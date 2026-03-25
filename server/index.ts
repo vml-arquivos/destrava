@@ -34,12 +34,42 @@ function writeJSON(filename: string, data: unknown): void {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
 }
 
+// ─── n8n Webhook helper ──────────────────────────────────────────────────────
+async function dispararN8n(evento: string, payload: Record<string, unknown>): Promise<boolean> {
+  const webhookUrl = process.env.N8N_WEBHOOK_URL;
+  if (!webhookUrl) {
+    console.log(`[n8n] Webhook não configurado — evento "${evento}" ignorado.`);
+    return false;
+  }
+  try {
+    const body = JSON.stringify({ evento, timestamp: new Date().toISOString(), ...payload });
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.ok) {
+      console.log(`[n8n] ✅ Webhook "${evento}" enviado com sucesso (${res.status})`);
+      return true;
+    } else {
+      console.warn(`[n8n] ⚠️ Webhook "${evento}" retornou ${res.status}`);
+      return false;
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[n8n] ❌ Erro ao enviar webhook "${evento}": ${msg}`);
+    return false;
+  }
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface Lead {
   id: string;
   nome: string;
   email: string;
   telefone: string;
+  empresa?: string;
   cpfCnpj?: string;
   tipoPessoa: "pf" | "pj";
   produto?: string;
@@ -50,6 +80,7 @@ interface Lead {
   status: "novo" | "em_atendimento" | "aprovado" | "reprovado" | "convertido";
   criadoEm: string;
   atualizadoEm: string;
+  n8nNotificado?: boolean;
 }
 
 interface Simulacao {
@@ -57,6 +88,7 @@ interface Simulacao {
   nome: string;
   email: string;
   telefone: string;
+  empresa?: string;
   cpfCnpj?: string;
   tipoPessoa: "pf" | "pj";
   produto: string;
@@ -65,7 +97,11 @@ interface Simulacao {
   taxaAplicada?: number;
   parcelaMensal?: number;
   totalPagar?: number;
+  impostoValor?: number;
+  comissaoValor?: number;
+  custoTotal?: number;
   criadoEm: string;
+  n8nNotificado?: boolean;
 }
 
 interface Contato {
@@ -108,12 +144,17 @@ async function startServer() {
 
   // ─── Health check ──────────────────────────────────────────────────────────
   app.get("/api/health", (_req: Request, res: Response) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString(), version: "1.0.0" });
+    res.json({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      version: "2.0.0",
+      n8n_configured: !!process.env.N8N_WEBHOOK_URL,
+    });
   });
 
   // ─── LEADS API ─────────────────────────────────────────────────────────────
   // POST /api/leads - Criar novo lead
-  app.post("/api/leads", (req: Request, res: Response) => {
+  app.post("/api/leads", async (req: Request, res: Response) => {
     try {
       const leads = readJSON<Lead[]>("leads.json", []);
       const now = new Date().toISOString();
@@ -122,6 +163,7 @@ async function startServer() {
         nome: req.body.nome || "",
         email: req.body.email || "",
         telefone: req.body.telefone || "",
+        empresa: req.body.empresa || "",
         cpfCnpj: req.body.cpfCnpj || "",
         tipoPessoa: req.body.tipoPessoa || "pf",
         produto: req.body.produto || "",
@@ -132,10 +174,32 @@ async function startServer() {
         status: "novo",
         criadoEm: now,
         atualizadoEm: now,
+        n8nNotificado: false,
       };
       leads.push(newLead);
       writeJSON("leads.json", leads);
       console.log(`[LEAD] Novo lead: ${newLead.nome} - ${newLead.produto}`);
+
+      // Disparar n8n de forma assíncrona (não bloqueia a resposta)
+      dispararN8n("novo_lead", {
+        id: newLead.id,
+        nome: newLead.nome,
+        telefone: newLead.telefone,
+        empresa: newLead.empresa,
+        email: newLead.email,
+        produto: newLead.produto,
+        valorSolicitado: newLead.valorSolicitado,
+        prazo: newLead.prazo,
+        origem: newLead.origem,
+        criadoEm: newLead.criadoEm,
+      }).then(ok => {
+        if (ok) {
+          const ls = readJSON<Lead[]>("leads.json", []);
+          const idx = ls.findIndex(l => l.id === newLead.id);
+          if (idx !== -1) { ls[idx].n8nNotificado = true; writeJSON("leads.json", ls); }
+        }
+      });
+
       res.status(201).json({ success: true, id: newLead.id, message: "Lead registrado com sucesso!" });
     } catch (err) {
       console.error("[LEAD ERROR]", err);
@@ -176,7 +240,7 @@ async function startServer() {
 
   // ─── SIMULAÇÕES API ────────────────────────────────────────────────────────
   // POST /api/simulacoes - Registrar simulação
-  app.post("/api/simulacoes", (req: Request, res: Response) => {
+  app.post("/api/simulacoes", async (req: Request, res: Response) => {
     try {
       const simulacoes = readJSON<Simulacao[]>("simulacoes.json", []);
       const newSim: Simulacao = {
@@ -184,6 +248,7 @@ async function startServer() {
         nome: req.body.nome || "",
         email: req.body.email || "",
         telefone: req.body.telefone || "",
+        empresa: req.body.empresa || "",
         cpfCnpj: req.body.cpfCnpj || "",
         tipoPessoa: req.body.tipoPessoa || "pf",
         produto: req.body.produto || "",
@@ -192,11 +257,37 @@ async function startServer() {
         taxaAplicada: Number(req.body.taxaAplicada) || 0,
         parcelaMensal: Number(req.body.parcelaMensal) || 0,
         totalPagar: Number(req.body.totalPagar) || 0,
+        impostoValor: Number(req.body.impostoValor) || 0,
+        comissaoValor: Number(req.body.comissaoValor) || 0,
+        custoTotal: Number(req.body.custoTotal) || 0,
         criadoEm: new Date().toISOString(),
+        n8nNotificado: false,
       };
       simulacoes.push(newSim);
       writeJSON("simulacoes.json", simulacoes);
       console.log(`[SIM] Nova simulação: ${newSim.nome} - ${newSim.produto} - R$ ${newSim.valorSolicitado}`);
+
+      // Disparar n8n de forma assíncrona
+      dispararN8n("nova_simulacao", {
+        id: newSim.id,
+        nome: newSim.nome,
+        telefone: newSim.telefone,
+        empresa: newSim.empresa,
+        email: newSim.email,
+        produto: newSim.produto,
+        valorSolicitado: newSim.valorSolicitado,
+        prazo: newSim.prazo,
+        parcelaMensal: newSim.parcelaMensal,
+        custoTotal: newSim.custoTotal,
+        criadoEm: newSim.criadoEm,
+      }).then(ok => {
+        if (ok) {
+          const ss = readJSON<Simulacao[]>("simulacoes.json", []);
+          const idx = ss.findIndex(s => s.id === newSim.id);
+          if (idx !== -1) { ss[idx].n8nNotificado = true; writeJSON("simulacoes.json", ss); }
+        }
+      });
+
       res.status(201).json({ success: true, id: newSim.id });
     } catch (err) {
       console.error("[SIM ERROR]", err);
@@ -217,7 +308,7 @@ async function startServer() {
 
   // ─── CONTATO API ───────────────────────────────────────────────────────────
   // POST /api/contato - Enviar mensagem de contato
-  app.post("/api/contato", (req: Request, res: Response) => {
+  app.post("/api/contato", async (req: Request, res: Response) => {
     try {
       const contatos = readJSON<Contato[]>("contatos.json", []);
       const newContato: Contato = {
@@ -233,6 +324,18 @@ async function startServer() {
       contatos.push(newContato);
       writeJSON("contatos.json", contatos);
       console.log(`[CONTATO] Novo contato: ${newContato.nome} - ${newContato.assunto}`);
+
+      // Disparar n8n
+      dispararN8n("novo_contato", {
+        id: newContato.id,
+        nome: newContato.nome,
+        email: newContato.email,
+        telefone: newContato.telefone,
+        assunto: newContato.assunto,
+        mensagem: newContato.mensagem,
+        criadoEm: newContato.criadoEm,
+      });
+
       res.status(201).json({ success: true, id: newContato.id, message: "Mensagem enviada com sucesso!" });
     } catch (err) {
       console.error("[CONTATO ERROR]", err);
@@ -273,13 +376,44 @@ async function startServer() {
     }, {});
 
     const totalValorSimulado = simulacoes.reduce((sum, s) => sum + (s.valorSolicitado || 0), 0);
+    const totalCustoSimulado = simulacoes.reduce((sum, s) => sum + (s.custoTotal || 0), 0);
 
     res.json({
       leads: { total: leads.length, byStatus: leadsByStatus, byProduto: leadsByProduto },
-      simulacoes: { total: simulacoes.length, totalValorSimulado },
+      simulacoes: { total: simulacoes.length, totalValorSimulado, totalCustoSimulado },
       contatos: { total: contatos.length },
+      n8n: { configured: !!process.env.N8N_WEBHOOK_URL },
       timestamp: new Date().toISOString(),
     });
+  });
+
+  // ─── n8n WEBHOOK CONFIG API ────────────────────────────────────────────────
+  // GET /api/n8n/status - Verificar status da integração n8n
+  app.get("/api/n8n/status", (req: Request, res: Response) => {
+    const adminKey = req.headers["x-admin-key"];
+    if (adminKey !== (process.env.ADMIN_KEY || "destrava2024admin")) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    res.json({
+      configured: !!process.env.N8N_WEBHOOK_URL,
+      webhookUrl: process.env.N8N_WEBHOOK_URL ? "***configurado***" : null,
+      eventos: ["novo_lead", "nova_simulacao", "novo_contato"],
+    });
+  });
+
+  // POST /api/n8n/test - Testar webhook n8n
+  app.post("/api/n8n/test", async (req: Request, res: Response) => {
+    const adminKey = req.headers["x-admin-key"];
+    if (adminKey !== (process.env.ADMIN_KEY || "destrava2024admin")) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    const ok = await dispararN8n("teste_webhook", {
+      mensagem: "Teste de integração Destrava Crédito → n8n",
+      ambiente: process.env.NODE_ENV || "development",
+    });
+    res.json({ success: ok, message: ok ? "Webhook enviado com sucesso!" : "Falha ao enviar webhook. Verifique a URL." });
   });
 
   // ─── Static files ──────────────────────────────────────────────────────────
@@ -306,6 +440,7 @@ async function startServer() {
     console.log(`✅ Destrava Crédito - Server running on http://0.0.0.0:${port}/`);
     console.log(`📁 Data dir: ${DATA_DIR}`);
     console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
+    console.log(`🔗 n8n Webhook: ${process.env.N8N_WEBHOOK_URL ? "✅ Configurado" : "⚠️ Não configurado"}`);
   });
 }
 
