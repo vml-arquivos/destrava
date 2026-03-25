@@ -204,71 +204,70 @@ function PainelResultado({
   const [mostrarTabela, setMostrarTabela] = useState(false);
 
   return (
-    <div className="space-y-4">
-      {/* Parcela destaque */}
+    <div className="space-y-3">
+
+      {/* 1. Parcela Mensal — destaque principal */}
       <div className="bg-gradient-to-br from-[#001f6b] to-[#003db5] rounded-2xl p-6 text-white text-center">
         <p className="text-white/70 text-sm mb-1">Parcela Mensal</p>
         <p className="text-4xl font-bold">{fmtBRL.format(resultado.parcelaMensal)}</p>
-        <p className="text-white/60 text-xs mt-1">em {prazo}x mensais</p>
+        <p className="text-white/60 text-xs mt-1">{prazo}x mensais</p>
       </div>
 
-      {/* Detalhamento */}
-      <div className="space-y-0">
-        {[
-          { label: "Valor do Crédito", value: fmtBRL.format(resultado.parcelaMensal * prazo - resultado.totalJuros), color: "" },
-          { label: "Total de Juros", value: fmtBRL.format(resultado.totalJuros), color: "text-amber-600" },
-          { label: "Total do Financiamento", value: fmtBRL.format(resultado.totalFinanciamento), color: "font-semibold" },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="flex justify-between items-center py-2.5 border-b border-border text-sm">
-            <span className="text-muted-foreground">{label}</span>
-            <span className={`font-medium ${color}`}>{value}</span>
+      {/* 2. Total do Financiamento (valor + juros) */}
+      <div className="rounded-xl border bg-card p-4">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Financiamento</p>
+        <div className="space-y-0">
+          <div className="flex justify-between items-center py-2 border-b border-border text-sm">
+            <span className="text-muted-foreground">Valor do Crédito</span>
+            <span className="font-medium">{fmtBRL.format(resultado.parcelaMensal * prazo - resultado.totalJuros)}</span>
           </div>
-        ))}
+          <div className="flex justify-between items-center py-2 border-b border-border text-sm">
+            <span className="text-muted-foreground">Total de Juros</span>
+            <span className="font-medium text-amber-600">{fmtBRL.format(resultado.totalJuros)}</span>
+          </div>
+          <div className="flex justify-between items-center py-2 text-sm">
+            <span className="font-semibold">Valor Total do Financiamento</span>
+            <span className="font-bold text-primary">{fmtBRL.format(resultado.totalFinanciamento)}</span>
+          </div>
+        </div>
+      </div>
 
-        {/* Bloco fiscal — só no cenário A */}
-        {comImposto && valorFiscalNum > 0 && (
-          <>
-            <div className="flex justify-between items-center py-2.5 border-b border-border text-sm">
-              <span className="text-muted-foreground flex items-center gap-1.5">
-                <Info className="h-3.5 w-3.5 text-blue-500" />
-                Valor Fiscal Declarado
-              </span>
-              <span className="font-medium">{fmtBRL.format(valorFiscalNum)}</span>
+      {/* 3. Custo Total da Operação = Financiamento + Comissão + Imposto */}
+      <div className="rounded-xl border-2 border-red-200 bg-red-50 p-4">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Custo Total da Operação</p>
+        <div className="space-y-0">
+
+          {/* Financiamento */}
+          <div className="flex justify-between items-center py-2 border-b border-red-100 text-sm">
+            <span className="text-muted-foreground">Valor Total do Financiamento</span>
+            <span className="font-medium">{fmtBRL.format(resultado.totalFinanciamento)}</span>
+          </div>
+
+          {/* Comissão — pago 1x */}
+          {resultado.comissaoValor > 0 && (
+            <div className="flex justify-between items-center py-2 border-b border-red-100 text-sm">
+              <span className="text-muted-foreground">Comissão Destrava <span className="text-xs">(pago 1x)</span></span>
+              <span className="font-semibold text-orange-600">{fmtBRL.format(resultado.comissaoValor)}</span>
             </div>
-            <div className="flex justify-between items-center py-2.5 border-b border-border text-sm">
+          )}
+
+          {/* Imposto — pago 1x */}
+          {comImposto && resultado.impostoValor > 0 && (
+            <div className="flex justify-between items-center py-2 border-b border-red-100 text-sm">
               <span className="text-muted-foreground">
-                Imposto ({pctImpostoNum}% sobre fiscal) — pago 1x
+                Imposto ({pctImpostoNum}% s/ {fmtBRL.format(valorFiscalNum)}) <span className="text-xs">(pago 1x)</span>
               </span>
               <span className="font-semibold text-red-600">{fmtBRL.format(resultado.impostoValor)}</span>
             </div>
-          </>
-        )}
+          )}
 
-        {resultado.comissaoValor > 0 && (
-          <div className="flex justify-between items-center py-2.5 border-b border-border text-sm">
-            <span className="text-muted-foreground">Comissão Destrava — pago 1x</span>
-            <span className="font-semibold text-orange-600">{fmtBRL.format(resultado.comissaoValor)}</span>
+          {/* Total */}
+          <div className="flex justify-between items-center pt-3 text-sm">
+            <span className="font-bold text-base">Total Gasto pelo Cliente</span>
+            <span className="font-bold text-xl text-red-700">{fmtBRL.format(resultado.custoTotalOperacao)}</span>
           </div>
-        )}
+        </div>
       </div>
-
-
-
-      {/* Custo total — destaque */}
-      <div className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-200 rounded-2xl p-5">
-        <p className="text-sm text-muted-foreground text-center mb-1">
-          💰 Custo Total da Operação
-        </p>
-        <p className="text-3xl font-bold text-center text-red-700">
-          {fmtBRL.format(resultado.custoTotalOperacao)}
-        </p>
-        <p className="text-xs text-center text-muted-foreground mt-1.5">
-          Financiamento ({fmtBRL.format(resultado.totalFinanciamento)})
-          {resultado.impostoValor > 0 ? ` + Imposto (${fmtBRL.format(resultado.impostoValor)})` : ""}
-          {resultado.comissaoValor > 0 ? ` + Comissão (${fmtBRL.format(resultado.comissaoValor)})` : ""}
-        </p>
-      </div>
-
 
     </div>
   );
