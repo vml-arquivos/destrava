@@ -257,7 +257,7 @@ function PainelResultado({
     <div className="space-y-4">
       {/* Parcela destaque */}
       <div className="bg-gradient-to-br from-[#001f6b] to-[#003db5] rounded-2xl p-6 text-white text-center">
-        <p className="text-white/70 text-sm mb-1">Parcela Mensal (Sistema Price)</p>
+        <p className="text-white/70 text-sm mb-1">Parcela Mensal</p>
         <p className="text-4xl font-bold">{fmtBRL.format(resultado.parcelaMensal)}</p>
         <p className="text-white/60 text-xs mt-1">em {prazo}x mensais</p>
       </div>
@@ -302,17 +302,7 @@ function PainelResultado({
         )}
       </div>
 
-      {/* CET */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-muted/50 rounded-xl p-3 text-center">
-          <p className="text-xs text-muted-foreground mb-0.5">CET Mensal</p>
-          <p className="text-lg font-bold text-primary">{fmtPct(resultado.cetMensal)}</p>
-        </div>
-        <div className="bg-muted/50 rounded-xl p-3 text-center">
-          <p className="text-xs text-muted-foreground mb-0.5">CET Anual</p>
-          <p className="text-lg font-bold text-primary">{fmtPct(resultado.cetAnual)}</p>
-        </div>
-      </div>
+
 
       {/* Custo total — destaque */}
       <div className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-200 rounded-2xl p-5">
@@ -329,42 +319,7 @@ function PainelResultado({
         </p>
       </div>
 
-      {/* Tabela de amortização */}
-      <div>
-        <button
-          className="flex items-center justify-between w-full text-sm font-medium text-muted-foreground hover:text-foreground py-2.5 border-t"
-          onClick={() => setMostrarTabela(!mostrarTabela)}
-        >
-          <span>Tabela de Amortização (Sistema Price)</span>
-          {mostrarTabela ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </button>
 
-        {mostrarTabela && (
-          <div className="overflow-x-auto mt-2 rounded-xl border text-xs">
-            <table className="w-full">
-              <thead className="bg-muted/60">
-                <tr>
-                  {["Parc.", "Saldo Inicial", "Juros", "Amortização", "Prestação", "Saldo Final"].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {resultado.tabelaAmortizacao.map((row) => (
-                  <tr key={row.parcela} className="border-t hover:bg-muted/20">
-                    <td className="px-3 py-1.5 font-medium">{row.parcela}</td>
-                    <td className="px-3 py-1.5">{fmtBRL.format(row.saldoInicial)}</td>
-                    <td className="px-3 py-1.5 text-amber-600">{fmtBRL.format(row.juros)}</td>
-                    <td className="px-3 py-1.5 text-green-700">{fmtBRL.format(row.amortizacao)}</td>
-                    <td className="px-3 py-1.5 font-semibold">{fmtBRL.format(row.prestacao)}</td>
-                    <td className="px-3 py-1.5 text-muted-foreground">{fmtBRL.format(row.saldoFinal)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
