@@ -43,7 +43,7 @@ lerna-debug.log*
 pids
 *.pid
 *.seed
-*.pid.lock
+# *.pid.lock — mantido para não ignorar pnpm-lock.yaml por engano
 
 # Coverage directory used by tools like istanbul
 coverage/
