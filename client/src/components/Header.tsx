@@ -1,0 +1,194 @@
+import { APP_LOGO } from "@/const";
+import { Button } from "@/components/ui/button";
+import { Link, useLocation } from "wouter";
+import { Menu, X, ChevronDown, Building2, User, BarChart3, Shield, Search, FileText } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+
+interface NavItem {
+  label: string;
+  href: string;
+  children?: { label: string; href: string; icon?: React.ComponentType<{ className?: string }>; desc?: string }[];
+}
+
+export default function Header() {
+  const [location] = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const navItems: NavItem[] = [
+    { label: "Início", href: "/" },
+    {
+      label: "Crédito Empresarial",
+      href: "/credito-empresas",
+      children: [
+        { label: "Visão Geral", href: "/credito-empresas", icon: Building2, desc: "Todas as linhas para PJ" },
+        { label: "PRONAMPE", href: "/credito-empresas#pronampe", icon: Building2, desc: "Até R$ 150k - Selic + 6%" },
+        { label: "Giro CAIXA Fácil", href: "/giro-caixa-facil", icon: Building2, desc: "Até R$ 70k - A partir 2,99%" },
+        { label: "PRONAMP", href: "/credito-empresas#pronamp", icon: Building2, desc: "Agronegócio - Médio Produtor" },
+        { label: "Médio e Grande Porte", href: "/credito-empresas#medio-grande", icon: Building2, desc: "Soluções corporativas" },
+      ],
+    },
+    {
+      label: "Crédito Pessoal",
+      href: "/credito-pessoal",
+      children: [
+        { label: "Visão Geral", href: "/credito-pessoal", icon: User, desc: "Todas as linhas para PF" },
+        { label: "Consignado", href: "/credito-pessoal#consignado", icon: User, desc: "Menor taxa do mercado" },
+        { label: "Crédito Pessoal", href: "/credito-pessoal#pessoal", icon: User, desc: "Para qualquer finalidade" },
+        { label: "Financiamento Imóvel", href: "/credito-pessoal#imovel", icon: User, desc: "Casa própria com FGTS" },
+        { label: "Financiamento Veículo", href: "/credito-pessoal#veiculo", icon: User, desc: "Carro novo ou usado" },
+      ],
+    },
+    {
+      label: "Serviços",
+      href: "/produtos",
+      children: [
+        { label: "Rating Banco do Brasil", href: "/rating-banco-brasil", icon: BarChart3, desc: "Consulta e análise de rating" },
+        { label: "Certificado Digital", href: "/certificado-digital", icon: Shield, desc: "A1 e A3 para PF e PJ" },
+        { label: "Consulta SPC/Serasa", href: "/consulta-spc-serasa", icon: Search, desc: "CPF e CNPJ" },
+        { label: "Limpa Nome CPF", href: "/limpa-nome", icon: FileText, desc: "Regularize seu CPF" },
+        { label: "Limpa Nome CNPJ", href: "/limpa-nome-cnpj", icon: FileText, desc: "Regularize seu CNPJ" },
+        { label: "Calculadora Score", href: "/calculadora-score", icon: BarChart3, desc: "Simule seu score" },
+      ],
+    },
+    { label: "Simulador", href: "/simulador" },
+    { label: "Blog", href: "/blog" },
+    { label: "Sobre", href: "/sobre" },
+    { label: "Contato", href: "/contato" },
+  ];
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <div className="container">
+        <div className="flex h-20 items-center justify-between">
+          {/* Logo */}
+          <Link href="/" className="flex items-center flex-shrink-0">
+            <img src={APP_LOGO} alt="Destrava Crédito" className="h-12 w-auto" />
+          </Link>
+
+          {/* Desktop Navigation */}
+          <nav className="hidden lg:flex items-center gap-1" ref={dropdownRef}>
+            {navItems.map((item) =>
+              item.children ? (
+                <div key={item.href} className="relative">
+                  <button
+                    onClick={() => setOpenDropdown(openDropdown === item.label ? null : item.label)}
+                    className={`flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-md transition-colors hover:bg-accent hover:text-accent-foreground ${
+                      location.startsWith(item.href) ? "text-primary" : "text-foreground/80"
+                    }`}
+                  >
+                    {item.label}
+                    <ChevronDown className={`h-4 w-4 transition-transform ${openDropdown === item.label ? "rotate-180" : ""}`} />
+                  </button>
+                  {openDropdown === item.label && (
+                    <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
+                      {item.children.map((child) => (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          onClick={() => setOpenDropdown(null)}
+                          className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                        >
+                          {child.icon && (
+                            <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                              <child.icon className="h-4 w-4 text-[var(--color-caixa-blue)]" />
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{child.label}</p>
+                            {child.desc && <p className="text-xs text-gray-500 mt-0.5">{child.desc}</p>}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`px-3 py-2 text-sm font-medium rounded-md transition-colors hover:bg-accent hover:text-accent-foreground ${
+                    location === item.href ? "text-primary" : "text-foreground/80"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              )
+            )}
+          </nav>
+
+          {/* CTA Button Desktop */}
+          <div className="hidden lg:block flex-shrink-0">
+            <Link href="/simular">
+              <Button size="lg" className="font-semibold bg-[var(--color-caixa-blue)] hover:bg-blue-700">
+                Simular Agora
+              </Button>
+            </Link>
+          </div>
+
+          {/* Mobile Menu Button */}
+          <button
+            className="lg:hidden p-2"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle menu"
+          >
+            {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          </button>
+        </div>
+
+        {/* Mobile Navigation */}
+        {mobileMenuOpen && (
+          <nav className="lg:hidden py-4 border-t border-border max-h-[80vh] overflow-y-auto">
+            <div className="flex flex-col gap-1">
+              {navItems.map((item) => (
+                <div key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`block px-4 py-3 text-base font-medium rounded-lg transition-colors hover:bg-accent ${
+                      location === item.href ? "text-primary bg-accent" : "text-foreground/80"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                  {item.children && (
+                    <div className="ml-4 mt-1 space-y-1">
+                      {item.children.slice(1).map((child) => (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="block px-4 py-2 text-sm text-gray-600 hover:text-primary hover:bg-gray-50 rounded-lg"
+                        >
+                          {child.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+              <div className="pt-4 px-2">
+                <Link href="/simular" onClick={() => setMobileMenuOpen(false)}>
+                  <Button size="lg" className="w-full font-semibold bg-[var(--color-caixa-blue)] hover:bg-blue-700">
+                    Simular Agora
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </nav>
+        )}
+      </div>
+    </header>
+  );
+}

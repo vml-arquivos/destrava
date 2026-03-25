@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 85" fill="none">
+  <!-- Definições de gradientes -->
+  <defs>
+    <linearGradient id="blueGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2196F3;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1565C0;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="cyanGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#00BCD4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0097A7;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Círculo azul de fundo -->
+  <circle cx="28" cy="42" r="24" fill="url(#blueGradient)"/>
+  
+  <!-- Letra D branca -->
+  <path d="M 16 27 L 16 57 L 32 57 C 41 57 48 50 48 42 C 48 34 41 27 32 27 Z M 21 32 L 30 32 C 37 32 43 38 43 42 C 43 46 37 52 30 52 L 21 52 Z" fill="white"/>
+  
+  <!-- Relógio dentro do D -->
+  <g>
+    <circle cx="30" cy="42" r="9" fill="none" stroke="#64B5F6" stroke-width="1.8"/>
+    <!-- Ponteiro das horas -->
+    <line x1="30" y1="42" x2="27" y2="36" stroke="#64B5F6" stroke-width="1.8" stroke-linecap="round"/>
+    <!-- Ponteiro dos minutos -->
+    <line x1="30" y1="42" x2="34" y2="39" stroke="#64B5F6" stroke-width="1.5" stroke-linecap="round"/>
+    <!-- Centro -->
+    <circle cx="30" cy="42" r="1.8" fill="#64B5F6"/>
+  </g>
+  
+  <!-- Texto "estrava" -->
+  <text x="54" y="52" font-family="'Montserrat', 'Arial Black', sans-serif" font-size="34" font-weight="800" fill="url(#blueGradient)" letter-spacing="-1">estrava</text>
+  
+  <!-- Texto "CRÉDITO" -->
+  <text x="54" y="66" font-family="'Montserrat', 'Arial', sans-serif" font-size="12" font-weight="700" letter-spacing="2" fill="url(#cyanGradient)">CRÉDITO</text>
+</svg>

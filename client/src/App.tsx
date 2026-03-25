@@ -1,0 +1,88 @@
+import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import NotFound from "@/pages/NotFound";
+import { Route, Switch } from "wouter";
+import ErrorBoundary from "./components/ErrorBoundary";
+import { ThemeProvider } from "./contexts/ThemeContext";
+import Home from "./pages/Home";
+import Sobre from "./pages/Sobre";
+import GiroCaixaFacil from "./pages/GiroCaixaFacil";
+import Simulacao from "./pages/Simulacao";
+import SimuladorCompleto from "./pages/SimuladorCompleto";
+import CalculadoraScore from "./pages/CalculadoraScore";
+import FAQ from "./pages/FAQ";
+import LimpaNome from "./pages/LimpaNome";
+import LimpaNomeCNPJ from "./pages/LimpaNomeCNPJ";
+import Produtos from "./pages/Produtos";
+import Blog from "./pages/Blog";
+import BlogPost from "./pages/BlogPost";
+import PoliticaPrivacidade from "./pages/PoliticaPrivacidade";
+import TermosUso from "./pages/TermosUso";
+import Sucesso from "./pages/Sucesso";
+// Novas páginas
+import CapturaLead from "./pages/CapturaLead";
+import RatingBancoBrasil from "./pages/RatingBancoBrasil";
+import CertificadoDigital from "./pages/CertificadoDigital";
+import ConsultaSPCSerasa from "./pages/ConsultaSPCSerasa";
+import CreditoEmpresas from "./pages/CreditoEmpresas";
+import CreditoPessoaFisica from "./pages/CreditoPessoaFisica";
+import Contato from "./pages/Contato";
+
+function Router() {
+  return (
+    <Switch>
+      {/* Páginas principais */}
+      <Route path="/" component={Home} />
+      <Route path="/sobre" component={Sobre} />
+      <Route path="/produtos" component={Produtos} />
+      <Route path="/blog" component={Blog} />
+      <Route path="/blog/:slug" component={BlogPost} />
+      <Route path="/faq" component={FAQ} />
+      <Route path="/contato" component={Contato} />
+
+      {/* Simuladores */}
+      <Route path="/simulacao" component={Simulacao} />
+      <Route path="/simulador" component={SimuladorCompleto} />
+      <Route path="/simular" component={CapturaLead} />
+      <Route path="/calculadora-score" component={CalculadoraScore} />
+
+      {/* Crédito Empresarial */}
+      <Route path="/credito-empresas" component={CreditoEmpresas} />
+      <Route path="/giro-caixa-facil" component={GiroCaixaFacil} />
+
+      {/* Crédito Pessoa Física */}
+      <Route path="/credito-pessoal" component={CreditoPessoaFisica} />
+
+      {/* Serviços */}
+      <Route path="/rating-banco-brasil" component={RatingBancoBrasil} />
+      <Route path="/certificado-digital" component={CertificadoDigital} />
+      <Route path="/consulta-spc-serasa" component={ConsultaSPCSerasa} />
+      <Route path="/limpa-nome" component={LimpaNome} />
+      <Route path="/limpa-nome-cnpj" component={LimpaNomeCNPJ} />
+
+      {/* Legais */}
+      <Route path="/politica-privacidade" component={PoliticaPrivacidade} />
+      <Route path="/termos-uso" component={TermosUso} />
+      <Route path="/sucesso" component={Sucesso} />
+
+      {/* Fallback */}
+      <Route path="/404" component={NotFound} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+function App() {
+  return (
+    <ErrorBoundary>
+      <ThemeProvider defaultTheme="light">
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
+  );
+}
+
+export default App;

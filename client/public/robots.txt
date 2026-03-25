@@ -1,0 +1,18 @@
+# robots.txt para Destrava Crédito
+# Permite indexação de todas as páginas públicas
+
+User-agent: *
+Allow: /
+
+# Páginas prioritárias para indexação
+Allow: /sobre
+Allow: /giro-caixa-facil
+Allow: /simulacao
+Allow: /simulador
+Allow: /blog
+
+# Sitemap
+Sitemap: https://destrava-credito.manus.space/sitemap.xml
+
+# Crawl-delay para evitar sobrecarga
+Crawl-delay: 1
