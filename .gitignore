@@ -105,6 +105,8 @@ temp/
 *.sqlite
 *.sqlite3
 
-# Dados de clientes (leads, simulações, contatos) - não versionar!
-data/
+# Dados de clientes (leads, simulações, contatos) na raiz - não versionar!
+# NOTA: /data/ (com barra inicial) ignora apenas a pasta raiz do projeto,
+# preservando client/src/data/ que contém dados estáticos do código-fonte.
+/data/
 *.json.bak
