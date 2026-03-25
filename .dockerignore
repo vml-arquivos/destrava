@@ -1,0 +1,42 @@
+# Dependências (serão instaladas no container)
+node_modules/
+.pnpm-store/
+
+# Build local (será gerado no container)
+dist/
+
+# Dados de clientes (não incluir na imagem)
+data/
+*.json.bak
+
+# Logs
+logs/
+*.log
+
+# Arquivos de ambiente (configurar no Coolify)
+.env
+.env.local
+.env.*.local
+
+# Git
+.git/
+.gitignore
+
+# Editor e OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Arquivos de documentação e análise
+ANALISE_*.md
+PESQUISA_*.md
+PLANEJAMENTO_*.md
+IMPLANTACAO.md
+todo.md
+
+# Scripts de deploy manual (não necessários no container)
+deploy.sh
+nginx-setup.sh
+nginx.conf
+install.sh
