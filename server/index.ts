@@ -300,7 +300,8 @@ async function startServer() {
     }
   });
 
-  const port = Number(process.env.PORT) || 3000;
+  // Porta padrão 4000 para não conflitar com Chatwoot (3000) na mesma VPS
+  const port = Number(process.env.PORT) || 4000;
   server.listen(port, "0.0.0.0", () => {
     console.log(`✅ Destrava Crédito - Server running on http://0.0.0.0:${port}/`);
     console.log(`📁 Data dir: ${DATA_DIR}`);

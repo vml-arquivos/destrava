@@ -7,9 +7,10 @@ module.exports = {
       exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
-        PORT: 3000,
+        PORT: 4000,
         DATA_DIR: '/var/data/destrava',
-        ADMIN_KEY: 'destrava2024admin'
+        ADMIN_KEY: 'destrava2024admin',
+        SITE_DOMAIN: 'destrava.permupay.com.br'
       },
       error_file: './logs/err.log',
       out_file: './logs/out.log',
@@ -21,9 +22,10 @@ module.exports = {
       ignore_watch: ['node_modules', 'logs', 'dist', 'data'],
       env_production: {
         NODE_ENV: 'production',
-        PORT: 3000,
+        PORT: 4000,
         DATA_DIR: '/var/data/destrava',
-        ADMIN_KEY: 'destrava2024admin'
+        ADMIN_KEY: 'destrava2024admin',
+        SITE_DOMAIN: 'destrava.permupay.com.br'
       }
     }
   ]
