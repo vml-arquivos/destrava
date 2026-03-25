@@ -27,6 +27,12 @@ import ConsultaSPCSerasa from "./pages/ConsultaSPCSerasa";
 import CreditoEmpresas from "./pages/CreditoEmpresas";
 import CreditoPessoaFisica from "./pages/CreditoPessoaFisica";
 import Contato from "./pages/Contato";
+// Área do Colaborador
+import ColaboradorLogin from "./pages/colaborador/Login";
+import ColaboradorDashboard from "./pages/colaborador/Dashboard";
+import ColaboradorCalculadora from "./pages/colaborador/CalculadoraPage";
+import ColaboradorSimulacoes from "./pages/colaborador/Simulacoes";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function Router() {
   return (
@@ -64,6 +70,37 @@ function Router() {
       <Route path="/politica-privacidade" component={PoliticaPrivacidade} />
       <Route path="/termos-uso" component={TermosUso} />
       <Route path="/sucesso" component={Sucesso} />
+
+      {/* Área do Colaborador */}
+      <Route path="/colaborador/login" component={ColaboradorLogin} />
+      <Route path="/colaborador/dashboard">
+        {() => (
+          <ProtectedRoute>
+            <ColaboradorDashboard />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/calculadora">
+        {() => (
+          <ProtectedRoute>
+            <ColaboradorCalculadora />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/simulacoes">
+        {() => (
+          <ProtectedRoute>
+            <ColaboradorSimulacoes />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador">
+        {() => (
+          <ProtectedRoute>
+            <ColaboradorDashboard />
+          </ProtectedRoute>
+        )}
+      </Route>
 
       {/* Fallback */}
       <Route path="/404" component={NotFound} />
