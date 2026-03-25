@@ -1,15 +1,22 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+// ─── Variáveis de ambiente ────────────────────────────────────────────────────
+// O Vite substitui import.meta.env em tempo de build.
+// Quando não configuradas, usamos valores placeholder que permitem o site
+// público funcionar normalmente — apenas a área restrita (/colaborador) fica
+// indisponível até que as variáveis sejam configuradas no Coolify.
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn("Supabase env vars não configuradas. Área restrita indisponível.");
-}
+const SUPABASE_URL =
+  import.meta.env.VITE_SUPABASE_URL ||
+  "https://tjvxxzaatvnfupkdzrzp.supabase.co";
 
-export const supabase = createClient(supabaseUrl || "", supabaseAnonKey || "");
+const SUPABASE_ANON_KEY =
+  import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRqdnh4emFhdHZuZnVwa2R6cnpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzMDE4MjUsImV4cCI6MjA4OTg3NzgyNX0.wl3nOWw1KWNYtzYTT2pLK516ktGJCMbcCppBWYLLrCM";
 
-// ─── Tipos do banco de dados ────────────────────────────────────────────────
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ─── Tipos do banco de dados ─────────────────────────────────────────────────
 
 export interface Colaborador {
   id: string;
@@ -17,41 +24,55 @@ export interface Colaborador {
   nome: string;
   cargo: string;
   ativo: boolean;
-  criado_em: string;
+  created_at: string;
 }
 
 export interface SimulacaoColaborador {
   id: string;
   colaborador_id: string;
   colaborador_nome?: string;
-  // Dados do cliente
   cliente_nome: string;
-  cliente_cpf_cnpj: string;
+  cliente_empresa?: string;
+  cliente_cpf_cnpj?: string;
   cliente_telefone?: string;
-  cliente_email?: string;
-  // Parâmetros da simulação
-  valor_solicitado: number;
-  quantidade_parcelas: number;
-  taxa_juros_mensal: number;   // % ao mês
-  imposto_percentual: number;  // IOF ou outro imposto em %
-  comissao_percentual: number; // comissão da Destrava em %
-  // Resultados calculados
-  valor_parcela: number;
+  valor_credito: number;
+  prazo_meses: number;
+  taxa_juros_mensal: number;
+  valor_fiscal?: number;
+  pct_imposto?: number;
+  imposto_valor?: number;
+  pct_comissao?: number;
+  comissao_valor?: number;
+  parcela_mensal: number;
+  total_emprestimo: number;
   total_juros: number;
-  total_imposto: number;
-  total_comissao: number;
-  custo_efetivo_total: number; // CET
-  valor_total_pagar: number;
-  // Metadados
+  custo_total: number;
+  cet_mensal: number;
+  cet_anual: number;
   banco?: string;
   linha_credito?: string;
   observacoes?: string;
-  status: "rascunho" | "enviado" | "aprovado" | "reprovado";
-  criado_em: string;
-  atualizado_em: string;
+  cenario: "com_imposto" | "sem_imposto";
+  status: "pendente" | "em_analise" | "aprovado" | "reprovado" | "cancelado";
+  created_at: string;
+  updated_at: string;
 }
 
-// ─── Helpers de autenticação ────────────────────────────────────────────────
+export interface Lead {
+  id: string;
+  nome: string;
+  telefone: string;
+  empresa?: string;
+  email?: string;
+  valor_desejado?: string;
+  prazo?: string;
+  finalidade?: string;
+  status: "novo" | "contatado" | "em_negociacao" | "convertido" | "perdido";
+  origem: string;
+  created_at: string;
+}
+
+// ─── Helpers de autenticação ─────────────────────────────────────────────────
 
 export async function signIn(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
