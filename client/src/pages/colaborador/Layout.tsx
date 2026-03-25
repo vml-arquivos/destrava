@@ -12,6 +12,8 @@ import {
   X,
   ChevronRight,
   User,
+  Users,
+  Database,
 } from "lucide-react";
 
 interface NavItem {
@@ -24,6 +26,8 @@ const navItems: NavItem[] = [
   { href: "/colaborador/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/colaborador/calculadora", label: "Calculadora", icon: Calculator },
   { href: "/colaborador/simulacoes", label: "Simulações Salvas", icon: FileText },
+  { href: "/colaborador/usuarios", label: "Usuários", icon: Users },
+  { href: "/colaborador/sql", label: "SQL Editor", icon: Database },
 ];
 
 interface LayoutProps {

@@ -32,6 +32,8 @@ import ColaboradorLogin from "./pages/colaborador/Login";
 import ColaboradorDashboard from "./pages/colaborador/Dashboard";
 import ColaboradorCalculadora from "./pages/colaborador/CalculadoraPage";
 import ColaboradorSimulacoes from "./pages/colaborador/Simulacoes";
+import ColaboradorUsuarios from "./pages/colaborador/Usuarios";
+import ColaboradorSqlEditor from "./pages/colaborador/SqlEditor";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function Router() {
@@ -91,6 +93,20 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <ColaboradorSimulacoes />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/usuarios">
+        {() => (
+          <ProtectedRoute>
+            <ColaboradorUsuarios />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/sql">
+        {() => (
+          <ProtectedRoute>
+            <ColaboradorSqlEditor />
           </ProtectedRoute>
         )}
       </Route>
