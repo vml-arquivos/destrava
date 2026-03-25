@@ -70,22 +70,12 @@ function formatarTelefone(v: string): string {
 // ─── Cálculos ─────────────────────────────────────────────────────────────────
 
 interface ResultadoCalculo {
-  parcelaMensal: number;
-  totalEmprestimo: number;
-  totalJuros: number;
-  impostoValor: number;
-  comissaoValor: number;
-  custoTotalOperacao: number;
-  cetMensal: number;
-  cetAnual: number;
-  tabelaAmortizacao: Array<{
-    parcela: number;
-    saldoInicial: number;
-    juros: number;
-    amortizacao: number;
-    prestacao: number;
-    saldoFinal: number;
-  }>;
+  parcelaMensal: number;      // parcela pura do financiamento (valor + taxa + prazo)
+  totalFinanciamento: number; // total pago no financiamento (parcela × prazo)
+  totalJuros: number;         // juros totais do financiamento
+  impostoValor: number;       // imposto pago UMA VEZ (sobre valor fiscal)
+  comissaoValor: number;      // comissão paga UMA VEZ (sobre valor do crédito)
+  custoTotalOperacao: number; // total financiamento + imposto (1x) + comissão (1x)
 }
 
 function calcular(
@@ -100,75 +90,35 @@ function calcular(
 
   const taxa = taxaMensal / 100;
 
-  // Parcela calculada sobre o valor do crédito (Price)
+  // ── PARCELA: calculada APENAS sobre valor do crédito + taxa + prazo ──────────
+  // Imposto e comissão NÃO entram na parcela — são pagos uma única vez
   const parcelaMensal =
     (valorCredito * taxa * Math.pow(1 + taxa, prazo)) /
     (Math.pow(1 + taxa, prazo) - 1);
 
-  const totalEmprestimo = parcelaMensal * prazo;
-  const totalJuros = totalEmprestimo - valorCredito;
+  const totalFinanciamento = parcelaMensal * prazo;
+  const totalJuros = totalFinanciamento - valorCredito;
 
-  // Imposto calculado sobre o valor fiscal declarado pelo cliente
+  // ── IMPOSTO: pago UMA VEZ sobre o valor fiscal declarado pelo cliente ────────
   const impostoValor = valorFiscal > 0 && pctImposto > 0
     ? (valorFiscal * pctImposto) / 100
     : 0;
 
-  // Comissão calculada sobre o valor do crédito
+  // ── COMISSÃO: paga UMA VEZ sobre o valor do crédito ─────────────────────────
   const comissaoValor = pctComissao > 0
     ? (valorCredito * pctComissao) / 100
     : 0;
 
-  // Custo total da operação = total do empréstimo + imposto + comissão
-  const custoTotalOperacao = totalEmprestimo + impostoValor + comissaoValor;
-
-  // CET via Newton-Raphson (considera comissão e imposto como custo inicial)
-  const custoInicial = impostoValor + comissaoValor;
-  const fluxo = [-(valorCredito - custoInicial)];
-  for (let i = 0; i < prazo; i++) fluxo.push(parcelaMensal);
-
-  let cetMensal = taxa;
-  for (let iter = 0; iter < 200; iter++) {
-    let f = 0, df = 0;
-    for (let t = 0; t < fluxo.length; t++) {
-      const fator = Math.pow(1 + cetMensal, t);
-      f += fluxo[t] / fator;
-      if (t > 0) df -= (t * fluxo[t]) / (fator * (1 + cetMensal));
-    }
-    if (Math.abs(df) < 1e-15) break;
-    const delta = -f / df;
-    cetMensal += delta;
-    if (Math.abs(delta) < 1e-10) break;
-  }
-  const cetAnual = (Math.pow(1 + cetMensal, 12) - 1) * 100;
-
-  // Tabela de amortização (Sistema Price)
-  const tabelaAmortizacao = [];
-  let saldo = valorCredito;
-  for (let i = 1; i <= prazo; i++) {
-    const juros = saldo * taxa;
-    const amortizacao = parcelaMensal - juros;
-    const saldoFinal = Math.max(0, saldo - amortizacao);
-    tabelaAmortizacao.push({
-      parcela: i,
-      saldoInicial: saldo,
-      juros,
-      amortizacao,
-      prestacao: parcelaMensal,
-      saldoFinal,
-    });
-    saldo = saldoFinal;
-  }
+  // ── CUSTO TOTAL: financiamento + imposto (1x) + comissão (1x) ───────────────
+  const custoTotalOperacao = totalFinanciamento + impostoValor + comissaoValor;
 
   return {
     parcelaMensal,
-    totalEmprestimo,
+    totalFinanciamento,
     totalJuros,
     impostoValor,
     comissaoValor,
     custoTotalOperacao,
-    cetMensal: cetMensal * 100,
-    cetAnual,
-    tabelaAmortizacao,
   };
 }
 
@@ -267,7 +217,7 @@ function PainelResultado({
         {[
           { label: "Valor do Crédito", value: fmtBRL.format(resultado.parcelaMensal * prazo - resultado.totalJuros), color: "" },
           { label: "Total de Juros", value: fmtBRL.format(resultado.totalJuros), color: "text-amber-600" },
-          { label: "Total do Empréstimo", value: fmtBRL.format(resultado.totalEmprestimo), color: "font-semibold" },
+          { label: "Total do Financiamento", value: fmtBRL.format(resultado.totalFinanciamento), color: "font-semibold" },
         ].map(({ label, value, color }) => (
           <div key={label} className="flex justify-between items-center py-2.5 border-b border-border text-sm">
             <span className="text-muted-foreground">{label}</span>
@@ -287,7 +237,7 @@ function PainelResultado({
             </div>
             <div className="flex justify-between items-center py-2.5 border-b border-border text-sm">
               <span className="text-muted-foreground">
-                Imposto ({pctImpostoNum}% sobre fiscal)
+                Imposto ({pctImpostoNum}% sobre fiscal) — pago 1x
               </span>
               <span className="font-semibold text-red-600">{fmtBRL.format(resultado.impostoValor)}</span>
             </div>
@@ -296,7 +246,7 @@ function PainelResultado({
 
         {resultado.comissaoValor > 0 && (
           <div className="flex justify-between items-center py-2.5 border-b border-border text-sm">
-            <span className="text-muted-foreground">Comissão Destrava</span>
+            <span className="text-muted-foreground">Comissão Destrava — pago 1x</span>
             <span className="font-semibold text-orange-600">{fmtBRL.format(resultado.comissaoValor)}</span>
           </div>
         )}
@@ -313,7 +263,7 @@ function PainelResultado({
           {fmtBRL.format(resultado.custoTotalOperacao)}
         </p>
         <p className="text-xs text-center text-muted-foreground mt-1.5">
-          Empréstimo ({fmtBRL.format(resultado.totalEmprestimo)})
+          Financiamento ({fmtBRL.format(resultado.totalFinanciamento)})
           {resultado.impostoValor > 0 ? ` + Imposto (${fmtBRL.format(resultado.impostoValor)})` : ""}
           {resultado.comissaoValor > 0 ? ` + Comissão (${fmtBRL.format(resultado.comissaoValor)})` : ""}
         </p>
