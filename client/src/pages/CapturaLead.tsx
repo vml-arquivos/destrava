@@ -1,10 +1,12 @@
+import { useState, FormEvent } from "react";
+import { Link } from "wouter";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -12,757 +14,547 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { Badge } from "@/components/ui/badge";
 import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Calculator,
   CheckCircle2,
-  Clock,
-  Shield,
+  ArrowRight,
+  Phone,
   User,
   Building2,
-  Phone,
   Mail,
-  MapPin,
   DollarSign,
-  Calculator,
-  ArrowRight,
+  ChevronDown,
+  ChevronUp,
+  MessageCircle,
+  Shield,
+  Clock,
   Star,
-  TrendingUp,
-  FileText,
+  Loader2,
 } from "lucide-react";
-import { useState, FormEvent } from "react";
-import { useLocation } from "wouter";
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+interface LeadForm {
+  nome: string;
+  telefone: string;
+  empresa: string;
+  email: string;
+  valorDesejado: string;
+  finalidade: string;
+  tipoCliente: string;
+}
 
-const formatCNPJ = (value: string) => {
-  const digits = value.replace(/\D/g, "").slice(0, 14);
-  return digits
-    .replace(/^(\d{2})(\d)/, "$1.$2")
-    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
-    .replace(/\.(\d{3})(\d)/, ".$1/$2")
-    .replace(/(\d{4})(\d)/, "$1-$2");
-};
+interface ResultadoSimulacao {
+  parcelaMin: number;
+  parcelaMax: number;
+  totalMin: number;
+  totalMax: number;
+  parcelas: number;
+}
 
-const formatCPF = (value: string) => {
-  const digits = value.replace(/\D/g, "").slice(0, 11);
-  return digits
-    .replace(/(\d{3})(\d)/, "$1.$2")
-    .replace(/(\d{3})(\d)/, "$1.$2")
-    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-};
+const FINALIDADES = [
+  "Capital de Giro",
+  "Expansão do Negócio",
+  "Compra de Equipamentos",
+  "Reforma / Construção",
+  "Quitação de Dívidas",
+  "Investimento em Estoque",
+  "Folha de Pagamento",
+  "Outro",
+];
 
-const formatPhone = (value: string) => {
-  const digits = value.replace(/\D/g, "").slice(0, 11);
-  if (digits.length <= 10) {
-    return digits.replace(/(\d{2})(\d{4})(\d{0,4})/, "($1) $2-$3");
-  }
-  return digits.replace(/(\d{2})(\d{5})(\d{0,4})/, "($1) $2-$3");
-};
+const FAIXAS_VALOR = [
+  { label: "Até R$ 20.000", valor: "20000" },
+  { label: "R$ 20.001 a R$ 50.000", valor: "50000" },
+  { label: "R$ 50.001 a R$ 100.000", valor: "100000" },
+  { label: "R$ 100.001 a R$ 300.000", valor: "300000" },
+  { label: "R$ 300.001 a R$ 500.000", valor: "500000" },
+  { label: "Acima de R$ 500.000", valor: "1000000" },
+];
 
-const calculateInstallment = (principal: number, monthlyRate: number, months: number) => {
-  if (monthlyRate === 0) return principal / months;
-  const rate = monthlyRate / 100;
-  return (principal * rate * Math.pow(1 + rate, months)) / (Math.pow(1 + rate, months) - 1);
-};
+const fmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+function calcularEstimativa(valorStr: string, parcelas: number): ResultadoSimulacao | null {
+  const valor = parseFloat(valorStr);
+  if (!valor || valor <= 0 || !parcelas) return null;
+  const taxaMin = 0.015;
+  const taxaMax = 0.045;
+  const parcelaMin =
+    (valor * taxaMin * Math.pow(1 + taxaMin, parcelas)) /
+    (Math.pow(1 + taxaMin, parcelas) - 1);
+  const parcelaMax =
+    (valor * taxaMax * Math.pow(1 + taxaMax, parcelas)) /
+    (Math.pow(1 + taxaMax, parcelas) - 1);
+  return {
+    parcelaMin,
+    parcelaMax,
+    totalMin: parcelaMin * parcelas,
+    totalMax: parcelaMax * parcelas,
+    parcelas,
+  };
+}
+
+function formatarTelefone(v: string): string {
+  const nums = v.replace(/\D/g, "").slice(0, 11);
+  if (nums.length <= 2) return nums;
+  if (nums.length <= 6) return `(${nums.slice(0, 2)}) ${nums.slice(2)}`;
+  if (nums.length <= 10)
+    return `(${nums.slice(0, 2)}) ${nums.slice(2, 6)}-${nums.slice(6)}`;
+  return `(${nums.slice(0, 2)}) ${nums.slice(2, 7)}-${nums.slice(7)}`;
+}
 
 export default function CapturaLead() {
-  const [, setLocation] = useLocation();
-  const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [tipoCliente, setTipoCliente] = useState<"empresa" | "pessoa-fisica">("empresa");
-
-  // Dados pessoais
-  const [formData, setFormData] = useState({
+  const [etapa, setEtapa] = useState<"formulario" | "resultado">("formulario");
+  const [form, setForm] = useState<LeadForm>({
     nome: "",
-    documento: "",
-    whatsapp: "",
+    telefone: "",
+    empresa: "",
     email: "",
-    cep: "",
-    endereco: "",
-    cidade: "",
-    estado: "",
-    porte: "",
-    faturamento: "",
-    produto: "",
+    valorDesejado: "",
     finalidade: "",
-    observacoes: "",
+    tipoCliente: "empresa",
   });
+  const [parcelas, setParcelas] = useState("24");
+  const [resultado, setResultado] = useState<ResultadoSimulacao | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [erros, setErros] = useState<Partial<Record<keyof LeadForm, string>>>({});
+  const [mostrarDetalhes, setMostrarDetalhes] = useState(false);
 
-  // Simulador
-  const [valorEmprestimo, setValorEmprestimo] = useState(50000);
-  const [prazoMeses, setPrazoMeses] = useState(24);
-  const [taxaMensal, setTaxaMensal] = useState(2.5);
-
-  const parcela = calculateInstallment(valorEmprestimo, taxaMensal, prazoMeses);
-  const totalPago = parcela * prazoMeses;
-  const totalJuros = totalPago - valorEmprestimo;
-
-  const produtosEmpresa = [
-    { value: "giro-caixa-facil", label: "Giro CAIXA Fácil (até R$ 70k)" },
-    { value: "pronampe", label: "PRONAMPE (até R$ 150k)" },
-    { value: "pronamp", label: "PRONAMP - Programa Nacional de Apoio ao Médio Produtor Rural" },
-    { value: "credito-pj-pequeno", label: "Crédito PJ - Pequeno Porte" },
-    { value: "credito-pj-medio", label: "Crédito PJ - Médio Porte" },
-    { value: "credito-pj-grande", label: "Crédito PJ - Grande Porte" },
-    { value: "capital-giro", label: "Capital de Giro Empresarial" },
-    { value: "financiamento-equipamentos", label: "Financiamento de Equipamentos" },
-    { value: "certificado-digital", label: "Certificado Digital" },
-    { value: "rating-bb", label: "Consulta de Rating - Banco do Brasil" },
-    { value: "spc-serasa-pj", label: "Consulta SPC/Serasa CNPJ" },
-    { value: "limpa-nome-cnpj", label: "Limpeza de Nome CNPJ" },
-    { value: "outro", label: "Outro" },
-  ];
-
-  const produtosPF = [
-    { value: "credito-pessoal", label: "Crédito Pessoal" },
-    { value: "consignado", label: "Crédito Consignado" },
-    { value: "financiamento-imovel", label: "Financiamento Imobiliário" },
-    { value: "financiamento-veiculo", label: "Financiamento de Veículo" },
-    { value: "spc-serasa-cpf", label: "Consulta SPC/Serasa CPF" },
-    { value: "limpa-nome-cpf", label: "Limpeza de Nome CPF" },
-    { value: "outro", label: "Outro" },
-  ];
-
-  const handleChange = (field: string, value: string) => {
-    let formatted = value;
-    if (field === "documento") {
-      formatted = tipoCliente === "empresa" ? formatCNPJ(value) : formatCPF(value);
-    } else if (field === "whatsapp") {
-      formatted = formatPhone(value);
-    }
-    setFormData((prev) => ({ ...prev, [field]: formatted }));
+  const set = (field: keyof LeadForm, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    if (erros[field]) setErros((prev) => ({ ...prev, [field]: "" }));
   };
 
-  const handleSubmit = async (e: FormEvent) => {
+  function validar(): boolean {
+    const novosErros: Partial<Record<keyof LeadForm, string>> = {};
+    if (!form.nome.trim()) novosErros.nome = "Nome é obrigatório";
+    if (!form.telefone.trim()) novosErros.telefone = "Telefone é obrigatório";
+    else if (form.telefone.replace(/\D/g, "").length < 10)
+      novosErros.telefone = "Telefone inválido";
+    setErros(novosErros);
+    return Object.keys(novosErros).length === 0;
+  }
+
+  async function handleSimular(e: FormEvent) {
     e.preventDefault();
-    setLoading(true);
-
-    const payload = {
-      ...formData,
-      tipoCliente,
-      simulacao: {
-        valorEmprestimo,
-        prazoMeses,
-        taxaMensal,
-        parcelaEstimada: parcela,
-        totalPago,
-        totalJuros,
-      },
-      criadoEm: new Date().toISOString(),
-    };
-
+    if (!validar()) return;
+    setEnviando(true);
+    const res = calcularEstimativa(form.valorDesejado, parseInt(parcelas));
+    setResultado(res);
     try {
-      const res = await fetch("/api/leads", {
+      await fetch("/api/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          nome: form.nome,
+          telefone: form.telefone,
+          empresa: form.empresa || null,
+          email: form.email || null,
+          valorDesejado: form.valorDesejado ? parseFloat(form.valorDesejado) : null,
+          finalidade: form.finalidade || null,
+          tipoCliente: form.tipoCliente,
+          parcelas: parseInt(parcelas),
+          origem: "simulador-publico",
+        }),
       });
-
-      if (res.ok) {
-        setLocation("/sucesso");
-      } else {
-        // Fallback: redirecionar mesmo sem API
-        setLocation("/sucesso");
-      }
     } catch {
-      // Fallback: redirecionar mesmo sem API
-      setLocation("/sucesso");
-    } finally {
-      setLoading(false);
+      // silencioso
     }
-  };
+    setEnviando(false);
+    setEtapa("resultado");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
-  const isStep1Valid =
-    formData.nome.length >= 3 &&
-    formData.whatsapp.length >= 14 &&
-    formData.email.includes("@");
+  const whatsappUrl = `https://wa.me/5561986055223?text=${encodeURIComponent(
+    `Olá! Me chamo ${form.nome} e fiz uma simulação no site da Destrava Crédito.\n\n` +
+      (form.empresa ? `Empresa: ${form.empresa}\n` : "") +
+      (form.valorDesejado ? `Valor desejado: ${fmt.format(parseFloat(form.valorDesejado))}\n` : "") +
+      (form.finalidade ? `Finalidade: ${form.finalidade}\n` : "") +
+      `Prazo: ${parcelas} meses\n\nGostaria de conversar com um especialista.`
+  )}`;
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
+    <>
       <SEO
-        title="Simule seu Empréstimo Grátis"
-        description="Simule seu empréstimo gratuitamente. Crédito para empresas e pessoa física. PRONAMPE, Giro CAIXA Fácil, Rating, Certificado Digital, SPC/Serasa e muito mais."
-        keywords="simulador empréstimo, crédito empresarial, PRONAMPE, Giro CAIXA Fácil, limpa nome, SPC Serasa, certificado digital, rating banco do brasil"
+        title="Simule seu Empréstimo Grátis | Destrava Crédito"
+        description="Simule agora seu empréstimo empresarial ou pessoal. Preencha seus dados e receba uma estimativa personalizada. Atendimento por especialistas."
+        keywords="simular empréstimo, simulador crédito empresarial, simulação PRONAMPE, capital de giro"
       />
       <Header />
 
-      {/* HERO */}
-      <section className="bg-gradient-to-br from-[var(--color-caixa-blue)] via-[var(--color-caixa-blue-dark)] to-[#001a4d] text-white py-12 md:py-16">
-        <div className="container px-4">
-          <div className="max-w-4xl mx-auto text-center">
-            <Badge className="bg-[var(--color-caixa-yellow)] text-black font-bold mb-4 text-sm px-4 py-1">
-              100% Gratuito e Sem Compromisso
+      <main className="min-h-screen bg-gradient-to-b from-[#001f6b]/5 to-white">
+        <section className="bg-gradient-to-br from-[#001f6b] via-[#002d8a] to-[#003db5] text-white py-14 px-4">
+          <div className="max-w-3xl mx-auto text-center">
+            <Badge className="bg-white/20 text-white border-white/30 mb-4">
+              <Calculator className="h-3.5 w-3.5 mr-1.5" />
+              Simulação 100% Gratuita
             </Badge>
-            <h1 className="text-3xl md:text-5xl font-bold mb-4 leading-tight">
-              Simule seu Empréstimo Agora
+            <h1 className="text-3xl md:text-4xl font-bold mb-4 leading-tight">
+              Simule seu Empréstimo e Descubra as Melhores Condições
             </h1>
-            <p className="text-lg md:text-xl text-white/90 mb-6 max-w-2xl mx-auto">
-              Preencha seus dados, simule o valor e prazo ideal, e nossa equipe de especialistas entrará em contato com as melhores condições para você.
+            <p className="text-white/80 text-lg mb-6">
+              Preencha seus dados e receba uma estimativa personalizada.
+              Um especialista da Destrava Crédito entrará em contato com as melhores opções para você.
             </p>
-            <div className="flex flex-wrap justify-center gap-6 text-sm">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-[var(--color-caixa-yellow)]" />
-                <span>Análise Gratuita</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-[var(--color-caixa-yellow)]" />
-                <span>Retorno em 24h</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Shield className="h-5 w-5 text-[var(--color-caixa-yellow)]" />
-                <span>Dados Protegidos</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Star className="h-5 w-5 text-[var(--color-caixa-yellow)]" />
-                <span>+500 Clientes Atendidos</span>
-              </div>
+            <div className="flex flex-wrap justify-center gap-5 text-sm text-white/70">
+              <span className="flex items-center gap-1.5">
+                <Shield className="h-4 w-4 text-green-400" />
+                Dados protegidos
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Clock className="h-4 w-4 text-yellow-400" />
+                Resposta em até 2h
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Star className="h-4 w-4 text-yellow-400" />
+                +500 empresas atendidas
+              </span>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* FORMULÁRIO PRINCIPAL */}
-      <section className="py-10 md:py-16">
-        <div className="container px-4">
-          <div className="max-w-5xl mx-auto">
-            {/* Indicador de passos */}
-            <div className="flex items-center justify-center mb-8 gap-2">
-              {[1, 2, 3].map((s) => (
-                <div key={s} className="flex items-center gap-2">
-                  <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all ${
-                      step >= s
-                        ? "bg-[var(--color-caixa-blue)] text-white"
-                        : "bg-gray-200 text-gray-500"
-                    }`}
-                  >
-                    {step > s ? <CheckCircle2 className="h-5 w-5" /> : s}
-                  </div>
-                  <span className={`text-sm font-medium hidden sm:block ${step >= s ? "text-[var(--color-caixa-blue)]" : "text-gray-400"}`}>
-                    {s === 1 ? "Seus Dados" : s === 2 ? "Simulação" : "Finalizar"}
-                  </span>
-                  {s < 3 && <div className={`w-8 md:w-16 h-1 rounded ${step > s ? "bg-[var(--color-caixa-blue)]" : "bg-gray-200"}`} />}
-                </div>
-              ))}
-            </div>
+        <section className="py-12 px-4">
+          <div className="max-w-2xl mx-auto">
 
-            <form onSubmit={handleSubmit}>
-              <div className="grid md:grid-cols-3 gap-6">
-                {/* COLUNA ESQUERDA - FORMULÁRIO */}
-                <div className="md:col-span-2 space-y-6">
+            {etapa === "formulario" && (
+              <Card className="shadow-xl border-0">
+                <CardHeader className="pb-4 border-b">
+                  <CardTitle className="text-xl flex items-center gap-2">
+                    <Calculator className="h-5 w-5 text-primary" />
+                    Preencha seus dados para simular
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Campos com <span className="text-destructive font-semibold">*</span> são obrigatórios
+                  </p>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <form onSubmit={handleSimular} className="space-y-6">
 
-                  {/* PASSO 1: DADOS PESSOAIS */}
-                  {step === 1 && (
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
-                      <div className="flex items-center gap-3 mb-6">
-                        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                          <User className="h-5 w-5 text-[var(--color-caixa-blue)]" />
-                        </div>
-                        <div>
-                          <h2 className="text-xl font-bold text-gray-900">Seus Dados</h2>
-                          <p className="text-sm text-gray-500">Informações de contato</p>
-                        </div>
-                      </div>
+                    {/* Tipo de cliente */}
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { value: "empresa", label: "Empresa (PJ)", icon: Building2 },
+                        { value: "pessoa_fisica", label: "Pessoa Física (PF)", icon: User },
+                      ].map(({ value, label, icon: Icon }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => set("tipoCliente", value)}
+                          className={`flex items-center justify-center gap-2 p-3 rounded-xl border-2 text-sm font-medium transition-all ${
+                            form.tipoCliente === value
+                              ? "border-primary bg-primary/5 text-primary"
+                              : "border-border text-muted-foreground hover:border-primary/30"
+                          }`}
+                        >
+                          <Icon className="h-4 w-4" />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
 
-                      {/* Tipo de Cliente */}
-                      <div className="mb-6">
-                        <Label className="text-sm font-semibold text-gray-700 mb-3 block">Você é:</Label>
-                        <div className="grid grid-cols-2 gap-3">
-                          <button
-                            type="button"
-                            onClick={() => setTipoCliente("empresa")}
-                            className={`p-4 rounded-xl border-2 text-left transition-all ${
-                              tipoCliente === "empresa"
-                                ? "border-[var(--color-caixa-blue)] bg-blue-50"
-                                : "border-gray-200 hover:border-gray-300"
-                            }`}
-                          >
-                            <Building2 className={`h-6 w-6 mb-2 ${tipoCliente === "empresa" ? "text-[var(--color-caixa-blue)]" : "text-gray-400"}`} />
-                            <p className="font-semibold text-sm">Empresa / CNPJ</p>
-                            <p className="text-xs text-gray-500">MEI, ME, EPP, Médio ou Grande Porte</p>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setTipoCliente("pessoa-fisica")}
-                            className={`p-4 rounded-xl border-2 text-left transition-all ${
-                              tipoCliente === "pessoa-fisica"
-                                ? "border-[var(--color-caixa-blue)] bg-blue-50"
-                                : "border-gray-200 hover:border-gray-300"
-                            }`}
-                          >
-                            <User className={`h-6 w-6 mb-2 ${tipoCliente === "pessoa-fisica" ? "text-[var(--color-caixa-blue)]" : "text-gray-400"}`} />
-                            <p className="font-semibold text-sm">Pessoa Física / CPF</p>
-                            <p className="text-xs text-gray-500">Crédito pessoal, consignado, imóvel</p>
-                          </button>
-                        </div>
-                      </div>
+                    <div className="space-y-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Dados de Contato
+                      </p>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="md:col-span-2">
-                          <Label htmlFor="nome" className="text-sm font-semibold">
-                            {tipoCliente === "empresa" ? "Nome / Razão Social *" : "Nome Completo *"}
-                          </Label>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="nome">
+                          Nome Completo <span className="text-destructive">*</span>
+                        </Label>
+                        <div className="relative">
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                           <Input
                             id="nome"
-                            value={formData.nome}
-                            onChange={(e) => handleChange("nome", e.target.value)}
-                            placeholder={tipoCliente === "empresa" ? "Ex: Empresa LTDA" : "Ex: João da Silva"}
-                            className="mt-1"
-                            required
+                            value={form.nome}
+                            onChange={(e) => set("nome", e.target.value)}
+                            placeholder="Seu nome completo"
+                            className={`pl-9 ${erros.nome ? "border-destructive" : ""}`}
                           />
                         </div>
+                        {erros.nome && <p className="text-xs text-destructive">{erros.nome}</p>}
+                      </div>
 
-                        <div>
-                          <Label htmlFor="documento" className="text-sm font-semibold">
-                            {tipoCliente === "empresa" ? "CNPJ *" : "CPF *"}
-                          </Label>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="telefone">
+                          Telefone / WhatsApp <span className="text-destructive">*</span>
+                        </Label>
+                        <div className="relative">
+                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                           <Input
-                            id="documento"
-                            value={formData.documento}
-                            onChange={(e) => handleChange("documento", e.target.value)}
-                            placeholder={tipoCliente === "empresa" ? "00.000.000/0000-00" : "000.000.000-00"}
-                            className="mt-1"
-                            required
+                            id="telefone"
+                            value={form.telefone}
+                            onChange={(e) => set("telefone", formatarTelefone(e.target.value))}
+                            placeholder="(61) 9 9999-9999"
+                            className={`pl-9 ${erros.telefone ? "border-destructive" : ""}`}
+                            inputMode="tel"
                           />
                         </div>
+                        {erros.telefone && <p className="text-xs text-destructive">{erros.telefone}</p>}
+                      </div>
 
-                        <div>
-                          <Label htmlFor="whatsapp" className="text-sm font-semibold">
-                            WhatsApp *
+                      {form.tipoCliente === "empresa" && (
+                        <div className="space-y-1.5">
+                          <Label htmlFor="empresa">
+                            Nome da Empresa
+                            <span className="text-muted-foreground text-xs ml-1.5 font-normal">(opcional)</span>
                           </Label>
-                          <div className="relative mt-1">
-                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                          <div className="relative">
+                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
-                              id="whatsapp"
-                              value={formData.whatsapp}
-                              onChange={(e) => handleChange("whatsapp", e.target.value)}
-                              placeholder="(61) 9 0000-0000"
-                              className="pl-9"
-                              required
-                            />
-                          </div>
-                        </div>
-
-                        <div className="md:col-span-2">
-                          <Label htmlFor="email" className="text-sm font-semibold">
-                            E-mail *
-                          </Label>
-                          <div className="relative mt-1">
-                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                            <Input
-                              id="email"
-                              type="email"
-                              value={formData.email}
-                              onChange={(e) => handleChange("email", e.target.value)}
-                              placeholder="seu@email.com.br"
-                              className="pl-9"
-                              required
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <Label htmlFor="cidade" className="text-sm font-semibold">
-                            Cidade
-                          </Label>
-                          <div className="relative mt-1">
-                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                            <Input
-                              id="cidade"
-                              value={formData.cidade}
-                              onChange={(e) => handleChange("cidade", e.target.value)}
-                              placeholder="Ex: Brasília"
+                              id="empresa"
+                              value={form.empresa}
+                              onChange={(e) => set("empresa", e.target.value)}
+                              placeholder="Nome da sua empresa"
                               className="pl-9"
                             />
                           </div>
                         </div>
+                      )}
 
-                        <div>
-                          <Label htmlFor="estado" className="text-sm font-semibold">
-                            Estado
-                          </Label>
-                          <Select onValueChange={(v) => handleChange("estado", v)}>
-                            <SelectTrigger className="mt-1">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="email">
+                          E-mail
+                          <span className="text-muted-foreground text-xs ml-1.5 font-normal">(opcional)</span>
+                        </Label>
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="email"
+                            type="email"
+                            value={form.email}
+                            onChange={(e) => set("email", e.target.value)}
+                            placeholder="seu@email.com"
+                            className="pl-9"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Sobre o Empréstimo
+                        <span className="text-muted-foreground text-xs ml-1.5 font-normal normal-case">(todos opcionais)</span>
+                      </p>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <Label>Valor Desejado</Label>
+                          <Select value={form.valorDesejado} onValueChange={(v) => set("valorDesejado", v)}>
+                            <SelectTrigger>
+                              <DollarSign className="h-4 w-4 text-muted-foreground mr-1 flex-shrink-0" />
                               <SelectValue placeholder="Selecione..." />
                             </SelectTrigger>
                             <SelectContent>
-                              {["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"].map((uf) => (
-                                <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                              {FAIXAS_VALOR.map((f) => (
+                                <SelectItem key={f.valor} value={f.valor}>{f.label}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         </div>
 
-                        {tipoCliente === "empresa" && (
-                          <div className="md:col-span-2">
-                            <Label htmlFor="porte" className="text-sm font-semibold">
-                              Porte da Empresa
-                            </Label>
-                            <Select onValueChange={(v) => handleChange("porte", v)}>
-                              <SelectTrigger className="mt-1">
-                                <SelectValue placeholder="Selecione o porte..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="mei">MEI - Microempreendedor Individual</SelectItem>
-                                <SelectItem value="me">ME - Microempresa</SelectItem>
-                                <SelectItem value="epp">EPP - Empresa de Pequeno Porte</SelectItem>
-                                <SelectItem value="medio">Médio Porte</SelectItem>
-                                <SelectItem value="grande">Grande Porte</SelectItem>
-                              </SelectContent>
-                            </Select>
+                        <div className="space-y-1.5">
+                          <Label>Prazo Desejado</Label>
+                          <Select value={parcelas} onValueChange={setParcelas}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {[6, 12, 18, 24, 36, 48, 60, 72, 84].map((p) => (
+                                <SelectItem key={p} value={String(p)}>{p} meses</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>Finalidade do Crédito</Label>
+                        <Select value={form.finalidade} onValueChange={(v) => set("finalidade", v)}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Para que você precisa do crédito?" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {FINALIDADES.map((f) => (
+                              <SelectItem key={f} value={f}>{f}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
+                      <Shield className="h-3.5 w-3.5 inline mr-1 text-green-600" />
+                      Seus dados são protegidos e utilizados apenas para fins de atendimento.
+                      Não compartilhamos com terceiros.
+                    </p>
+
+                    <Button
+                      type="submit"
+                      size="lg"
+                      className="w-full font-bold text-base h-14"
+                      disabled={enviando}
+                    >
+                      {enviando ? (
+                        <>
+                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                          Calculando...
+                        </>
+                      ) : (
+                        <>
+                          <Calculator className="mr-2 h-5 w-5" />
+                          Simular Agora — É Grátis
+                          <ArrowRight className="ml-2 h-5 w-5" />
+                        </>
+                      )}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            )}
+
+            {etapa === "resultado" && (
+              <div className="space-y-6">
+                <Card className="shadow-xl border-0 overflow-hidden">
+                  <div className="bg-gradient-to-r from-[#001f6b] to-[#003db5] p-6 text-white text-center">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/20 mb-4">
+                      <CheckCircle2 className="h-8 w-8 text-green-400" />
+                    </div>
+                    <h2 className="text-2xl font-bold mb-1">
+                      Simulação Concluída, {form.nome.split(" ")[0]}!
+                    </h2>
+                    <p className="text-white/80 text-sm">
+                      Veja abaixo uma estimativa baseada nas condições de mercado
+                    </p>
+                  </div>
+
+                  <CardContent className="p-6 space-y-5">
+                    {resultado && form.valorDesejado ? (
+                      <>
+                        <div className="bg-gradient-to-br from-primary/5 to-transparent rounded-xl p-5 border border-primary/20">
+                          <p className="text-sm text-muted-foreground text-center mb-2">
+                            Estimativa de Parcela Mensal
+                          </p>
+                          <div className="text-center">
+                            <p className="text-3xl font-bold text-primary">
+                              {fmt.format(resultado.parcelaMin)}
+                              <span className="text-muted-foreground text-lg font-normal mx-2">a</span>
+                              {fmt.format(resultado.parcelaMax)}
+                            </p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              em {resultado.parcelas}x · taxa de 1,5% a 4,5% a.m.
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          className="flex items-center justify-between w-full text-sm font-medium text-muted-foreground hover:text-foreground"
+                          onClick={() => setMostrarDetalhes(!mostrarDetalhes)}
+                        >
+                          <span>Ver detalhes da estimativa</span>
+                          {mostrarDetalhes ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </button>
+
+                        {mostrarDetalhes && (
+                          <div className="space-y-2 text-sm border-t pt-4">
+                            {[
+                              ["Valor solicitado", fmt.format(parseFloat(form.valorDesejado))],
+                              ["Prazo", `${resultado.parcelas} meses`],
+                              ["Total mínimo estimado", fmt.format(resultado.totalMin)],
+                              ["Total máximo estimado", fmt.format(resultado.totalMax)],
+                            ].map(([label, value]) => (
+                              <div key={label} className="flex justify-between py-1.5 border-b last:border-0">
+                                <span className="text-muted-foreground">{label}</span>
+                                <span className="font-semibold">{value}</span>
+                              </div>
+                            ))}
+                            <p className="text-xs text-muted-foreground bg-amber-50 border border-amber-200 rounded-md p-2 mt-2">
+                              Estimativa baseada em taxas de mercado (1,5% a 4,5% a.m.). A taxa real depende da análise de crédito.
+                            </p>
                           </div>
                         )}
-
-                        <div className="md:col-span-2">
-                          <Label htmlFor="produto" className="text-sm font-semibold">
-                            O que você precisa? *
-                          </Label>
-                          <Select onValueChange={(v) => handleChange("produto", v)} required>
-                            <SelectTrigger className="mt-1">
-                              <SelectValue placeholder="Selecione o produto/serviço..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(tipoCliente === "empresa" ? produtosEmpresa : produtosPF).map((p) => (
-                                <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center py-4 text-muted-foreground text-sm">
+                        Para ver a estimativa de parcelas, informe o valor desejado na próxima simulação.
                       </div>
+                    )}
 
-                      <Button
-                        type="button"
-                        onClick={() => setStep(2)}
-                        disabled={!isStep1Valid}
-                        className="w-full mt-6 bg-[var(--color-caixa-blue)] hover:bg-blue-700 text-white font-bold py-3 text-base"
-                      >
-                        Continuar para Simulação
-                        <ArrowRight className="ml-2 h-5 w-5" />
-                      </Button>
+                    <div className="bg-muted/30 rounded-xl p-4 text-sm space-y-2">
+                      <p className="font-semibold">Seus dados registrados:</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div><span className="text-muted-foreground block text-xs">Nome</span><p className="font-medium">{form.nome}</p></div>
+                        <div><span className="text-muted-foreground block text-xs">Telefone</span><p className="font-medium">{form.telefone}</p></div>
+                        {form.empresa && <div><span className="text-muted-foreground block text-xs">Empresa</span><p className="font-medium">{form.empresa}</p></div>}
+                        {form.finalidade && <div><span className="text-muted-foreground block text-xs">Finalidade</span><p className="font-medium">{form.finalidade}</p></div>}
+                      </div>
                     </div>
-                  )}
 
-                  {/* PASSO 2: SIMULADOR */}
-                  {step === 2 && (
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
-                      <div className="flex items-center gap-3 mb-6">
-                        <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                          <Calculator className="h-5 w-5 text-green-600" />
-                        </div>
-                        <div>
-                          <h2 className="text-xl font-bold text-gray-900">Simulação de Crédito</h2>
-                          <p className="text-sm text-gray-500">Ajuste os valores para sua necessidade</p>
-                        </div>
-                      </div>
-
-                      <div className="space-y-8">
-                        {/* Valor do Empréstimo */}
-                        <div>
-                          <div className="flex justify-between items-center mb-3">
-                            <Label className="text-sm font-semibold">Valor do Empréstimo</Label>
-                            <span className="text-xl font-bold text-[var(--color-caixa-blue)]">
-                              {formatCurrency(valorEmprestimo)}
-                            </span>
-                          </div>
-                          <Slider
-                            min={5000}
-                            max={tipoCliente === "empresa" ? 5000000 : 500000}
-                            step={5000}
-                            value={[valorEmprestimo]}
-                            onValueChange={([v]) => setValorEmprestimo(v)}
-                            className="mb-2"
-                          />
-                          <div className="flex justify-between text-xs text-gray-400">
-                            <span>R$ 5.000</span>
-                            <span>{tipoCliente === "empresa" ? "R$ 5.000.000" : "R$ 500.000"}</span>
-                          </div>
-                        </div>
-
-                        {/* Prazo */}
-                        <div>
-                          <div className="flex justify-between items-center mb-3">
-                            <Label className="text-sm font-semibold">Prazo de Pagamento</Label>
-                            <span className="text-xl font-bold text-[var(--color-caixa-blue)]">
-                              {prazoMeses} meses
-                            </span>
-                          </div>
-                          <Slider
-                            min={6}
-                            max={120}
-                            step={6}
-                            value={[prazoMeses]}
-                            onValueChange={([v]) => setPrazoMeses(v)}
-                            className="mb-2"
-                          />
-                          <div className="flex justify-between text-xs text-gray-400">
-                            <span>6 meses</span>
-                            <span>120 meses</span>
-                          </div>
-                        </div>
-
-                        {/* Taxa */}
-                        <div>
-                          <div className="flex justify-between items-center mb-3">
-                            <Label className="text-sm font-semibold">Taxa de Juros (estimativa)</Label>
-                            <span className="text-xl font-bold text-[var(--color-caixa-blue)]">
-                              {taxaMensal.toFixed(2)}% a.m.
-                            </span>
-                          </div>
-                          <Slider
-                            min={0.5}
-                            max={8}
-                            step={0.1}
-                            value={[taxaMensal]}
-                            onValueChange={([v]) => setTaxaMensal(v)}
-                            className="mb-2"
-                          />
-                          <div className="flex justify-between text-xs text-gray-400">
-                            <span>0,5% a.m.</span>
-                            <span>8% a.m.</span>
-                          </div>
-                        </div>
-
-                        {/* Finalidade */}
-                        <div>
-                          <Label htmlFor="finalidade" className="text-sm font-semibold">
-                            Finalidade do Crédito
-                          </Label>
-                          <Select onValueChange={(v) => handleChange("finalidade", v)}>
-                            <SelectTrigger className="mt-1">
-                              <SelectValue placeholder="Para que você vai usar o crédito?" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="capital-giro">Capital de Giro</SelectItem>
-                              <SelectItem value="investimento">Investimento / Expansão</SelectItem>
-                              <SelectItem value="equipamentos">Compra de Equipamentos</SelectItem>
-                              <SelectItem value="reforma">Reforma / Obra</SelectItem>
-                              <SelectItem value="pagamento-dividas">Pagamento de Dívidas</SelectItem>
-                              <SelectItem value="imovel">Aquisição de Imóvel</SelectItem>
-                              <SelectItem value="veiculo">Aquisição de Veículo</SelectItem>
-                              <SelectItem value="outro">Outro</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div>
-                          <Label htmlFor="observacoes" className="text-sm font-semibold">
-                            Observações (opcional)
-                          </Label>
-                          <Textarea
-                            id="observacoes"
-                            value={formData.observacoes}
-                            onChange={(e) => handleChange("observacoes", e.target.value)}
-                            placeholder="Conte mais sobre sua necessidade, situação atual, restrições, etc."
-                            className="mt-1 resize-none"
-                            rows={3}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex gap-3 mt-6">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setStep(1)}
-                          className="flex-1"
-                        >
-                          Voltar
-                        </Button>
-                        <Button
-                          type="button"
-                          onClick={() => setStep(3)}
-                          className="flex-2 bg-[var(--color-caixa-blue)] hover:bg-blue-700 text-white font-bold"
-                        >
-                          Revisar e Enviar
+                    <div className="space-y-3">
+                      <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
+                        <Button size="lg" className="w-full font-bold bg-green-600 hover:bg-green-700 h-14">
+                          <MessageCircle className="mr-2 h-5 w-5" />
+                          Falar com Especialista no WhatsApp
                           <ArrowRight className="ml-2 h-5 w-5" />
                         </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* PASSO 3: REVISÃO E ENVIO */}
-                  {step === 3 && (
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
-                      <div className="flex items-center gap-3 mb-6">
-                        <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center">
-                          <FileText className="h-5 w-5 text-yellow-600" />
-                        </div>
-                        <div>
-                          <h2 className="text-xl font-bold text-gray-900">Revisão dos Dados</h2>
-                          <p className="text-sm text-gray-500">Confirme suas informações antes de enviar</p>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4 mb-6">
-                        <div className="bg-gray-50 rounded-xl p-4">
-                          <h3 className="font-semibold text-sm text-gray-500 mb-3">DADOS PESSOAIS</h3>
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div><span className="text-gray-500">Nome:</span> <span className="font-medium">{formData.nome}</span></div>
-                            <div><span className="text-gray-500">{tipoCliente === "empresa" ? "CNPJ:" : "CPF:"}</span> <span className="font-medium">{formData.documento}</span></div>
-                            <div><span className="text-gray-500">WhatsApp:</span> <span className="font-medium">{formData.whatsapp}</span></div>
-                            <div><span className="text-gray-500">E-mail:</span> <span className="font-medium">{formData.email}</span></div>
-                            {formData.cidade && <div><span className="text-gray-500">Cidade:</span> <span className="font-medium">{formData.cidade}/{formData.estado}</span></div>}
-                            {formData.produto && <div className="col-span-2"><span className="text-gray-500">Produto:</span> <span className="font-medium">{formData.produto}</span></div>}
-                          </div>
-                        </div>
-
-                        <div className="bg-blue-50 rounded-xl p-4">
-                          <h3 className="font-semibold text-sm text-gray-500 mb-3">SIMULAÇÃO</h3>
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div><span className="text-gray-500">Valor:</span> <span className="font-bold text-[var(--color-caixa-blue)]">{formatCurrency(valorEmprestimo)}</span></div>
-                            <div><span className="text-gray-500">Prazo:</span> <span className="font-medium">{prazoMeses} meses</span></div>
-                            <div><span className="text-gray-500">Taxa Est.:</span> <span className="font-medium">{taxaMensal.toFixed(2)}% a.m.</span></div>
-                            <div><span className="text-gray-500">Parcela Est.:</span> <span className="font-bold text-green-600">{formatCurrency(parcela)}</span></div>
-                          </div>
-                        </div>
-
-                        <p className="text-xs text-gray-500 italic">
-                          * Os valores da simulação são estimativas. As condições reais serão definidas após análise de crédito pela instituição financeira.
-                        </p>
-                      </div>
-
-                      <div className="flex items-start gap-3 mb-6 p-4 bg-gray-50 rounded-xl">
-                        <input type="checkbox" id="lgpd" className="mt-1" required />
-                        <label htmlFor="lgpd" className="text-xs text-gray-600">
-                          Concordo com a <a href="/politica-privacidade" className="text-[var(--color-caixa-blue)] underline">Política de Privacidade</a> e autorizo o uso dos meus dados para contato e análise de crédito, conforme a LGPD (Lei 13.709/2018).
-                        </label>
-                      </div>
-
-                      <div className="flex gap-3">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setStep(2)}
-                          className="flex-1"
-                        >
-                          Voltar
-                        </Button>
-                        <Button
-                          type="submit"
-                          disabled={loading}
-                          className="flex-2 bg-[var(--color-caixa-yellow)] hover:bg-yellow-500 text-black font-bold text-base py-3"
-                        >
-                          {loading ? "Enviando..." : "Enviar Simulação"}
-                          {!loading && <ArrowRight className="ml-2 h-5 w-5" />}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* COLUNA DIREITA - RESULTADO DA SIMULAÇÃO */}
-                <div className="space-y-4">
-                  {/* Card de Resultado */}
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sticky top-24">
-                    <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                      <Calculator className="h-5 w-5 text-[var(--color-caixa-blue)]" />
-                      Resultado da Simulação
-                    </h3>
-
-                    <div className="space-y-4">
-                      <div className="bg-[var(--color-caixa-blue)] rounded-xl p-4 text-white text-center">
-                        <p className="text-sm text-white/80 mb-1">Parcela Estimada</p>
-                        <p className="text-3xl font-bold">{formatCurrency(parcela)}</p>
-                        <p className="text-xs text-white/70 mt-1">por mês</p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-gray-50 rounded-xl p-3 text-center">
-                          <p className="text-xs text-gray-500">Valor Solicitado</p>
-                          <p className="font-bold text-sm text-gray-900">{formatCurrency(valorEmprestimo)}</p>
-                        </div>
-                        <div className="bg-gray-50 rounded-xl p-3 text-center">
-                          <p className="text-xs text-gray-500">Total a Pagar</p>
-                          <p className="font-bold text-sm text-gray-900">{formatCurrency(totalPago)}</p>
-                        </div>
-                        <div className="bg-gray-50 rounded-xl p-3 text-center">
-                          <p className="text-xs text-gray-500">Juros Totais</p>
-                          <p className="font-bold text-sm text-red-500">{formatCurrency(totalJuros)}</p>
-                        </div>
-                        <div className="bg-gray-50 rounded-xl p-3 text-center">
-                          <p className="text-xs text-gray-500">Prazo</p>
-                          <p className="font-bold text-sm text-gray-900">{prazoMeses} meses</p>
-                        </div>
-                      </div>
-
-                      <p className="text-xs text-gray-400 text-center">
-                        * Simulação estimada. Sujeito à análise e aprovação.
+                      </a>
+                      <p className="text-xs text-center text-muted-foreground">
+                        Um especialista entrará em contato em até 2 horas úteis
                       </p>
                     </div>
-                  </div>
 
-                  {/* Produtos em Destaque */}
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                    <h3 className="font-bold text-gray-900 mb-4">Produtos em Destaque</h3>
-                    <div className="space-y-3">
-                      {[
-                        { name: "PRONAMPE", desc: "Selic + 6% a.a.", badge: "Governo" },
-                        { name: "Giro CAIXA Fácil", desc: "A partir de 2,99% a.m.", badge: "CAIXA" },
-                        { name: "Rating BB", desc: "Consulta e análise", badge: "Banco do Brasil" },
-                      ].map((p) => (
-                        <div key={p.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                          <div>
-                            <p className="font-semibold text-sm">{p.name}</p>
-                            <p className="text-xs text-gray-500">{p.desc}</p>
-                          </div>
-                          <Badge variant="secondary" className="text-xs">{p.badge}</Badge>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Contato Direto */}
-                  <div className="bg-green-50 rounded-2xl border border-green-200 p-6 text-center">
-                    <TrendingUp className="h-8 w-8 text-green-600 mx-auto mb-3" />
-                    <p className="font-bold text-gray-900 mb-2">Prefere falar agora?</p>
-                    <p className="text-sm text-gray-600 mb-4">Nossa equipe está disponível para atendimento imediato.</p>
-                    <a
-                      href="https://wa.me/5561986055223?text=Olá! Tenho interesse em simular um empréstimo."
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <Button
+                      variant="ghost"
+                      className="w-full text-muted-foreground"
+                      onClick={() => { setEtapa("formulario"); setResultado(null); }}
                     >
-                      <Button className="w-full bg-green-600 hover:bg-green-700 text-white font-bold">
-                        Falar no WhatsApp
-                      </Button>
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      </section>
+                      Fazer nova simulação
+                    </Button>
+                  </CardContent>
+                </Card>
 
-      {/* DEPOIMENTOS */}
-      <section className="py-12 bg-white">
-        <div className="container px-4">
-          <h2 className="text-2xl font-bold text-center text-gray-900 mb-8">O que nossos clientes dizem</h2>
-          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            {[
-              { nome: "Carlos M.", empresa: "Distribuidora Silva", texto: "Consegui o PRONAMPE em 15 dias com a ajuda da Destrava. Processo simples e rápido!", rating: 5 },
-              { nome: "Ana Paula R.", empresa: "Restaurante Sabor", texto: "Precisava de capital de giro urgente. A equipe foi incrível, me orientou em tudo.", rating: 5 },
-              { nome: "Roberto L.", empresa: "Construtora RL", texto: "Excelente assessoria! Me ajudaram a conseguir crédito mesmo com restrições no CNPJ.", rating: 5 },
-            ].map((t) => (
-              <div key={t.nome} className="bg-gray-50 rounded-xl p-6">
-                <div className="flex gap-1 mb-3">
-                  {Array.from({ length: t.rating }).map((_, i) => (
-                    <Star key={i} className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { href: "/credito-empresas", titulo: "Crédito Empresarial", icon: Building2 },
+                    { href: "/credito-pessoal", titulo: "Crédito Pessoal", icon: User },
+                    { href: "/simulador", titulo: "Simulador Completo", icon: Calculator },
+                  ].map((item) => (
+                    <Link key={item.href} href={item.href}>
+                      <a className="block p-3 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-all text-center">
+                        <item.icon className="h-5 w-5 text-primary mx-auto mb-1.5" />
+                        <p className="font-semibold text-xs">{item.titulo}</p>
+                      </a>
+                    </Link>
                   ))}
                 </div>
-                <p className="text-sm text-gray-700 mb-4 italic">"{t.texto}"</p>
-                <div>
-                  <p className="font-bold text-sm">{t.nome}</p>
-                  <p className="text-xs text-gray-500">{t.empresa}</p>
-                </div>
               </div>
-            ))}
+            )}
           </div>
-        </div>
-      </section>
+        </section>
+
+        <section className="py-10 px-4 bg-muted/30 border-t border-border">
+          <div className="max-w-2xl mx-auto">
+            <div className="flex flex-wrap justify-center gap-8 text-center">
+              {[
+                { valor: "+500", label: "Empresas atendidas" },
+                { valor: "+15", label: "Linhas de crédito" },
+                { valor: "R$ 50M+", label: "Em crédito captado" },
+                { valor: "98%", label: "Satisfação" },
+              ].map((item) => (
+                <div key={item.label}>
+                  <p className="text-2xl font-bold text-primary">{item.valor}</p>
+                  <p className="text-muted-foreground text-xs">{item.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </main>
 
       <Footer />
-    </div>
+    </>
   );
 }
