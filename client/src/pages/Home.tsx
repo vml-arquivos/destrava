@@ -59,20 +59,20 @@ export default function Home() {
 
   const faqs = [
     {
-      question: "Quem libera o crédito?",
-      answer: "O crédito é analisado e liberado exclusivamente pela CAIXA Econômica Federal. A Destrava Crédito atua como Correspondente Bancário, auxiliando na documentação e no processo de solicitação."
+      question: "A Destrava trabalha com quais bancos e linhas de crédito?",
+      answer: "A Destrava Crédito é uma assessoria financeira independente que trabalha com múltiplos bancos e instituições: CAIXA Econômica Federal, Banco do Brasil, bancos privados e fintechs. Buscamos a melhor linha de crédito para o perfil da sua empresa, seja PRONAMPE, Giro CAIXA Fácil, capital de giro, financiamento de equipamentos ou crédito estruturado."
     },
     {
-      question: "As taxas são fixas?",
-      answer: "As taxas variam conforme análise de crédito da CAIXA e perfil da empresa. A taxa mínima do Giro CAIXA Fácil é de 2,99% a.m., mas pode variar conforme aprovação."
+      question: "A Destrava atende empresas de qual porte?",
+      answer: "Atendemos empresas de todos os portes: MEI, microempresas, pequenas, médias e grandes empresas. Cada perfil tem linhas de crédito específicas e nossa equipe identifica a solução mais adequada para cada caso."
     },
     {
       question: "Quais documentos são normalmente pedidos?",
-      answer: "Geralmente são necessários: CNPJ, cartão CNPJ, contrato social, comprovante de endereço da empresa, documentos pessoais dos sócios, extrato bancário e declaração de faturamento."
+      answer: "Geralmente são necessários: CNPJ, contrato social, comprovante de endereço da empresa, documentos pessoais dos sócios, extratos bancários e declaração de faturamento. A Destrava Crédito orienta sobre a documentação específica para cada linha de crédito e ajuda a organizar tudo de forma eficiente."
     },
     {
       question: "Em quanto tempo sai a resposta?",
-      answer: "O prazo varia conforme a complexidade da análise. Geralmente a CAIXA responde em 3 a 7 dias úteis após o envio completo da documentação."
+      answer: "O prazo varia conforme a linha de crédito, o banco e a complexidade da análise. Em média, entre 3 e 15 dias úteis após o envio completo da documentação. Com a assessoria da Destrava, o processo tende a ser mais ágil, pois ajudamos a enviar tudo correto desde o início."
     }
   ];
 
@@ -91,28 +91,37 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col">
       <SEO
-        title="Captação de Recursos e Crédito Empresarial - Destrava Crédito"
-        description="Destrava Crédito: Captação de recursos e assessoria financeira para empresas. Múltiplos produtos de crédito com análise personalizada de perfil e risco."
-        keywords="captacao de recursos, credito empresarial, giro caixa facil, pronampe, credito empresa, financiamento, destrava credito"
-        image="https://destrava-credito.manus.space/3.png"
+        title="Assessoria de Crédito Empresarial - Destrava Crédito"
+        description="Destrava Crédito: Assessoria financeira independente para empresas de todos os portes. PRONAMPE, Giro CAIXA Fácil, capital de giro, crédito estruturado. Análise personalizada e acesso às melhores linhas de crédito do mercado."
+        keywords="assessoria credito empresarial, pronampe, giro caixa facil, capital de giro, credito empresa, financiamento empresarial, credito pequena media grande empresa, destrava credito"
+        image="https://destrava.permupay.com.br/3.png"
         structuredData={structuredData}
       />
       <Header />
 
       {/* HERO SECTION */}
-      <section className="relative bg-gradient-to-br from-[var(--color-caixa-blue)] to-[var(--color-caixa-blue-dark)] text-white py-20 md:py-32 overflow-hidden">
+      <section className="relative bg-gradient-to-br from-[var(--color-caixa-blue)] via-[#002d8a] to-[var(--color-caixa-blue-dark)] text-white py-20 md:py-32 overflow-hidden">
+        {/* Padrão de fundo sutil */}
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30"></div>
-        
+        {/* Gradiente decorativo */}
+        <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-white/5 to-transparent pointer-events-none"></div>
+
         <div className="container relative z-10">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
-              <h1 className="text-4xl md:text-6xl font-bold mb-6 leading-tight">
-                Assessoria de Crédito e Captação de Recursos para sua Empresa.
+              {/* Badge de posicionamento */}
+              <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 mb-6 text-sm font-medium">
+                <Shield className="h-4 w-4 text-[var(--color-caixa-yellow)]" />
+                <span>Assessoria Financeira Independente · Multi-Banco</span>
+              </div>
+
+              <h1 className="text-4xl md:text-5xl font-bold mb-6 leading-tight">
+                Crédito Empresarial para Empresas de Todos os Portes
               </h1>
-              <p className="text-xl md:text-2xl mb-8 text-white/90">
-                A Destrava Crédito analisa o perfil da sua empresa e encontra a melhor solução de crédito. Desde capital de giro até financiamentos estruturados, ajudamos sua empresa a crescer.
+              <p className="text-xl md:text-2xl mb-8 text-white/90 leading-relaxed">
+                A Destrava Crédito analisa o perfil da sua empresa e busca a melhor solução de crédito no mercado. Capital de giro, PRONAMPE, financiamentos estruturados — do MEI à grande empresa.
               </p>
-              <div className="flex flex-col sm:flex-row gap-4 mb-8">
+              <div className="flex flex-col sm:flex-row gap-4 mb-10">
                 <a
                   href="https://wa.me/5561986055223"
                   target="_blank"
@@ -120,42 +129,36 @@ export default function Home() {
                 >
                   <Button
                     size="lg"
-                    className="bg-[var(--color-caixa-yellow)] hover:bg-yellow-500 text-black font-bold"
+                    className="bg-[var(--color-caixa-yellow)] hover:bg-yellow-500 text-black font-bold shadow-lg"
                   >
                     <MessageCircle className="mr-2 h-5 w-5" />
                     Conversar com Especialista
                   </Button>
                 </a>
-                <Link href="/produtos">
+                <Link href="/simular">
                   <Button
                     variant="outline"
                     size="lg"
                     className="font-semibold bg-white/10 border-white/30 text-white hover:bg-white/20 w-full sm:w-auto"
                   >
-                    Ver Produtos de Crédito
+                    Simular Empréstimo Grátis
                   </Button>
                 </Link>
               </div>
-              
-              {/* Logos CAIXA + Destrava */}
-              <div className="flex items-center gap-6 pt-6 border-t border-white/20">
-                <div className="flex items-center gap-3">
-                  <img
-                    src="/caixa-logo.svg"
-                    alt="CAIXA Econômica Federal"
-                    className="h-14 w-auto brightness-0 invert"
-                  />
+
+              {/* Credenciais — sem logos de bancos terceiros */}
+              <div className="grid grid-cols-3 gap-4 pt-6 border-t border-white/20">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-[var(--color-caixa-yellow)]">+500</p>
+                  <p className="text-xs text-white/70 mt-1">Empresas Assessoradas</p>
                 </div>
-                <div className="h-12 w-px bg-white/30"></div>
-                <div className="flex flex-col">
-                  <img
-                    src="/destrava-logo.svg"
-                    alt="Destrava Crédito"
-                    className="h-10 w-auto brightness-0 invert mb-1"
-                  />
-                  <span className="text-xs text-white/70">
-                    Correspondente / Assessoria
-                  </span>
+                <div className="text-center border-x border-white/20">
+                  <p className="text-2xl font-bold text-[var(--color-caixa-yellow)]">+15</p>
+                  <p className="text-xs text-white/70 mt-1">Linhas de Crédito</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-[var(--color-caixa-yellow)]">98%</p>
+                  <p className="text-xs text-white/70 mt-1">Taxa de Satisfação</p>
                 </div>
               </div>
             </div>
@@ -163,8 +166,8 @@ export default function Home() {
             <div className="hidden md:block">
               <img
                 src="/3.png"
-                alt="Empresário com tablet mostrando R$ 70.000"
-                className="rounded-lg shadow-2xl"
+                alt="Assessoria de crédito empresarial - Destrava Crédito"
+                className="rounded-2xl shadow-2xl"
               />
             </div>
           </div>
@@ -179,7 +182,7 @@ export default function Home() {
               Como Funciona Nossa Assessoria de Crédito
             </h2>
             <p className="text-lg text-muted-foreground leading-relaxed">
-              A Destrava Crédito realiza uma análise completa do perfil da sua empresa para encontrar a melhor solução de crédito. Desde capital de giro até financiamentos estruturados, ajudamos sua empresa a captar os recursos necessários para crescer.
+              A Destrava Crédito é uma assessoria financeira independente. Analisamos o perfil da sua empresa e buscamos a melhor solução de crédito no mercado — seja em bancos públicos, privados ou fintechs. Do capital de giro ao financiamento estruturado, trabalhamos para empresas de todos os portes.
             </p>
           </div>
 
@@ -193,7 +196,7 @@ export default function Home() {
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
-                  <span>Identificação da melhor linha de crédito</span>
+                  <span>Acesso a +15 linhas de crédito em múltiplos bancos</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
@@ -201,7 +204,11 @@ export default function Home() {
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
-                  <span>Recuperação de crédito e limpeza de nome</span>
+                  <span>Recuperação de crédito e regularização de CNPJ</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                  <span>Atendimento para MEI, pequenas, médias e grandes empresas</span>
                 </li>
               </ul>
             </div>
@@ -210,16 +217,16 @@ export default function Home() {
               <h3 className="text-2xl font-bold mb-6">Por que Escolher a Destrava</h3>
               <div className="space-y-4">
                 <div>
-                  <p className="text-lg font-bold mb-1">Assessoria Personalizada</p>
-                  <p className="text-white/80 text-sm">Cada empresa é única e merece atenção especial</p>
+                  <p className="text-lg font-bold mb-1">Assessoria Independente</p>
+                  <p className="text-white/80 text-sm">Buscamos a melhor opção do mercado, sem vínculo exclusivo com nenhum banco</p>
                 </div>
                 <div className="border-t border-white/20 pt-4">
-                  <p className="text-lg font-bold mb-1">Correspondente Autorizado</p>
-                  <p className="text-white/80 text-sm">Credenciados pela CAIXA e parceiros</p>
+                  <p className="text-lg font-bold mb-1">Atendimento para Todos os Portes</p>
+                  <p className="text-white/80 text-sm">MEI, micro, pequena, média e grande empresa — cada perfil tem a solução certa</p>
                 </div>
                 <div className="border-t border-white/20 pt-4">
-                  <p className="text-lg font-bold mb-1">Sem Burocracia</p>
-                  <p className="text-white/80 text-sm">Ajudamos a organizar documentação de forma eficiente</p>
+                  <p className="text-lg font-bold mb-1">Processo Ágil e Sem Burocracia</p>
+                  <p className="text-white/80 text-sm">Organizamos toda a documentação para acelerar a aprovação do crédito</p>
                 </div>
               </div>
             </div>
@@ -243,22 +250,22 @@ export default function Home() {
             <BenefitCard
               icon={FileCheck}
               title="1. Simulação Gratuita"
-              description="Preencha o formulário com seus dados e receba uma simulação sem compromisso."
+              description="Preencha o formulário com os dados da sua empresa e receba uma análise sem compromisso."
+            />
+            <BenefitCard
+              icon={TrendingUp}
+              title="2. Análise de Perfil"
+              description="Nossa equipe analisa o perfil da empresa e identifica as melhores linhas de crédito disponíveis."
             />
             <BenefitCard
               icon={HeadphonesIcon}
-              title="2. Orientação Destrava"
-              description="Nossa equipe orienta sobre documentos e melhores práticas para aprovação."
-            />
-            <BenefitCard
-              icon={Shield}
-              title="3. Análise da CAIXA"
-              description="A CAIXA Econômica Federal analisa seu perfil e aprova o crédito."
+              title="3. Assessoria Completa"
+              description="Orientamos sobre documentação, preparamos o processo e acompanhamos a análise junto ao banco."
             />
             <BenefitCard
               icon={CheckCircle2}
               title="4. Crédito Liberado"
-              description="Aprovado? O valor é depositado diretamente na sua conta."
+              description="Aprovado? O valor é depositado diretamente na conta da sua empresa."
             />
           </div>
         </div>
@@ -272,8 +279,7 @@ export default function Home() {
               Por que escolher a Destrava Crédito?
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Somos correspondentes autorizados com foco em facilitar seu acesso
-              ao crédito
+              Assessoria financeira independente com acesso às melhores linhas de crédito do mercado para empresas de todos os portes
             </p>
           </div>
 
@@ -292,9 +298,9 @@ export default function Home() {
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
                 <Shield className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="text-xl font-bold mb-2">Correspondente Autorizado</h3>
+              <h3 className="text-xl font-bold mb-2">Multi-Banco</h3>
               <p className="text-muted-foreground text-sm">
-                Credenciados pela CAIXA para intermediar operações
+                Acesso a múltiplos bancos e linhas de crédito — sem exclusividade
               </p>
             </div>
 
@@ -364,9 +370,9 @@ export default function Home() {
               <h2 className="text-3xl md:text-4xl font-bold mb-4">
                 Perguntas Frequentes
               </h2>
-              <p className="text-lg text-muted-foreground">
-                Tire suas dúvidas sobre o Giro CAIXA Fácil
-              </p>
+            <p className="text-lg text-muted-foreground">
+              Tire suas dúvidas sobre nossa assessoria e as linhas de crédito disponíveis
+            </p>
             </div>
 
             <Accordion type="single" collapsible className="space-y-4">
@@ -378,10 +384,7 @@ export default function Home() {
                   Quem libera o crédito?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  O crédito é analisado e liberado exclusivamente pela CAIXA
-                  Econômica Federal. A Destrava Crédito atua como correspondente
-                  bancário, intermediando o processo e oferecendo assessoria para
-                  facilitar a aprovação.
+                  A Destrava Crédito é uma assessoria financeira independente que trabalha com múltiplos bancos e instituições: CAIXA Econômica Federal, Banco do Brasil, bancos privados e fintechs. Identificamos a melhor linha de crédito para o perfil da sua empresa e acompanhamos todo o processo de aprovação.
                 </AccordionContent>
               </AccordionItem>
 
@@ -393,11 +396,7 @@ export default function Home() {
                   As taxas são fixas?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  Não. As taxas de juros variam conforme o perfil do cliente, o
-                  histórico de crédito e a análise realizada pela CAIXA. A taxa
-                  mínima divulgada é de 3% a.m., mas pode ser diferente para cada
-                  caso. Nossa assessoria ajuda a apresentar seu perfil da melhor
-                  forma possível.
+                  Não. As taxas variam conforme a linha de crédito, o banco e o perfil da empresa. Cada caso é analisado individualmente. Nossa assessoria ajuda a identificar a linha com as melhores condições para o seu perfil e a apresentar a documentação da forma mais favorável.
                 </AccordionContent>
               </AccordionItem>
 
@@ -425,11 +424,7 @@ export default function Home() {
                   Em quanto tempo sai a resposta?
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  O prazo de análise varia conforme a complexidade do caso e a
-                  documentação apresentada. Em média, a CAIXA responde entre 7 a
-                  15 dias úteis. Com a assessoria da Destrava Crédito, o processo
-                  tende a ser mais rápido, pois ajudamos a enviar tudo correto
-                  desde o início.
+                  O prazo varia conforme a linha de crédito e o banco escolhido. Em média, entre 3 e 15 dias úteis após o envio completo da documentação. Com a assessoria da Destrava Crédito, o processo tende a ser mais ágil, pois organizamos tudo corretamente desde o início.
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
@@ -443,10 +438,10 @@ export default function Home() {
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                Faça sua Simulação Gratuita
+                Simule Seu Crédito Gratuitamente
               </h2>
               <p className="text-lg text-muted-foreground">
-                Preencha o formulário e nossa equipe entrará em contato
+                Preencha o formulário e nossa equipe de especialistas entrará em contato para apresentar as melhores opções para a sua empresa
               </p>
             </div>
 
