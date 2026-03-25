@@ -22,8 +22,8 @@ RUN pnpm run build
 # ─── Stage 2: Production ─────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 
-# Instalar pnpm
-RUN npm install -g pnpm@10.4.1
+# Instalar pnpm e wget (necessário para o healthcheck)
+RUN apk add --no-cache wget && npm install -g pnpm@10.4.1
 
 WORKDIR /app
 
@@ -50,8 +50,8 @@ USER node
 ENV NODE_ENV=production
 ENV PORT=4000
 ENV DATA_DIR=/var/data/destrava
-ENV ADMIN_KEY=destrava2024admin
 ENV SITE_DOMAIN=destrava.permupay.com.br
+# ADMIN_KEY deve ser definido via variáveis de ambiente no Coolify (não hardcoded aqui)
 
 # Expor porta interna (Traefik faz o roteamento externo 80/443)
 EXPOSE 4000
