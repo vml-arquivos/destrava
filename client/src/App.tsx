@@ -21,6 +21,7 @@ import TermosUso from "./pages/TermosUso";
 import Sucesso from "./pages/Sucesso";
 // Novas páginas
 import CapturaLead from "./pages/CapturaLead";
+import SimuladorPublico from "./pages/SimuladorPublico";
 import RatingBancoBrasil from "./pages/RatingBancoBrasil";
 import CertificadoDigital from "./pages/CertificadoDigital";
 import ConsultaSPCSerasa from "./pages/ConsultaSPCSerasa";
@@ -51,7 +52,7 @@ function Router() {
       {/* Simuladores */}
       <Route path="/simulacao" component={Simulacao} />
       <Route path="/simulador" component={SimuladorCompleto} />
-      <Route path="/simular" component={CapturaLead} />
+      <Route path="/simular" component={SimuladorPublico} />
       <Route path="/calculadora-score" component={CalculadoraScore} />
 
       {/* Crédito Empresarial */}

@@ -1,7 +1,7 @@
 import { APP_LOGO } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
-import { Menu, X, ChevronDown, Building2, User, BarChart3, Shield, Search, FileText } from "lucide-react";
+import { Menu, X, ChevronDown, Building2, User, BarChart3, Shield, Search, FileText, Lock } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 
 interface NavItem {
@@ -128,8 +128,14 @@ export default function Header() {
             )}
           </nav>
 
-          {/* CTA Button Desktop */}
-          <div className="hidden lg:block flex-shrink-0">
+          {/* CTA Buttons Desktop */}
+          <div className="hidden lg:flex items-center gap-2 flex-shrink-0">
+            <Link href="/colaborador/login">
+              <Button variant="ghost" size="sm" className="text-gray-500 hover:text-gray-700 gap-1.5 text-xs">
+                <Lock className="h-3.5 w-3.5" />
+                Área Restrita
+              </Button>
+            </Link>
             <Link href="/simular">
               <Button size="lg" className="font-semibold bg-[var(--color-caixa-blue)] hover:bg-blue-700">
                 Simular Agora
@@ -178,10 +184,16 @@ export default function Header() {
                   )}
                 </div>
               ))}
-              <div className="pt-4 px-2">
+              <div className="pt-4 px-2 space-y-2">
                 <Link href="/simular" onClick={() => setMobileMenuOpen(false)}>
                   <Button size="lg" className="w-full font-semibold bg-[var(--color-caixa-blue)] hover:bg-blue-700">
                     Simular Agora
+                  </Button>
+                </Link>
+                <Link href="/colaborador/login" onClick={() => setMobileMenuOpen(false)}>
+                  <Button variant="outline" size="sm" className="w-full text-gray-500 border-gray-200 gap-1.5">
+                    <Lock className="h-3.5 w-3.5" />
+                    Área Restrita — Colaboradores
                   </Button>
                 </Link>
               </div>
