@@ -3,62 +3,6 @@
   "nodes": [
     {
       "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "info-001",
-              "name": "telefone",
-              "value": "={{ $json.body.sender.phone_number }}",
-              "type": "string"
-            },
-            {
-              "id": "info-002",
-              "name": "id_conversa",
-              "value": "={{ $json.body.conversation.id }}",
-              "type": "string"
-            },
-            {
-              "id": "info-003",
-              "name": "id_conta",
-              "value": "={{ $json.body.account.id }}",
-              "type": "string"
-            },
-            {
-              "id": "info-004",
-              "name": "contact_id",
-              "value": "={{ $json.body.sender.id }}",
-              "type": "string"
-            },
-            {
-              "id": "info-005",
-              "name": "nome_contato",
-              "value": "={{ $json.body.sender.name }}",
-              "type": "string"
-            },
-            {
-              "id": "info-006",
-              "name": "mensagem",
-              "value": "={{ $json.body.content }}",
-              "type": "string"
-            },
-            {
-              "id": "info-007",
-              "name": "url_chatwoot",
-              "value": "https://chatwoot.permupay.com.br",
-              "type": "string"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [-2400, 400],
-      "id": "crm-info-001",
-      "name": "Info"
-    },
-    {
-      "parameters": {
         "httpMethod": "POST",
         "path": "crm-qualificacao",
         "options": {}
@@ -69,6 +13,25 @@
       "id": "crm-webhook-001",
       "name": "Webhook Chatwoot",
       "webhookId": "crm-qualificacao-destrava"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "i1", "name": "telefone",      "value": "={{ $json.body.sender.phone_number }}", "type": "string" },
+            { "id": "i2", "name": "id_conversa",   "value": "={{ $json.body.conversation.id }}",     "type": "string" },
+            { "id": "i3", "name": "contact_id",    "value": "={{ $json.body.sender.id }}",           "type": "string" },
+            { "id": "i4", "name": "nome_contato",  "value": "={{ $json.body.sender.name }}",         "type": "string" },
+            { "id": "i5", "name": "mensagem",      "value": "={{ $json.body.content }}",             "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-2400, 400],
+      "id": "crm-info-001",
+      "name": "Info"
     },
     {
       "parameters": {
@@ -100,12 +63,7 @@
         "returnAll": false,
         "limit": 1,
         "where": {
-          "values": [
-            {
-              "column": "telefone",
-              "value": "={{ $('Info').item.json.telefone }}"
-            }
-          ]
+          "values": [{ "column": "telefone", "value": "={{ $('Info').item.json.telefone }}" }]
         },
         "options": {}
       },
@@ -114,9 +72,7 @@
       "position": [-1920, 400],
       "id": "crm-buscar-lead-001",
       "name": "Buscar Lead no CRM",
-      "credentials": {
-        "postgres": { "id": "g7IUIrtqmqAM3wCr", "name": "Postgres account" }
-      }
+      "credentials": { "postgres": { "id": "g7IUIrtqmqAM3wCr", "name": "Postgres account" } }
     },
     {
       "parameters": {
@@ -142,6 +98,36 @@
     },
     {
       "parameters": {
+        "operation": "update",
+        "schema": { "__rl": true, "mode": "list", "value": "public" },
+        "table": { "__rl": true, "value": "leads", "mode": "list" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "ultimo_contato_em": "={{ $now.toISO() }}",
+            "chatwoot_conv_id": "={{ $('Info').item.json.id_conversa }}"
+          },
+          "matchingColumns": ["id"],
+          "schema": [
+            { "id": "id",                "displayName": "id",                "required": true,  "defaultMatch": true,  "display": true, "type": "string",   "canBeUsedToMatch": true },
+            { "id": "ultimo_contato_em", "displayName": "ultimo_contato_em", "required": false, "defaultMatch": false, "display": true, "type": "dateTime", "canBeUsedToMatch": false },
+            { "id": "chatwoot_conv_id",  "displayName": "chatwoot_conv_id",  "required": false, "defaultMatch": false, "display": true, "type": "number",   "canBeUsedToMatch": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [-1440, 240],
+      "id": "crm-atualizar-contato-001",
+      "name": "Atualizar último contato",
+      "credentials": { "postgres": { "id": "g7IUIrtqmqAM3wCr", "name": "Postgres account" } }
+    },
+    {
+      "parameters": {
         "schema": { "__rl": true, "mode": "list", "value": "public" },
         "table": { "__rl": true, "value": "leads", "mode": "list" },
         "columns": {
@@ -155,22 +141,20 @@
             "etapa_funil": "novo",
             "temperatura": "frio",
             "chatwoot_conv_id": "={{ $('Info').item.json.id_conversa }}",
-            "whatsapp_jid": "={{ $('Info').item.json.telefone }}",
             "ultimo_contato_em": "={{ $now.toISO() }}"
           },
           "matchingColumns": ["id"],
           "schema": [
-            { "id": "id", "displayName": "id", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": true },
-            { "id": "nome", "displayName": "nome", "required": true, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
-            { "id": "telefone", "displayName": "telefone", "required": true, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "status", "displayName": "status", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
-            { "id": "origem", "displayName": "origem", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
-            { "id": "canal_origem", "displayName": "canal_origem", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
-            { "id": "etapa_funil", "displayName": "etapa_funil", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
-            { "id": "temperatura", "displayName": "temperatura", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
-            { "id": "chatwoot_conv_id", "displayName": "chatwoot_conv_id", "required": false, "defaultMatch": false, "display": true, "type": "number", "canBeUsedToMatch": false },
-            { "id": "whatsapp_jid", "displayName": "whatsapp_jid", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
-            { "id": "ultimo_contato_em", "displayName": "ultimo_contato_em", "required": false, "defaultMatch": false, "display": true, "type": "dateTime", "canBeUsedToMatch": false }
+            { "id": "id",               "displayName": "id",               "required": false, "defaultMatch": true,  "display": true, "type": "string",   "canBeUsedToMatch": true, "removed": true },
+            { "id": "nome",             "displayName": "nome",             "required": true,  "defaultMatch": false, "display": true, "type": "string",   "canBeUsedToMatch": false },
+            { "id": "telefone",         "displayName": "telefone",         "required": true,  "defaultMatch": false, "display": true, "type": "string",   "canBeUsedToMatch": true },
+            { "id": "status",           "displayName": "status",           "required": false, "defaultMatch": false, "display": true, "type": "string",   "canBeUsedToMatch": false },
+            { "id": "origem",           "displayName": "origem",           "required": false, "defaultMatch": false, "display": true, "type": "string",   "canBeUsedToMatch": false },
+            { "id": "canal_origem",     "displayName": "canal_origem",     "required": false, "defaultMatch": false, "display": true, "type": "string",   "canBeUsedToMatch": false },
+            { "id": "etapa_funil",      "displayName": "etapa_funil",      "required": false, "defaultMatch": false, "display": true, "type": "string",   "canBeUsedToMatch": false },
+            { "id": "temperatura",      "displayName": "temperatura",      "required": false, "defaultMatch": false, "display": true, "type": "string",   "canBeUsedToMatch": false },
+            { "id": "chatwoot_conv_id", "displayName": "chatwoot_conv_id", "required": false, "defaultMatch": false, "display": true, "type": "number",   "canBeUsedToMatch": false },
+            { "id": "ultimo_contato_em","displayName": "ultimo_contato_em","required": false, "defaultMatch": false, "display": true, "type": "dateTime", "canBeUsedToMatch": false }
           ],
           "attemptToConvertTypes": false,
           "convertFieldsToString": false
@@ -182,58 +166,19 @@
       "position": [-1440, 560],
       "id": "crm-criar-lead-001",
       "name": "Criar Lead no CRM",
-      "credentials": {
-        "postgres": { "id": "g7IUIrtqmqAM3wCr", "name": "Postgres account" }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "update",
-        "schema": { "__rl": true, "mode": "list", "value": "public" },
-        "table": { "__rl": true, "value": "leads", "mode": "list" },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "id": "={{ $json.id }}",
-            "ultimo_contato_em": "={{ $now.toISO() }}",
-            "chatwoot_conv_id": "={{ $('Info').item.json.id_conversa }}"
-          },
-          "matchingColumns": ["id"],
-          "schema": [
-            { "id": "id", "displayName": "id", "required": true, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "ultimo_contato_em", "displayName": "ultimo_contato_em", "required": false, "defaultMatch": false, "display": true, "type": "dateTime", "canBeUsedToMatch": false },
-            { "id": "chatwoot_conv_id", "displayName": "chatwoot_conv_id", "required": false, "defaultMatch": false, "display": true, "type": "number", "canBeUsedToMatch": false }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [-1440, 240],
-      "id": "crm-atualizar-contato-001",
-      "name": "Atualizar último contato",
-      "credentials": {
-        "postgres": { "id": "g7IUIrtqmqAM3wCr", "name": "Postgres account" }
-      }
+      "credentials": { "postgres": { "id": "g7IUIrtqmqAM3wCr", "name": "Postgres account" } }
     },
     {
       "parameters": {
         "operation": "select",
         "schema": { "__rl": true, "mode": "list", "value": "public" },
         "table": { "__rl": true, "value": "n8n_historico_mensagens", "mode": "list" },
-        "returnAll": true,
-        "where": {
-          "values": [
-            {
-              "column": "session_id",
-              "value": "={{ $('Info').item.json.telefone }}"
-            }
-          ]
-        },
-        "sort": { "values": [{ "column": "created_at" }] },
+        "returnAll": false,
         "limit": 20,
+        "where": {
+          "values": [{ "column": "session_id", "value": "={{ $('Info').item.json.telefone }}" }]
+        },
+        "sort": { "values": [{ "column": "created_at", "direction": "DESC" }] },
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
@@ -241,72 +186,69 @@
       "position": [-1200, 400],
       "id": "crm-historico-001",
       "name": "Buscar histórico conversa",
-      "credentials": {
-        "postgres": { "id": "g7IUIrtqmqAM3wCr", "name": "Postgres account" }
-      }
+      "credentials": { "postgres": { "id": "g7IUIrtqmqAM3wCr", "name": "Postgres account" } }
     },
     {
       "parameters": {
-        "jsCode": "// Montar contexto completo para a IA qualificar o lead\nconst historico = $input.all();\nconst info = $('Info').first().json;\n\n// Buscar dados do lead (pode vir do nó de busca ou criação)\nlet leadData = {};\ntry {\n  leadData = $('Buscar Lead no CRM').first().json || {};\n} catch(e) {\n  try { leadData = $('Criar Lead no CRM').first().json || {}; } catch(e2) {}\n}\n\n// Formatar histórico de mensagens\nconst msgs = historico\n  .map(h => {\n    try {\n      const m = typeof h.json.message === 'string' ? JSON.parse(h.json.message) : h.json.message;\n      const role = m.type === 'ai' ? 'Consultor' : 'Cliente';\n      return `${role}: ${m.content || m.text || ''}`;\n    } catch(e) { return ''; }\n  })\n  .filter(Boolean)\n  .slice(-20)\n  .join('\\n');\n\nreturn [{\n  json: {\n    lead_id: leadData.id,\n    nome: leadData.nome || info.nome_contato || 'Desconhecido',\n    telefone: info.telefone,\n    empresa: leadData.empresa || '',\n    produto: leadData.produto_interesse || '',\n    valor: leadData.valor_solicitado || '',\n    etapa_atual: leadData.etapa_funil || 'novo',\n    temperatura_atual: leadData.temperatura || 'frio',\n    historico_conversa: msgs || 'Sem histórico ainda.',\n    ultima_mensagem: info.mensagem,\n  }\n}];"
+        "jsCode": "// Montar prompt completo para o LLM\nconst historico = $input.all();\nconst info = $('Info').first().json;\n\n// Dados do lead\nlet leadData = {};\ntry { leadData = $('Buscar Lead no CRM').first().json || {}; } catch(e) {}\ntry { if (!leadData.id) leadData = $('Criar Lead no CRM').first().json || {}; } catch(e) {}\n\n// Formatar histórico\nconst msgs = historico\n  .map(h => {\n    try {\n      const m = typeof h.json.message === 'string' ? JSON.parse(h.json.message) : h.json.message;\n      const role = m.type === 'ai' ? 'Consultor' : 'Cliente';\n      return `${role}: ${m.content || m.text || ''}`;\n    } catch(e) { return ''; }\n  })\n  .filter(Boolean)\n  .reverse()\n  .join('\\n');\n\nconst prompt = `Analise o lead abaixo e retorne um JSON estruturado de qualificação.\n\n## DADOS DO LEAD\n- Nome: ${leadData.nome || info.nome_contato || 'Desconhecido'}\n- Telefone: ${info.telefone}\n- Empresa: ${leadData.empresa || 'Não informado'}\n- Produto de interesse: ${leadData.produto_interesse || 'Não identificado'}\n- Valor solicitado: ${leadData.valor_solicitado || 'Não informado'}\n- Etapa atual: ${leadData.etapa_funil || 'novo'}\n- Temperatura atual: ${leadData.temperatura || 'frio'}\n\n## HISTÓRICO DA CONVERSA (últimas 20 mensagens)\n${msgs || 'Sem histórico ainda.'}\n\n## ÚLTIMA MENSAGEM RECEBIDA\n${info.mensagem}\n\n---\n\nRetorne APENAS um JSON válido com esta estrutura exata (sem markdown, sem explicação):\n{\n  \"score\": <0-100>,\n  \"temperatura\": <\"frio\"|\"morno\"|\"quente\"|\"urgente\">,\n  \"etapa_sugerida\": <\"novo\"|\"contato_feito\"|\"qualificado\"|\"proposta_enviada\"|\"negociacao\"|\"documentacao\"|\"aprovacao\">,\n  \"probabilidade_conversao\": <0-100>,\n  \"resumo\": \"<resumo objetivo em 1-2 frases>\",\n  \"proxima_acao\": \"<ação específica para o consultor>\",\n  \"pontos_positivos\": [\"<ponto1>\", \"<ponto2>\"],\n  \"pontos_atencao\": [\"<ponto1>\"],\n  \"documentos_faltando\": [\"<doc1>\"],\n  \"nome_identificado\": \"<nome real ou null>\",\n  \"empresa_identificada\": \"<empresa ou null>\",\n  \"produto_identificado\": \"<produto ou null>\",\n  \"valor_identificado\": <numero ou null>,\n  \"prazo_identificado\": <meses ou null>\n}\n\nScore: 0-25=frio | 26-50=morno | 51-75=quente | 76-100=urgente`;\n\nreturn [{\n  json: {\n    lead_id: leadData.id,\n    telefone: info.telefone,\n    prompt\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [-960, 400],
-      "id": "crm-montar-contexto-001",
-      "name": "Montar contexto para IA"
+      "id": "crm-montar-prompt-001",
+      "name": "Montar prompt"
     },
     {
       "parameters": {
         "promptType": "define",
-        "text": "=Analise o lead abaixo e retorne um JSON estruturado de qualificação.\n\n## DADOS DO LEAD\n- Nome: {{ $json.nome }}\n- Telefone: {{ $json.telefone }}\n- Empresa: {{ $json.empresa || 'Não informado' }}\n- Produto de interesse: {{ $json.produto || 'Não identificado' }}\n- Valor solicitado: {{ $json.valor || 'Não informado' }}\n- Etapa atual: {{ $json.etapa_atual }}\n- Temperatura atual: {{ $json.temperatura_atual }}\n\n## HISTÓRICO DA CONVERSA\n{{ $json.historico_conversa }}\n\n## ÚLTIMA MENSAGEM\n{{ $json.ultima_mensagem }}\n\n---\n\nRetorne APENAS um JSON válido com esta estrutura exata:\n{\n  \"score\": <0-100>,\n  \"temperatura\": <\"frio\"|\"morno\"|\"quente\"|\"urgente\">,\n  \"etapa_sugerida\": <\"novo\"|\"contato_feito\"|\"qualificado\"|\"proposta_enviada\"|\"negociacao\"|\"documentacao\"|\"aprovacao\">,\n  \"probabilidade_conversao\": <0-100>,\n  \"resumo\": \"<resumo objetivo em 1-2 frases do perfil e momento do lead>\",\n  \"proxima_acao\": \"<ação específica e objetiva que o consultor deve tomar>\",\n  \"pontos_positivos\": [\"<ponto1>\", \"<ponto2>\"],\n  \"pontos_atencao\": [\"<ponto1>\", \"<ponto2>\"],\n  \"documentos_faltando\": [\"<doc1>\", \"<doc2>\"],\n  \"nome_identificado\": \"<nome real se identificado na conversa, senão null>\",\n  \"empresa_identificada\": \"<empresa se identificada, senão null>\",\n  \"produto_identificado\": \"<produto de interesse se identificado, senão null>\",\n  \"valor_identificado\": <valor numérico se identificado, senão null>,\n  \"prazo_identificado\": <prazo em meses se identificado, senão null>\n}\n\nCritérios de score:\n- 0-25: Lead frio, pouca informação ou sem interesse claro\n- 26-50: Lead morno, interesse demonstrado mas sem qualificação completa\n- 51-75: Lead quente, qualificado com necessidade clara e capacidade\n- 76-100: Lead urgente, pronto para proposta ou já com documentação\n\nSeja objetivo e baseie-se APENAS nas informações da conversa.",
+        "text": "={{ $json.prompt }}",
         "options": {
-          "systemMessage": "Você é um especialista em qualificação de leads de crédito empresarial e pessoal. Sua função é analisar conversas de WhatsApp e retornar análises estruturadas em JSON para alimentar o CRM da Destrava Crédito. Retorne APENAS o JSON, sem texto adicional, sem markdown, sem explicações."
+          "systemMessage": "Você é um especialista em qualificação de leads de crédito empresarial e pessoal. Analise conversas de WhatsApp e retorne APENAS JSON válido, sem texto adicional, sem markdown, sem comentários."
         }
       },
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 1.8,
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
       "position": [-720, 400],
-      "id": "crm-agente-qualificacao-001",
-      "name": "Agente Qualificador IA"
+      "id": "crm-llm-chain-001",
+      "name": "Qualificar com Gemini"
     },
     {
       "parameters": {
-        "modelName": "models/gemini-2.5-pro",
-        "options": {}
+        "modelName": "models/gemini-2.5-flash",
+        "options": {
+          "temperature": 0.1,
+          "maxOutputTokens": 1024
+        }
       },
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
-      "position": [-720, 624],
+      "position": [-720, 580],
       "id": "crm-gemini-001",
-      "name": "Gemini 2.5 Pro",
-      "credentials": {
-        "googlePalmApi": { "id": "utglXGgdfvIxw8T7", "name": "gemini-ia" }
-      }
+      "name": "Gemini 2.5 Flash",
+      "credentials": { "googlePalmApi": { "id": "utglXGgdfvIxw8T7", "name": "gemini-ia" } }
     },
     {
       "parameters": {
-        "jsCode": "// Parsear o JSON retornado pela IA\nconst output = $json.output || $json.text || $json.message || '';\nconst contexto = $('Montar contexto para IA').first().json;\n\nlet qualificacao = {};\ntry {\n  // Tentar extrair JSON do output\n  const match = output.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    qualificacao = JSON.parse(match[0]);\n  } else {\n    qualificacao = JSON.parse(output);\n  }\n} catch(e) {\n  // Fallback se IA não retornar JSON válido\n  qualificacao = {\n    score: 10,\n    temperatura: 'frio',\n    etapa_sugerida: contexto.etapa_atual || 'novo',\n    probabilidade_conversao: 10,\n    resumo: 'Análise automática não disponível.',\n    proxima_acao: 'Revisar conversa manualmente.',\n    pontos_positivos: [],\n    pontos_atencao: ['Erro no processamento da IA'],\n    documentos_faltando: [],\n    nome_identificado: null,\n    empresa_identificada: null,\n    produto_identificado: null,\n    valor_identificado: null,\n    prazo_identificado: null,\n  };\n}\n\nreturn [{\n  json: {\n    ...qualificacao,\n    lead_id: contexto.lead_id,\n    telefone: contexto.telefone,\n  }\n}];"
+        "jsCode": "// Parsear o JSON retornado pelo LLM\nconst output = $json.text || $json.output || $json.message || '';\nconst contexto = $('Montar prompt').first().json;\n\nlet q = {};\ntry {\n  const match = output.match(/\\{[\\s\\S]*\\}/);\n  q = JSON.parse(match ? match[0] : output);\n} catch(e) {\n  q = {\n    score: 10, temperatura: 'frio', etapa_sugerida: 'novo',\n    probabilidade_conversao: 10,\n    resumo: 'Análise automática indisponível.',\n    proxima_acao: 'Revisar conversa manualmente.',\n    pontos_positivos: [], pontos_atencao: ['Erro no processamento'],\n    documentos_faltando: [],\n    nome_identificado: null, empresa_identificada: null,\n    produto_identificado: null, valor_identificado: null, prazo_identificado: null\n  };\n}\n\nreturn [{ json: { ...q, lead_id: contexto.lead_id, telefone: contexto.telefone } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [-480, 400],
       "id": "crm-parsear-json-001",
-      "name": "Parsear JSON da IA"
+      "name": "Parsear JSON"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT public.crm_atualizar_qualificacao(\n  '{{ $json.lead_id }}'::uuid,\n  {{ $json.score }}::integer,\n  '{{ $json.temperatura }}',\n  '{{ $json.etapa_sugerida }}',\n  '{{ $json.resumo.replace(/'/g, \"''\") }}',\n  '{{ ($json.proxima_acao || '').replace(/'/g, \"''\") }}',\n  ARRAY[{{ ($json.documentos_faltando || []).map(d => \"'\" + d.replace(/'/g, \"''\") + \"'\").join(',') || \"''\" }}]::text[],\n  {{ $json.probabilidade_conversao || 0 }}::integer,\n  ARRAY[{{ ($json.pontos_positivos || []).map(p => \"'\" + p.replace(/'/g, \"''\") + \"'\").join(',') || \"''\" }}]::text[],\n  ARRAY[{{ ($json.pontos_atencao || []).map(p => \"'\" + p.replace(/'/g, \"''\") + \"'\").join(',') || \"''\" }}]::text[]\n) as qualificacao_id;",
+        "query": "SELECT public.crm_atualizar_qualificacao(\n  '{{ $json.lead_id }}'::uuid,\n  {{ $json.score }}::integer,\n  '{{ $json.temperatura }}',\n  '{{ $json.etapa_sugerida }}',\n  '{{ ($json.resumo || '').replace(/'/g, \"''\") }}',\n  '{{ ($json.proxima_acao || '').replace(/'/g, \"''\") }}',\n  ARRAY[{{ ($json.documentos_faltando || []).map(d => \"'\" + String(d).replace(/'/g, \"''\") + \"'\").join(',') || \"''\" }}]::text[],\n  {{ $json.probabilidade_conversao || 0 }}::integer,\n  ARRAY[{{ ($json.pontos_positivos || []).map(p => \"'\" + String(p).replace(/'/g, \"''\") + \"'\").join(',') || \"''\" }}]::text[],\n  ARRAY[{{ ($json.pontos_atencao || []).map(p => \"'\" + String(p).replace(/'/g, \"''\") + \"'\").join(',') || \"''\" }}]::text[]\n) as qualificacao_id;",
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [-240, 400],
-      "id": "crm-salvar-qualificacao-001",
-      "name": "Salvar Qualificação no CRM",
-      "credentials": {
-        "postgres": { "id": "g7IUIrtqmqAM3wCr", "name": "Postgres account" }
-      }
+      "id": "crm-salvar-qualif-001",
+      "name": "Salvar Qualificação",
+      "credentials": { "postgres": { "id": "g7IUIrtqmqAM3wCr", "name": "Postgres account" } }
     },
     {
       "parameters": {
@@ -316,21 +258,21 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "id": "={{ $('Parsear JSON da IA').item.json.lead_id }}",
-            "nome": "={{ $('Parsear JSON da IA').item.json.nome_identificado || undefined }}",
-            "empresa": "={{ $('Parsear JSON da IA').item.json.empresa_identificada || undefined }}",
-            "produto_interesse": "={{ $('Parsear JSON da IA').item.json.produto_identificado || undefined }}",
-            "valor_solicitado": "={{ $('Parsear JSON da IA').item.json.valor_identificado || undefined }}",
-            "prazo_meses": "={{ $('Parsear JSON da IA').item.json.prazo_identificado || undefined }}"
+            "id": "={{ $('Parsear JSON').item.json.lead_id }}",
+            "nome": "={{ $('Parsear JSON').item.json.nome_identificado || undefined }}",
+            "empresa": "={{ $('Parsear JSON').item.json.empresa_identificada || undefined }}",
+            "produto_interesse": "={{ $('Parsear JSON').item.json.produto_identificado || undefined }}",
+            "valor_solicitado": "={{ $('Parsear JSON').item.json.valor_identificado || undefined }}",
+            "prazo_meses": "={{ $('Parsear JSON').item.json.prazo_identificado || undefined }}"
           },
           "matchingColumns": ["id"],
           "schema": [
-            { "id": "id", "displayName": "id", "required": true, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "nome", "displayName": "nome", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
-            { "id": "empresa", "displayName": "empresa", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
-            { "id": "produto_interesse", "displayName": "produto_interesse", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "id",               "displayName": "id",               "required": true,  "defaultMatch": true,  "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "nome",             "displayName": "nome",             "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "empresa",          "displayName": "empresa",          "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "produto_interesse","displayName": "produto_interesse", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
             { "id": "valor_solicitado", "displayName": "valor_solicitado", "required": false, "defaultMatch": false, "display": true, "type": "number", "canBeUsedToMatch": false },
-            { "id": "prazo_meses", "displayName": "prazo_meses", "required": false, "defaultMatch": false, "display": true, "type": "number", "canBeUsedToMatch": false }
+            { "id": "prazo_meses",      "displayName": "prazo_meses",      "required": false, "defaultMatch": false, "display": true, "type": "number", "canBeUsedToMatch": false }
           ],
           "attemptToConvertTypes": false,
           "convertFieldsToString": false
@@ -340,25 +282,29 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [0, 400],
-      "id": "crm-enriquecer-lead-001",
-      "name": "Enriquecer dados do Lead",
-      "credentials": {
-        "postgres": { "id": "g7IUIrtqmqAM3wCr", "name": "Postgres account" }
-      }
+      "id": "crm-enriquecer-001",
+      "name": "Enriquecer Lead",
+      "credentials": { "postgres": { "id": "g7IUIrtqmqAM3wCr", "name": "Postgres account" } }
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+          "options": { "caseSensitive": false, "typeValidation": "strict", "version": 2 },
           "conditions": [
             {
-              "id": "alert-001",
-              "leftValue": "={{ $('Parsear JSON da IA').item.json.temperatura }}",
-              "rightValue": "quente",
-              "operator": { "type": "string", "operation": "equals" }
+              "id": "hot-001",
+              "leftValue": "={{ $('Parsear JSON').item.json.temperatura }}",
+              "rightValue": "frio",
+              "operator": { "type": "string", "operation": "notEquals" }
+            },
+            {
+              "id": "hot-002",
+              "leftValue": "={{ $('Parsear JSON').item.json.temperatura }}",
+              "rightValue": "morno",
+              "operator": { "type": "string", "operation": "notEquals" }
             }
           ],
-          "combinator": "or"
+          "combinator": "and"
         },
         "options": {}
       },
@@ -375,20 +321,20 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "lead_id": "={{ $('Parsear JSON da IA').item.json.lead_id }}",
+            "lead_id": "={{ $('Parsear JSON').item.json.lead_id }}",
             "tipo": "ia_acao",
             "titulo": "🔥 Lead quente identificado pela IA",
-            "descricao": "={{ 'Score: ' + $('Parsear JSON da IA').item.json.score + '/100 | ' + $('Parsear JSON da IA').item.json.resumo }}",
+            "descricao": "={{ 'Score: ' + $('Parsear JSON').item.json.score + '/100 — ' + $('Parsear JSON').item.json.resumo }}",
             "origem_ia": true,
             "concluido": true
           },
           "matchingColumns": ["id"],
           "schema": [
-            { "id": "id", "displayName": "id", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": true },
-            { "id": "lead_id", "displayName": "lead_id", "required": true, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
-            { "id": "tipo", "displayName": "tipo", "required": true, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
-            { "id": "titulo", "displayName": "titulo", "required": true, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
-            { "id": "descricao", "displayName": "descricao", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "id",        "displayName": "id",        "required": false, "defaultMatch": true,  "display": true, "type": "string",  "canBeUsedToMatch": true, "removed": true },
+            { "id": "lead_id",   "displayName": "lead_id",   "required": true,  "defaultMatch": false, "display": true, "type": "string",  "canBeUsedToMatch": false },
+            { "id": "tipo",      "displayName": "tipo",      "required": true,  "defaultMatch": false, "display": true, "type": "string",  "canBeUsedToMatch": false },
+            { "id": "titulo",    "displayName": "titulo",    "required": true,  "defaultMatch": false, "display": true, "type": "string",  "canBeUsedToMatch": false },
+            { "id": "descricao", "displayName": "descricao", "required": false, "defaultMatch": false, "display": true, "type": "string",  "canBeUsedToMatch": false },
             { "id": "origem_ia", "displayName": "origem_ia", "required": false, "defaultMatch": false, "display": true, "type": "boolean", "canBeUsedToMatch": false },
             { "id": "concluido", "displayName": "concluido", "required": false, "defaultMatch": false, "display": true, "type": "boolean", "canBeUsedToMatch": false }
           ],
@@ -401,30 +347,26 @@
       "typeVersion": 2.6,
       "position": [480, 240],
       "id": "crm-alerta-atividade-001",
-      "name": "Registrar alerta lead quente",
-      "credentials": {
-        "postgres": { "id": "g7IUIrtqmqAM3wCr", "name": "Postgres account" }
-      }
+      "name": "Registrar alerta",
+      "credentials": { "postgres": { "id": "g7IUIrtqmqAM3wCr", "name": "Postgres account" } }
     },
     {
       "parameters": {
-        "chatId": "={{ $('Info').item.json.telegram_chat_id || 'SEU_CHAT_ID_TELEGRAM' }}",
-        "text": "=🔥 *Lead Quente Identificado!*\n\n👤 *{{ $('Parsear JSON da IA').item.json.nome_identificado || $('Info').item.json.nome_contato }}*\n📱 {{ $('Info').item.json.telefone }}\n🏢 {{ $('Parsear JSON da IA').item.json.empresa_identificada || 'Não informado' }}\n💰 Produto: {{ $('Parsear JSON da IA').item.json.produto_identificado || 'A identificar' }}\n\n📊 Score: *{{ $('Parsear JSON da IA').item.json.score }}/100*\n🌡️ Temperatura: *{{ $('Parsear JSON da IA').item.json.temperatura.toUpperCase() }}*\n📈 Prob. conversão: *{{ $('Parsear JSON da IA').item.json.probabilidade_conversao }}%*\n\n💬 {{ $('Parsear JSON da IA').item.json.resumo }}\n\n🎯 *Próxima ação:* {{ $('Parsear JSON da IA').item.json.proxima_acao }}\n\n🔗 Ver no CRM: https://destrava.permupay.com.br/colaborador/crm",
+        "chatId": "SEU_CHAT_ID_TELEGRAM",
+        "text": "=🔥 *Lead Quente!*\n\n👤 *{{ $('Parsear JSON').item.json.nome_identificado || $('Info').item.json.nome_contato }}*\n📱 {{ $('Info').item.json.telefone }}\n🏢 {{ $('Parsear JSON').item.json.empresa_identificada || '—' }}\n💼 {{ $('Parsear JSON').item.json.produto_identificado || 'A identificar' }}\n\n📊 Score: *{{ $('Parsear JSON').item.json.score }}/100*\n🌡️ *{{ $('Parsear JSON').item.json.temperatura.toUpperCase() }}*\n📈 Conversão: *{{ $('Parsear JSON').item.json.probabilidade_conversao }}%*\n\n💬 {{ $('Parsear JSON').item.json.resumo }}\n\n🎯 *Próxima ação:* {{ $('Parsear JSON').item.json.proxima_acao }}\n\n🔗 https://destrava.permupay.com.br/colaborador/crm",
         "additionalFields": { "parse_mode": "Markdown" }
       },
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [480, 400],
-      "id": "crm-telegram-alerta-001",
+      "id": "crm-telegram-001",
       "name": "Notificar Telegram",
-      "credentials": {
-        "telegramApi": { "id": "dJJpJq7jR2M2BZ81", "name": "Telegram account" }
-      }
+      "credentials": { "telegramApi": { "id": "dJJpJq7jR2M2BZ81", "name": "Telegram account" } }
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={ \"status\": \"ok\", \"lead_id\": \"{{ $('Parsear JSON da IA').item.json.lead_id }}\", \"score\": {{ $('Parsear JSON da IA').item.json.score }}, \"temperatura\": \"{{ $('Parsear JSON da IA').item.json.temperatura }}\" }"
+        "responseBody": "={ \"status\": \"ok\", \"lead_id\": \"{{ $('Parsear JSON').item.json.lead_id }}\", \"score\": {{ $('Parsear JSON').item.json.score }}, \"temperatura\": \"{{ $('Parsear JSON').item.json.temperatura }}\" }"
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
@@ -434,80 +376,46 @@
     }
   ],
   "connections": {
-    "Webhook Chatwoot": {
-      "main": [[{ "node": "Info", "type": "main", "index": 0 }]]
-    },
-    "Info": {
-      "main": [[{ "node": "Tem mensagem?", "type": "main", "index": 0 }]]
-    },
-    "Tem mensagem?": {
-      "main": [
-        [{ "node": "Buscar Lead no CRM", "type": "main", "index": 0 }],
-        []
-      ]
-    },
-    "Buscar Lead no CRM": {
-      "main": [[{ "node": "Lead existe?", "type": "main", "index": 0 }]]
-    },
+    "Webhook Chatwoot":           { "main": [[{ "node": "Info",                    "type": "main", "index": 0 }]] },
+    "Info":                       { "main": [[{ "node": "Tem mensagem?",           "type": "main", "index": 0 }]] },
+    "Tem mensagem?":              { "main": [[{ "node": "Buscar Lead no CRM",      "type": "main", "index": 0 }], []] },
+    "Buscar Lead no CRM":         { "main": [[{ "node": "Lead existe?",            "type": "main", "index": 0 }]] },
     "Lead existe?": {
       "main": [
         [{ "node": "Atualizar último contato", "type": "main", "index": 0 }],
-        [{ "node": "Criar Lead no CRM", "type": "main", "index": 0 }]
+        [{ "node": "Criar Lead no CRM",        "type": "main", "index": 0 }]
       ]
     },
-    "Atualizar último contato": {
-      "main": [[{ "node": "Buscar histórico conversa", "type": "main", "index": 0 }]]
-    },
-    "Criar Lead no CRM": {
-      "main": [[{ "node": "Buscar histórico conversa", "type": "main", "index": 0 }]]
-    },
-    "Buscar histórico conversa": {
-      "main": [[{ "node": "Montar contexto para IA", "type": "main", "index": 0 }]]
-    },
-    "Montar contexto para IA": {
-      "main": [[{ "node": "Agente Qualificador IA", "type": "main", "index": 0 }]]
-    },
-    "Agente Qualificador IA": {
-      "main": [[{ "node": "Parsear JSON da IA", "type": "main", "index": 0 }]]
-    },
-    "Gemini 2.5 Pro": {
-      "ai_languageModel": [[{ "node": "Agente Qualificador IA", "type": "ai_languageModel", "index": 0 }]]
-    },
-    "Parsear JSON da IA": {
-      "main": [[{ "node": "Salvar Qualificação no CRM", "type": "main", "index": 0 }]]
-    },
-    "Salvar Qualificação no CRM": {
-      "main": [[{ "node": "Enriquecer dados do Lead", "type": "main", "index": 0 }]]
-    },
-    "Enriquecer dados do Lead": {
-      "main": [[{ "node": "Lead quente ou urgente?", "type": "main", "index": 0 }]]
-    },
+    "Atualizar último contato":   { "main": [[{ "node": "Buscar histórico conversa", "type": "main", "index": 0 }]] },
+    "Criar Lead no CRM":          { "main": [[{ "node": "Buscar histórico conversa", "type": "main", "index": 0 }]] },
+    "Buscar histórico conversa":  { "main": [[{ "node": "Montar prompt",            "type": "main", "index": 0 }]] },
+    "Montar prompt":              { "main": [[{ "node": "Qualificar com Gemini",    "type": "main", "index": 0 }]] },
+    "Qualificar com Gemini":      { "main": [[{ "node": "Parsear JSON",             "type": "main", "index": 0 }]] },
+    "Gemini 2.5 Flash":           { "ai_languageModel": [[{ "node": "Qualificar com Gemini", "type": "ai_languageModel", "index": 0 }]] },
+    "Parsear JSON":               { "main": [[{ "node": "Salvar Qualificação",      "type": "main", "index": 0 }]] },
+    "Salvar Qualificação":        { "main": [[{ "node": "Enriquecer Lead",          "type": "main", "index": 0 }]] },
+    "Enriquecer Lead":            { "main": [[{ "node": "Lead quente ou urgente?",  "type": "main", "index": 0 }]] },
     "Lead quente ou urgente?": {
       "main": [
         [
-          { "node": "Registrar alerta lead quente", "type": "main", "index": 0 },
-          { "node": "Notificar Telegram", "type": "main", "index": 0 }
+          { "node": "Registrar alerta",  "type": "main", "index": 0 },
+          { "node": "Notificar Telegram","type": "main", "index": 0 }
         ],
         [{ "node": "Resposta OK", "type": "main", "index": 0 }]
       ]
     },
-    "Registrar alerta lead quente": {
-      "main": [[{ "node": "Resposta OK", "type": "main", "index": 0 }]]
-    },
-    "Notificar Telegram": {
-      "main": [[{ "node": "Resposta OK", "type": "main", "index": 0 }]]
-    }
+    "Registrar alerta":   { "main": [[{ "node": "Resposta OK", "type": "main", "index": 0 }]] },
+    "Notificar Telegram": { "main": [[{ "node": "Resposta OK", "type": "main", "index": 0 }]] }
   },
   "pinData": {},
   "settings": {
     "executionOrder": "v1",
     "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner",
-    "errorWorkflow": ""
+    "callerPolicy": "workflowsFromSameOwner"
   },
   "staticData": null,
   "tags": [{ "name": "CRM" }, { "name": "Destrava" }, { "name": "Qualificação" }],
   "triggerCount": 1,
   "updatedAt": "2026-03-25T00:00:00.000Z",
-  "versionId": "crm-v1"
+  "versionId": "crm-v2"
 }
