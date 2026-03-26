@@ -11,50 +11,34 @@ export default defineConfig({
       "@shared": path.resolve(import.meta.dirname, "shared"),
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
     },
-    // CRÍTICO: garante que apenas UMA instância do React é usada em todo o bundle.
-    // Sem isso, pacotes como streamdown/react-markdown podem criar uma segunda
-    // instância, causando "Cannot read properties of undefined (reading 'createContext')".
-    dedupe: ["react", "react-dom", "scheduler"],
+    dedupe: ["react", "react-dom", "react/jsx-runtime", "scheduler"],
   },
-  // Pré-bundling das dependências mais pesadas para evitar ciclos no build
   optimizeDeps: {
+    // Força o Vite a pré-bundlizar TUDO que é usado pelo React internamente.
+    // Sem isso, o Rollup deixa "scheduler" como bare import externo,
+    // causando "Failed to resolve module specifier scheduler" no browser.
     include: [
       "react",
       "react-dom",
+      "react-dom/client",
       "react/jsx-runtime",
-      "@supabase/supabase-js",
-      "framer-motion",
-      "recharts",
+      "react/jsx-dev-runtime",
+      "scheduler",
     ],
-    exclude: ["shiki", "mermaid"],
   },
   envDir: path.resolve(import.meta.dirname),
   root: path.resolve(import.meta.dirname, "client"),
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
-    chunkSizeWarningLimit: 10000,
+    chunkSizeWarningLimit: 15000,
     rollupOptions: {
+      // NENHUMA configuração de external — tudo deve ser bundlizado.
+      // O manualChunks foi removido pois causava o scheduler ser
+      // extraído como chunk separado sem ser resolvido corretamente.
       output: {
-        // Estratégia simplificada: apenas separa os chunks gigantes que
-        // causam timeout no browser. Não tenta separar React — o Vite/Rollup
-        // já garante uma única instância via dedupe + optimizeDeps.
-        manualChunks(id) {
-          // Shiki: 9MB — deve ficar isolado para não bloquear o carregamento
-          if (
-            id.includes("node_modules/shiki/") ||
-            id.includes("node_modules/@shikijs/")
-          ) {
-            return "vendor-shiki";
-          }
-          // Mermaid: 1.5MB — isolado por tamanho
-          if (
-            id.includes("node_modules/mermaid/") ||
-            id.includes("node_modules/cytoscape/")
-          ) {
-            return "vendor-mermaid";
-          }
-        },
+        // Sem manualChunks: o Rollup decide a divisão automaticamente.
+        // Isso garante que scheduler, react e react-dom ficam no mesmo chunk.
       },
     },
   },
