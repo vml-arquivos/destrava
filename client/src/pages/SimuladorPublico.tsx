@@ -221,7 +221,6 @@ export default function SimuladorPublico() {
       <SEO
         title="Simulador de Crédito Gratuito | Destrava Crédito"
         description="Simule seu empréstimo gratuitamente. Crédito empresarial e pessoal com as melhores condições do mercado."
-        canonical="/simular"
       />
 
       {/* Hero */}

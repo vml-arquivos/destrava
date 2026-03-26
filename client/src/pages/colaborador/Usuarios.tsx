@@ -106,28 +106,23 @@ export default function UsuariosPage() {
     setMensagem(null);
 
     try {
-      // 1. Criar usuário no Supabase Auth via signUp (funciona sem service_role no client)
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
-        password: senha,
-        options: {
-          data: { nome, cargo },
+      // Usa rota backend /api/colaboradores (service_role) — cria sem confirmação de e-mail
+      const ADMIN_KEY = import.meta.env.VITE_ADMIN_KEY ?? "";
+      const res = await fetch("/api/colaboradores", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-key": ADMIN_KEY,
         },
+        body: JSON.stringify({
+          nome: nome.trim(),
+          email: email.trim().toLowerCase(),
+          cargo,
+          senha,
+        }),
       });
-
-      if (authError) throw new Error(authError.message);
-      if (!authData.user) throw new Error("Usuário não foi criado.");
-
-      // 2. Inserir perfil na tabela colaboradores
-      const { error: profileError } = await supabase.from("colaboradores").insert({
-        id: authData.user.id,
-        nome: nome.trim(),
-        cargo,
-        email: email.trim().toLowerCase(),
-        ativo: true,
-      });
-
-      if (profileError) throw new Error(profileError.message);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Erro ao criar colaborador.");
 
       setMensagem({
         tipo: "sucesso",

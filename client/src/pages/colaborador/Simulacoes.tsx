@@ -109,7 +109,7 @@ export default function Simulacoes() {
     const matchBusca =
       !busca ||
       s.cliente_nome.toLowerCase().includes(busca.toLowerCase()) ||
-      s.cliente_cpf_cnpj.includes(busca) ||
+      (s.cliente_cpf_cnpj ?? "").includes(busca) ||
       (s.banco || "").toLowerCase().includes(busca.toLowerCase());
     const matchStatus = filtroStatus === "todos" || s.status === filtroStatus;
     return matchBusca && matchStatus;

@@ -29,10 +29,12 @@ export default function ColaboradorLogin() {
     const { error } = await signIn(email, password);
 
     if (error) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const errMsg: string = (error as any)?.message ?? "";
       setError(
-        error.message === "Invalid login credentials"
+        errMsg === "Invalid login credentials"
           ? "E-mail ou senha incorretos. Verifique suas credenciais."
-          : error.message === "Email not confirmed"
+          : errMsg === "Email not confirmed"
           ? "Confirme seu e-mail antes de fazer login."
           : "Erro ao fazer login. Tente novamente."
       );

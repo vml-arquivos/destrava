@@ -573,7 +573,7 @@ function FichaLead({
                           <label className="text-xs text-gray-500 mb-1 block">{label}</label>
                           <Input
                             className="h-8 text-sm"
-                            defaultValue={(lead as Record<string, unknown>)[key] as string ?? ""}
+                            defaultValue={((lead as unknown) as Record<string, unknown>)[key] as string ?? ""}
                             onChange={e => setDadosEdit(prev => ({ ...prev, [key]: e.target.value }))}
                           />
                         </div>

@@ -96,24 +96,26 @@ export default function Clientes() {
 
   async function carregarClientes() {
     setLoading(true);
+    // tabela 'clientes' não existe — usar 'leads' como entidade canônica
     const { data, error } = await supabase
-      .from("clientes")
+      .from("leads")
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (!error && data) setClientes(data);
+    if (!error && data) setClientes(data as any);
     setLoading(false);
   }
 
   async function carregarAtividades(clienteId: string) {
     setLoadingAtividades(true);
+    // tabela 'atividades_crm' não existe — usar 'crm_atividades' com campo lead_id
     const { data, error } = await supabase
-      .from("atividades_crm")
+      .from("crm_atividades")
       .select("*")
-      .eq("cliente_id", clienteId)
+      .eq("lead_id", clienteId)
       .order("created_at", { ascending: false });
 
-    if (!error && data) setAtividades(data);
+    if (!error && data) setAtividades(data as any);
     setLoadingAtividades(false);
   }
 
@@ -124,7 +126,7 @@ export default function Clientes() {
 
   async function atualizarStatus(clienteId: string, novoStatus: string) {
     const { error } = await supabase
-      .from("clientes")
+      .from("leads")
       .update({ status: novoStatus })
       .eq("id", clienteId);
 
@@ -133,11 +135,12 @@ export default function Clientes() {
       if (clienteSelecionado?.id === clienteId) {
         setClienteSelecionado(prev => prev ? { ...prev, status: novoStatus as any } : null);
       }
-      // Registrar atividade de mudança de status
-      await supabase.from("atividades_crm").insert({
-        cliente_id: clienteId,
+      // Registrar atividade de mudança de status em crm_atividades
+      await supabase.from("crm_atividades").insert({
+        lead_id: clienteId,
         tipo: "status_change",
-        descricao: `Status alterado para: ${STATUS_CONFIG[novoStatus as keyof typeof STATUS_CONFIG]?.label}`
+        titulo: `Status alterado para: ${STATUS_CONFIG[novoStatus as keyof typeof STATUS_CONFIG]?.label}`,
+        concluido: true,
       });
     }
   }
@@ -147,12 +150,14 @@ export default function Clientes() {
     setSalvando(true);
 
     const { data, error } = await supabase
-      .from("atividades_crm")
+      .from("crm_atividades")
       .insert({
-        cliente_id: clienteSelecionado.id,
+        lead_id: clienteSelecionado.id,
         tipo: novaAtividade.tipo,
+        titulo: novaAtividade.descricao.substring(0, 100),
         descricao: novaAtividade.descricao,
-        resultado: novaAtividade.resultado || null
+        resultado: novaAtividade.resultado || null,
+        concluido: true,
       })
       .select()
       .single();
@@ -170,13 +175,26 @@ export default function Clientes() {
     setSalvando(true);
 
     const { data: userData } = await supabase.auth.getUser();
+    // Inserir em 'leads' (tabela 'clientes' não existe no schema real)
     const { data, error } = await supabase
-      .from("clientes")
+      .from("leads")
       .insert({
-        ...form,
-        colaborador_id: userData?.user?.id,
-        faturamento_anual: form.faturamento_anual ? parseFloat(form.faturamento_anual) : null,
-        proximo_contato: form.proximo_contato || null
+        nome: form.nome,
+        empresa: form.empresa || null,
+        cpf_cnpj: form.cpf_cnpj || null,
+        telefone: form.telefone,
+        email: form.email || null,
+        tipo_pessoa: form.tipo as "pf" | "pj",
+        cidade: form.cidade || null,
+        estado: form.estado || null,
+        status: form.status,
+        responsavel_id: userData?.user?.id || null,
+        observacoes_ia: form.observacoes || null,
+        proximo_followup: form.proximo_contato || null,
+        origem: "painel_interno",
+        etapa_funil: "Novo",
+        temperatura: "frio",
+        score_ia: 0,
       })
       .select()
       .single();
@@ -196,7 +214,7 @@ export default function Clientes() {
 
   async function excluirCliente(clienteId: string) {
     if (!confirm("Tem certeza que deseja excluir este cliente?")) return;
-    const { error } = await supabase.from("clientes").delete().eq("id", clienteId);
+    const { error } = await supabase.from("leads").delete().eq("id", clienteId);
     if (!error) {
       setClientes(prev => prev.filter(c => c.id !== clienteId));
       if (clienteSelecionado?.id === clienteId) setClienteSelecionado(null);

@@ -26,13 +26,15 @@ function getSupabase() {
 const supabaseReady = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 // Alias para manter compatibilidade com o restante do código
-const supabase = new Proxy({} as ReturnType<typeof createClient>, {
-  get(_target, prop) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const supabase = new Proxy({} as any, {
+  get(_target: unknown, prop: string | symbol) {
     const client = getSupabase();
     if (!client) throw new Error("[Supabase] Cliente não disponível — variáveis não configuradas.");
-    return (client as Record<string | symbol, unknown>)[prop];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (client as any)[prop];
   },
-});
+}) as ReturnType<typeof createClient>;
 
 if (!supabaseReady) {
   console.warn("[Supabase] SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY não configuradas. Persistência desativada.");
@@ -117,6 +119,7 @@ async function startServer() {
   app.post("/api/leads", async (req: Request, res: Response) => {
     try {
       const now = new Date().toISOString();
+      // Colunas alinhadas ao schema real da tabela leads
       const lead = {
         nome: req.body.nome || "",
         email: req.body.email || null,
@@ -124,13 +127,15 @@ async function startServer() {
         empresa: req.body.empresa || null,
         cpf_cnpj: req.body.cpfCnpj || null,
         tipo_pessoa: req.body.tipoPessoa || "pf",
-        produto: req.body.produto || null,
+        produto_interesse: req.body.produto || null,   // coluna real: produto_interesse
         valor_solicitado: Number(req.body.valorSolicitado) || null,
-        prazo: Number(req.body.prazo) || null,
-        mensagem: req.body.mensagem || null,
+        prazo_meses: Number(req.body.prazo) || null,   // coluna real: prazo_meses
+        finalidade: req.body.mensagem || null,         // coluna real: finalidade (sem coluna 'mensagem')
         origem: req.body.origem || "site",
         status: "novo",
-        n8n_notificado: false,
+        etapa_funil: "Novo",
+        temperatura: "frio",
+        score_ia: 0,
         created_at: now,
         updated_at: now,
       };
@@ -138,24 +143,24 @@ async function startServer() {
       let leadId = `local-${Date.now()}`;
 
       if (supabaseReady) {
-        const { data, error } = await supabase.from("leads").insert(lead).select("id").single();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any).from("leads").insert(lead).select("id").single();
         if (error) {
           console.error("[LEAD] Erro Supabase:", error.message);
         } else {
-          leadId = data.id;
-          console.log(`[LEAD] Salvo no Supabase: ${lead.nome} — ${lead.produto}`);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          leadId = (data as any).id;
+          console.log(`[LEAD] Salvo no Supabase: ${lead.nome} — ${lead.produto_interesse}`);
         }
       }
 
       dispararN8n("novo_lead", {
         id: leadId, nome: lead.nome, telefone: lead.telefone,
-        empresa: lead.empresa, email: lead.email, produto: lead.produto,
-        valorSolicitado: lead.valor_solicitado, prazo: lead.prazo,
+        empresa: lead.empresa, email: lead.email, produto: lead.produto_interesse,
+        valorSolicitado: lead.valor_solicitado, prazo: lead.prazo_meses,
         origem: lead.origem, criadoEm: now,
       }).then(async (ok) => {
-        if (ok && supabaseReady) {
-          await supabase.from("leads").update({ n8n_notificado: true }).eq("id", leadId);
-        }
+        // n8n_notificado não existe no schema real — sem update
       });
 
       res.status(201).json({ success: true, id: leadId, message: "Lead registrado com sucesso!" });
@@ -183,14 +188,16 @@ async function startServer() {
   app.patch("/api/leads/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       if (!supabaseReady) { res.status(503).json({ error: "Supabase não configurado" }); return; }
-      const { data, error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
         .from("leads")
         .update({ ...req.body, updated_at: new Date().toISOString() })
         .eq("id", req.params.id)
         .select()
         .single();
       if (error) throw error;
-      res.json({ success: true, lead: data });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      res.json({ success: true, lead: data as any });
     } catch (err) {
       console.error("[LEAD PATCH ERROR]", err);
       res.status(500).json({ error: "Erro ao atualizar lead." });
@@ -198,9 +205,12 @@ async function startServer() {
   });
 
   // ─── SIMULAÇÕES API ────────────────────────────────────────────────────────
+  // NOTA: tabela simulacoes_publicas NÃO existe no banco.
+  // Simulações públicas são gravadas como leads com origem='simulador_publico'.
   app.post("/api/simulacoes", async (req: Request, res: Response) => {
     try {
       const now = new Date().toISOString();
+      // Gravar como lead com origem simulador_publico (schema real não tem simulacoes_publicas)
       const sim = {
         nome: req.body.nome || "",
         email: req.body.email || null,
@@ -208,33 +218,38 @@ async function startServer() {
         empresa: req.body.empresa || null,
         cpf_cnpj: req.body.cpfCnpj || null,
         tipo_pessoa: req.body.tipoPessoa || "pf",
-        produto: req.body.produto || "",
-        valor_solicitado: Number(req.body.valorSolicitado) || 0,
-        prazo: Number(req.body.prazo) || 0,
-        taxa_aplicada: Number(req.body.taxaEstimada) || null,
-        parcela_mensal: Number(req.body.parcelaMensal) || null,
-        total_pagar: Number(req.body.totalPagar) || null,
+        produto_interesse: req.body.produto || null,
+        valor_solicitado: Number(req.body.valorSolicitado) || null,
+        prazo_meses: Number(req.body.prazo) || null,
+        finalidade: `Parcela estimada: R$ ${req.body.parcelaMensal || 0} | Total: R$ ${req.body.totalPagar || 0}`,
         origem: "simulador_publico",
-        n8n_notificado: false,
+        status: "novo",
+        etapa_funil: "Novo",
+        temperatura: "frio",
+        score_ia: 0,
         created_at: now,
+        updated_at: now,
       };
 
       let simId = `local-${Date.now()}`;
 
       if (supabaseReady) {
-        const { data, error } = await supabase.from("simulacoes_publicas").insert(sim).select("id").single();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any).from("leads").insert(sim).select("id").single();
         if (error) {
           console.error("[SIM] Erro Supabase:", error.message);
         } else {
-          simId = data.id;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          simId = (data as any).id;
+          console.log(`[SIM] Salvo como lead: ${sim.nome} — ${sim.produto_interesse}`);
         }
       }
 
       dispararN8n("nova_simulacao", {
         id: simId, nome: sim.nome, telefone: sim.telefone,
-        empresa: sim.empresa, email: sim.email, produto: sim.produto,
-        valorSolicitado: sim.valor_solicitado, prazo: sim.prazo,
-        parcelaMensal: sim.parcela_mensal, custoTotal: sim.total_pagar, criadoEm: now,
+        empresa: sim.empresa, email: sim.email, produto: sim.produto_interesse,
+        valorSolicitado: sim.valor_solicitado, prazo: sim.prazo_meses,
+        parcelaMensal: req.body.parcelaMensal, custoTotal: req.body.totalPagar, criadoEm: now,
       });
 
       res.status(201).json({ success: true, id: simId, message: "Simulação registrada!" });
@@ -247,9 +262,11 @@ async function startServer() {
   app.get("/api/simulacoes", requireAdmin, async (_req: Request, res: Response) => {
     try {
       if (!supabaseReady) { res.json({ total: 0, simulacoes: [] }); return; }
+      // Buscar leads com origem simulador_publico (tabela simulacoes_publicas não existe)
       const { data, error } = await supabase
-        .from("simulacoes_publicas")
+        .from("leads")
         .select("*")
+        .eq("origem", "simulador_publico")
         .order("created_at", { ascending: false });
       if (error) throw error;
       res.json({ total: data?.length ?? 0, simulacoes: data ?? [] });
@@ -259,29 +276,43 @@ async function startServer() {
     }
   });
 
-  // ─── CONTATO API ───────────────────────────────────────────────────────────
+  // ─── CONTATO API ────────────────────────────────────────────────────────
+  // NOTA: tabela contatos NÃO existe no banco.
+  // Contatos do site são gravados como leads com origem='contato_site'.
   app.post("/api/contato", async (req: Request, res: Response) => {
     try {
       const now = new Date().toISOString();
       const contato = {
         nome: req.body.nome || "",
-        email: req.body.email || "",
+        email: req.body.email || null,
         telefone: req.body.telefone || null,
-        assunto: req.body.assunto || "",
-        mensagem: req.body.mensagem || "",
+        finalidade: `[${req.body.assunto || "contato"}] ${req.body.mensagem || ""}`.substring(0, 500),
+        origem: "contato_site",
         status: "novo",
+        etapa_funil: "Novo",
+        temperatura: "frio",
+        score_ia: 0,
         created_at: now,
+        updated_at: now,
       };
 
+      let contatoId = `local-${Date.now()}`;
+
       if (supabaseReady) {
-        const { error } = await supabase.from("contatos").insert(contato);
-        if (error) console.error("[CONTATO] Erro Supabase:", error.message);
-        else console.log(`[CONTATO] Salvo: ${contato.nome} — ${contato.assunto}`);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any).from("leads").insert(contato).select("id").single();
+        if (error) {
+          console.error("[CONTATO] Erro Supabase:", error.message);
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          contatoId = (data as any).id;
+          console.log(`[CONTATO] Salvo como lead: ${contato.nome} — ${req.body.assunto}`);
+        }
       }
 
       dispararN8n("novo_contato", {
-        nome: contato.nome, email: contato.email, telefone: contato.telefone,
-        assunto: contato.assunto, mensagem: contato.mensagem, criadoEm: now,
+        id: contatoId, nome: contato.nome, email: contato.email, telefone: contato.telefone,
+        assunto: req.body.assunto, mensagem: req.body.mensagem, criadoEm: now,
       });
 
       res.status(201).json({ success: true, message: "Mensagem enviada com sucesso!" });
@@ -294,9 +325,11 @@ async function startServer() {
   app.get("/api/contatos", requireAdmin, async (_req: Request, res: Response) => {
     try {
       if (!supabaseReady) { res.json({ total: 0, contatos: [] }); return; }
+      // Buscar leads com origem contato_site (tabela contatos não existe)
       const { data, error } = await supabase
-        .from("contatos")
+        .from("leads")
         .select("*")
+        .eq("origem", "contato_site")
         .order("created_at", { ascending: false });
       if (error) throw error;
       res.json({ total: data?.length ?? 0, contatos: data ?? [] });
@@ -320,31 +353,32 @@ async function startServer() {
         return;
       }
 
+        // Todas as origens são gravadas na tabela leads
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sb = supabase as any;
       const [leadsRes, simsRes, contatosRes] = await Promise.all([
-        supabase.from("leads").select("status, produto, valor_solicitado"),
-        supabase.from("simulacoes_publicas").select("valor_solicitado, total_pagar"),
-        supabase.from("contatos").select("id", { count: "exact", head: true }),
+        sb.from("leads").select("status, produto_interesse, valor_solicitado"),
+        sb.from("leads").select("valor_solicitado").eq("origem", "simulador_publico"),
+        sb.from("leads").select("id", { count: "exact", head: true }).eq("origem", "contato_site"),
       ]);
-
-      const leads = leadsRes.data ?? [];
-      const sims = simsRes.data ?? [];
-
-      const byStatus = leads.reduce((acc: Record<string, number>, l) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const leads: any[] = leadsRes.data ?? [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sims: any[] = simsRes.data ?? [];
+      const byStatus = leads.reduce((acc: Record<string, number>, l: any) => {
         acc[l.status] = (acc[l.status] || 0) + 1;
         return acc;
       }, {});
-
-      const byProduto = leads.reduce((acc: Record<string, number>, l) => {
-        if (l.produto) acc[l.produto] = (acc[l.produto] || 0) + 1;
+      const byProduto = leads.reduce((acc: Record<string, number>, l: any) => {
+        if (l.produto_interesse) acc[l.produto_interesse] = (acc[l.produto_interesse] || 0) + 1;
         return acc;
       }, {});
-
       res.json({
         leads: { total: leads.length, byStatus, byProduto },
         simulacoes: {
           total: sims.length,
-          totalValorSimulado: sims.reduce((s, r) => s + (r.valor_solicitado || 0), 0),
-          totalCustoSimulado: sims.reduce((s, r) => s + (r.total_pagar || 0), 0),
+          totalValorSimulado: sims.reduce((s: number, r: Record<string, number>) => s + (r.valor_solicitado || 0), 0),
+          totalCustoSimulado: 0, // campo total_pagar não existe na tabela leads
         },
         contatos: { total: contatosRes.count ?? 0 },
         n8n: { configured: !!process.env.N8N_WEBHOOK_URL },
@@ -356,7 +390,58 @@ async function startServer() {
     }
   });
 
-  // ─── n8n WEBHOOK CONFIG API ────────────────────────────────────────────────
+  // ─── COLABORADORES API (admin flow — sem confirmação de e-mail) ───────────────
+  // Usa service_role para criar usuário diretamente sem exigir confirmação de e-mail
+  app.post("/api/colaboradores", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      if (!supabaseReady) { res.status(503).json({ error: "Supabase não configurado" }); return; }
+      const { nome, email, cargo, senha } = req.body;
+      if (!nome || !email || !cargo || !senha) {
+        res.status(400).json({ error: "Campos obrigatórios: nome, email, cargo, senha" });
+        return;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const adminAuth = (supabase as any).auth.admin;
+      // Criar usuário no Auth com email_confirm=true (pula confirmação)
+      const { data: authData, error: authError } = await adminAuth.createUser({
+        email: email.trim().toLowerCase(),
+        password: senha,
+        email_confirm: true,
+        user_metadata: { nome, cargo },
+      });
+      if (authError) {
+        console.error("[COLAB] Auth error:", authError.message);
+        res.status(400).json({ error: authError.message });
+        return;
+      }
+      const userId = authData.user.id;
+      // Inserir perfil na tabela colaboradores
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: profileError } = await (supabase as any)
+        .from("colaboradores")
+        .insert({
+          id: userId,
+          nome: nome.trim(),
+          cargo,
+          email: email.trim().toLowerCase(),
+          ativo: true,
+        });
+      if (profileError) {
+        console.error("[COLAB] Profile error:", profileError.message);
+        // Tentar reverter criação do usuário no Auth
+        await adminAuth.deleteUser(userId).catch(() => {});
+        res.status(500).json({ error: profileError.message });
+        return;
+      }
+      console.log(`[COLAB] Colaborador criado: ${nome} (${email})`);
+      res.status(201).json({ success: true, id: userId, message: `Colaborador "${nome}" criado com sucesso!` });
+    } catch (err) {
+      console.error("[COLAB ERROR]", err);
+      res.status(500).json({ error: "Erro ao criar colaborador." });
+    }
+  });
+
+  // ─── n8n WEBHOOK CONFIG API ────────────────────────────────────────────────────────
   app.get("/api/n8n/status", requireAdmin, (_req: Request, res: Response) => {
     res.json({
       configured: !!process.env.N8N_WEBHOOK_URL,
@@ -364,7 +449,6 @@ async function startServer() {
       eventos: ["novo_lead", "nova_simulacao", "novo_contato"],
     });
   });
-
   app.post("/api/n8n/test", requireAdmin, async (_req: Request, res: Response) => {
     const ok = await dispararN8n("teste_webhook", {
       mensagem: "Teste de integração Destrava Crédito → n8n",

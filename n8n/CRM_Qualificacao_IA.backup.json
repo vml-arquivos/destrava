@@ -99,7 +99,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO crm_eventos_webhook (event_id, tipo_evento, payload, status_processamento, created_at)\nVALUES (\n  '{{ $json.eventId }}',\n  '{{ $json.eventType }}',\n  '{{ JSON.stringify($json.rawBody) }}'::jsonb,\n  'pendente',\n  NOW()\n)\nON CONFLICT (event_id) DO NOTHING\nRETURNING id, event_id, (xmax = 0) AS is_new;",
+        "query": "INSERT INTO crm_eventos_webhook (event_id, tipo_evento, payload_raw, status_processamento, recebido_em)\nVALUES (\n  '{{ $json.eventId }}',\n  '{{ $json.eventType }}',\n  '{{ JSON.stringify($json.rawBody) }}'::jsonb,\n  'pendente',\n  NOW()\n)\nON CONFLICT (event_id) DO NOTHING\nRETURNING id, event_id, (xmax = 0) AS is_new;",
         "options": {}
       },
       "id": "registrar-evento",
@@ -110,7 +110,7 @@
         900,
         300
       ],
-      "continueOnFail": false
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -174,7 +174,7 @@
         1340,
         300
       ],
-      "continueOnFail": false
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -221,7 +221,7 @@
         1780,
         200
       ],
-      "continueOnFail": false
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -237,7 +237,7 @@
         1780,
         400
       ],
-      "continueOnFail": false
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -253,12 +253,12 @@
         2000,
         300
       ],
-      "continueOnFail": false
+      "continueOnFail": true
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO crm_mensagens (\n  conversa_id,\n  direcao,\n  tipo_conteudo,\n  conteudo,\n  message_id_externo,\n  remetente_tipo,\n  created_at\n)\nVALUES (\n  {{ $json.id }},\n  'inbound',\n  '{{ $('Extrair Info (Robusto)').item.json.tipoConteudo }}',\n  '{{ $('Extrair Info (Robusto)').item.json.conteudo.replace(/'/g, \"''\") }}',\n  '{{ $('Extrair Info (Robusto)').item.json.messageId }}',\n  'contato',\n  NOW()\n)\nON CONFLICT (message_id_externo) DO NOTHING\nRETURNING id;",
+        "query": "INSERT INTO crm_mensagens (\n  conversa_id,\n  direcao,\n  tipo_conteudo,\n  conteudo,\n  media_url,\n  message_id_externo,\n  created_at\n)\nVALUES (\n  {{ $json.id }},\n  'inbound',\n  '{{ $('Extrair Info (Robusto)').item.json.tipoConteudo }}',\n  '{{ $('Extrair Info (Robusto)').item.json.conteudo.replace(/'/g, \"''\") }}',\n  {{ $('Extrair Info (Robusto)').item.json.mediaUrl ? \"'\" + $('Extrair Info (Robusto)').item.json.mediaUrl + \"'\" : 'NULL' }},\n  '{{ $('Extrair Info (Robusto)').item.json.messageId }}',\n  NOW(),\n  NOW()\n)\nON CONFLICT (message_id_externo) DO NOTHING\nRETURNING id;",
         "options": {}
       },
       "id": "persistir-mensagem",
@@ -269,12 +269,12 @@
         2220,
         300
       ],
-      "continueOnFail": false
+      "continueOnFail": true
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO crm_atividades (\n  lead_id,\n  tipo,\n  titulo,\n  origem_ia,\n  concluido,\n  created_at\n)\nVALUES (\n  {{ $('Upsert Conversa').item.json.lead_id }},\n  'whatsapp_inbound',\n  '{{ $('Extrair Info (Robusto)').item.json.tipoConteudo }} recebido via WhatsApp',\n  false,\n  true,\n  NOW()\n)\nRETURNING id;",
+        "query": "SELECT crm_registrar_interacao_atividade(\n  {{ $('Upsert Conversa').item.json.lead_id }},\n  'whatsapp_inbound',\n  '{{ $('Extrair Info (Robusto)').item.json.tipoConteudo }} recebido via WhatsApp',\n  NULL\n);",
         "options": {}
       },
       "id": "registrar-atividade",
@@ -285,7 +285,7 @@
         2440,
         300
       ],
-      "continueOnFail": false
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -301,7 +301,7 @@
         2660,
         300
       ],
-      "continueOnFail": false
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -368,7 +368,7 @@
         3540,
         300
       ],
-      "continueOnFail": false
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -384,7 +384,7 @@
         3760,
         300
       ],
-      "continueOnFail": false
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -400,7 +400,7 @@
         3980,
         300
       ],
-      "continueOnFail": false
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -458,7 +458,7 @@
         4420,
         200
       ],
-      "continueOnFail": false
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -504,7 +504,7 @@
         2220,
         600
       ],
-      "continueOnFail": false
+      "continueOnFail": true
     },
     {
       "parameters": {

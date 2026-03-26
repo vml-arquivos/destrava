@@ -635,7 +635,7 @@ function CenarioComImposto() {
                 </Button>
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => gerarPdfSimulacao({
                   cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
-                  cenarioA: resultado ? { taxa: resultado.taxaJurosMensal, valorCredito: resultado.valorCredito, prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, impostoValor: resultado.impostoValor, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "com_imposto" } : undefined,
+                  cenarioA: resultado ? { taxa: parseFloat(form.taxaJuros), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, impostoValor: resultado.impostoValor, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "com_imposto" } : undefined,
                   modo: "simples"
                 })}>
                   <Printer className="mr-1.5 h-4 w-4" />Exportar PDF
@@ -779,7 +779,7 @@ function CenarioSemImposto() {
                 </Button>
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => gerarPdfSimulacao({
                   cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
-                  cenarioA: resultado ? { taxa: resultado.taxaJurosMensal, valorCredito: resultado.valorCredito, prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "sem_imposto" } : undefined,
+                  cenarioA: resultado ? { taxa: parseFloat(form.taxaJuros), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "sem_imposto" } : undefined,
                   modo: "simples"
                 })}>
                   <Printer className="mr-1.5 h-4 w-4" />Exportar PDF
@@ -1291,8 +1291,8 @@ function CenarioComparativo() {
               if (resA && resB) {
                 gerarPdfSimulacao({
                   cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
-                  cenarioA: { taxa: resA.taxaJurosMensal, valorCredito: resA.valorCredito, prazo: parseInt(form.prazo), parcela: resA.parcelaMensal, totalFinanciamento: resA.totalFinanciamento, totalJuros: resA.totalJuros, impostoValor: resA.impostoValor, comissaoValor: resA.comissaoValor, custoTotalOperacao: resA.custoTotalOperacao, cenario: "com_imposto" },
-                  cenarioB: { taxa: resB.taxaJurosMensal, valorCredito: resB.valorCredito, prazo: parseInt(form.prazo), parcela: resB.parcelaMensal, totalFinanciamento: resB.totalFinanciamento, totalJuros: resB.totalJuros, comissaoValor: resB.comissaoValor, custoTotalOperacao: resB.custoTotalOperacao, cenario: "sem_imposto" },
+                  cenarioA: { taxa: parseFloat(form.taxaA), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resA.parcelaMensal, totalFinanciamento: resA.totalFinanciamento, totalJuros: resA.totalJuros, impostoValor: resA.impostoValor, comissaoValor: resA.comissaoValor, custoTotalOperacao: resA.custoTotalOperacao, cenario: "com_imposto" },
+                  cenarioB: { taxa: parseFloat(form.taxaB), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resB.parcelaMensal, totalFinanciamento: resB.totalFinanciamento, totalJuros: resB.totalJuros, comissaoValor: resB.comissaoValor, custoTotalOperacao: resB.custoTotalOperacao, cenario: "sem_imposto" },
                   modo: "comparativo"
                 });
               }
