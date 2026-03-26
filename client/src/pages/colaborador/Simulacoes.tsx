@@ -49,14 +49,15 @@ import { Link } from "wouter";
 const fmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const fmtPct = (v: number) => `${Number(v).toFixed(2).replace(".", ",")}%`;
 
-type Status = "todos" | "rascunho" | "enviado" | "aprovado" | "reprovado";
+type Status = "todos" | "pendente" | "em_analise" | "aprovado" | "reprovado" | "cancelado";
 
 const statusBadge = (status: string) => {
   switch (status) {
     case "aprovado": return <Badge className="bg-green-100 text-green-800 border-green-200">Aprovado</Badge>;
     case "reprovado": return <Badge variant="destructive">Reprovado</Badge>;
-    case "enviado": return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Enviado</Badge>;
-    default: return <Badge variant="secondary">Rascunho</Badge>;
+    case "em_analise": return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Em Análise</Badge>;
+    case "cancelado": return <Badge variant="outline">Cancelado</Badge>;
+    default: return <Badge variant="secondary">Pendente</Badge>;
   }
 };
 
@@ -79,7 +80,7 @@ export default function Simulacoes() {
       .from("simulacoes_colaborador")
       .select("*")
       .eq("colaborador_id", user!.id)
-      .order("criado_em", { ascending: false });
+      .order("created_at", { ascending: false });
     setSimulacoes((data as SimulacaoColaborador[]) || []);
     setLoading(false);
   }
@@ -156,13 +157,14 @@ export default function Simulacoes() {
                 <SelectTrigger className="w-full sm:w-44">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos os status</SelectItem>
-                  <SelectItem value="rascunho">Rascunho</SelectItem>
-                  <SelectItem value="enviado">Enviado</SelectItem>
-                  <SelectItem value="aprovado">Aprovado</SelectItem>
-                  <SelectItem value="reprovado">Reprovado</SelectItem>
-                </SelectContent>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os status</SelectItem>
+                    <SelectItem value="pendente">Pendente</SelectItem>
+                    <SelectItem value="em_analise">Em Análise</SelectItem>
+                    <SelectItem value="aprovado">Aprovado</SelectItem>
+                    <SelectItem value="reprovado">Reprovado</SelectItem>
+                    <SelectItem value="cancelado">Cancelado</SelectItem>
+                  </SelectContent>
               </Select>
             </div>
           </CardContent>
@@ -209,13 +211,13 @@ export default function Simulacoes() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm font-semibold">
-                          {fmt.format(Number(sim.valor_solicitado))}
+                          {fmt.format(Number(sim.valor_credito))}
                         </TableCell>
                         <TableCell className="text-center text-sm">
-                          {sim.quantidade_parcelas}x
+                          {sim.prazo_meses}x
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm">
-                          {fmt.format(Number(sim.valor_parcela))}
+                          {fmt.format(Number(sim.parcela_mensal))}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {sim.banco || "—"}
@@ -224,7 +226,7 @@ export default function Simulacoes() {
                           {statusBadge(sim.status)}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {new Date(sim.criado_em).toLocaleDateString("pt-BR")}
+                          {new Date(sim.created_at).toLocaleDateString("pt-BR")}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">
@@ -279,22 +281,21 @@ export default function Simulacoes() {
               {/* Resultado principal */}
               <div className="bg-primary text-white rounded-xl p-4 text-center">
                 <p className="text-xs text-white/70 mb-1">Parcela Mensal</p>
-                <p className="text-3xl font-bold">{fmt.format(Number(selecionada.valor_parcela))}</p>
+                <p className="text-3xl font-bold">{fmt.format(Number(selecionada.parcela_mensal))}</p>
                 <p className="text-xs text-white/70 mt-1">
-                  {selecionada.quantidade_parcelas}x de {fmt.format(Number(selecionada.valor_parcela))}
+                  {selecionada.prazo_meses}x de {fmt.format(Number(selecionada.parcela_mensal))}
                 </p>
               </div>
 
               {/* Detalhamento */}
               <div className="space-y-2 text-sm">
                 {[
-                  ["Valor Solicitado", fmt.format(Number(selecionada.valor_solicitado))],
+                  ["Valor do Crédito", fmt.format(Number(selecionada.valor_credito))],
                   ["Taxa de Juros", `${fmtPct(Number(selecionada.taxa_juros_mensal))} a.m.`],
-                  ["Imposto / IOF", `${fmtPct(Number(selecionada.imposto_percentual))} → ${fmt.format(Number(selecionada.total_imposto))}`],
-                  ["Comissão Destrava", `${fmtPct(Number(selecionada.comissao_percentual))} → ${fmt.format(Number(selecionada.total_comissao))}`],
+                  ["Imposto / IOF", `${fmtPct(Number(selecionada.pct_imposto || 0))} → ${fmt.format(Number(selecionada.imposto_valor || 0))}`],
+                  ["Comissão Destrava", `${fmtPct(Number(selecionada.pct_comissao || 0))} → ${fmt.format(Number(selecionada.comissao_valor || 0))}`],
                   ["Total de Juros", fmt.format(Number(selecionada.total_juros))],
-                  ["CET Mensal", fmtPct(Number(selecionada.custo_efetivo_total))],
-                  ["Total a Pagar", fmt.format(Number(selecionada.valor_total_pagar))],
+                  ["Custo Total", fmt.format(Number(selecionada.custo_total))],
                 ].map(([label, value]) => (
                   <div key={label} className="flex justify-between border-b pb-2">
                     <span className="text-muted-foreground">{label}</span>
@@ -324,10 +325,11 @@ export default function Simulacoes() {
                 <p className="text-sm font-medium">Alterar Status:</p>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { status: "rascunho", label: "Rascunho", icon: Clock, color: "outline" as const },
-                    { status: "enviado", label: "Enviado", icon: Send, color: "outline" as const },
+                    { status: "pendente", label: "Pendente", icon: Clock, color: "outline" as const },
+                    { status: "em_analise", label: "Em Análise", icon: Send, color: "outline" as const },
                     { status: "aprovado", label: "Aprovado", icon: CheckCircle2, color: "outline" as const },
                     { status: "reprovado", label: "Reprovado", icon: XCircle, color: "outline" as const },
+                    { status: "cancelado", label: "Cancelado", icon: XCircle, color: "outline" as const },
                   ].map(({ status, label, icon: Icon, color }) => (
                     <Button
                       key={status}
@@ -352,7 +354,7 @@ export default function Simulacoes() {
 
               {/* Data */}
               <p className="text-xs text-muted-foreground text-center">
-                Criada em {new Date(selecionada.criado_em).toLocaleString("pt-BR")}
+                Criada em {new Date(selecionada.created_at).toLocaleString("pt-BR")}
               </p>
             </div>
           )}

@@ -26,6 +26,10 @@ CREATE POLICY "Colaboradores podem atualizar seus próprios dados"
   ON public.colaboradores FOR UPDATE
   USING (auth.uid() = id);
 
+CREATE POLICY "Qualquer usuário autenticado pode inserir seu próprio perfil"
+  ON public.colaboradores FOR INSERT
+  WITH CHECK (auth.uid() = id);
+
 -- ─── Tabela: clientes ─────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.clientes (
   id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
