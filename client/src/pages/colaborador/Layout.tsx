@@ -14,6 +14,7 @@ import {
   User,
   Users,
   Zap,
+  Kanban,
 } from "lucide-react";
 
 interface NavItem {
@@ -24,12 +25,13 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: "/colaborador/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/colaborador/calculadora", label: "Calculadora", icon: Calculator },
-  { href: "/colaborador/clientes", label: "Clientes CRM", icon: Users },
-  { href: "/colaborador/simulacoes", label: "Simulações", icon: FileText },
-  { href: "/colaborador/integracoes", label: "Integrações n8n", icon: Zap },
-  { href: "/colaborador/usuarios", label: "Usuários", icon: User },
+  { href: "/colaborador/dashboard",  label: "Dashboard",       icon: LayoutDashboard },
+  { href: "/colaborador/crm",        label: "CRM — Pipeline",  icon: Kanban },
+  { href: "/colaborador/calculadora",label: "Calculadora",     icon: Calculator },
+  { href: "/colaborador/simulacoes", label: "Simulações",      icon: FileText },
+  { href: "/colaborador/clientes",   label: "Clientes",        icon: Users },
+  { href: "/colaborador/integracoes",label: "Integrações n8n", icon: Zap },
+  { href: "/colaborador/usuarios",   label: "Usuários",        icon: User },
 ];
 
 interface LayoutProps {
