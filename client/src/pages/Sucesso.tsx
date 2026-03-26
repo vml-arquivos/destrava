@@ -2,12 +2,24 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { CheckCircle2, Home, MessageCircle, FileText } from "lucide-react";
+import { CheckCircle2, Home, MessageCircle, FileText, ArrowLeft } from "lucide-react";
 
 export default function Sucesso() {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
+
+      {/* Barra de retorno */}
+      <div className="bg-muted/40 border-b border-border">
+        <div className="container py-3">
+          <Link href="/">
+            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground gap-2 -ml-2">
+              <ArrowLeft className="h-4 w-4" />
+              Voltar para o Início
+            </Button>
+          </Link>
+        </div>
+      </div>
 
       <section className="flex-1 py-20">
         <div className="container">
