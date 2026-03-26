@@ -8,15 +8,32 @@ import { createClient } from "@supabase/supabase-js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ─── Supabase (backend service role) ────────────────────────────────────────
-const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+// ─── Supabase (backend service role) — inicialização lazy ──────────────────
+// IMPORTANTE: createClient() lança exceção se supabaseUrl for vazio (v2.100+).
+// Por isso usamos inicialização lazy: o cliente só é criado quando as variáveis
+// estiverem disponíveis, evitando crash no startup do container.
+let _supabase: ReturnType<typeof createClient> | null = null;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
-  auth: { persistSession: false },
+function getSupabase() {
+  if (_supabase) return _supabase;
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  _supabase = createClient(url, key, { auth: { persistSession: false } });
+  return _supabase;
+}
+
+const supabaseReady = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+// Alias para manter compatibilidade com o restante do código
+const supabase = new Proxy({} as ReturnType<typeof createClient>, {
+  get(_target, prop) {
+    const client = getSupabase();
+    if (!client) throw new Error("[Supabase] Cliente não disponível — variáveis não configuradas.");
+    return (client as Record<string | symbol, unknown>)[prop];
+  },
 });
 
-const supabaseReady = !!(SUPABASE_URL && SUPABASE_SERVICE_KEY);
 if (!supabaseReady) {
   console.warn("[Supabase] SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY não configuradas. Persistência desativada.");
 }
