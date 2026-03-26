@@ -258,7 +258,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO crm_mensagens (\n  conversa_id,\n  lead_id,\n  direcao,\n  tipo_conteudo,\n  conteudo,\n  media_url,\n  message_id_externo,\n  created_at,\n  created_at\n)\nVALUES (\n  {{ $json.id }},\n  {{ $('Upsert Conversa').item.json.lead_id }},\n  'inbound',\n  '{{ $('Extrair Info (Robusto)').item.json.tipoConteudo }}',\n  '{{ $('Extrair Info (Robusto)').item.json.conteudo.replace(/'/g, \"''\") }}',\n  {{ $('Extrair Info (Robusto)').item.json.mediaUrl ? \"'\" + $('Extrair Info (Robusto)').item.json.mediaUrl + \"'\" : 'NULL' }},\n  '{{ $('Extrair Info (Robusto)').item.json.messageId }}',\n  NOW(),\n  NOW()\n)\nON CONFLICT (message_id_externo) DO NOTHING\nRETURNING id;",
+        "query": "INSERT INTO crm_mensagens (\n  conversa_id,\n  direcao,\n  tipo_conteudo,\n  conteudo,\n  media_url,\n  message_id_externo,\n  created_at\n)\nVALUES (\n  {{ $json.id }},\n  'inbound',\n  '{{ $('Extrair Info (Robusto)').item.json.tipoConteudo }}',\n  '{{ $('Extrair Info (Robusto)').item.json.conteudo.replace(/'/g, \"''\") }}',\n  {{ $('Extrair Info (Robusto)').item.json.mediaUrl ? \"'\" + $('Extrair Info (Robusto)').item.json.mediaUrl + \"'\" : 'NULL' }},\n  '{{ $('Extrair Info (Robusto)').item.json.messageId }}',\n  NOW(),\n  NOW()\n)\nON CONFLICT (message_id_externo) DO NOTHING\nRETURNING id;",
         "options": {}
       },
       "id": "persistir-mensagem",
@@ -290,7 +290,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT\n  m.conteudo,\n  m.direcao,\n  m.created_at\nFROM crm_mensagens m\nWHERE m.lead_id = {{ $('Upsert Conversa').item.json.lead_id }}\n  AND m.tipo_conteudo IN ('texto', 'audio')\nORDER BY m.created_at DESC\nLIMIT 20;",
+        "query": "SELECT\n  m.conteudo,\n  m.direcao,\n  m.created_at\nFROM crm_mensagens m\nWHERE m.conversa_id = '{{ $('Upsert Conversa').item.json.id }}'\n  AND m.tipo_conteudo IN ('texto', 'audio')\nORDER BY m.created_at DESC\nLIMIT 20;",
         "options": {}
       },
       "id": "buscar-historico",
