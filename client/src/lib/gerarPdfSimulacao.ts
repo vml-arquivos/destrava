@@ -44,6 +44,7 @@ const CINZA_CLARO = [245, 247, 250] as [number, number, number];
 const VERDE = [22, 163, 74] as [number, number, number];
 const VERMELHO = [220, 38, 38] as [number, number, number];
 const BRANCO = [255, 255, 255] as [number, number, number];
+const PRETO = [0, 0, 0] as [number, number, number];
 
 // ─── Gerador principal ────────────────────────────────────────────────────────
 export function gerarPdfSimulacao(dados: DadosPdf): void {
@@ -170,12 +171,14 @@ export function gerarPdfSimulacao(dados: DadosPdf): void {
       doc.setFillColor(...bg);
       doc.rect(xStart, cy - 4, largura, 6.5, "F");
 
-      doc.setTextColor(destaque ? ...AZUL : ...CINZA);
+      // ✅ CORREÇÃO: spread aplicado sobre o resultado do ternário
+      doc.setTextColor(...(destaque ? AZUL : CINZA));
       doc.setFont("helvetica", destaque ? "bold" : "normal");
       doc.setFontSize(destaque ? 9 : 8);
       doc.text(label, xStart + 3, cy);
 
-      doc.setTextColor(destaque ? ...AZUL : 0, 0, 0);
+      // ✅ CORREÇÃO: spread aplicado sobre o resultado do ternário
+      doc.setTextColor(...(destaque ? AZUL : PRETO));
       doc.setFont("helvetica", "bold");
       doc.setFontSize(destaque ? 9 : 8);
       doc.text(valor, xStart + largura - 3, cy, { align: "right" });
