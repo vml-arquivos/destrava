@@ -1,5 +1,5 @@
 {
-  "name": "CRM Qualificacao IA v4 — Fase 1.1",
+  "name": "CRM Qualificacao IA v4 \u2014 Fase 1.1",
   "nodes": [
     {
       "parameters": {
@@ -12,62 +12,89 @@
       "name": "Webhook Chatwoot",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// ─── BLOCO A: Extração robusta do payload Chatwoot ───\nconst body = $input.first().json.body || $input.first().json;\n\n// Identificadores do evento\nconst eventType = body.event || body.message_type || 'unknown';\nconst messageId = body.id || body.message_id || null;\nconst conversationId = body.conversation?.id || body.conversation_id || null;\nconst accountId = body.account?.id || body.account_id || null;\n\n// ─── BLOCO B: Extração robusta de conteúdo (texto, áudio, imagem, doc) ───\nconst content = body.content || body.message?.content || '';\nconst attachments = body.attachments || body.message?.attachments || [];\n\n// Determinar tipo de conteúdo\nlet tipoConteudo = 'texto';\nlet conteudoFinal = content;\nlet mediaUrl = null;\n\nif (attachments && attachments.length > 0) {\n  const att = attachments[0];\n  const fileType = att.file_type || att.content_type || '';\n  if (fileType.includes('audio') || att.data_url?.includes('audio')) {\n    tipoConteudo = 'audio';\n    mediaUrl = att.data_url || att.file_url || null;\n    conteudoFinal = content || '[Áudio recebido]';\n  } else if (fileType.includes('image') || att.data_url?.includes('image')) {\n    tipoConteudo = 'imagem';\n    mediaUrl = att.data_url || att.file_url || null;\n    conteudoFinal = content || '[Imagem recebida]';\n  } else if (fileType.includes('video') || att.data_url?.includes('video')) {\n    tipoConteudo = 'video';\n    mediaUrl = att.data_url || att.file_url || null;\n    conteudoFinal = content || '[Vídeo recebido]';\n  } else {\n    tipoConteudo = 'documento';\n    mediaUrl = att.data_url || att.file_url || null;\n    conteudoFinal = content || '[Documento recebido]';\n  }\n}\n\n// ─── BLOCO C: Normalização de telefone ───\nconst rawPhone = body.meta?.sender?.phone_number\n  || body.conversation?.meta?.sender?.phone_number\n  || body.sender?.phone_number\n  || body.contact?.phone_number\n  || '';\n\n// Remove tudo que não é dígito, garante DDI 55 para Brasil\nlet telefone = rawPhone.replace(/\\D/g, '');\nif (telefone.length === 11 && !telefone.startsWith('55')) {\n  telefone = '55' + telefone;\n} else if (telefone.length === 10 && !telefone.startsWith('55')) {\n  telefone = '55' + telefone;\n}\n\n// Validação mínima: precisa ter pelo menos 12 dígitos (55 + 10)\nconst telefoneValido = telefone.length >= 12;\n\n// Nome do contato\nconst nomeContato = body.meta?.sender?.name\n  || body.conversation?.meta?.sender?.name\n  || body.sender?.name\n  || body.contact?.name\n  || 'Desconhecido';\n\n// ─── Verificar se tem conteúdo processável ───\n// Aceita: texto, áudio, imagem, documento, vídeo\n// Rejeita: apenas eventos sem conteúdo nem anexo (ex: status de leitura)\nconst temConteudo = (conteudoFinal && conteudoFinal.trim().length > 0) || attachments.length > 0;\n\n// Só processar mensagens inbound (do cliente para a empresa)\nconst isInbound = body.message_type === 'incoming' || body.message_type === undefined;\n\n// ─── ID único do evento (idempotência) ───\n// Prioriza ID nativo da mensagem, fallback para hash do contexto\nconst eventId = messageId\n  ? `msg_${messageId}`\n  : `evt_${conversationId}_${Date.now()}_${Math.random().toString(36).substr(2,6)}`;\n\nreturn [{\n  json: {\n    eventId,\n    eventType,\n    messageId,\n    conversationId,\n    accountId,\n    telefone,\n    telefoneValido,\n    nomeContato,\n    conteudo: conteudoFinal,\n    tipoConteudo,\n    mediaUrl,\n    temConteudo,\n    isInbound,\n    rawBody: body\n  }\n}];"
+        "jsCode": "// \u2500\u2500\u2500 BLOCO A: Extra\u00e7\u00e3o robusta do payload Chatwoot \u2500\u2500\u2500\nconst body = $input.first().json.body || $input.first().json;\n\n// Identificadores do evento\nconst eventType = body.event || body.message_type || 'unknown';\nconst messageId = body.id || body.message_id || null;\nconst conversationId = body.conversation?.id || body.conversation_id || null;\nconst accountId = body.account?.id || body.account_id || null;\n\n// \u2500\u2500\u2500 BLOCO B: Extra\u00e7\u00e3o robusta de conte\u00fado (texto, \u00e1udio, imagem, doc) \u2500\u2500\u2500\nconst content = body.content || body.message?.content || '';\nconst attachments = body.attachments || body.message?.attachments || [];\n\n// Determinar tipo de conte\u00fado\nlet tipoConteudo = 'texto';\nlet conteudoFinal = content;\nlet mediaUrl = null;\n\nif (attachments && attachments.length > 0) {\n  const att = attachments[0];\n  const fileType = att.file_type || att.content_type || '';\n  if (fileType.includes('audio') || att.data_url?.includes('audio')) {\n    tipoConteudo = 'audio';\n    mediaUrl = att.data_url || att.file_url || null;\n    conteudoFinal = content || '[\u00c1udio recebido]';\n  } else if (fileType.includes('image') || att.data_url?.includes('image')) {\n    tipoConteudo = 'imagem';\n    mediaUrl = att.data_url || att.file_url || null;\n    conteudoFinal = content || '[Imagem recebida]';\n  } else if (fileType.includes('video') || att.data_url?.includes('video')) {\n    tipoConteudo = 'video';\n    mediaUrl = att.data_url || att.file_url || null;\n    conteudoFinal = content || '[V\u00eddeo recebido]';\n  } else {\n    tipoConteudo = 'documento';\n    mediaUrl = att.data_url || att.file_url || null;\n    conteudoFinal = content || '[Documento recebido]';\n  }\n}\n\n// \u2500\u2500\u2500 BLOCO C: Normaliza\u00e7\u00e3o de telefone \u2500\u2500\u2500\nconst rawPhone = body.meta?.sender?.phone_number\n  || body.conversation?.meta?.sender?.phone_number\n  || body.sender?.phone_number\n  || body.contact?.phone_number\n  || '';\n\n// Remove tudo que n\u00e3o \u00e9 d\u00edgito, garante DDI 55 para Brasil\nlet telefone = rawPhone.replace(/\\D/g, '');\nif (telefone.length === 11 && !telefone.startsWith('55')) {\n  telefone = '55' + telefone;\n} else if (telefone.length === 10 && !telefone.startsWith('55')) {\n  telefone = '55' + telefone;\n}\n\n// Valida\u00e7\u00e3o m\u00ednima: precisa ter pelo menos 12 d\u00edgitos (55 + 10)\nconst telefoneValido = telefone.length >= 12;\n\n// Nome do contato\nconst nomeContato = body.meta?.sender?.name\n  || body.conversation?.meta?.sender?.name\n  || body.sender?.name\n  || body.contact?.name\n  || 'Desconhecido';\n\n// \u2500\u2500\u2500 Verificar se tem conte\u00fado process\u00e1vel \u2500\u2500\u2500\n// Aceita: texto, \u00e1udio, imagem, documento, v\u00eddeo\n// Rejeita: apenas eventos sem conte\u00fado nem anexo (ex: status de leitura)\nconst temConteudo = (conteudoFinal && conteudoFinal.trim().length > 0) || attachments.length > 0;\n\n// S\u00f3 processar mensagens inbound (do cliente para a empresa)\nconst isInbound = body.message_type === 'incoming' || body.message_type === undefined;\n\n// \u2500\u2500\u2500 ID \u00fanico do evento (idempot\u00eancia) \u2500\u2500\u2500\n// Prioriza ID nativo da mensagem, fallback para hash do contexto\nconst eventId = messageId\n  ? `msg_${messageId}`\n  : `evt_${conversationId}_${Date.now()}_${Math.random().toString(36).substr(2,6)}`;\n\nreturn [{\n  json: {\n    eventId,\n    eventType,\n    messageId,\n    conversationId,\n    accountId,\n    telefone,\n    telefoneValido,\n    nomeContato,\n    conteudo: conteudoFinal,\n    tipoConteudo,\n    mediaUrl,\n    temConteudo,\n    isInbound,\n    rawBody: body\n  }\n}];"
       },
       "id": "extrair-info",
       "name": "Extrair Info (Robusto)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 300]
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "cond-tem-conteudo",
               "leftValue": "={{ $json.temConteudo }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "equals" }
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
             },
             {
               "id": "cond-is-inbound",
               "leftValue": "={{ $json.isInbound }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "equals" }
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
             },
             {
               "id": "cond-telefone-valido",
               "leftValue": "={{ $json.telefoneValido }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "equals" }
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
             }
           ],
           "combinator": "and"
         }
       },
       "id": "gate-entrada",
-      "name": "Tem conteúdo processável?",
+      "name": "Tem conte\u00fado process\u00e1vel?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [680, 300]
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={ \"status\": \"ignored\", \"reason\": \"no_processable_content\" }",
-        "options": { "responseCode": 200 }
+        "options": {
+          "responseCode": 200
+        }
       },
       "id": "resposta-ignorado",
-      "name": "Ignorar (sem conteúdo)",
+      "name": "Ignorar (sem conte\u00fado)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [900, 500]
+      "position": [
+        900,
+        500
+      ]
     },
     {
       "parameters": {
@@ -76,44 +103,62 @@
         "options": {}
       },
       "id": "registrar-evento",
-      "name": "Registrar Evento (Idempotência)",
+      "name": "Registrar Evento (Idempot\u00eancia)",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [900, 300],
+      "position": [
+        900,
+        300
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
           "conditions": [
             {
               "id": "cond-evento-novo",
               "leftValue": "={{ $json.is_new }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "equals" }
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
             }
           ],
           "combinator": "and"
         }
       },
       "id": "evento-novo",
-      "name": "Evento novo? (Deduplicação)",
+      "name": "Evento novo? (Deduplica\u00e7\u00e3o)",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1120, 300]
+      "position": [
+        1120,
+        300
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={ \"status\": \"deduplicated\", \"event_id\": \"{{ $('Extrair Info (Robusto)').item.json.eventId }}\" }",
-        "options": { "responseCode": 200 }
+        "options": {
+          "responseCode": 200
+        }
       },
       "id": "resposta-duplicado",
       "name": "Resposta (Duplicado)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1340, 500]
+      "position": [
+        1340,
+        500
+      ]
     },
     {
       "parameters": {
@@ -125,19 +170,29 @@
       "name": "Buscar Lead",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1340, 300],
+      "position": [
+        1340,
+        300
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
           "conditions": [
             {
               "id": "cond-lead-existe",
               "leftValue": "={{ $json.id }}",
               "rightValue": "",
-              "operator": { "type": "string", "operation": "notEmpty" }
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
             }
           ],
           "combinator": "and"
@@ -147,7 +202,10 @@
       "name": "Lead existe?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1560, 300]
+      "position": [
+        1560,
+        300
+      ]
     },
     {
       "parameters": {
@@ -159,20 +217,26 @@
       "name": "Atualizar Lead",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1780, 200],
+      "position": [
+        1780,
+        200
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO leads (nome, telefone, status, etapa_funil, temperatura, score_ia, origem, created_at, updated_at)\nVALUES (\n  '{{ $('Extrair Info (Robusto)').item.json.nomeContato }}',\n  '{{ $('Extrair Info (Robusto)').item.json.telefone }}',\n  'novo',\n  'Novo',\n  'frio',\n  0,\n  'whatsapp',\n  NOW(),\n  NOW()\n)\nON CONFLICT (telefone) DO UPDATE\n  SET updated_at = NOW()\nRETURNING id, nome, status, score_ia, etapa_funil, temperatura;",
+        "query": "INSERT INTO leads (nome, telefone, status, etapa_funil, temperatura, score_ia, origem, created_at, updated_at)\nVALUES (\n  '{{ $('Extrair Info (Robusto)').item.json.nomeContato }}',\n  '{{ $('Extrair Info (Robusto)').item.json.telefone }}',\n  'novo',\n  'Novo',\n  'frio',\n  0,\n  'whatsapp',\n  NOW(),\n  NOW()\n)\nRETURNING id, nome, status, score_ia, etapa_funil, temperatura;",
         "options": {}
       },
       "id": "criar-lead",
       "name": "Criar Lead",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1780, 400],
+      "position": [
+        1780,
+        400
+      ],
       "continueOnFail": true
     },
     {
@@ -185,20 +249,26 @@
       "name": "Upsert Conversa",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [2000, 300],
+      "position": [
+        2000,
+        300
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO crm_mensagens (\n  conversa_id,\n  lead_id,\n  direcao,\n  tipo_conteudo,\n  conteudo,\n  media_url,\n  message_id_externo,\n  enviado_em,\n  created_at\n)\nVALUES (\n  {{ $json.id }},\n  {{ $('Upsert Conversa').item.json.lead_id }},\n  'inbound',\n  '{{ $('Extrair Info (Robusto)').item.json.tipoConteudo }}',\n  '{{ $('Extrair Info (Robusto)').item.json.conteudo.replace(/'/g, \"''\") }}',\n  {{ $('Extrair Info (Robusto)').item.json.mediaUrl ? \"'\" + $('Extrair Info (Robusto)').item.json.mediaUrl + \"'\" : 'NULL' }},\n  '{{ $('Extrair Info (Robusto)').item.json.messageId }}',\n  NOW(),\n  NOW()\n)\nON CONFLICT (message_id_externo) DO NOTHING\nRETURNING id;",
+        "query": "INSERT INTO crm_mensagens (\n  conversa_id,\n  lead_id,\n  direcao,\n  tipo_conteudo,\n  conteudo,\n  media_url,\n  message_id_externo,\n  created_at,\n  created_at\n)\nVALUES (\n  {{ $json.id }},\n  {{ $('Upsert Conversa').item.json.lead_id }},\n  'inbound',\n  '{{ $('Extrair Info (Robusto)').item.json.tipoConteudo }}',\n  '{{ $('Extrair Info (Robusto)').item.json.conteudo.replace(/'/g, \"''\") }}',\n  {{ $('Extrair Info (Robusto)').item.json.mediaUrl ? \"'\" + $('Extrair Info (Robusto)').item.json.mediaUrl + \"'\" : 'NULL' }},\n  '{{ $('Extrair Info (Robusto)').item.json.messageId }}',\n  NOW(),\n  NOW()\n)\nON CONFLICT (message_id_externo) DO NOTHING\nRETURNING id;",
         "options": {}
       },
       "id": "persistir-mensagem",
       "name": "Persistir Mensagem (Inbound)",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [2220, 300],
+      "position": [
+        2220,
+        300
+      ],
       "continueOnFail": true
     },
     {
@@ -211,31 +281,40 @@
       "name": "Registrar Atividade CRM",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [2440, 300],
+      "position": [
+        2440,
+        300
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT\n  m.conteudo,\n  m.direcao,\n  m.enviado_em\nFROM crm_mensagens m\nWHERE m.lead_id = {{ $('Upsert Conversa').item.json.lead_id }}\n  AND m.tipo_conteudo IN ('texto', 'audio')\nORDER BY m.enviado_em DESC\nLIMIT 20;",
+        "query": "SELECT\n  m.conteudo,\n  m.direcao,\n  m.created_at\nFROM crm_mensagens m\nWHERE m.lead_id = {{ $('Upsert Conversa').item.json.lead_id }}\n  AND m.tipo_conteudo IN ('texto', 'audio')\nORDER BY m.created_at DESC\nLIMIT 20;",
         "options": {}
       },
       "id": "buscar-historico",
-      "name": "Buscar Histórico (crm_mensagens)",
+      "name": "Buscar Hist\u00f3rico (crm_mensagens)",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [2660, 300],
+      "position": [
+        2660,
+        300
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "const leadId = $('Upsert Conversa').item.json.lead_id;\nconst leadInfo = $('Atualizar Lead').item?.json || $('Criar Lead').item?.json || {};\nconst mensagens = $input.all();\n\n// Montar histórico da conversa\nconst historico = mensagens\n  .filter(m => m.json.conteudo)\n  .reverse()\n  .map(m => `[${m.json.direcao === 'inbound' ? 'Cliente' : 'Agente'}]: ${m.json.conteudo}`)\n  .join('\\n');\n\nconst prompt = `Você é um analista de crédito especialista. Analise a conversa abaixo e retorne APENAS um JSON válido, sem markdown, sem explicações.\n\nLEAD ATUAL:\n- ID: ${leadId}\n- Nome: ${leadInfo.nome || 'Desconhecido'}\n- Status atual: ${leadInfo.status || 'novo'}\n- Etapa atual: ${leadInfo.etapa_funil || 'Novo'}\n- Score atual: ${leadInfo.score_ia || 0}\n\nHISTÓRICO DA CONVERSA (mais recente por último):\n${historico || 'Sem histórico disponível'}\n\nRetorne EXATAMENTE este JSON (sem markdown):\n{\n  \"score\": <número 0-100>,\n  \"temperatura\": <\"frio\"|\"morno\"|\"quente\"|\"urgente\">,\n  \"etapa_sugerida\": <\"Novo\"|\"Contato Feito\"|\"Qualificado\"|\"Proposta Enviada\"|\"Negociação\"|\"Documentação\"|\"Aprovação\"|\"Ganho\"|\"Perdido\">,\n  \"resumo\": <\"resumo em 1-2 frases do perfil do lead\">,\n  \"proxima_acao\": <\"próxima ação recomendada\">,\n  \"probabilidade_conversao\": <número 0-100>,\n  \"documentos_faltando\": [<lista de documentos pendentes ou array vazio>],\n  \"pontos_positivos\": [<lista de pontos positivos ou array vazio>],\n  \"pontos_atencao\": [<lista de pontos de atenção ou array vazio>],\n  \"nome_identificado\": <\"nome real identificado na conversa ou null\">,\n  \"empresa_identificada\": <\"nome da empresa ou null\">,\n  \"produto_interesse\": <\"produto de interesse ou null\">,\n  \"valor_estimado\": <\"valor estimado ou null\">\n}`;\n\nreturn [{ json: { prompt, leadId, leadInfo } }];"
+        "jsCode": "const leadId = $('Upsert Conversa').item.json.lead_id;\nconst leadInfo = $('Atualizar Lead').item?.json || $('Criar Lead').item?.json || {};\nconst mensagens = $input.all();\n\n// Montar hist\u00f3rico da conversa\nconst historico = mensagens\n  .filter(m => m.json.conteudo)\n  .reverse()\n  .map(m => `[${m.json.direcao === 'inbound' ? 'Cliente' : 'Agente'}]: ${m.json.conteudo}`)\n  .join('\\n');\n\nconst prompt = `Voc\u00ea \u00e9 um analista de cr\u00e9dito especialista. Analise a conversa abaixo e retorne APENAS um JSON v\u00e1lido, sem markdown, sem explica\u00e7\u00f5es.\n\nLEAD ATUAL:\n- ID: ${leadId}\n- Nome: ${leadInfo.nome || 'Desconhecido'}\n- Status atual: ${leadInfo.status || 'novo'}\n- Etapa atual: ${leadInfo.etapa_funil || 'Novo'}\n- Score atual: ${leadInfo.score_ia || 0}\n\nHIST\u00d3RICO DA CONVERSA (mais recente por \u00faltimo):\n${historico || 'Sem hist\u00f3rico dispon\u00edvel'}\n\nRetorne EXATAMENTE este JSON (sem markdown):\n{\n  \"score\": <n\u00famero 0-100>,\n  \"temperatura\": <\"frio\"|\"morno\"|\"quente\"|\"urgente\">,\n  \"etapa_sugerida\": <\"Novo\"|\"Contato Feito\"|\"Qualificado\"|\"Proposta Enviada\"|\"Negocia\u00e7\u00e3o\"|\"Documenta\u00e7\u00e3o\"|\"Aprova\u00e7\u00e3o\"|\"Ganho\"|\"Perdido\">,\n  \"resumo\": <\"resumo em 1-2 frases do perfil do lead\">,\n  \"proxima_acao\": <\"pr\u00f3xima a\u00e7\u00e3o recomendada\">,\n  \"probabilidade_conversao\": <n\u00famero 0-100>,\n  \"documentos_faltando\": [<lista de documentos pendentes ou array vazio>],\n  \"pontos_positivos\": [<lista de pontos positivos ou array vazio>],\n  \"pontos_atencao\": [<lista de pontos de aten\u00e7\u00e3o ou array vazio>],\n  \"nome_identificado\": <\"nome real identificado na conversa ou null\">,\n  \"empresa_identificada\": <\"nome da empresa ou null\">,\n  \"produto_interesse\": <\"produto de interesse ou null\">,\n  \"valor_estimado\": <\"valor estimado ou null\">\n}`;\n\nreturn [{ json: { prompt, leadId, leadInfo } }];"
       },
       "id": "montar-prompt",
       "name": "Montar Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2880, 300]
+      "position": [
+        2880,
+        300
+      ]
     },
     {
       "parameters": {
@@ -257,7 +336,10 @@
       "name": "Qualificar com Gemini",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
-      "position": [3100, 300]
+      "position": [
+        3100,
+        300
+      ]
     },
     {
       "parameters": {
@@ -267,19 +349,25 @@
       "name": "Parsear JSON da IA",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3320, 300]
+      "position": [
+        3320,
+        300
+      ]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO crm_qualificacoes_ia (\n  lead_id,\n  score,\n  temperatura,\n  etapa_sugerida,\n  resumo,\n  proxima_acao,\n  probabilidade_conversao,\n  documentos_faltando,\n  pontos_positivos,\n  pontos_atencao,\n  qualificado_em\n)\nVALUES (\n  {{ $json.leadId }},\n  {{ $json.score || 0 }},\n  '{{ $json.temperatura || \"frio\" }}',\n  '{{ $json.etapa_sugerida || \"Novo\" }}',\n  '{{ ($json.resumo || '').replace(/'/g, \"''\") }}',\n  '{{ ($json.proxima_acao || '').replace(/'/g, \"''\") }}',\n  {{ $json.probabilidade_conversao || 0 }},\n  '{{ JSON.stringify($json.documentos_faltando || []) }}'::jsonb,\n  '{{ JSON.stringify($json.pontos_positivos || []) }}'::jsonb,\n  '{{ JSON.stringify($json.pontos_atencao || []) }}'::jsonb,\n  NOW()\n)\nRETURNING id;",
+        "query": "INSERT INTO crm_qualificacoes_ia (\n  lead_id,\n  score,\n  temperatura,\n  etapa_sugerida,\n  resumo,\n  proxima_acao,\n  probabilidade_conv,\n  documentos_faltando,\n  pontos_positivos,\n  pontos_atencao,\n  created_at\n)\nVALUES (\n  {{ $json.leadId }},\n  {{ $json.score || 0 }},\n  '{{ $json.temperatura || \"frio\" }}',\n  '{{ $json.etapa_sugerida || \"Novo\" }}',\n  '{{ ($json.resumo || '').replace(/'/g, \"''\") }}',\n  '{{ ($json.proxima_acao || '').replace(/'/g, \"''\") }}',\n  {{ $json.probabilidade_conv || 0 }},\n  '{{ JSON.stringify($json.documentos_faltando || []) }}'::jsonb,\n  '{{ JSON.stringify($json.pontos_positivos || []) }}'::jsonb,\n  '{{ JSON.stringify($json.pontos_atencao || []) }}'::jsonb,\n  NOW()\n)\nRETURNING id;",
         "options": {}
       },
       "id": "salvar-qualificacao",
-      "name": "Salvar Qualificação",
+      "name": "Salvar Qualifica\u00e7\u00e3o",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [3540, 300],
+      "position": [
+        3540,
+        300
+      ],
       "continueOnFail": true
     },
     {
@@ -292,7 +380,10 @@
       "name": "Enriquecer Lead",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [3760, 300],
+      "position": [
+        3760,
+        300
+      ],
       "continueOnFail": true
     },
     {
@@ -305,25 +396,38 @@
       "name": "Marcar Evento Processado",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [3980, 300],
+      "position": [
+        3980,
+        300
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
           "conditions": [
             {
               "id": "cond-lead-quente",
               "leftValue": "={{ $('Parsear JSON da IA').item.json.temperatura }}",
               "rightValue": "frio",
-              "operator": { "type": "string", "operation": "notEquals" }
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
             },
             {
               "id": "cond-score-alto",
               "leftValue": "={{ $('Parsear JSON da IA').item.json.score }}",
               "rightValue": 50,
-              "operator": { "type": "number", "operation": "gte" }
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
             }
           ],
           "combinator": "and"
@@ -333,12 +437,15 @@
       "name": "Lead quente?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [4200, 300]
+      "position": [
+        4200,
+        300
+      ]
     },
     {
       "parameters": {
         "chatId": "SEU_CHAT_ID_TELEGRAM",
-        "text": "=🔥 *Lead {{ $('Parsear JSON da IA').item.json.temperatura === 'urgente' ? 'URGENTE' : 'Quente' }}!*\n\n👤 *Nome:* {{ $('Enriquecer Lead').item.json.nome || 'Desconhecido' }}\n📱 *Telefone:* {{ $('Extrair Info (Robusto)').item.json.telefone }}\n🏢 *Empresa:* {{ $('Parsear JSON da IA').item.json.empresa_identificada || 'N/A' }}\n📦 *Produto:* {{ $('Parsear JSON da IA').item.json.produto_interesse || 'N/A' }}\n\n📊 *Score IA:* {{ $('Parsear JSON da IA').item.json.score }}/100\n🌡️ *Temperatura:* {{ $('Parsear JSON da IA').item.json.temperatura }}\n📍 *Etapa:* {{ $('Enriquecer Lead').item.json.etapa_funil }}\n\n💡 *Próxima Ação:* {{ $('Parsear JSON da IA').item.json.proxima_acao }}\n\n🔗 https://destrava.permupay.com.br/colaborador/crm",
+        "text": "=\ud83d\udd25 *Lead {{ $('Parsear JSON da IA').item.json.temperatura === 'urgente' ? 'URGENTE' : 'Quente' }}!*\n\n\ud83d\udc64 *Nome:* {{ $('Enriquecer Lead').item.json.nome || 'Desconhecido' }}\n\ud83d\udcf1 *Telefone:* {{ $('Extrair Info (Robusto)').item.json.telefone }}\n\ud83c\udfe2 *Empresa:* {{ $('Parsear JSON da IA').item.json.empresa_identificada || 'N/A' }}\n\ud83d\udce6 *Produto:* {{ $('Parsear JSON da IA').item.json.produto_interesse || 'N/A' }}\n\n\ud83d\udcca *Score IA:* {{ $('Parsear JSON da IA').item.json.score }}/100\n\ud83c\udf21\ufe0f *Temperatura:* {{ $('Parsear JSON da IA').item.json.temperatura }}\n\ud83d\udccd *Etapa:* {{ $('Enriquecer Lead').item.json.etapa_funil }}\n\n\ud83d\udca1 *Pr\u00f3xima A\u00e7\u00e3o:* {{ $('Parsear JSON da IA').item.json.proxima_acao }}\n\n\ud83d\udd17 https://destrava.permupay.com.br/colaborador/crm",
         "additionalFields": {
           "parse_mode": "Markdown"
         }
@@ -347,30 +454,41 @@
       "name": "Alerta Telegram",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [4420, 200],
+      "position": [
+        4420,
+        200
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={ \"status\": \"ok\", \"event_id\": \"{{ $('Extrair Info (Robusto)').item.json.eventId }}\", \"lead_id\": {{ $('Parsear JSON da IA').item.json.leadId }}, \"score\": {{ $('Parsear JSON da IA').item.json.score }} }",
-        "options": { "responseCode": 200 }
+        "options": {
+          "responseCode": 200
+        }
       },
       "id": "resposta-ok",
       "name": "Resposta OK",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [4420, 400]
+      "position": [
+        4420,
+        400
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// ─── BLOCO D: Tratamento de Erro ───\n// Captura o erro e prepara os dados para atualizar o evento como 'erro'\nconst eventId = $('Extrair Info (Robusto)').item?.json?.eventId || 'unknown';\nconst errorMessage = $input.first().json.error?.message\n  || $input.first().json.message\n  || JSON.stringify($input.first().json)\n  || 'Erro desconhecido';\n\nreturn [{ json: { eventId, errorMessage: errorMessage.substring(0, 500) } }];"
+        "jsCode": "// \u2500\u2500\u2500 BLOCO D: Tratamento de Erro \u2500\u2500\u2500\n// Captura o erro e prepara os dados para atualizar o evento como 'erro'\nconst eventId = $('Extrair Info (Robusto)').item?.json?.eventId || 'unknown';\nconst errorMessage = $input.first().json.error?.message\n  || $input.first().json.message\n  || JSON.stringify($input.first().json)\n  || 'Erro desconhecido';\n\nreturn [{ json: { eventId, errorMessage: errorMessage.substring(0, 500) } }];"
       },
       "id": "capturar-erro",
       "name": "Capturar Erro",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2000, 600]
+      "position": [
+        2000,
+        600
+      ]
     },
     {
       "parameters": {
@@ -382,118 +500,346 @@
       "name": "Registrar Erro no Banco",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [2220, 600],
+      "position": [
+        2220,
+        600
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={ \"status\": \"error\", \"event_id\": \"{{ $('Capturar Erro').item.json.eventId }}\", \"message\": \"Erro registrado para auditoria\" }",
-        "options": { "responseCode": 500 }
+        "options": {
+          "responseCode": 500
+        }
       },
       "id": "resposta-erro",
       "name": "Resposta Erro",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [2440, 600]
+      "position": [
+        2440,
+        600
+      ]
     }
   ],
   "connections": {
     "Webhook Chatwoot": {
-      "main": [[{ "node": "Extrair Info (Robusto)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Extrair Info (Robusto)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Extrair Info (Robusto)": {
-      "main": [[{ "node": "Tem conteúdo processável?", "type": "main", "index": 0 }]]
-    },
-    "Tem conteúdo processável?": {
       "main": [
-        [{ "node": "Registrar Evento (Idempotência)", "type": "main", "index": 0 }],
-        [{ "node": "Ignorar (sem conteúdo)", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Tem conte\u00fado process\u00e1vel?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Registrar Evento (Idempotência)": {
+    "Tem conte\u00fado process\u00e1vel?": {
       "main": [
-        [{ "node": "Evento novo? (Deduplicação)", "type": "main", "index": 0 }],
-        [{ "node": "Capturar Erro", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Registrar Evento (Idempot\u00eancia)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignorar (sem conte\u00fado)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Evento novo? (Deduplicação)": {
+    "Registrar Evento (Idempot\u00eancia)": {
       "main": [
-        [{ "node": "Buscar Lead", "type": "main", "index": 0 }],
-        [{ "node": "Resposta (Duplicado)", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Evento novo? (Deduplica\u00e7\u00e3o)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capturar Erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evento novo? (Deduplica\u00e7\u00e3o)": {
+      "main": [
+        [
+          {
+            "node": "Buscar Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resposta (Duplicado)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Buscar Lead": {
       "main": [
-        [{ "node": "Lead existe?", "type": "main", "index": 0 }],
-        [{ "node": "Capturar Erro", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Lead existe?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capturar Erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Lead existe?": {
       "main": [
-        [{ "node": "Atualizar Lead", "type": "main", "index": 0 }],
-        [{ "node": "Criar Lead", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Atualizar Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Criar Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Atualizar Lead": {
-      "main": [[{ "node": "Upsert Conversa", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Upsert Conversa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Criar Lead": {
-      "main": [[{ "node": "Upsert Conversa", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Upsert Conversa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Upsert Conversa": {
       "main": [
-        [{ "node": "Persistir Mensagem (Inbound)", "type": "main", "index": 0 }],
-        [{ "node": "Capturar Erro", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Persistir Mensagem (Inbound)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capturar Erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Persistir Mensagem (Inbound)": {
       "main": [
-        [{ "node": "Registrar Atividade CRM", "type": "main", "index": 0 }],
-        [{ "node": "Capturar Erro", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Registrar Atividade CRM",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capturar Erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Registrar Atividade CRM": {
-      "main": [[{ "node": "Buscar Histórico (crm_mensagens)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Buscar Hist\u00f3rico (crm_mensagens)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Buscar Histórico (crm_mensagens)": {
-      "main": [[{ "node": "Montar Prompt", "type": "main", "index": 0 }]]
+    "Buscar Hist\u00f3rico (crm_mensagens)": {
+      "main": [
+        [
+          {
+            "node": "Montar Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Montar Prompt": {
-      "main": [[{ "node": "Qualificar com Gemini", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Qualificar com Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Qualificar com Gemini": {
       "main": [
-        [{ "node": "Parsear JSON da IA", "type": "main", "index": 0 }],
-        [{ "node": "Capturar Erro", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Parsear JSON da IA",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Capturar Erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Parsear JSON da IA": {
-      "main": [[{ "node": "Salvar Qualificação", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Salvar Qualifica\u00e7\u00e3o",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Salvar Qualificação": {
-      "main": [[{ "node": "Enriquecer Lead", "type": "main", "index": 0 }]]
+    "Salvar Qualifica\u00e7\u00e3o": {
+      "main": [
+        [
+          {
+            "node": "Enriquecer Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Enriquecer Lead": {
-      "main": [[{ "node": "Marcar Evento Processado", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Marcar Evento Processado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Marcar Evento Processado": {
-      "main": [[{ "node": "Lead quente?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Lead quente?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Lead quente?": {
       "main": [
-        [{ "node": "Alerta Telegram", "type": "main", "index": 0 }],
-        [{ "node": "Resposta OK", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Alerta Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resposta OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Alerta Telegram": {
-      "main": [[{ "node": "Resposta OK", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Resposta OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Capturar Erro": {
-      "main": [[{ "node": "Registrar Erro no Banco", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Registrar Erro no Banco",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Registrar Erro no Banco": {
-      "main": [[{ "node": "Resposta Erro", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Resposta Erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "pinData": {},
@@ -504,7 +850,11 @@
     "errorWorkflow": ""
   },
   "staticData": null,
-  "tags": ["crm", "qualificacao", "fase1.1"],
+  "tags": [
+    "crm",
+    "qualificacao",
+    "fase1.1"
+  ],
   "triggerCount": 0,
   "updatedAt": "2026-03-26T00:00:00.000Z",
   "versionId": "crm-v4-fase1.1"
