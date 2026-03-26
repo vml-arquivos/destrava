@@ -9,17 +9,13 @@ import Sobre from "./pages/Sobre";
 import GiroCaixaFacil from "./pages/GiroCaixaFacil";
 import Simulacao from "./pages/Simulacao";
 import SimuladorCompleto from "./pages/SimuladorCompleto";
-import CalculadoraScore from "./pages/CalculadoraScore";
 import FAQ from "./pages/FAQ";
-import LimpaNome from "./pages/LimpaNome";
-import LimpaNomeCNPJ from "./pages/LimpaNomeCNPJ";
 import Produtos from "./pages/Produtos";
 import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
 import PoliticaPrivacidade from "./pages/PoliticaPrivacidade";
 import TermosUso from "./pages/TermosUso";
 import Sucesso from "./pages/Sucesso";
-// Novas páginas
 import CapturaLead from "./pages/CapturaLead";
 import SimuladorPublico from "./pages/SimuladorPublico";
 import RatingBancoBrasil from "./pages/RatingBancoBrasil";
@@ -34,7 +30,6 @@ import ColaboradorDashboard from "./pages/colaborador/Dashboard";
 import ColaboradorCalculadora from "./pages/colaborador/CalculadoraPage";
 import ColaboradorSimulacoes from "./pages/colaborador/Simulacoes";
 import ColaboradorUsuarios from "./pages/colaborador/Usuarios";
-import ColaboradorSqlEditor from "./pages/colaborador/SqlEditor";
 import ColaboradorClientes from "./pages/colaborador/Clientes";
 import ColaboradorIntegracoes from "./pages/colaborador/Integracoes";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -55,7 +50,6 @@ function Router() {
       <Route path="/simulacao" component={Simulacao} />
       <Route path="/simulador" component={SimuladorCompleto} />
       <Route path="/simular" component={SimuladorPublico} />
-      <Route path="/calculadora-score" component={CalculadoraScore} />
 
       {/* Crédito Empresarial */}
       <Route path="/credito-empresas" component={CreditoEmpresas} />
@@ -68,8 +62,9 @@ function Router() {
       <Route path="/rating-banco-brasil" component={RatingBancoBrasil} />
       <Route path="/certificado-digital" component={CertificadoDigital} />
       <Route path="/consulta-spc-serasa" component={ConsultaSPCSerasa} />
-      <Route path="/limpa-nome" component={LimpaNome} />
-      <Route path="/limpa-nome-cnpj" component={LimpaNomeCNPJ} />
+
+      {/* Captura de Lead */}
+      <Route path="/captura" component={CapturaLead} />
 
       {/* Legais */}
       <Route path="/politica-privacidade" component={PoliticaPrivacidade} />
@@ -103,13 +98,6 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <ColaboradorUsuarios />
-          </ProtectedRoute>
-        )}
-      </Route>
-      <Route path="/colaborador/sql">
-        {() => (
-          <ProtectedRoute>
-            <ColaboradorSqlEditor />
           </ProtectedRoute>
         )}
       </Route>

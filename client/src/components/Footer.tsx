@@ -18,9 +18,6 @@ export default function Footer() {
     { label: "Rating Banco do Brasil", href: "/rating-banco-brasil" },
     { label: "Certificado Digital", href: "/certificado-digital" },
     { label: "Consulta SPC/Serasa", href: "/consulta-spc-serasa" },
-    { label: "Limpa Nome CPF", href: "/limpa-nome" },
-    { label: "Limpa Nome CNPJ", href: "/limpa-nome-cnpj" },
-    { label: "Calculadora Score", href: "/calculadora-score" },
   ];
 
   const linksInstitucional = [

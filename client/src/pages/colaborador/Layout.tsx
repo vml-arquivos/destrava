@@ -13,7 +13,6 @@ import {
   ChevronRight,
   User,
   Users,
-  Database,
   Zap,
 } from "lucide-react";
 
@@ -31,7 +30,6 @@ const navItems: NavItem[] = [
   { href: "/colaborador/simulacoes", label: "Simulações", icon: FileText },
   { href: "/colaborador/integracoes", label: "Integrações n8n", icon: Zap },
   { href: "/colaborador/usuarios", label: "Usuários", icon: User },
-  { href: "/colaborador/sql", label: "SQL Editor", icon: Database },
 ];
 
 interface LayoutProps {

@@ -1,7 +1,7 @@
 import { APP_LOGO } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
-import { Menu, X, ChevronDown, Building2, User, BarChart3, Shield, Search, FileText, Lock } from "lucide-react";
+import { Menu, X, ChevronDown, Building2, User, BarChart3, Shield, Search, Lock } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 
 interface NavItem {
@@ -47,9 +47,6 @@ export default function Header() {
         { label: "Rating Banco do Brasil", href: "/rating-banco-brasil", icon: BarChart3, desc: "Consulta e análise de rating" },
         { label: "Certificado Digital", href: "/certificado-digital", icon: Shield, desc: "A1 e A3 para PF e PJ" },
         { label: "Consulta SPC/Serasa", href: "/consulta-spc-serasa", icon: Search, desc: "CPF e CNPJ" },
-        { label: "Limpa Nome CPF", href: "/limpa-nome", icon: FileText, desc: "Regularize seu CPF" },
-        { label: "Limpa Nome CNPJ", href: "/limpa-nome-cnpj", icon: FileText, desc: "Regularize seu CNPJ" },
-        { label: "Calculadora Score", href: "/calculadora-score", icon: BarChart3, desc: "Simule seu score" },
       ],
     },
     { label: "Simulador", href: "/simulador" },

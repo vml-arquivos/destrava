@@ -11,7 +11,7 @@ interface N8nStatus {
   eventos: string[];
 }
 
-const ADMIN_KEY = "destrava2024admin";
+const ADMIN_KEY = import.meta.env.VITE_ADMIN_KEY ?? "";
 
 const EVENTOS_INFO = {
   novo_lead: {

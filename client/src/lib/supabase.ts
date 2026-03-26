@@ -1,20 +1,22 @@
 import { createClient } from "@supabase/supabase-js";
 
 // ─── Variáveis de ambiente ────────────────────────────────────────────────────
-// O Vite substitui import.meta.env em tempo de build.
-// Quando não configuradas, usamos valores placeholder que permitem o site
-// público funcionar normalmente — apenas a área restrita (/colaborador) fica
-// indisponível até que as variáveis sejam configuradas no Coolify.
+// Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no Coolify/ambiente.
+// Sem essas variáveis, a área restrita (/colaborador) ficará indisponível.
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-const SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL ||
-  "https://tjvxxzaatvnfupkdzrzp.supabase.co";
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.warn(
+    "[Supabase] VITE_SUPABASE_URL ou VITE_SUPABASE_ANON_KEY não configuradas. " +
+    "A área restrita estará indisponível."
+  );
+}
 
-const SUPABASE_ANON_KEY =
-  import.meta.env.VITE_SUPABASE_ANON_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRqdnh4emFhdHZuZnVwa2R6cnpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzMDE4MjUsImV4cCI6MjA4OTg3NzgyNX0.wl3nOWw1KWNYtzYTT2pLK516ktGJCMbcCppBWYLLrCM";
-
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase = createClient(
+  SUPABASE_URL ?? "https://placeholder.supabase.co",
+  SUPABASE_ANON_KEY ?? "placeholder-key"
+);
 
 // ─── Tipos do banco de dados ─────────────────────────────────────────────────
 
@@ -47,8 +49,8 @@ export interface SimulacaoColaborador {
   total_emprestimo: number;
   total_juros: number;
   custo_total: number;
-  cet_mensal: number;
-  cet_anual: number;
+  cet_mensal?: number;
+  cet_anual?: number;
   banco?: string;
   linha_credito?: string;
   observacoes?: string;
@@ -67,9 +69,32 @@ export interface Lead {
   valor_desejado?: string;
   prazo?: string;
   finalidade?: string;
-  status: "novo" | "contatado" | "em_negociacao" | "convertido" | "perdido";
+  produto?: string;
   origem: string;
+  status: "novo" | "contatado" | "em_negociacao" | "convertido" | "perdido";
   created_at: string;
+}
+
+export interface Cliente {
+  id: string;
+  nome: string;
+  empresa?: string;
+  cpf_cnpj?: string;
+  telefone: string;
+  email?: string;
+  tipo: "pf" | "pj";
+  cidade?: string;
+  estado?: string;
+  faturamento_anual?: number;
+  segmento?: string;
+  status: "lead" | "contato" | "analise" | "aprovado" | "reprovado" | "cancelado" | "convertido";
+  origem: string;
+  prioridade: "baixa" | "media" | "alta";
+  observacoes?: string;
+  proximo_contato?: string;
+  colaborador_id?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 // ─── Helpers de autenticação ─────────────────────────────────────────────────

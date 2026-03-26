@@ -1,167 +1,172 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
-  
+
   <!-- Página Principal -->
   <url>
-    <loc>https://destrava-credito.manus.space/</loc>
-    <lastmod>2025-11-11</lastmod>
+    <loc>https://destrava.permupay.com.br/</loc>
+    <lastmod>2026-03-25</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
-      <image:loc>https://destrava-credito.manus.space/3.png</image:loc>
-      <image:title>Giro CAIXA Fácil - Até R$ 70.000 para sua empresa</image:title>
+      <image:loc>https://destrava.permupay.com.br/3.png</image:loc>
+      <image:title>Destrava Crédito - Assessoria de Crédito Empresarial</image:title>
     </image:image>
   </url>
 
   <!-- Sobre -->
   <url>
-    <loc>https://destrava-credito.manus.space/sobre</loc>
-    <lastmod>2025-11-11</lastmod>
+    <loc>https://destrava.permupay.com.br/sobre</loc>
+    <lastmod>2026-03-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
 
-  <!-- Giro CAIXA Fácil -->
+  <!-- Crédito Empresarial -->
   <url>
-    <loc>https://destrava-credito.manus.space/giro-caixa-facil</loc>
-    <lastmod>2025-11-11</lastmod>
+    <loc>https://destrava.permupay.com.br/credito-empresas</loc>
+    <lastmod>2026-03-25</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://destrava.permupay.com.br/giro-caixa-facil</loc>
+    <lastmod>2026-03-25</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
 
-  <!-- Simulação -->
+  <!-- Crédito Pessoal -->
   <url>
-    <loc>https://destrava-credito.manus.space/simulacao</loc>
-    <lastmod>2025-11-11</lastmod>
+    <loc>https://destrava.permupay.com.br/credito-pessoal</loc>
+    <lastmod>2026-03-25</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <priority>0.8</priority>
   </url>
 
-  <!-- Simulador Completo -->
+  <!-- Serviços -->
   <url>
-    <loc>https://destrava-credito.manus.space/simulador</loc>
-    <lastmod>2025-11-11</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-
-  <!-- Calculadora de Score -->
-  <url>
-    <loc>https://destrava-credito.manus.space/calculadora-score</loc>
-    <lastmod>2025-11-11</lastmod>
+    <loc>https://destrava.permupay.com.br/rating-banco-brasil</loc>
+    <lastmod>2026-03-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://destrava.permupay.com.br/certificado-digital</loc>
+    <lastmod>2026-03-25</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://destrava.permupay.com.br/consulta-spc-serasa</loc>
+    <lastmod>2026-03-25</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Simuladores -->
+  <url>
+    <loc>https://destrava.permupay.com.br/simulador</loc>
+    <lastmod>2026-03-25</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://destrava.permupay.com.br/simular</loc>
+    <lastmod>2026-03-25</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
   </url>
 
   <!-- FAQ -->
   <url>
-    <loc>https://destrava-credito.manus.space/faq</loc>
-    <lastmod>2025-11-11</lastmod>
+    <loc>https://destrava.permupay.com.br/faq</loc>
+    <lastmod>2026-03-25</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-
-  <!-- Limpa Nome -->
-  <url>
-    <loc>https://destrava-credito.manus.space/limpa-nome</loc>
-    <lastmod>2025-11-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.95</priority>
+    <priority>0.8</priority>
   </url>
 
   <!-- Blog -->
   <url>
-    <loc>https://destrava-credito.manus.space/blog</loc>
-    <lastmod>2025-11-11</lastmod>
+    <loc>https://destrava.permupay.com.br/blog</loc>
+    <lastmod>2026-03-25</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
-
-  <!-- Artigos do Blog -->
   <url>
-    <loc>https://destrava-credito.manus.space/blog/melhorar-score-credito-empresarial</loc>
-    <lastmod>2025-11-11</lastmod>
+    <loc>https://destrava.permupay.com.br/blog/pronampe-2025-guia-completo</loc>
+    <lastmod>2026-03-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
-
   <url>
-    <loc>https://destrava-credito.manus.space/blog/pronampe-2025-guia-completo</loc>
-    <lastmod>2025-11-10</lastmod>
+    <loc>https://destrava.permupay.com.br/blog/mei-me-epp-diferenca-credito</loc>
+    <lastmod>2026-03-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
-
   <url>
-    <loc>https://destrava-credito.manus.space/blog/mei-me-epp-diferenca-credito</loc>
-    <lastmod>2025-11-09</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
-  <url>
-    <loc>https://destrava-credito.manus.space/blog/como-funciona-capital-de-giro</loc>
-    <lastmod>2025-01-15</lastmod>
+    <loc>https://destrava.permupay.com.br/blog/como-funciona-capital-de-giro</loc>
+    <lastmod>2026-03-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
-
   <url>
-    <loc>https://destrava-credito.manus.space/blog/documentos-necessarios-credito-empresarial</loc>
-    <lastmod>2025-01-10</lastmod>
+    <loc>https://destrava.permupay.com.br/blog/documentos-necessarios-credito-empresarial</loc>
+    <lastmod>2026-03-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
-
   <url>
-    <loc>https://destrava-credito.manus.space/blog/sinais-empresa-precisa-capital-giro</loc>
-    <lastmod>2025-01-05</lastmod>
+    <loc>https://destrava.permupay.com.br/blog/sinais-empresa-precisa-capital-giro</loc>
+    <lastmod>2026-03-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
-
   <url>
-    <loc>https://destrava-credito.manus.space/blog/garantias-emprestimo-empresarial</loc>
-    <lastmod>2025-11-08</lastmod>
+    <loc>https://destrava.permupay.com.br/blog/garantias-emprestimo-empresarial</loc>
+    <lastmod>2026-03-25</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://destrava.permupay.com.br/blog/fluxo-caixa-positivo-comprovar-credito</loc>
+    <lastmod>2026-03-25</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://destrava.permupay.com.br/blog/erros-credito-empresarial-negado</loc>
+    <lastmod>2026-03-25</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://destrava.permupay.com.br/blog/capital-giro-vs-emprestimo-diferenca</loc>
+    <lastmod>2026-03-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
+  <!-- Contato -->
   <url>
-    <loc>https://destrava-credito.manus.space/blog/fluxo-caixa-positivo-comprovar-credito</loc>
-    <lastmod>2025-11-07</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
-  <url>
-    <loc>https://destrava-credito.manus.space/blog/erros-credito-empresarial-negado</loc>
-    <lastmod>2025-11-06</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
-  <url>
-    <loc>https://destrava-credito.manus.space/blog/capital-giro-vs-emprestimo-diferenca</loc>
-    <lastmod>2025-11-05</lastmod>
+    <loc>https://destrava.permupay.com.br/contato</loc>
+    <lastmod>2026-03-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
 
   <!-- Páginas Legais -->
   <url>
-    <loc>https://destrava-credito.manus.space/politica-privacidade</loc>
-    <lastmod>2025-11-11</lastmod>
+    <loc>https://destrava.permupay.com.br/politica-privacidade</loc>
+    <lastmod>2026-03-25</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
-
   <url>
-    <loc>https://destrava-credito.manus.space/termos-uso</loc>
-    <lastmod>2025-11-11</lastmod>
+    <loc>https://destrava.permupay.com.br/termos-uso</loc>
+    <lastmod>2026-03-25</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
-
 </urlset>

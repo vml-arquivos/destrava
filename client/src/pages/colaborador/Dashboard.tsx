@@ -8,7 +8,7 @@ import {
   RefreshCw, Loader2, AlertCircle, MessageSquare
 } from "lucide-react";
 
-const ADMIN_KEY = "destrava2024admin";
+const ADMIN_KEY = import.meta.env.VITE_ADMIN_KEY ?? "";
 
 interface Stats {
   leads: {

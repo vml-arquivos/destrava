@@ -9,7 +9,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 4000,
         DATA_DIR: '/var/data/destrava',
-        ADMIN_KEY: 'destrava2024admin',
+        ADMIN_KEY: process.env.ADMIN_KEY || 'CHANGE_ME_IN_ENV',
         SITE_DOMAIN: 'destrava.permupay.com.br'
       },
       error_file: './logs/err.log',
@@ -24,7 +24,7 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 4000,
         DATA_DIR: '/var/data/destrava',
-        ADMIN_KEY: 'destrava2024admin',
+        ADMIN_KEY: process.env.ADMIN_KEY || 'CHANGE_ME_IN_ENV',
         SITE_DOMAIN: 'destrava.permupay.com.br'
       }
     }

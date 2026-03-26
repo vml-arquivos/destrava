@@ -1,3 +1,5 @@
+import { toast } from "sonner";
+import { gerarPdfSimulacao } from "@/lib/gerarPdfSimulacao";
 import { useState, useCallback, useEffect } from "react";
 import Layout from "./Layout";
 import { Button } from "@/components/ui/button";
@@ -518,6 +520,7 @@ function CenarioComImposto() {
       setSalvo(true);
     } catch (err) {
       console.error(err);
+      toast.error("Erro ao salvar simulação. Verifique a conexão e tente novamente.");
     }
     setSalvando(false);
   }
@@ -630,8 +633,12 @@ function CenarioComImposto() {
                 <Button variant="outline" size="sm" className="flex-1" onClick={handleSalvar} disabled={salvando || salvo}>
                   {salvo ? <><CheckCircle2 className="mr-1.5 h-4 w-4 text-green-600" />Salvo!</> : <><Save className="mr-1.5 h-4 w-4" />{salvando ? "Salvando..." : "Salvar"}</>}
                 </Button>
-                <Button variant="outline" size="sm" className="flex-1" onClick={() => window.print()}>
-                  <Printer className="mr-1.5 h-4 w-4" />Imprimir
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => gerarPdfSimulacao({
+                  cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
+                  cenarioA: resultado ? { taxa: resultado.taxaJurosMensal, valorCredito: resultado.valorCredito, prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, impostoValor: resultado.impostoValor, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "com_imposto" } : undefined,
+                  modo: "simples"
+                })}>
+                  <Printer className="mr-1.5 h-4 w-4" />Exportar PDF
                 </Button>
               </div>
             </CardContent>
@@ -712,6 +719,7 @@ function CenarioSemImposto() {
       setSalvo(true);
     } catch (err) {
       console.error(err);
+      toast.error("Erro ao salvar simulação. Verifique a conexão e tente novamente.");
     }
     setSalvando(false);
   }
@@ -769,8 +777,12 @@ function CenarioSemImposto() {
                 <Button variant="outline" size="sm" className="flex-1" onClick={handleSalvar} disabled={salvando || salvo}>
                   {salvo ? <><CheckCircle2 className="mr-1.5 h-4 w-4 text-green-600" />Salvo!</> : <><Save className="mr-1.5 h-4 w-4" />{salvando ? "Salvando..." : "Salvar"}</>}
                 </Button>
-                <Button variant="outline" size="sm" className="flex-1" onClick={() => window.print()}>
-                  <Printer className="mr-1.5 h-4 w-4" />Imprimir
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => gerarPdfSimulacao({
+                  cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
+                  cenarioA: resultado ? { taxa: resultado.taxaJurosMensal, valorCredito: resultado.valorCredito, prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "sem_imposto" } : undefined,
+                  modo: "simples"
+                })}>
+                  <Printer className="mr-1.5 h-4 w-4" />Exportar PDF
                 </Button>
               </div>
             </CardContent>
@@ -919,6 +931,7 @@ function CenarioComparativo() {
       setSalvo(true);
     } catch (err) {
       console.error(err);
+      toast.error("Erro ao salvar simulação. Verifique a conexão e tente novamente.");
     }
     setSalvando(false);
   }
@@ -1274,7 +1287,16 @@ function CenarioComparativo() {
                 : <><Save className="mr-2 h-5 w-5" />{salvando ? "Salvando..." : "Salvar Ambos os Cenários"}</>
               }
             </Button>
-            <Button variant="outline" onClick={() => window.print()} className="h-12 px-5">
+            <Button variant="outline" onClick={() => {
+              if (resA && resB) {
+                gerarPdfSimulacao({
+                  cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
+                  cenarioA: { taxa: resA.taxaJurosMensal, valorCredito: resA.valorCredito, prazo: parseInt(form.prazo), parcela: resA.parcelaMensal, totalFinanciamento: resA.totalFinanciamento, totalJuros: resA.totalJuros, impostoValor: resA.impostoValor, comissaoValor: resA.comissaoValor, custoTotalOperacao: resA.custoTotalOperacao, cenario: "com_imposto" },
+                  cenarioB: { taxa: resB.taxaJurosMensal, valorCredito: resB.valorCredito, prazo: parseInt(form.prazo), parcela: resB.parcelaMensal, totalFinanciamento: resB.totalFinanciamento, totalJuros: resB.totalJuros, comissaoValor: resB.comissaoValor, custoTotalOperacao: resB.custoTotalOperacao, cenario: "sem_imposto" },
+                  modo: "comparativo"
+                });
+              }
+            }} className="h-12 px-5" title="Exportar PDF">
               <Printer className="h-5 w-5" />
             </Button>
             <Button variant="outline" onClick={handleLimpar} className="h-12 px-5" title="Limpar">
