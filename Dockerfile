@@ -6,12 +6,18 @@ RUN npm install -g pnpm@10.4.1
 
 WORKDIR /app
 
-# Copiar arquivos de dependências
-COPY package.json pnpm-lock.yaml ./
+# Copiar arquivos de configuração do pnpm (incluindo .npmrc com public-hoist-pattern)
+# O .npmrc garante que 'scheduler' tenha symlink em node_modules/ raiz.
+# Sem isso o Rollup trata "scheduler" como módulo externo e o browser falha:
+# "Failed to resolve module specifier scheduler"
+COPY package.json pnpm-lock.yaml .npmrc ./
 COPY patches/ ./patches/
 
 # Instalar dependências (incluindo devDependencies para o build)
 RUN pnpm install --frozen-lockfile
+
+# Garantir que scheduler tem symlink (falha o build se não estiver)
+RUN ls node_modules/scheduler/index.js && echo "OK: scheduler symlink presente"
 
 # Copiar todo o código fonte
 COPY . .
@@ -31,8 +37,8 @@ WORKDIR /app
 RUN mkdir -p /var/data/destrava /var/log/destrava && \
     chown -R node:node /var/data/destrava /var/log/destrava /app
 
-# Copiar package.json para instalar apenas dependências de produção
-COPY package.json pnpm-lock.yaml ./
+# Copiar arquivos de configuração
+COPY package.json pnpm-lock.yaml .npmrc ./
 COPY patches/ ./patches/
 
 # Instalar apenas dependências de produção
