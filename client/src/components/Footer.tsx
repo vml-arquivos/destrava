@@ -1,17 +1,16 @@
 import { APP_LOGO } from "@/const";
 import { Link } from "wouter";
-import { Facebook, Instagram, Linkedin, Mail, Phone, MessageCircle, MapPin } from "lucide-react";
+import { Instagram, Linkedin, Mail, Phone, MessageCircle, MapPin } from "lucide-react";
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
 
   const linksCredito = [
-    { label: "Crédito para Empresas", href: "/credito-empresas" },
+    { label: "Crédito Empresarial", href: "/credito-empresas" },
     { label: "PRONAMPE", href: "/credito-empresas" },
     { label: "Giro CAIXA Fácil", href: "/giro-caixa-facil" },
     { label: "PRONAMP", href: "/credito-empresas" },
-    { label: "Crédito Pessoal", href: "/credito-pessoal" },
-    { label: "Consignado", href: "/credito-pessoal" },
+    { label: "Médio e Grande Porte", href: "/credito-empresas#medio-grande" },
   ];
 
   const linksServicos = [
@@ -23,8 +22,6 @@ export default function Footer() {
   const linksInstitucional = [
     { label: "Início", href: "/" },
     { label: "Sobre Nós", href: "/sobre" },
-    { label: "Produtos", href: "/produtos" },
-    { label: "Simulador", href: "/simulador" },
     { label: "Blog", href: "/blog" },
     { label: "FAQ", href: "/faq" },
     { label: "Contato", href: "/contato" },
@@ -42,14 +39,12 @@ export default function Footer() {
               className="h-12 w-auto mb-4 brightness-0 invert"
             />
             <p className="text-sm text-white/80 mb-5 leading-relaxed max-w-xs">
-              Correspondente bancário e assessoria especializada em crédito empresarial e pessoal. Facilitamos o acesso ao crédito para empresas e pessoas físicas em todo o Brasil.
+              A Destrava é uma assessoria empresarial focada em captação de recursos e crédito para empresas, com atuação consultiva, condução completa do processo e atendimento próximo.
+            </p>
+            <p className="text-xs text-white/50 mb-5 leading-relaxed max-w-xs italic">
+              Assessoria empresarial com foco em clareza, estratégia e condução real para empresas que precisam avançar.
             </p>
             <div className="flex gap-4 mb-5">
-              <a href="https://facebook.com/destravacredito" target="_blank" rel="noopener noreferrer"
-                className="w-9 h-9 rounded-lg bg-white/10 hover:bg-[var(--color-caixa-yellow)] hover:text-black flex items-center justify-center transition-all"
-                aria-label="Facebook">
-                <Facebook className="h-4 w-4" />
-              </a>
               <a href="https://instagram.com/destravacredito" target="_blank" rel="noopener noreferrer"
                 className="w-9 h-9 rounded-lg bg-white/10 hover:bg-[var(--color-caixa-yellow)] hover:text-black flex items-center justify-center transition-all"
                 aria-label="Instagram">
@@ -60,7 +55,7 @@ export default function Footer() {
                 aria-label="LinkedIn">
                 <Linkedin className="h-4 w-4" />
               </a>
-              <a href="https://wa.me/5561986055223" target="_blank" rel="noopener noreferrer"
+              <a href="https://wa.me/556135268355" target="_blank" rel="noopener noreferrer"
                 className="w-9 h-9 rounded-lg bg-white/10 hover:bg-green-500 flex items-center justify-center transition-all"
                 aria-label="WhatsApp">
                 <MessageCircle className="h-4 w-4" />
@@ -69,7 +64,7 @@ export default function Footer() {
             <div className="space-y-2 text-sm text-white/70">
               <div className="flex items-center gap-2">
                 <Phone className="h-4 w-4 text-[var(--color-caixa-yellow)]" />
-                <a href="tel:+5561986055223" className="hover:text-white transition-colors">(61) 9 8605-5223</a>
+                <a href="tel:+556135268355" className="hover:text-white transition-colors">(61) 3526-8355</a>
               </div>
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-[var(--color-caixa-yellow)]" />
@@ -82,9 +77,9 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* Crédito */}
+          {/* Crédito Empresarial */}
           <div>
-            <h3 className="font-bold text-base mb-4 text-[var(--color-caixa-yellow)]">Crédito</h3>
+            <h3 className="font-bold text-base mb-4 text-[var(--color-caixa-yellow)]">Crédito Empresarial</h3>
             <ul className="space-y-2">
               {linksCredito.map((link) => (
                 <li key={link.label}>
@@ -130,13 +125,13 @@ export default function Footer() {
           {/* Disclaimer Legal */}
           <div className="bg-white/10 rounded-xl p-5 mb-6">
             <p className="text-xs text-white/80 leading-relaxed">
-              <strong>Aviso Legal:</strong> A Destrava Crédito atua como <strong>Correspondente Bancário e Assessoria de Crédito</strong>, intermediando o processo de solicitação de crédito junto às instituições financeiras. A concessão final do crédito é de responsabilidade exclusiva da instituição financeira parceira. As condições de crédito, taxas de juros e prazos variam conforme perfil do cliente e análise de crédito. Sujeito à análise e aprovação. As simulações apresentadas são estimativas e não constituem oferta de crédito.
+              <strong>Aviso Legal:</strong> A Destrava atua como <strong>assessoria empresarial para captação de recursos e crédito para empresas</strong>. A concessão final do crédito é de responsabilidade exclusiva da instituição financeira parceira. As condições de crédito, taxas de juros e prazos variam conforme perfil do cliente e análise de crédito. Sujeito à análise e aprovação. As simulações apresentadas são estimativas e não constituem oferta de crédito.
             </p>
           </div>
 
           {/* Links Legais e Copyright */}
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-white/60">
-            <p>© {currentYear} Destrava Crédito. Todos os direitos reservados.</p>
+            <p>© {currentYear} Destrava. Todos os direitos reservados.</p>
             <div className="flex gap-6">
               <Link href="/politica-privacidade" className="hover:text-[var(--color-caixa-yellow)] transition-colors">
                 Política de Privacidade

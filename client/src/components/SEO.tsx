@@ -128,21 +128,21 @@ export default function SEO({
 // Structured Data helpers
 export const organizationStructuredData = {
   "@context": "https://schema.org",
-  "@type": "FinancialService",
-  name: "Destrava Crédito",
+  "@type": "ProfessionalService",
+  name: "Destrava",
   description:
-    "Correspondente bancário autorizado da CAIXA Econômica Federal. Assessoria especializada em crédito empresarial e Giro CAIXA Fácil.",
-  url: "https://destrava-credito.manus.space",
-  logo: "https://destrava-credito.manus.space/destrava-logo.svg",
-  image: "https://destrava-credito.manus.space/3.png",
-  telephone: "+55-61-98605-5223",
+    "Assessoria empresarial para captação de recursos e crédito para empresas, com condução completa do processo, atendimento consultivo e acompanhamento próximo.",
+  url: "https://destrava.permupay.com.br",
+  logo: "https://destrava.permupay.com.br/destrava-logo.svg",
+  image: "https://destrava.permupay.com.br/3.png",
+  telephone: "+55-61-3526-8355",
   address: {
     "@type": "PostalAddress",
     addressCountry: "BR",
-    addressLocality: "Brasil",
+    addressLocality: "Brasília",
+    addressRegion: "DF",
   },
   sameAs: [
-    "https://www.facebook.com/destravacredito",
     "https://www.instagram.com/destravacredito",
     "https://www.linkedin.com/company/destravacredito",
   ],
@@ -156,13 +156,13 @@ export const organizationStructuredData = {
 export const serviceStructuredData = (serviceName: string, description: string) => ({
   "@context": "https://schema.org",
   "@type": "Service",
-  serviceType: "Crédito Empresarial",
+  serviceType: "Assessoria Empresarial",
   name: serviceName,
   description: description,
   provider: {
-    "@type": "FinancialService",
-    name: "Destrava Crédito",
-    telephone: "+55-61-98605-5223",
+    "@type": "ProfessionalService",
+    name: "Destrava",
+    telephone: "+55-61-3526-8355",
   },
   areaServed: {
     "@type": "Country",
@@ -205,14 +205,14 @@ export const articleStructuredData = (
     "@type": "Person",
     name: author,
   },
-  publisher: {
-    "@type": "Organization",
-    name: "Destrava Crédito",
-    logo: {
-      "@type": "ImageObject",
-      url: "https://destrava-credito.manus.space/destrava-logo.svg",
+    publisher: {
+      "@type": "Organization",
+      name: "Destrava",
+      logo: {
+        "@type": "ImageObject",
+        url: "https://destrava.permupay.com.br/destrava-logo.svg",
+      },
     },
-  },
 });
 
 export const faqStructuredData = (faqs: { question: string; answer: string }[]) => ({

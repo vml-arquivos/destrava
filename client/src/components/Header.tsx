@@ -1,7 +1,7 @@
 import { APP_LOGO } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
-import { Menu, X, ChevronDown, Building2, User, BarChart3, Shield, Search, Lock } from "lucide-react";
+import { Menu, X, ChevronDown, Building2, BarChart3, Shield, Search, Lock } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 
 interface NavItem {
@@ -22,22 +22,11 @@ export default function Header() {
       label: "Crédito Empresarial",
       href: "/credito-empresas",
       children: [
-        { label: "Visão Geral", href: "/credito-empresas", icon: Building2, desc: "Todas as linhas para PJ" },
+        { label: "Visão Geral", href: "/credito-empresas", icon: Building2, desc: "Soluções para empresas de todos os portes" },
         { label: "PRONAMPE", href: "/credito-empresas#pronampe", icon: Building2, desc: "Até R$ 150k - Selic + 6%" },
         { label: "Giro CAIXA Fácil", href: "/giro-caixa-facil", icon: Building2, desc: "Até R$ 70k - A partir 2,99%" },
         { label: "PRONAMP", href: "/credito-empresas#pronamp", icon: Building2, desc: "Agronegócio - Médio Produtor" },
         { label: "Médio e Grande Porte", href: "/credito-empresas#medio-grande", icon: Building2, desc: "Soluções corporativas" },
-      ],
-    },
-    {
-      label: "Crédito Pessoal",
-      href: "/credito-pessoal",
-      children: [
-        { label: "Visão Geral", href: "/credito-pessoal", icon: User, desc: "Todas as linhas para PF" },
-        { label: "Consignado", href: "/credito-pessoal#consignado", icon: User, desc: "Menor taxa do mercado" },
-        { label: "Crédito Pessoal", href: "/credito-pessoal#pessoal", icon: User, desc: "Para qualquer finalidade" },
-        { label: "Financiamento Imóvel", href: "/credito-pessoal#imovel", icon: User, desc: "Casa própria com FGTS" },
-        { label: "Financiamento Veículo", href: "/credito-pessoal#veiculo", icon: User, desc: "Carro novo ou usado" },
       ],
     },
     {
@@ -49,7 +38,6 @@ export default function Header() {
         { label: "Consulta SPC/Serasa", href: "/consulta-spc-serasa", icon: Search, desc: "CPF e CNPJ" },
       ],
     },
-    { label: "Simulador", href: "/simulador" },
     { label: "Blog", href: "/blog" },
     { label: "Sobre", href: "/sobre" },
     { label: "Contato", href: "/contato" },
@@ -135,7 +123,7 @@ export default function Header() {
             </Link>
             <Link href="/simular">
               <Button size="lg" className="font-semibold bg-[var(--color-caixa-blue)] hover:bg-blue-700">
-                Simular Agora
+                Solicitar Análise
               </Button>
             </Link>
           </div>
@@ -184,7 +172,7 @@ export default function Header() {
               <div className="pt-4 px-2 space-y-2">
                 <Link href="/simular" onClick={() => setMobileMenuOpen(false)}>
                   <Button size="lg" className="w-full font-semibold bg-[var(--color-caixa-blue)] hover:bg-blue-700">
-                    Simular Agora
+                    Solicitar Análise
                   </Button>
                 </Link>
                 <Link href="/colaborador/login" onClick={() => setMobileMenuOpen(false)}>

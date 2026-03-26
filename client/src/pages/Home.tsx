@@ -1,7 +1,6 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import SEO, { organizationStructuredData, serviceStructuredData, faqStructuredData } from "@/components/SEO";
-import CTAButton from "@/components/CTAButton";
+import SEO, { organizationStructuredData, faqStructuredData } from "@/components/SEO";
 import BenefitCard from "@/components/BenefitCard";
 import TestimonialCard from "@/components/TestimonialCard";
 import { Button } from "@/components/ui/button";
@@ -21,7 +20,6 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
-  ShoppingCart,
   Users,
   TrendingUp,
   FileCheck,
@@ -30,6 +28,8 @@ import {
   HeadphonesIcon,
   CheckCircle2,
   MessageCircle,
+  Target,
+  Lightbulb,
 } from "lucide-react";
 import { useState, FormEvent } from "react";
 import { useLocation, Link } from "wouter";
@@ -48,7 +48,6 @@ export default function Home() {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    // Em produção, aqui seria enviado para uma API
     console.log("Formulário enviado:", formData);
     setLocation("/sucesso");
   };
@@ -59,20 +58,24 @@ export default function Home() {
 
   const faqs = [
     {
-      question: "A Destrava trabalha com quais bancos e linhas de crédito?",
-      answer: "A Destrava Crédito é uma assessoria financeira independente que trabalha com múltiplos bancos e instituições: CAIXA Econômica Federal, Banco do Brasil, bancos privados e fintechs. Buscamos a melhor linha de crédito para o perfil da sua empresa, seja PRONAMPE, Giro CAIXA Fácil, capital de giro, financiamento de equipamentos ou crédito estruturado."
+      question: "Como funciona a assessoria empresarial da Destrava?",
+      answer: "Nossa atuação começa com o entendimento do cenário da sua empresa. A partir disso, conduzimos a jornada com análise, organização e acompanhamento próximo, para tornar o processo mais claro, seguro e menos desgastante para o empresário."
     },
     {
-      question: "A Destrava atende empresas de qual porte?",
-      answer: "Atendemos empresas de todos os portes: MEI, microempresas, pequenas, médias e grandes empresas. Cada perfil tem linhas de crédito específicas e nossa equipe identifica a solução mais adequada para cada caso."
+      question: "Preciso saber exatamente qual solução minha empresa precisa?",
+      answer: "Não. Muitas empresas chegam até nós justamente buscando direção. A Destrava ajuda a dar clareza ao cenário e a organizar o caminho com base na necessidade real do negócio."
     },
     {
-      question: "Quais documentos são normalmente pedidos?",
-      answer: "Geralmente são necessários: CNPJ, contrato social, comprovante de endereço da empresa, documentos pessoais dos sócios, extratos bancários e declaração de faturamento. A Destrava Crédito orienta sobre a documentação específica para cada linha de crédito e ajuda a organizar tudo de forma eficiente."
+      question: "A Destrava acompanha o processo do início ao fim?",
+      answer: "Sim. Nosso diferencial está justamente na condução completa da operação, com apoio consultivo e acompanhamento ao longo de toda a jornada."
     },
     {
-      question: "Em quanto tempo sai a resposta?",
-      answer: "O prazo varia conforme a linha de crédito, o banco e a complexidade da análise. Em média, entre 3 e 15 dias úteis após o envio completo da documentação. Com a assessoria da Destrava, o processo tende a ser mais ágil, pois ajudamos a enviar tudo correto desde o início."
+      question: "O processo é muito burocrático para o empresário?",
+      answer: "Nosso objetivo é exatamente reduzir essa carga. A Destrava organiza as etapas, orienta o que é necessário e conduz o processo para que o empresário tenha mais foco na empresa e menos desgaste operacional."
+    },
+    {
+      question: "Como posso iniciar a análise da minha empresa?",
+      answer: "Você pode começar pelo botão principal da página e solicitar uma análise. A partir daí, nossa equipe entra em contato para entender o cenário e orientar os próximos passos."
     }
   ];
 
@@ -80,10 +83,6 @@ export default function Home() {
     "@context": "https://schema.org",
     "@graph": [
       organizationStructuredData,
-      serviceStructuredData(
-        "Giro CAIXA Fácil",
-        "Capital de giro para micro e pequenas empresas. Até R$ 70.000 com taxas a partir de 2,99% a.m."
-      ),
       faqStructuredData(faqs)
     ]
   };
@@ -91,9 +90,9 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col">
       <SEO
-        title="Assessoria de Crédito Empresarial - Destrava Crédito"
-        description="Destrava Crédito: Assessoria financeira independente para empresas de todos os portes. PRONAMPE, Giro CAIXA Fácil, capital de giro, crédito estruturado. Análise personalizada e acesso às melhores linhas de crédito do mercado."
-        keywords="assessoria credito empresarial, pronampe, giro caixa facil, capital de giro, credito empresa, financiamento empresarial, credito pequena media grande empresa, destrava credito"
+        title="Assessoria Empresarial para Captação de Recursos e Crédito para Empresas | Destrava"
+        description="A Destrava oferece assessoria empresarial para captação de recursos e crédito para empresas, com condução completa do processo, atendimento consultivo e mais clareza para o empresário."
+        keywords="assessoria empresarial, captação de recursos, crédito para empresas, crédito empresarial, assessoria para empresas, captação de recursos para empresas, assessoria de crédito empresarial, soluções para empresas, recursos para empresas"
         image="https://destrava.permupay.com.br/3.png"
         structuredData={structuredData}
       />
@@ -112,53 +111,53 @@ export default function Home() {
               {/* Badge de posicionamento */}
               <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 mb-6 text-sm font-medium">
                 <Shield className="h-4 w-4 text-[var(--color-caixa-yellow)]" />
-                <span>Assessoria Financeira Independente · Multi-Banco</span>
+                <span>Assessoria empresarial com foco em captação de recursos e crédito para empresas</span>
               </div>
 
               <h1 className="text-4xl md:text-5xl font-bold mb-6 leading-tight">
-                Crédito Empresarial para Empresas de Todos os Portes
+                Assessoria Empresarial para Captação de Recursos e Crédito para Empresas
               </h1>
-              <p className="text-xl md:text-2xl mb-8 text-white/90 leading-relaxed">
-                A Destrava Crédito analisa o perfil da sua empresa e busca a melhor solução de crédito no mercado. Capital de giro, PRONAMPE, financiamentos estruturados — do MEI à grande empresa.
+              <p className="text-xl md:text-2xl mb-4 text-white/90 leading-relaxed">
+                A Destrava conduz sua empresa em toda a jornada com estratégia, organização e acompanhamento próximo, para que você tenha mais clareza, menos desgaste operacional e um caminho mais seguro para viabilizar recursos.
+              </p>
+              <p className="text-base mb-8 text-white/75 leading-relaxed">
+                Se a sua empresa precisa avançar, reorganizar o caixa, ganhar fôlego ou encontrar uma solução financeira com mais direção e menos burocracia, você chegou ao lugar certo.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 mb-10">
+                <Link href="/simular">
+                  <Button
+                    size="lg"
+                    className="bg-[var(--color-caixa-yellow)] hover:bg-yellow-500 text-black font-bold shadow-lg w-full sm:w-auto"
+                  >
+                    Solicitar Análise
+                  </Button>
+                </Link>
                 <a
-                  href="https://wa.me/5561986055223"
+                  href="https://wa.me/556135268355"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <Button
-                    size="lg"
-                    className="bg-[var(--color-caixa-yellow)] hover:bg-yellow-500 text-black font-bold shadow-lg"
-                  >
-                    <MessageCircle className="mr-2 h-5 w-5" />
-                    Conversar com Especialista
-                  </Button>
-                </a>
-                <Link href="/simular">
                   <Button
                     variant="outline"
                     size="lg"
                     className="font-semibold bg-white/10 border-white/30 text-white hover:bg-white/20 w-full sm:w-auto"
                   >
-                    Simular Empréstimo Grátis
+                    <MessageCircle className="mr-2 h-5 w-5" />
+                    Falar no WhatsApp
                   </Button>
-                </Link>
+                </a>
               </div>
 
-              {/* Credenciais — sem logos de bancos terceiros */}
+              {/* Prova rápida */}
               <div className="grid grid-cols-3 gap-4 pt-6 border-t border-white/20">
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-[var(--color-caixa-yellow)]">+500</p>
-                  <p className="text-xs text-white/70 mt-1">Empresas Assessoradas</p>
+                  <p className="text-sm font-semibold text-[var(--color-caixa-yellow)]">Atendimento consultivo</p>
                 </div>
                 <div className="text-center border-x border-white/20">
-                  <p className="text-2xl font-bold text-[var(--color-caixa-yellow)]">+15</p>
-                  <p className="text-xs text-white/70 mt-1">Linhas de Crédito</p>
+                  <p className="text-sm font-semibold text-[var(--color-caixa-yellow)]">Condução completa do processo</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-[var(--color-caixa-yellow)]">98%</p>
-                  <p className="text-xs text-white/70 mt-1">Taxa de Satisfação</p>
+                  <p className="text-sm font-semibold text-[var(--color-caixa-yellow)]">Soluções para empresas de diferentes portes</p>
                 </div>
               </div>
             </div>
@@ -166,7 +165,7 @@ export default function Home() {
             <div className="hidden md:flex md:items-start md:justify-center">
               <img
                 src="/3.png"
-                alt="Assessoria de crédito empresarial - Destrava Crédito"
+                alt="Assessoria empresarial para captação de recursos - Destrava"
                 className="rounded-2xl shadow-2xl w-full max-w-lg object-cover"
               />
             </div>
@@ -174,59 +173,73 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ASSESSORIA DE CRÉDITO */}
+      {/* BLOCO INSTITUCIONAL PRINCIPAL */}
       <section className="py-20 bg-muted/30">
         <div className="container">
           <div className="max-w-4xl mx-auto text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold mb-6">
-              Como Funciona Nossa Assessoria de Crédito
+              A solução que sua empresa procura para captar recursos com mais clareza e menos desgaste
             </h2>
             <p className="text-lg text-muted-foreground leading-relaxed">
-              A Destrava Crédito é uma assessoria financeira independente. Analisamos o perfil da sua empresa e buscamos a melhor solução de crédito no mercado — seja em bancos públicos, privados ou fintechs. Do capital de giro ao financiamento estruturado, trabalhamos para empresas de todos os portes.
+              A Destrava atua com assessoria empresarial para empresas que precisam de direção, organização e apoio real na busca por recursos. Mais do que apresentar caminhos, nossa atuação envolve entendimento do cenário, análise estratégica e condução completa do processo, reduzindo a carga operacional do empresário e dando mais segurança em cada etapa.
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-8 mb-12">
             <div className="bg-card p-8 rounded-lg border-2 border-border">
-              <h3 className="text-2xl font-bold mb-4">O que Oferecemos</h3>
+              <h3 className="text-2xl font-bold mb-4">O que sua empresa encontra na Destrava</h3>
               <ul className="space-y-3">
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
-                  <span>Análise de perfil e risco da sua empresa</span>
+                  <span>Análise estratégica do cenário da empresa</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
-                  <span>Acesso a +15 linhas de crédito em múltiplos bancos</span>
+                  <span>Direcionamento mais claro para a necessidade do negócio</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
-                  <span>Orientação completa no processo de aprovação</span>
+                  <span>Condução completa do processo com apoio consultivo</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
-                  <span>Recuperação de crédito e regularização de CNPJ</span>
+                  <span>Organização da jornada com menos peso para o empresário</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
-                  <span>Atendimento para MEI, pequenas, médias e grandes empresas</span>
+                  <span>Acompanhamento próximo do início ao avanço da operação</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                  <span>Soluções pensadas para a realidade e o momento da empresa</span>
                 </li>
               </ul>
+              <p className="mt-6 text-sm text-muted-foreground italic">
+                Nosso papel é transformar um processo que costuma ser complexo em uma jornada mais clara, organizada e conduzida com método.
+              </p>
             </div>
 
             <div className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white p-8 rounded-lg shadow-lg">
-              <h3 className="text-2xl font-bold mb-6">Por que Escolher a Destrava</h3>
+              <h3 className="text-2xl font-bold mb-6">Por que empresas escolhem a Destrava</h3>
+              <p className="text-white/80 mb-6">
+                Porque encontrar recursos para a empresa exige mais do que tentativa: exige análise, condução, organização e acompanhamento.
+              </p>
               <div className="space-y-4">
                 <div>
-                  <p className="text-lg font-bold mb-1">Assessoria Independente</p>
-                  <p className="text-white/80 text-sm">Buscamos a melhor opção do mercado, sem vínculo exclusivo com nenhum banco</p>
+                  <p className="text-lg font-bold mb-1">Atendimento consultivo de verdade</p>
+                  <p className="text-white/80 text-sm">Sua empresa é atendida com escuta, análise e direcionamento, sem respostas genéricas.</p>
                 </div>
                 <div className="border-t border-white/20 pt-4">
-                  <p className="text-lg font-bold mb-1">Atendimento para Todos os Portes</p>
-                  <p className="text-white/80 text-sm">MEI, micro, pequena, média e grande empresa — cada perfil tem a solução certa</p>
+                  <p className="text-lg font-bold mb-1">Condução completa do processo</p>
+                  <p className="text-white/80 text-sm">A Destrava assume a parte pesada da jornada e organiza cada etapa para reduzir a carga operacional.</p>
                 </div>
                 <div className="border-t border-white/20 pt-4">
-                  <p className="text-lg font-bold mb-1">Processo Ágil e Sem Burocracia</p>
-                  <p className="text-white/80 text-sm">Organizamos toda a documentação para acelerar a aprovação do crédito</p>
+                  <p className="text-lg font-bold mb-1">Mais clareza para decidir</p>
+                  <p className="text-white/80 text-sm">Você entende melhor o caminho da sua empresa, com mais segurança, mais contexto e menos ruído.</p>
+                </div>
+                <div className="border-t border-white/20 pt-4">
+                  <p className="text-lg font-bold mb-1">Agilidade com organização</p>
+                  <p className="text-white/80 text-sm">Um processo bem conduzido reduz retrabalho, evita perda de tempo e melhora a experiência do início ao fim.</p>
                 </div>
               </div>
             </div>
@@ -239,78 +252,75 @@ export default function Home() {
         <div className="container">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Como Funciona
+              Como funciona nossa assessoria
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Processo simples e orientado em 4 etapas
+              Um processo pensado para simplificar a jornada da sua empresa e conduzir cada etapa com mais clareza.
             </p>
           </div>
 
           <div className="grid md:grid-cols-4 gap-8">
             <BenefitCard
-              icon={FileCheck}
-              title="1. Simulação Gratuita"
-              description="Preencha o formulário com os dados da sua empresa e receba uma análise sem compromisso."
+              icon={Lightbulb}
+              title="1. Entendimento do cenário da empresa"
+              description="Começamos entendendo o momento do negócio, a necessidade da empresa e o objetivo da operação."
             />
             <BenefitCard
               icon={TrendingUp}
-              title="2. Análise de Perfil"
-              description="Nossa equipe analisa o perfil da empresa e identifica as melhores linhas de crédito disponíveis."
+              title="2. Análise estratégica do perfil"
+              description="Avaliamos o contexto com olhar técnico e consultivo para direcionar o caminho mais adequado."
             />
             <BenefitCard
               icon={HeadphonesIcon}
-              title="3. Assessoria Completa"
-              description="Orientamos sobre documentação, preparamos o processo e acompanhamos a análise junto ao banco."
+              title="3. Condução da operação"
+              description="A Destrava organiza e acompanha o processo, reduzindo a carga operacional sobre o empresário."
             />
             <BenefitCard
               icon={CheckCircle2}
-              title="4. Crédito Liberado"
-              description="Aprovado? O valor é depositado diretamente na conta da sua empresa."
+              title="4. Acompanhamento até o avanço da solução"
+              description="Seguimos com proximidade, clareza e apoio em cada fase, para que a empresa tenha segurança ao longo da jornada."
             />
           </div>
         </div>
       </section>
 
-      {/* DIFERENCIAIS DA DESTRAVA */}
+      {/* DIFERENCIAIS / BENEFÍCIOS */}
       <section className="py-20 bg-muted/30">
         <div className="container">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Por que escolher a Destrava Crédito?
+              Mais do que apoio financeiro: uma assessoria que organiza, conduz e facilita
             </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Assessoria financeira independente com acesso às melhores linhas de crédito do mercado para empresas de todos os portes
-            </p>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
+                <Users className="h-8 w-8 text-primary" />
+              </div>
+              <h3 className="text-xl font-bold mb-2">Menos peso para o empresário</h3>
+              <p className="text-muted-foreground text-sm">
+                A empresa não precisa carregar sozinha a complexidade do processo.
+              </p>
+            </div>
+
+            <div className="bg-card p-6 rounded-lg border border-border text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
+                <Target className="h-8 w-8 text-primary" />
+              </div>
+              <h3 className="text-xl font-bold mb-2">Mais clareza em cada etapa</h3>
+              <p className="text-muted-foreground text-sm">
+                Você entende o caminho com mais segurança e menos incerteza.
+              </p>
+            </div>
+
+            <div className="bg-card p-6 rounded-lg border border-border text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
                 <HeadphonesIcon className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="text-xl font-bold mb-2">Atendimento Humano</h3>
+              <h3 className="text-xl font-bold mb-2">Acompanhamento próximo</h3>
               <p className="text-muted-foreground text-sm">
-                Assessoria personalizada em cada etapa do processo
-              </p>
-            </div>
-
-            <div className="bg-card p-6 rounded-lg border border-border text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-                <Shield className="h-8 w-8 text-primary" />
-              </div>
-              <h3 className="text-xl font-bold mb-2">Multi-Banco</h3>
-              <p className="text-muted-foreground text-sm">
-                Acesso a múltiplos bancos e linhas de crédito — sem exclusividade
-              </p>
-            </div>
-
-            <div className="bg-card p-6 rounded-lg border border-border text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-                <Clock className="h-8 w-8 text-primary" />
-              </div>
-              <h3 className="text-xl font-bold mb-2">Processo Ágil</h3>
-              <p className="text-muted-foreground text-sm">
-                Orientação para acelerar análise e aprovação
+                Atuação consultiva com presença real ao longo da jornada.
               </p>
             </div>
 
@@ -318,9 +328,9 @@ export default function Home() {
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
                 <FileCheck className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="text-xl font-bold mb-2">Menos Burocracia</h3>
+              <h3 className="text-xl font-bold mb-2">Processo mais organizado</h3>
               <p className="text-muted-foreground text-sm">
-                Ajudamos a organizar documentação de forma eficiente
+                Mais método, menos improviso e mais fluidez para a empresa avançar.
               </p>
             </div>
           </div>
@@ -335,13 +345,13 @@ export default function Home() {
               O que nossos clientes dizem
             </h2>
             <p className="text-lg text-muted-foreground">
-              Empresários que já contaram com nossa assessoria
+              Empresas que encontraram na Destrava uma assessoria mais clara, próxima e comprometida com a solução.
             </p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
             <TestimonialCard
-              quote="A Destrava Crédito me ajudou a entender todo o processo e organizar os documentos. Consegui o crédito em menos de 15 dias!"
+              quote="A Destrava me ajudou a entender todo o processo e organizar os documentos. Consegui o crédito em menos de 15 dias!"
               author="Carlos Silva"
               role="Proprietário"
               company="Mercadinho Bom Preço"
@@ -353,7 +363,7 @@ export default function Home() {
               company="Salão Beleza Pura"
             />
             <TestimonialCard
-              quote="Estava com dificuldade para pagar fornecedores. Com o Giro CAIXA Fácil e a assessoria da Destrava, consegui regularizar tudo."
+              quote="Estava com dificuldade para pagar fornecedores. Com a assessoria da Destrava, consegui organizar tudo e avançar com mais segurança."
               author="Roberto Santos"
               role="Sócio"
               company="Distribuidora RS"
@@ -368,80 +378,43 @@ export default function Home() {
           <div className="max-w-3xl mx-auto">
             <div className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                Perguntas Frequentes
+                Perguntas frequentes
               </h2>
-            <p className="text-lg text-muted-foreground">
-              Tire suas dúvidas sobre nossa assessoria e as linhas de crédito disponíveis
-            </p>
+              <p className="text-lg text-muted-foreground">
+                Esclareça as principais dúvidas sobre nossa assessoria empresarial e o início da sua jornada com a Destrava.
+              </p>
             </div>
 
             <Accordion type="single" collapsible className="space-y-4">
-              <AccordionItem
-                value="item-1"
-                className="bg-card border border-border rounded-lg px-6"
-              >
-                <AccordionTrigger className="text-left font-semibold hover:no-underline">
-                  Quem libera o crédito?
-                </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">
-                  A Destrava Crédito é uma assessoria financeira independente que trabalha com múltiplos bancos e instituições: CAIXA Econômica Federal, Banco do Brasil, bancos privados e fintechs. Identificamos a melhor linha de crédito para o perfil da sua empresa e acompanhamos todo o processo de aprovação.
-                </AccordionContent>
-              </AccordionItem>
-
-              <AccordionItem
-                value="item-2"
-                className="bg-card border border-border rounded-lg px-6"
-              >
-                <AccordionTrigger className="text-left font-semibold hover:no-underline">
-                  As taxas são fixas?
-                </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">
-                  Não. As taxas variam conforme a linha de crédito, o banco e o perfil da empresa. Cada caso é analisado individualmente. Nossa assessoria ajuda a identificar a linha com as melhores condições para o seu perfil e a apresentar a documentação da forma mais favorável.
-                </AccordionContent>
-              </AccordionItem>
-
-              <AccordionItem
-                value="item-3"
-                className="bg-card border border-border rounded-lg px-6"
-              >
-                <AccordionTrigger className="text-left font-semibold hover:no-underline">
-                  Quais documentos normalmente são pedidos?
-                </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">
-                  Geralmente são solicitados: CNPJ, documentos pessoais dos
-                  sócios, comprovante de faturamento, extratos bancários e
-                  declarações fiscais. A Destrava Crédito orienta sobre a
-                  documentação específica para o seu caso e ajuda a organizar tudo
-                  de forma eficiente.
-                </AccordionContent>
-              </AccordionItem>
-
-              <AccordionItem
-                value="item-4"
-                className="bg-card border border-border rounded-lg px-6"
-              >
-                <AccordionTrigger className="text-left font-semibold hover:no-underline">
-                  Em quanto tempo sai a resposta?
-                </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">
-                  O prazo varia conforme a linha de crédito e o banco escolhido. Em média, entre 3 e 15 dias úteis após o envio completo da documentação. Com a assessoria da Destrava Crédito, o processo tende a ser mais ágil, pois organizamos tudo corretamente desde o início.
-                </AccordionContent>
-              </AccordionItem>
+              {faqs.map((faq, index) => (
+                <AccordionItem
+                  key={index}
+                  value={`item-${index + 1}`}
+                  className="bg-card border border-border rounded-lg px-6"
+                >
+                  <AccordionTrigger className="text-left font-semibold hover:no-underline">
+                    {faq.question}
+                  </AccordionTrigger>
+                  <AccordionContent className="text-muted-foreground">
+                    {faq.answer}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
             </Accordion>
           </div>
         </div>
       </section>
 
-      {/* FORMULÁRIO DE SIMULAÇÃO */}
+      {/* FORMULÁRIO — SOLICITAR ANÁLISE */}
       <section id="simulacao" className="py-20 scroll-mt-20">
         <div className="container">
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                Simule Seu Crédito Gratuitamente
+                Solicite uma análise para sua empresa
               </h2>
               <p className="text-lg text-muted-foreground">
-                Preencha o formulário e nossa equipe de especialistas entrará em contato para apresentar as melhores opções para a sua empresa
+                Dê o primeiro passo com mais clareza, apoio e direção. A Destrava avalia o cenário da sua empresa e conduz o processo com uma assessoria completa.
               </p>
             </div>
 
@@ -548,11 +521,11 @@ export default function Home() {
               </div>
 
               <Button type="submit" size="lg" className="w-full font-semibold">
-                Enviar Simulação
+                Solicitar Análise
               </Button>
 
               <p className="text-xs text-muted-foreground text-center">
-                Ao enviar, você concorda com nossa{" "}
+                Seus dados serão usados apenas para contato e continuidade do atendimento.{" "}
                 <a href="/politica-privacidade" className="underline">
                   Política de Privacidade
                 </a>
