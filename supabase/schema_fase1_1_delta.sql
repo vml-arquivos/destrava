@@ -1,26 +1,42 @@
 -- ============================================================
--- DELTA v1.1 — Blindagem Operacional
+-- DELTA v1.1 — Blindagem Operacional (CORRIGIDO)
 -- Execute no Supabase SQL Editor
 -- Seguro: IF NOT EXISTS em tudo, sem quebrar tabelas existentes
 -- ============================================================
 
 -- ─── 1. Coluna erro_detalhe na tabela crm_eventos_webhook ───
--- Necessária para o Bloco D (tratamento de erro) do workflow n8n
 ALTER TABLE crm_eventos_webhook
   ADD COLUMN IF NOT EXISTS erro_detalhe TEXT;
 
--- ─── 2. Coluna tipo_conteudo em crm_mensagens ───
--- Necessária para o Bloco B (tipo: texto, audio, imagem, video, documento)
+-- ─── 2. Colunas tipo_conteudo e media_url em crm_mensagens ───
 ALTER TABLE crm_mensagens
   ADD COLUMN IF NOT EXISTS tipo_conteudo TEXT NOT NULL DEFAULT 'texto';
 
--- ─── 3. Coluna media_url em crm_mensagens ───
--- Armazena URL de áudio, imagem ou documento recebido
 ALTER TABLE crm_mensagens
   ADD COLUMN IF NOT EXISTS media_url TEXT;
 
+-- ─── 3. Colunas extras em leads (se não existirem) ───
+-- leads.id é UUID, leads não tem updated_at — adicionamos aqui
+ALTER TABLE public.leads
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+ALTER TABLE public.leads
+  ADD COLUMN IF NOT EXISTS produto_interesse TEXT;
+
+ALTER TABLE public.leads
+  ADD COLUMN IF NOT EXISTS empresa TEXT;
+
+ALTER TABLE public.leads
+  ADD COLUMN IF NOT EXISTS score_ia INTEGER DEFAULT 0;
+
+ALTER TABLE public.leads
+  ADD COLUMN IF NOT EXISTS etapa_funil TEXT DEFAULT 'Novo';
+
+ALTER TABLE public.leads
+  ADD COLUMN IF NOT EXISTS temperatura TEXT DEFAULT 'frio'
+    CHECK (temperatura IN ('frio','morno','quente','urgente'));
+
 -- ─── 4. Função de normalização de telefone ───
--- Garante formato E.164 brasileiro (55 + 11 dígitos)
 CREATE OR REPLACE FUNCTION normalizar_telefone(raw_phone TEXT)
 RETURNS TEXT
 LANGUAGE plpgsql
@@ -29,50 +45,29 @@ AS $$
 DECLARE
   digits TEXT;
 BEGIN
-  -- Remove tudo que não é dígito
   digits := regexp_replace(raw_phone, '\D', '', 'g');
-
-  -- Vazio ou muito curto: retorna como está
   IF length(digits) < 10 THEN
     RETURN digits;
   END IF;
-
-  -- Já tem DDI 55: retorna como está
   IF left(digits, 2) = '55' AND length(digits) >= 12 THEN
     RETURN digits;
   END IF;
-
-  -- Tem 11 dígitos (DDD + número com 9): adiciona 55
-  IF length(digits) = 11 THEN
-    RETURN '55' || digits;
-  END IF;
-
-  -- Tem 10 dígitos (DDD + número sem 9): adiciona 55
-  IF length(digits) = 10 THEN
-    RETURN '55' || digits;
-  END IF;
-
-  RETURN digits;
+  RETURN '55' || digits;
 END;
 $$;
 
--- ─── 5. Índice para busca por telefone normalizado em leads ───
+-- ─── 5. Índices de performance ───
 CREATE INDEX IF NOT EXISTS idx_leads_telefone_norm
-  ON leads (normalizar_telefone(telefone));
+  ON public.leads (normalizar_telefone(telefone));
 
--- ─── 6. Índice para tipo_conteudo em crm_mensagens ───
 CREATE INDEX IF NOT EXISTS idx_crm_mensagens_tipo_conteudo
   ON crm_mensagens (tipo_conteudo);
 
--- ─── 7. Coluna produto_interesse em leads (se não existir) ───
-ALTER TABLE leads
-  ADD COLUMN IF NOT EXISTS produto_interesse TEXT;
-
--- ─── 8. Coluna empresa em leads (se não existir) ───
-ALTER TABLE leads
-  ADD COLUMN IF NOT EXISTS empresa TEXT;
-
--- ─── 9. View atualizada do pipeline CRM ───
+-- ─── 6. View atualizada do pipeline CRM ───
+-- Usa os nomes REAIS das colunas:
+--   crm_qualificacoes_ia.created_at  (não qualificado_em)
+--   crm_qualificacoes_ia.probabilidade_conv (não probabilidade_conversao)
+--   leads.id é UUID
 CREATE OR REPLACE VIEW vw_crm_pipeline AS
 SELECT
   l.id,
@@ -89,38 +84,38 @@ SELECT
   l.created_at,
   l.updated_at,
   -- Última qualificação da IA
-  q.resumo              AS ia_resumo,
-  q.proxima_acao        AS ia_proxima_acao,
-  q.probabilidade_conversao AS ia_probabilidade,
-  q.documentos_faltando AS ia_documentos_faltando,
-  q.pontos_positivos    AS ia_pontos_positivos,
-  q.pontos_atencao      AS ia_pontos_atencao,
-  q.qualificado_em      AS ia_qualificado_em,
+  q.resumo                  AS ia_resumo,
+  q.proxima_acao            AS ia_proxima_acao,
+  q.probabilidade_conv      AS ia_probabilidade,
+  q.documentos_faltando     AS ia_documentos_faltando,
+  q.pontos_positivos        AS ia_pontos_positivos,
+  q.pontos_atencao          AS ia_pontos_atencao,
+  q.created_at              AS ia_qualificado_em,
   -- Contagem de mensagens
   COALESCE(msg.total_mensagens, 0) AS total_mensagens,
-  -- Última mensagem
   msg.ultima_mensagem_em
-FROM leads l
+FROM public.leads l
 LEFT JOIN LATERAL (
   SELECT *
   FROM crm_qualificacoes_ia
   WHERE lead_id = l.id
-  ORDER BY qualificado_em DESC
+  ORDER BY created_at DESC
   LIMIT 1
 ) q ON true
 LEFT JOIN LATERAL (
   SELECT
-    COUNT(*) AS total_mensagens,
-    MAX(enviado_em) AS ultima_mensagem_em
+    COUNT(*)            AS total_mensagens,
+    MAX(enviado_em)     AS ultima_mensagem_em
   FROM crm_mensagens
   WHERE lead_id = l.id
 ) msg ON true;
 
--- ─── 10. Função helper para registrar atividade (usada pelo n8n) ───
+-- ─── 7. Função helper para registrar atividade (usada pelo n8n) ───
+-- atividades_crm usa cliente_id (UUID) — alinhado com leads.id UUID
 CREATE OR REPLACE FUNCTION crm_registrar_interacao_atividade(
-  p_lead_id     INTEGER,
-  p_tipo        TEXT,
-  p_descricao   TEXT,
+  p_lead_id       UUID,
+  p_tipo          TEXT,
+  p_descricao     TEXT,
   p_colaborador_id UUID DEFAULT NULL
 )
 RETURNS VOID
@@ -142,7 +137,6 @@ BEGIN
     NOW()
   );
 EXCEPTION WHEN OTHERS THEN
-  -- Silencia erros para não quebrar o fluxo principal
   NULL;
 END;
 $$;
