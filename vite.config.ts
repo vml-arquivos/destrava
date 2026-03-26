@@ -3,61 +3,56 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig } from "vite";
 
-const plugins = [react(), tailwindcss()];
-
 export default defineConfig({
-  plugins,
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
       "@shared": path.resolve(import.meta.dirname, "shared"),
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
     },
+    // CRÍTICO: garante que apenas UMA instância do React é usada em todo o bundle.
+    // Sem isso, pacotes como streamdown/react-markdown podem criar uma segunda
+    // instância, causando "Cannot read properties of undefined (reading 'createContext')".
+    dedupe: ["react", "react-dom", "scheduler"],
+  },
+  // Pré-bundling das dependências mais pesadas para evitar ciclos no build
+  optimizeDeps: {
+    include: [
+      "react",
+      "react-dom",
+      "react/jsx-runtime",
+      "@supabase/supabase-js",
+      "framer-motion",
+      "recharts",
+    ],
+    exclude: ["shiki", "mermaid"],
   },
   envDir: path.resolve(import.meta.dirname),
   root: path.resolve(import.meta.dirname, "client"),
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
-    chunkSizeWarningLimit: 600,
+    chunkSizeWarningLimit: 10000,
     rollupOptions: {
       output: {
+        // Estratégia simplificada: apenas separa os chunks gigantes que
+        // causam timeout no browser. Não tenta separar React — o Vite/Rollup
+        // já garante uma única instância via dedupe + optimizeDeps.
         manualChunks(id) {
-          // React core
-          if (id.includes("node_modules/react") || id.includes("node_modules/react-dom")) {
-            return "vendor-react";
-          }
-          // Radix UI
-          if (id.includes("node_modules/@radix-ui")) {
-            return "vendor-radix";
-          }
-          // Mermaid (diagramas) — isolado por ser gigante
-          if (id.includes("node_modules/mermaid") || id.includes("node_modules/cytoscape")) {
-            return "vendor-mermaid";
-          }
-          // Shiki (syntax highlighter com 200+ linguagens) — maior culpado do bundle pesado
-          if (id.includes("node_modules/shiki") || id.includes("node_modules/@shikijs")) {
+          // Shiki: 9MB — deve ficar isolado para não bloquear o carregamento
+          if (
+            id.includes("node_modules/shiki/") ||
+            id.includes("node_modules/@shikijs/")
+          ) {
             return "vendor-shiki";
           }
-          // KaTeX (renderização matemática)
-          if (id.includes("node_modules/katex")) {
-            return "vendor-katex";
-          }
-          // Recharts / D3
-          if (id.includes("node_modules/recharts") || id.includes("node_modules/d3")) {
-            return "vendor-charts";
-          }
-          // Framer Motion
-          if (id.includes("node_modules/framer-motion")) {
-            return "vendor-motion";
-          }
-          // Supabase
-          if (id.includes("node_modules/@supabase")) {
-            return "vendor-supabase";
-          }
-          // Demais node_modules
-          if (id.includes("node_modules")) {
-            return "vendor-misc";
+          // Mermaid: 1.5MB — isolado por tamanho
+          if (
+            id.includes("node_modules/mermaid/") ||
+            id.includes("node_modules/cytoscape/")
+          ) {
+            return "vendor-mermaid";
           }
         },
       },

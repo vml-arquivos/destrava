@@ -7,7 +7,21 @@ import { blogPosts } from "@/data/blogPosts";
 import { useRoute, Link } from "wouter";
 import { Calendar, Clock, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Streamdown } from "streamdown";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+// Substituímos o streamdown por react-markdown + remark-gfm.
+// O streamdown embutia mermaid + shiki como dependências diretas, criando
+// dependências circulares no bundle que causavam tela branca em produção:
+// "Cannot read properties of undefined (reading 'createContext')".
+// O react-markdown é leve (~30KB) e não tem essas dependências pesadas.
+function MarkdownContent({ children }: { children: string }) {
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+      {children}
+    </ReactMarkdown>
+  );
+}
 
 export default function BlogPost() {
   const [, params] = useRoute("/blog/:slug");
@@ -89,17 +103,17 @@ export default function BlogPost() {
               {/* Dividir o conteúdo para inserir o banner no meio */}
               {post.content.includes("##") ? (
                 <>
-                  <Streamdown>
+                  <MarkdownContent>
                     {post.content.split("##")[0]}
-                  </Streamdown>
+                  </MarkdownContent>
                   <ScoreBanner />
-                  <Streamdown>
+                  <MarkdownContent>
                     {"##" + post.content.split("##").slice(1).join("##")}
-                  </Streamdown>
+                  </MarkdownContent>
                 </>
               ) : (
                 <>
-                  <Streamdown>{post.content}</Streamdown>
+                  <MarkdownContent>{post.content}</MarkdownContent>
                   <ScoreBanner />
                 </>
               )}
