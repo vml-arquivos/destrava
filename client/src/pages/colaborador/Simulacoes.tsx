@@ -80,7 +80,7 @@ export default function Simulacoes() {
       .from("simulacoes_colaborador")
       .select("*")
       .eq("colaborador_id", user!.id)
-      .order("created_at", { ascending: false });
+      .order("criado_em", { ascending: false });
     setSimulacoes((data as SimulacaoColaborador[]) || []);
     setLoading(false);
   }
@@ -211,13 +211,13 @@ export default function Simulacoes() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm font-semibold">
-                          {fmt.format(Number(sim.valor_credito))}
+                          {fmt.format(Number(sim.valor_solicitado))}
                         </TableCell>
                         <TableCell className="text-center text-sm">
-                          {sim.prazo_meses}x
+                          {sim.quantidade_parcelas}x
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm">
-                          {fmt.format(Number(sim.parcela_mensal))}
+                          {fmt.format(Number(sim.valor_parcela))}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {sim.banco || "—"}
@@ -226,7 +226,7 @@ export default function Simulacoes() {
                           {statusBadge(sim.status)}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {new Date(sim.created_at).toLocaleDateString("pt-BR")}
+                          {new Date(sim.criado_em).toLocaleDateString("pt-BR")}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">
@@ -281,21 +281,21 @@ export default function Simulacoes() {
               {/* Resultado principal */}
               <div className="bg-primary text-white rounded-xl p-4 text-center">
                 <p className="text-xs text-white/70 mb-1">Parcela Mensal</p>
-                <p className="text-3xl font-bold">{fmt.format(Number(selecionada.parcela_mensal))}</p>
+                <p className="text-3xl font-bold">{fmt.format(Number(selecionada.valor_parcela))}</p>
                 <p className="text-xs text-white/70 mt-1">
-                  {selecionada.prazo_meses}x de {fmt.format(Number(selecionada.parcela_mensal))}
+                  {selecionada.quantidade_parcelas}x de {fmt.format(Number(selecionada.valor_parcela))}
                 </p>
               </div>
 
               {/* Detalhamento */}
               <div className="space-y-2 text-sm">
                 {[
-                  ["Valor do Crédito", fmt.format(Number(selecionada.valor_credito))],
+                  ["Valor Solicitado", fmt.format(Number(selecionada.valor_solicitado))],
                   ["Taxa de Juros", `${fmtPct(Number(selecionada.taxa_juros_mensal))} a.m.`],
-                  ["Imposto / IOF", `${fmtPct(Number(selecionada.pct_imposto || 0))} → ${fmt.format(Number(selecionada.imposto_valor || 0))}`],
-                  ["Comissão Destrava", `${fmtPct(Number(selecionada.pct_comissao || 0))} → ${fmt.format(Number(selecionada.comissao_valor || 0))}`],
+                  ["Imposto / IOF", `${fmtPct(Number(selecionada.imposto_percentual || 0))} → ${fmt.format(Number(selecionada.total_imposto || 0))}`],
+                  ["Comissão Destrava", `${fmtPct(Number(selecionada.comissao_percentual || 0))} → ${fmt.format(Number(selecionada.total_comissao || 0))}`],
                   ["Total de Juros", fmt.format(Number(selecionada.total_juros))],
-                  ["Custo Total", fmt.format(Number(selecionada.custo_total))],
+                  ["Custo Total", fmt.format(Number(selecionada.custo_efetivo_total))],
                 ].map(([label, value]) => (
                   <div key={label} className="flex justify-between border-b pb-2">
                     <span className="text-muted-foreground">{label}</span>
@@ -354,7 +354,7 @@ export default function Simulacoes() {
 
               {/* Data */}
               <p className="text-xs text-muted-foreground text-center">
-                Criada em {new Date(selecionada.created_at).toLocaleString("pt-BR")}
+                Criada em {new Date(selecionada.criado_em).toLocaleString("pt-BR")}
               </p>
             </div>
           )}

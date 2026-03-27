@@ -30,34 +30,42 @@ export interface Colaborador {
 }
 
 export interface SimulacaoColaborador {
+  // Colunas reais da tabela simulacoes_colaborador (schema auditado)
   id: string;
   colaborador_id: string;
-  colaborador_nome?: string;
   cliente_nome: string;
-  cliente_empresa?: string;
   cliente_cpf_cnpj?: string;
   cliente_telefone?: string;
-  valor_credito: number;
-  prazo_meses: number;
+  cliente_email?: string;
+  valor_solicitado: number;
+  quantidade_parcelas: number;
   taxa_juros_mensal: number;
-  valor_fiscal?: number;
-  pct_imposto?: number;
-  imposto_valor?: number;
-  pct_comissao?: number;
-  comissao_valor?: number;
-  parcela_mensal: number;
-  total_emprestimo: number;
+  imposto_percentual?: number;
+  comissao_percentual?: number;
+  valor_parcela: number;
   total_juros: number;
-  custo_total: number;
-  cet_mensal?: number;
-  cet_anual?: number;
+  total_imposto?: number;
+  total_comissao?: number;
+  custo_efetivo_total: number;
+  valor_total_pagar: number;
   banco?: string;
   linha_credito?: string;
   observacoes?: string;
-  cenario: "com_imposto" | "sem_imposto";
   status: "pendente" | "em_analise" | "aprovado" | "reprovado" | "cancelado";
-  created_at: string;
-  updated_at: string;
+  criado_em: string;
+  atualizado_em: string;
+  // Aliases para compatibilidade com código legado (leitura apenas)
+  valor_credito?: number;       // = valor_solicitado
+  prazo_meses?: number;         // = quantidade_parcelas
+  parcela_mensal?: number;      // = valor_parcela
+  total_emprestimo?: number;    // = valor_total_pagar
+  custo_total?: number;         // = custo_efetivo_total
+  pct_imposto?: number;         // = imposto_percentual
+  imposto_valor?: number;       // = total_imposto
+  pct_comissao?: number;        // = comissao_percentual
+  comissao_valor?: number;      // = total_comissao
+  created_at?: string;          // = criado_em
+  updated_at?: string;          // = atualizado_em
 }
 
 export interface Lead {
