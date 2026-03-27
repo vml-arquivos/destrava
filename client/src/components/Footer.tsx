@@ -39,7 +39,7 @@ export default function Footer() {
               className="h-12 w-auto mb-4 brightness-0 invert"
             />
             <p className="text-sm text-white/80 mb-5 leading-relaxed max-w-xs">
-              A Destrava é uma assessoria empresarial focada em captação de recursos e crédito para empresas, com atuação consultiva, condução completa do processo e atendimento próximo.
+              Assessoria especializada em captação de crédito bancário e governamental para empresas que buscam mais clareza, organização e apoio consultivo em todo o processo.
             </p>
             <p className="text-xs text-white/50 mb-5 leading-relaxed max-w-xs italic">
               Assessoria empresarial com foco em clareza, estratégia e condução real para empresas que precisam avançar.

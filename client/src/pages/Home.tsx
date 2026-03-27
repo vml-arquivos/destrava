@@ -111,17 +111,17 @@ export default function Home() {
               {/* Badge de posicionamento */}
               <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 mb-6 text-sm font-medium">
                 <Shield className="h-4 w-4 text-[var(--color-caixa-yellow)]" />
-                <span>Assessoria empresarial com foco em captação de recursos e crédito para empresas</span>
+                <span></span>
               </div>
 
               <h1 className="text-4xl md:text-5xl font-bold mb-6 leading-tight">
-                Assessoria Empresarial para Captação de Recursos e Crédito para Empresas
+                Assessoria Especializada em Captação de Crédito Bancário e Governamental.
               </h1>
               <p className="text-xl md:text-2xl mb-4 text-white/90 leading-relaxed">
-                A Destrava conduz sua empresa em toda a jornada com estratégia, organização e acompanhamento próximo, para que você tenha mais clareza, menos desgaste operacional e um caminho mais seguro para viabilizar recursos.
+                A Destrava atua ao lado da sua empresa para identificar as melhores linhas de crédito, organizar a operação e conduzir todo o processo com mais segurança, estratégia e clareza.
               </p>
               <p className="text-base mb-8 text-white/75 leading-relaxed">
-                Se a sua empresa precisa avançar, reorganizar o caixa, ganhar fôlego ou encontrar uma solução financeira com mais direção e menos burocracia, você chegou ao lugar certo.
+                Cuidamos da estruturação da demanda, do direcionamento correto e do acompanhamento da operação para que sua empresa avance com menos desgaste, mais previsibilidade e melhores condições de crédito.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 mb-10">
                 <Link href="/simular">
@@ -129,7 +129,7 @@ export default function Home() {
                     size="lg"
                     className="bg-[var(--color-caixa-yellow)] hover:bg-yellow-500 text-black font-bold shadow-lg w-full sm:w-auto"
                   >
-                    Solicitar Análise
+                    → Simule seu crédito
                   </Button>
                 </Link>
                 <a
@@ -157,7 +157,7 @@ export default function Home() {
                   <p className="text-sm font-semibold text-[var(--color-caixa-yellow)]">Condução completa do processo</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-sm font-semibold text-[var(--color-caixa-yellow)]">Soluções para empresas de diferentes portes</p>
+                  <p className="text-sm font-semibold text-[var(--color-caixa-yellow)]">Sem custo antecipado</p>
                 </div>
               </div>
             </div>
@@ -405,16 +405,17 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FORMULÁRIO — SOLICITAR ANÁLISE */}
+      {/* FORMULÁRIO — SOLICITAR CONTATO */}
       <section id="simulacao" className="py-20 scroll-mt-20">
         <div className="container">
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-12">
+              <p className="text-sm font-semibold uppercase tracking-wider text-primary mb-3">Solicite uma consultoria</p>
               <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                Solicite uma análise para sua empresa
+                Fale com nossa equipe e entenda o melhor caminho para sua empresa
               </h2>
               <p className="text-lg text-muted-foreground">
-                Dê o primeiro passo com mais clareza, apoio e direção. A Destrava avalia o cenário da sua empresa e conduz o processo com uma assessoria completa.
+                Preencha o formulário e solicite o contato da nossa equipe. Vamos entender o seu momento e orientar os próximos passos com mais clareza e segurança.
               </p>
             </div>
 
@@ -422,6 +423,10 @@ export default function Home() {
               onSubmit={handleSubmit}
               className="bg-card p-8 rounded-lg border-2 border-border shadow-lg space-y-6"
             >
+              <div className="mb-2">
+                <h3 className="text-xl font-bold mb-1">Solicite o contato da nossa equipe</h3>
+                <p className="text-sm text-muted-foreground">Informe seus dados e nossa equipe entrará em contato para entender sua necessidade e apresentar a melhor orientação.</p>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="nome">Nome Completo *</Label>
                 <Input
@@ -521,14 +526,15 @@ export default function Home() {
               </div>
 
               <Button type="submit" size="lg" className="w-full font-semibold">
-                Solicitar Análise
+                → Solicitar contato
               </Button>
 
               <p className="text-xs text-muted-foreground text-center">
-                Seus dados serão usados apenas para contato e continuidade do atendimento.{" "}
+                Ao enviar seus dados, você concorda com nossa{" "}
                 <a href="/politica-privacidade" className="underline">
                   Política de Privacidade
                 </a>
+                . Suas informações são tratadas com confidencialidade e utilizadas apenas para contato da nossa equipe.
               </p>
             </form>
           </div>

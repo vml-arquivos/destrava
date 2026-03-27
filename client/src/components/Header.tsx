@@ -123,7 +123,7 @@ export default function Header() {
             </Link>
             <Link href="/simular">
               <Button size="lg" className="font-semibold bg-[var(--color-caixa-blue)] hover:bg-blue-700">
-                Solicitar Análise
+                Simule seu crédito
               </Button>
             </Link>
           </div>
@@ -172,7 +172,7 @@ export default function Header() {
               <div className="pt-4 px-2 space-y-2">
                 <Link href="/simular" onClick={() => setMobileMenuOpen(false)}>
                   <Button size="lg" className="w-full font-semibold bg-[var(--color-caixa-blue)] hover:bg-blue-700">
-                    Solicitar Análise
+                    Simule seu crédito
                   </Button>
                 </Link>
                 <Link href="/colaborador/login" onClick={() => setMobileMenuOpen(false)}>
