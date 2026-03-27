@@ -100,22 +100,16 @@ export default function Home() {
       <Header />
 
       {/* HERO SECTION */}
-      <section className="relative bg-gradient-to-br from-[var(--color-caixa-blue)] via-[#002d8a] to-[var(--color-caixa-blue-dark)] text-white pt-8 pb-12 md:pt-12 md:pb-16 overflow-hidden">
+      <section className="relative bg-gradient-to-br from-[var(--color-caixa-blue)] via-[#002d8a] to-[var(--color-caixa-blue-dark)] text-white pt-6 pb-10 md:pt-8 md:pb-14 overflow-hidden">
         {/* Padrão de fundo sutil */}
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30"></div>
         {/* Gradiente decorativo */}
         <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-white/5 to-transparent pointer-events-none"></div>
 
         <div className="container relative z-10">
-          <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
+          <div className="grid md:grid-cols-2 gap-6 md:gap-10 items-start">
             <div>
-              {/* Badge de posicionamento */}
-              <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 mb-6 text-sm font-medium">
-                <Shield className="h-4 w-4 text-[var(--color-caixa-yellow)]" />
-                <span></span>
-              </div>
-
-              <h1 className="text-4xl md:text-5xl font-bold mb-6 leading-tight">
+              <h1 className="text-4xl md:text-5xl font-bold mb-5 leading-tight">
                 Assessoria Especializada em Captação de Crédito Bancário e Governamental.
               </h1>
               <p className="text-xl md:text-2xl mb-4 text-white/90 leading-relaxed">
@@ -163,7 +157,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="flex items-start justify-center mt-8 md:mt-0">
+            <div className="flex items-start justify-center mt-6 md:mt-0">
               <HeroCarousel />
             </div>
           </div>

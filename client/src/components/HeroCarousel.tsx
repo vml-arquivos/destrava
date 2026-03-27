@@ -97,7 +97,7 @@ export default function HeroCarousel() {
       role="region"
     >
       {/* Imagem principal */}
-      <div className="relative overflow-hidden rounded-2xl shadow-2xl aspect-square w-full max-w-lg mx-auto">
+      <div className="relative overflow-hidden rounded-2xl shadow-2xl aspect-square w-full max-w-xl mx-auto">
         <img
           key={current}
           src={slides[current].src}
