@@ -178,7 +178,7 @@ export default function Home() {
         <div className="container">
           <div className="max-w-4xl mx-auto text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold mb-6">
-              A solução que sua empresa procura para captar recursos com mais clareza e menos desgaste
+              A solução que sua empresa precisa para obter crédito com clareza, honestidade e menos desgaste
             </h2>
             <p className="text-lg text-muted-foreground leading-relaxed">
               A Destrava atua com assessoria empresarial para empresas que precisam de direção, organização e apoio real na busca por recursos. Mais do que apresentar caminhos, nossa atuação envolve entendimento do cenário, análise estratégica e condução completa do processo, reduzindo a carga operacional do empresário e dando mais segurança em cada etapa.

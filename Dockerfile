@@ -22,6 +22,22 @@ RUN ls node_modules/scheduler/index.js && echo "OK: scheduler symlink presente"
 # Copiar todo o código fonte
 COPY . .
 
+# ─── Variáveis de build do Vite (OBRIGATÓRIAS) ───────────────────────────────
+# O Vite bake essas variáveis no bundle em build-time via import.meta.env.
+# Devem ser definidas como Build Args no Coolify (Settings > Build Args):
+#   VITE_SUPABASE_URL=https://<project>.supabase.co
+#   VITE_SUPABASE_ANON_KEY=<anon-key>
+# Sem elas o bundle usa undefined e o login falha com placeholder.supabase.co.
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+
+# Validar que as variáveis foram fornecidas antes de buildar
+RUN if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then \
+      echo "ERRO: VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY sao obrigatorias como Build Args no Coolify." && exit 1; \
+    fi
+
 # Build: frontend (Vite) + backend (esbuild)
 RUN pnpm run build
 

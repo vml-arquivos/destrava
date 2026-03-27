@@ -1,22 +1,20 @@
 import { createClient } from "@supabase/supabase-js";
 
 // ─── Variáveis de ambiente ────────────────────────────────────────────────────
-// Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no Coolify/ambiente.
-// Sem essas variáveis, a área restrita (/colaborador) ficará indisponível.
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY são OBRIGATÓRIAS.
+// Devem ser definidas como Build Args no Coolify/Dockerfile antes do `pnpm build`.
+// Se ausentes em build-time, o Vite bake undefined no bundle e o login falha.
+const SUPABASE_URL: string = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY: string = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.warn(
-    "[Supabase] VITE_SUPABASE_URL ou VITE_SUPABASE_ANON_KEY não configuradas. " +
-    "A área restrita estará indisponível."
+  throw new Error(
+    "[Supabase] VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY são obrigatórias. " +
+    "Defina-as como variáveis de ambiente de BUILD no Coolify antes de rebuildar."
   );
 }
 
-export const supabase = createClient(
-  SUPABASE_URL ?? "https://placeholder.supabase.co",
-  SUPABASE_ANON_KEY ?? "placeholder-key"
-);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ─── Tipos do banco de dados ─────────────────────────────────────────────────
 
