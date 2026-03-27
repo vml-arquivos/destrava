@@ -1,5 +1,6 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import HeroCarousel from "@/components/HeroCarousel";
 import SEO, { organizationStructuredData, faqStructuredData } from "@/components/SEO";
 import BenefitCard from "@/components/BenefitCard";
 import TestimonialCard from "@/components/TestimonialCard";
@@ -106,7 +107,7 @@ export default function Home() {
         <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-white/5 to-transparent pointer-events-none"></div>
 
         <div className="container relative z-10">
-          <div className="grid md:grid-cols-2 gap-8 items-center">
+          <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
             <div>
               {/* Badge de posicionamento */}
               <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 mb-6 text-sm font-medium">
@@ -162,12 +163,8 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="hidden md:flex md:items-start md:justify-center">
-              <img
-                src="/3.png"
-                alt="Assessoria empresarial para captação de recursos - Destrava"
-                className="rounded-2xl shadow-2xl w-full max-w-lg object-cover"
-              />
+            <div className="flex items-start justify-center mt-8 md:mt-0">
+              <HeroCarousel />
             </div>
           </div>
         </div>

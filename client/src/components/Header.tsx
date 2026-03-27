@@ -23,10 +23,12 @@ export default function Header() {
       href: "/credito-empresas",
       children: [
         { label: "Visão Geral", href: "/credito-empresas", icon: Building2, desc: "Soluções para empresas de todos os portes" },
-        { label: "PRONAMPE", href: "/credito-empresas#pronampe", icon: Building2, desc: "Até R$ 150k - Selic + 6%" },
-        { label: "Giro CAIXA Fácil", href: "/giro-caixa-facil", icon: Building2, desc: "Até R$ 70k - A partir 2,99%" },
-        { label: "PRONAMP", href: "/credito-empresas#pronamp", icon: Building2, desc: "Agronegócio - Médio Produtor" },
-        { label: "Médio e Grande Porte", href: "/credito-empresas#medio-grande", icon: Building2, desc: "Soluções corporativas" },
+        { label: "PRONAMPE", href: "/credito-empresas#pronampe", icon: Building2, desc: "Até R$ 150k · Selic + 6% a.a." },
+        { label: "Capital de Giro Caixa", href: "/credito-empresas#giro-caixa", icon: Building2, desc: "Até R$ 70k · A partir de 2,99% a.m." },
+        { label: "FCO", href: "/credito-empresas#fco", icon: Building2, desc: "Fundo Constitucional do Centro-Oeste" },
+        { label: "FGI PEAC", href: "/credito-empresas#fgi", icon: Building2, desc: "Garantia para capital de giro e investimentos" },
+        { label: "FAMPE", href: "/credito-empresas#fampe", icon: Building2, desc: "Fundo de Aval para Micro e Pequenas Empresas" },
+        { label: "ProCred 360", href: "/credito-empresas#procred", icon: Building2, desc: "Até 48 meses para pagar" },
       ],
     },
     {
