@@ -494,8 +494,13 @@ function CenarioComImposto() {
     setSalvando(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from("simulacoes_colaborador").insert({
-        colaborador_id: user?.id,
+      if (!user) {
+        toast.error("Sessão expirada. Faça login novamente.");
+        setSalvando(false);
+        return;
+      }
+      const { error } = await supabase.from("simulacoes_colaborador").insert({
+        colaborador_id: user.id,
         cliente_nome: form.nome,
         cliente_telefone: form.telefone,
         cliente_cpf_cnpj: form.cpfCnpj || null,
@@ -514,7 +519,13 @@ function CenarioComImposto() {
         linha_credito: form.linhaCredito || null,
         observacoes: form.observacoes ? `[com_imposto] ${form.observacoes}` : "[com_imposto]",
       });
-      setSalvo(true);
+      if (error) {
+        console.error("[Calculadora] Erro ao salvar simulação:", error);
+        toast.error(`Erro ao salvar: ${error.message}`);
+      } else {
+        setSalvo(true);
+        toast.success("Simulação salva com sucesso!");
+      }
     } catch (err) {
       console.error(err);
       toast.error("Erro ao salvar simulação. Verifique a conexão e tente novamente.");
@@ -693,8 +704,13 @@ function CenarioSemImposto() {
     setSalvando(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from("simulacoes_colaborador").insert({
-        colaborador_id: user?.id,
+      if (!user) {
+        toast.error("Sessão expirada. Faça login novamente.");
+        setSalvando(false);
+        return;
+      }
+      const { error } = await supabase.from("simulacoes_colaborador").insert({
+        colaborador_id: user.id,
         cliente_nome: form.nome,
         cliente_telefone: form.telefone,
         cliente_cpf_cnpj: form.cpfCnpj || null,
@@ -711,7 +727,13 @@ function CenarioSemImposto() {
         linha_credito: form.linhaCredito || null,
         observacoes: form.observacoes ? `[sem_imposto] ${form.observacoes}` : "[sem_imposto]",
       });
-      setSalvo(true);
+      if (error) {
+        console.error("[Calculadora] Erro ao salvar simulação:", error);
+        toast.error(`Erro ao salvar: ${error.message}`);
+      } else {
+        setSalvo(true);
+        toast.success("Simulação salva com sucesso!");
+      }
     } catch (err) {
       console.error(err);
       toast.error("Erro ao salvar simulação. Verifique a conexão e tente novamente.");
@@ -883,8 +905,13 @@ function CenarioComparativo() {
     setSalvando(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Sessão expirada. Faça login novamente.");
+        setSalvando(false);
+        return;
+      }
       const base = {
-        colaborador_id: user?.id,
+        colaborador_id: user.id,
         cliente_nome: form.nome,
         cliente_telefone: form.telefone,
         cliente_cpf_cnpj: form.cpfCnpj || null,
@@ -894,8 +921,9 @@ function CenarioComparativo() {
         banco: form.banco || null,
         linha_credito: form.linhaCredito || null,
       };
+      let hasError = false;
       if (resA) {
-        await supabase.from("simulacoes_colaborador").insert({
+        const { error } = await supabase.from("simulacoes_colaborador").insert({
           ...base,
           taxa_juros_mensal: parseFloat(form.taxaA),
           imposto_percentual: parseFloat(form.pctImposto) || null,
@@ -907,9 +935,10 @@ function CenarioComparativo() {
           custo_efetivo_total: resA.custoTotalOperacao,
           observacoes: form.observacoes ? `[com_imposto] ${form.observacoes}` : "[com_imposto]",
         });
+        if (error) { console.error("[Calculadora] Erro cenário A:", error); toast.error(`Erro cenário A: ${error.message}`); hasError = true; }
       }
       if (resB) {
-        await supabase.from("simulacoes_colaborador").insert({
+        const { error } = await supabase.from("simulacoes_colaborador").insert({
           ...base,
           taxa_juros_mensal: parseFloat(form.taxaB),
           total_comissao: resB.comissaoValor,
@@ -919,8 +948,12 @@ function CenarioComparativo() {
           custo_efetivo_total: resB.custoTotalOperacao,
           observacoes: form.observacoes ? `[sem_imposto] ${form.observacoes}` : "[sem_imposto]",
         });
+        if (error) { console.error("[Calculadora] Erro cenário B:", error); toast.error(`Erro cenário B: ${error.message}`); hasError = true; }
       }
-      setSalvo(true);
+      if (!hasError) {
+        setSalvo(true);
+        toast.success("Simulações salvas com sucesso!");
+      }
     } catch (err) {
       console.error(err);
       toast.error("Erro ao salvar simulação. Verifique a conexão e tente novamente.");

@@ -175,6 +175,11 @@ export default function Clientes() {
     setSalvando(true);
 
     const { data: userData } = await supabase.auth.getUser();
+    if (!userData?.user) {
+      alert("Sessão expirada. Faça login novamente.");
+      setSalvando(false);
+      return;
+    }
     // Inserir em 'leads' (tabela 'clientes' não existe no schema real)
     const { data, error } = await supabase
       .from("leads")
@@ -188,7 +193,7 @@ export default function Clientes() {
         cidade: form.cidade || null,
         estado: form.estado || null,
         status: form.status,
-        responsavel_id: userData?.user?.id || null,
+        responsavel_id: userData.user.id,
         observacoes_ia: form.observacoes || null,
         proximo_followup: form.proximo_contato || null,
         origem: "painel_interno",
@@ -199,7 +204,10 @@ export default function Clientes() {
       .select()
       .single();
 
-    if (!error && data) {
+    if (error) {
+      console.error("[Clientes] Erro ao salvar cliente:", error);
+      alert(`Erro ao salvar cliente: ${error.message}`);
+    } else if (data) {
       setClientes(prev => [data, ...prev]);
       setModalNovoCliente(false);
       setForm({
