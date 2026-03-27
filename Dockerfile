@@ -14,7 +14,10 @@ COPY package.json pnpm-lock.yaml .npmrc ./
 COPY patches/ ./patches/
 
 # Instalar dependências (incluindo devDependencies para o build)
-RUN pnpm install --frozen-lockfile
+# --mount=type=cache: o pnpm store persiste em disco entre builds no mesmo host.
+# Primeira execução: baixa tudo (~55s). Execuções seguintes: lê do cache (~5s).
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
 # Garantir que scheduler tem symlink (falha o build se não estiver)
 RUN ls node_modules/scheduler/index.js && echo "OK: scheduler symlink presente"
@@ -58,7 +61,9 @@ COPY package.json pnpm-lock.yaml .npmrc ./
 COPY patches/ ./patches/
 
 # Instalar apenas dependências de produção
-RUN pnpm install --frozen-lockfile --prod
+# Mesmo cache mount do builder — reutiliza pacotes já baixados no Stage 1.
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --prod
 
 # Copiar o build gerado no stage anterior
 COPY --from=builder /app/dist ./dist
