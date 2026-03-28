@@ -357,7 +357,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO crm_qualificacoes_ia (\n  lead_id,\n  score,\n  temperatura,\n  etapa_sugerida,\n  resumo,\n  proxima_acao,\n  probabilidade_conv,\n  documentos_faltando,\n  pontos_positivos,\n  pontos_atencao,\n  created_at\n)\nVALUES (\n  {{ $json.leadId }},\n  {{ $json.score || 0 }},\n  '{{ $json.temperatura || \"frio\" }}',\n  '{{ $json.etapa_sugerida || \"Novo\" }}',\n  '{{ ($json.resumo || '').replace(/'/g, \"''\") }}',\n  '{{ ($json.proxima_acao || '').replace(/'/g, \"''\") }}',\n  {{ $json.probabilidade_conv || 0 }},\n  '{{ JSON.stringify($json.documentos_faltando || []) }}'::jsonb,\n  '{{ JSON.stringify($json.pontos_positivos || []) }}'::jsonb,\n  '{{ JSON.stringify($json.pontos_atencao || []) }}'::jsonb,\n  NOW()\n)\nRETURNING id;",
+        "query": "INSERT INTO crm_qualificacoes_ia (\n  lead_id,\n  score,\n  temperatura,\n  etapa_sugerida,\n  resumo,\n  proxima_acao,\n  probabilidade_conversao,\n  documentos_faltando,\n  pontos_positivos,\n  pontos_atencao,\n  created_at\n)\nVALUES (\n  {{ $json.leadId }},\n  {{ $json.score || 0 }},\n  '{{ $json.temperatura || \"frio\" }}',\n  '{{ $json.etapa_sugerida || \"Novo\" }}',\n  '{{ ($json.resumo || '').replace(/'/g, \"''\") }}',\n  '{{ ($json.proxima_acao || '').replace(/'/g, \"''\") }}',\n  {{ $json.probabilidade_conversao || 0 }},\n  '{{ JSON.stringify($json.documentos_faltando || []) }}'::jsonb,\n  '{{ JSON.stringify($json.pontos_positivos || []) }}'::jsonb,\n  '{{ JSON.stringify($json.pontos_atencao || []) }}'::jsonb,\n  NOW()\n)\nRETURNING id;",
         "options": {}
       },
       "id": "salvar-qualificacao",

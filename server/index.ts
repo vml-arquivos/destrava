@@ -140,27 +140,35 @@ async function startServer() {
         updated_at: now,
       };
 
-      let leadId = `local-${Date.now()}`;
+      let leadId: string | null = null;
+      let dbError: string | null = null;
 
       if (supabaseReady) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any).from("leads").insert(lead).select("id").single();
         if (error) {
+          dbError = error.message;
           console.error("[LEAD] Erro Supabase:", error.message);
-        } else {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          leadId = (data as any).id;
-          console.log(`[LEAD] Salvo no Supabase: ${lead.nome} — ${lead.produto_interesse}`);
+          res.status(500).json({ success: false, message: `Erro ao salvar lead no banco: ${error.message}` });
+          return;
         }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        leadId = (data as any).id;
+        console.log(`[LEAD] Salvo no Supabase: ${lead.nome} — ${lead.produto_interesse}`);
+      } else {
+        // Supabase não configurado — registra localmente mas não dispara n8n
+        leadId = `local-${Date.now()}`;
+        console.warn("[LEAD] Supabase não configurado — lead não persistido no banco.");
+        res.status(201).json({ success: true, id: leadId, message: "Lead registrado localmente (Supabase não configurado)." });
+        return;
       }
 
+      // n8n só é disparado após persistência bem-sucedida
       dispararN8n("novo_lead", {
         id: leadId, nome: lead.nome, telefone: lead.telefone,
         empresa: lead.empresa, email: lead.email, produto: lead.produto_interesse,
         valorSolicitado: lead.valor_solicitado, prazo: lead.prazo_meses,
         origem: lead.origem, criadoEm: now,
-      }).then(async (ok) => {
-        // n8n_notificado não existe no schema real — sem update
       });
 
       res.status(201).json({ success: true, id: leadId, message: "Lead registrado com sucesso!" });
@@ -231,20 +239,27 @@ async function startServer() {
         updated_at: now,
       };
 
-      let simId = `local-${Date.now()}`;
+      let simId: string | null = null;
 
       if (supabaseReady) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any).from("leads").insert(sim).select("id").single();
         if (error) {
           console.error("[SIM] Erro Supabase:", error.message);
-        } else {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          simId = (data as any).id;
-          console.log(`[SIM] Salvo como lead: ${sim.nome} — ${sim.produto_interesse}`);
+          res.status(500).json({ success: false, message: `Erro ao salvar simulação no banco: ${error.message}` });
+          return;
         }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        simId = (data as any).id;
+        console.log(`[SIM] Salvo como lead: ${sim.nome} — ${sim.produto_interesse}`);
+      } else {
+        simId = `local-${Date.now()}`;
+        console.warn("[SIM] Supabase não configurado — simulação não persistida.");
+        res.status(201).json({ success: true, id: simId, message: "Simulação registrada localmente (Supabase não configurado)." });
+        return;
       }
 
+      // n8n só é disparado após persistência bem-sucedida
       dispararN8n("nova_simulacao", {
         id: simId, nome: sim.nome, telefone: sim.telefone,
         empresa: sim.empresa, email: sim.email, produto: sim.produto_interesse,
@@ -296,20 +311,27 @@ async function startServer() {
         updated_at: now,
       };
 
-      let contatoId = `local-${Date.now()}`;
+      let contatoId: string | null = null;
 
       if (supabaseReady) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any).from("leads").insert(contato).select("id").single();
         if (error) {
           console.error("[CONTATO] Erro Supabase:", error.message);
-        } else {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          contatoId = (data as any).id;
-          console.log(`[CONTATO] Salvo como lead: ${contato.nome} — ${req.body.assunto}`);
+          res.status(500).json({ success: false, message: `Erro ao salvar contato no banco: ${error.message}` });
+          return;
         }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        contatoId = (data as any).id;
+        console.log(`[CONTATO] Salvo como lead: ${contato.nome} — ${req.body.assunto}`);
+      } else {
+        contatoId = `local-${Date.now()}`;
+        console.warn("[CONTATO] Supabase não configurado — contato não persistido.");
+        res.status(201).json({ success: true, message: "Mensagem enviada localmente (Supabase não configurado)." });
+        return;
       }
 
+      // n8n só é disparado após persistência bem-sucedida
       dispararN8n("novo_contato", {
         id: contatoId, nome: contato.nome, email: contato.email, telefone: contato.telefone,
         assunto: req.body.assunto, mensagem: req.body.mensagem, criadoEm: now,
