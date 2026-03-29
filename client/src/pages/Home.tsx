@@ -31,6 +31,7 @@ import {
   MessageCircle,
   Target,
   Lightbulb,
+  ArrowRight,
 } from "lucide-react";
 import { useState, FormEvent } from "react";
 import { useLocation, Link } from "wouter";
@@ -324,6 +325,84 @@ export default function Home() {
                 Mais método, menos improviso e mais fluidez para a empresa avançar.
               </p>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* LINHAS DE CRÉDITO */}
+      <section className="py-20 bg-muted/30">
+        <div className="container">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">Linhas de Crédito Disponíveis</h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Trabalhamos com as principais linhas de crédito do mercado. Conheça cada programa e descubra qual é o ideal para sua empresa.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[
+              {
+                logo: "/logo-pronampe.jpg",
+                title: "PRONAMPE",
+                desc: "Até R$ 150 mil com Selic + 6% a.a. para MEI, microempresas e pequenas empresas. Carência de 6 meses.",
+                href: "/pronampe",
+                badge: "Mais popular",
+                badgeColor: "bg-green-100 text-green-700",
+              },
+              {
+                logo: "/logo-procred360.webp",
+                title: "ProCred 360",
+                desc: "Juros 50% menores que o mercado para MEI e microempresas com faturamento até R$ 360 mil.",
+                href: "/procred360",
+                badge: "Programa Acredita",
+                badgeColor: "bg-blue-100 text-blue-700",
+              },
+              {
+                logo: "/logo-caixa.png",
+                title: "Giro CAIXA Fácil",
+                desc: "Até R$ 1 milhão para capital de giro com taxa pré-fixada e prazo de até 40 meses. CAIXA Econômica.",
+                href: "/giro-caixa-facil",
+                badge: "Capital de giro",
+                badgeColor: "bg-orange-100 text-orange-700",
+              },
+              {
+                logo: "/logo-bndes-fgi.jpg",
+                title: "PEAC FGI",
+                desc: "De R$ 5 mil a R$ 10 milhões com garantia do FGI/BNDES. Prazo até 60 meses, carência até 12 meses.",
+                href: "/peac-fgi",
+                badge: "Grandes volumes",
+                badgeColor: "bg-purple-100 text-purple-700",
+              },
+              {
+                logo: "/logo-fco.png",
+                title: "FCO",
+                desc: "Financiamento para empresas e produtores rurais de GO, MT, MS e DF. Juros a partir de 8,60% a.a.",
+                href: "/fco",
+                badge: "Centro-Oeste",
+                badgeColor: "bg-violet-100 text-violet-700",
+              },
+              {
+                logo: "/logo-fampe.webp",
+                title: "FAMPE",
+                desc: "O Sebrae complementa até 80% das garantias para você acessar crédito de R$ 10 mil a R$ 700 mil.",
+                href: "/fampe",
+                badge: "Sebrae",
+                badgeColor: "bg-amber-100 text-amber-700",
+              },
+            ].map((linha) => (
+              <div key={linha.title} className="bg-card rounded-xl border border-border p-6 flex flex-col hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="h-12 w-24 flex items-center">
+                    <img src={linha.logo} alt={linha.title} className="max-h-12 max-w-full object-contain" />
+                  </div>
+                  <span className={`text-xs font-semibold px-2 py-1 rounded-full ${linha.badgeColor}`}>{linha.badge}</span>
+                </div>
+                <h3 className="text-lg font-bold mb-2">{linha.title}</h3>
+                <p className="text-muted-foreground text-sm flex-1 mb-4">{linha.desc}</p>
+                <Link href={linha.href} className="inline-flex items-center gap-1 text-primary font-semibold text-sm hover:underline">
+                  Saiba mais <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            ))}
           </div>
         </div>
       </section>

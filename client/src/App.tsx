@@ -19,6 +19,13 @@ import Sucesso from "./pages/Sucesso";
 import CapturaLead from "./pages/CapturaLead";
 import SimuladorPublico from "./pages/SimuladorPublico";
 import RatingBancoBrasil from "./pages/RatingBancoBrasil";
+import RatingBancoCentral from "./pages/RatingBancoCentral";
+import Pronampe from "./pages/Pronampe";
+import Procred360 from "./pages/Procred360";
+import PeacFgi from "./pages/PeacFgi";
+import Fco from "./pages/Fco";
+import Fampe from "./pages/Fampe";
+import GiroCaixaFacilLP from "./pages/GiroCaixaFacilLP";
 import CertificadoDigital from "./pages/CertificadoDigital";
 import ConsultaSPCSerasa from "./pages/ConsultaSPCSerasa";
 import CreditoEmpresas from "./pages/CreditoEmpresas";
@@ -54,13 +61,19 @@ function Router() {
 
       {/* Crédito Empresarial */}
       <Route path="/credito-empresas" component={CreditoEmpresas} />
-      <Route path="/giro-caixa-facil" component={GiroCaixaFacil} />
+      <Route path="/giro-caixa-facil" component={GiroCaixaFacilLP} />
+      <Route path="/pronampe" component={Pronampe} />
+      <Route path="/procred360" component={Procred360} />
+      <Route path="/peac-fgi" component={PeacFgi} />
+      <Route path="/fco" component={Fco} />
+      <Route path="/fampe" component={Fampe} />
 
       {/* Crédito Pessoa Física */}
       <Route path="/credito-pessoal" component={CreditoPessoaFisica} />
 
       {/* Serviços */}
       <Route path="/rating-banco-brasil" component={RatingBancoBrasil} />
+      <Route path="/rating-banco-central" component={RatingBancoCentral} />
       <Route path="/certificado-digital" component={CertificadoDigital} />
       <Route path="/consulta-spc-serasa" component={ConsultaSPCSerasa} />
 

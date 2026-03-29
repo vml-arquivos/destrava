@@ -7,14 +7,16 @@ export default function Footer() {
 
   const linksCredito = [
     { label: "Crédito Empresarial", href: "/credito-empresas" },
-    { label: "PRONAMPE", href: "/credito-empresas" },
+    { label: "PRONAMPE", href: "/pronampe" },
     { label: "Giro CAIXA Fácil", href: "/giro-caixa-facil" },
-    { label: "PRONAMP", href: "/credito-empresas" },
-    { label: "Médio e Grande Porte", href: "/credito-empresas#medio-grande" },
+    { label: "ProCred 360", href: "/procred360" },
+    { label: "PEAC FGI", href: "/peac-fgi" },
+    { label: "FCO", href: "/fco" },
+    { label: "FAMPE", href: "/fampe" },
   ];
 
   const linksServicos = [
-    { label: "Rating Banco do Brasil", href: "/rating-banco-brasil" },
+    { label: "Rating Banco Central", href: "/rating-banco-central" },
     { label: "Certificado Digital", href: "/certificado-digital" },
     { label: "Consulta SPC/Serasa", href: "/consulta-spc-serasa" },
   ];
