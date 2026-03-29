@@ -447,6 +447,7 @@ function CamposEmprestimo({
 // ─── Cenário A: COM Imposto ───────────────────────────────────────────────────
 
 function CenarioComImposto() {
+  const { user } = useAuth();
   const [form, setForm] = useState<FormComImposto>({
     ...formBaseInicial,
     valorFiscal: "",
@@ -658,7 +659,8 @@ function CenarioComImposto() {
 // ─── Cenário B: SEM Imposto ───────────────────────────────────────────────────
 
 function CenarioSemImposto() {
-  const [form, setForm] = useState<FormBase>({ ...formBaseInicial });
+  const { user } = useAuth();
+  const [form, setForm] = useState<FormSemImposto>({ ...formBaseInicial });
   const [erros, setErros] = useState<Record<string, string>>({});
   const [resultado, setResultado] = useState<ResultadoCalculo | null>(null);
   const [salvando, setSalvando] = useState(false);
