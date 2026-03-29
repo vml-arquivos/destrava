@@ -474,6 +474,54 @@ async function startServer() {
     }
   });
 
+  // ─── POST /api/simulacoes — Salvar simulação do colaborador ────────────────
+  app.post("/api/simulacoes", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const now = new Date().toISOString();
+      
+      const { rows } = await pool.query(
+        `INSERT INTO simulacoes_colaborador
+          (colaborador_id, cliente_nome, cliente_telefone, cliente_cpf_cnpj,
+           valor_solicitado, quantidade_parcelas, taxa_juros_mensal, comissao_percentual,
+           total_comissao, valor_parcela, valor_total_pagar, total_juros,
+           custo_efetivo_total, imposto_percentual, total_imposto,
+           banco, linha_credito, observacoes, status, criado_em, atualizado_em)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'rascunho',$19,$19)
+         RETURNING id`,
+        [
+          colaborador.id,
+          req.body.cliente_nome || "",
+          req.body.cliente_telefone || null,
+          req.body.cliente_cpf_cnpj || null,
+          req.body.valor_solicitado || null,
+          req.body.quantidade_parcelas || null,
+          req.body.taxa_juros_mensal || null,
+          req.body.comissao_percentual || null,
+          req.body.total_comissao || null,
+          req.body.valor_parcela || null,
+          req.body.valor_total_pagar || null,
+          req.body.total_juros || null,
+          req.body.custo_efetivo_total || null,
+          req.body.imposto_percentual || null,
+          req.body.total_imposto || null,
+          req.body.banco || null,
+          req.body.linha_credito || null,
+          req.body.observacoes || null,
+          now,
+        ]
+      );
+      
+      const simId = rows[0].id;
+      console.log(`[SIMULACAO] Salva para colaborador ${colaborador.id}: ${req.body.cliente_nome}`);
+      
+      res.status(201).json({ success: true, id: simId, message: "Simulação salva com sucesso!" });
+    } catch (err) {
+      console.error("[POST /api/simulacoes]", err);
+      res.status(500).json({ error: "Erro ao salvar simulação" });
+    }
+  });
+
   // ─── GET /api/simulacoes — Listar simulações do colaborador ────────────────
   app.get("/api/simulacoes", requireJwt, async (req: Request, res: Response) => {
     try {
