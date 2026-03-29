@@ -96,26 +96,25 @@ export default function Clientes() {
 
   async function carregarClientes() {
     setLoading(true);
-    // tabela 'clientes' não existe — usar 'leads' como entidade canônica
-    const { data, error } = await supabase
-      .from("leads")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (!error && data) setClientes(data as any);
+    try {
+      const data = await apiFetch("/api/leads");
+      setClientes(data as any);
+    } catch (err) {
+      console.error(err);
+      setClientes([]);
+    }
     setLoading(false);
   }
 
   async function carregarAtividades(clienteId: string) {
     setLoadingAtividades(true);
-    // tabela 'atividades_crm' não existe — usar 'crm_atividades' com campo lead_id
-    const { data, error } = await supabase
-      .from("crm_atividades")
-      .select("*")
-      .eq("lead_id", clienteId)
-      .order("created_at", { ascending: false });
-
-    if (!error && data) setAtividades(data as any);
+    try {
+      const data = await apiFetch(`/api/crm/atividades?lead_id=${clienteId}`);
+      setAtividades(data as any);
+    } catch (err) {
+      console.error(err);
+      setAtividades([]);
+    }
     setLoadingAtividades(false);
   }
 
@@ -125,23 +124,30 @@ export default function Clientes() {
   }
 
   async function atualizarStatus(clienteId: string, novoStatus: string) {
-    const { error } = await supabase
-      .from("leads")
-      .update({ status: novoStatus })
-      .eq("id", clienteId);
-
-    if (!error) {
+    try {
+      await apiFetch(`/api/leads/${clienteId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: novoStatus }),
+      });
       setClientes(prev => prev.map(c => c.id === clienteId ? { ...c, status: novoStatus as any } : c));
       if (clienteSelecionado?.id === clienteId) {
         setClienteSelecionado(prev => prev ? { ...prev, status: novoStatus as any } : null);
       }
       // Registrar atividade de mudança de status em crm_atividades
-      await apiFetch("/api/crm/atividades", { method: "POST", body: JSON.stringify({
-        lead_id: clienteId,
-        tipo: "status_change",
-        titulo: `Status alterado para: ${STATUS_CONFIG[novoStatus as keyof typeof STATUS_CONFIG]?.label}`,
-        concluido: true,
+      await apiFetch("/api/crm/atividades", {
+        method: "POST",
+        body: JSON.stringify({
+          lead_id: clienteId,
+          tipo: "status_change",
+          descricao: `Status alterado para: ${STATUS_CONFIG[novoStatus as keyof typeof STATUS_CONFIG]?.label}`,
+          resultado: "concluido",
+        }),
       });
+      toast.success("Status atualizado.");
+      fetchClientes();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao atualizar status.");
     }
   }
 
@@ -149,23 +155,26 @@ export default function Clientes() {
     if (!clienteSelecionado || !novaAtividade.descricao) return;
     setSalvando(true);
 
-    const { data, error } = await supabase
-      .from("crm_atividades")
-      .insert({
-        lead_id: clienteSelecionado.id,
-        tipo: novaAtividade.tipo,
-        titulo: novaAtividade.descricao.substring(0, 100),
-        descricao: novaAtividade.descricao,
-        resultado: novaAtividade.resultado || null,
-        concluido: true,
-      })
-      .select()
-      .single();
+    try {
+      const data = await apiFetch("/api/crm/atividades", {
+        method: "POST",
+        body: JSON.stringify({
+          lead_id: clienteSelecionado.id,
+          tipo: novaAtividade.tipo,
+          descricao: novaAtividade.descricao,
+          resultado: novaAtividade.resultado || null,
+        }),
+      });
 
-    if (!error && data) {
-      setAtividades(prev => [data, ...prev]);
-      setNovaAtividade({ tipo: "nota", descricao: "", resultado: "" });
-      setModalAtividade(false);
+      if (data) {
+        setAtividades(prev => [data, ...prev]);
+        setNovaAtividade({ tipo: "nota", descricao: "", resultado: "" });
+        setModalAtividade(false);
+        toast.success("Atividade registrada.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao salvar atividade.");
     }
     setSalvando(false);
   }
@@ -174,58 +183,56 @@ export default function Clientes() {
     if (!form.nome || !form.telefone) return;
     setSalvando(true);
 
-    // User obtained from useAuth hook
-    if (!userData?.user) {
-      alert("Sessão expirada. Faça login novamente.");
-      setSalvando(false);
-      return;
-    }
-    // Inserir em 'leads' (tabela 'clientes' não existe no schema real)
-    const { data, error } = await supabase
-      .from("leads")
-      .insert({
-        nome: form.nome,
-        empresa: form.empresa || null,
-        cpf_cnpj: form.cpf_cnpj || null,
-        telefone: form.telefone,
-        email: form.email || null,
-        tipo_pessoa: form.tipo as "pf" | "pj",
-        cidade: form.cidade || null,
-        estado: form.estado || null,
-        status: form.status,
-        responsavel_id: userData.user.id,
-        observacoes_ia: form.observacoes || null,
-        proximo_followup: form.proximo_contato || null,
-        origem: "painel_interno",
-        etapa_funil: "Novo",
-        temperatura: "frio",
-        score_ia: 0,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error("[Clientes] Erro ao salvar cliente:", error);
-      alert(`Erro ao salvar cliente: ${error.message}`);
-    } else if (data) {
-      setClientes(prev => [data, ...prev]);
-      setModalNovoCliente(false);
-      setForm({
-        nome: "", empresa: "", cpf_cnpj: "", telefone: "", email: "",
-        tipo: "pj", cidade: "", estado: "", faturamento_anual: "",
-        segmento: "", status: "lead", prioridade: "media", observacoes: "",
-        proximo_contato: ""
+    try {
+      const data = await apiFetch("/api/leads", {
+        method: "POST",
+        body: JSON.stringify({
+          nome: form.nome,
+          empresa: form.empresa || null,
+          cpf_cnpj: form.cpf_cnpj || null,
+          telefone: form.telefone,
+          email: form.email || null,
+          tipo_pessoa: form.tipo as "pf" | "pj",
+          cidade: form.cidade || null,
+          estado: form.estado || null,
+          status: form.status,
+          observacoes_ia: form.observacoes || null,
+          proximo_followup: form.proximo_contato || null,
+          origem: "painel_interno",
+          etapa_funil: "Novo",
+          temperatura: "frio",
+          score_ia: 0,
+        }),
       });
+
+      if (data) {
+        setClientes(prev => [data, ...prev]);
+        setModalNovoCliente(false);
+        setForm({
+          nome: "", empresa: "", cpf_cnpj: "", telefone: "", email: "",
+          tipo: "pj", cidade: "", estado: "", faturamento_anual: "",
+          segmento: "", status: "lead", prioridade: "media", observacoes: "",
+          proximo_contato: ""
+        });
+        toast.success("Cliente criado com sucesso.");
+      }
+    } catch (err: any) {
+      console.error("[Clientes] Erro ao salvar cliente:", err);
+      toast.error(err.message || "Erro ao salvar cliente.");
     }
     setSalvando(false);
   }
 
   async function excluirCliente(clienteId: string) {
     if (!confirm("Tem certeza que deseja excluir este cliente?")) return;
-    await apiFetch(`/api/leads/${clienteId}`, { method: "DELETE" });
-    if (!error) {
+    try {
+      await apiFetch(`/api/leads/${clienteId}`, { method: "DELETE" });
       setClientes(prev => prev.filter(c => c.id !== clienteId));
       if (clienteSelecionado?.id === clienteId) setClienteSelecionado(null);
+      toast.success("Cliente excluído.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao excluir cliente.");
     }
   }
 
