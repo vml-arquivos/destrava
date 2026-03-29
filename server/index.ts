@@ -454,6 +454,280 @@ async function startServer() {
     res.json({ success: ok, message: ok ? "Webhook enviado com sucesso!" : "Falha ao enviar webhook. Verifique a URL." });
   });
 
+  // ─── GET /api/me — Obter dados do usuário logado ───────────────────────────
+  app.get("/api/me", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const result = await pool.query(
+        "SELECT id, email, nome, cargo, ativo FROM colaboradores WHERE id = $1",
+        [colaborador.id]
+      );
+      const user = result.rows[0];
+      if (!user) {
+        res.status(404).json({ error: "Usuário não encontrado" });
+        return;
+      }
+      res.json(user);
+    } catch (err) {
+      console.error("[GET /api/me]", err);
+      res.status(500).json({ error: "Erro ao obter usuário" });
+    }
+  });
+
+  // ─── GET /api/simulacoes — Listar simulações do colaborador ────────────────
+  app.get("/api/simulacoes", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const result = await pool.query(
+        "SELECT * FROM simulacoes_colaborador WHERE colaborador_id = $1 ORDER BY criado_em DESC",
+        [colaborador.id]
+      );
+      res.json(result.rows);
+    } catch (err) {
+      console.error("[GET /api/simulacoes]", err);
+      res.status(500).json({ error: "Erro ao listar simulações" });
+    }
+  });
+
+  // ─── PATCH /api/simulacoes/:id — Atualizar simulação ──────────────────────
+  app.patch("/api/simulacoes/:id", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      
+      // Verificar se a simulação pertence ao colaborador
+      const checkResult = await pool.query(
+        "SELECT id FROM simulacoes_colaborador WHERE id = $1 AND colaborador_id = $2",
+        [id, colaborador.id]
+      );
+      if (checkResult.rows.length === 0) {
+        res.status(403).json({ error: "Acesso negado" });
+        return;
+      }
+      
+      await pool.query(
+        "UPDATE simulacoes_colaborador SET status = $1, atualizado_em = NOW() WHERE id = $2",
+        [status, id]
+      );
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[PATCH /api/simulacoes/:id]", err);
+      res.status(500).json({ error: "Erro ao atualizar simulação" });
+    }
+  });
+
+  // ─── DELETE /api/simulacoes/:id — Deletar simulação ───────────────────────
+  app.delete("/api/simulacoes/:id", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      
+      // Verificar se a simulação pertence ao colaborador
+      const checkResult = await pool.query(
+        "SELECT id FROM simulacoes_colaborador WHERE id = $1 AND colaborador_id = $2",
+        [id, colaborador.id]
+      );
+      if (checkResult.rows.length === 0) {
+        res.status(403).json({ error: "Acesso negado" });
+        return;
+      }
+      
+      await pool.query("DELETE FROM simulacoes_colaborador WHERE id = $1", [id]);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[DELETE /api/simulacoes/:id]", err);
+      res.status(500).json({ error: "Erro ao deletar simulação" });
+    }
+  });
+
+  // ─── DELETE /api/leads/:id — Deletar lead ────────────────────────────────
+  app.delete("/api/leads/:id", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      await pool.query("DELETE FROM leads WHERE id = $1", [id]);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[DELETE /api/leads/:id]", err);
+      res.status(500).json({ error: "Erro ao deletar lead" });
+    }
+  });
+
+  // ─── POST /api/crm/atividades — Criar atividade ──────────────────────────
+  app.post("/api/crm/atividades", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const { lead_id, tipo, descricao, resultado } = req.body;
+      const now = new Date().toISOString();
+      const result = await pool.query(
+        `INSERT INTO crm_atividades (lead_id, tipo, descricao, resultado, created_at)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [lead_id, tipo, descricao, resultado || null, now]
+      );
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error("[POST /api/crm/atividades]", err);
+      res.status(500).json({ error: "Erro ao criar atividade" });
+    }
+  });
+
+  // ─── GET /api/crm/atividades — Listar atividades ──────────────────────────
+  app.get("/api/crm/atividades", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const { lead_id } = req.query;
+      let query = "SELECT * FROM crm_atividades";
+      const params: any[] = [];
+      
+      if (lead_id) {
+        query += " WHERE lead_id = $1";
+        params.push(lead_id);
+      }
+      query += " ORDER BY created_at DESC LIMIT 100";
+      
+      const result = await pool.query(query, params);
+      res.json(result.rows);
+    } catch (err) {
+      console.error("[GET /api/crm/atividades]", err);
+      res.status(500).json({ error: "Erro ao listar atividades" });
+    }
+  });
+
+  // ─── POST /api/crm/documentos — Criar documento ──────────────────────────
+  app.post("/api/crm/documentos", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const { lead_id, tipo, url, descricao } = req.body;
+      const now = new Date().toISOString();
+      const result = await pool.query(
+        `INSERT INTO crm_documentos (lead_id, tipo, url, descricao, created_at)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [lead_id, tipo, url, descricao || null, now]
+      );
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error("[POST /api/crm/documentos]", err);
+      res.status(500).json({ error: "Erro ao criar documento" });
+    }
+  });
+
+  // ─── GET /api/crm/documentos — Listar documentos ──────────────────────────
+  app.get("/api/crm/documentos", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const { lead_id } = req.query;
+      let query = "SELECT * FROM crm_documentos";
+      const params: any[] = [];
+      
+      if (lead_id) {
+        query += " WHERE lead_id = $1";
+        params.push(lead_id);
+      }
+      query += " ORDER BY created_at DESC";
+      
+      const result = await pool.query(query, params);
+      res.json(result.rows);
+    } catch (err) {
+      console.error("[GET /api/crm/documentos]", err);
+      res.status(500).json({ error: "Erro ao listar documentos" });
+    }
+  });
+
+  // ─── POST /api/crm/qualificacoes — Criar qualificação IA ──────────────────
+  app.post("/api/crm/qualificacoes", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const { lead_id, score, recomendacao, analise } = req.body;
+      const now = new Date().toISOString();
+      const result = await pool.query(
+        `INSERT INTO crm_qualificacoes_ia (lead_id, score, recomendacao, analise, created_at)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [lead_id, score, recomendacao, analise || null, now]
+      );
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error("[POST /api/crm/qualificacoes]", err);
+      res.status(500).json({ error: "Erro ao criar qualificação" });
+    }
+  });
+
+  // ─── GET /api/crm/qualificacoes — Listar qualificações ────────────────────
+  app.get("/api/crm/qualificacoes", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const { lead_id } = req.query;
+      let query = "SELECT * FROM crm_qualificacoes_ia";
+      const params: any[] = [];
+      
+      if (lead_id) {
+        query += " WHERE lead_id = $1";
+        params.push(lead_id);
+      }
+      query += " ORDER BY created_at DESC LIMIT 10";
+      
+      const result = await pool.query(query, params);
+      res.json(result.rows);
+    } catch (err) {
+      console.error("[GET /api/crm/qualificacoes]", err);
+      res.status(500).json({ error: "Erro ao listar qualificações" });
+    }
+  });
+
+  // ─── POST /api/crm/mover-funil — Mover lead no funil ──────────────────────
+  app.post("/api/crm/mover-funil", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const { lead_id, etapa_funil } = req.body;
+      await pool.query(
+        "UPDATE leads SET etapa_funil = $1, updated_at = NOW() WHERE id = $2",
+        [etapa_funil, lead_id]
+      );
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[POST /api/crm/mover-funil]", err);
+      res.status(500).json({ error: "Erro ao mover lead" });
+    }
+  });
+
+  // ─── GET /api/crm/pipeline — Obter pipeline ──────────────────────────────
+  app.get("/api/crm/pipeline", requireJwt, async (_req: Request, res: Response) => {
+    try {
+      const result = await pool.query(
+        `SELECT etapa_funil, COUNT(*) as total, SUM(valor_solicitado) as valor_total
+         FROM leads WHERE etapa_funil IS NOT NULL
+         GROUP BY etapa_funil ORDER BY etapa_funil`
+      );
+      res.json(result.rows);
+    } catch (err) {
+      console.error("[GET /api/crm/pipeline]", err);
+      res.status(500).json({ error: "Erro ao obter pipeline" });
+    }
+  });
+
+  // ─── PATCH /api/colaboradores/:id/toggle — Ativar/desativar colaborador ───
+  app.patch("/api/colaboradores/:id/toggle", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result = await pool.query(
+        "UPDATE colaboradores SET ativo = NOT ativo WHERE id = $1 RETURNING *",
+        [id]
+      );
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error("[PATCH /api/colaboradores/:id/toggle]", err);
+      res.status(500).json({ error: "Erro ao atualizar colaborador" });
+    }
+  });
+
+  // ─── POST /api/admin/sql — Executar SQL (admin) ────────────────────────────
+  app.post("/api/admin/sql", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { query } = req.body;
+      if (!query || typeof query !== "string") {
+        res.status(400).json({ error: "Query inválida" });
+        return;
+      }
+      const result = await pool.query(query);
+      res.json(result.rows);
+    } catch (err: any) {
+      console.error("[POST /api/admin/sql]", err);
+      res.status(500).json({ error: err.message || "Erro ao executar SQL" });
+    }
+  });
+
   // ─── Static files ──────────────────────────────────────────────────────────
   const staticPath =
     process.env.NODE_ENV === "production"
