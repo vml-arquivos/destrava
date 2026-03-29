@@ -1,6 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { apiFetch, getToken, setToken, removeToken } from "@/lib/api";
-import type { Colaborador } from "@/lib/supabase";
+
+export type Colaborador = {
+  id: string;
+  nome: string;
+  cargo: string;
+  email: string;
+  ativo: boolean;
+  created_at: string;
+};
 
 interface AuthState {
   user: Colaborador | null;

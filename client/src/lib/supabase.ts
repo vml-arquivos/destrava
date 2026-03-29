@@ -84,5 +84,4 @@ export interface Cliente {
   updated_at: string;
 }
 
-// Supabase client is no longer used
-export const supabase = null as any;
+// Supabase has been completely removed. Use apiFetch from lib/api.ts instead.

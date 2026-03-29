@@ -1,7 +1,15 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { apiFetch } from "@/lib/api";
-import type { SimulacaoColaborador } from "@/lib/supabase";
+
+type SimulacaoColaborador = {
+  id: string;
+  colaborador_id?: string;
+  cliente_nome: string;
+  valor_solicitado?: number;
+  status?: string;
+  [key: string]: any;
+};
 import ColaboradorLayout from "./Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
