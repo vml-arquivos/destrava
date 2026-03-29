@@ -80,12 +80,13 @@ export default function UsuariosPage() {
 
   async function carregarColaboradores() {
     setCarregando(true);
-    const { data, error } = await supabase
-      .from("colaboradores")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (!error && data) setColaboradores(data);
+    try {
+      const data = await apiFetch("/api/colaboradores");
+      setColaboradores(data ?? []);
+    } catch (err) {
+      console.error(err);
+      setColaboradores([]);
+    }
     setCarregando(false);
   }
 

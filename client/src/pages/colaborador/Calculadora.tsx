@@ -719,13 +719,8 @@ function CenarioSemImposto() {
         linha_credito: form.linhaCredito || null,
         observacoes: form.observacoes ? `[sem_imposto] ${form.observacoes}` : "[sem_imposto]",
       });
-      if (error) {
-        console.error("[Calculadora] Erro ao salvar simulação:", error);
-        toast.error(`Erro ao salvar: ${error.message}`);
-      } else {
-        setSalvo(true);
-        toast.success("Simulação salva com sucesso!");
-      }
+      setSalvo(true);
+      toast.success("Simulação salva com sucesso!");
     } catch (err) {
       console.error(err);
       toast.error("Erro ao salvar simulação. Verifique a conexão e tente novamente.");
@@ -927,24 +922,24 @@ function CenarioComparativo() {
           custo_efetivo_total: resA.custoTotalOperacao,
           observacoes: form.observacoes ? `[com_imposto] ${form.observacoes}` : "[com_imposto]",
         });
-        if (error) { console.error("[Calculadora] Erro cenário A:", error); toast.error(`Erro cenário A: ${error.message}`); hasError = true; }
       }
       if (resB) {
-        await apiFetch("/api/simulacoes", { method: "POST", body: JSON.stringify({
-          ...base,
-          taxa_juros_mensal: parseFloat(form.taxaB),
-          total_comissao: resB.comissaoValor,
-          valor_parcela: resB.parcelaMensal,
-          valor_total_pagar: resB.totalFinanciamento,
-          total_juros: resB.totalJuros,
-          custo_efetivo_total: resB.custoTotalOperacao,
-          observacoes: form.observacoes ? `[sem_imposto] ${form.observacoes}` : "[sem_imposto]",
+        await apiFetch("/api/simulacoes", {
+          method: "POST",
+          body: JSON.stringify({
+            ...base,
+            taxa_juros_mensal: parseFloat(form.taxaB),
+            total_comissao: resB.comissaoValor,
+            valor_parcela: resB.parcelaMensal,
+            valor_total_pagar: resB.totalFinanciamento,
+            total_juros: resB.totalJuros,
+            custo_efetivo_total: resB.custoTotalOperacao,
+            observacoes: form.observacoes ? `[sem_imposto] ${form.observacoes}` : "[sem_imposto]",
+          }),
         });
-        if (error) { console.error("[Calculadora] Erro cenário B:", error); toast.error(`Erro cenário B: ${error.message}`); hasError = true; }
       }
-      if (!hasError) {
-        setSalvo(true);
-        toast.success("Simulações salvas com sucesso!");
+      setSalvo(true);
+      toast.success("Simulações salvas com sucesso!");
       }
     } catch (err) {
       console.error(err);

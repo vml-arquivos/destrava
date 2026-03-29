@@ -344,20 +344,25 @@ function FichaLead({
   async function salvarAtividade() {
     if (!novaAtiv.titulo.trim()) return toast.error("Informe o título da atividade.");
     setSalvando(true);
-    await apiFetch("/api/crm/atividades", { method: "POST", body: JSON.stringify({
-      lead_id: lead.id,
-      tipo: novaAtiv.tipo,
-      titulo: novaAtiv.titulo,
-      descricao: novaAtiv.descricao || null,
-      resultado: novaAtiv.resultado || null,
-      origem_ia: false,
-    });
-    if (error) { toast.error("Erro ao salvar atividade."); }
-    else {
+    try {
+      await apiFetch("/api/crm/atividades", {
+        method: "POST",
+        body: JSON.stringify({
+          lead_id: lead.id,
+          tipo: novaAtiv.tipo,
+          titulo: novaAtiv.titulo,
+          descricao: novaAtiv.descricao || null,
+          resultado: novaAtiv.resultado || null,
+          origem_ia: false,
+        }),
+      });
       toast.success("Atividade registrada!");
       setNovaAtiv({ tipo: "nota", titulo: "", descricao: "", resultado: "" });
       carregarDados();
       onUpdate();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao salvar atividade.");
     }
     setSalvando(false);
   }
@@ -365,34 +370,57 @@ function FichaLead({
   async function moverFunil() {
     if (novaEtapa === lead.etapa_funil && novaTemp === lead.temperatura) return;
     setSalvando(true);
-    const updates: Record<string, unknown> = { temperatura: novaTemp };
-    if (novaEtapa !== lead.etapa_funil) {
-      await apiFetch("/api/crm/mover-funil", { method: "POST", body: JSON.stringify(, {
-        p_lead_id: lead.id,
-        p_nova_etapa: novaEtapa,
+    try {
+      const updates: Record<string, unknown> = { temperatura: novaTemp };
+      if (novaEtapa !== lead.etapa_funil) {
+        await apiFetch("/api/crm/mover-funil", {
+          method: "POST",
+          body: JSON.stringify({
+            lead_id: lead.id,
+            etapa_funil: novaEtapa,
+          }),
+        });
+      }
+      await apiFetch(`/api/leads/${lead.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(updates),
       });
-      if (error) { toast.error("Erro ao mover funil."); setSalvando(false); return; }
+      toast.success("Lead atualizado!");
+      onUpdate();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao mover funil.");
     }
-    await apiFetch("/api/leads/update", { method: "PATCH", body: JSON.stringify((updates).eq("id", lead.id);
-    toast.success("Lead atualizado!");
-    onUpdate();
     setSalvando(false);
   }
 
   async function salvarEdicao() {
     if (!dadosEdit || Object.keys(dadosEdit).length === 0) { setEditando(false); return; }
     setSalvando(true);
-    const { error } = await apiFetch("/api/leads/update", { method: "PATCH", body: JSON.stringify((dadosEdit).eq("id", lead.id);
-    if (error) toast.error("Erro ao salvar.");
-    else { toast.success("Dados salvos!"); setEditando(false); onUpdate(); }
+    try {
+      await apiFetch(`/api/leads/${lead.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(dadosEdit),
+      });
+      toast.success("Dados salvos!");
+      setEditando(false);
+      onUpdate();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao salvar.");
+    }
     setSalvando(false);
   }
 
   async function atualizarDocumento(docId: string, status: string) {
-    const updates: Record<string, unknown> = { status };
-    if (status === "recebido") updates.recebido_em = new Date().toISOString();
-    if (status === "aprovado") updates.aprovado_em = new Date().toISOString();
-    await apiFetch("/api/crm/documentos/update", { method: "PATCH", body: JSON.stringify((updates).eq("id", docId);
+    try {
+      const updates: Record<string, unknown> = { status };
+      if (status === "recebido") updates.recebido_em = new Date().toISOString();
+      if (status === "aprovado") updates.aprovado_em = new Date().toISOString();
+      await apiFetch(`/api/crm/documentos/${docId}`, {
+        method: "PATCH",
+        body: JSON.stringify(updates),
+      });
     carregarDados();
     onUpdate();
   }
@@ -910,32 +938,22 @@ export default function CRM() {
 
   const carregarLeads = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("vw_crm_pipeline")
-      .select("*")
-      .order("score_efetivo", { ascending: false });
-
-    if (error) {
-      // Fallback para tabela leads direta se a view não existir ainda
-      const { data: fallback } = await supabase
-        .from("leads")
-        .select("*")
-        .not("etapa_funil", "in", "(ganho,perdido,inativo)")
-        .order("created_at", { ascending: false });
-      setLeads(fallback ?? []);
-    } else {
+    try {
+      const data = await apiFetch("/api/crm/pipeline");
       setLeads(data ?? []);
-    }
 
-    // Calcular métricas por etapa
-    const m: Record<string, { total: number; valor: number }> = {};
-    const source = await apiFetch("/api/crm/pipeline"("etapa_funil,valor_solicitado")).data ?? [];
-    source.forEach((l: { etapa_funil: string; valor_solicitado?: number }) => {
-      if (!m[l.etapa_funil]) m[l.etapa_funil] = { total: 0, valor: 0 };
-      m[l.etapa_funil].total++;
-      m[l.etapa_funil].valor += l.valor_solicitado ?? 0;
-    });
-    setMetricas(m);
+      // Calcular métricas por etapa
+      const m: Record<string, { total: number; valor: number }> = {};
+      data.forEach((l: { etapa_funil: string; valor_solicitado?: number }) => {
+        if (!m[l.etapa_funil]) m[l.etapa_funil] = { total: 0, valor: 0 };
+        m[l.etapa_funil].total++;
+        m[l.etapa_funil].valor += l.valor_solicitado ?? 0;
+      });
+      setMetricas(m);
+    } catch (err) {
+      console.error(err);
+      setLeads([]);
+    }
     setLoading(false);
   }, []);
 
@@ -945,24 +963,29 @@ export default function CRM() {
       return;
     }
     setSalvando(true);
-    await apiFetch("/api/leads", { method: "POST", body: JSON.stringify({
-      nome: novoLead.nome,
-      telefone: novoLead.telefone,
-      email: novoLead.email || null,
-      empresa: novoLead.empresa || null,
-      produto_interesse: novoLead.produto_interesse || null,
-      valor_solicitado: novoLead.valor_solicitado ? parseFloat(novoLead.valor_solicitado) : null,
-      etapa_funil: etapaNovoLead,
-      canal_origem: "manual",
-      status: etapaNovoLead,
-      origem: "manual",
-    });
-    if (error) toast.error("Erro ao criar lead.");
-    else {
+    try {
+      await apiFetch("/api/leads", {
+        method: "POST",
+        body: JSON.stringify({
+          nome: novoLead.nome,
+          telefone: novoLead.telefone,
+          email: novoLead.email || null,
+          empresa: novoLead.empresa || null,
+          produto_interesse: novoLead.produto_interesse || null,
+          valor_solicitado: novoLead.valor_solicitado ? parseFloat(novoLead.valor_solicitado) : null,
+          etapa_funil: etapaNovoLead,
+          canal_origem: "manual",
+          status: etapaNovoLead,
+          origem: "manual",
+        }),
+      });
       toast.success("Lead criado com sucesso!");
       setShowNovoLead(false);
       setNovoLead({ nome: "", telefone: "", email: "", empresa: "", produto_interesse: "", valor_solicitado: "" });
       carregarLeads();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao criar lead.");
     }
     setSalvando(false);
   }
