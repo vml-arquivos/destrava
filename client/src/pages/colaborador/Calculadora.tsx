@@ -701,23 +701,26 @@ function CenarioSemImposto() {
         setSalvando(false);
         return;
       }
-      await apiFetch("/api/simulacoes", { method: "POST", body: JSON.stringify({
-        colaborador_id: user.id,
-        cliente_nome: form.nome,
-        cliente_telefone: form.telefone,
-        cliente_cpf_cnpj: form.cpfCnpj || null,
-        valor_solicitado: parseBRL(form.valorCredito),
-        quantidade_parcelas: parseInt(form.prazo),
-        taxa_juros_mensal: parseFloat(form.taxaJuros),
-        comissao_percentual: parseFloat(form.comissao) || null,
-        total_comissao: resultado.comissaoValor,
-        valor_parcela: resultado.parcelaMensal,
-        valor_total_pagar: resultado.totalFinanciamento,
-        total_juros: resultado.totalJuros,
-        custo_efetivo_total: resultado.custoTotalOperacao,
-        banco: form.banco || null,
-        linha_credito: form.linhaCredito || null,
-        observacoes: form.observacoes ? `[sem_imposto] ${form.observacoes}` : "[sem_imposto]",
+      await apiFetch("/api/simulacoes", {
+        method: "POST",
+        body: JSON.stringify({
+          colaborador_id: user.id,
+          cliente_nome: form.nome,
+          cliente_telefone: form.telefone,
+          cliente_cpf_cnpj: form.cpfCnpj || null,
+          valor_solicitado: parseBRL(form.valorCredito),
+          quantidade_parcelas: parseInt(form.prazo),
+          taxa_juros_mensal: parseFloat(form.taxaJuros),
+          comissao_percentual: parseFloat(form.comissao) || null,
+          total_comissao: resultado.comissaoValor,
+          valor_parcela: resultado.parcelaMensal,
+          valor_total_pagar: resultado.totalFinanciamento,
+          total_juros: resultado.totalJuros,
+          custo_efetivo_total: resultado.custoTotalOperacao,
+          banco: form.banco || null,
+          linha_credito: form.linhaCredito || null,
+          observacoes: form.observacoes ? `[sem_imposto] ${form.observacoes}` : "[sem_imposto]",
+        }),
       });
       setSalvo(true);
       toast.success("Simulação salva com sucesso!");
@@ -910,17 +913,20 @@ function CenarioComparativo() {
       };
       let hasError = false;
       if (resA) {
-        await apiFetch("/api/simulacoes", { method: "POST", body: JSON.stringify({
-          ...base,
-          taxa_juros_mensal: parseFloat(form.taxaA),
-          imposto_percentual: parseFloat(form.pctImposto) || null,
-          total_imposto: resA.impostoValor || null,
-          total_comissao: resA.comissaoValor,
-          valor_parcela: resA.parcelaMensal,
-          valor_total_pagar: resA.totalFinanciamento,
-          total_juros: resA.totalJuros,
-          custo_efetivo_total: resA.custoTotalOperacao,
-          observacoes: form.observacoes ? `[com_imposto] ${form.observacoes}` : "[com_imposto]",
+        await apiFetch("/api/simulacoes", {
+          method: "POST",
+          body: JSON.stringify({
+            ...base,
+            taxa_juros_mensal: parseFloat(form.taxaA),
+            imposto_percentual: parseFloat(form.pctImposto) || null,
+            total_imposto: resA.impostoValor || null,
+            total_comissao: resA.comissaoValor,
+            valor_parcela: resA.parcelaMensal,
+            valor_total_pagar: resA.totalFinanciamento,
+            total_juros: resA.totalJuros,
+            custo_efetivo_total: resA.custoTotalOperacao,
+            observacoes: form.observacoes ? `[com_imposto] ${form.observacoes}` : "[com_imposto]",
+          }),
         });
       }
       if (resB) {
@@ -939,8 +945,7 @@ function CenarioComparativo() {
         });
       }
       setSalvo(true);
-      toast.success("Simulações salvas com sucesso!");
-      }
+        toast.success("Simulações salvas com sucesso!");
     } catch (err) {
       console.error(err);
       toast.error("Erro ao salvar simulação. Verifique a conexão e tente novamente.");
