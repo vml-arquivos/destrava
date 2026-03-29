@@ -36,9 +36,9 @@ export default function Footer() {
           {/* Logo e Descrição */}
           <div className="lg:col-span-2">
             <img
-              src={APP_LOGO}
+              src="/destrava-logo-color.svg"
               alt="Destrava Crédito"
-              className="h-12 w-auto mb-4 brightness-0 invert"
+              className="h-14 w-auto mb-4"
             />
             <p className="text-sm text-white/80 mb-5 leading-relaxed max-w-xs">
               Assessoria especializada em captação de crédito bancário e governamental para empresas que buscam mais clareza, organização e apoio consultivo em todo o processo.

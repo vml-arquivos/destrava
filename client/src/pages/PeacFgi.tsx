@@ -1,50 +1,31 @@
-import { Link } from "wouter";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import SEO from "@/components/SEO";
+import SEO, { serviceStructuredData } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
+import { Link } from "wouter";
 import {
   CheckCircle2,
-  ArrowRight,
   DollarSign,
   Calendar,
-  Shield,
+  Percent,
   Building2,
+  AlertCircle,
+  FileText,
+  Users,
   TrendingUp,
-  Star,
   Phone,
   ChevronDown,
-  AlertCircle,
+  ChevronUp,
 } from "lucide-react";
 import { useState } from "react";
 
-const WA_LINK = "https://wa.me/5561986055223?text=Olá!%20Quero%20saber%20mais%20sobre%20o%20PEAC%20FGI.";
-
 const faqs = [
-  {
-    q: "O que é o PEAC FGI?",
-    a: "O PEAC (Programa Emergencial de Acesso ao Crédito) com garantia do FGI (Fundo Garantidor de Investimentos) é uma linha de crédito voltada para micro, pequenas e médias empresas que precisam de capital de giro ou investimento, com valores de R$ 5 mil a R$ 10 milhões.",
-  },
-  {
-    q: "Quem pode acessar o PEAC FGI?",
-    a: "Micro, pequenas e médias empresas (inclusive MEI) com faturamento anual de até R$ 300 milhões. Os limites variam conforme o banco operador.",
-  },
-  {
-    q: "Quais os valores e prazos disponíveis?",
-    a: "Financiamento de R$ 5 mil a R$ 10 milhões, com prazo de 36 a 60 meses e carência obrigatória de 6 a 12 meses.",
-  },
-  {
-    q: "Quais garantias são exigidas?",
-    a: "A cobertura do FGI reduz a necessidade de garantias reais. Exige aval dos sócios e pode exigir garantias acessórias dependendo do valor e perfil da empresa.",
-  },
-  {
-    q: "Há custos adicionais?",
-    a: "Sim, há cobrança de IOF e Encargo por Concessão de Garantia (ECG), vigente desde 01/01/2024. Nossa equipe detalha todos os custos antes da contratação.",
-  },
-  {
-    q: "Como a Destrava Crédito me ajuda?",
-    a: "Analisamos seu perfil, identificamos o banco com melhores condições, organizamos a documentação e acompanhamos todo o processo até a aprovação e liberação.",
-  },
+  { q: 'O que é o PEAC FGI?', a: 'O PEAC com garantia do FGI do BNDES é uma linha de crédito que facilita o acesso de empresas ao sistema financeiro usando a garantia do BNDES como suporte.' },
+  { q: 'Qual o valor mínimo e máximo?', a: 'De R$ 5.000 a R$ 10 milhões por empresa, dependendo do porte, faturamento e análise de crédito do banco operador.' },
+  { q: 'Quais bancos operam o PEAC FGI?', a: 'O programa é operado por diversas instituições financeiras credenciadas pelo BNDES. A Destrava identifica o banco com melhores condições para o seu perfil.' },
+  { q: 'Qual o prazo de carência?', a: 'Até 12 meses de carência, ou seja, você começa a pagar somente após 12 meses da contratação.' },
+  { q: 'A garantia do FGI substitui outras garantias?', a: 'O FGI complementa ou substitui garantias reais exigidas pelo banco, facilitando a aprovação para empresas sem bens suficientes.' },
+  { q: 'Como a Destrava me ajuda?', a: 'Nossa equipe analisa o perfil da empresa, identifica o banco operador mais adequado, organiza a documentação e acompanha todo o processo de aprovação.' },
 ];
 
 export default function PeacFgi() {
@@ -53,162 +34,247 @@ export default function PeacFgi() {
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <SEO
-        title="PEAC FGI - Crédito com Garantia do FGI para Empresas | Destrava Crédito"
-        description="PEAC FGI: de R$ 5 mil a R$ 10 milhões para micro, pequenas e médias empresas. Carência de 6 a 12 meses, prazo até 60 meses. Destrava Crédito cuida de tudo."
-        keywords="PEAC FGI, fundo garantidor investimentos, crédito empresarial garantia, BNDES FGI, capital de giro garantia, crédito média empresa"
+        title="PEAC FGI - Crédito com Garantia BNDES para Empresas | Destrava Crédito"
+        description="PEAC FGI: de R$ 5 mil a R$ 10 milhões com garantia do FGI/BNDES. Prazo até 60 meses, carência até 12 meses. Assessoria completa da Destrava Crédito."
+        keywords="peac fgi, crédito com garantia bndes para empresas"
+        structuredData={serviceStructuredData("PEAC FGI", "PEAC FGI: de R$ 5 mil a R$ 10 milhões com garantia do FGI/BNDES. Prazo até 60 meses, carência até 12 meses. Assessoria completa da Destrava Crédito.")}
       />
       <Header />
 
       {/* HERO */}
-      <section className="bg-gradient-to-br from-[#1b5e20] via-[#2e7d32] to-[#388e3c] text-white py-14 md:py-20 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-blue-400 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-yellow-400 rounded-full blur-3xl" />
-        </div>
-        <div className="container px-4 relative z-10">
-          <div className="grid md:grid-cols-2 gap-10 items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 bg-white/20 border border-white/30 rounded-full px-4 py-2 mb-6">
-                <Shield className="h-4 w-4 text-white" />
-                <span className="text-white/90 text-sm font-semibold">BNDES · Fundo Garantidor de Investimentos</span>
+      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white py-20">
+        <div className="container">
+          <div className="max-w-3xl">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="bg-white rounded-xl px-4 py-2 flex items-center justify-center h-16">
+                <img src="/logo-bndes-fgi.jpg" alt="PEAC FGI" className="h-12 w-auto object-contain" />
               </div>
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
-                PEAC FGI<br />
-                <span className="text-yellow-300">Crédito com garantia</span><br />
-                para crescer
-              </h1>
-              <p className="text-lg md:text-xl text-white/90 mb-8 leading-relaxed">
-                De <strong>R$ 5 mil a R$ 10 milhões</strong> para micro, pequenas e médias empresas. Garantia do FGI reduz exigência de bens. Carência de até 12 meses.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Link href="/simular">
-                  <Button size="lg" className="bg-yellow-400 hover:bg-yellow-500 text-black font-bold px-8 w-full sm:w-auto">
-                    Simular Agora
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Button>
-                </Link>
-                <a href={WA_LINK} target="_blank" rel="noopener noreferrer">
-                  <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8 w-full sm:w-auto">
-                    Falar com Especialista
-                  </Button>
-                </a>
-              </div>
+              <span className="text-sm font-semibold bg-white/20 px-3 py-1 rounded-full border border-white/30">
+                FGI / BNDES
+              </span>
             </div>
-            <div className="hidden md:flex flex-col gap-4">
-              <div className="bg-white/10 backdrop-blur rounded-2xl p-6 border border-white/20">
-                <img src="/logo-bndes-fgi.jpg" alt="BNDES FGI" className="h-14 object-contain mb-4 bg-white rounded-lg p-2" />
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { label: "Valor mínimo", value: "R$ 5.000" },
-                    { label: "Valor máximo", value: "R$ 10 milhões" },
-                    { label: "Prazo", value: "36 a 60 meses" },
-                    { label: "Carência", value: "6 a 12 meses" },
-                  ].map((item) => (
-                    <div key={item.label} className="bg-white/10 rounded-xl p-3 text-center">
-                      <p className="text-white/70 text-xs mb-1">{item.label}</p>
-                      <p className="text-white font-bold text-sm">{item.value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            <h1 className="text-4xl md:text-5xl font-bold mb-4">PEAC FGI</h1>
+            <p className="text-xl text-white/90 mb-2 font-medium">
+              Crédito de R$ 5 mil a R$ 10 milhões com garantia do BNDES
+            </p>
+            <p className="text-lg text-white/80 leading-relaxed mb-8">
+              Programa de crédito com garantia do FGI/BNDES para capital de giro e investimento. Prazo de até 60 meses e carência de até 12 meses para empresas de todos os portes.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Link href="/simular">
+                <Button size="lg" variant="secondary" className="font-semibold">
+                  Simular Agora
+                </Button>
+              </Link>
+              <a href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20PEAC+FGI." target="_blank" rel="noopener noreferrer">
+                <Button size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
+                  <Phone className="h-4 w-4 mr-2" /> Falar com Especialista
+                </Button>
+              </a>
             </div>
           </div>
         </div>
       </section>
 
-      {/* NÚMEROS */}
-      <section className="py-12 bg-gray-50 border-b">
-        <div className="container px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-            {[
-              { icon: DollarSign, value: "R$ 10M", label: "Limite máximo", color: "text-green-600" },
-              { icon: Calendar, value: "60 meses", label: "Prazo máximo", color: "text-blue-600" },
-              { icon: Shield, value: "FGI", label: "Garantia BNDES", color: "text-purple-600" },
-              { icon: TrendingUp, value: "12 meses", label: "Carência máxima", color: "text-orange-600" },
-            ].map((item) => (
-              <div key={item.label} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <item.icon className={`h-8 w-8 ${item.color} mx-auto mb-3`} />
-                <p className={`text-2xl font-bold ${item.color} mb-1`}>{item.value}</p>
-                <p className="text-gray-500 text-sm">{item.label}</p>
-              </div>
-            ))}
+      {/* MÉTRICAS */}
+      <section className="py-16">
+        <div className="container">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-card p-6 rounded-lg border border-border text-center">
+              <DollarSign className="h-12 w-12 text-primary mx-auto mb-4" />
+              <h3 className="font-bold text-lg mb-2">Faixa de Crédito</h3>
+              <p className="text-2xl font-bold text-primary mb-2">R$ 5k a R$ 10M</p>
+              <p className="text-sm text-muted-foreground">Para empresas de todos os portes</p>
+            </div>
+            <div className="bg-card p-6 rounded-lg border border-border text-center">
+              <Percent className="h-12 w-12 text-primary mx-auto mb-4" />
+              <h3 className="font-bold text-lg mb-2">Taxa de Juros</h3>
+              <p className="text-2xl font-bold text-primary mb-2">A partir de 1% a.m.</p>
+              <p className="text-sm text-muted-foreground">Conforme perfil e banco operador</p>
+            </div>
+            <div className="bg-card p-6 rounded-lg border border-border text-center">
+              <Calendar className="h-12 w-12 text-primary mx-auto mb-4" />
+              <h3 className="font-bold text-lg mb-2">Prazo</h3>
+              <p className="text-2xl font-bold text-primary mb-2">Até 60 meses</p>
+              <p className="text-sm text-muted-foreground">Com carência de até 12 meses</p>
+            </div>
+            <div className="bg-card p-6 rounded-lg border border-border text-center">
+              <Building2 className="h-12 w-12 text-primary mx-auto mb-4" />
+              <h3 className="font-bold text-lg mb-2">Público-Alvo</h3>
+              <p className="text-2xl font-bold text-primary mb-2">Todos os portes</p>
+              <p className="text-sm text-muted-foreground">MEI, ME, EPP, médio e grande porte</p>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* PÚBLICO-ALVO */}
-      <section className="py-16 md:py-20">
-        <div className="container px-4">
-          <div className="max-w-3xl mx-auto text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Para quem é o PEAC FGI?</h2>
-            <p className="text-lg text-gray-600">Uma linha robusta para empresas que precisam de volumes maiores de crédito.</p>
-          </div>
-          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            {[
-              { icon: Building2, title: "MEI e Microempresas", desc: "Faturamento anual até R$ 360 mil — acesso a crédito com garantia facilitada", color: "bg-blue-50 border-blue-200" },
-              { icon: TrendingUp, title: "Pequenas Empresas", desc: "Faturamento até R$ 4,8 milhões — capital de giro e investimento em expansão", color: "bg-green-50 border-green-200" },
-              { icon: Star, title: "Médias Empresas", desc: "Faturamento até R$ 300 milhões — grandes volumes com garantia do FGI", color: "bg-purple-50 border-purple-200" },
-            ].map((item) => (
-              <div key={item.title} className={`rounded-2xl p-6 border-2 ${item.color} text-center`}>
-                <item.icon className="h-10 w-10 text-gray-700 mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{item.title}</h3>
-                <p className="text-gray-600 text-sm">{item.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* BENEFÍCIOS */}
-      <section className="py-16 md:py-20 bg-gray-50">
-        <div className="container px-4">
-          <div className="max-w-3xl mx-auto text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Vantagens do PEAC FGI</h2>
-          </div>
-          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            {[
-              { title: "Acesso a grandes volumes", desc: "Financiamento de até R$ 10 milhões, muito acima das linhas convencionais para PMEs." },
-              { title: "Garantia do FGI reduz exigências", desc: "O Fundo Garantidor de Investimentos do BNDES cobre parte do risco, facilitando a aprovação." },
-              { title: "Carência estendida", desc: "Até 12 meses de carência para começar a pagar, dando tempo para o investimento gerar retorno." },
-              { title: "Prazo longo", desc: "Até 60 meses para pagamento, com parcelas que cabem no fluxo de caixa da empresa." },
-              { title: "Capital de giro e investimento", desc: "Pode ser usado tanto para reforço de caixa quanto para expansão, equipamentos e infraestrutura." },
-              { title: "Assessoria completa", desc: "A Destrava Crédito analisa, organiza e acompanha todo o processo até a liberação." },
-            ].map((item) => (
-              <div key={item.title} className="flex items-start gap-4 bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <CheckCircle2 className="h-6 w-6 text-green-500 flex-shrink-0 mt-1" />
+      {/* PARA QUE USAR */}
+      <section className="py-16 bg-muted/30">
+        <div className="container">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-center">
+              Para que você pode usar?
+            </h2>
+            <p className="text-center text-muted-foreground mb-10">
+              O crédito pode ser utilizado para diversas finalidades relacionadas à atividade empresarial.
+            </p>
+            <div className="grid md:grid-cols-2 gap-5">
+              <div className="bg-card p-5 rounded-lg border border-border flex gap-4">
+                <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
                 <div>
-                  <h3 className="font-bold text-gray-900 mb-1">{item.title}</h3>
-                  <p className="text-gray-600 text-sm">{item.desc}</p>
+                  <h3 className="font-semibold mb-1">Capital de Giro</h3>
+                  <p className="text-sm text-muted-foreground">Reforçar o caixa operacional e manter a empresa em pleno funcionamento.</p>
                 </div>
               </div>
-            ))}
-          </div>
-          <div className="mt-8 bg-amber-50 border border-amber-200 rounded-2xl p-6 max-w-4xl mx-auto flex items-start gap-4">
-            <AlertCircle className="h-6 w-6 text-amber-500 flex-shrink-0 mt-1" />
-            <div>
-              <h3 className="font-bold text-gray-900 mb-1">Atenção: custos adicionais</h3>
-              <p className="text-gray-600 text-sm">Há cobrança de IOF e Encargo por Concessão de Garantia (ECG) vigente desde 01/01/2024. Nossa equipe detalha todos os custos antes de qualquer contratação.</p>
+              <div className="bg-card p-5 rounded-lg border border-border flex gap-4">
+                <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold mb-1">Investimento Fixo</h3>
+                  <p className="text-sm text-muted-foreground">Adquirir máquinas, equipamentos, veículos e infraestrutura produtiva.</p>
+                </div>
+              </div>
+              <div className="bg-card p-5 rounded-lg border border-border flex gap-4">
+                <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold mb-1">Expansão de Capacidade</h3>
+                  <p className="text-sm text-muted-foreground">Ampliar a capacidade produtiva ou de atendimento da empresa.</p>
+                </div>
+              </div>
+              <div className="bg-card p-5 rounded-lg border border-border flex gap-4">
+                <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold mb-1">Modernização Tecnológica</h3>
+                  <p className="text-sm text-muted-foreground">Investir em sistemas, automação e tecnologia para ganhar eficiência.</p>
+                </div>
+              </div>
+              <div className="bg-card p-5 rounded-lg border border-border flex gap-4">
+                <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold mb-1">Projetos de Inovação</h3>
+                  <p className="text-sm text-muted-foreground">Financiar projetos de pesquisa, desenvolvimento e inovação.</p>
+                </div>
+              </div>
+              <div className="bg-card p-5 rounded-lg border border-border flex gap-4">
+                <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold mb-1">Refinanciamento de Dívidas</h3>
+                  <p className="text-sm text-muted-foreground">Consolidar dívidas com taxas mais altas em condições mais favoráveis.</p>
+                </div>
+              </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* REQUISITOS */}
+      <section className="py-16">
+        <div className="container">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl font-bold mb-10 text-center">Requisitos e Documentação</h2>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="bg-card p-6 rounded-lg border border-border">
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" /> Quem pode solicitar
+                </h3>
+                <ul className="space-y-3">
+                  <li className="flex items-start gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Empresas de qualquer porte (MEI, ME, EPP, médio e grande)</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>CNPJ ativo e em situação regular</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Sem restrições graves no CADIN e Serasa</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Certidões negativas de débitos tributários</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Demonstrações financeiras atualizadas</span>
+                  </li>
+                </ul>
+              </div>
+              <div className="bg-card p-6 rounded-lg border border-border">
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-primary" /> Documentos necessários
+                </h3>
+                <ul className="space-y-3">
+                  <li className="flex items-start gap-2 text-sm">
+                    <FileText className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>CNPJ e contrato social / certificado MEI</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-sm">
+                    <FileText className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>RG e CPF dos sócios e administradores</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-sm">
+                    <FileText className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Comprovante de endereço da empresa</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-sm">
+                    <FileText className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Balanço patrimonial ou declaração de faturamento</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-sm">
+                    <FileText className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Extratos bancários dos últimos 6 meses</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* COMO FUNCIONA */}
+      <section className="py-16 bg-muted/30">
+        <div className="container">
+          <h2 className="text-3xl font-bold mb-10 text-center">Como Funciona com a Destrava</h2>
+          <div className="grid md:grid-cols-4 gap-6 max-w-5xl mx-auto">
+            {[
+              { n: "01", icon: Users, title: "Análise Gratuita", desc: "Avaliamos seu perfil e verificamos a elegibilidade sem custo." },
+              { n: "02", icon: FileText, title: "Organização Documental", desc: "Preparamos e organizamos toda a documentação necessária." },
+              { n: "03", icon: Building2, title: "Negociação Bancária", desc: "Identificamos o banco com melhores condições e conduzimos a negociação." },
+              { n: "04", icon: TrendingUp, title: "Liberação do Crédito", desc: "Acompanhamos até a aprovação e liberação do recurso na sua conta." },
+            ].map((step) => (
+              <div key={step.n} className="text-center">
+                <div className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center text-xl font-bold mx-auto mb-4">
+                  {step.n}
+                </div>
+                <step.icon className="h-6 w-6 text-primary mx-auto mb-2" />
+                <h3 className="font-bold mb-2">{step.title}</h3>
+                <p className="text-sm text-muted-foreground">{step.desc}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* FAQ */}
-      <section className="py-16 md:py-20">
-        <div className="container px-4 max-w-3xl mx-auto">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-10 text-center">Perguntas frequentes</h2>
+      <section className="py-16">
+        <div className="container max-w-3xl">
+          <h2 className="text-3xl font-bold mb-10 text-center">Perguntas Frequentes</h2>
           <div className="space-y-3">
             {faqs.map((faq, i) => (
-              <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div key={i} className="border border-border rounded-lg overflow-hidden bg-card">
                 <button
-                  className="w-full flex items-center justify-between p-6 text-left"
                   onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                  className="w-full flex items-center justify-between p-5 text-left hover:bg-muted/30 transition-colors"
                 >
-                  <span className="font-semibold text-gray-900">{faq.q}</span>
-                  <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${openFaq === i ? "rotate-180" : ""}`} />
+                  <span className="font-semibold pr-4">{faq.q}</span>
+                  {openFaq === i
+                    ? <ChevronUp className="h-5 w-5 text-primary flex-shrink-0" />
+                    : <ChevronDown className="h-5 w-5 text-muted-foreground flex-shrink-0" />}
                 </button>
                 {openFaq === i && (
-                  <div className="px-6 pb-6 text-gray-600 text-sm leading-relaxed">{faq.a}</div>
+                  <div className="px-5 pb-5 text-sm text-muted-foreground leading-relaxed border-t border-border pt-4">
+                    {faq.a}
+                  </div>
                 )}
               </div>
             ))}
@@ -216,26 +282,42 @@ export default function PeacFgi() {
         </div>
       </section>
 
+      {/* AVISO LEGAL */}
+      <section className="py-8">
+        <div className="container max-w-4xl">
+          <div className="bg-[var(--color-caixa-yellow)]/10 border-l-4 border-[var(--color-caixa-yellow)] p-6 rounded">
+            <div className="flex gap-3">
+              <AlertCircle className="h-6 w-6 text-[var(--color-caixa-yellow)] flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold mb-2">Importante:</p>
+                <p className="text-sm text-muted-foreground">
+                  A Destrava atua como assessoria empresarial para captação de crédito. A concessão final do crédito é de responsabilidade exclusiva da instituição financeira. As condições estão sujeitas à análise e aprovação. As simulações são estimativas e não constituem oferta de crédito.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* CTA FINAL */}
-      <section className="py-16 md:py-20 bg-gradient-to-br from-[#1b5e20] to-[#388e3c] text-white">
-        <div className="container px-4 text-center">
+      <section className="py-16 bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white">
+        <div className="container text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Acesse o PEAC FGI com a Destrava</h2>
-          <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto">Nossa equipe analisa seu perfil gratuitamente e encontra as melhores condições para sua empresa.</p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <p className="text-lg text-white/80 mb-8 max-w-xl mx-auto">
+            Garantia do BNDES, prazo de até 60 meses e assessoria especializada. Do R$ 5 mil ao R$ 10 milhões.
+          </p>
+          <div className="flex flex-wrap justify-center gap-4">
             <Link href="/simular">
-              <Button size="lg" className="bg-yellow-400 hover:bg-yellow-500 text-black font-bold px-10">
+              <Button size="lg" variant="secondary" className="font-semibold">
                 Simular Agora
-                <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
-            <a href={WA_LINK} target="_blank" rel="noopener noreferrer">
-              <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-10">
-                <Phone className="mr-2 h-5 w-5" />
-                Falar com Especialista
+            <a href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20PEAC+FGI." target="_blank" rel="noopener noreferrer">
+              <Button size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
+                <Phone className="h-4 w-4 mr-2" /> Falar com Especialista
               </Button>
             </a>
           </div>
-          <p className="text-white/60 text-sm mt-6">Análise gratuita · Sem compromisso · Atendimento em até 2h úteis</p>
         </div>
       </section>
 

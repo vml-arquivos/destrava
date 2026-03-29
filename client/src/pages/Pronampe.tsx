@@ -1,52 +1,31 @@
-import { Link } from "wouter";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import SEO from "@/components/SEO";
+import SEO, { serviceStructuredData } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
+import { Link } from "wouter";
 import {
   CheckCircle2,
-  ArrowRight,
   DollarSign,
   Calendar,
   Percent,
-  Shield,
+  Building2,
+  AlertCircle,
+  FileText,
   Users,
   TrendingUp,
-  FileText,
-  Star,
-  Clock,
   Phone,
   ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { useState } from "react";
 
-const WA_LINK = "https://wa.me/5561986055223?text=Olá!%20Quero%20saber%20mais%20sobre%20o%20PRONAMPE.";
-
 const faqs = [
-  {
-    q: "Quem pode solicitar o PRONAMPE?",
-    a: "MEIs, microempresas e empresas de pequeno porte com faturamento anual de até R$ 4,8 milhões. Para empresas lideradas por mulheres, o limite de crédito sobe para 50% do faturamento.",
-  },
-  {
-    q: "Qual o valor máximo que posso obter?",
-    a: "Até 30% do faturamento anual bruto, limitado a R$ 150.000 por CNPJ. Para empresas lideradas por mulheres, o limite sobe para 50% do faturamento, também limitado a R$ 150.000.",
-  },
-  {
-    q: "Qual a taxa de juros do PRONAMPE?",
-    a: "A taxa máxima é Selic + 6% ao ano, sem tarifas de crédito adicionais. É uma das menores taxas disponíveis para micro e pequenas empresas no Brasil.",
-  },
-  {
-    q: "Qual o prazo de pagamento?",
-    a: "Até 48 meses para pagamento, com 6 meses de carência. Contratos podem ser renegociados para até 72 meses em situações específicas.",
-  },
-  {
-    q: "Quais garantias são exigidas?",
-    a: "Aval dos sócios e apoio do Fundo Garantidor de Operações (FGO), que facilita a aprovação mesmo para empresas sem bens para oferecer como garantia.",
-  },
-  {
-    q: "Como a Destrava Crédito me ajuda no PRONAMPE?",
-    a: "Nossa equipe analisa seu faturamento, organiza toda a documentação, identifica o banco com melhores condições e acompanha o processo até a aprovação e liberação do crédito.",
-  },
+  { q: 'Quem pode solicitar o PRONAMPE?', a: 'MEIs, microempresas e empresas de pequeno porte com faturamento anual de ate R$ 4,8 milhoes. Para empresas lideradas por mulheres, o limite de credito sobe para 50% do faturamento.' },
+  { q: 'Qual o valor maximo que posso obter?', a: 'Ate 30% do faturamento anual bruto, limitado a R$ 150.000 por CNPJ. Para empresas lideradas por mulheres, o limite sobe para 50% do faturamento.' },
+  { q: 'Qual a taxa de juros do PRONAMPE?', a: 'A taxa maxima e Selic + 6% ao ano, sem tarifas de credito adicionais. E uma das menores taxas disponiveis para micro e pequenas empresas no Brasil.' },
+  { q: 'Qual o prazo de pagamento?', a: 'Ate 48 meses para pagamento, com 6 meses de carencia. Contratos podem ser renegociados para ate 72 meses em situacoes especificas.' },
+  { q: 'Quais garantias sao exigidas?', a: 'Aval dos socios e apoio do Fundo Garantidor de Operacoes (FGO), que facilita a aprovacao mesmo para empresas sem bens para oferecer como garantia.' },
+  { q: 'Como a Destrava Credito me ajuda no PRONAMPE?', a: 'Nossa equipe analisa seu faturamento, organiza toda a documentacao, identifica o banco com melhores condicoes e acompanha o processo ate a aprovacao e liberacao do credito.' },
 ];
 
 export default function Pronampe() {
@@ -55,171 +34,222 @@ export default function Pronampe() {
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <SEO
-        title="PRONAMPE - Crédito para Micro e Pequenas Empresas | Destrava Crédito"
-        description="PRONAMPE: até R$ 150 mil com Selic + 6% ao ano para MEI, ME e EPP. 48 meses para pagar, 6 de carência. A Destrava Crédito cuida de tudo para você."
-        keywords="pronampe, crédito micro empresa, crédito pequena empresa, pronampe 2025, empréstimo MEI, crédito empresarial baixo juros"
+        title="PRONAMPE - Credito para Micro e Pequenas Empresas | Destrava Credito"
+        description="PRONAMPE: ate R$ 150 mil com Selic + 6% ao ano para MEI, ME e EPP. 48 meses para pagar, 6 de carencia. A Destrava Credito cuida de tudo para voce."
+        keywords="pronampe, credito micro empresa, credito pequena empresa, pronampe 2025, emprestimo MEI"
+        structuredData={serviceStructuredData("PRONAMPE", "Programa Nacional de Apoio as Micro e Pequenas Empresas com assessoria completa da Destrava Credito.")}
       />
       <Header />
 
       {/* HERO */}
-      <section className="bg-gradient-to-br from-[#003F7F] via-[#0052a5] to-[#006fd6] text-white py-14 md:py-20 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-green-400 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-300 rounded-full blur-3xl" />
-        </div>
-        <div className="container px-4 relative z-10">
-          <div className="grid md:grid-cols-2 gap-10 items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 bg-green-400/20 border border-green-400/40 rounded-full px-4 py-2 mb-6">
-                <Star className="h-4 w-4 text-green-400" />
-                <span className="text-green-300 text-sm font-semibold">Programa Federal de Crédito</span>
+      <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white py-20">
+        <div className="container">
+          <div className="max-w-3xl">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="bg-white rounded-xl px-4 py-2 flex items-center justify-center h-16">
+                <img src="/logo-pronampe.jpg" alt="PRONAMPE" className="h-12 w-auto object-contain" />
               </div>
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
-                PRONAMPE<br />
-                <span className="text-green-400">Crédito que impulsiona</span><br />
-                sua empresa
-              </h1>
-              <p className="text-lg md:text-xl text-white/90 mb-8 leading-relaxed">
-                Até <strong>R$ 150.000</strong> com a menor taxa do mercado — <strong>Selic + 6% ao ano</strong>. Para MEI, microempresas e empresas de pequeno porte. A Destrava cuida de tudo.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Link href="/simular">
-                  <Button size="lg" className="bg-green-400 hover:bg-green-500 text-black font-bold px-8 w-full sm:w-auto">
-                    Simular Agora
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Button>
-                </Link>
-                <a href={WA_LINK} target="_blank" rel="noopener noreferrer">
-                  <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8 w-full sm:w-auto">
-                    Falar com Especialista
-                  </Button>
-                </a>
-              </div>
+              <span className="text-sm font-semibold bg-white/20 px-3 py-1 rounded-full border border-white/30">
+                Programa Federal
+              </span>
             </div>
-            <div className="hidden md:flex flex-col gap-4">
-              <div className="bg-white/10 backdrop-blur rounded-2xl p-6 border border-white/20">
-                <img src="/logo-pronampe.jpg" alt="PRONAMPE" className="h-16 object-contain mb-4 rounded-lg" />
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { label: "Valor máximo", value: "R$ 150.000" },
-                    { label: "Taxa", value: "Selic + 6% a.a." },
-                    { label: "Prazo", value: "Até 48 meses" },
-                    { label: "Carência", value: "6 meses" },
-                  ].map((item) => (
-                    <div key={item.label} className="bg-white/10 rounded-xl p-3 text-center">
-                      <p className="text-white/70 text-xs mb-1">{item.label}</p>
-                      <p className="text-white font-bold text-sm">{item.value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="bg-green-400/20 border border-green-400/30 rounded-2xl p-4 flex items-center gap-3">
-                <CheckCircle2 className="h-6 w-6 text-green-400 flex-shrink-0" />
-                <p className="text-white/90 text-sm"><strong>Garantia FGO:</strong> aprovação facilitada mesmo sem bens para oferecer</p>
-              </div>
+            <h1 className="text-4xl md:text-5xl font-bold mb-4">PRONAMPE</h1>
+            <p className="text-xl text-white/90 mb-2 font-medium">
+              Programa Nacional de Apoio às Micro e Pequenas Empresas
+            </p>
+            <p className="text-lg text-white/80 leading-relaxed mb-8">
+              Até <strong>R$ 150.000</strong> com taxa <strong>Selic + 6% ao ano</strong> e carência de 6 meses.
+              Para MEI, microempresas e empresas de pequeno porte. A Destrava cuida de todo o processo.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Link href="/simular">
+                <Button size="lg" variant="secondary" className="font-semibold">
+                  Simular Agora
+                </Button>
+              </Link>
+              <a href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20PRONAMPE." target="_blank" rel="noopener noreferrer">
+                <Button size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
+                  <Phone className="h-4 w-4 mr-2" /> Falar com Especialista
+                </Button>
+              </a>
             </div>
           </div>
         </div>
       </section>
 
-      {/* NÚMEROS */}
-      <section className="py-12 bg-gray-50 border-b">
-        <div className="container px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-            {[
-              { icon: DollarSign, value: "R$ 150k", label: "Limite por CNPJ", color: "text-blue-600" },
-              { icon: Percent, value: "Selic+6%", label: "Taxa máxima a.a.", color: "text-green-600" },
-              { icon: Calendar, value: "48 meses", label: "Prazo de pagamento", color: "text-purple-600" },
-              { icon: Clock, value: "6 meses", label: "Carência inicial", color: "text-orange-600" },
-            ].map((item) => (
-              <div key={item.label} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <item.icon className={`h-8 w-8 ${item.color} mx-auto mb-3`} />
-                <p className={`text-2xl font-bold ${item.color} mb-1`}>{item.value}</p>
-                <p className="text-gray-500 text-sm">{item.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* QUEM PODE */}
-      <section className="py-16 md:py-20">
-        <div className="container px-4">
-          <div className="max-w-3xl mx-auto text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Quem pode solicitar o PRONAMPE?</h2>
-            <p className="text-lg text-gray-600">O programa atende micro e pequenos empreendedores em todo o Brasil.</p>
-          </div>
-          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            {[
-              { icon: Users, title: "MEI", desc: "Microempreendedor Individual com faturamento anual até R$ 81 mil", color: "bg-blue-50 border-blue-200" },
-              { icon: TrendingUp, title: "Microempresa", desc: "Empresas com faturamento anual até R$ 360 mil", color: "bg-green-50 border-green-200" },
-              { icon: Shield, title: "Pequeno Porte", desc: "Empresas com faturamento anual até R$ 4,8 milhões", color: "bg-purple-50 border-purple-200" },
-            ].map((item) => (
-              <div key={item.title} className={`rounded-2xl p-6 border-2 ${item.color} text-center`}>
-                <item.icon className="h-10 w-10 text-gray-700 mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{item.title}</h3>
-                <p className="text-gray-600 text-sm">{item.desc}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-8 bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-200 rounded-2xl p-6 max-w-4xl mx-auto">
-            <div className="flex items-start gap-4">
-              <Star className="h-8 w-8 text-pink-500 flex-shrink-0 mt-1" />
-              <div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">Bônus para Mulheres Empreendedoras</h3>
-                <p className="text-gray-600">Empresas lideradas por mulheres têm limite ampliado para <strong>50% do faturamento</strong>, com teto de R$ 150.000 por CNPJ.</p>
-              </div>
+      {/* MÉTRICAS */}
+      <section className="py-16">
+        <div className="container">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-card p-6 rounded-lg border border-border text-center">
+              <DollarSign className="h-12 w-12 text-primary mx-auto mb-4" />
+              <h3 className="font-bold text-lg mb-2">Valor Máximo</h3>
+              <p className="text-2xl font-bold text-primary mb-2">Até R$ 150k</p>
+              <p className="text-sm text-muted-foreground">30% do faturamento anual</p>
+            </div>
+            <div className="bg-card p-6 rounded-lg border border-border text-center">
+              <Percent className="h-12 w-12 text-primary mx-auto mb-4" />
+              <h3 className="font-bold text-lg mb-2">Taxa de Juros</h3>
+              <p className="text-2xl font-bold text-primary mb-2">Selic + 6% a.a.</p>
+              <p className="text-sm text-muted-foreground">Uma das menores do mercado</p>
+            </div>
+            <div className="bg-card p-6 rounded-lg border border-border text-center">
+              <Calendar className="h-12 w-12 text-primary mx-auto mb-4" />
+              <h3 className="font-bold text-lg mb-2">Prazo</h3>
+              <p className="text-2xl font-bold text-primary mb-2">Até 48 meses</p>
+              <p className="text-sm text-muted-foreground">Com carência de 6 meses</p>
+            </div>
+            <div className="bg-card p-6 rounded-lg border border-border text-center">
+              <Building2 className="h-12 w-12 text-primary mx-auto mb-4" />
+              <h3 className="font-bold text-lg mb-2">Público-Alvo</h3>
+              <p className="text-2xl font-bold text-primary mb-2">MEI / ME / EPP</p>
+              <p className="text-sm text-muted-foreground">Faturamento até R$ 4,8M/ano</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* BENEFÍCIOS */}
-      <section className="py-16 md:py-20 bg-gray-50">
-        <div className="container px-4">
-          <div className="max-w-3xl mx-auto text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Por que escolher o PRONAMPE?</h2>
-            <p className="text-lg text-gray-600">Vantagens que fazem a diferença para o seu negócio.</p>
-          </div>
-          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            {[
-              { title: "Taxa limitada por lei", desc: "Máximo de Selic + 6% ao ano, sem tarifas adicionais. Proteção legal contra juros abusivos." },
-              { title: "Contratação digital", desc: "Alguns bancos permitem contratação 100% online, sem precisar ir à agência." },
-              { title: "Garantia FGO", desc: "O Fundo Garantidor de Operações facilita a aprovação mesmo sem bens para oferecer como garantia." },
-              { title: "Carência de 6 meses", desc: "Você tem 6 meses antes de começar a pagar, dando tempo para o crédito gerar retorno." },
-              { title: "Prazo estendido", desc: "Até 48 meses para pagar, com possibilidade de renegociação para 72 meses." },
-              { title: "Sem burocracia excessiva", desc: "Com a Destrava Crédito, cuidamos de toda a documentação e análise para você." },
-            ].map((item) => (
-              <div key={item.title} className="flex items-start gap-4 bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <CheckCircle2 className="h-6 w-6 text-green-500 flex-shrink-0 mt-1" />
+      {/* PARA QUE USAR */}
+      <section className="py-16 bg-muted/30">
+        <div className="container">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-center">
+              Para que você pode usar o PRONAMPE?
+            </h2>
+            <p className="text-center text-muted-foreground mb-10">
+              O crédito pode ser utilizado para qualquer finalidade relacionada à atividade empresarial.
+            </p>
+            <div className="grid md:grid-cols-2 gap-5">
+              <div className="bg-card p-5 rounded-lg border border-border flex gap-4">
+                <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
                 <div>
-                  <h3 className="font-bold text-gray-900 mb-1">{item.title}</h3>
-                  <p className="text-gray-600 text-sm">{item.desc}</p>
+                  <h3 className="font-semibold mb-1">Capital de Giro</h3>
+                  <p className="text-sm text-muted-foreground">Manter o fluxo de caixa saudável e cobrir despesas operacionais do dia a dia.</p>
                 </div>
               </div>
-            ))}
+              <div className="bg-card p-5 rounded-lg border border-border flex gap-4">
+                <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold mb-1">Estoque</h3>
+                  <p className="text-sm text-muted-foreground">Comprar mercadorias, matérias-primas ou insumos para ampliar a capacidade produtiva.</p>
+                </div>
+              </div>
+              <div className="bg-card p-5 rounded-lg border border-border flex gap-4">
+                <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold mb-1">Equipamentos</h3>
+                  <p className="text-sm text-muted-foreground">Adquirir máquinas, equipamentos e ferramentas para modernizar a operação.</p>
+                </div>
+              </div>
+              <div className="bg-card p-5 rounded-lg border border-border flex gap-4">
+                <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold mb-1">Reforma e Infraestrutura</h3>
+                  <p className="text-sm text-muted-foreground">Reformar o estabelecimento, ampliar o espaço físico ou melhorar a estrutura.</p>
+                </div>
+              </div>
+              <div className="bg-card p-5 rounded-lg border border-border flex gap-4">
+                <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold mb-1">Marketing e Tecnologia</h3>
+                  <p className="text-sm text-muted-foreground">Investir em marketing digital, sistemas de gestão e ferramentas tecnológicas.</p>
+                </div>
+              </div>
+              <div className="bg-card p-5 rounded-lg border border-border flex gap-4">
+                <CheckCircle2 className="h-6 w-6 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold mb-1">Refinanciamento</h3>
+                  <p className="text-sm text-muted-foreground">Trocar dívidas com juros mais altos por uma taxa mais competitiva e prazo maior.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* REQUISITOS */}
+      <section className="py-16">
+        <div className="container">
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl font-bold mb-10 text-center">Requisitos e Documentação</h2>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="bg-card p-6 rounded-lg border border-border">
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" /> Quem pode solicitar
+                </h3>
+                <ul className="space-y-3">
+                  <li className="flex items-start gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>MEI, Microempresa ou Empresa de Pequeno Porte</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Faturamento anual de até R$ 4,8 milhões</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Pelo menos 1 ano de funcionamento</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Situação regular na Receita Federal</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Sem restrições graves no CADIN</span>
+                  </li>
+                </ul>
+              </div>
+              <div className="bg-card p-6 rounded-lg border border-border">
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-primary" /> Documentos necessários
+                </h3>
+                <ul className="space-y-3">
+                  <li className="flex items-start gap-2 text-sm">
+                    <FileText className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>CNPJ e contrato social / certificado MEI</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-sm">
+                    <FileText className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>RG e CPF de todos os sócios</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-sm">
+                    <FileText className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Comprovante de endereço da empresa</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-sm">
+                    <FileText className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Declarações de faturamento (DEFIS / DASN)</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-sm">
+                    <FileText className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span>Extratos bancários dos últimos 3 meses</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
       {/* COMO FUNCIONA */}
-      <section className="py-16 md:py-20">
-        <div className="container px-4">
-          <div className="max-w-3xl mx-auto text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Como funciona com a Destrava?</h2>
-            <p className="text-lg text-gray-600">Do primeiro contato à aprovação, cuidamos de tudo.</p>
-          </div>
+      <section className="py-16 bg-muted/30">
+        <div className="container">
+          <h2 className="text-3xl font-bold mb-10 text-center">Como Funciona com a Destrava</h2>
           <div className="grid md:grid-cols-4 gap-6 max-w-5xl mx-auto">
             {[
-              { step: "01", title: "Análise gratuita", desc: "Avaliamos seu faturamento e elegibilidade sem custo." },
-              { step: "02", title: "Documentação", desc: "Organizamos todos os documentos necessários para aprovação." },
-              { step: "03", title: "Negociação", desc: "Identificamos o banco com melhores condições para seu perfil." },
-              { step: "04", title: "Aprovação", desc: "Acompanhamos até a liberação do crédito na sua conta." },
-            ].map((item) => (
-              <div key={item.step} className="text-center">
-                <div className="w-14 h-14 bg-blue-600 text-white rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-4">{item.step}</div>
-                <h3 className="font-bold text-gray-900 mb-2">{item.title}</h3>
-                <p className="text-gray-600 text-sm">{item.desc}</p>
+              { n: "01", icon: Users, title: "Análise Gratuita", desc: "Avaliamos seu perfil e verificamos a elegibilidade sem custo." },
+              { n: "02", icon: FileText, title: "Organização Documental", desc: "Preparamos e organizamos toda a documentação necessária." },
+              { n: "03", icon: Building2, title: "Negociação Bancária", desc: "Identificamos o banco com melhores condições e conduzimos a negociação." },
+              { n: "04", icon: TrendingUp, title: "Liberação do Crédito", desc: "Acompanhamos até a aprovação e liberação do recurso na sua conta." },
+            ].map((step) => (
+              <div key={step.n} className="text-center">
+                <div className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center text-xl font-bold mx-auto mb-4">
+                  {step.n}
+                </div>
+                <step.icon className="h-6 w-6 text-primary mx-auto mb-2" />
+                <h3 className="font-bold mb-2">{step.title}</h3>
+                <p className="text-sm text-muted-foreground">{step.desc}</p>
               </div>
             ))}
           </div>
@@ -227,21 +257,25 @@ export default function Pronampe() {
       </section>
 
       {/* FAQ */}
-      <section className="py-16 md:py-20 bg-gray-50">
-        <div className="container px-4 max-w-3xl mx-auto">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-10 text-center">Perguntas frequentes</h2>
+      <section className="py-16">
+        <div className="container max-w-3xl">
+          <h2 className="text-3xl font-bold mb-10 text-center">Perguntas Frequentes</h2>
           <div className="space-y-3">
             {faqs.map((faq, i) => (
-              <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div key={i} className="border border-border rounded-lg overflow-hidden bg-card">
                 <button
-                  className="w-full flex items-center justify-between p-6 text-left"
                   onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                  className="w-full flex items-center justify-between p-5 text-left hover:bg-muted/30 transition-colors"
                 >
-                  <span className="font-semibold text-gray-900">{faq.q}</span>
-                  <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform ${openFaq === i ? "rotate-180" : ""}`} />
+                  <span className="font-semibold pr-4">{faq.q}</span>
+                  {openFaq === i
+                    ? <ChevronUp className="h-5 w-5 text-primary flex-shrink-0" />
+                    : <ChevronDown className="h-5 w-5 text-muted-foreground flex-shrink-0" />}
                 </button>
                 {openFaq === i && (
-                  <div className="px-6 pb-6 text-gray-600 text-sm leading-relaxed">{faq.a}</div>
+                  <div className="px-5 pb-5 text-sm text-muted-foreground leading-relaxed border-t border-border pt-4">
+                    {faq.a}
+                  </div>
                 )}
               </div>
             ))}
@@ -249,26 +283,42 @@ export default function Pronampe() {
         </div>
       </section>
 
+      {/* AVISO LEGAL */}
+      <section className="py-8">
+        <div className="container max-w-4xl">
+          <div className="bg-[var(--color-caixa-yellow)]/10 border-l-4 border-[var(--color-caixa-yellow)] p-6 rounded">
+            <div className="flex gap-3">
+              <AlertCircle className="h-6 w-6 text-[var(--color-caixa-yellow)] flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold mb-2">Importante:</p>
+                <p className="text-sm text-muted-foreground">
+                  A Destrava atua como assessoria empresarial para captação de crédito. A concessão final do crédito é de responsabilidade exclusiva da instituição financeira. As condições estão sujeitas à análise e aprovação. As simulações são estimativas e não constituem oferta de crédito.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* CTA FINAL */}
-      <section className="py-16 md:py-20 bg-gradient-to-br from-[#003F7F] to-[#006fd6] text-white">
-        <div className="container px-4 text-center">
+      <section className="py-16 bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white">
+        <div className="container text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Pronto para acessar o PRONAMPE?</h2>
-          <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto">Nossa equipe analisa seu caso gratuitamente e cuida de toda a documentação. Você foca no seu negócio.</p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <p className="text-lg text-white/80 mb-8 max-w-xl mx-auto">
+            Nossa equipe faz toda a análise e condução do processo. Você foca no seu negócio.
+          </p>
+          <div className="flex flex-wrap justify-center gap-4">
             <Link href="/simular">
-              <Button size="lg" className="bg-green-400 hover:bg-green-500 text-black font-bold px-10">
+              <Button size="lg" variant="secondary" className="font-semibold">
                 Simular Agora
-                <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
-            <a href={WA_LINK} target="_blank" rel="noopener noreferrer">
-              <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-10">
-                <Phone className="mr-2 h-5 w-5" />
-                Falar com Especialista
+            <a href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20PRONAMPE." target="_blank" rel="noopener noreferrer">
+              <Button size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
+                <Phone className="h-4 w-4 mr-2" /> Falar com Especialista
               </Button>
             </a>
           </div>
-          <p className="text-white/60 text-sm mt-6">Análise gratuita · Sem compromisso · Atendimento em até 2h úteis</p>
         </div>
       </section>
 
