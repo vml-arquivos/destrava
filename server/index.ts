@@ -96,7 +96,27 @@ async function startServer() {
     next();
   }
 
-  // ─── Middleware JWT (Bearer token) ────────────────────────────────────────
+    // ─── Middleware que aceita JWT OU admin-key (para rotas de gestão de usuários) ────
+  function requireJwtOrAdmin(req: Request, res: Response, next: NextFunction) {
+    // Tenta JWT primeiro
+    const auth = req.headers.authorization;
+    if (auth?.startsWith("Bearer ")) {
+      try {
+        const decoded = jwt.verify(auth.slice(7), process.env.JWT_SECRET!) as any;
+        (req as Request & { colaborador: any }).colaborador = decoded;
+        return next();
+      } catch { /* cai para admin-key */ }
+    }
+    // Fallback: admin-key (para scripts e n8n)
+    const adminKey = req.headers["x-admin-key"];
+    if (process.env.ADMIN_KEY && adminKey === process.env.ADMIN_KEY) {
+      (req as Request & { colaborador: any }).colaborador = { id: 'admin', email: 'admin', nome: 'Admin', cargo: 'Admin' };
+      return next();
+    }
+    res.status(401).json({ error: "Unauthorized" });
+  }
+
+  // ─── Middleware JWT (Bearer token) ────────────────────────────────────
   function requireJwt(req: Request, res: Response, next: NextFunction) {
     const auth = req.headers.authorization;
     if (!auth?.startsWith("Bearer ")) {
@@ -153,9 +173,11 @@ async function startServer() {
         { expiresIn: "24h" }
       );
       console.log(`[LOGIN] Colaborador autenticado: ${user.nome} (${user.email})`);
+      const colaboradorData = { id: user.id, email: user.email, nome: user.nome, cargo: user.cargo, ativo: user.ativo };
       res.json({
         token,
-        user: { id: user.id, email: user.email, nome: user.nome, cargo: user.cargo },
+        user: colaboradorData,
+        colaborador: colaboradorData,
       });
     } catch (err) {
       console.error("[LOGIN ERROR]", err);
@@ -216,7 +238,7 @@ async function startServer() {
         `SELECT * FROM leads ${where} ORDER BY created_at DESC`,
         params
       );
-      res.json({ total: rows.length, leads: rows });
+      res.json(rows);
     } catch (err) {
       console.error("[LEADS GET ERROR]", err);
       res.status(500).json({ error: "Erro ao buscar leads." });
@@ -375,7 +397,7 @@ async function startServer() {
   });
 
   // ─── COLABORADORES API ────────────────────────────────────────────────────
-  app.post("/api/colaboradores", requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/colaboradores", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
       const { nome, email, cargo, senha } = req.body;
       if (!nome || !email || !cargo || !senha) {
@@ -403,19 +425,19 @@ async function startServer() {
     }
   });
 
-  app.get("/api/colaboradores", requireAdmin, async (_req: Request, res: Response) => {
+  app.get("/api/colaboradores", requireJwtOrAdmin, async (_req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
         "SELECT id, email, nome, cargo, ativo, criado_em FROM colaboradores ORDER BY nome"
       );
-      res.json({ colaboradores: rows });
+      res.json(rows);
     } catch (err) {
       console.error("[COLAB GET ERROR]", err);
       res.status(500).json({ error: "Erro ao buscar colaboradores." });
     }
   });
 
-  app.patch("/api/colaboradores/:id", requireAdmin, async (req: Request, res: Response) => {
+  app.patch("/api/colaboradores/:id", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
       const { nome, cargo, ativo, senha } = req.body;
       const updates: Record<string, unknown> = { atualizado_em: new Date().toISOString() };
@@ -601,15 +623,18 @@ async function startServer() {
     }
   });
 
-  // ─── POST /api/crm/atividades — Criar atividade ──────────────────────────
+   // ─── POST /api/crm/atividades — Criar atividade ──────────────────────
   app.post("/api/crm/atividades", requireJwt, async (req: Request, res: Response) => {
     try {
-      const { lead_id, tipo, descricao, resultado } = req.body;
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const { lead_id, tipo, titulo, descricao, resultado, origem_ia } = req.body;
+      // titulo é obrigatório no schema CRM; usa descricao como fallback para compatibilidade
+      const tituloFinal = titulo || descricao || tipo || 'Atividade';
       const now = new Date().toISOString();
       const result = await pool.query(
-        `INSERT INTO crm_atividades (lead_id, tipo, descricao, resultado, created_at)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [lead_id, tipo, descricao, resultado || null, now]
+        `INSERT INTO crm_atividades (lead_id, colaborador_id, tipo, titulo, descricao, resultado, origem_ia, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [lead_id, colaborador.id, tipo || 'nota', tituloFinal, descricao || null, resultado || null, origem_ia || false, now]
       );
       res.json(result.rows[0]);
     } catch (err) {
@@ -639,15 +664,24 @@ async function startServer() {
     }
   });
 
-  // ─── POST /api/crm/documentos — Criar documento ──────────────────────────
+  // ─── POST /api/crm/documentos — Criar documento ──────────────────────
   app.post("/api/crm/documentos", requireJwt, async (req: Request, res: Response) => {
     try {
-      const { lead_id, tipo, url, descricao } = req.body;
+      const { lead_id, nome, tipo, status, obrigatorio, observacao, url_arquivo } = req.body;
       const now = new Date().toISOString();
       const result = await pool.query(
-        `INSERT INTO crm_documentos (lead_id, tipo, url, descricao, created_at)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [lead_id, tipo, url, descricao || null, now]
+        `INSERT INTO crm_documentos (lead_id, nome, tipo, status, obrigatorio, observacao, url_arquivo, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8) RETURNING *`,
+        [
+          lead_id,
+          nome || tipo || 'Documento',
+          tipo || 'outro',
+          status || 'pendente',
+          obrigatorio ?? false,
+          observacao || null,
+          url_arquivo || null,
+          now,
+        ]
       );
       res.json(result.rows[0]);
     } catch (err) {
@@ -677,15 +711,51 @@ async function startServer() {
     }
   });
 
+  // ─── PATCH /api/crm/documentos/:id — Atualizar documento ─────────────────
+  app.patch("/api/crm/documentos/:id", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const updates = { ...req.body, updated_at: new Date().toISOString() };
+      const keys = Object.keys(updates);
+      const values = Object.values(updates);
+      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+      const result = await pool.query(
+        `UPDATE crm_documentos SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
+        [...values, id]
+      );
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error("[PATCH /api/crm/documentos/:id]", err);
+      res.status(500).json({ error: "Erro ao atualizar documento" });
+    }
+  });
+
   // ─── POST /api/crm/qualificacoes — Criar qualificação IA ──────────────────
   app.post("/api/crm/qualificacoes", requireJwt, async (req: Request, res: Response) => {
     try {
-      const { lead_id, score, recomendacao, analise } = req.body;
+      const { lead_id, score, temperatura, etapa_sugerida, resumo, proxima_acao,
+              pontos_positivos, pontos_atencao, documentos_faltando, probabilidade_conv,
+              recomendacao, analise } = req.body;
       const now = new Date().toISOString();
+      // Suporta tanto o schema novo (schema_crm.sql) quanto o legado
       const result = await pool.query(
-        `INSERT INTO crm_qualificacoes_ia (lead_id, score, recomendacao, analise, created_at)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [lead_id, score, recomendacao, analise || null, now]
+        `INSERT INTO crm_qualificacoes_ia
+          (lead_id, score, temperatura, etapa_sugerida, resumo, proxima_acao,
+           pontos_positivos, pontos_atencao, documentos_faltando, probabilidade_conv, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+        [
+          lead_id,
+          score || 0,
+          temperatura || 'frio',
+          etapa_sugerida || recomendacao || 'novo',
+          resumo || analise || '',
+          proxima_acao || null,
+          pontos_positivos || [],
+          pontos_atencao || [],
+          documentos_faltando || [],
+          probabilidade_conv || null,
+          now,
+        ]
       );
       res.json(result.rows[0]);
     } catch (err) {
@@ -730,8 +800,26 @@ async function startServer() {
     }
   });
 
-  // ─── GET /api/crm/pipeline — Obter pipeline ──────────────────────────────
+  // ─── GET /api/crm/pipeline — Obter leads completos para o kanban (usa view) ────
   app.get("/api/crm/pipeline", requireJwt, async (_req: Request, res: Response) => {
+    try {
+      // Tenta usar a view vw_crm_pipeline (schema CRM completo)
+      // Fallback para tabela leads simples se a view não existir
+      let result;
+      try {
+        result = await pool.query(`SELECT * FROM vw_crm_pipeline ORDER BY created_at DESC LIMIT 500`);
+      } catch {
+        result = await pool.query(`SELECT * FROM leads ORDER BY created_at DESC LIMIT 500`);
+      }
+      res.json(result.rows);
+    } catch (err) {
+      console.error("[GET /api/crm/pipeline]", err);
+      res.status(500).json({ error: "Erro ao obter pipeline" });
+    }
+  });
+
+  // ─── GET /api/crm/pipeline/metricas — Métricas agrupadas por etapa ──────────
+  app.get("/api/crm/pipeline/metricas", requireJwt, async (_req: Request, res: Response) => {
     try {
       const result = await pool.query(
         `SELECT etapa_funil, COUNT(*) as total, SUM(valor_solicitado) as valor_total
@@ -740,13 +828,13 @@ async function startServer() {
       );
       res.json(result.rows);
     } catch (err) {
-      console.error("[GET /api/crm/pipeline]", err);
-      res.status(500).json({ error: "Erro ao obter pipeline" });
+      console.error("[GET /api/crm/pipeline/metricas]", err);
+      res.status(500).json({ error: "Erro ao obter métricas do pipeline" });
     }
   });
 
   // ─── PATCH /api/colaboradores/:id/toggle — Ativar/desativar colaborador ───
-  app.patch("/api/colaboradores/:id/toggle", requireAdmin, async (req: Request, res: Response) => {
+  app.patch("/api/colaboradores/:id/toggle", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const result = await pool.query(

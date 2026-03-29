@@ -107,14 +107,9 @@ export default function UsuariosPage() {
     setMensagem(null);
 
     try {
-      // Usa rota backend /api/colaboradores (service_role) — cria sem confirmação de e-mail
-      const ADMIN_KEY = import.meta.env.VITE_ADMIN_KEY ?? "";
-      const res = await fetch("/api/colaboradores", {
+      // Usa apiFetch (JWT) — o backend aceita JWT ou admin-key
+      const json = await apiFetch("/api/colaboradores", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-admin-key": ADMIN_KEY,
-        },
         body: JSON.stringify({
           nome: nome.trim(),
           email: email.trim().toLowerCase(),
@@ -122,8 +117,6 @@ export default function UsuariosPage() {
           senha,
         }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Erro ao criar colaborador.");
 
       setMensagem({
         tipo: "sucesso",

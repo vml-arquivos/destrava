@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ email, password }),
       });
       setToken(data.token);
-      const user = data.colaborador;
+      const user = data.colaborador ?? data.user;
       setState({
         user,
         session: { access_token: data.token },

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import Layout from "./Layout";
 import { apiFetch } from "@/lib/api";
+import { toast } from "sonner";
 import {
   Users, Plus, Search, Filter, Phone, Mail, Building2,
   ChevronRight, Clock, CheckCircle, XCircle, AlertCircle,
@@ -144,7 +145,7 @@ export default function Clientes() {
         }),
       });
       toast.success("Status atualizado.");
-      fetchClientes();
+      carregarClientes();
     } catch (err) {
       console.error(err);
       toast.error("Erro ao atualizar status.");

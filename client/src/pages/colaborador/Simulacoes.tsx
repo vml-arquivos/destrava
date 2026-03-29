@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
 
 type SimulacaoColaborador = {
@@ -60,7 +60,7 @@ const fmtPct = (v: number) => `${Number(v).toFixed(2).replace(".", ",")}%`;
 
 type Status = "todos" | "pendente" | "em_analise" | "aprovado" | "reprovado" | "cancelado";
 
-const statusBadge = (status: string) => {
+const statusBadge = (status?: string) => {
   switch (status) {
     case "aprovado": return <Badge className="bg-green-100 text-green-800 border-green-200">Aprovado</Badge>;
     case "reprovado": return <Badge variant="destructive">Reprovado</Badge>;

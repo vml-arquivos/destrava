@@ -660,14 +660,14 @@ function CenarioComImposto() {
 
 function CenarioSemImposto() {
   const { user } = useAuth();
-  const [form, setForm] = useState<FormSemImposto>({ ...formBaseInicial });
+  const [form, setForm] = useState<FormBase>({ ...formBaseInicial });
   const [erros, setErros] = useState<Record<string, string>>({});
   const [resultado, setResultado] = useState<ResultadoCalculo | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [salvo, setSalvo] = useState(false);
 
   const set = useCallback((k: keyof FormBase, v: string) => {
-    setForm((prev) => ({ ...prev, [k]: v }));
+    setForm((prev: FormBase) => ({ ...prev, [k]: v }));
     setErros((prev) => ({ ...prev, [k]: "" }));
   }, []);
 
@@ -706,7 +706,7 @@ function CenarioSemImposto() {
       await apiFetch("/api/simulacoes", {
         method: "POST",
         body: JSON.stringify({
-          colaborador_id: user.id,
+          colaborador_id: user?.id,
           cliente_nome: form.nome,
           cliente_telefone: form.telefone,
           cliente_cpf_cnpj: form.cpfCnpj || null,
@@ -842,6 +842,7 @@ function DifTag({ a, b, campo }: { a: number; b: number; campo: "parcela" | "tot
 }
 
 function CenarioComparativo() {
+  const { user } = useAuth();
   const [form, setForm] = useState<FormComparativo>({
     nome: "", empresa: "", telefone: "", cpfCnpj: "",
     valorCredito: "", prazo: "24", comissao: "",
@@ -903,7 +904,7 @@ function CenarioComparativo() {
         return;
       }
       const base = {
-        colaborador_id: user.id,
+        colaborador_id: user?.id,
         cliente_nome: form.nome,
         cliente_telefone: form.telefone,
         cliente_cpf_cnpj: form.cpfCnpj || null,

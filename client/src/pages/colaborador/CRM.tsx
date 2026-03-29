@@ -330,10 +330,10 @@ function FichaLead({
 
   async function carregarDados() {
     setLoading(true);
-    const [{ data: ativs }, { data: docs }, { data: quals }] = await Promise.all([
-      apiFetch("/api/crm/atividades")("*").eq("lead_id", lead.id).order("created_at", { ascending: false }).limit(30),
-      apiFetch("/api/crm/documentos")("*").eq("lead_id", lead.id).order("created_at"),
-      apiFetch("/api/crm/qualificacoes")("*").eq("lead_id", lead.id).order("created_at", { ascending: false }).limit(5),
+    const [ativs, docs, quals] = await Promise.all([
+      apiFetch(`/api/crm/atividades?lead_id=${lead.id}`),
+      apiFetch(`/api/crm/documentos?lead_id=${lead.id}`),
+      apiFetch(`/api/crm/qualificacoes?lead_id=${lead.id}`),
     ]);
     setAtividades(ativs ?? []);
     setDocumentos(docs ?? []);
