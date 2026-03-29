@@ -421,16 +421,33 @@ function FichaLead({
         method: "PATCH",
         body: JSON.stringify(updates),
       });
-    carregarDados();
-    onUpdate();
+      carregarDados();
+      onUpdate();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao atualizar documento.");
+    }
   }
 
   async function adicionarDocumento(tipo: string) {
-    const nome = DOCS_TIPOS[tipo] ?? tipo;
-    await apiFetch("/api/crm/documentos", { method: "POST", body: JSON.stringify({
-      lead_id: lead.id, nome, tipo, status: "pendente", obrigatorio: false,
-    });
-    carregarDados();
+    try {
+      const nome = DOCS_TIPOS[tipo] ?? tipo;
+      await apiFetch("/api/crm/documentos", {
+        method: "POST",
+        body: JSON.stringify({
+          lead_id: lead.id,
+          nome,
+          tipo,
+          status: "pendente",
+          obrigatorio: false,
+        }),
+      });
+      carregarDados();
+      toast.success("Documento adicionado.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao adicionar documento.");
+    }
   }
 
   const temp = lead.temperatura ? TEMPERATURA_CONFIG[lead.temperatura] : null;
