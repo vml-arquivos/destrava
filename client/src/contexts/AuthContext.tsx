@@ -1,11 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { User, Session } from "@supabase/supabase-js";
-import { supabase, Colaborador } from "@/lib/supabase";
+import { supabase, Colaborador, signIn as authSignIn, signOut as authSignOut, getUser, getToken } from "@/lib/supabase";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface AuthState {
-  user: User | null;
-  session: Session | null;
+  user: Colaborador | null;
+  session: { access_token: string } | null;
   colaborador: Colaborador | null;
   loading: boolean;
   isAuthenticated: boolean;
@@ -30,62 +29,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isAuthenticated: false,
   });
 
-  const fetchColaborador = useCallback(async (userId: string) => {
-    const { data } = await supabase
-      .from("colaboradores")
-      .select("*")
-      .eq("id", userId)
-      .single();
-    if (data) {
-      setState((prev) => ({ ...prev, colaborador: data as Colaborador }));
-    }
+  const loadSession = useCallback(async () => {
+    const user = await getUser();
+    const token = getToken();
+    setState({
+      user,
+      session: token ? { access_token: token } : null,
+      colaborador: user,
+      loading: false,
+      isAuthenticated: !!user,
+    });
   }, []);
 
   useEffect(() => {
-    // Buscar sessão inicial
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setState((prev) => ({
-        ...prev,
-        session,
-        user: session?.user ?? null,
-        loading: false,
-        isAuthenticated: !!session,
-      }));
-      if (session?.user) fetchColaborador(session.user.id);
-    });
-
-    // Listener único para mudanças de autenticação
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setState((prev) => ({
-        ...prev,
-        session,
-        user: session?.user ?? null,
-        colaborador: session ? prev.colaborador : null,
-        loading: false,
-        isAuthenticated: !!session,
-      }));
-      if (session?.user) fetchColaborador(session.user.id);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [fetchColaborador]);
+    loadSession();
+  }, [loadSession]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await authSignIn(email, password);
+    if (data?.user) {
+      const user = data.user as Colaborador;
+      setState({
+        user,
+        session: data.session as { access_token: string },
+        colaborador: user,
+        loading: false,
+        isAuthenticated: true,
+      });
+    }
     return { data, error };
   }, []);
 
   const signOut = useCallback(async () => {
-    const { error } = await supabase.auth.signOut();
+    const { error } = await authSignOut();
     setState({ user: null, session: null, colaborador: null, loading: false, isAuthenticated: false });
     return { error };
   }, []);
 
   const refreshColaborador = useCallback(async () => {
-    if (state.user) await fetchColaborador(state.user.id);
-  }, [state.user, fetchColaborador]);
+    const user = await getUser();
+    if (user) setState((prev) => ({ ...prev, user, colaborador: user }));
+  }, []);
 
   return (
     <AuthContext.Provider value={{ ...state, signIn, signOut, refreshColaborador }}>

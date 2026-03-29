@@ -1,34 +1,20 @@
-import { createClient } from "@supabase/supabase-js";
+// ─── Auth Client — Destrava Crédito (sem Supabase) ───────────────────────────
+// Autenticação via JWT próprio. Token armazenado no localStorage.
+// API base: /api (mesmo servidor Express)
 
-// ─── Variáveis de ambiente ────────────────────────────────────────────────────
-// VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY são OBRIGATÓRIAS.
-// Devem ser definidas como Build Args no Coolify/Dockerfile antes do `pnpm build`.
-// Se ausentes em build-time, o Vite bake undefined no bundle e o login falha.
-const SUPABASE_URL: string = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY: string = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const API_BASE = "";
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error(
-    "[Supabase] VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY são obrigatórias. " +
-    "Defina-as como variáveis de ambiente de BUILD no Coolify antes de rebuildar."
-  );
-}
-
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// ─── Tipos do banco de dados ─────────────────────────────────────────────────
-
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 export interface Colaborador {
   id: string;
   email: string;
   nome: string;
   cargo: string;
   ativo: boolean;
-  created_at: string;
+  criado_em?: string;
 }
 
 export interface SimulacaoColaborador {
-  // Colunas reais da tabela simulacoes_colaborador (schema auditado)
   id: string;
   colaborador_id: string;
   cliente_nome: string;
@@ -49,21 +35,20 @@ export interface SimulacaoColaborador {
   banco?: string;
   linha_credito?: string;
   observacoes?: string;
-  status: "pendente" | "em_analise" | "aprovado" | "reprovado" | "cancelado";
+  status: "rascunho" | "enviado" | "aprovado" | "reprovado";
   criado_em: string;
   atualizado_em: string;
-  // Aliases para compatibilidade com código legado (leitura apenas)
-  valor_credito?: number;       // = valor_solicitado
-  prazo_meses?: number;         // = quantidade_parcelas
-  parcela_mensal?: number;      // = valor_parcela
-  total_emprestimo?: number;    // = valor_total_pagar
-  custo_total?: number;         // = custo_efetivo_total
-  pct_imposto?: number;         // = imposto_percentual
-  imposto_valor?: number;       // = total_imposto
-  pct_comissao?: number;        // = comissao_percentual
-  comissao_valor?: number;      // = total_comissao
-  created_at?: string;          // = criado_em
-  updated_at?: string;          // = atualizado_em
+  valor_credito?: number;
+  prazo_meses?: number;
+  parcela_mensal?: number;
+  total_emprestimo?: number;
+  custo_total?: number;
+  pct_imposto?: number;
+  imposto_valor?: number;
+  pct_comissao?: number;
+  comissao_valor?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Lead {
@@ -103,24 +88,107 @@ export interface Cliente {
   updated_at: string;
 }
 
-// ─── Helpers de autenticação ─────────────────────────────────────────────────
+// ─── Helpers de Token ─────────────────────────────────────────────────────────
+export function getToken(): string | null {
+  return localStorage.getItem("destrava_token");
+}
 
+function setToken(token: string) {
+  localStorage.setItem("destrava_token", token);
+}
+
+function clearToken() {
+  localStorage.removeItem("destrava_token");
+  localStorage.removeItem("destrava_user");
+}
+
+function setUser(user: Colaborador) {
+  localStorage.setItem("destrava_user", JSON.stringify(user));
+}
+
+export function getStoredUser(): Colaborador | null {
+  try {
+    const raw = localStorage.getItem("destrava_user");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Helpers de autenticação ─────────────────────────────────────────────────
 export async function signIn(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  return { data, error };
+  try {
+    const res = await fetch(`${API_BASE}/api/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { data: null, error: { message: data.error || "Credenciais inválidas" } };
+    }
+    setToken(data.token);
+    setUser(data.user);
+    return { data: { user: data.user, session: { access_token: data.token } }, error: null };
+  } catch {
+    return { data: null, error: { message: "Erro de conexão com o servidor" } };
+  }
 }
 
 export async function signOut() {
-  const { error } = await supabase.auth.signOut();
-  return { error };
+  clearToken();
+  return { error: null };
 }
 
 export async function getSession() {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session;
+  const token = getToken();
+  if (!token) return null;
+  return { access_token: token };
 }
 
-export async function getUser() {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
+export async function getUser(): Promise<Colaborador | null> {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    if (payload.exp && payload.exp * 1000 < Date.now()) {
+      clearToken();
+      return null;
+    }
+    return { id: payload.id, email: payload.email, nome: payload.nome, cargo: payload.cargo, ativo: true };
+  } catch {
+    clearToken();
+    return null;
+  }
 }
+
+// ─── Fetch autenticado (helper para páginas do colaborador) ──────────────────
+export async function apiFetch(path: string, options: RequestInit = {}) {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...((options.headers as Record<string, string>) || {}),
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return fetch(`${API_BASE}${path}`, { ...options, headers });
+}
+
+// ─── Stub de compatibilidade (supabase.auth.*) ────────────────────────────────
+export const supabase = {
+  from: (table: string) => {
+    console.warn(`[MIGRAÇÃO] supabase.from("${table}") chamado — migre para apiFetch`);
+    const stub: Record<string, unknown> = {};
+    const methods = ["select","insert","update","delete","eq","order","limit","single","maybeSingle"];
+    methods.forEach(m => { stub[m] = () => stub; });
+    stub["then"] = (fn: (v: { data: null; error: { message: string } }) => void) =>
+      Promise.resolve({ data: null, error: { message: "Supabase removido. Use apiFetch." } }).then(fn);
+    return stub;
+  },
+  auth: {
+    signInWithPassword: async ({ email, password }: { email: string; password: string }) =>
+      signIn(email, password),
+    signOut: async () => signOut(),
+    getSession: async () => ({ data: { session: await getSession() } }),
+    getUser: async () => ({ data: { user: await getUser() } }),
+  },
+};

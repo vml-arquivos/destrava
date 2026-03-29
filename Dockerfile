@@ -8,14 +8,10 @@ WORKDIR /app
 
 # Copiar arquivos de configuração do pnpm (incluindo .npmrc com public-hoist-pattern)
 # O .npmrc garante que 'scheduler' tenha symlink em node_modules/ raiz.
-# Sem isso o Rollup trata "scheduler" como módulo externo e o browser falha:
-# "Failed to resolve module specifier scheduler"
 COPY package.json pnpm-lock.yaml .npmrc ./
 COPY patches/ ./patches/
 
 # Instalar dependências (incluindo devDependencies para o build)
-# --mount=type=cache: o pnpm store persiste em disco entre builds no mesmo host.
-# Primeira execução: baixa tudo (~55s). Execuções seguintes: lê do cache (~5s).
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 
@@ -25,21 +21,12 @@ RUN ls node_modules/scheduler/index.js && echo "OK: scheduler symlink presente"
 # Copiar todo o código fonte
 COPY . .
 
-# ─── Variáveis de build do Vite (OBRIGATÓRIAS) ───────────────────────────────
-# O Vite bake essas variáveis no bundle em build-time via import.meta.env.
-# Devem ser definidas como Build Args no Coolify (Settings > Build Args):
-#   VITE_SUPABASE_URL=https://<project>.supabase.co
-#   VITE_SUPABASE_ANON_KEY=<anon-key>
-# Sem elas o bundle usa undefined e o login falha com placeholder.supabase.co.
-ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_ANON_KEY
-ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
-ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
-
-# Validar que as variáveis foram fornecidas antes de buildar
-RUN if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then \
-      echo "ERRO: VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY sao obrigatorias como Build Args no Coolify." && exit 1; \
-    fi
+# ─── Variáveis de build do Vite ───────────────────────────────────────────────
+# Apenas VITE_ADMIN_KEY é necessária em build-time (usada no painel do colaborador).
+# DATABASE_URL e JWT_SECRET são variáveis de runtime — não são bakeadas no bundle.
+# Defina no Coolify em: Settings > Build Args > VITE_ADMIN_KEY=<sua-chave>
+ARG VITE_ADMIN_KEY
+ENV VITE_ADMIN_KEY=$VITE_ADMIN_KEY
 
 # Build: frontend (Vite) + backend (esbuild)
 RUN pnpm run build
@@ -61,7 +48,6 @@ COPY package.json pnpm-lock.yaml .npmrc ./
 COPY patches/ ./patches/
 
 # Instalar apenas dependências de produção
-# Mesmo cache mount do builder — reutiliza pacotes já baixados no Stage 1.
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --prod
 
@@ -73,12 +59,11 @@ USER node
 
 # Variáveis de ambiente padrão
 # NOTA: PORT=4000 evita conflito com Chatwoot (3000) na mesma VPS
-# O Traefik/Coolify roteia destrava.permupay.com.br → container:4000
 ENV NODE_ENV=production
 ENV PORT=4000
 ENV DATA_DIR=/var/data/destrava
 ENV SITE_DOMAIN=destrava.permupay.com.br
-# ADMIN_KEY deve ser definido via variáveis de ambiente no Coolify (não hardcoded aqui)
+# DATABASE_URL, JWT_SECRET e ADMIN_KEY devem ser definidos via Environment Variables no Coolify
 
 # Expor porta interna (Traefik faz o roteamento externo 80/443)
 EXPOSE 4000

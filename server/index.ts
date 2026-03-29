@@ -3,42 +3,34 @@ import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-import { createClient } from "@supabase/supabase-js";
+import pkg from "pg";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
+
+const { Pool } = pkg;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ─── Supabase (backend service role) — inicialização lazy ──────────────────
-// IMPORTANTE: createClient() lança exceção se supabaseUrl for vazio (v2.100+).
-// Por isso usamos inicialização lazy: o cliente só é criado quando as variáveis
-// estiverem disponíveis, evitando crash no startup do container.
-let _supabase: ReturnType<typeof createClient> | null = null;
+// ─── PostgreSQL Pool ─────────────────────────────────────────────────────────
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: false,
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+});
 
-function getSupabase() {
-  if (_supabase) return _supabase;
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  _supabase = createClient(url, key, { auth: { persistSession: false } });
-  return _supabase;
-}
+pool.on("error", (err) => {
+  console.error("[DB] Erro inesperado no pool:", err.message);
+});
 
-const supabaseReady = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-
-// Alias para manter compatibilidade com o restante do código
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const supabase = new Proxy({} as any, {
-  get(_target: unknown, prop: string | symbol) {
-    const client = getSupabase();
-    if (!client) throw new Error("[Supabase] Cliente não disponível — variáveis não configuradas.");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (client as any)[prop];
-  },
-}) as ReturnType<typeof createClient>;
-
-if (!supabaseReady) {
-  console.warn("[Supabase] SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY não configuradas. Persistência desativada.");
-}
+// Testa a conexão ao iniciar
+pool.query("SELECT 1").then(() => {
+  console.log("🗄️  PostgreSQL: ✅ Conectado");
+}).catch((e) => {
+  console.error("🗄️  PostgreSQL: ❌ Falha na conexão —", e.message);
+});
 
 // ─── n8n Webhook helper ──────────────────────────────────────────────────────
 async function dispararN8n(evento: string, payload: Record<string, unknown>): Promise<boolean> {
@@ -77,7 +69,7 @@ async function startServer() {
   app.use(express.json({ limit: "5mb" }));
   app.use(express.urlencoded({ extended: true }));
 
-  // CORS — restrito ao domínio de produção
+  // CORS
   app.use((req: Request, res: Response, next: NextFunction) => {
     const allowedOrigins = [
       "https://destrava.permupay.com.br",
@@ -94,7 +86,7 @@ async function startServer() {
     next();
   });
 
-  // ─── Middleware de autenticação admin ──────────────────────────────────────
+  // ─── Middleware admin (x-admin-key) ──────────────────────────────────────
   function requireAdmin(req: Request, res: Response, next: NextFunction) {
     const adminKey = req.headers["x-admin-key"];
     if (!process.env.ADMIN_KEY || adminKey !== process.env.ADMIN_KEY) {
@@ -104,71 +96,107 @@ async function startServer() {
     next();
   }
 
+  // ─── Middleware JWT (Bearer token) ────────────────────────────────────────
+  function requireJwt(req: Request, res: Response, next: NextFunction) {
+    const auth = req.headers.authorization;
+    if (!auth?.startsWith("Bearer ")) {
+      res.status(401).json({ error: "Token não fornecido" });
+      return;
+    }
+    try {
+      const decoded = jwt.verify(auth.slice(7), process.env.JWT_SECRET!);
+      (req as Request & { colaborador: unknown }).colaborador = decoded;
+      next();
+    } catch {
+      res.status(401).json({ error: "Token inválido ou expirado" });
+    }
+  }
+
   // ─── Health check ──────────────────────────────────────────────────────────
-  app.get("/api/health", (_req: Request, res: Response) => {
+  app.get("/api/health", async (_req: Request, res: Response) => {
+    let dbOk = false;
+    try { await pool.query("SELECT 1"); dbOk = true; } catch { /* ignore */ }
     res.json({
       status: "ok",
       timestamp: new Date().toISOString(),
-      version: "3.0.0",
+      version: "4.0.0",
+      db: dbOk ? "connected" : "error",
       n8n_configured: !!process.env.N8N_WEBHOOK_URL,
-      supabase_configured: supabaseReady,
     });
+  });
+
+  // ─── LOGIN ────────────────────────────────────────────────────────────────
+  app.post("/api/login", async (req: Request, res: Response) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        res.status(400).json({ error: "Email e senha são obrigatórios" });
+        return;
+      }
+      const result = await pool.query(
+        "SELECT id, email, nome, cargo, senha_hash, ativo FROM colaboradores WHERE email = $1",
+        [email.trim().toLowerCase()]
+      );
+      const user = result.rows[0];
+      if (!user || !user.ativo) {
+        res.status(401).json({ error: "Credenciais inválidas" });
+        return;
+      }
+      const senhaOk = await bcrypt.compare(password, user.senha_hash);
+      if (!senhaOk) {
+        res.status(401).json({ error: "Credenciais inválidas" });
+        return;
+      }
+      const token = jwt.sign(
+        { id: user.id, email: user.email, nome: user.nome, cargo: user.cargo },
+        process.env.JWT_SECRET!,
+        { expiresIn: "24h" }
+      );
+      console.log(`[LOGIN] Colaborador autenticado: ${user.nome} (${user.email})`);
+      res.json({
+        token,
+        user: { id: user.id, email: user.email, nome: user.nome, cargo: user.cargo },
+      });
+    } catch (err) {
+      console.error("[LOGIN ERROR]", err);
+      res.status(500).json({ error: "Erro ao autenticar" });
+    }
   });
 
   // ─── LEADS API ─────────────────────────────────────────────────────────────
   app.post("/api/leads", async (req: Request, res: Response) => {
     try {
       const now = new Date().toISOString();
-      // Colunas alinhadas ao schema real da tabela leads
-      const lead = {
-        nome: req.body.nome || "",
-        email: req.body.email || null,
-        telefone: req.body.telefone || "",
-        empresa: req.body.empresa || null,
-        cpf_cnpj: req.body.cpfCnpj || null,
-        tipo_pessoa: req.body.tipoPessoa || "pf",
-        produto_interesse: req.body.produto || null,   // coluna real: produto_interesse
-        valor_solicitado: Number(req.body.valorSolicitado) || null,
-        prazo_meses: Number(req.body.prazo) || null,   // coluna real: prazo_meses
-        finalidade: req.body.mensagem || null,         // coluna real: finalidade (sem coluna 'mensagem')
-        origem: req.body.origem || "site",
-        status: "novo",
-        etapa_funil: "Novo",
-        temperatura: "frio",
-        score_ia: 0,
-        created_at: now,
-        updated_at: now,
-      };
+      const { rows } = await pool.query(
+        `INSERT INTO leads
+          (nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto_interesse,
+           valor_solicitado, prazo_meses, finalidade, origem, status, etapa_funil,
+           temperatura, score_ia, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'novo','novo','frio',0,$12,$12)
+         RETURNING id`,
+        [
+          req.body.nome || "",
+          req.body.email || null,
+          req.body.telefone || "",
+          req.body.empresa || null,
+          req.body.cpfCnpj || null,
+          req.body.tipoPessoa || "pf",
+          req.body.produto || null,
+          Number(req.body.valorSolicitado) || null,
+          Number(req.body.prazo) || null,
+          req.body.mensagem || null,
+          req.body.origem || "site",
+          now,
+        ]
+      );
+      const leadId = rows[0].id;
+      console.log(`[LEAD] Salvo: ${req.body.nome} — ${req.body.produto}`);
 
-      let leadId: string | null = null;
-      let dbError: string | null = null;
-
-      if (supabaseReady) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error } = await (supabase as any).from("leads").insert(lead).select("id").single();
-        if (error) {
-          dbError = error.message;
-          console.error("[LEAD] Erro Supabase:", error.message);
-          res.status(500).json({ success: false, message: `Erro ao salvar lead no banco: ${error.message}` });
-          return;
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        leadId = (data as any).id;
-        console.log(`[LEAD] Salvo no Supabase: ${lead.nome} — ${lead.produto_interesse}`);
-      } else {
-        // Supabase não configurado — registra localmente mas não dispara n8n
-        leadId = `local-${Date.now()}`;
-        console.warn("[LEAD] Supabase não configurado — lead não persistido no banco.");
-        res.status(201).json({ success: true, id: leadId, message: "Lead registrado localmente (Supabase não configurado)." });
-        return;
-      }
-
-      // n8n só é disparado após persistência bem-sucedida
       dispararN8n("novo_lead", {
-        id: leadId, nome: lead.nome, telefone: lead.telefone,
-        empresa: lead.empresa, email: lead.email, produto: lead.produto_interesse,
-        valorSolicitado: lead.valor_solicitado, prazo: lead.prazo_meses,
-        origem: lead.origem, criadoEm: now,
+        id: leadId, nome: req.body.nome, telefone: req.body.telefone,
+        empresa: req.body.empresa, email: req.body.email, produto: req.body.produto,
+        valorSolicitado: req.body.valorSolicitado, prazo: req.body.prazo,
+        origem: req.body.origem || "site", criadoEm: now,
       });
 
       res.status(201).json({ success: true, id: leadId, message: "Lead registrado com sucesso!" });
@@ -180,13 +208,15 @@ async function startServer() {
 
   app.get("/api/leads", requireAdmin, async (req: Request, res: Response) => {
     try {
-      if (!supabaseReady) { res.json({ total: 0, leads: [], warning: "Supabase não configurado" }); return; }
       const status = req.query.status as string | undefined;
-      let query = supabase.from("leads").select("*").order("created_at", { ascending: false });
-      if (status) query = query.eq("status", status);
-      const { data, error } = await query;
-      if (error) throw error;
-      res.json({ total: data?.length ?? 0, leads: data ?? [] });
+      const params: string[] = [];
+      let where = "";
+      if (status) { params.push(status); where = `WHERE status = $1`; }
+      const { rows } = await pool.query(
+        `SELECT * FROM leads ${where} ORDER BY created_at DESC`,
+        params
+      );
+      res.json({ total: rows.length, leads: rows });
     } catch (err) {
       console.error("[LEADS GET ERROR]", err);
       res.status(500).json({ error: "Erro ao buscar leads." });
@@ -195,17 +225,15 @@ async function startServer() {
 
   app.patch("/api/leads/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
-      if (!supabaseReady) { res.status(503).json({ error: "Supabase não configurado" }); return; }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("leads")
-        .update({ ...req.body, updated_at: new Date().toISOString() })
-        .eq("id", req.params.id)
-        .select()
-        .single();
-      if (error) throw error;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      res.json({ success: true, lead: data as any });
+      const fields = { ...req.body, updated_at: new Date().toISOString() };
+      const keys = Object.keys(fields);
+      const values = Object.values(fields);
+      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+      const { rows } = await pool.query(
+        `UPDATE leads SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
+        [...values, req.params.id]
+      );
+      res.json({ success: true, lead: rows[0] });
     } catch (err) {
       console.error("[LEAD PATCH ERROR]", err);
       res.status(500).json({ error: "Erro ao atualizar lead." });
@@ -213,57 +241,37 @@ async function startServer() {
   });
 
   // ─── SIMULAÇÕES API ────────────────────────────────────────────────────────
-  // NOTA: tabela simulacoes_publicas NÃO existe no banco.
-  // Simulações públicas são gravadas como leads com origem='simulador_publico'.
   app.post("/api/simulacoes", async (req: Request, res: Response) => {
     try {
       const now = new Date().toISOString();
-      // Gravar como lead com origem simulador_publico (schema real não tem simulacoes_publicas)
-      const sim = {
-        nome: req.body.nome || "",
-        email: req.body.email || null,
-        telefone: req.body.telefone || "",
-        empresa: req.body.empresa || null,
-        cpf_cnpj: req.body.cpfCnpj || null,
-        tipo_pessoa: req.body.tipoPessoa || "pf",
-        produto_interesse: req.body.produto || null,
-        valor_solicitado: Number(req.body.valorSolicitado) || null,
-        prazo_meses: Number(req.body.prazo) || null,
-        finalidade: `Parcela estimada: R$ ${req.body.parcelaMensal || 0} | Total: R$ ${req.body.totalPagar || 0}`,
-        origem: "simulador_publico",
-        status: "novo",
-        etapa_funil: "Novo",
-        temperatura: "frio",
-        score_ia: 0,
-        created_at: now,
-        updated_at: now,
-      };
+      const { rows } = await pool.query(
+        `INSERT INTO leads
+          (nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto_interesse,
+           valor_solicitado, prazo_meses, finalidade, origem, status, etapa_funil,
+           temperatura, score_ia, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'simulador_publico','novo','novo','frio',0,$11,$11)
+         RETURNING id`,
+        [
+          req.body.nome || "",
+          req.body.email || null,
+          req.body.telefone || "",
+          req.body.empresa || null,
+          req.body.cpfCnpj || null,
+          req.body.tipoPessoa || "pf",
+          req.body.produto || null,
+          Number(req.body.valorSolicitado) || null,
+          Number(req.body.prazo) || null,
+          `Parcela estimada: R$ ${req.body.parcelaMensal || 0} | Total: R$ ${req.body.totalPagar || 0}`,
+          now,
+        ]
+      );
+      const simId = rows[0].id;
+      console.log(`[SIM] Salvo como lead: ${req.body.nome} — ${req.body.produto}`);
 
-      let simId: string | null = null;
-
-      if (supabaseReady) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error } = await (supabase as any).from("leads").insert(sim).select("id").single();
-        if (error) {
-          console.error("[SIM] Erro Supabase:", error.message);
-          res.status(500).json({ success: false, message: `Erro ao salvar simulação no banco: ${error.message}` });
-          return;
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        simId = (data as any).id;
-        console.log(`[SIM] Salvo como lead: ${sim.nome} — ${sim.produto_interesse}`);
-      } else {
-        simId = `local-${Date.now()}`;
-        console.warn("[SIM] Supabase não configurado — simulação não persistida.");
-        res.status(201).json({ success: true, id: simId, message: "Simulação registrada localmente (Supabase não configurado)." });
-        return;
-      }
-
-      // n8n só é disparado após persistência bem-sucedida
       dispararN8n("nova_simulacao", {
-        id: simId, nome: sim.nome, telefone: sim.telefone,
-        empresa: sim.empresa, email: sim.email, produto: sim.produto_interesse,
-        valorSolicitado: sim.valor_solicitado, prazo: sim.prazo_meses,
+        id: simId, nome: req.body.nome, telefone: req.body.telefone,
+        empresa: req.body.empresa, email: req.body.email, produto: req.body.produto,
+        valorSolicitado: req.body.valorSolicitado, prazo: req.body.prazo,
         parcelaMensal: req.body.parcelaMensal, custoTotal: req.body.totalPagar, criadoEm: now,
       });
 
@@ -276,65 +284,41 @@ async function startServer() {
 
   app.get("/api/simulacoes", requireAdmin, async (_req: Request, res: Response) => {
     try {
-      if (!supabaseReady) { res.json({ total: 0, simulacoes: [] }); return; }
-      // Buscar leads com origem simulador_publico (tabela simulacoes_publicas não existe)
-      const { data, error } = await supabase
-        .from("leads")
-        .select("*")
-        .eq("origem", "simulador_publico")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      res.json({ total: data?.length ?? 0, simulacoes: data ?? [] });
+      const { rows } = await pool.query(
+        `SELECT * FROM leads WHERE origem = 'simulador_publico' ORDER BY created_at DESC`
+      );
+      res.json({ total: rows.length, simulacoes: rows });
     } catch (err) {
       console.error("[SIMS GET ERROR]", err);
       res.status(500).json({ error: "Erro ao buscar simulações." });
     }
   });
 
-  // ─── CONTATO API ────────────────────────────────────────────────────────
-  // NOTA: tabela contatos NÃO existe no banco.
-  // Contatos do site são gravados como leads com origem='contato_site'.
+  // ─── CONTATO API ────────────────────────────────────────────────────────────
   app.post("/api/contato", async (req: Request, res: Response) => {
     try {
       const now = new Date().toISOString();
-      const contato = {
-        nome: req.body.nome || "",
-        email: req.body.email || null,
-        telefone: req.body.telefone || null,
-        finalidade: `[${req.body.assunto || "contato"}] ${req.body.mensagem || ""}`.substring(0, 500),
-        origem: "contato_site",
-        status: "novo",
-        etapa_funil: "Novo",
-        temperatura: "frio",
-        score_ia: 0,
-        created_at: now,
-        updated_at: now,
-      };
+      const { rows } = await pool.query(
+        `INSERT INTO leads
+          (nome, email, telefone, finalidade, origem, status, etapa_funil,
+           temperatura, score_ia, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,'contato_site','novo','novo','frio',0,$5,$5)
+         RETURNING id`,
+        [
+          req.body.nome || "",
+          req.body.email || null,
+          req.body.telefone || null,
+          `[${req.body.assunto || "contato"}] ${req.body.mensagem || ""}`.substring(0, 500),
+          now,
+        ]
+      );
+      const contatoId = rows[0].id;
+      console.log(`[CONTATO] Salvo: ${req.body.nome} — ${req.body.assunto}`);
 
-      let contatoId: string | null = null;
-
-      if (supabaseReady) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error } = await (supabase as any).from("leads").insert(contato).select("id").single();
-        if (error) {
-          console.error("[CONTATO] Erro Supabase:", error.message);
-          res.status(500).json({ success: false, message: `Erro ao salvar contato no banco: ${error.message}` });
-          return;
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        contatoId = (data as any).id;
-        console.log(`[CONTATO] Salvo como lead: ${contato.nome} — ${req.body.assunto}`);
-      } else {
-        contatoId = `local-${Date.now()}`;
-        console.warn("[CONTATO] Supabase não configurado — contato não persistido.");
-        res.status(201).json({ success: true, message: "Mensagem enviada localmente (Supabase não configurado)." });
-        return;
-      }
-
-      // n8n só é disparado após persistência bem-sucedida
       dispararN8n("novo_contato", {
-        id: contatoId, nome: contato.nome, email: contato.email, telefone: contato.telefone,
-        assunto: req.body.assunto, mensagem: req.body.mensagem, criadoEm: now,
+        id: contatoId, nome: req.body.nome, email: req.body.email,
+        telefone: req.body.telefone, assunto: req.body.assunto,
+        mensagem: req.body.mensagem, criadoEm: now,
       });
 
       res.status(201).json({ success: true, message: "Mensagem enviada com sucesso!" });
@@ -346,15 +330,10 @@ async function startServer() {
 
   app.get("/api/contatos", requireAdmin, async (_req: Request, res: Response) => {
     try {
-      if (!supabaseReady) { res.json({ total: 0, contatos: [] }); return; }
-      // Buscar leads com origem contato_site (tabela contatos não existe)
-      const { data, error } = await supabase
-        .from("leads")
-        .select("*")
-        .eq("origem", "contato_site")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      res.json({ total: data?.length ?? 0, contatos: data ?? [] });
+      const { rows } = await pool.query(
+        `SELECT * FROM leads WHERE origem = 'contato_site' ORDER BY created_at DESC`
+      );
+      res.json({ total: rows.length, contatos: rows });
     } catch (err) {
       console.error("[CONTATOS GET ERROR]", err);
       res.status(500).json({ error: "Erro ao buscar contatos." });
@@ -364,34 +343,17 @@ async function startServer() {
   // ─── ESTATÍSTICAS API ──────────────────────────────────────────────────────
   app.get("/api/stats", requireAdmin, async (_req: Request, res: Response) => {
     try {
-      if (!supabaseReady) {
-        res.json({
-          leads: { total: 0, byStatus: {}, byProduto: {} },
-          simulacoes: { total: 0, totalValorSimulado: 0, totalCustoSimulado: 0 },
-          contatos: { total: 0 },
-          n8n: { configured: !!process.env.N8N_WEBHOOK_URL },
-          timestamp: new Date().toISOString(),
-        });
-        return;
-      }
-
-        // Todas as origens são gravadas na tabela leads
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sb = supabase as any;
       const [leadsRes, simsRes, contatosRes] = await Promise.all([
-        sb.from("leads").select("status, produto_interesse, valor_solicitado"),
-        sb.from("leads").select("valor_solicitado").eq("origem", "simulador_publico"),
-        sb.from("leads").select("id", { count: "exact", head: true }).eq("origem", "contato_site"),
+        pool.query("SELECT status, produto_interesse, valor_solicitado FROM leads"),
+        pool.query("SELECT valor_solicitado FROM leads WHERE origem = 'simulador_publico'"),
+        pool.query("SELECT COUNT(*) FROM leads WHERE origem = 'contato_site'"),
       ]);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const leads: any[] = leadsRes.data ?? [];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sims: any[] = simsRes.data ?? [];
-      const byStatus = leads.reduce((acc: Record<string, number>, l: any) => {
-        acc[l.status] = (acc[l.status] || 0) + 1;
-        return acc;
+      const leads = leadsRes.rows;
+      const sims = simsRes.rows;
+      const byStatus = leads.reduce((acc: Record<string, number>, l) => {
+        acc[l.status] = (acc[l.status] || 0) + 1; return acc;
       }, {});
-      const byProduto = leads.reduce((acc: Record<string, number>, l: any) => {
+      const byProduto = leads.reduce((acc: Record<string, number>, l) => {
         if (l.produto_interesse) acc[l.produto_interesse] = (acc[l.produto_interesse] || 0) + 1;
         return acc;
       }, {});
@@ -399,10 +361,10 @@ async function startServer() {
         leads: { total: leads.length, byStatus, byProduto },
         simulacoes: {
           total: sims.length,
-          totalValorSimulado: sims.reduce((s: number, r: Record<string, number>) => s + (r.valor_solicitado || 0), 0),
-          totalCustoSimulado: 0, // campo total_pagar não existe na tabela leads
+          totalValorSimulado: sims.reduce((s, r) => s + (Number(r.valor_solicitado) || 0), 0),
+          totalCustoSimulado: 0,
         },
-        contatos: { total: contatosRes.count ?? 0 },
+        contatos: { total: Number(contatosRes.rows[0].count) },
         n8n: { configured: !!process.env.N8N_WEBHOOK_URL },
         timestamp: new Date().toISOString(),
       });
@@ -412,58 +374,70 @@ async function startServer() {
     }
   });
 
-  // ─── COLABORADORES API (admin flow — sem confirmação de e-mail) ───────────────
-  // Usa service_role para criar usuário diretamente sem exigir confirmação de e-mail
+  // ─── COLABORADORES API ────────────────────────────────────────────────────
   app.post("/api/colaboradores", requireAdmin, async (req: Request, res: Response) => {
     try {
-      if (!supabaseReady) { res.status(503).json({ error: "Supabase não configurado" }); return; }
       const { nome, email, cargo, senha } = req.body;
       if (!nome || !email || !cargo || !senha) {
         res.status(400).json({ error: "Campos obrigatórios: nome, email, cargo, senha" });
         return;
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const adminAuth = (supabase as any).auth.admin;
-      // Criar usuário no Auth com email_confirm=true (pula confirmação)
-      const { data: authData, error: authError } = await adminAuth.createUser({
-        email: email.trim().toLowerCase(),
-        password: senha,
-        email_confirm: true,
-        user_metadata: { nome, cargo },
-      });
-      if (authError) {
-        console.error("[COLAB] Auth error:", authError.message);
-        res.status(400).json({ error: authError.message });
-        return;
-      }
-      const userId = authData.user.id;
-      // Inserir perfil na tabela colaboradores
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: profileError } = await (supabase as any)
-        .from("colaboradores")
-        .insert({
-          id: userId,
-          nome: nome.trim(),
-          cargo,
-          email: email.trim().toLowerCase(),
-          ativo: true,
-        });
-      if (profileError) {
-        console.error("[COLAB] Profile error:", profileError.message);
-        // Tentar reverter criação do usuário no Auth
-        await adminAuth.deleteUser(userId).catch(() => {});
-        res.status(500).json({ error: profileError.message });
-        return;
-      }
+      const senhaHash = await bcrypt.hash(senha, 12);
+      const { rows } = await pool.query(
+        `INSERT INTO colaboradores (nome, email, cargo, senha_hash, ativo)
+         VALUES ($1, $2, $3, $4, true)
+         RETURNING id`,
+        [nome.trim(), email.trim().toLowerCase(), cargo, senhaHash]
+      );
+      const userId = rows[0].id;
       console.log(`[COLAB] Colaborador criado: ${nome} (${email})`);
       res.status(201).json({ success: true, id: userId, message: `Colaborador "${nome}" criado com sucesso!` });
-    } catch (err) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("unique") || msg.includes("duplicate")) {
+        res.status(409).json({ error: "E-mail já cadastrado" });
+        return;
+      }
       console.error("[COLAB ERROR]", err);
       res.status(500).json({ error: "Erro ao criar colaborador." });
     }
   });
 
-  // ─── n8n WEBHOOK CONFIG API ────────────────────────────────────────────────────────
+  app.get("/api/colaboradores", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        "SELECT id, email, nome, cargo, ativo, criado_em FROM colaboradores ORDER BY nome"
+      );
+      res.json({ colaboradores: rows });
+    } catch (err) {
+      console.error("[COLAB GET ERROR]", err);
+      res.status(500).json({ error: "Erro ao buscar colaboradores." });
+    }
+  });
+
+  app.patch("/api/colaboradores/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { nome, cargo, ativo, senha } = req.body;
+      const updates: Record<string, unknown> = { atualizado_em: new Date().toISOString() };
+      if (nome) updates.nome = nome.trim();
+      if (cargo) updates.cargo = cargo;
+      if (ativo !== undefined) updates.ativo = ativo;
+      if (senha) updates.senha_hash = await bcrypt.hash(senha, 12);
+      const keys = Object.keys(updates);
+      const values = Object.values(updates);
+      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+      const { rows } = await pool.query(
+        `UPDATE colaboradores SET ${set} WHERE id = $${keys.length + 1} RETURNING id, nome, email, cargo, ativo`,
+        [...values, req.params.id]
+      );
+      res.json({ success: true, colaborador: rows[0] });
+    } catch (err) {
+      console.error("[COLAB PATCH ERROR]", err);
+      res.status(500).json({ error: "Erro ao atualizar colaborador." });
+    }
+  });
+
+  // ─── n8n WEBHOOK CONFIG API ────────────────────────────────────────────────
   app.get("/api/n8n/status", requireAdmin, (_req: Request, res: Response) => {
     res.json({
       configured: !!process.env.N8N_WEBHOOK_URL,
@@ -471,6 +445,7 @@ async function startServer() {
       eventos: ["novo_lead", "nova_simulacao", "novo_contato"],
     });
   });
+
   app.post("/api/n8n/test", requireAdmin, async (_req: Request, res: Response) => {
     const ok = await dispararN8n("teste_webhook", {
       mensagem: "Teste de integração Destrava Crédito → n8n",
@@ -496,11 +471,9 @@ async function startServer() {
     }
   });
 
-  // Porta 4000 — não conflita com Chatwoot (3000) na mesma VPS
   const port = Number(process.env.PORT) || 4000;
   server.listen(port, "0.0.0.0", () => {
-    console.log(`✅ Destrava Crédito v3.0 — http://0.0.0.0:${port}/`);
-    console.log(`🗄️  Supabase: ${supabaseReady ? "✅ Configurado" : "⚠️ Não configurado"}`);
+    console.log(`✅ Destrava Crédito v4.0 — http://0.0.0.0:${port}/`);
     console.log(`🌍 Ambiente: ${process.env.NODE_ENV || "development"}`);
     console.log(`🔗 n8n: ${process.env.N8N_WEBHOOK_URL ? "✅ Configurado" : "⚠️ Não configurado"}`);
   });
