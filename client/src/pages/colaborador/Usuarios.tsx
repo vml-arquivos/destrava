@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import Layout from "./Layout";
-import { supabase } from "@/lib/supabase";
+import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -146,7 +146,7 @@ export default function UsuariosPage() {
   // ─── Alternar status ativo/inativo ────────────────────────────────────────
 
   async function toggleAtivo(id: string, ativo: boolean) {
-    await supabase.from("colaboradores").update({ ativo: !ativo }).eq("id", id);
+    await apiFetch(`/api/colaboradores/${id}/toggle`, { method: "PATCH" });
     carregarColaboradores();
   }
 

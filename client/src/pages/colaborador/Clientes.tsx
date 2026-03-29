@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import Layout from "./Layout";
-import { supabase } from "@/lib/supabase";
+import { apiFetch } from "@/lib/api";
 import {
   Users, Plus, Search, Filter, Phone, Mail, Building2,
   ChevronRight, Clock, CheckCircle, XCircle, AlertCircle,
@@ -136,7 +136,7 @@ export default function Clientes() {
         setClienteSelecionado(prev => prev ? { ...prev, status: novoStatus as any } : null);
       }
       // Registrar atividade de mudança de status em crm_atividades
-      await supabase.from("crm_atividades").insert({
+      await apiFetch("/api/crm/atividades", { method: "POST", body: JSON.stringify({
         lead_id: clienteId,
         tipo: "status_change",
         titulo: `Status alterado para: ${STATUS_CONFIG[novoStatus as keyof typeof STATUS_CONFIG]?.label}`,
@@ -174,7 +174,7 @@ export default function Clientes() {
     if (!form.nome || !form.telefone) return;
     setSalvando(true);
 
-    const { data: userData } = await supabase.auth.getUser();
+    // User obtained from useAuth hook
     if (!userData?.user) {
       alert("Sessão expirada. Faça login novamente.");
       setSalvando(false);
@@ -222,7 +222,7 @@ export default function Clientes() {
 
   async function excluirCliente(clienteId: string) {
     if (!confirm("Tem certeza que deseja excluir este cliente?")) return;
-    const { error } = await supabase.from("leads").delete().eq("id", clienteId);
+    await apiFetch(`/api/leads/${clienteId}`, { method: "DELETE" });
     if (!error) {
       setClientes(prev => prev.filter(c => c.id !== clienteId));
       if (clienteSelecionado?.id === clienteId) setClienteSelecionado(null);

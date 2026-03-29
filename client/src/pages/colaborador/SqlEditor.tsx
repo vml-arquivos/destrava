@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import Layout from "./Layout";
-import { supabase } from "@/lib/supabase";
+import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -266,23 +266,19 @@ export default function SqlEditorPage() {
     const inicio = Date.now();
 
     try {
-      const { data, error } = await supabase.rpc("exec_sql", { query: sql.trim() });
+      const data = await apiFetch("/api/admin/sql", {
+        method: "POST",
+        body: JSON.stringify({ query: sql.trim() }),
+      });
 
       const duracao = Date.now() - inicio;
 
-      if (error) {
-        setErro(error.message);
-        setHistorico((prev) => [{ sql, resultado: null, erro: error.message, duracao, timestamp: new Date() }, ...prev.slice(0, 19)]);
+      if (data?.error) {
+        setErro(data.error);
+        setHistorico((prev) => [{ sql, resultado: null, erro: data.error, duracao, timestamp: new Date() }, ...prev.slice(0, 19)]);
       } else {
-        // Verificar se o resultado contém um erro da função
-        if (data && typeof data === "object" && !Array.isArray(data) && "error" in data) {
-          const errMsg = (data as { error: string }).error;
-          setErro(errMsg);
-          setHistorico((prev) => [{ sql, resultado: null, erro: errMsg, duracao, timestamp: new Date() }, ...prev.slice(0, 19)]);
-        } else {
-          setResultado(data);
-          setHistorico((prev) => [{ sql, resultado: data, erro: null, duracao, timestamp: new Date() }, ...prev.slice(0, 19)]);
-        }
+        setResultado(data);
+        setHistorico((prev) => [{ sql, resultado: data, erro: null, duracao, timestamp: new Date() }, ...prev.slice(0, 19)]);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";

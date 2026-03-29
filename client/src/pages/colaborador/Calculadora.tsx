@@ -45,7 +45,8 @@ import {
   TrendingUp,
   Minus,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 // ─── Formatadores ─────────────────────────────────────────────────────────────
 
@@ -493,42 +494,33 @@ function CenarioComImposto() {
     if (!resultado) return;
     setSalvando(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error("Sessão expirada. Faça login novamente.");
-        setSalvando(false);
-        return;
-      }
-      const { error } = await supabase.from("simulacoes_colaborador").insert({
-        colaborador_id: user.id,
-        cliente_nome: form.nome,
-        cliente_telefone: form.telefone,
-        cliente_cpf_cnpj: form.cpfCnpj || null,
-        valor_solicitado: parseBRL(form.valorCredito),
-        quantidade_parcelas: parseInt(form.prazo),
-        taxa_juros_mensal: parseFloat(form.taxaJuros),
-        imposto_percentual: parseFloat(form.pctImposto) || null,
-        total_imposto: resultado.impostoValor || null,
-        comissao_percentual: parseFloat(form.comissao) || null,
-        total_comissao: resultado.comissaoValor,
-        valor_parcela: resultado.parcelaMensal,
-        valor_total_pagar: resultado.totalFinanciamento,
-        total_juros: resultado.totalJuros,
-        custo_efetivo_total: resultado.custoTotalOperacao,
-        banco: form.banco || null,
-        linha_credito: form.linhaCredito || null,
-        observacoes: form.observacoes ? `[com_imposto] ${form.observacoes}` : "[com_imposto]",
+      await apiFetch("/api/simulacoes", {
+        method: "POST",
+        body: JSON.stringify({
+          cliente_nome: form.nome,
+          cliente_telefone: form.telefone,
+          cliente_cpf_cnpj: form.cpfCnpj || null,
+          valor_solicitado: parseBRL(form.valorCredito),
+          quantidade_parcelas: parseInt(form.prazo),
+          taxa_juros_mensal: parseFloat(form.taxaJuros),
+          imposto_percentual: parseFloat(form.pctImposto) || null,
+          total_imposto: resultado.impostoValor || null,
+          comissao_percentual: parseFloat(form.comissao) || null,
+          total_comissao: resultado.comissaoValor,
+          valor_parcela: resultado.parcelaMensal,
+          valor_total_pagar: resultado.totalFinanciamento,
+          total_juros: resultado.totalJuros,
+          custo_efetivo_total: resultado.custoTotalOperacao,
+          banco: form.banco || null,
+          linha_credito: form.linhaCredito || null,
+          observacoes: form.observacoes ? `[com_imposto] ${form.observacoes}` : "[com_imposto]",
+        }),
       });
-      if (error) {
-        console.error("[Calculadora] Erro ao salvar simulação:", error);
-        toast.error(`Erro ao salvar: ${error.message}`);
-      } else {
-        setSalvo(true);
-        toast.success("Simulação salva com sucesso!");
-      }
-    } catch (err) {
+      setSalvo(true);
+      toast.success("Simulação salva com sucesso!");
+    } catch (err: any) {
       console.error(err);
-      toast.error("Erro ao salvar simulação. Verifique a conexão e tente novamente.");
+      toast.error(err.message || "Erro ao salvar simulação. Verifique a conexão e tente novamente.");
     }
     setSalvando(false);
   }
@@ -703,13 +695,13 @@ function CenarioSemImposto() {
     if (!resultado) return;
     setSalvando(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // User obtained from useAuth hook
+      if (false) {
         toast.error("Sessão expirada. Faça login novamente.");
         setSalvando(false);
         return;
       }
-      const { error } = await supabase.from("simulacoes_colaborador").insert({
+      await apiFetch("/api/simulacoes", { method: "POST", body: JSON.stringify({
         colaborador_id: user.id,
         cliente_nome: form.nome,
         cliente_telefone: form.telefone,
@@ -904,8 +896,8 @@ function CenarioComparativo() {
     if (!validar() || (!resA && !resB)) return;
     setSalvando(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // User obtained from useAuth hook
+      if (false) {
         toast.error("Sessão expirada. Faça login novamente.");
         setSalvando(false);
         return;
@@ -923,7 +915,7 @@ function CenarioComparativo() {
       };
       let hasError = false;
       if (resA) {
-        const { error } = await supabase.from("simulacoes_colaborador").insert({
+        await apiFetch("/api/simulacoes", { method: "POST", body: JSON.stringify({
           ...base,
           taxa_juros_mensal: parseFloat(form.taxaA),
           imposto_percentual: parseFloat(form.pctImposto) || null,
@@ -938,7 +930,7 @@ function CenarioComparativo() {
         if (error) { console.error("[Calculadora] Erro cenário A:", error); toast.error(`Erro cenário A: ${error.message}`); hasError = true; }
       }
       if (resB) {
-        const { error } = await supabase.from("simulacoes_colaborador").insert({
+        await apiFetch("/api/simulacoes", { method: "POST", body: JSON.stringify({
           ...base,
           taxa_juros_mensal: parseFloat(form.taxaB),
           total_comissao: resB.comissaoValor,

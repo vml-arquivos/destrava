@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import Layout from "./Layout";
-import { supabase } from "@/lib/supabase";
+import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import {
   Users, Plus, Search, Phone, Mail, Building2, ChevronRight,
@@ -331,9 +331,9 @@ function FichaLead({
   async function carregarDados() {
     setLoading(true);
     const [{ data: ativs }, { data: docs }, { data: quals }] = await Promise.all([
-      supabase.from("crm_atividades").select("*").eq("lead_id", lead.id).order("created_at", { ascending: false }).limit(30),
-      supabase.from("crm_documentos").select("*").eq("lead_id", lead.id).order("created_at"),
-      supabase.from("crm_qualificacoes_ia").select("*").eq("lead_id", lead.id).order("created_at", { ascending: false }).limit(5),
+      apiFetch("/api/crm/atividades")("*").eq("lead_id", lead.id).order("created_at", { ascending: false }).limit(30),
+      apiFetch("/api/crm/documentos")("*").eq("lead_id", lead.id).order("created_at"),
+      apiFetch("/api/crm/qualificacoes")("*").eq("lead_id", lead.id).order("created_at", { ascending: false }).limit(5),
     ]);
     setAtividades(ativs ?? []);
     setDocumentos(docs ?? []);
@@ -344,7 +344,7 @@ function FichaLead({
   async function salvarAtividade() {
     if (!novaAtiv.titulo.trim()) return toast.error("Informe o título da atividade.");
     setSalvando(true);
-    const { error } = await supabase.from("crm_atividades").insert({
+    await apiFetch("/api/crm/atividades", { method: "POST", body: JSON.stringify({
       lead_id: lead.id,
       tipo: novaAtiv.tipo,
       titulo: novaAtiv.titulo,
@@ -367,13 +367,13 @@ function FichaLead({
     setSalvando(true);
     const updates: Record<string, unknown> = { temperatura: novaTemp };
     if (novaEtapa !== lead.etapa_funil) {
-      const { error } = await supabase.rpc("crm_mover_funil", {
+      await apiFetch("/api/crm/mover-funil", { method: "POST", body: JSON.stringify(, {
         p_lead_id: lead.id,
         p_nova_etapa: novaEtapa,
       });
       if (error) { toast.error("Erro ao mover funil."); setSalvando(false); return; }
     }
-    await supabase.from("leads").update(updates).eq("id", lead.id);
+    await apiFetch("/api/leads/update", { method: "PATCH", body: JSON.stringify((updates).eq("id", lead.id);
     toast.success("Lead atualizado!");
     onUpdate();
     setSalvando(false);
@@ -382,7 +382,7 @@ function FichaLead({
   async function salvarEdicao() {
     if (!dadosEdit || Object.keys(dadosEdit).length === 0) { setEditando(false); return; }
     setSalvando(true);
-    const { error } = await supabase.from("leads").update(dadosEdit).eq("id", lead.id);
+    const { error } = await apiFetch("/api/leads/update", { method: "PATCH", body: JSON.stringify((dadosEdit).eq("id", lead.id);
     if (error) toast.error("Erro ao salvar.");
     else { toast.success("Dados salvos!"); setEditando(false); onUpdate(); }
     setSalvando(false);
@@ -392,14 +392,14 @@ function FichaLead({
     const updates: Record<string, unknown> = { status };
     if (status === "recebido") updates.recebido_em = new Date().toISOString();
     if (status === "aprovado") updates.aprovado_em = new Date().toISOString();
-    await supabase.from("crm_documentos").update(updates).eq("id", docId);
+    await apiFetch("/api/crm/documentos/update", { method: "PATCH", body: JSON.stringify((updates).eq("id", docId);
     carregarDados();
     onUpdate();
   }
 
   async function adicionarDocumento(tipo: string) {
     const nome = DOCS_TIPOS[tipo] ?? tipo;
-    await supabase.from("crm_documentos").insert({
+    await apiFetch("/api/crm/documentos", { method: "POST", body: JSON.stringify({
       lead_id: lead.id, nome, tipo, status: "pendente", obrigatorio: false,
     });
     carregarDados();
@@ -929,7 +929,7 @@ export default function CRM() {
 
     // Calcular métricas por etapa
     const m: Record<string, { total: number; valor: number }> = {};
-    const source = (await supabase.from("vw_crm_pipeline").select("etapa_funil,valor_solicitado")).data ?? [];
+    const source = await apiFetch("/api/crm/pipeline"("etapa_funil,valor_solicitado")).data ?? [];
     source.forEach((l: { etapa_funil: string; valor_solicitado?: number }) => {
       if (!m[l.etapa_funil]) m[l.etapa_funil] = { total: 0, valor: 0 };
       m[l.etapa_funil].total++;
@@ -945,7 +945,7 @@ export default function CRM() {
       return;
     }
     setSalvando(true);
-    const { error } = await supabase.from("leads").insert({
+    await apiFetch("/api/leads", { method: "POST", body: JSON.stringify({
       nome: novoLead.nome,
       telefone: novoLead.telefone,
       email: novoLead.email || null,

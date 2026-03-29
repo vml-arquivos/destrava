@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase, SimulacaoColaborador } from "@/lib/supabase";
+import { apiFetch } from "@/lib/api";
+import type { SimulacaoColaborador } from "@/lib/supabase";
 import ColaboradorLayout from "./Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,33 +77,42 @@ export default function Simulacoes() {
 
   async function fetchSimulacoes() {
     setLoading(true);
-    const { data } = await supabase
-      .from("simulacoes_colaborador")
-      .select("*")
-      .eq("colaborador_id", user!.id)
-      .order("criado_em", { ascending: false });
-    setSimulacoes((data as SimulacaoColaborador[]) || []);
+    try {
+      const data = await apiFetch("/api/simulacoes");
+      setSimulacoes((data as SimulacaoColaborador[]) || []);
+    } catch (err) {
+      console.error(err);
+      setSimulacoes([]);
+    }
     setLoading(false);
   }
 
   async function atualizarStatus(id: string, status: string) {
     setAtualizando(id);
-    await supabase
-      .from("simulacoes_colaborador")
-      .update({ status })
-      .eq("id", id);
-    setSimulacoes((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status: status as any } : s))
-    );
-    if (selecionada?.id === id) setSelecionada((prev) => prev ? { ...prev, status: status as any } : null);
+    try {
+      await apiFetch(`/api/simulacoes/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      setSimulacoes((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, status: status as any } : s))
+      );
+      if (selecionada?.id === id) setSelecionada((prev) => prev ? { ...prev, status: status as any } : null);
+    } catch (err) {
+      console.error(err);
+    }
     setAtualizando(null);
   }
 
   async function excluir(id: string) {
     if (!confirm("Tem certeza que deseja excluir esta simulação?")) return;
-    await supabase.from("simulacoes_colaborador").delete().eq("id", id);
-    setSimulacoes((prev) => prev.filter((s) => s.id !== id));
-    if (selecionada?.id === id) setSelecionada(null);
+    try {
+      await apiFetch(`/api/simulacoes/${id}`, { method: "DELETE" });
+      setSimulacoes((prev) => prev.filter((s) => s.id !== id));
+      if (selecionada?.id === id) setSelecionada(null);
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   const filtradas = simulacoes.filter((s) => {

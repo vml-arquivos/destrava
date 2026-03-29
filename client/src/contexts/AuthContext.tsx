@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { supabase, Colaborador, signIn as authSignIn, signOut as authSignOut, getUser, getToken } from "@/lib/supabase";
+import { apiFetch, getToken, setToken, removeToken } from "@/lib/api";
+import type { Colaborador } from "@/lib/supabase";
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
 interface AuthState {
   user: Colaborador | null;
   session: { access_token: string } | null;
@@ -16,10 +16,8 @@ interface AuthContextValue extends AuthState {
   refreshColaborador: () => Promise<void>;
 }
 
-// ─── Context ──────────────────────────────────────────────────────────────────
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -30,15 +28,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   const loadSession = useCallback(async () => {
-    const user = await getUser();
     const token = getToken();
-    setState({
-      user,
-      session: token ? { access_token: token } : null,
-      colaborador: user,
-      loading: false,
-      isAuthenticated: !!user,
-    });
+    if (!token) {
+      setState({
+        user: null,
+        session: null,
+        colaborador: null,
+        loading: false,
+        isAuthenticated: false,
+      });
+      return;
+    }
+    try {
+      const user = await apiFetch("/api/me");
+      setState({
+        user,
+        session: { access_token: token },
+        colaborador: user,
+        loading: false,
+        isAuthenticated: true,
+      });
+    } catch {
+      removeToken();
+      setState({
+        user: null,
+        session: null,
+        colaborador: null,
+        loading: false,
+        isAuthenticated: false,
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -46,29 +65,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loadSession]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const { data, error } = await authSignIn(email, password);
-    if (data?.user) {
-      const user = data.user as Colaborador;
+    try {
+      const data = await apiFetch("/api/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      setToken(data.token);
+      const user = data.colaborador;
       setState({
         user,
-        session: data.session as { access_token: string },
+        session: { access_token: data.token },
         colaborador: user,
         loading: false,
         isAuthenticated: true,
       });
+      return { data: { user, session: { access_token: data.token } }, error: null };
+    } catch (err: any) {
+      return { data: null, error: { message: err.message ?? "Credenciais inválidas" } };
     }
-    return { data, error };
   }, []);
 
   const signOut = useCallback(async () => {
-    const { error } = await authSignOut();
+    removeToken();
     setState({ user: null, session: null, colaborador: null, loading: false, isAuthenticated: false });
-    return { error };
+    return { error: null };
   }, []);
 
   const refreshColaborador = useCallback(async () => {
-    const user = await getUser();
-    if (user) setState((prev) => ({ ...prev, user, colaborador: user }));
+    try {
+      const user = await apiFetch("/api/me");
+      setState((prev) => ({ ...prev, user, colaborador: user }));
+    } catch {
+      removeToken();
+      setState((prev) => ({ ...prev, user: null, colaborador: null, isAuthenticated: false }));
+    }
   }, []);
 
   return (
@@ -78,7 +108,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
