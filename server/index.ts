@@ -213,26 +213,28 @@ async function startServer() {
       const estado       = b.estado || null;
       const observacoes_ia    = b.observacoes_ia || null;
       const proximo_followup  = b.proximo_followup || null;
-      // UTM e rastreamento de origem (enviados pelo SimuladorPublico)
+      // UTM — capturados para o payload n8n mas gravados apenas se a coluna existir no banco
+      // O banco atual (validado em produção) não tem essas colunas ainda.
+      // Elas são passadas ao n8n via payload sem precisar estar no INSERT.
       const utm_source   = b.utm_source   || null;
       const utm_medium   = b.utm_medium   || null;
       const utm_campaign = b.utm_campaign || null;
       const pagina_origem = b.pagina || b.pagina_origem || null;
 
+      // INSERT com exatamente 20 colunas e 20 valores ($1..$19, $19 reutilizado para updated_at)
+      // Colunas confirmadas no banco real (diagnóstico 30/03/2026)
       const { rows } = await pool.query(
         `INSERT INTO leads
           (nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto_interesse,
            valor_solicitado, prazo_meses, finalidade, origem, status, etapa_funil,
            temperatura, score_ia, cidade, estado, observacoes_ia, proximo_followup,
-           utm_source, utm_medium, utm_campaign, pagina_origem,
            created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$24)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$20)
          RETURNING *`,
         [
           nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto,
           valor, prazo, finalidade, origem, status_lead, etapa_funil,
           temperatura, score_ia, cidade, estado, observacoes_ia, proximo_followup,
-          utm_source, utm_medium, utm_campaign, pagina_origem,
           now,
         ]
       );
