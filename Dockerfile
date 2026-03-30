@@ -51,7 +51,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
 COPY --from=builder /app/dist ./dist
 # Copia scripts e migração SQL para o container de produção
 COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/supabase/migrate.sql ./supabase/migrate.sql
+COPY --from=builder /app/db/migrate.sql ./db/migrate.sql
 
 # Entrypoint: executa migração antes de iniciar o servidor
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
@@ -59,10 +59,10 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 USER node
 
+# Valores padrão seguros — variáveis reais injetadas pelo Coolify em runtime
 ENV NODE_ENV=production
 ENV PORT=4000
 ENV DATA_DIR=/var/data/destrava
-ENV SITE_DOMAIN=destravacredito.com
 
 EXPOSE 4000
 

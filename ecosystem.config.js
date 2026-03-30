@@ -1,16 +1,17 @@
+// ecosystem.config.js — PM2 (desenvolvimento local apenas)
+// Em produção, o deploy é feito via Coolify + Docker.
+// Todas as variáveis de ambiente são injetadas pelo Coolify em runtime.
 module.exports = {
   apps: [
     {
       name: 'destrava-credito',
       script: './dist/index.js',
-      instances: 'max',
-      exec_mode: 'cluster',
+      instances: 1,
+      exec_mode: 'fork',
       env: {
-        NODE_ENV: 'production',
-        PORT: 4000,
-        DATA_DIR: '/var/data/destrava',
-        ADMIN_KEY: process.env.ADMIN_KEY || 'CHANGE_ME_IN_ENV',
-        SITE_DOMAIN: 'destrava.permupay.com.br'
+        NODE_ENV: process.env.NODE_ENV || 'development',
+        PORT: process.env.PORT || 4000,
+        DATA_DIR: process.env.DATA_DIR || './data',
       },
       error_file: './logs/err.log',
       out_file: './logs/out.log',
@@ -20,13 +21,6 @@ module.exports = {
       watch: false,
       max_memory_restart: '500M',
       ignore_watch: ['node_modules', 'logs', 'dist', 'data'],
-      env_production: {
-        NODE_ENV: 'production',
-        PORT: 4000,
-        DATA_DIR: '/var/data/destrava',
-        ADMIN_KEY: process.env.ADMIN_KEY || 'CHANGE_ME_IN_ENV',
-        SITE_DOMAIN: 'destrava.permupay.com.br'
-      }
     }
   ]
 };

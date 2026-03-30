@@ -1,53 +1,49 @@
-# Destrava Crédito - Site Institucional
+# Destrava Crédito — Site Institucional
 
-Site institucional completo da **Destrava Crédito**, com simulador de empréstimos, captura de leads, landing pages de produtos e backend dinâmico para persistência de dados.
+Site institucional completo da **Destrava Crédito**, com simulador de empréstimos, captura de leads, landing pages de produtos e painel interno para colaboradores.
 
 ## Tecnologias
 
 | Camada | Tecnologia |
-|--------|-----------|
+| :--- | :--- |
 | Frontend | React 18 + TypeScript + Tailwind CSS 4 |
 | Roteamento | Wouter |
 | Build | Vite 7 |
-| Backend | Express.js + Node.js |
-| Deploy | PM2 + Nginx |
-| Hospedagem | Google Cloud VPS |
+| Backend | Express.js + Node.js 20 |
+| Banco de dados | PostgreSQL 17 (nativo) |
+| Deploy | Coolify + Docker |
+| Automação | n8n |
 
 ## Funcionalidades
 
 ### Páginas Principais
-- **Home** - Landing page institucional com hero, produtos e depoimentos
-- **Simulador** - Simulador completo de empréstimos
-- **Captura de Leads** (`/simular`) - Formulário com simulador integrado para captura de leads
-- **Blog** - Artigos sobre crédito e finanças
-- **FAQ** - Perguntas frequentes
-- **Sobre** - Sobre a empresa
-- **Contato** - Formulário de contato
 
-### Produtos / Serviços
-- **Crédito Empresarial** (`/credito-empresas`) - PRONAMPE, Giro CAIXA Fácil, PRONAMP, médio/grande porte
-- **Crédito Pessoal** (`/credito-pessoal`) - Consignado, pessoal, imobiliário, veículo
-- **Rating Banco do Brasil** (`/rating-banco-brasil`) - Consulta e melhoria de rating
-- **Certificado Digital** (`/certificado-digital`) - A1 e A3 para PF e PJ
-- **Consulta SPC/Serasa** (`/consulta-spc-serasa`) - CPF e CNPJ
-- **Limpa Nome CPF** (`/limpa-nome`) - Regularização de CPF
-- **Limpa Nome CNPJ** (`/limpa-nome-cnpj`) - Regularização de CNPJ
-- **Calculadora Score** (`/calculadora-score`) - Simulação de score
+- **Home** — Landing page institucional com hero, produtos e depoimentos
+- **Simulador Público** (`/simular`) — Simulador com captura de leads integrada
+- **Blog** — Artigos sobre crédito e finanças
+- **Sobre / Contato** — Institucional e formulário de contato
 
-### Backend API
+### Painel Interno (`/colaborador`)
+
+- **Dashboard** — Estatísticas de leads, simulações e conversões
+- **CRM / Pipeline** — Kanban de leads por etapa do funil
+- **Simulações** — Histórico de simulações realizadas pelos colaboradores
+- **Integrações** — Configuração de webhooks n8n
+
+### API Backend
+
 | Endpoint | Método | Descrição |
-|----------|--------|-----------|
+| :--- | :--- | :--- |
 | `/api/health` | GET | Health check |
-| `/api/leads` | POST | Criar novo lead |
-| `/api/leads` | GET | Listar leads (admin) |
-| `/api/leads/:id` | PATCH | Atualizar status do lead (admin) |
-| `/api/simulacoes` | POST | Registrar simulação |
-| `/api/simulacoes` | GET | Listar simulações (admin) |
-| `/api/contato` | POST | Enviar mensagem de contato |
-| `/api/contatos` | GET | Listar contatos (admin) |
-| `/api/stats` | GET | Estatísticas gerais (admin) |
+| `/api/leads` | POST | Criar novo lead (público) |
+| `/api/leads` | GET | Listar leads (requer auth) |
+| `/api/leads/:id` | PATCH | Atualizar lead (requer auth) |
+| `/api/simulacoes` | POST | Registrar simulação (requer auth) |
+| `/api/simulacoes` | GET | Listar simulações (requer auth) |
+| `/api/stats` | GET | Estatísticas gerais (requer auth) |
+| `/api/crm/pipeline` | GET | Pipeline CRM (requer auth) |
 
-> **Admin:** Adicione o header `x-admin-key: SEU_ADMIN_KEY` nas requisições de admin.
+> **Autenticação:** JWT via header `Authorization: Bearer <token>` ou `x-admin-key: <ADMIN_KEY>` para acesso administrativo.
 
 ## Instalação e Desenvolvimento
 
@@ -59,72 +55,83 @@ cd destrava
 # Instalar dependências
 pnpm install
 
+# Configurar variáveis de ambiente
+cp .env.example .env
+# Editar .env com os valores corretos
+
 # Iniciar em desenvolvimento
 pnpm dev
 ```
 
-## Build e Deploy
-
-```bash
-# Build para produção
-pnpm build
-
-# Iniciar em produção
-pnpm start
-
-# Deploy completo na VPS
-bash deploy.sh
-
-# Configurar Nginx
-sudo bash nginx-setup.sh destravacredito.com.br
-```
-
 ## Variáveis de Ambiente
 
-Copie `.env.example` para `.env` e configure:
+Copie `.env.example` para `.env` e preencha os valores. **Nunca commite o arquivo `.env`.**
 
-```env
-NODE_ENV=production
-PORT=3000
-DATA_DIR=/var/data/destrava
-ADMIN_KEY=sua-chave-secreta-aqui
-SITE_DOMAIN=destravacredito.com.br
-WHATSAPP_NUMBER=5561986055223
+As variáveis obrigatórias são:
+
+| Variável | Descrição |
+| :--- | :--- |
+| `DATABASE_URL` | Connection string PostgreSQL |
+| `ADMIN_KEY` | Chave de acesso admin (`openssl rand -hex 32`) |
+| `VITE_ADMIN_KEY` | Mesma chave, exposta ao frontend via Vite |
+| `JWT_SECRET` | Segredo JWT (`openssl rand -hex 48`) |
+| `NODE_ENV` | `production` |
+| `PORT` | `4000` |
+| `SITE_DOMAIN` | `destravacredito.com` |
+| `N8N_WEBHOOK_URL` | URL do webhook n8n |
+
+Em produção, todas as variáveis são injetadas pelo **Coolify** em runtime — nunca ficam no repositório.
+
+## Build e Deploy
+
+O deploy é feito automaticamente pelo **Coolify** a cada push na branch `main`.
+
+```bash
+# Build local (para teste)
+pnpm build
+
+# Iniciar em produção (local)
+pnpm start
+```
+
+O `docker-entrypoint.sh` executa a migração do banco (`db/migrate.sql`) automaticamente antes de iniciar o servidor em todo redeploy.
+
+## Criar Primeiro Colaborador
+
+Após o primeiro deploy, execute dentro do container via terminal do Coolify:
+
+```bash
+docker exec -it <container_id> sh
+
+NOME="Nome Completo" EMAIL="email@destravacredito.com.br" SENHA="Senha@123" CARGO="Administrador" \
+  node scripts/create-user.mjs
 ```
 
 ## Estrutura do Projeto
 
 ```
 destrava/
-├── client/
-│   └── src/
-│       ├── components/     # Componentes reutilizáveis
-│       ├── pages/          # Páginas da aplicação
-│       ├── data/           # Dados estáticos (produtos, blog)
-│       └── contexts/       # Contextos React
+├── client/src/
+│   ├── components/     # Componentes reutilizáveis
+│   ├── pages/          # Páginas da aplicação
+│   ├── lib/            # Utilitários e tipos
+│   └── contexts/       # Contextos React
 ├── server/
-│   └── index.ts            # Backend Express com API
-├── data/                   # Dados persistidos (leads, simulações)
-├── dist/                   # Build de produção
-├── ecosystem.config.js     # Configuração PM2
-├── nginx-setup.sh          # Script de configuração Nginx
-└── deploy.sh               # Script de deploy automatizado
-```
-
-## Acesso Admin
-
-Para acessar os dados de leads e simulações, use a API com o header de autenticação:
-
-```bash
-# Listar leads
-curl -H "x-admin-key: destrava2024admin" https://destravacredito.com.br/api/leads
-
-# Estatísticas
-curl -H "x-admin-key: destrava2024admin" https://destravacredito.com.br/api/stats
+│   └── index.ts        # Backend Express + API
+├── db/                 # Migrações SQL (PostgreSQL nativo)
+│   ├── migrate.sql     # Migração principal (idempotente)
+│   └── migrate_delta.sql
+├── scripts/
+│   ├── migrate-db.mjs  # Executor de migração
+│   ├── create-user.mjs # Criar colaborador
+│   └── db-inspect.mjs  # Diagnóstico do banco
+├── Dockerfile
+├── docker-entrypoint.sh
+└── .env.example
 ```
 
 ## Contato
 
-- **WhatsApp:** (61) 9 8605-5223
-- **E-mail:** contato@destravacredito.com.br
-- **Localização:** Brasília - DF
+- **WhatsApp:** (61) 3526-8355
+- **Site:** destravacredito.com
+- **Localização:** Brasília — DF

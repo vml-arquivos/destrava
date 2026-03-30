@@ -69,10 +69,12 @@ async function startServer() {
   app.use(express.json({ limit: "5mb" }));
   app.use(express.urlencoded({ extended: true }));
 
-  // CORS
+  // CORS — origens permitidas via variável de ambiente (sem hardcode)
   app.use((req: Request, res: Response, next: NextFunction) => {
+    const siteDomain = process.env.SITE_DOMAIN || "destravacredito.com";
     const allowedOrigins = [
-      "https://destrava.permupay.com.br",
+      `https://${siteDomain}`,
+      `http://${siteDomain}`,
       "http://localhost:5173",
       "http://localhost:4000",
     ];

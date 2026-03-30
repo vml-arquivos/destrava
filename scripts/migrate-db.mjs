@@ -1,7 +1,7 @@
 /**
  * DESTRAVA CRÉDITO — Executor de Migração
  * ─────────────────────────────────────────
- * Lê supabase/migrate.sql e executa no banco PostgreSQL da VPS.
+ * Lê db/migrate.sql e executa no banco PostgreSQL da VPS.
  * Idempotente: seguro para rodar múltiplas vezes.
  *
  * Uso:
@@ -26,7 +26,7 @@ const pool = new Pool({
 async function main() {
   console.log("\n🗄️  DESTRAVA — Executando migração do banco...");
 
-  const sqlPath = join(__dirname, "..", "supabase", "migrate.sql");
+  const sqlPath = join(__dirname, "..", "db", "migrate.sql");
   const sql = readFileSync(sqlPath, "utf8");
 
   const client = await pool.connect();
