@@ -49,17 +49,25 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --prod
 
 COPY --from=builder /app/dist ./dist
+# Copia scripts e migração SQL para o container de produção
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/supabase/migrate.sql ./supabase/migrate.sql
+
+# Entrypoint: executa migração antes de iniciar o servidor
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 USER node
 
 ENV NODE_ENV=production
 ENV PORT=4000
 ENV DATA_DIR=/var/data/destrava
-ENV SITE_DOMAIN=destrava.permupay.com.br
+ENV SITE_DOMAIN=destravacredito.com
 
 EXPOSE 4000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget -qO- http://localhost:4000/api/health || exit 1
 
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "dist/index.js"]
