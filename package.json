@@ -11,7 +11,8 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "migrate": "node scripts/migrate-db.mjs",
-    "create-user": "node scripts/create-user.mjs"
+    "create-user": "node scripts/create-user.mjs",
+    "db:inspect": "node scripts/db-inspect.mjs"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.12",
