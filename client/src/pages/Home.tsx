@@ -343,7 +343,7 @@ export default function Home() {
               {
                 logo: "/logo-pronampe.jpg",
                 title: "PRONAMPE",
-                desc: "Até R$ 150 mil com Selic + 6% a.a. para MEI, microempresas e pequenas empresas. Carência de 6 meses.",
+                desc: "Linha de crédito federal para MEI, microempresas e pequenas empresas. Condições diferenciadas com carência e taxas abaixo do mercado.",
                 href: "/pronampe",
                 badge: "Mais popular",
                 badgeColor: "bg-green-100 text-green-700",
@@ -351,7 +351,7 @@ export default function Home() {
               {
                 logo: "/logo-procred360.webp",
                 title: "ProCred 360",
-                desc: "Juros 50% menores que o mercado para MEI e microempresas com faturamento até R$ 360 mil.",
+                desc: "Programa do Governo Federal com juros subsidiados para MEI e microempresas. Parte do Programa Acredita no Primeiro Passo.",
                 href: "/procred360",
                 badge: "Programa Acredita",
                 badgeColor: "bg-blue-100 text-blue-700",
@@ -359,7 +359,7 @@ export default function Home() {
               {
                 logo: "/logo-caixa.png",
                 title: "Giro CAIXA Fácil",
-                desc: "Até R$ 1 milhão para capital de giro com taxa pré-fixada e prazo de até 40 meses. CAIXA Econômica.",
+                desc: "Capital de giro com taxa pré-fixada e prazos estendidos pela CAIXA Econômica Federal. Ideal para manter o fluxo de caixa.",
                 href: "/giro-caixa-facil",
                 badge: "Capital de giro",
                 badgeColor: "bg-orange-100 text-orange-700",
@@ -367,7 +367,7 @@ export default function Home() {
               {
                 logo: "/logo-bndes-fgi.jpg",
                 title: "PEAC FGI",
-                desc: "De R$ 5 mil a R$ 10 milhões com garantia do FGI/BNDES. Prazo até 60 meses, carência até 12 meses.",
+                desc: "Crédito com garantia do FGI/BNDES para empresas de todos os portes. Prazos estendidos e carência para adequar ao fluxo do negócio.",
                 href: "/peac-fgi",
                 badge: "Grandes volumes",
                 badgeColor: "bg-purple-100 text-purple-700",
@@ -375,7 +375,7 @@ export default function Home() {
               {
                 logo: "/logo-fco.png",
                 title: "FCO",
-                desc: "Financiamento para empresas e produtores rurais de GO, MT, MS e DF. Juros a partir de 8,60% a.a.",
+                desc: "Financiamento do Fundo Constitucional do Centro-Oeste para empresas e produtores rurais de GO, MT, MS e DF.",
                 href: "/fco",
                 badge: "Centro-Oeste",
                 badgeColor: "bg-violet-100 text-violet-700",
@@ -383,7 +383,7 @@ export default function Home() {
               {
                 logo: "/logo-fampe.webp",
                 title: "FAMPE",
-                desc: "O Sebrae complementa até 80% das garantias para você acessar crédito de R$ 10 mil a R$ 700 mil.",
+                desc: "Fundo do Sebrae que complementa as garantias exigidas pelos bancos, facilitando o acesso ao crédito para pequenos negócios.",
                 href: "/fampe",
                 badge: "Sebrae",
                 badgeColor: "bg-amber-100 text-amber-700",

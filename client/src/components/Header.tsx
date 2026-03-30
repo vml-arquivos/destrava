@@ -23,12 +23,12 @@ export default function Header() {
       href: "/credito-empresas",
       children: [
         { label: "Visão Geral", href: "/credito-empresas", icon: Building2, desc: "Soluções para empresas de todos os portes" },
-        { label: "PRONAMPE", href: "/pronampe", icon: Building2, desc: "Até R$ 150k · Selic + 6% a.a." },
-        { label: "Giro CAIXA Fácil", href: "/giro-caixa-facil", icon: Building2, desc: "Até R$ 1M · Capital de giro" },
+        { label: "PRONAMPE", href: "/pronampe", icon: Building2, desc: "Crédito federal para MEI e pequenas empresas" },
+        { label: "Giro CAIXA Fácil", href: "/giro-caixa-facil", icon: Building2, desc: "Capital de giro pela CAIXA Econômica Federal" },
         { label: "FCO", href: "/fco", icon: Building2, desc: "Fundo Constitucional do Centro-Oeste" },
-        { label: "PEAC FGI", href: "/peac-fgi", icon: Building2, desc: "R$ 5k a R$ 10M · Garantia FGI" },
-        { label: "FAMPE", href: "/fampe", icon: Building2, desc: "Aval Sebrae até 80% da garantia" },
-        { label: "ProCred 360", href: "/procred360", icon: Building2, desc: "Juros 50% menores · Programa Acredita" },
+        { label: "PEAC FGI", href: "/peac-fgi", icon: Building2, desc: "Crédito com garantia FGI/BNDES" },
+        { label: "FAMPE", href: "/fampe", icon: Building2, desc: "Complemento de garantias pelo Sebrae" },
+        { label: "ProCred 360", href: "/procred360", icon: Building2, desc: "Juros subsidiados · Programa Acredita" },
       ],
     },
     {
