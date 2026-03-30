@@ -144,7 +144,33 @@ const ESTADOS_BR = [
   "SP","SE","TO",
 ];
 
-// ─── Componente Principal ─────────────────────────────────────────────────────
+// ─── Componente Secao (FORA do principal para evitar remount ao digitar) ─────────────────────────────────────────────────────────────────────────────────
+
+function Secao({ id, titulo, icon, children, secaoAberta, setSecaoAberta }: {
+  id: string;
+  titulo: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  secaoAberta: string;
+  setSecaoAberta: (v: string) => void;
+}) {
+  const aberta = secaoAberta === id;
+  return (
+    <div className="border rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setSecaoAberta(aberta ? "" : id)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 text-sm font-semibold text-gray-700"
+      >
+        <span className="flex items-center gap-2">{icon}{titulo}</span>
+        {aberta ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+      </button>
+      {aberta && <div className="p-4 space-y-4">{children}</div>}
+    </div>
+  );
+}
+
+// ─── Componente Principal ─────────────────────────────────────────────────────────────────────────────────
 
 export default function Empresas() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
@@ -328,30 +354,7 @@ export default function Empresas() {
       }
     } catch { /* silencioso */ }
   }
-
-  // ─── Seção colapsável ───────────────────────────────────────────────────────
-
-  function Secao({ id, titulo, icon, children }: {
-    id: string; titulo: string; icon: React.ReactNode; children: React.ReactNode;
-  }) {
-    const aberta = secaoAberta === id;
-    return (
-      <div className="border rounded-xl overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setSecaoAberta(aberta ? "" : id)}
-          className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 text-sm font-semibold text-gray-700"
-        >
-          <span className="flex items-center gap-2">{icon}{titulo}</span>
-          {aberta ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </button>
-        {aberta && <div className="p-4 space-y-4">{children}</div>}
-      </div>
-    );
-  }
-
-  // ─── Render ─────────────────────────────────────────────────────────────────
-
+  // ─── Render ─────────────────────────────────────────────────────────────────────────────────
   const empresasFiltradas = empresas; // filtro já vem do backend
 
   return (
@@ -710,7 +713,7 @@ export default function Empresas() {
             <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
 
               {/* Seção: Dados Básicos */}
-              <Secao id="basico" titulo="Dados da Empresa" icon={<Building2 className="w-4 h-4 text-blue-600" />}>
+              <Secao id="basico" titulo="Dados da Empresa" icon={<Building2 className="w-4 h-4 text-blue-600" />} secaoAberta={secaoAberta} setSecaoAberta={setSecaoAberta}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2 space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">
@@ -821,7 +824,7 @@ export default function Empresas() {
               </Secao>
 
               {/* Seção: Contato */}
-              <Secao id="contato" titulo="Contato" icon={<Phone className="w-4 h-4 text-green-600" />}>
+              <Secao id="contato" titulo="Contato" icon={<Phone className="w-4 h-4 text-green-600" />} secaoAberta={secaoAberta} setSecaoAberta={setSecaoAberta}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Telefone</label>
@@ -866,7 +869,7 @@ export default function Empresas() {
               </Secao>
 
               {/* Seção: Endereço */}
-              <Secao id="endereco" titulo="Endereço" icon={<MapPin className="w-4 h-4 text-orange-500" />}>
+              <Secao id="endereco" titulo="Endereço" icon={<MapPin className="w-4 h-4 text-orange-500" />} secaoAberta={secaoAberta} setSecaoAberta={setSecaoAberta}>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">CEP</label>
@@ -943,7 +946,7 @@ export default function Empresas() {
               </Secao>
 
               {/* Seção: Sócio / Responsável */}
-              <Secao id="responsavel" titulo="Sócio / Responsável" icon={<User className="w-4 h-4 text-purple-600" />}>
+              <Secao id="responsavel" titulo="Sócio / Responsável" icon={<User className="w-4 h-4 text-purple-600" />} secaoAberta={secaoAberta} setSecaoAberta={setSecaoAberta}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Nome</label>
@@ -996,7 +999,7 @@ export default function Empresas() {
               </Secao>
 
               {/* Seção: Dados Financeiros */}
-              <Secao id="financeiro" titulo="Dados Financeiros" icon={<DollarSign className="w-4 h-4 text-emerald-600" />}>
+              <Secao id="financeiro" titulo="Dados Financeiros" icon={<DollarSign className="w-4 h-4 text-emerald-600" />} secaoAberta={secaoAberta} setSecaoAberta={setSecaoAberta}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Banco Principal</label>
@@ -1062,7 +1065,7 @@ export default function Empresas() {
               </Secao>
 
               {/* Seção: Tags e Observações */}
-              <Secao id="extras" titulo="Tags e Observações" icon={<Tag className="w-4 h-4 text-yellow-600" />}>
+              <Secao id="extras" titulo="Tags e Observações" icon={<Tag className="w-4 h-4 text-yellow-600" />} secaoAberta={secaoAberta} setSecaoAberta={setSecaoAberta}>
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-gray-600">Tags</label>

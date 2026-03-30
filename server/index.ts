@@ -28,6 +28,58 @@ pool.on("error", (err) => {
 // Testa a conexão ao iniciar
 pool.query("SELECT 1").then(() => {
   console.log("🗄️  PostgreSQL: ✅ Conectado");
+  // ── Auto-migration: garante que a tabela empresas existe ──────────────────
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS public.empresas (
+      id                   UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+      razao_social         TEXT         NOT NULL,
+      nome_fantasia        TEXT,
+      cnpj                 TEXT,
+      inscricao_estadual   TEXT,
+      email                TEXT,
+      telefone             TEXT,
+      whatsapp             TEXT,
+      site                 TEXT,
+      segmento             TEXT,
+      porte                TEXT         DEFAULT 'mei'
+                             CHECK (porte IN ('mei','me','epp','medio','grande')),
+      faturamento_anual    NUMERIC(15,2),
+      numero_funcionarios  INTEGER,
+      cep                  TEXT,
+      logradouro           TEXT,
+      numero               TEXT,
+      complemento          TEXT,
+      bairro               TEXT,
+      cidade               TEXT,
+      estado               CHAR(2),
+      responsavel_nome     TEXT,
+      responsavel_cpf      TEXT,
+      responsavel_cargo    TEXT,
+      responsavel_telefone TEXT,
+      responsavel_email    TEXT,
+      banco_principal      TEXT,
+      agencia              TEXT,
+      conta                TEXT,
+      limite_credito_atual NUMERIC(15,2),
+      score_serasa         INTEGER,
+      score_spc            INTEGER,
+      responsavel_id       UUID         REFERENCES public.colaboradores(id) ON DELETE SET NULL,
+      status               TEXT         NOT NULL DEFAULT 'ativo'
+                             CHECK (status IN ('ativo','inativo','prospecto','cliente','ex_cliente')),
+      origem               TEXT         DEFAULT 'manual',
+      tags                 TEXT[]       DEFAULT '{}',
+      observacoes          TEXT,
+      created_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      updated_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_empresas_razao_social ON public.empresas(razao_social);
+    CREATE INDEX IF NOT EXISTS idx_empresas_cnpj         ON public.empresas(cnpj) WHERE cnpj IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_empresas_status       ON public.empresas(status);
+  `).then(() => {
+    console.log("🗄️  Tabela empresas: ✅ Verificada/criada");
+  }).catch((e: Error) => {
+    console.error("🗄️  Tabela empresas: ❌ Erro na auto-migration —", e.message);
+  });
 }).catch((e) => {
   console.error("🗄️  PostgreSQL: ❌ Falha na conexão —", e.message);
 });
