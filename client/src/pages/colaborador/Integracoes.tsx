@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import Layout from "./Layout";
+import { apiFetch } from "@/lib/api";
 import {
   Zap, CheckCircle, XCircle, AlertCircle, Play, Settings,
   Copy, ExternalLink, Loader2, RefreshCw, Info, ChevronDown, ChevronUp
@@ -10,8 +11,6 @@ interface N8nStatus {
   webhookUrl: string | null;
   eventos: string[];
 }
-
-const ADMIN_KEY = import.meta.env.VITE_ADMIN_KEY ?? "";
 
 const EVENTOS_INFO = {
   novo_lead: {
@@ -89,13 +88,8 @@ export default function Integracoes() {
   async function carregarStatus() {
     setLoading(true);
     try {
-      const res = await fetch("/api/n8n/status", {
-        headers: { "x-admin-key": ADMIN_KEY },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setStatus(data);
-      }
+      const data = await apiFetch("/api/n8n/status");
+      setStatus(data);
     } catch {
       // ignore
     }
@@ -106,11 +100,7 @@ export default function Integracoes() {
     setTestando(true);
     setResultadoTeste(null);
     try {
-      const res = await fetch("/api/n8n/test", {
-        method: "POST",
-        headers: { "x-admin-key": ADMIN_KEY },
-      });
-      const data = await res.json();
+      const data = await apiFetch("/api/n8n/test", { method: "POST" });
       setResultadoTeste(data);
     } catch {
       setResultadoTeste({ success: false, message: "Erro de conexão ao testar webhook." });

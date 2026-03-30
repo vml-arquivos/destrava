@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
+import { apiFetch } from "@/lib/api";
 import ColaboradorLayout from "./Layout";
 import {
   Calculator, FileText, TrendingUp, DollarSign, Clock,
@@ -8,8 +9,7 @@ import {
   RefreshCw, Loader2, AlertCircle, MessageSquare
 } from "lucide-react";
 
-const ADMIN_KEY = import.meta.env.VITE_ADMIN_KEY ?? "";
-
+// Interfaces alinhadas com os shapes reais do banco
 interface Stats {
   leads: {
     total: number;
@@ -25,26 +25,29 @@ interface Stats {
   n8n: { configured: boolean };
 }
 
-interface Lead {
+// Shape real da tabela leads (snake_case do PostgreSQL)
+interface LeadRow {
   id: string;
   nome: string;
   empresa?: string;
   telefone: string;
-  produto?: string;
-  valorSolicitado?: number;
+  produto_interesse?: string;
+  valor_solicitado?: number;
   status: string;
-  criadoEm: string;
+  created_at: string;
 }
 
-interface Simulacao {
+// Shape real da tabela simulacoes_colaborador
+interface SimulacaoRow {
   id: string;
-  nome: string;
+  cliente_nome: string;
   empresa?: string;
-  produto: string;
-  valorSolicitado: number;
-  parcelaMensal?: number;
-  custoTotal?: number;
-  criadoEm: string;
+  linha_credito?: string;
+  banco?: string;
+  valor_solicitado?: number;
+  valor_parcela?: number;
+  criado_em: string;
+  status?: string;
 }
 
 const fmt = (v: number) => v?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) ?? "R$ 0,00";
@@ -61,8 +64,8 @@ const STATUS_LEAD_COLOR: Record<string, string> = {
 export default function Dashboard() {
   const { colaborador } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
-  const [leadsRecentes, setLeadsRecentes] = useState<Lead[]>([]);
-  const [simulacoesRecentes, setSimulacoesRecentes] = useState<Simulacao[]>([]);
+  const [leadsRecentes, setLeadsRecentes] = useState<LeadRow[]>([]);
+  const [simulacoesRecentes, setSimulacoesRecentes] = useState<SimulacaoRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -72,23 +75,26 @@ export default function Dashboard() {
     setLoading(true);
     setErro(null);
     try {
-      const headers = { "x-admin-key": ADMIN_KEY };
-
-      const [statsRes, leadsRes, simsRes] = await Promise.all([
-        fetch("/api/stats", { headers }),
-        fetch("/api/leads", { headers }),
-        fetch("/api/simulacoes", { headers }),
+      // Todas as chamadas usam JWT via apiFetch — sem ADMIN_KEY no bundle
+      const [statsData, leadsData, simsData] = await Promise.all([
+        apiFetch("/api/stats").catch(() => null),
+        apiFetch("/api/leads").catch(() => []),
+        apiFetch("/api/simulacoes").catch(() => []),
       ]);
 
-      if (statsRes.ok) setStats(await statsRes.json());
-      if (leadsRes.ok) {
-        const data = await leadsRes.json();
-        setLeadsRecentes((data.leads || []).slice(0, 5));
-      }
-      if (simsRes.ok) {
-        const data = await simsRes.json();
-        setSimulacoesRecentes((data.simulacoes || []).slice(0, 5));
-      }
+      if (statsData) setStats(statsData);
+
+      // GET /api/leads retorna array direto quando autenticado com JWT
+      const leadsArr: LeadRow[] = Array.isArray(leadsData)
+        ? leadsData
+        : (leadsData?.leads ?? []);
+      setLeadsRecentes(leadsArr.slice(0, 5));
+
+      // GET /api/simulacoes retorna array direto (simulacoes_colaborador do colaborador logado)
+      const simsArr: SimulacaoRow[] = Array.isArray(simsData)
+        ? simsData
+        : (simsData?.simulacoes ?? []);
+      setSimulacoesRecentes(simsArr.slice(0, 5));
     } catch (e) {
       setErro("Erro ao carregar dados. Verifique a conexão.");
     }
@@ -151,7 +157,7 @@ export default function Dashboard() {
                   <Users className="w-4 h-4 text-blue-600" />
                 </div>
               </div>
-              <p className="text-3xl font-bold text-gray-900">{stats?.leads.total ?? 0}</p>
+              <p className="text-3xl font-bold text-gray-900">{stats?.leads.total ?? leadsRecentes.length}</p>
               <p className="text-xs text-gray-400 mt-1">
                 {stats?.leads.byStatus?.novo ?? 0} novos
               </p>
@@ -164,7 +170,7 @@ export default function Dashboard() {
                   <Calculator className="w-4 h-4 text-green-600" />
                 </div>
               </div>
-              <p className="text-3xl font-bold text-gray-900">{stats?.simulacoes.total ?? 0}</p>
+              <p className="text-3xl font-bold text-gray-900">{stats?.simulacoes.total ?? simulacoesRecentes.length}</p>
               <p className="text-xs text-gray-400 mt-1">realizadas</p>
             </div>
 
@@ -256,19 +262,19 @@ export default function Dashboard() {
                 leadsRecentes.map(lead => (
                   <div key={lead.id} className="flex items-center gap-3 p-3 hover:bg-gray-50">
                     <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs flex-shrink-0">
-                      {lead.nome.charAt(0).toUpperCase()}
+                      {(lead.nome || "?").charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{lead.nome}</p>
                       <p className="text-xs text-gray-500 truncate">
-                        {lead.empresa || lead.telefone} · {lead.produto || "—"}
+                        {lead.empresa || lead.telefone} · {lead.produto_interesse || "—"}
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_LEAD_COLOR[lead.status] || "bg-gray-100 text-gray-600"}`}>
                         {lead.status}
                       </span>
-                      <p className="text-xs text-gray-400 mt-0.5">{fmtDate(lead.criadoEm)}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{fmtDate(lead.created_at)}</p>
                     </div>
                   </div>
                 ))
@@ -311,14 +317,14 @@ export default function Dashboard() {
                       <Calculator className="w-4 h-4 text-green-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{sim.nome}</p>
+                      <p className="text-sm font-medium text-gray-900 truncate">{sim.cliente_nome}</p>
                       <p className="text-xs text-gray-500 truncate">
-                        {sim.produto} · {sim.empresa || "—"}
+                        {sim.linha_credito || sim.banco || "—"}
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-semibold text-gray-900">{fmt(sim.valorSolicitado)}</p>
-                      <p className="text-xs text-gray-400">{fmtDate(sim.criadoEm)}</p>
+                      <p className="text-sm font-semibold text-gray-900">{fmt(sim.valor_solicitado ?? 0)}</p>
+                      <p className="text-xs text-gray-400">{fmtDate(sim.criado_em)}</p>
                     </div>
                   </div>
                 ))
