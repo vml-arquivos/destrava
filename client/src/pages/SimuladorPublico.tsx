@@ -256,6 +256,10 @@ export default function SimuladorPublico() {
           // produto_interesse é o campo correto no schema; "produto" é alias aceito pelo backend
           produto: produtoSelecionado.nome,
           produto_interesse: produtoSelecionado.nome,
+          // Campos com nomes exatos das colunas do banco (schema real)
+          valor_solicitado: valor,
+          prazo_meses: prazo,
+          // Aliases camelCase para compatibilidade com normalização do backend
           valorSolicitado: valor,
           prazo,
           taxaEstimada: taxa,
@@ -270,6 +274,7 @@ export default function SimuladorPublico() {
           temperatura: "frio",
           // Contexto de rastreamento
           pagina: "/simular",
+          pagina_origem: "/simular",
           utm_source:   urlParams.get("utm_source") || undefined,
           utm_medium:   urlParams.get("utm_medium") || undefined,
           utm_campaign: urlParams.get("utm_campaign") || undefined,
