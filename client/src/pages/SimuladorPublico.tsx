@@ -184,9 +184,9 @@ export default function SimuladorPublico() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [produtoSelecionado, setProdutoSelecionado] = useState(produtos[0]);
-  const [valor, setValor] = useState(35000);
-  const [prazo, setPrazo] = useState(24);
-  const [taxa, setTaxa] = useState(4.25);
+  const [valor, setValor] = useState(produtos[0].minValor);
+  const [prazo, setPrazo] = useState(produtos[0].minPrazo);
+  const [taxa, setTaxa] = useState(produtos[0].minTaxa);
   const [enviando, setEnviando] = useState(false);
   const [leadSalvo, setLeadSalvo] = useState(false);
 
@@ -213,18 +213,18 @@ export default function SimuladorPublico() {
       const prods = produtos.filter((p) => p.tipo === tipoPessoa);
       const prod = prods[0];
       setProdutoSelecionado(prod);
-      setValor(Math.round((prod.minValor + prod.maxValor) / 2));
-      setPrazo(Math.round((prod.minPrazo + prod.maxPrazo) / 2));
-      setTaxa(Math.round(((prod.minTaxa + prod.maxTaxa) / 2) * 100) / 100);
+      setValor(prod.minValor);
+      setPrazo(prod.minPrazo);
+      setTaxa(prod.minTaxa);
       setStep(2);
     }
   }
 
   function selecionarProduto(prod: (typeof produtos)[0]) {
     setProdutoSelecionado(prod);
-    setValor(Math.round((prod.minValor + prod.maxValor) / 2));
-    setPrazo(Math.round((prod.minPrazo + prod.maxPrazo) / 2));
-    setTaxa(Math.round(((prod.minTaxa + prod.maxTaxa) / 2) * 100) / 100);
+    setValor(prod.minValor);
+    setPrazo(prod.minPrazo);
+    setTaxa(prod.minTaxa);
   }
 
   async function handleSimular() {
