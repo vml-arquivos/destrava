@@ -155,7 +155,7 @@ const produtos = [
     maxPrazo: 144,
     minTaxa: 0.68,
     maxTaxa: 1.11,
-    tags: ["Centro-Oeste", "A partir de 8,60% a.a."],
+    tags: ["Centro-Oeste", "0,68% a 1,11% a.m."],
     cor: "violet",
   },
 

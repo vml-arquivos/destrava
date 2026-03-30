@@ -22,6 +22,9 @@ export interface ResultadoCenario {
   comissaoValor?: number;
   custoTotalOperacao: number;
   cenario: "com_imposto" | "sem_imposto";
+  taxaAnualEquiv?: number;
+  cetMensal?: number;
+  cetAnual?: number;
 }
 
 export interface DadosPdf {
@@ -152,7 +155,8 @@ export function gerarPdfSimulacao(dados: DadosPdf): void {
     const linhas: [string, string, boolean?][] = [
       ["Valor do Crédito", fmt(res.valorCredito)],
       ["Prazo", `${res.prazo} meses`],
-      ["Taxa de Juros (a.m.)", fmtPct(res.taxa)],
+      ["Taxa de Juros", `${fmtPct(res.taxa)} a.m. / ${res.taxaAnualEquiv ? fmtPct(res.taxaAnualEquiv) : '0,00%'} a.a.`],
+      ["CET", `${res.cetMensal ? fmtPct(res.cetMensal) : '0,00%'} a.m. / ${res.cetAnual ? fmtPct(res.cetAnual) : '0,00%'} a.a.`],
       ["Parcela Mensal", fmt(res.parcela), true],
       ["Total Financiamento", fmt(res.totalFinanciamento)],
       ["Total de Juros", fmt(res.totalJuros)],

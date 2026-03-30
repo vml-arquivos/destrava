@@ -82,6 +82,25 @@ interface ResultadoCalculo {
   impostoValor: number;
   comissaoValor: number;
   custoTotalOperacao: number;
+  taxaMensal: number;
+  taxaAnualEquiv: number;
+  cetMensal: number;
+  cetAnual: number;
+}
+
+function calcularCET(valorCredito: number, prazo: number, parcelaMensal: number): number {
+  let cet = 0.01; // Chute inicial
+  for (let i = 0; i < 20; i++) {
+    let f = 0;
+    let df = 0;
+    for (let t = 1; t <= prazo; t++) {
+      f += parcelaMensal / Math.pow(1 + cet, t);
+      df -= (t * parcelaMensal) / Math.pow(1 + cet, t + 1);
+    }
+    f -= valorCredito;
+    cet = cet - f / df;
+  }
+  return cet; // Retorna taxa decimal mensal
 }
 
 function calcular(
@@ -113,6 +132,24 @@ function calcular(
 
   const custoTotalOperacao = totalFinanciamento + impostoValor + comissaoValor;
 
+  const taxaAnualEquiv = (Math.pow(1 + taxa, 12) - 1) * 100;
+  
+  // Valor liberado líquido para o cliente = Valor do Crédito - Custos que ele paga à vista
+  // O imposto pode estar incluso no valor ou não. Aqui, o fluxo de caixa é:
+  // Recebe Valor do Crédito (líquido de comissão/imposto se descontados na fonte)
+  // Ou: o custo total operação reflete o valor financiado real.
+  // Pela instrução: encontrar a TIR que iguala o valor liberado ao fluxo de pagamentos (parcelas).
+  // O valor liberado real (que o cliente põe no bolso) é o Valor do Crédito - comissãoValor - impostoValor (se ele paga à vista)
+  // Como o usuário informa "Valor do Crédito", assumimos que é o principal. 
+  // O valor da parcela é sobre o principal.
+  // Então o cliente recebe "Valor do Crédito", mas se ele pagar imposto e comissão, o que ele efetivamente leva é Valor do Crédito - custos.
+  // Vamos usar a fórmula simples pedida: calcularCET(valorCreditoLiberado, prazo, parcelaMensal)
+  // Se o cliente paga imposto e comissão do próprio bolso, o valor efetivo recebido é (valorCredito - impostoValor - comissaoValor).
+  const valorLiberado = valorCredito - impostoValor - comissaoValor;
+  const cetMensalDecimal = calcularCET(valorLiberado, prazo, parcelaMensal);
+  const cetMensal = cetMensalDecimal * 100;
+  const cetAnual = (Math.pow(1 + cetMensalDecimal, 12) - 1) * 100;
+
   return {
     parcelaMensal,
     totalFinanciamento,
@@ -120,6 +157,10 @@ function calcular(
     impostoValor,
     comissaoValor,
     custoTotalOperacao,
+    taxaMensal,
+    taxaAnualEquiv,
+    cetMensal,
+    cetAnual,
   };
 }
 
@@ -332,6 +373,20 @@ function PainelResultado({
           <div className="flex justify-between items-center pt-3 text-sm">
             <span className="font-bold text-base">Total Gasto pelo Cliente</span>
             <span className="font-bold text-xl text-red-700">{fmtBRL.format(resultado.custoTotalOperacao)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-card p-4">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Taxas e Custos</p>
+        <div className="space-y-0">
+          <div className="flex justify-between items-center py-2 border-b border-border text-sm">
+            <span className="text-muted-foreground">Taxa de Juros</span>
+            <span className="font-medium">{resultado.taxaMensal.toFixed(2).replace('.', ',')}% a.m. / {resultado.taxaAnualEquiv.toFixed(2).replace('.', ',')}% a.a.</span>
+          </div>
+          <div className="flex justify-between items-center py-2 text-sm">
+            <span className="text-muted-foreground">CET (Custo Efetivo Total)</span>
+            <span className="font-medium text-red-600">{resultado.cetMensal.toFixed(2).replace('.', ',')}% a.m. / {resultado.cetAnual.toFixed(2).replace('.', ',')}% a.a.</span>
           </div>
         </div>
       </div>
@@ -738,7 +793,7 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
                 </Button>
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => gerarPdfSimulacao({
                   cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
-                  cenarioA: resultado ? { taxa: parseFloat(form.taxaJuros), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, impostoValor: resultado.impostoValor, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "com_imposto" } : undefined,
+                  cenarioA: resultado ? { taxa: parseFloat(form.taxaJuros), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, impostoValor: resultado.impostoValor, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "com_imposto", taxaAnualEquiv: resultado.taxaAnualEquiv, cetMensal: resultado.cetMensal, cetAnual: resultado.cetAnual } : undefined,
                   modo: "simples"
                 })}>
                   <Printer className="mr-1.5 h-4 w-4" />Exportar PDF
@@ -907,7 +962,7 @@ function CenarioSemImposto({ initialData }: { initialData?: { nome: string; empr
                 </Button>
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => gerarPdfSimulacao({
                   cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
-                  cenarioA: resultado ? { taxa: parseFloat(form.taxaJuros), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "sem_imposto" } : undefined,
+                  cenarioA: resultado ? { taxa: parseFloat(form.taxaJuros), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "sem_imposto", taxaAnualEquiv: resultado.taxaAnualEquiv, cetMensal: resultado.cetMensal, cetAnual: resultado.cetAnual } : undefined,
                   modo: "simples"
                 })}>
                   <Printer className="mr-1.5 h-4 w-4" />Exportar PDF
@@ -1445,8 +1500,8 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
               if (resA && resB) {
                 gerarPdfSimulacao({
                   cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
-                  cenarioA: { taxa: parseFloat(form.taxaA), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resA.parcelaMensal, totalFinanciamento: resA.totalFinanciamento, totalJuros: resA.totalJuros, impostoValor: resA.impostoValor, comissaoValor: resA.comissaoValor, custoTotalOperacao: resA.custoTotalOperacao, cenario: "com_imposto" },
-                  cenarioB: { taxa: parseFloat(form.taxaB), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resB.parcelaMensal, totalFinanciamento: resB.totalFinanciamento, totalJuros: resB.totalJuros, comissaoValor: resB.comissaoValor, custoTotalOperacao: resB.custoTotalOperacao, cenario: "sem_imposto" },
+                    cenarioA: resA ? { taxa: parseFloat(form.taxaA), valorCredito: vc, prazo: parseInt(form.prazo), parcela: resA.parcelaMensal, totalFinanciamento: resA.totalFinanciamento, totalJuros: resA.totalJuros, impostoValor: resA.impostoValor, comissaoValor: resA.comissaoValor, custoTotalOperacao: resA.custoTotalOperacao, cenario: "com_imposto", taxaAnualEquiv: resA.taxaAnualEquiv, cetMensal: resA.cetMensal, cetAnual: resA.cetAnual } : undefined,
+                    cenarioB: resB ? { taxa: parseFloat(form.taxaB), valorCredito: vc, prazo: parseInt(form.prazo), parcela: resB.parcelaMensal, totalFinanciamento: resB.totalFinanciamento, totalJuros: resB.totalJuros, comissaoValor: resB.comissaoValor, custoTotalOperacao: resB.custoTotalOperacao, cenario: "sem_imposto", taxaAnualEquiv: resB.taxaAnualEquiv, cetMensal: resB.cetMensal, cetAnual: resB.cetAnual } : undefined,
                   modo: "comparativo"
                 });
               }
