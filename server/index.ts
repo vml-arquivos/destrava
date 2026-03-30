@@ -197,7 +197,9 @@ async function startServer() {
       const telefone     = b.telefone || "";
       const empresa      = b.empresa || null;
       const cpf_cnpj     = b.cpf_cnpj || b.cpfCnpj || null;
-      const tipo_pessoa  = b.tipo_pessoa || b.tipoPessoa || "pf";
+      // Normaliza tipo_pessoa: aceita "empresa" (frontend público) → "pj" (schema DB)
+      const rawTipo      = b.tipo_pessoa || b.tipoPessoa || "pf";
+      const tipo_pessoa  = rawTipo === "empresa" ? "pj" : rawTipo;
       const produto      = b.produto_interesse || b.produto || null;
       const valor        = Number(b.valor_solicitado || b.valorSolicitado || b.valorDesejado) || null;
       const prazo        = Number(b.prazo_meses || b.prazo || b.parcelas) || null;
@@ -230,9 +232,48 @@ async function startServer() {
       const lead = rows[0];
       console.log(`[LEAD] Salvo: ${nome} — ${produto || origem}`);
 
+      // Payload canônico — alinhado com especificação Destrava v2
       dispararN8n("novo_lead", {
-        id: lead.id, nome, telefone, empresa, email, produto,
-        valorSolicitado: valor, prazo, origem, criadoEm: now,
+        event:       "novo_lead",
+        source:      origem,
+        environment: process.env.NODE_ENV || "production",
+        protocol:    "https",
+        lead: {
+          id:               lead.id,
+          nome,
+          telefone,
+          email:            email || null,
+          empresa:          empresa || null,
+          tipo_pessoa,
+          origem,
+          produto_interesse: produto || null,
+        },
+        simulation: {
+          valor_solicitado:  valor,
+          prazo,
+          parcela_estimada:  Number(b.parcelaMensal || b.parcela_mensal) || null,
+          taxa_estimada:     Number(b.taxaEstimada || b.taxa_estimada) || null,
+        },
+        context: {
+          pagina:       b.pagina || "/simular",
+          utm_source:   b.utm_source || null,
+          utm_medium:   b.utm_medium || null,
+          utm_campaign: b.utm_campaign || null,
+        },
+        routing: {
+          priority: origem === "simulador_publico" ? "high" : "normal",
+          channel:  "whatsapp",
+        },
+        // Compatível com payload legado (campos na raiz)
+        id:             lead.id,
+        nome,
+        telefone,
+        empresa:        empresa || null,
+        email:          email || null,
+        produto,
+        valorSolicitado: valor,
+        prazo,
+        criadoEm:       now,
       });
 
       // Retorna o lead completo para que o frontend possa atualizar a lista localmente
@@ -456,6 +497,10 @@ async function startServer() {
       configured: !!process.env.N8N_WEBHOOK_URL,
       webhookUrl: process.env.N8N_WEBHOOK_URL ? "***configurado***" : null,
       eventos: ["novo_lead", "nova_simulacao", "novo_contato"],
+      payload_version: "2.0",
+      campos_canonicos: {
+        novo_lead: ["event","source","environment","lead.id","lead.nome","lead.telefone","lead.email","lead.tipo_pessoa","lead.origem","lead.produto_interesse","simulation.valor_solicitado","simulation.prazo","simulation.parcela_estimada","context.pagina","context.utm_source","context.utm_medium","context.utm_campaign","routing.priority","routing.channel"],
+      },
     });
   });
 
@@ -852,6 +897,108 @@ async function startServer() {
     } catch (err: any) {
       console.error("[POST /api/admin/sql]", err);
       res.status(500).json({ error: err.message || "Erro ao executar SQL" });
+    }
+  });
+
+  // ─── POST /api/leads/:id/solicitar-pdf — Solicitar PDF por e-mail via n8n ────
+  // Delega o envio ao n8n (que usa SMTP/Gmail configurado no workflow)
+  app.post("/api/leads/:id/solicitar-pdf", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { email, nome, produto, valor, prazo, parcela, taxa } = req.body;
+      if (!email) {
+        res.status(400).json({ error: "E-mail é obrigatório para envio do PDF" });
+        return;
+      }
+      const ok = await dispararN8n("solicitar_pdf_simulacao", {
+        event:      "solicitar_pdf_simulacao",
+        source:     "simulador_publico",
+        environment: process.env.NODE_ENV || "production",
+        lead: { id, nome, email },
+        simulation: { produto, valor, prazo, parcela, taxa },
+        routing: { channel: "email", priority: "high" },
+        timestamp: new Date().toISOString(),
+      });
+      if (ok) {
+        res.json({ success: true, message: "Solicitação de PDF enviada! Você receberá por e-mail em breve." });
+      } else {
+        // n8n não configurado ou falhou — informa sem quebrar o fluxo
+        res.json({ success: false, message: "Envio por e-mail indisponível no momento. Use o botão de download direto." });
+      }
+    } catch (err) {
+      console.error("[POST /api/leads/:id/solicitar-pdf]", err);
+      res.status(500).json({ error: "Erro ao solicitar PDF" });
+    }
+  });
+
+  // ─── PATCH /api/leads/:id/ia — Atualizar campos de IA no lead ─────────────
+  // Rota dedicada para o copiloto IA atualizar score, probabilidades e recomendações
+  app.patch("/api/leads/:id/ia", requireJwtOrAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const {
+        score_ia, probabilidade_aprovacao, probabilidade_conversao,
+        proxima_acao_ia, linha_recomendada, prazo_aprovacao_estimado,
+        analise_credito_ia, resumo_ia, observacoes_ia, temperatura,
+      } = req.body;
+
+      // Monta apenas os campos enviados (partial update seguro)
+      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (score_ia !== undefined)                updates.score_ia = score_ia;
+      if (probabilidade_aprovacao !== undefined) updates.probabilidade_aprovacao = probabilidade_aprovacao;
+      if (probabilidade_conversao !== undefined) updates.probabilidade_conversao = probabilidade_conversao;
+      if (proxima_acao_ia !== undefined)         updates.proxima_acao_ia = proxima_acao_ia;
+      if (linha_recomendada !== undefined)       updates.linha_recomendada = linha_recomendada;
+      if (prazo_aprovacao_estimado !== undefined) updates.prazo_aprovacao_estimado = prazo_aprovacao_estimado;
+      if (analise_credito_ia !== undefined)      updates.analise_credito_ia = analise_credito_ia;
+      if (resumo_ia !== undefined)               updates.resumo_ia = resumo_ia;
+      if (observacoes_ia !== undefined)          updates.observacoes_ia = observacoes_ia;
+      if (temperatura !== undefined)             updates.temperatura = temperatura;
+
+      const keys = Object.keys(updates);
+      const values = Object.values(updates);
+      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+
+      const { rows } = await pool.query(
+        `UPDATE leads SET ${set} WHERE id = $${keys.length + 1} RETURNING id, nome, score_ia, temperatura, proxima_acao_ia, linha_recomendada`,
+        [...values, id]
+      );
+
+      if (rows.length === 0) {
+        res.status(404).json({ error: "Lead não encontrado" });
+        return;
+      }
+
+      console.log(`[IA] Lead ${id} atualizado com dados de IA`);
+      res.json({ success: true, lead: rows[0] });
+    } catch (err) {
+      console.error("[PATCH /api/leads/:id/ia]", err);
+      res.status(500).json({ error: "Erro ao atualizar dados de IA" });
+    }
+  });
+
+  // ─── GET /api/leads/para-ia — Leads que precisam de qualificação IA ─────────
+  app.get("/api/leads/para-ia", requireJwtOrAdmin, async (_req: Request, res: Response) => {
+    try {
+      let result;
+      try {
+        result = await pool.query(`SELECT * FROM vw_leads_para_ia WHERE precisa_score = TRUE ORDER BY created_at DESC LIMIT 50`);
+      } catch {
+        // Fallback se a view ainda não foi criada no banco
+        result = await pool.query(
+          `SELECT id, nome, telefone, email, empresa, tipo_pessoa, produto_interesse,
+                  valor_solicitado, prazo_meses, origem, etapa_funil, temperatura,
+                  score_ia, resumo_ia, proxima_acao_ia, created_at
+           FROM leads
+           WHERE (score_ia = 0 OR score_ia IS NULL)
+             AND etapa_funil NOT IN ('inativo','perdido','ganho')
+           ORDER BY created_at DESC LIMIT 50`
+        );
+      }
+      res.json({ total: result.rows.length, leads: result.rows });
+    } catch (err) {
+      console.error("[GET /api/leads/para-ia]", err);
+      res.status(500).json({ error: "Erro ao buscar leads para IA" });
     }
   });
 
