@@ -186,49 +186,66 @@ async function startServer() {
   });
 
   // ─── LEADS API ─────────────────────────────────────────────────────────────
+  // POST /api/leads — aceita tanto payload público (camelCase) quanto painel interno (snake_case)
   app.post("/api/leads", async (req: Request, res: Response) => {
     try {
+      const b = req.body;
       const now = new Date().toISOString();
+      // Normaliza campos: suporta camelCase (público) e snake_case (painel interno)
+      const nome         = b.nome || "";
+      const email        = b.email || null;
+      const telefone     = b.telefone || "";
+      const empresa      = b.empresa || null;
+      const cpf_cnpj     = b.cpf_cnpj || b.cpfCnpj || null;
+      const tipo_pessoa  = b.tipo_pessoa || b.tipoPessoa || "pf";
+      const produto      = b.produto_interesse || b.produto || null;
+      const valor        = Number(b.valor_solicitado || b.valorSolicitado || b.valorDesejado) || null;
+      const prazo        = Number(b.prazo_meses || b.prazo || b.parcelas) || null;
+      const finalidade   = b.finalidade || b.mensagem || null;
+      const origem       = b.origem || "site";
+      const status_lead  = b.status || "novo";
+      const etapa_funil  = b.etapa_funil || "novo";
+      const temperatura  = b.temperatura || "frio";
+      const score_ia     = Number(b.score_ia) || 0;
+      const cidade       = b.cidade || null;
+      const estado       = b.estado || null;
+      const observacoes_ia    = b.observacoes_ia || null;
+      const proximo_followup  = b.proximo_followup || null;
+
       const { rows } = await pool.query(
         `INSERT INTO leads
           (nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto_interesse,
            valor_solicitado, prazo_meses, finalidade, origem, status, etapa_funil,
-           temperatura, score_ia, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'novo','novo','frio',0,$12,$12)
-         RETURNING id`,
+           temperatura, score_ia, cidade, estado, observacoes_ia, proximo_followup,
+           created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$20)
+         RETURNING *`,
         [
-          req.body.nome || "",
-          req.body.email || null,
-          req.body.telefone || "",
-          req.body.empresa || null,
-          req.body.cpfCnpj || null,
-          req.body.tipoPessoa || "pf",
-          req.body.produto || null,
-          Number(req.body.valorSolicitado) || null,
-          Number(req.body.prazo) || null,
-          req.body.mensagem || null,
-          req.body.origem || "site",
+          nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto,
+          valor, prazo, finalidade, origem, status_lead, etapa_funil,
+          temperatura, score_ia, cidade, estado, observacoes_ia, proximo_followup,
           now,
         ]
       );
-      const leadId = rows[0].id;
-      console.log(`[LEAD] Salvo: ${req.body.nome} — ${req.body.produto}`);
+      const lead = rows[0];
+      console.log(`[LEAD] Salvo: ${nome} — ${produto || origem}`);
 
       dispararN8n("novo_lead", {
-        id: leadId, nome: req.body.nome, telefone: req.body.telefone,
-        empresa: req.body.empresa, email: req.body.email, produto: req.body.produto,
-        valorSolicitado: req.body.valorSolicitado, prazo: req.body.prazo,
-        origem: req.body.origem || "site", criadoEm: now,
+        id: lead.id, nome, telefone, empresa, email, produto,
+        valorSolicitado: valor, prazo, origem, criadoEm: now,
       });
 
-      res.status(201).json({ success: true, id: leadId, message: "Lead registrado com sucesso!" });
+      // Retorna o lead completo para que o frontend possa atualizar a lista localmente
+      res.status(201).json(lead);
     } catch (err) {
       console.error("[LEAD ERROR]", err);
       res.status(500).json({ success: false, message: "Erro ao registrar lead." });
     }
   });
 
-  app.get("/api/leads", requireAdmin, async (req: Request, res: Response) => {
+  // GET /api/leads — aceita JWT (painel interno) ou admin-key (scripts/n8n)
+  // Retorna { leads: [...], total: N } para o Dashboard (admin-key) e array direto para o painel (JWT)
+  app.get("/api/leads", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
       const status = req.query.status as string | undefined;
       const params: string[] = [];
@@ -238,14 +255,23 @@ async function startServer() {
         `SELECT * FROM leads ${where} ORDER BY created_at DESC`,
         params
       );
-      res.json(rows);
+      // Retorna shape compatível com ambos os consumidores:
+      // Dashboard (admin-key) usa data.leads; Clientes.tsx (JWT) usa array direto
+      // Enviamos ambos para máxima compatibilidade
+      const isAdmin = !req.headers.authorization && req.headers["x-admin-key"];
+      if (isAdmin) {
+        res.json({ leads: rows, total: rows.length });
+      } else {
+        res.json(rows);
+      }
     } catch (err) {
       console.error("[LEADS GET ERROR]", err);
       res.status(500).json({ error: "Erro ao buscar leads." });
     }
   });
 
-  app.patch("/api/leads/:id", requireAdmin, async (req: Request, res: Response) => {
+  // PATCH /api/leads/:id — aceita JWT (CRM) ou admin-key
+  app.patch("/api/leads/:id", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
       const fields = { ...req.body, updated_at: new Date().toISOString() };
       const keys = Object.keys(fields);
@@ -263,56 +289,20 @@ async function startServer() {
   });
 
   // ─── SIMULAÇÕES API ────────────────────────────────────────────────────────
-  app.post("/api/simulacoes", async (req: Request, res: Response) => {
-    try {
-      const now = new Date().toISOString();
-      const { rows } = await pool.query(
-        `INSERT INTO leads
-          (nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto_interesse,
-           valor_solicitado, prazo_meses, finalidade, origem, status, etapa_funil,
-           temperatura, score_ia, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'simulador_publico','novo','novo','frio',0,$11,$11)
-         RETURNING id`,
-        [
-          req.body.nome || "",
-          req.body.email || null,
-          req.body.telefone || "",
-          req.body.empresa || null,
-          req.body.cpfCnpj || null,
-          req.body.tipoPessoa || "pf",
-          req.body.produto || null,
-          Number(req.body.valorSolicitado) || null,
-          Number(req.body.prazo) || null,
-          `Parcela estimada: R$ ${req.body.parcelaMensal || 0} | Total: R$ ${req.body.totalPagar || 0}`,
-          now,
-        ]
-      );
-      const simId = rows[0].id;
-      console.log(`[SIM] Salvo como lead: ${req.body.nome} — ${req.body.produto}`);
+  // NOTA: POST /api/simulacoes público foi REMOVIDO — era handler legado nunca chamado pelo frontend.
+  // O frontend público (SimuladorPublico.tsx, CapturaLead.tsx) usa POST /api/leads.
+  // As rotas /api/simulacoes com requireJwt (abaixo) são as corretas para o painel interno.
 
-      dispararN8n("nova_simulacao", {
-        id: simId, nome: req.body.nome, telefone: req.body.telefone,
-        empresa: req.body.empresa, email: req.body.email, produto: req.body.produto,
-        valorSolicitado: req.body.valorSolicitado, prazo: req.body.prazo,
-        parcelaMensal: req.body.parcelaMensal, custoTotal: req.body.totalPagar, criadoEm: now,
-      });
-
-      res.status(201).json({ success: true, id: simId, message: "Simulação registrada!" });
-    } catch (err) {
-      console.error("[SIM ERROR]", err);
-      res.status(500).json({ success: false, message: "Erro ao registrar simulação." });
-    }
-  });
-
-  app.get("/api/simulacoes", requireAdmin, async (_req: Request, res: Response) => {
+  // GET /api/admin/simulacoes-publicas — lista leads do simulador público (admin-key)
+  app.get("/api/admin/simulacoes-publicas", requireAdmin, async (_req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
-        `SELECT * FROM leads WHERE origem = 'simulador_publico' ORDER BY created_at DESC`
+        `SELECT * FROM leads WHERE origem IN ('simulador_publico','simulador-publico','site') ORDER BY created_at DESC`
       );
       res.json({ total: rows.length, simulacoes: rows });
     } catch (err) {
-      console.error("[SIMS GET ERROR]", err);
-      res.status(500).json({ error: "Erro ao buscar simulações." });
+      console.error("[ADMIN SIMS GET ERROR]", err);
+      res.status(500).json({ error: "Erro ao buscar simulações públicas." });
     }
   });
 
@@ -363,7 +353,8 @@ async function startServer() {
   });
 
   // ─── ESTATÍSTICAS API ──────────────────────────────────────────────────────
-  app.get("/api/stats", requireAdmin, async (_req: Request, res: Response) => {
+  // GET /api/stats — aceita JWT (Dashboard) ou admin-key (scripts externos)
+  app.get("/api/stats", requireJwtOrAdmin, async (_req: Request, res: Response) => {
     try {
       const [leadsRes, simsRes, contatosRes] = await Promise.all([
         pool.query("SELECT status, produto_interesse, valor_solicitado FROM leads"),
@@ -460,7 +451,7 @@ async function startServer() {
   });
 
   // ─── n8n WEBHOOK CONFIG API ────────────────────────────────────────────────
-  app.get("/api/n8n/status", requireAdmin, (_req: Request, res: Response) => {
+  app.get("/api/n8n/status", requireJwtOrAdmin, (_req: Request, res: Response) => {
     res.json({
       configured: !!process.env.N8N_WEBHOOK_URL,
       webhookUrl: process.env.N8N_WEBHOOK_URL ? "***configurado***" : null,
@@ -468,7 +459,7 @@ async function startServer() {
     });
   });
 
-  app.post("/api/n8n/test", requireAdmin, async (_req: Request, res: Response) => {
+  app.post("/api/n8n/test", requireJwtOrAdmin, async (_req: Request, res: Response) => {
     const ok = await dispararN8n("teste_webhook", {
       mensagem: "Teste de integração Destrava Crédito → n8n",
       ambiente: process.env.NODE_ENV || "development",
