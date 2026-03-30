@@ -61,7 +61,6 @@ export default function ColaboradorLayout({ children, title }: LayoutProps) {
         <div className="p-5 border-b border-gray-200">
           <a href="/" className="flex items-center gap-2">
             <img src="/destrava-logo.svg" alt="Destrava Crédito" className="h-8" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-            <span className="font-bold text-blue-900 text-lg">Destrava</span>
           </a>
           <div className="mt-2">
             <Badge variant="secondary" className="text-xs">Área do Colaborador</Badge>
@@ -130,7 +129,7 @@ export default function ColaboradorLayout({ children, title }: LayoutProps) {
       {/* ── Mobile: Header + Drawer ── */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 px-4 h-14 flex items-center justify-between shadow-sm">
         <a href="/" className="flex items-center gap-2">
-          <span className="font-bold text-blue-900">Destrava</span>
+          <img src="/destrava-logo.svg" alt="Destrava Crédito" className="h-7" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
           <Badge variant="secondary" className="text-xs">Colaborador</Badge>
         </a>
         <button

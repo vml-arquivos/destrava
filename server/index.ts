@@ -118,6 +118,45 @@ pool.query("SELECT 1").then(() => {
   }).catch((e: Error) => {
     console.error("🗄️  Tabela triagem_leads: ❌ Erro na auto-migration —", e.message);
   });
+
+  // Tabelas auxiliares de Empresas
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS public.empresa_followups (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      empresa_id  UUID NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
+      titulo      TEXT NOT NULL,
+      tipo        TEXT NOT NULL DEFAULT 'ligacao',
+      descricao   TEXT,
+      data_agendada TIMESTAMPTZ,
+      concluido   BOOLEAN NOT NULL DEFAULT false,
+      concluido_em TIMESTAMPTZ,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS public.empresa_historico (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      empresa_id  UUID NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
+      tipo        TEXT NOT NULL DEFAULT 'nota',
+      descricao   TEXT NOT NULL,
+      autor       TEXT,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS public.empresa_documentos (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      empresa_id  UUID NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
+      nome        TEXT NOT NULL,
+      tipo        TEXT,
+      tamanho     INTEGER,
+      url         TEXT,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    -- Adicionar colunas de IA na triagem se não existirem
+    ALTER TABLE public.triagem_leads ADD COLUMN IF NOT EXISTS observacoes_ia TEXT;
+    ALTER TABLE public.triagem_leads ADD COLUMN IF NOT EXISTS score_ia INTEGER;
+  `).then(() => {
+    console.log("🗄️  Tabelas auxiliares empresas: ✅ Verificadas/criadas");
+  }).catch((e: Error) => {
+    console.error("🗄️  Tabelas auxiliares empresas: ❌ Erro —", e.message);
+  });
 }).catch((e) => {
   console.error("🗄️  PostgreSQL: ❌ Falha na conexão —", e.message);
 });
@@ -1373,6 +1412,172 @@ async function startServer() {
     } catch (err) {
       console.error("[DELETE /api/triagem/:id]", err);
       res.status(500).json({ error: "Erro ao descartar" });
+    }
+  });
+
+  // ─── Empresas: Followup, Histórico, Documentos ──────────────────────────────
+
+  // GET /api/empresas/:id/followups
+  app.get("/api/empresas/:id/followups", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(
+        "SELECT * FROM empresa_followups WHERE empresa_id=$1 ORDER BY data_agendada ASC NULLS LAST, created_at DESC",
+        [req.params.id]
+      );
+      res.json(r.rows);
+    } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
+  });
+
+  // POST /api/empresas/:id/followups
+  app.post("/api/empresas/:id/followups", requireJwt, async (req: Request, res: Response) => {
+    const { titulo, tipo = "ligacao", data_agendada, descricao } = req.body;
+    try {
+      const r = await pool.query(
+        `INSERT INTO empresa_followups (empresa_id, titulo, tipo, data_agendada, descricao)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [req.params.id, titulo, tipo, data_agendada || null, descricao || null]
+      );
+      res.json(r.rows[0]);
+    } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
+  });
+
+  // PATCH /api/empresas/:id/followups/:fid/concluir
+  app.patch("/api/empresas/:id/followups/:fid/concluir", requireJwt, async (req: Request, res: Response) => {
+    try {
+      await pool.query(
+        "UPDATE empresa_followups SET concluido=true, concluido_em=NOW() WHERE id=$1 AND empresa_id=$2",
+        [req.params.fid, req.params.id]
+      );
+      res.json({ success: true });
+    } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
+  });
+
+  // GET /api/empresas/:id/historico
+  app.get("/api/empresas/:id/historico", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(
+        "SELECT * FROM empresa_historico WHERE empresa_id=$1 ORDER BY created_at DESC",
+        [req.params.id]
+      );
+      res.json(r.rows);
+    } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
+  });
+
+  // POST /api/empresas/:id/historico
+  app.post("/api/empresas/:id/historico", requireJwt, async (req: Request, res: Response) => {
+    const { tipo = "nota", descricao } = req.body;
+    const colab = (req as any).colaborador;
+    try {
+      const r = await pool.query(
+        `INSERT INTO empresa_historico (empresa_id, tipo, descricao, autor)
+         VALUES ($1,$2,$3,$4) RETURNING *`,
+        [req.params.id, tipo, descricao, colab?.nome || "Sistema"]
+      );
+      res.json(r.rows[0]);
+    } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
+  });
+
+  // GET /api/empresas/:id/documentos
+  app.get("/api/empresas/:id/documentos", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query(
+        "SELECT * FROM empresa_documentos WHERE empresa_id=$1 ORDER BY created_at DESC",
+        [req.params.id]
+      );
+      res.json(r.rows);
+    } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
+  });
+
+  // POST /api/empresas/:id/documentos (upload multipart)
+  app.post("/api/empresas/:id/documentos", requireJwt, async (req: Request, res: Response) => {
+    try {
+      // Salva metadados (arquivo real pode ser salvo em DATA_DIR)
+      const dataDir = process.env.DATA_DIR || "/data";
+      const uploadDir = path.join(dataDir, "uploads", "empresas", req.params.id);
+      await fs.promises.mkdir(uploadDir, { recursive: true });
+
+      // Lê o body como buffer raw (multipart simples)
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      await new Promise(r => req.on("end", r));
+      const buf = Buffer.concat(chunks);
+
+      // Extrai nome do arquivo do Content-Disposition ou gera um
+      const contentDisp = req.headers["content-disposition"] || "";
+      const match = contentDisp.match(/filename="?([^"\n]+)"?/);
+      const nomeArq = match?.[1] || `doc_${Date.now()}`;
+      const filePath = path.join(uploadDir, nomeArq);
+      await fs.promises.writeFile(filePath, buf);
+
+      const r = await pool.query(
+        `INSERT INTO empresa_documentos (empresa_id, nome, tipo, tamanho, url)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [req.params.id, nomeArq, path.extname(nomeArq).replace(".", "") || "arquivo", buf.length, `/uploads/empresas/${req.params.id}/${nomeArq}`]
+      );
+      res.json(r.rows[0]);
+    } catch (err) { console.error(err); res.status(500).json({ error: "Erro ao salvar documento" }); }
+  });
+
+  // ─── Triagem: Qualificação por IA ─────────────────────────────────────────
+
+  // POST /api/triagem/:id/qualificar-ia — Qualifica o lead com GPT
+  app.post("/api/triagem/:id/qualificar-ia", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const r = await pool.query("SELECT * FROM triagem_leads WHERE id=$1", [req.params.id]);
+      if (!r.rows[0]) return res.status(404).json({ error: "Não encontrado" });
+      const lead = r.rows[0];
+
+      const { OpenAI } = await import("openai");
+      const openai = new OpenAI();
+
+      const prompt = `Você é um analista de crédito empresarial especializado em assessoria de crédito para PMEs.
+Analise o perfil abaixo e classifique o potencial deste lead para crédito empresarial.
+
+Dados do lead:
+- Nome: ${lead.nome}
+- Empresa: ${lead.empresa || "Não informado"}
+- Telefone: ${lead.telefone}
+- CNPJ: ${lead.cnpj || "Não informado"}
+- Produto de interesse: ${lead.produto_interesse || "Não informado"}
+- Prazo desejado: ${lead.prazo_meses ? lead.prazo_meses + " meses" : "Não informado"}
+- Canal de origem: ${lead.canal_origem || "simulador_publico"}
+- Data de entrada: ${new Date(lead.created_at).toLocaleDateString("pt-BR")}
+
+Responda APENAS com um JSON válido no seguinte formato:
+{
+  "classificacao": "possivel_cliente" | "curioso" | "sem_perfil" | "pendente",
+  "score": <número de 0 a 100>,
+  "temperatura": "frio" | "morno" | "quente",
+  "resumo": "<2-3 frases explicando a classificação>",
+  "pontos_positivos": ["<ponto1>", "<ponto2>"],
+  "pontos_atencao": ["<ponto1>", "<ponto2>"],
+  "proxima_acao": "<ação recomendada para o consultor>"
+}`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.3,
+        response_format: { type: "json_object" },
+      });
+
+      const analise = JSON.parse(completion.choices[0].message.content || "{}");
+
+      // Atualiza o status na triagem com base na classificação da IA
+      const novoStatus = analise.classificacao === "possivel_cliente" ? "possivel_cliente"
+        : analise.classificacao === "curioso" ? "curioso"
+        : analise.classificacao === "sem_perfil" ? "sem_perfil"
+        : "pendente";
+
+      await pool.query(
+        `UPDATE triagem_leads SET status=$1, observacoes_ia=$2, score_ia=$3, updated_at=NOW() WHERE id=$4`,
+        [novoStatus, JSON.stringify(analise), analise.score || null, req.params.id]
+      );
+
+      res.json({ success: true, analise });
+    } catch (err) {
+      console.error("[POST /api/triagem/:id/qualificar-ia]", err);
+      res.status(500).json({ error: "Erro ao qualificar com IA" });
     }
   });
 

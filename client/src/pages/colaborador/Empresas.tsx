@@ -11,6 +11,7 @@ import {
   FileText, ChevronDown, ChevronUp,
   Calculator, AlertTriangle, ShieldCheck, ShieldAlert, ShieldOff,
   TrendingDown, Activity, BarChart2,
+  Paperclip, Upload, MessageSquare, History, Bell, Send, PlusCircle,
 } from "lucide-react";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -235,6 +236,35 @@ function calcularScore(e: Empresa): { score: number; risco: "baixo" | "medio" | 
   return { score: scoreNorm, risco, indicadores };
 }
 
+// ─── Tipos para Followup e Histórico ────────────────────────────────────────
+interface EmpresaFollowup {
+  id: string;
+  empresa_id: string;
+  tipo: string;
+  titulo: string;
+  descricao?: string;
+  data_agendada?: string;
+  concluido: boolean;
+  created_at: string;
+}
+interface EmpresaHistorico {
+  id: string;
+  empresa_id: string;
+  tipo: string;
+  descricao: string;
+  autor?: string;
+  created_at: string;
+}
+interface EmpresaDocumento {
+  id: string;
+  empresa_id: string;
+  nome: string;
+  tipo: string;
+  tamanho?: number;
+  url?: string;
+  created_at: string;
+}
+
 export default function Empresas() {
   const [, setLocation] = useLocation();
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
@@ -242,6 +272,14 @@ export default function Empresas() {
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [empresaSelecionada, setEmpresaSelecionada] = useState<Empresa | null>(null);
+  const [abaAtiva, setAbaAtiva] = useState<"dados" | "documentos" | "followup" | "historico">("dados");
+  const [followups, setFollowups] = useState<EmpresaFollowup[]>([]);
+  const [historico, setHistorico] = useState<EmpresaHistorico[]>([]);
+  const [documentos, setDocumentos] = useState<EmpresaDocumento[]>([]);
+  const [loadingDetalhe, setLoadingDetalhe] = useState(false);
+  const [novaObs, setNovaObs] = useState("");
+  const [novoFollowup, setNovoFollowup] = useState({ titulo: "", tipo: "ligacao", data_agendada: "", descricao: "" });
+  const [adicionandoFollowup, setAdicionandoFollowup] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState<Empresa | null>(null);
   const [form, setForm] = useState<FormEmpresa>({ ...FORM_VAZIO });
@@ -271,6 +309,61 @@ export default function Empresas() {
     const t = setTimeout(carregarEmpresas, busca ? 400 : 0);
     return () => clearTimeout(t);
   }, [carregarEmpresas]);
+
+  // Carrega followup, histórico e documentos ao selecionar empresa
+  useEffect(() => {
+    if (!empresaSelecionada) return;
+    setAbaAtiva("dados");
+    setFollowups([]);
+    setHistorico([]);
+    setDocumentos([]);
+    setLoadingDetalhe(true);
+    Promise.all([
+      apiFetch(`/api/empresas/${empresaSelecionada.id}/followups`).catch(() => []),
+      apiFetch(`/api/empresas/${empresaSelecionada.id}/historico`).catch(() => []),
+      apiFetch(`/api/empresas/${empresaSelecionada.id}/documentos`).catch(() => []),
+    ]).then(([fups, hist, docs]) => {
+      setFollowups(Array.isArray(fups) ? fups : []);
+      setHistorico(Array.isArray(hist) ? hist : []);
+      setDocumentos(Array.isArray(docs) ? docs : []);
+    }).finally(() => setLoadingDetalhe(false));
+  }, [empresaSelecionada?.id]);
+
+  async function adicionarHistorico(descricao: string, tipo = "nota") {
+    if (!empresaSelecionada || !descricao.trim()) return;
+    try {
+      await apiFetch(`/api/empresas/${empresaSelecionada.id}/historico`, {
+        method: "POST", body: JSON.stringify({ tipo, descricao }),
+      });
+      const hist = await apiFetch(`/api/empresas/${empresaSelecionada.id}/historico`).catch(() => []);
+      setHistorico(Array.isArray(hist) ? hist : []);
+      setNovaObs("");
+      toast.success("Nota adicionada.");
+    } catch { toast.error("Erro ao adicionar nota."); }
+  }
+
+  async function salvarFollowup() {
+    if (!empresaSelecionada || !novoFollowup.titulo.trim()) return;
+    try {
+      await apiFetch(`/api/empresas/${empresaSelecionada.id}/followups`, {
+        method: "POST", body: JSON.stringify(novoFollowup),
+      });
+      const fups = await apiFetch(`/api/empresas/${empresaSelecionada.id}/followups`).catch(() => []);
+      setFollowups(Array.isArray(fups) ? fups : []);
+      setNovoFollowup({ titulo: "", tipo: "ligacao", data_agendada: "", descricao: "" });
+      setAdicionandoFollowup(false);
+      toast.success("Follow-up agendado.");
+    } catch { toast.error("Erro ao salvar follow-up."); }
+  }
+
+  async function concluirFollowup(id: string) {
+    if (!empresaSelecionada) return;
+    try {
+      await apiFetch(`/api/empresas/${empresaSelecionada.id}/followups/${id}/concluir`, { method: "PATCH" });
+      setFollowups(prev => prev.map(f => f.id === id ? { ...f, concluido: true } : f));
+      adicionarHistorico(`Follow-up concluído`, "followup");
+    } catch { toast.error("Erro ao concluir follow-up."); }
+  }
 
   // ─── Formulário ─────────────────────────────────────────────────────────────
 
@@ -661,8 +754,40 @@ export default function Empresas() {
                   );
                 })()}
 
-                {/* Corpo do detalhe */}
-                <div className="p-5 space-y-5">
+                {/* ─── Abas de Navegação ─────────────────────────────── */}
+                <div className="flex border-b border-gray-200 px-4 gap-1 bg-gray-50">
+                  {([
+                    { id: "dados",      label: "Dados",       icon: <Building2 className="w-3.5 h-3.5" /> },
+                    { id: "documentos", label: "Documentos",  icon: <Paperclip className="w-3.5 h-3.5" />, badge: documentos.length },
+                    { id: "followup",   label: "Follow-up",   icon: <Bell className="w-3.5 h-3.5" />, badge: followups.filter(f => !f.concluido).length },
+                    { id: "historico",  label: "Histórico",   icon: <History className="w-3.5 h-3.5" />, badge: historico.length },
+                  ] as const).map(aba => (
+                    <button
+                      key={aba.id}
+                      onClick={() => setAbaAtiva(aba.id)}
+                      className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition-colors ${
+                        abaAtiva === aba.id
+                          ? "border-blue-600 text-blue-700"
+                          : "border-transparent text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      {aba.icon} {aba.label}
+                      {(aba as any).badge > 0 && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+                          abaAtiva === aba.id ? "bg-blue-100 text-blue-700" : "bg-gray-200 text-gray-600"
+                        }`}>{(aba as any).badge}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {loadingDetalhe && (
+                  <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+                )}
+
+                {/* ─── ABA: DADOS ────────────────────────────────────────── */}
+                {!loadingDetalhe && abaAtiva === "dados" && (
+                <div className="p-5 space-y-5 overflow-y-auto" style={{ maxHeight: "calc(100vh - 380px)" }}>
                   {/* Dados básicos */}
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                     {empresaSelecionada.cnpj && (
@@ -805,6 +930,201 @@ export default function Empresas() {
                     </div>
                   )}
                 </div>
+                )}
+
+                {/* ─── ABA: DOCUMENTOS ─────────────────────────────────── */}
+                {!loadingDetalhe && abaAtiva === "documentos" && (
+                  <div className="p-5 space-y-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 380px)" }}>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-gray-700">Documentos da Empresa</p>
+                      <label className="flex items-center gap-1.5 text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors">
+                        <Upload className="w-3.5 h-3.5" /> Enviar Arquivo
+                        <input type="file" className="hidden" onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file || !empresaSelecionada) return;
+                          const fd = new FormData();
+                          fd.append("file", file);
+                          try {
+                            await apiFetch(`/api/empresas/${empresaSelecionada.id}/documentos`, {
+                              method: "POST",
+                              body: fd,
+                              headers: {},
+                            });
+                            const docs = await apiFetch(`/api/empresas/${empresaSelecionada.id}/documentos`).catch(() => []);
+                            setDocumentos(Array.isArray(docs) ? docs : []);
+                            toast.success("Documento enviado.");
+                          } catch { toast.error("Erro ao enviar documento."); }
+                        }} />
+                      </label>
+                    </div>
+                    {documentos.length === 0 ? (
+                      <div className="text-center py-12 text-gray-400">
+                        <Paperclip className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                        <p className="text-sm">Nenhum documento enviado</p>
+                        <p className="text-xs mt-1">Envie balancetes, extratos, contratos e outros arquivos</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {documentos.map(doc => (
+                          <div key={doc.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5 border">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <FileText className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-gray-800 truncate">{doc.nome}</p>
+                                <p className="text-xs text-gray-400">{doc.tipo} · {new Date(doc.created_at).toLocaleDateString("pt-BR")}</p>
+                              </div>
+                            </div>
+                            {doc.url && (
+                              <a href={doc.url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex-shrink-0 ml-2">Baixar</a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ─── ABA: FOLLOW-UP ───────────────────────────────────── */}
+                {!loadingDetalhe && abaAtiva === "followup" && (
+                  <div className="p-5 space-y-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 380px)" }}>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-gray-700">Follow-ups</p>
+                      <button onClick={() => setAdicionandoFollowup(true)} className="flex items-center gap-1.5 text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors">
+                        <PlusCircle className="w-3.5 h-3.5" /> Novo
+                      </button>
+                    </div>
+                    {adicionandoFollowup && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+                        <p className="text-xs font-semibold text-blue-700">Novo Follow-up</p>
+                        <input
+                          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                          placeholder="Título do follow-up..."
+                          value={novoFollowup.titulo}
+                          onChange={e => setNovoFollowup(p => ({ ...p, titulo: e.target.value }))}
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                            value={novoFollowup.tipo}
+                            onChange={e => setNovoFollowup(p => ({ ...p, tipo: e.target.value }))}
+                          >
+                            <option value="ligacao">Ligança</option>
+                            <option value="whatsapp">WhatsApp</option>
+                            <option value="email">E-mail</option>
+                            <option value="reuniao">Reunião</option>
+                            <option value="visita">Visita</option>
+                            <option value="outro">Outro</option>
+                          </select>
+                          <input
+                            type="datetime-local"
+                            className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                            value={novoFollowup.data_agendada}
+                            onChange={e => setNovoFollowup(p => ({ ...p, data_agendada: e.target.value }))}
+                          />
+                        </div>
+                        <textarea
+                          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+                          rows={2}
+                          placeholder="Descrição (opcional)..."
+                          value={novoFollowup.descricao}
+                          onChange={e => setNovoFollowup(p => ({ ...p, descricao: e.target.value }))}
+                        />
+                        <div className="flex gap-2">
+                          <button onClick={salvarFollowup} className="flex-1 bg-blue-600 text-white text-sm py-2 rounded-lg hover:bg-blue-700">Salvar</button>
+                          <button onClick={() => setAdicionandoFollowup(false)} className="flex-1 bg-gray-100 text-gray-700 text-sm py-2 rounded-lg hover:bg-gray-200">Cancelar</button>
+                        </div>
+                      </div>
+                    )}
+                    {followups.length === 0 && !adicionandoFollowup ? (
+                      <div className="text-center py-12 text-gray-400">
+                        <Bell className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                        <p className="text-sm">Nenhum follow-up agendado</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {followups.map(f => (
+                          <div key={f.id} className={`flex items-start gap-3 rounded-xl border p-3 ${
+                            f.concluido ? "bg-gray-50 opacity-60" : "bg-white"
+                          }`}>
+                            <button
+                              onClick={() => !f.concluido && concluirFollowup(f.id)}
+                              className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                                f.concluido ? "bg-green-500 border-green-500" : "border-gray-300 hover:border-green-400"
+                              }`}
+                            >
+                              {f.concluido && <CheckCircle className="w-3 h-3 text-white" />}
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm font-medium ${f.concluido ? "line-through text-gray-400" : "text-gray-800"}`}>{f.titulo}</p>
+                              {f.descricao && <p className="text-xs text-gray-500 mt-0.5">{f.descricao}</p>}
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs text-gray-400">{f.tipo}</span>
+                                {f.data_agendada && (
+                                  <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                    !f.concluido && new Date(f.data_agendada) < new Date()
+                                      ? "bg-red-100 text-red-600"
+                                      : "bg-gray-100 text-gray-500"
+                                  }`}>
+                                    {new Date(f.data_agendada).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ─── ABA: HISTÓRICO ─────────────────────────────────────── */}
+                {!loadingDetalhe && abaAtiva === "historico" && (
+                  <div className="p-5 space-y-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 380px)" }}>
+                    {/* Campo de nova nota */}
+                    <div className="flex gap-2">
+                      <textarea
+                        className="flex-1 border rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        rows={2}
+                        placeholder="Adicionar nota, observação ou registro..."
+                        value={novaObs}
+                        onChange={e => setNovaObs(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter" && e.ctrlKey) adicionarHistorico(novaObs); }}
+                      />
+                      <button
+                        onClick={() => adicionarHistorico(novaObs)}
+                        disabled={!novaObs.trim()}
+                        className="self-end px-3 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-40 transition-colors"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {historico.length === 0 ? (
+                      <div className="text-center py-10 text-gray-400">
+                        <History className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                        <p className="text-sm">Nenhum registro ainda</p>
+                        <p className="text-xs mt-1">Adicione notas, registros de contato e observações</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {historico.map(h => (
+                          <div key={h.id} className="flex gap-3">
+                            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center mt-0.5">
+                              <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                            </div>
+                            <div className="flex-1 bg-gray-50 rounded-xl px-3 py-2.5 border">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-semibold text-gray-600">{h.autor || "Sistema"}</span>
+                                <span className="text-xs text-gray-400">{new Date(h.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                              </div>
+                              <p className="text-sm text-gray-800 whitespace-pre-wrap">{h.descricao}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
               </div>
             )}
           </div>

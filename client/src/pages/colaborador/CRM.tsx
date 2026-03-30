@@ -180,7 +180,13 @@ function ScoreBadge({ score }: { score?: number }) {
 }
 
 // ─── Card do Lead no Kanban ───────────────────────────────────
-function KanbanCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
+function KanbanCard({
+  lead, onClick, onDragStart
+}: {
+  lead: Lead;
+  onClick: () => void;
+  onDragStart: (lead: Lead) => void;
+}) {
   const temp = lead.temperatura ? TEMPERATURA_CONFIG[lead.temperatura] : null;
   const TempIcon = temp?.icon;
   const hasFollowup = lead.proximo_followup && new Date(lead.proximo_followup) <= new Date();
@@ -188,69 +194,56 @@ function KanbanCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
 
   return (
     <div
-      className="bg-white rounded-lg border border-gray-200 p-3 cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group"
+      draggable
+      onDragStart={e => { e.dataTransfer.effectAllowed = "move"; onDragStart(lead); }}
+      className="bg-white rounded-lg border border-gray-200 p-2.5 cursor-grab active:cursor-grabbing hover:border-blue-400 hover:shadow-md transition-all group select-none"
       onClick={onClick}
     >
       {/* Header */}
-      <div className="flex items-start justify-between gap-2 mb-2">
+      <div className="flex items-start justify-between gap-1.5 mb-1.5">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900 truncate">{lead.nome}</p>
+          <p className="text-xs font-semibold text-gray-900 truncate leading-tight">{lead.nome}</p>
           {lead.empresa && (
-            <p className="text-xs text-gray-500 truncate">{lead.empresa}</p>
+            <p className="text-[11px] text-gray-400 truncate">{lead.empresa}</p>
           )}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           {temp && TempIcon && (
             <span className={`${temp.color} ${temp.bg} p-0.5 rounded`}>
-              <TempIcon className="h-3 w-3" />
+              <TempIcon className="h-2.5 w-2.5" />
             </span>
           )}
           <ScoreBadge score={lead.score_efetivo ?? lead.score_ia} />
         </div>
       </div>
 
-      {/* Produto / Valor */}
-      {(lead.produto_interesse || lead.valor_solicitado) && (
-        <div className="flex items-center gap-2 mb-2">
-          {lead.produto_interesse && (
-            <span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded truncate max-w-[120px]">
-              {lead.produto_interesse}
-            </span>
-          )}
-          {lead.valor_solicitado && (
-            <span className="text-xs font-medium text-gray-700">{fmt(lead.valor_solicitado)}</span>
-          )}
-        </div>
+      {/* Produto */}
+      {lead.produto_interesse && (
+        <span className="inline-block text-[11px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded truncate max-w-full mb-1.5">
+          {lead.produto_interesse}
+        </span>
       )}
 
-      {/* Alertas */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {hasFollowup && (
-          <span className="inline-flex items-center gap-0.5 text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
-            <Clock className="h-3 w-3" />
-            Follow-up
-          </span>
-        )}
-        {docsAlert && (
-          <span className="inline-flex items-center gap-0.5 text-xs text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">
-            <AlertTriangle className="h-3 w-3" />
-            Docs
-          </span>
-        )}
-        {lead.dias_sem_contato != null && lead.dias_sem_contato > 7 && (
-          <span className="inline-flex items-center gap-0.5 text-xs text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded">
-            <Clock className="h-3 w-3" />
-            {lead.dias_sem_contato}d
-          </span>
-        )}
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-        <span className="text-xs text-gray-400">{fmtDate(lead.created_at)}</span>
-        {lead.responsavel_nome && (
-          <span className="text-xs text-gray-500 truncate max-w-[80px]">{lead.responsavel_nome.split(" ")[0]}</span>
-        )}
+      {/* Alertas + data */}
+      <div className="flex items-center justify-between gap-1">
+        <div className="flex items-center gap-1 flex-wrap">
+          {hasFollowup && (
+            <span className="inline-flex items-center gap-0.5 text-[11px] text-red-600 bg-red-50 px-1 py-0.5 rounded">
+              <Clock className="h-2.5 w-2.5" />FU
+            </span>
+          )}
+          {docsAlert && (
+            <span className="inline-flex items-center gap-0.5 text-[11px] text-orange-600 bg-orange-50 px-1 py-0.5 rounded">
+              <AlertTriangle className="h-2.5 w-2.5" />Doc
+            </span>
+          )}
+          {lead.dias_sem_contato != null && lead.dias_sem_contato > 7 && (
+            <span className="inline-flex items-center gap-0.5 text-[11px] text-gray-400 bg-gray-50 px-1 py-0.5 rounded">
+              <Clock className="h-2.5 w-2.5" />{lead.dias_sem_contato}d
+            </span>
+          )}
+        </div>
+        <span className="text-[11px] text-gray-300 flex-shrink-0">{fmtDate(lead.created_at)}</span>
       </div>
     </div>
   );
@@ -258,45 +251,63 @@ function KanbanCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
 
 // ─── Coluna do Kanban ─────────────────────────────────────────
 function KanbanColuna({
-  etapa, leads, onCardClick, onAddLead
+  etapa, leads, onCardClick, onAddLead, onDrop, onDragStart
 }: {
   etapa: typeof ETAPAS_FUNIL[0];
   leads: Lead[];
   onCardClick: (l: Lead) => void;
   onAddLead: (etapa: string) => void;
+  onDrop: (etapaId: string) => void;
+  onDragStart: (lead: Lead) => void;
 }) {
+  const [isDragOver, setIsDragOver] = useState(false);
   const valor = leads.reduce((s, l) => s + (l.valor_solicitado ?? 0), 0);
+
   return (
-    <div className={`flex-shrink-0 w-64 rounded-xl border-2 ${etapa.color} flex flex-col`} style={{ minHeight: 200 }}>
+    <div
+      className={`flex-shrink-0 w-52 rounded-xl border-2 flex flex-col transition-all ${
+        isDragOver ? "border-blue-400 bg-blue-50 scale-[1.01] shadow-lg" : etapa.color
+      }`}
+      style={{ minHeight: 160 }}
+      onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
+      onDragLeave={() => setIsDragOver(false)}
+      onDrop={e => { e.preventDefault(); setIsDragOver(false); onDrop(etapa.id); }}
+    >
       {/* Header da coluna */}
-      <div className="px-3 py-2.5 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${etapa.dot}`} />
-          <span className={`text-xs font-bold uppercase tracking-wide ${etapa.text}`}>{etapa.label}</span>
-          <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full bg-white/70 ${etapa.text}`}>
+      <div className="px-2.5 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${etapa.dot}`} />
+          <span className={`text-[11px] font-bold uppercase tracking-wide ${etapa.text} truncate max-w-[90px]`}>{etapa.label}</span>
+          <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-white/70 ${etapa.text}`}>
             {leads.length}
           </span>
         </div>
         <button
           onClick={() => onAddLead(etapa.id)}
-          className={`p-1 rounded hover:bg-white/50 transition-colors ${etapa.text} opacity-60 hover:opacity-100`}
+          className={`p-0.5 rounded hover:bg-white/50 transition-colors ${etapa.text} opacity-60 hover:opacity-100`}
         >
-          <Plus className="h-3.5 w-3.5" />
+          <Plus className="h-3 w-3" />
         </button>
       </div>
       {/* Valor total */}
       {valor > 0 && (
-        <div className={`px-3 pb-1.5 text-xs font-medium ${etapa.text} opacity-70`}>
+        <div className={`px-2.5 pb-1 text-[11px] font-medium ${etapa.text} opacity-70`}>
           {fmt(valor)}
         </div>
       )}
+      {/* Drop zone hint */}
+      {isDragOver && (
+        <div className="mx-2 mb-1 border-2 border-dashed border-blue-400 rounded-lg py-2 text-center text-xs text-blue-500 font-medium">
+          Soltar aqui
+        </div>
+      )}
       {/* Cards */}
-      <div className="flex-1 px-2 pb-2 space-y-2 overflow-y-auto" style={{ maxHeight: "calc(100vh - 280px)" }}>
+      <div className="flex-1 px-1.5 pb-1.5 space-y-1.5 overflow-y-auto" style={{ maxHeight: "calc(100vh - 260px)" }}>
         {leads.map(lead => (
-          <KanbanCard key={lead.id} lead={lead} onClick={() => onCardClick(lead)} />
+          <KanbanCard key={lead.id} lead={lead} onClick={() => onCardClick(lead)} onDragStart={onDragStart} />
         ))}
         {leads.length === 0 && (
-          <div className="text-center py-6 text-xs text-gray-400">Nenhum lead</div>
+          <div className="text-center py-4 text-xs text-gray-400">Nenhum lead</div>
         )}
       </div>
     </div>
@@ -1023,6 +1034,28 @@ export default function CRM() {
     return acc;
   }, {});
 
+  // Drag-and-drop
+  const [leadArrastando, setLeadArrastando] = useState<Lead | null>(null);
+
+  async function moverViaArrastar(novaEtapaId: string) {
+    if (!leadArrastando || leadArrastando.etapa_funil === novaEtapaId) return;
+    // Atualização otimista
+    setLeads(prev => prev.map(l =>
+      l.id === leadArrastando.id ? { ...l, etapa_funil: novaEtapaId } : l
+    ));
+    try {
+      await apiFetch("/api/crm/mover-funil", {
+        method: "POST",
+        body: JSON.stringify({ lead_id: leadArrastando.id, etapa_funil: novaEtapaId }),
+      });
+      toast.success(`Lead movido para ${ETAPAS_FUNIL.find(e => e.id === novaEtapaId)?.label ?? novaEtapaId}`);
+    } catch {
+      toast.error("Erro ao mover lead.");
+      carregarLeads(); // reverter
+    }
+    setLeadArrastando(null);
+  }
+
   // Métricas do topo
   const totalLeads = leadsFiltrados.length;
   const totalValor = leadsFiltrados.reduce((s, l) => s + (l.valor_solicitado ?? 0), 0);
@@ -1130,6 +1163,8 @@ export default function CRM() {
                   leads={leadsPorEtapa[etapa.id] ?? []}
                   onCardClick={lead => setLeadSelecionado(lead)}
                   onAddLead={e => { setEtapaNovoLead(e); setShowNovoLead(true); }}
+                  onDrop={novaEtapaId => moverViaArrastar(novaEtapaId)}
+                  onDragStart={lead => setLeadArrastando(lead)}
                 />
               ))}
             </div>

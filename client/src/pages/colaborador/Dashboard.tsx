@@ -6,7 +6,7 @@ import ColaboradorLayout from "./Layout";
 import {
   Calculator, FileText, TrendingUp, DollarSign, Clock,
   CheckCircle2, XCircle, Plus, ArrowRight, Users, Zap,
-  RefreshCw, Loader2, AlertCircle, MessageSquare
+  RefreshCw, Loader2, AlertCircle, MessageSquare, ShieldAlert
 } from "lucide-react";
 
 // Interfaces alinhadas com os shapes reais do banco
@@ -66,6 +66,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [leadsRecentes, setLeadsRecentes] = useState<LeadRow[]>([]);
   const [simulacoesRecentes, setSimulacoesRecentes] = useState<SimulacaoRow[]>([]);
+  const [triagemPendente, setTriagemPendente] = useState(0);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -76,10 +77,11 @@ export default function Dashboard() {
     setErro(null);
     try {
       // Todas as chamadas usam JWT via apiFetch — sem ADMIN_KEY no bundle
-      const [statsData, leadsData, simsData] = await Promise.all([
+      const [statsData, leadsData, simsData, triagemData] = await Promise.all([
         apiFetch("/api/stats").catch(() => null),
         apiFetch("/api/leads").catch(() => []),
         apiFetch("/api/simulacoes").catch(() => []),
+        apiFetch("/api/triagem/stats").catch(() => ({})),
       ]);
 
       if (statsData) setStats(statsData);
@@ -96,6 +98,9 @@ export default function Dashboard() {
         : (simsData?.simulacoes ?? []);
       // Mantemos todas para exibir no dashboard; slice(0,5) apenas no bloco de recentes
       setSimulacoesRecentes(simsArr);
+
+      // Triagem pendente
+      setTriagemPendente(triagemData?.pendente ?? 0);
     } catch (e) {
       setErro("Erro ao carregar dados. Verifique a conexão.");
     }
@@ -175,18 +180,18 @@ export default function Dashboard() {
               <p className="text-xs text-gray-400 mt-1">realizadas</p>
             </div>
 
-            <div className="bg-white rounded-xl border p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm text-gray-500">Volume Simulado</p>
-                <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center">
-                  <DollarSign className="w-4 h-4 text-yellow-600" />
+            <Link href="/colaborador/triagem">
+              <div className={`rounded-xl border p-5 shadow-sm cursor-pointer transition-all hover:shadow-md ${triagemPendente > 0 ? "bg-yellow-50 border-yellow-300" : "bg-white"}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-gray-500">Triagem Pendente</p>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${triagemPendente > 0 ? "bg-yellow-200" : "bg-gray-100"}`}>
+                    <ShieldAlert className={`w-4 h-4 ${triagemPendente > 0 ? "text-yellow-700" : "text-gray-400"}`} />
+                  </div>
                 </div>
+                <p className={`text-3xl font-bold ${triagemPendente > 0 ? "text-yellow-700" : "text-gray-900"}`}>{triagemPendente}</p>
+                <p className="text-xs text-gray-400 mt-1">aguardando qualificação</p>
               </div>
-              <p className="text-2xl font-bold text-yellow-600">
-                {fmt(stats?.simulacoes.totalValorSimulado ?? 0)}
-              </p>
-              <p className="text-xs text-gray-400 mt-1">em crédito</p>
-            </div>
+            </Link>
 
             <div className="bg-white rounded-xl border p-5 shadow-sm">
               <div className="flex items-center justify-between mb-2">
