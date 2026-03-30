@@ -16,6 +16,7 @@ import {
   Zap,
   Kanban,
   Building2,
+  ShieldAlert,
 } from "lucide-react";
 
 interface NavItem {
@@ -30,6 +31,7 @@ const navItems: NavItem[] = [
   { href: "/colaborador/crm",        label: "CRM — Pipeline",  icon: Kanban },
   { href: "/colaborador/calculadora",label: "Calculadora",     icon: Calculator },
   { href: "/colaborador/simulacoes", label: "Simulações",      icon: FileText },
+  { href: "/colaborador/triagem",    label: "Triagem",         icon: ShieldAlert },
   { href: "/colaborador/clientes",   label: "Clientes",        icon: Users },
   { href: "/colaborador/empresas",   label: "Empresas",        icon: Building2 },
   { href: "/colaborador/integracoes",label: "Integrações n8n", icon: Zap },

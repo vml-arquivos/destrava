@@ -80,6 +80,44 @@ pool.query("SELECT 1").then(() => {
   }).catch((e: Error) => {
     console.error("🗄️  Tabela empresas: ❌ Erro na auto-migration —", e.message);
   });
+
+  // ── Auto-migration: tabela triagem_leads (fila de qualificação do simulador) ─
+  pool.query(`
+    CREATE TABLE IF NOT EXISTS public.triagem_leads (
+      id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+      nome            TEXT         NOT NULL,
+      telefone        TEXT         NOT NULL,
+      email           TEXT,
+      empresa         TEXT,
+      cpf_cnpj        TEXT,
+      tipo_pessoa     TEXT         DEFAULT 'pj',
+      produto         TEXT,
+      valor           NUMERIC(15,2),
+      prazo           INTEGER,
+      parcela         NUMERIC(15,2),
+      taxa            NUMERIC(8,4),
+      cidade          TEXT,
+      estado          TEXT,
+      utm_source      TEXT,
+      utm_medium      TEXT,
+      utm_campaign    TEXT,
+      status          TEXT         NOT NULL DEFAULT 'pendente'
+                        CHECK (status IN ('pendente','possivel_cliente','curioso','sem_perfil','convertido','descartado')),
+      classificacao   TEXT,
+      observacoes     TEXT,
+      responsavel_id  UUID         REFERENCES public.colaboradores(id) ON DELETE SET NULL,
+      convertido_em   TIMESTAMPTZ,
+      lead_id         UUID         REFERENCES public.leads(id) ON DELETE SET NULL,
+      created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_triagem_status     ON public.triagem_leads(status);
+    CREATE INDEX IF NOT EXISTS idx_triagem_created_at ON public.triagem_leads(created_at DESC);
+  `).then(() => {
+    console.log("🗄️  Tabela triagem_leads: ✅ Verificada/criada");
+  }).catch((e: Error) => {
+    console.error("🗄️  Tabela triagem_leads: ❌ Erro na auto-migration —", e.message);
+  });
 }).catch((e) => {
   console.error("🗄️  PostgreSQL: ❌ Falha na conexão —", e.message);
 });
@@ -274,6 +312,39 @@ async function startServer() {
       const utm_medium   = b.utm_medium   || null;
       const utm_campaign = b.utm_campaign || null;
       const pagina_origem = b.pagina || b.pagina_origem || null;
+
+      // ── TRIAGEM: leads do simulador público vão para fila de qualificação ───────────────────────
+      if (origem === "simulador_publico" || origem === "simulador-publico" || origem === "site") {
+        const { rows: tRows } = await pool.query(
+          `INSERT INTO triagem_leads
+            (nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto,
+             valor, prazo, parcela, taxa, cidade, estado,
+             utm_source, utm_medium, utm_campaign, status, created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'pendente',$17,$17)
+           RETURNING *`,
+          [
+            nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto,
+            valor, prazo,
+            Number(b.parcelaMensal || b.parcela_mensal) || null,
+            Number(b.taxaEstimada || b.taxa_estimada) || null,
+            cidade, estado,
+            utm_source, utm_medium, utm_campaign,
+            now,
+          ]
+        );
+        const triagem = tRows[0];
+        console.log(`[TRIAGEM] Lead do simulador salvo na fila: ${nome} — ${produto || origem}`);
+
+        // Dispara n8n com evento específico de triagem
+        dispararN8n("triagem_novo_lead", {
+          event: "triagem_novo_lead",
+          source: origem,
+          triagem: { id: triagem.id, nome, telefone, email, empresa, produto, valor, prazo },
+          context: { pagina: b.pagina || "/simular", utm_source, utm_medium, utm_campaign },
+        });
+
+        return res.status(201).json({ ...triagem, _triagem: true });
+      }
 
       // INSERT com exatamente 20 colunas e 20 valores ($1..$19, $19 reutilizado para updated_at)
       // Colunas confirmadas no banco real (diagnóstico 30/03/2026)
@@ -1194,11 +1265,119 @@ async function startServer() {
       console.error("[DELETE /api/empresas/:id]", err);
       res.status(500).json({ error: "Erro ao excluir empresa" });
     }
+  });  // ─── TRIAGEM API ─────────────────────────────────────────────────────────────────────────────────
+
+  // GET /api/triagem — Listar fila de triagem com filtros
+  app.get("/api/triagem", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const busca  = req.query.busca  as string | undefined;
+      const params: any[] = [];
+      const conds: string[] = [];
+      if (status && status !== "todos") {
+        params.push(status); conds.push(`status = $${params.length}`);
+      }
+      if (busca && busca.trim()) {
+        const t = `%${busca.trim()}%`; params.push(t);
+        const i = params.length;
+        conds.push(`(nome ILIKE $${i} OR empresa ILIKE $${i} OR telefone ILIKE $${i} OR cpf_cnpj ILIKE $${i})`);
+      }
+      const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+      const { rows } = await pool.query(
+        `SELECT * FROM triagem_leads ${where} ORDER BY created_at DESC LIMIT 200`, params
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error("[GET /api/triagem]", err);
+      res.status(500).json({ error: "Erro ao listar triagem" });
+    }
   });
 
-  // ─── Static files ──────────────────────────────────────────────────────────────────────────────
-  const staticPath = process.env.NODE_ENV === "production"
-      ? path.resolve(__dirname, "public")
+  // GET /api/triagem/stats — Contadores por status
+  app.get("/api/triagem/stats", requireJwt, async (_req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT status, COUNT(*)::int as total FROM triagem_leads GROUP BY status`
+      );
+      const stats: Record<string, number> = {};
+      rows.forEach((r: any) => { stats[r.status] = r.total; });
+      res.json(stats);
+    } catch (err) {
+      console.error("[GET /api/triagem/stats]", err);
+      res.status(500).json({ error: "Erro ao buscar stats" });
+    }
+  });
+
+  // PATCH /api/triagem/:id — Atualizar status/classificação de um item da triagem
+  app.patch("/api/triagem/:id", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const { status, classificacao, observacoes, responsavel_id } = req.body;
+      const sets: string[] = ["updated_at = NOW()"];
+      const params: any[] = [req.params.id];
+      if (status)         { params.push(status);         sets.push(`status = $${params.length}`); }
+      if (classificacao)  { params.push(classificacao);  sets.push(`classificacao = $${params.length}`); }
+      if (observacoes !== undefined) { params.push(observacoes); sets.push(`observacoes = $${params.length}`); }
+      if (responsavel_id) { params.push(responsavel_id); sets.push(`responsavel_id = $${params.length}`); }
+      const { rows } = await pool.query(
+        `UPDATE triagem_leads SET ${sets.join(", ")} WHERE id = $1 RETURNING *`, params
+      );
+      res.json(rows[0]);
+    } catch (err) {
+      console.error("[PATCH /api/triagem/:id]", err);
+      res.status(500).json({ error: "Erro ao atualizar triagem" });
+    }
+  });
+
+  // POST /api/triagem/:id/converter — Converter item da triagem em lead real no CRM
+  app.post("/api/triagem/:id/converter", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const { rows: tRows } = await pool.query(
+        "SELECT * FROM triagem_leads WHERE id = $1", [req.params.id]
+      );
+      if (!tRows.length) return res.status(404).json({ error: "Item não encontrado" });
+      const t = tRows[0];
+      const now = new Date().toISOString();
+      const { rows: lRows } = await pool.query(
+        `INSERT INTO leads
+          (nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto_interesse,
+           valor_solicitado, prazo_meses, origem, status, etapa_funil, temperatura,
+           cidade, estado, score_ia, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'simulador_publico','novo','novo','morno',$10,$11,0,$12,$12)
+         RETURNING *`,
+        [t.nome, t.email, t.telefone, t.empresa, t.cpf_cnpj, t.tipo_pessoa, t.produto,
+         t.valor, t.prazo, t.cidade, t.estado, now]
+      );
+      const lead = lRows[0];
+      await pool.query(
+        `UPDATE triagem_leads SET status='convertido', lead_id=$1, convertido_em=NOW(), updated_at=NOW() WHERE id=$2`,
+        [lead.id, t.id]
+      );
+      dispararN8n("triagem_convertida", {
+        triagem_id: t.id, lead_id: lead.id,
+        nome: t.nome, telefone: t.telefone, produto: t.produto,
+      });
+      res.status(201).json({ lead, triagem_id: t.id });
+    } catch (err) {
+      console.error("[POST /api/triagem/:id/converter]", err);
+      res.status(500).json({ error: "Erro ao converter para lead" });
+    }
+  });
+
+  // DELETE /api/triagem/:id — Descartar item da triagem
+  app.delete("/api/triagem/:id", requireJwt, async (req: Request, res: Response) => {
+    try {
+      await pool.query(
+        "UPDATE triagem_leads SET status='descartado', updated_at=NOW() WHERE id=$1", [req.params.id]
+      );
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[DELETE /api/triagem/:id]", err);
+      res.status(500).json({ error: "Erro ao descartar" });
+    }
+  });
+
+  // ─── Static files ──────────────────────────────────────────────────────────────────────────────────
+  const staticPath = process.env.NODE_ENV === "production"     ? path.resolve(__dirname, "public")
       : path.resolve(__dirname, "..", "dist", "public");
 
   app.use(express.static(staticPath));

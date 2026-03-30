@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useLocation } from "wouter";
 import Layout from "./Layout";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
@@ -8,6 +9,8 @@ import {
   User, DollarSign, CreditCard, Tag, RefreshCw,
   CheckCircle, XCircle, Clock, Star, TrendingUp,
   FileText, ChevronDown, ChevronUp,
+  Calculator, AlertTriangle, ShieldCheck, ShieldAlert, ShieldOff,
+  TrendingDown, Activity, BarChart2,
 } from "lucide-react";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -172,7 +175,68 @@ function Secao({ id, titulo, icon, children, secaoAberta, setSecaoAberta }: {
 
 // ─── Componente Principal ─────────────────────────────────────────────────────────────────────────────────
 
+// ─── Função de Score/Risco (fora do componente para estabilidade) ─────────────
+
+function calcularScore(e: Empresa): { score: number; risco: "baixo" | "medio" | "alto" | "critico"; indicadores: string[] } {
+  let pontos = 0;
+  const indicadores: string[] = [];
+
+  // Faturamento anual
+  if (e.faturamento_anual) {
+    if (e.faturamento_anual >= 1_000_000) { pontos += 30; indicadores.push("Faturamento acima de R$ 1M"); }
+    else if (e.faturamento_anual >= 360_000) { pontos += 20; indicadores.push("Faturamento acima de R$ 360k"); }
+    else if (e.faturamento_anual >= 120_000) { pontos += 10; indicadores.push("Faturamento acima de R$ 120k"); }
+    else { pontos -= 5; indicadores.push("Faturamento abaixo de R$ 120k"); }
+  } else { indicadores.push("Faturamento não informado"); }
+
+  // Score Serasa
+  if (e.score_serasa) {
+    if (e.score_serasa >= 700) { pontos += 25; indicadores.push(`Serasa ${e.score_serasa} — Bom`); }
+    else if (e.score_serasa >= 500) { pontos += 15; indicadores.push(`Serasa ${e.score_serasa} — Regular`); }
+    else if (e.score_serasa >= 300) { pontos += 5; indicadores.push(`Serasa ${e.score_serasa} — Baixo`); }
+    else { pontos -= 15; indicadores.push(`Serasa ${e.score_serasa} — Crítico`); }
+  } else { indicadores.push("Score Serasa não informado"); }
+
+  // Score SPC
+  if (e.score_spc) {
+    if (e.score_spc >= 700) { pontos += 15; indicadores.push(`SPC ${e.score_spc} — Bom`); }
+    else if (e.score_spc >= 400) { pontos += 8; indicadores.push(`SPC ${e.score_spc} — Regular`); }
+    else { pontos -= 10; indicadores.push(`SPC ${e.score_spc} — Baixo`); }
+  }
+
+  // Porte
+  if (e.porte === "grande") { pontos += 10; }
+  else if (e.porte === "medio") { pontos += 7; }
+  else if (e.porte === "epp") { pontos += 5; }
+  else if (e.porte === "me") { pontos += 3; }
+
+  // Limite de crédito existente
+  if (e.limite_credito_atual && e.limite_credito_atual > 0) {
+    pontos += 10;
+    indicadores.push("Possui limite de crédito ativo");
+  }
+
+  // Status
+  if (e.status === "cliente") { pontos += 10; indicadores.push("Já é cliente ativo"); }
+  else if (e.status === "ex_cliente") { pontos -= 5; indicadores.push("Ex-cliente"); }
+
+  // Completude do cadastro
+  const campos = [e.cnpj, e.email, e.telefone, e.responsavel_nome, e.cidade];
+  const preenchidos = campos.filter(Boolean).length;
+  pontos += preenchidos * 2;
+  if (preenchidos < 3) indicadores.push("Cadastro incompleto");
+
+  const scoreNorm = Math.max(0, Math.min(100, pontos));
+  const risco: "baixo" | "medio" | "alto" | "critico" =
+    scoreNorm >= 70 ? "baixo" :
+    scoreNorm >= 50 ? "medio" :
+    scoreNorm >= 30 ? "alto" : "critico";
+
+  return { score: scoreNorm, risco, indicadores };
+}
+
 export default function Empresas() {
+  const [, setLocation] = useLocation();
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
@@ -543,6 +607,59 @@ export default function Empresas() {
                     </div>
                   </div>
                 </div>
+
+                {/* ─── Card Score/Risco ─────────────────────────────────── */}
+                {(() => {
+                  const { score, risco, indicadores } = calcularScore(empresaSelecionada);
+                  const RISCO_CONFIG = {
+                    baixo:   { label: "Baixo Risco",   color: "bg-green-50 border-green-200",  badge: "bg-green-100 text-green-800",  bar: "bg-green-500",  Icon: ShieldCheck },
+                    medio:   { label: "Risco Médio",   color: "bg-yellow-50 border-yellow-200", badge: "bg-yellow-100 text-yellow-800", bar: "bg-yellow-500", Icon: ShieldAlert },
+                    alto:    { label: "Alto Risco",    color: "bg-orange-50 border-orange-200", badge: "bg-orange-100 text-orange-800", bar: "bg-orange-500", Icon: AlertTriangle },
+                    critico: { label: "Risco Crítico", color: "bg-red-50 border-red-200",       badge: "bg-red-100 text-red-800",       bar: "bg-red-500",   Icon: ShieldOff },
+                  };
+                  const cfg = RISCO_CONFIG[risco];
+                  return (
+                    <div className={`mx-5 mt-4 border rounded-xl p-4 ${cfg.color}`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <cfg.Icon className="w-4 h-4" />
+                          <span className="text-sm font-bold text-gray-800">Score Destrava</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${cfg.badge}`}>{cfg.label}</span>
+                          <span className="text-2xl font-black text-gray-900">{score}<span className="text-sm font-normal text-gray-400">/100</span></span>
+                        </div>
+                      </div>
+                      {/* Barra de progresso */}
+                      <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
+                        <div className={`h-2 rounded-full transition-all ${cfg.bar}`} style={{ width: `${score}%` }} />
+                      </div>
+                      {/* Indicadores */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {indicadores.map((ind, i) => (
+                          <span key={i} className="text-xs bg-white/70 border border-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{ind}</span>
+                        ))}
+                      </div>
+                      {/* Botão Nova Simulação */}
+                      <button
+                        onClick={() => {
+                          // Salva os dados da empresa no sessionStorage para a Calculadora ler
+                          sessionStorage.setItem("calculadora_empresa", JSON.stringify({
+                            nome: empresaSelecionada.responsavel_nome || empresaSelecionada.razao_social,
+                            empresa: empresaSelecionada.razao_social,
+                            telefone: empresaSelecionada.telefone || empresaSelecionada.whatsapp || "",
+                            cpf_cnpj: empresaSelecionada.cnpj || "",
+                          }));
+                          setLocation("/colaborador/calculadora");
+                        }}
+                        className="mt-3 w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors"
+                      >
+                        <Calculator className="w-4 h-4" />
+                        Nova Simulação para {empresaSelecionada.nome_fantasia || empresaSelecionada.razao_social}
+                      </button>
+                    </div>
+                  );
+                })()}
 
                 {/* Corpo do detalhe */}
                 <div className="p-5 space-y-5">

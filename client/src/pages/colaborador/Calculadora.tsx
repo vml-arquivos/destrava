@@ -533,10 +533,14 @@ function CamposEmprestimo({
 
 // ─── Cenário A: COM Imposto ───────────────────────────────────────────────────
 
-function CenarioComImposto() {
+function CenarioComImposto({ initialData }: { initialData?: { nome: string; empresa: string; telefone: string; cpf_cnpj: string } }) {
   const { user } = useAuth();
   const [form, setForm] = useState<FormComImposto>({
     ...formBaseInicial,
+    nome: initialData?.nome || "",
+    empresa: initialData?.empresa || "",
+    telefone: initialData?.telefone ? formatarTelefone(initialData.telefone.replace(/\D/g, "")) : "",
+    cpfCnpj: initialData?.cpf_cnpj || "",
     valorFiscal: "",
     pctImposto: "",
   });
@@ -756,9 +760,15 @@ function CenarioComImposto() {
 
 // ─── Cenário B: SEM Imposto ───────────────────────────────────────────────────
 
-function CenarioSemImposto() {
+function CenarioSemImposto({ initialData }: { initialData?: { nome: string; empresa: string; telefone: string; cpf_cnpj: string } }) {
   const { user } = useAuth();
-  const [form, setForm] = useState<FormBase>({ ...formBaseInicial });
+  const [form, setForm] = useState<FormBase>({
+    ...formBaseInicial,
+    nome: initialData?.nome || "",
+    empresa: initialData?.empresa || "",
+    telefone: initialData?.telefone ? formatarTelefone(initialData.telefone.replace(/\D/g, "")) : "",
+    cpfCnpj: initialData?.cpf_cnpj || "",
+  });
   const [erros, setErros] = useState<Record<string, string>>({});
   const [resultado, setResultado] = useState<ResultadoCalculo | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -950,10 +960,13 @@ function DifTag({ a, b, campo }: { a: number; b: number; campo: "parcela" | "tot
   );
 }
 
-function CenarioComparativo() {
+function CenarioComparativo({ initialData }: { initialData?: { nome: string; empresa: string; telefone: string; cpf_cnpj: string } }) {
   const { user } = useAuth();
   const [form, setForm] = useState<FormComparativo>({
-    nome: "", empresa: "", telefone: "", cpfCnpj: "",
+    nome: initialData?.nome || "",
+    empresa: initialData?.empresa || "",
+    telefone: initialData?.telefone ? formatarTelefone(initialData.telefone.replace(/\D/g, "")) : "",
+    cpfCnpj: initialData?.cpf_cnpj || "",
     valorCredito: "", prazo: "24", comissao: "",
     banco: "", linhaCredito: "", observacoes: "",
     taxaA: "", valorFiscal: "", pctImposto: "",
@@ -1455,13 +1468,18 @@ function CenarioComparativo() {
           <p className="text-sm mt-1 opacity-60">O comparativo aparece automaticamente em tempo real</p>
         </div>
       )}
-    </div>
+     </div>
   );
 }
 
-// ─── Página principal ─────────────────────────────────────────────────────────
-
+// ─── Página principal ─────────────────────────────────────────────────────────────────────────────────
 export default function CalculadoraPage() {
+  // Lê dados pré-preenchidos da empresa (passados via sessionStorage pelo módulo de Empresas)
+  const empresaPreenchidaRaw = sessionStorage.getItem("calculadora_empresa");
+  const empresaPreenchida = empresaPreenchidaRaw
+    ? (() => { try { sessionStorage.removeItem("calculadora_empresa"); return JSON.parse(empresaPreenchidaRaw); } catch { return undefined; } })()
+    : undefined;
+
   return (
     <Layout>
       <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -1522,13 +1540,13 @@ export default function CalculadoraPage() {
           </div>
 
           <TabsContent value="comparativo">
-            <CenarioComparativo />
+            <CenarioComparativo initialData={empresaPreenchida} />
           </TabsContent>
           <TabsContent value="com-imposto">
-            <CenarioComImposto />
+            <CenarioComImposto initialData={empresaPreenchida} />
           </TabsContent>
           <TabsContent value="sem-imposto">
-            <CenarioSemImposto />
+            <CenarioSemImposto initialData={empresaPreenchida} />
           </TabsContent>
         </Tabs>
       </div>

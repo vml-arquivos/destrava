@@ -41,6 +41,7 @@ import ColaboradorClientes from "./pages/colaborador/Clientes";
 import ColaboradorIntegracoes from "./pages/colaborador/Integracoes";
 import ColaboradorCRM from "./pages/colaborador/CRM";
 import ColaboradorEmpresas from "./pages/colaborador/Empresas";
+import ColaboradorTriagem from "./pages/colaborador/Triagem";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function Router() {
@@ -134,6 +135,13 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <ColaboradorEmpresas />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/triagem">
+        {() => (
+          <ProtectedRoute>
+            <ColaboradorTriagem />
           </ProtectedRoute>
         )}
       </Route>
