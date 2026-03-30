@@ -15,16 +15,14 @@ RUN ls -la node_modules/scheduler && ls -la node_modules/scheduler/index.js
 
 COPY . .
 
-ARG VITE_ADMIN_KEY
-ENV VITE_ADMIN_KEY=$VITE_ADMIN_KEY
-
 # Diagnóstico explícito do ambiente
 RUN node -v && npm -v && pnpm -v
 
-# Build do frontend isolado, com log detalhado
-RUN pnpm exec vite build --debug
+# Build do frontend
+# VITE_ADMIN_KEY é injetada pelo Coolify como variável de ambiente em build-time
+RUN pnpm exec vite build
 
-# Build do backend isolado
+# Build do backend
 RUN pnpm exec esbuild server/index.ts \
     --platform=node \
     --packages=external \
@@ -49,17 +47,12 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --prod
 
 COPY --from=builder /app/dist ./dist
-# Copia scripts e migração SQL para o container de produção
+# Copia scripts para execução manual dentro do container (migração, diagnóstico, criar usuário)
 COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/db/migrate.sql ./db/migrate.sql
-
-# Entrypoint: executa migração antes de iniciar o servidor
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 USER node
 
-# Valores padrão seguros — variáveis reais injetadas pelo Coolify em runtime
+# Valores padrão — variáveis reais injetadas pelo Coolify em runtime
 ENV NODE_ENV=production
 ENV PORT=4000
 ENV DATA_DIR=/var/data/destrava
@@ -69,5 +62,4 @@ EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget -qO- http://localhost:4000/api/health || exit 1
 
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "dist/index.js"]
