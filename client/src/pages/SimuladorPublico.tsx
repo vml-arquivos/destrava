@@ -245,7 +245,7 @@ export default function SimuladorPublico() {
     try {
       // Captura UTM params da URL para rastreabilidade
       const urlParams = new URLSearchParams(window.location.search);
-      await fetch("/api/leads", {
+      const resp = await fetch("/api/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -275,8 +275,13 @@ export default function SimuladorPublico() {
           utm_campaign: urlParams.get("utm_campaign") || undefined,
         }),
       });
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => ({}));
+        console.error("[SimuladorPublico] Falha ao salvar lead:", resp.status, errBody);
+      }
       setLeadSalvo(true);
-    } catch {
+    } catch (err) {
+      console.error("[SimuladorPublico] Erro de rede ao salvar lead:", err);
       setLeadSalvo(true); // Mostrar resultado mesmo se falhar o salvamento
     }
     setEnviando(false);

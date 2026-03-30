@@ -213,19 +213,26 @@ async function startServer() {
       const estado       = b.estado || null;
       const observacoes_ia    = b.observacoes_ia || null;
       const proximo_followup  = b.proximo_followup || null;
+      // UTM e rastreamento de origem (enviados pelo SimuladorPublico)
+      const utm_source   = b.utm_source   || null;
+      const utm_medium   = b.utm_medium   || null;
+      const utm_campaign = b.utm_campaign || null;
+      const pagina_origem = b.pagina || b.pagina_origem || null;
 
       const { rows } = await pool.query(
         `INSERT INTO leads
           (nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto_interesse,
            valor_solicitado, prazo_meses, finalidade, origem, status, etapa_funil,
            temperatura, score_ia, cidade, estado, observacoes_ia, proximo_followup,
+           utm_source, utm_medium, utm_campaign, pagina_origem,
            created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$20)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$24)
          RETURNING *`,
         [
           nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto,
           valor, prazo, finalidade, origem, status_lead, etapa_funil,
           temperatura, score_ia, cidade, estado, observacoes_ia, proximo_followup,
+          utm_source, utm_medium, utm_campaign, pagina_origem,
           now,
         ]
       );
