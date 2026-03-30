@@ -300,11 +300,21 @@ async function startServer() {
   app.get("/api/leads", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
       const status = req.query.status as string | undefined;
-      const params: string[] = [];
-      let where = "";
-      if (status) { params.push(status); where = `WHERE status = $1`; }
+      const busca = req.query.busca as string | undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const params: any[] = [];
+      const conditions: string[] = [];
+      if (status) { params.push(status); conditions.push(`status = $${params.length}`); }
+      if (busca && busca.trim()) {
+        const term = `%${busca.trim()}%`;
+        params.push(term);
+        const idx = params.length;
+        conditions.push(`(nome ILIKE $${idx} OR empresa ILIKE $${idx} OR telefone ILIKE $${idx})`);
+      }
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+      const limitClause = limit ? `LIMIT ${limit}` : "";
       const { rows } = await pool.query(
-        `SELECT * FROM leads ${where} ORDER BY created_at DESC`,
+        `SELECT * FROM leads ${where} ORDER BY created_at DESC ${limitClause}`,
         params
       );
       // Retorna shape compatível com ambos os consumidores:

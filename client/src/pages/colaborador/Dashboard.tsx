@@ -94,7 +94,8 @@ export default function Dashboard() {
       const simsArr: SimulacaoRow[] = Array.isArray(simsData)
         ? simsData
         : (simsData?.simulacoes ?? []);
-      setSimulacoesRecentes(simsArr.slice(0, 5));
+      // Mantemos todas para exibir no dashboard; slice(0,5) apenas no bloco de recentes
+      setSimulacoesRecentes(simsArr);
     } catch (e) {
       setErro("Erro ao carregar dados. Verifique a conexão.");
     }
@@ -283,19 +284,30 @@ export default function Dashboard() {
           </div>
 
           {/* Simulações Recentes */}
-          <div className="bg-white rounded-xl border shadow-sm">
+          <div className="bg-white rounded-xl border shadow-sm flex flex-col">
             <div className="flex items-center justify-between p-4 border-b">
               <div>
-                <h3 className="font-semibold text-gray-900">Simulações Recentes</h3>
-                <p className="text-xs text-gray-500">Últimas 5 simulações realizadas</p>
+                <h3 className="font-semibold text-gray-900">Simulações</h3>
+                <p className="text-xs text-gray-500">
+                  {simulacoesRecentes.length > 0
+                    ? `${simulacoesRecentes.length} simulação${simulacoesRecentes.length !== 1 ? "ões" : ""} salva${simulacoesRecentes.length !== 1 ? "s" : ""}`
+                    : "Nenhuma simulação ainda"}
+                </p>
               </div>
-              <Link href="/colaborador/simulacoes">
-                <button className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                  Ver todas <ArrowRight className="w-3 h-3" />
-                </button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href="/colaborador/calculadora">
+                  <button className="flex items-center gap-1 text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium">
+                    <Plus className="w-3 h-3" /> Nova
+                  </button>
+                </Link>
+                <Link href="/colaborador/simulacoes">
+                  <button className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                    Ver todas <ArrowRight className="w-3 h-3" />
+                  </button>
+                </Link>
+              </div>
             </div>
-            <div className="divide-y">
+            <div className="divide-y overflow-y-auto" style={{ maxHeight: "320px" }}>
               {loading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
@@ -306,7 +318,7 @@ export default function Dashboard() {
                   <p className="text-xs">Nenhuma simulação ainda</p>
                   <Link href="/colaborador/calculadora">
                     <button className="mt-2 text-xs text-blue-600 hover:underline">
-                      + Criar simulação
+                      + Criar primeira simulação
                     </button>
                   </Link>
                 </div>
@@ -320,6 +332,7 @@ export default function Dashboard() {
                       <p className="text-sm font-medium text-gray-900 truncate">{sim.cliente_nome}</p>
                       <p className="text-xs text-gray-500 truncate">
                         {sim.linha_credito || sim.banco || "—"}
+                        {sim.empresa ? ` · ${sim.empresa}` : ""}
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0">

@@ -44,6 +44,8 @@ import {
   TrendingDown,
   TrendingUp,
   Minus,
+  Search,
+  ChevronDown,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -185,6 +187,86 @@ const formBaseInicial: FormBase = {
   observacoes: "",
 };
 
+// ─── Busca de lead/cliente existente ────────────────────────────────────────
+
+interface LeadOption {
+  id: string;
+  nome: string;
+  empresa?: string;
+  telefone: string;
+  cpf_cnpj?: string;
+}
+
+function SeletorCliente({
+  onSelect,
+}: {
+  onSelect: (lead: LeadOption) => void;
+}) {
+  const [busca, setBusca] = useState("");
+  const [resultados, setResultados] = useState<LeadOption[]>([]);
+  const [aberto, setAberto] = useState(false);
+  const [carregando, setCarregando] = useState(false);
+
+  useEffect(() => {
+    if (busca.length < 2) { setResultados([]); return; }
+    const t = setTimeout(async () => {
+      setCarregando(true);
+      try {
+        const data = await apiFetch(`/api/leads?busca=${encodeURIComponent(busca)}&limit=8`);
+        const arr: LeadOption[] = Array.isArray(data)
+          ? data
+          : (data?.leads ?? []);
+        setResultados(arr.slice(0, 8));
+        setAberto(true);
+      } catch { setResultados([]); }
+      setCarregando(false);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [busca]);
+
+  return (
+    <div className="relative">
+      <div className="flex items-center gap-2 pb-1 border-b mb-3">
+        <Search className="h-4 w-4 text-primary" />
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Buscar cliente/empresa existente</p>
+        <span className="text-xs text-muted-foreground ml-auto">(opcional)</span>
+      </div>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          onFocus={() => resultados.length > 0 && setAberto(true)}
+          onBlur={() => setTimeout(() => setAberto(false), 200)}
+          placeholder="Digite nome, empresa ou telefone..."
+          className="pl-9"
+        />
+        {carregando && <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />}
+      </div>
+      {aberto && resultados.length > 0 && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+          {resultados.map(lead => (
+            <button
+              key={lead.id}
+              type="button"
+              className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b last:border-0 transition-colors"
+              onMouseDown={() => { onSelect(lead); setBusca(""); setAberto(false); }}
+            >
+              <p className="text-sm font-medium text-gray-900">{lead.nome}</p>
+              <p className="text-xs text-gray-500">{lead.empresa || "—"} · {lead.telefone}</p>
+            </button>
+          ))}
+        </div>
+      )}
+      {aberto && busca.length >= 2 && resultados.length === 0 && !carregando && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 text-sm text-gray-400">
+          Nenhum cliente encontrado. Preencha os dados manualmente.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Painel de resultado individual ──────────────────────────────────────────
 
 function PainelResultado({
@@ -263,13 +345,18 @@ function CamposCliente({
   form,
   erros,
   set,
+  onSelectLead,
 }: {
   form: FormBase;
   erros: Record<string, string>;
   set: (k: keyof FormBase, v: string) => void;
+  onSelectLead?: (lead: LeadOption) => void;
 }) {
   return (
     <div className="space-y-4">
+      {onSelectLead && (
+        <SeletorCliente onSelect={onSelectLead} />
+      )}
       <div className="flex items-center gap-2 pb-1 border-b">
         <User className="h-4 w-4 text-primary" />
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dados do Cliente</p>
@@ -533,6 +620,17 @@ function CenarioComImposto() {
     setErros({});
   }
 
+  function handleSelectLead(lead: LeadOption) {
+    setForm(prev => ({
+      ...prev,
+      nome: lead.nome || prev.nome,
+      empresa: lead.empresa || prev.empresa,
+      telefone: lead.telefone || prev.telefone,
+      cpfCnpj: lead.cpf_cnpj || prev.cpfCnpj,
+    }));
+    setErros({});
+  }
+
   const valorFiscalNum = parseBRL(form.valorFiscal);
   const pctImpostoNum = parseFloat(form.pctImposto) || 0;
   const impostoPreview = valorFiscalNum > 0 && pctImpostoNum > 0
@@ -542,7 +640,7 @@ function CenarioComImposto() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="space-y-6">
-        <CamposCliente form={form} erros={erros} set={setBase} />
+        <CamposCliente form={form} erros={erros} set={setBase} onSelectLead={handleSelectLead} />
         <CamposEmprestimo form={form} erros={erros} set={setBase} />
 
         <div className="space-y-4">
@@ -740,10 +838,21 @@ function CenarioSemImposto() {
     setErros({});
   }
 
+  function handleSelectLead(lead: LeadOption) {
+    setForm(prev => ({
+      ...prev,
+      nome: lead.nome || prev.nome,
+      empresa: lead.empresa || prev.empresa,
+      telefone: lead.telefone || prev.telefone,
+      cpfCnpj: lead.cpf_cnpj || prev.cpfCnpj,
+    }));
+    setErros({});
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="space-y-6">
-        <CamposCliente form={form} erros={erros} set={set} />
+        <CamposCliente form={form} erros={erros} set={set} onSelectLead={handleSelectLead} />
         <CamposEmprestimo form={form} erros={erros} set={set} />
         <div className="space-y-1.5">
           <Label>Observações <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
@@ -976,10 +1085,22 @@ function CenarioComparativo() {
   const pi = parseFloat(form.pctImposto) || 0;
   const prazoNum = parseInt(form.prazo) || 24;
 
+  function handleSelectLead(lead: LeadOption) {
+    setForm(prev => ({
+      ...prev,
+      nome: lead.nome || prev.nome,
+      empresa: lead.empresa || prev.empresa,
+      telefone: lead.telefone || prev.telefone,
+      cpfCnpj: lead.cpf_cnpj || prev.cpfCnpj,
+    }));
+    setErros({});
+  }
+
   return (
     <div className="space-y-6">
       {/* Dados comuns */}
       <div className="bg-white rounded-2xl border p-5 space-y-5">
+        <SeletorCliente onSelect={handleSelectLead} />
         <div className="flex items-center gap-2 pb-1 border-b">
           <User className="h-4 w-4 text-primary" />
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dados do Cliente e do Crédito</p>
