@@ -1085,6 +1085,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
         cliente_nome: form.nome,
         cliente_telefone: form.telefone,
         cliente_cpf_cnpj: form.cpfCnpj || null,
+        cliente_empresa: form.empresa || null,
         valor_solicitado: parseBRL(form.valorCredito),
         quantidade_parcelas: parseInt(form.prazo),
         comissao_percentual: parseFloat(form.comissao) || null,

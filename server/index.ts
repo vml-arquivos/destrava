@@ -152,6 +152,11 @@ pool.query("SELECT 1").then(() => {
     -- Adicionar colunas de IA na triagem se não existirem
     ALTER TABLE public.triagem_leads ADD COLUMN IF NOT EXISTS observacoes_ia TEXT;
     ALTER TABLE public.triagem_leads ADD COLUMN IF NOT EXISTS score_ia INTEGER;
+    -- Vínculo de simulações com empresas
+    ALTER TABLE public.simulacoes_colaborador ADD COLUMN IF NOT EXISTS empresa_id UUID REFERENCES public.empresas(id) ON DELETE SET NULL;
+    ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS empresa_id UUID REFERENCES public.empresas(id) ON DELETE SET NULL;
+    ALTER TABLE public.triagem_leads ADD COLUMN IF NOT EXISTS empresa_id UUID REFERENCES public.empresas(id) ON DELETE SET NULL;
+
   `).then(() => {
     console.log("🗄️  Tabelas auxiliares empresas: ✅ Verificadas/criadas");
   }).catch((e: Error) => {
@@ -188,6 +193,60 @@ async function dispararN8n(evento: string, payload: Record<string, unknown>): Pr
     console.error(`[n8n] Erro ao enviar webhook "${evento}": ${msg}`);
     return false;
   }
+}
+
+
+async function processarEmpresaDaSimulacao(
+  client: any,
+  dados: {
+    razao_social: string;
+    cnpj?: string | null;
+    telefone?: string | null;
+    email?: string | null;
+    colaborador_id?: string | null;
+  }
+): Promise<string | null> {
+  if (!dados.razao_social || !dados.razao_social.trim()) return null;
+
+  const cleanCnpj = dados.cnpj ? dados.cnpj.replace(/\D/g, "") : null;
+  const cleanPhone = dados.telefone ? dados.telefone.replace(/\D/g, "") : null;
+  const cleanNome = dados.razao_social.trim();
+
+  if (cleanCnpj && cleanCnpj.length >= 11) {
+    const res = await client.query(
+      `SELECT id FROM empresas WHERE regexp_replace(cnpj, '\D', '', 'g') = $1 LIMIT 1`,
+      [cleanCnpj]
+    );
+    if (res.rows.length > 0) return res.rows[0].id;
+  }
+
+  if (cleanPhone) {
+    const res = await client.query(
+      `SELECT id FROM empresas 
+       WHERE lower(trim(razao_social)) = lower($1) 
+       AND regexp_replace(telefone, '\D', '', 'g') = $2 LIMIT 1`,
+      [cleanNome, cleanPhone]
+    );
+    if (res.rows.length > 0) return res.rows[0].id;
+  }
+
+  if (dados.email && dados.email.trim()) {
+    const res = await client.query(
+      `SELECT id FROM empresas 
+       WHERE lower(trim(razao_social)) = lower($1) 
+       AND lower(trim(email)) = lower($2) LIMIT 1`,
+      [cleanNome, dados.email.trim()]
+    );
+    if (res.rows.length > 0) return res.rows[0].id;
+  }
+
+  const res = await client.query(
+    `INSERT INTO empresas (razao_social, cnpj, telefone, email, responsavel_id, origem)
+     VALUES ($1, $2, $3, $4, $5, 'simulador')
+     RETURNING id`,
+    [cleanNome, dados.cnpj || null, dados.telefone || null, dados.email || null, dados.colaborador_id || null]
+  );
+  return res.rows[0].id;
 }
 
 // ─── App ─────────────────────────────────────────────────────────────────────
@@ -351,15 +410,23 @@ async function startServer() {
       const utm_medium   = b.utm_medium   || null;
       const utm_campaign = b.utm_campaign || null;
       const pagina_origem = b.pagina || b.pagina_origem || null;
+      let empresa_id = null;
+      if (empresa) {
+        empresa_id = await processarEmpresaDaSimulacao(pool, {
+          razao_social: empresa,
+          cnpj: cpf_cnpj,
+          telefone: telefone,
+          email: email
+        });
+      }
 
-      // ── TRIAGEM: leads do simulador público vão para fila de qualificação ───────────────────────
       if (origem === "simulador_publico" || origem === "simulador-publico" || origem === "site") {
         const { rows: tRows } = await pool.query(
           `INSERT INTO triagem_leads
             (nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto,
              valor, prazo, parcela, taxa, cidade, estado,
-             utm_source, utm_medium, utm_campaign, status, created_at, updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'pendente',$17,$17)
+             utm_source, utm_medium, utm_campaign, status, empresa_id, created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'pendente',$17,$18,$18)
            RETURNING *`,
           [
             nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto,
@@ -367,12 +434,23 @@ async function startServer() {
             Number(b.parcelaMensal || b.parcela_mensal) || null,
             Number(b.taxaEstimada || b.taxa_estimada) || null,
             cidade, estado,
+            
             utm_source, utm_medium, utm_campaign,
+            empresa_id,
             now,
           ]
         );
         const triagem = tRows[0];
         console.log(`[TRIAGEM] Lead do simulador salvo na fila: ${nome} — ${produto || origem}`);
+
+        if (empresa_id) {
+          const desc = `Simulação pública recebida: ${valor ? 'R$ ' + valor : 'Valor não informado'} em ${prazo ? prazo + 'x' : 'prazo não informado'}. Produto: ${produto || 'Não informado'}.`;
+          await pool.query(
+            `INSERT INTO empresa_historico (empresa_id, tipo, descricao, autor) VALUES ($1, 'simulacao', $2, 'Sistema')`,
+            [empresa_id, desc]
+          );
+        }
+
 
         // Dispara n8n com evento específico de triagem
         dispararN8n("triagem_novo_lead", {
@@ -392,18 +470,27 @@ async function startServer() {
           (nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto_interesse,
            valor_solicitado, prazo_meses, finalidade, origem, status, etapa_funil,
            temperatura, score_ia, cidade, estado, observacoes_ia, proximo_followup,
-           created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$20)
+           empresa_id, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$21)
          RETURNING *`,
         [
           nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto,
           valor, prazo, finalidade, origem, status_lead, etapa_funil,
           temperatura, score_ia, cidade, estado, observacoes_ia, proximo_followup,
+          empresa_id,
           now,
         ]
       );
       const lead = rows[0];
       console.log(`[LEAD] Salvo: ${nome} — ${produto || origem}`);
+
+      if (empresa_id) {
+        const desc = `Lead manual/API recebido: ${valor ? 'R$ ' + valor : 'Valor não informado'}. Origem: ${origem}.`;
+        await pool.query(
+          `INSERT INTO empresa_historico (empresa_id, tipo, descricao, autor) VALUES ($1, 'nota', $2, 'Sistema')`,
+          [empresa_id, desc]
+        );
+      }
 
       // Payload canônico — alinhado com especificação Destrava v2
       dispararN8n("novo_lead", {
@@ -721,20 +808,32 @@ async function startServer() {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const now = new Date().toISOString();
       
+      let empresa_id = null;
+      if (req.body.cliente_empresa) {
+        empresa_id = await processarEmpresaDaSimulacao(pool, {
+          razao_social: req.body.cliente_empresa,
+          cnpj: req.body.cliente_cpf_cnpj,
+          telefone: req.body.cliente_telefone,
+          colaborador_id: colaborador.id
+        });
+      }
+
       const { rows } = await pool.query(
         `INSERT INTO simulacoes_colaborador
-          (colaborador_id, cliente_nome, cliente_telefone, cliente_cpf_cnpj,
+          (colaborador_id, cliente_nome, cliente_telefone, cliente_cpf_cnpj, cliente_empresa, empresa_id,
            valor_solicitado, quantidade_parcelas, taxa_juros_mensal, comissao_percentual,
            total_comissao, valor_parcela, valor_total_pagar, total_juros,
            custo_efetivo_total, imposto_percentual, total_imposto,
            banco, linha_credito, observacoes, status, criado_em, atualizado_em)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'rascunho',$19,$19)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,'rascunho',$21,$21)
          RETURNING id`,
         [
           colaborador.id,
           req.body.cliente_nome || "",
           req.body.cliente_telefone || null,
           req.body.cliente_cpf_cnpj || null,
+          req.body.cliente_empresa || null,
+          empresa_id,
           req.body.valor_solicitado || null,
           req.body.quantidade_parcelas || null,
           req.body.taxa_juros_mensal || null,
@@ -755,6 +854,15 @@ async function startServer() {
       
       const simId = rows[0].id;
       console.log(`[SIMULACAO] Salva para colaborador ${colaborador.id}: ${req.body.cliente_nome}`);
+      
+      if (empresa_id) {
+        const cenario = req.body.imposto_percentual ? 'com imposto' : 'sem imposto';
+        const desc = `Simulação (${cenario}) criada por ${colaborador.nome}: R$ ${req.body.valor_solicitado || 0} em ${req.body.quantidade_parcelas || 0}x. Taxa: ${req.body.taxa_juros_mensal || 0}%.`;
+        await pool.query(
+          `INSERT INTO empresa_historico (empresa_id, tipo, descricao, autor) VALUES ($1, 'simulacao', $2, $3)`,
+          [empresa_id, desc, colaborador.nome]
+        );
+      }
       
       res.status(201).json({ success: true, id: simId, message: "Simulação salva com sucesso!" });
     } catch (err) {
