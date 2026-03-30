@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { gerarPdfSimulacao } from "@/lib/gerarPdfSimulacao";
 import { Link } from "wouter";
 import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,10 @@ import {
   Home,
   Car,
   Banknote,
+  FileDown,
+  ArrowLeft,
+  Award,
+  Zap,
 } from "lucide-react";
 
 // ─── Produtos de crédito ──────────────────────────────────────────────────────
@@ -238,6 +243,8 @@ export default function SimuladorPublico() {
   async function handleSimular() {
     setEnviando(true);
     try {
+      // Captura UTM params da URL para rastreabilidade
+      const urlParams = new URLSearchParams(window.location.search);
       await fetch("/api/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -246,13 +253,26 @@ export default function SimuladorPublico() {
           telefone: form.telefone,
           empresa: form.empresa || undefined,
           email: form.email || undefined,
+          // produto_interesse é o campo correto no schema; "produto" é alias aceito pelo backend
           produto: produtoSelecionado.nome,
+          produto_interesse: produtoSelecionado.nome,
           valorSolicitado: valor,
           prazo,
           taxaEstimada: taxa,
           parcelaMensal: parcela,
           totalPagar,
-          tipoPessoa,
+          // Mapeia corretamente: "empresa" → "pj", "pf" → "pf"
+          tipoPessoa: tipoPessoa === "empresa" ? "pj" : tipoPessoa,
+          tipo_pessoa: tipoPessoa === "empresa" ? "pj" : tipoPessoa,
+          // Origem explícita para rastreabilidade no funil
+          origem: "simulador_publico",
+          etapa_funil: "novo",
+          temperatura: "frio",
+          // Contexto de rastreamento
+          pagina: "/simular",
+          utm_source:   urlParams.get("utm_source") || undefined,
+          utm_medium:   urlParams.get("utm_medium") || undefined,
+          utm_campaign: urlParams.get("utm_campaign") || undefined,
         }),
       });
       setLeadSalvo(true);
@@ -732,55 +752,109 @@ export default function SimuladorPublico() {
                 </p>
               </div>
 
-              {/* Resumo da simulação */}
+              {/* Card de resultado enriquecido */}
               <div className="bg-white rounded-2xl shadow-sm border p-6">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
                   Resumo da Sua Simulação
                 </p>
+
+                {/* Linha recomendada com justificativa */}
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+                  <div className="flex items-start gap-3">
+                    <Award className="w-5 h-5 text-[#0033A0] flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-bold text-[#0033A0]">
+                        Linha Recomendada: {produtoSelecionado.nome}
+                      </p>
+                      <p className="text-xs text-blue-700 mt-1">
+                        {produtoSelecionado.desc}. Indicada para o seu perfil ({tipoPessoa === "empresa" ? "Pessoa Jurídica" : "Pessoa Física"}) com o valor e prazo solicitados.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Métricas */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                   <div className="text-center p-3 bg-blue-50 rounded-xl">
                     <p className="text-xs text-gray-500">Produto</p>
-                    <p className="font-bold text-[#0033A0] text-sm mt-1">
-                      {produtoSelecionado.nome}
-                    </p>
+                    <p className="font-bold text-[#0033A0] text-sm mt-1">{produtoSelecionado.nome}</p>
                   </div>
                   <div className="text-center p-3 bg-blue-50 rounded-xl">
                     <p className="text-xs text-gray-500">Valor</p>
-                    <p className="font-bold text-[#0033A0] text-sm mt-1">
-                      {formatCurrency(valor)}
-                    </p>
+                    <p className="font-bold text-[#0033A0] text-sm mt-1">{formatCurrency(valor)}</p>
                   </div>
                   <div className="text-center p-3 bg-blue-50 rounded-xl">
                     <p className="text-xs text-gray-500">Prazo</p>
-                    <p className="font-bold text-[#0033A0] text-sm mt-1">
-                      {prazo} meses
-                    </p>
+                    <p className="font-bold text-[#0033A0] text-sm mt-1">{prazo} meses</p>
                   </div>
                   <div className="text-center p-3 bg-green-50 rounded-xl">
                     <p className="text-xs text-gray-500">Parcela Est.</p>
-                    <p className="font-bold text-green-600 text-sm mt-1">
-                      {formatCurrency(parcela)}
-                    </p>
+                    <p className="font-bold text-green-600 text-sm mt-1">{formatCurrency(parcela)}</p>
                   </div>
                 </div>
 
-                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800 mb-4">
-                  <strong>⚠️ Importante:</strong> Esta é uma simulação estimada.
-                  Os valores finais dependem da análise de crédito. A Destrava
-                  Crédito atua como assessoria e não realiza aprovação de
-                  crédito.
+                {/* Prazo estimado de aprovação */}
+                <div className="flex items-center gap-3 bg-gray-50 rounded-xl p-3 mb-4">
+                  <Zap className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+                  <p className="text-sm text-gray-700">
+                    <strong>Prazo estimado de aprovação:</strong>{" "}
+                    {produtoSelecionado.id === "pronampe" || produtoSelecionado.id === "procred360"
+                      ? "5 a 15 dias úteis após análise documental"
+                      : produtoSelecionado.id === "consignado"
+                      ? "1 a 3 dias úteis"
+                      : produtoSelecionado.id === "credito-pessoal"
+                      ? "24 a 72 horas"
+                      : "3 a 10 dias úteis após análise"}
+                  </p>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-3">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800 mb-4">
+                  <strong>Importante:</strong> Esta é uma simulação estimada. Os valores finais dependem da análise de crédito. A Destrava Crédito atua como assessoria e não realiza aprovação de crédito.
+                </div>
+
+                {/* CTAs principais */}
+                <div className="grid md:grid-cols-2 gap-3 mb-3">
                   <a
-                    href={`https://wa.me/5561986055223?text=Ol%C3%A1!%20Fiz%20uma%20simula%C3%A7%C3%A3o%20no%20site%20para%20${encodeURIComponent(produtoSelecionado.nome)}%20no%20valor%20de%20${encodeURIComponent(formatCurrency(valor))}%20em%20${prazo}%20meses.%20Meu%20nome%20%C3%A9%20${encodeURIComponent(form.nome)}.`}
+                    href={`https://wa.me/5561986055223?text=Ol%C3%A1!%20Fiz%20uma%20simula%C3%A7%C3%A3o%20no%20site%20para%20${encodeURIComponent(produtoSelecionado.nome)}%20no%20valor%20de%20${encodeURIComponent(formatCurrency(valor))}%20em%20${prazo}%20meses.%20Meu%20nome%20%C3%A9%20${encodeURIComponent(form.nome)}.%20Gostaria%20de%20avan%C3%A7ar%20com%20a%20proposta.`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-4 rounded-xl transition-colors"
                   >
                     <MessageCircle className="w-5 h-5" />
-                    Falar no WhatsApp Agora
+                    Quero Avançar — Falar Agora
                   </a>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      gerarPdfSimulacao({
+                        cliente: {
+                          nome: form.nome,
+                          empresa: form.empresa || undefined,
+                          telefone: form.telefone,
+                          linhaCredito: produtoSelecionado.nome,
+                        },
+                        cenarioA: {
+                          taxa,
+                          valorCredito: valor,
+                          prazo,
+                          parcela,
+                          totalFinanciamento: totalPagar,
+                          totalJuros,
+                          custoTotalOperacao: totalPagar,
+                          cenario: "sem_imposto",
+                        },
+                        modo: "simples",
+                      });
+                    }}
+                    className="flex items-center justify-center gap-2 border-[#0033A0] text-[#0033A0] hover:bg-blue-50"
+                  >
+                    <FileDown className="w-4 h-4" />
+                    Baixar Simulação em PDF
+                  </Button>
+                </div>
+
+                {/* Ações secundárias */}
+                <div className="grid grid-cols-2 gap-3">
                   <Button
                     variant="outline"
                     onClick={() => {
@@ -788,10 +862,16 @@ export default function SimuladorPublico() {
                       setForm({ nome: "", telefone: "", empresa: "", email: "" });
                       setLeadSalvo(false);
                     }}
-                    className="border-gray-300"
+                    className="border-gray-300 text-gray-600"
                   >
                     Nova Simulação
                   </Button>
+                  <Link href="/">
+                    <Button variant="ghost" className="w-full text-gray-500 hover:text-[#0033A0]">
+                      <ArrowLeft className="w-4 h-4 mr-1" />
+                      Voltar à Página Inicial
+                    </Button>
+                  </Link>
                 </div>
               </div>
             </div>
