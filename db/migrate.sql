@@ -323,4 +323,67 @@ UPDATE public.leads
 SET etapa_funil = 'novo'
 WHERE etapa_funil IS NULL;
 
--- ─── FIM DA MIGRAÇÃO ──────────────────────────────────────────
+-- ─── Tabela: empresas ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.empresas (
+  id                   UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  razao_social         TEXT         NOT NULL,
+  nome_fantasia        TEXT,
+  cnpj                 TEXT,
+  inscricao_estadual   TEXT,
+  email                TEXT,
+  telefone             TEXT,
+  whatsapp             TEXT,
+  site                 TEXT,
+  segmento             TEXT,
+  porte                TEXT         DEFAULT 'mei'
+                         CHECK (porte IN ('mei','me','epp','medio','grande')),
+  faturamento_anual    NUMERIC(15,2),
+  numero_funcionarios  INTEGER,
+  -- Endereço
+  cep                  TEXT,
+  logradouro           TEXT,
+  numero               TEXT,
+  complemento          TEXT,
+  bairro               TEXT,
+  cidade               TEXT,
+  estado               CHAR(2),
+  -- Responsável / sócio
+  responsavel_nome     TEXT,
+  responsavel_cpf      TEXT,
+  responsavel_cargo    TEXT,
+  responsavel_telefone TEXT,
+  responsavel_email    TEXT,
+  -- Dados financeiros
+  banco_principal      TEXT,
+  agencia              TEXT,
+  conta                TEXT,
+  limite_credito_atual NUMERIC(15,2),
+  score_serasa         INTEGER,
+  score_spc            INTEGER,
+  -- Relacionamento interno
+  responsavel_id       UUID         REFERENCES public.colaboradores(id) ON DELETE SET NULL,
+  status               TEXT         NOT NULL DEFAULT 'ativo'
+                         CHECK (status IN ('ativo','inativo','prospecto','cliente','ex_cliente')),
+  origem               TEXT         DEFAULT 'manual',
+  tags                 TEXT[]       DEFAULT '{}',
+  observacoes          TEXT,
+  -- Controle
+  created_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_empresas_razao_social ON public.empresas(razao_social);
+CREATE INDEX IF NOT EXISTS idx_empresas_cnpj         ON public.empresas(cnpj) WHERE cnpj IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_empresas_status       ON public.empresas(status);
+CREATE INDEX IF NOT EXISTS idx_empresas_responsavel  ON public.empresas(responsavel_id);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_empresas_updated_at') THEN
+    CREATE TRIGGER trg_empresas_updated_at
+      BEFORE UPDATE ON public.empresas
+      FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+  END IF;
+END $$;
+
+-- ─── FIM DA MIGRAÇÃO ─────────────────────────────────────────────

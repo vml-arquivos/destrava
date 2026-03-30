@@ -158,20 +158,7 @@ const produtos = [
     tags: ["Centro-Oeste", "A partir de 8,60% a.a."],
     cor: "violet",
   },
-  {
-    id: "fgo",
-    nome: "FGO",
-    desc: "Fundo de Garantia de Operações — grandes operações com garantia do Tesouro Nacional",
-    tipo: "empresa",
-    minValor: 100000,
-    maxValor: 5000000,
-    minPrazo: 24,
-    maxPrazo: 120,
-    minTaxa: 0.7,
-    maxTaxa: 0.7,
-    tags: ["Até R$ 5M", "0,7% a.m."],
-    cor: "sky",
-  },
+
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

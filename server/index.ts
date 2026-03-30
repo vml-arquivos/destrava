@@ -1023,9 +1023,129 @@ async function startServer() {
     }
   });
 
-  // ─── Static files ──────────────────────────────────────────────────────────
-  const staticPath =
-    process.env.NODE_ENV === "production"
+  // ─── EMPRESAS API ──────────────────────────────────────────────────────────────────────────────────────────────────── // GET /api/empresas — Listar empresas com busca e filtros
+  app.get("/api/empresas", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const busca = req.query.busca as string | undefined;
+      const status = req.query.status as string | undefined;
+      const params: any[] = [];
+      const conditions: string[] = [];
+      if (status && status !== "todos") {
+        params.push(status);
+        conditions.push(`status = $${params.length}`);
+      }
+      if (busca && busca.trim()) {
+        const term = `%${busca.trim()}%`;
+        params.push(term);
+        const idx = params.length;
+        conditions.push(`(razao_social ILIKE $${idx} OR nome_fantasia ILIKE $${idx} OR cnpj ILIKE $${idx} OR responsavel_nome ILIKE $${idx})`);
+      }
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+      const { rows } = await pool.query(
+        `SELECT * FROM empresas ${where} ORDER BY razao_social ASC`,
+        params
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error("[GET /api/empresas]", err);
+      res.status(500).json({ error: "Erro ao listar empresas" });
+    }
+  });
+
+  // GET /api/empresas/:id — Buscar empresa por ID
+  app.get("/api/empresas/:id", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [req.params.id]);
+      if (rows.length === 0) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
+      res.json(rows[0]);
+    } catch (err) {
+      console.error("[GET /api/empresas/:id]", err);
+      res.status(500).json({ error: "Erro ao buscar empresa" });
+    }
+  });
+
+  // POST /api/empresas — Criar empresa
+  app.post("/api/empresas", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const {
+        razao_social, nome_fantasia, cnpj, inscricao_estadual,
+        email, telefone, whatsapp, site,
+        segmento, porte, faturamento_anual, numero_funcionarios,
+        cep, logradouro, numero, complemento, bairro, cidade, estado,
+        responsavel_nome, responsavel_cpf, responsavel_cargo, responsavel_telefone, responsavel_email,
+        banco_principal, agencia, conta, limite_credito_atual, score_serasa, score_spc,
+        status, origem, tags, observacoes,
+      } = req.body;
+      if (!razao_social || !razao_social.trim()) {
+        res.status(400).json({ error: "Razão social é obrigatória" });
+        return;
+      }
+      const { rows } = await pool.query(
+        `INSERT INTO empresas (
+          razao_social, nome_fantasia, cnpj, inscricao_estadual,
+          email, telefone, whatsapp, site,
+          segmento, porte, faturamento_anual, numero_funcionarios,
+          cep, logradouro, numero, complemento, bairro, cidade, estado,
+          responsavel_nome, responsavel_cpf, responsavel_cargo, responsavel_telefone, responsavel_email,
+          banco_principal, agencia, conta, limite_credito_atual, score_serasa, score_spc,
+          responsavel_id, status, origem, tags, observacoes
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
+          $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35
+        ) RETURNING *`,
+        [
+          razao_social.trim(), nome_fantasia || null, cnpj || null, inscricao_estadual || null,
+          email || null, telefone || null, whatsapp || null, site || null,
+          segmento || null, porte || 'mei', faturamento_anual || null, numero_funcionarios || null,
+          cep || null, logradouro || null, numero || null, complemento || null, bairro || null, cidade || null, estado || null,
+          responsavel_nome || null, responsavel_cpf || null, responsavel_cargo || null, responsavel_telefone || null, responsavel_email || null,
+          banco_principal || null, agencia || null, conta || null, limite_credito_atual || null, score_serasa || null, score_spc || null,
+          colaborador.id, status || 'ativo', origem || 'manual', tags || [], observacoes || null,
+        ]
+      );
+      res.status(201).json(rows[0]);
+    } catch (err) {
+      console.error("[POST /api/empresas]", err);
+      res.status(500).json({ error: "Erro ao criar empresa" });
+    }
+  });
+
+  // PATCH /api/empresas/:id — Atualizar empresa
+  app.patch("/api/empresas/:id", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const updates = { ...req.body, updated_at: new Date().toISOString() };
+      // Remove campos que não existem na tabela
+      delete updates.id;
+      const keys = Object.keys(updates);
+      const values = Object.values(updates);
+      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+      const { rows } = await pool.query(
+        `UPDATE empresas SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
+        [...values, id]
+      );
+      if (rows.length === 0) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
+      res.json(rows[0]);
+    } catch (err) {
+      console.error("[PATCH /api/empresas/:id]", err);
+      res.status(500).json({ error: "Erro ao atualizar empresa" });
+    }
+  });
+
+  // DELETE /api/empresas/:id — Excluir empresa
+  app.delete("/api/empresas/:id", requireJwt, async (req: Request, res: Response) => {
+    try {
+      await pool.query("DELETE FROM empresas WHERE id = $1", [req.params.id]);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[DELETE /api/empresas/:id]", err);
+      res.status(500).json({ error: "Erro ao excluir empresa" });
+    }
+  });
+
+  // ─── Static files ──────────────────────────────────────────────────────────────────────────────
+  const staticPath = process.env.NODE_ENV === "production"
       ? path.resolve(__dirname, "public")
       : path.resolve(__dirname, "..", "dist", "public");
 
