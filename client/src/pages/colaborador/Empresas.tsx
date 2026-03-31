@@ -52,6 +52,7 @@ interface Empresa {
   origem?: string;
   tags?: string[];
   observacoes?: string;
+  captador_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -93,6 +94,7 @@ const FORM_VAZIO: FormEmpresa = {
   origem: "manual",
   tags: [],
   observacoes: "",
+  captador_id: undefined,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -288,9 +290,17 @@ export default function Empresas() {
   const [tagInput, setTagInput] = useState("");
   const [secaoAberta, setSecaoAberta] = useState<string>("basico");
   const [confirmandoExclusao, setConfirmandoExclusao] = useState<string | null>(null);
+  // Lista de captadores para o select no formulário de empresa
+  const [captadores, setCaptadores] = useState<{ id: string; nome: string }[]>([]);
 
-  // ─── Carregar empresas ──────────────────────────────────────────────────────
+  // Carregar captadores ao montar
+  useEffect(() => {
+    apiFetch("/api/colaboradores")
+      .then((data: any[]) => setCaptadores((data || []).filter((c: any) => c.cargo?.toLowerCase() === "captador" && c.ativo)))
+      .catch(() => {});
+  }, []);
 
+  // ─── Carregar empresas ──────────────────────────────────────────────────────────────────────────────────
   const carregarEmpresas = useCallback(async () => {
     setLoading(true);
     try {
@@ -413,6 +423,7 @@ export default function Empresas() {
       origem: emp.origem || "manual",
       tags: emp.tags || [],
       observacoes: emp.observacoes || "",
+      captador_id: emp.captador_id || undefined,
     });
     setErros({});
     setSecaoAberta("basico");
@@ -1544,6 +1555,23 @@ export default function Empresas() {
                       rows={3}
                       className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                     />
+                  </div>
+                  {/* Captador vinculado */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-gray-600">Captador Vinculado <span className="text-gray-400 font-normal">(opcional)</span></label>
+                    <select
+                      value={form.captador_id || ""}
+                      onChange={e => set("captador_id", e.target.value || undefined)}
+                      className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="">Nenhum captador</option>
+                      {captadores.map(c => (
+                        <option key={c.id} value={c.id}>{c.nome}</option>
+                      ))}
+                    </select>
+                    {captadores.length === 0 && (
+                      <p className="text-xs text-gray-400">Nenhum captador ativo cadastrado. Crie um em Usuários com cargo "Captador".</p>
+                    )}
                   </div>
                 </div>
               </Secao>

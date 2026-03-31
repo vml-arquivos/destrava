@@ -578,20 +578,21 @@ async function startServer() {
   // ─── COLABORADORES API ────────────────────────────────────────────────────
   app.post("/api/colaboradores", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
-      const { nome, email, cargo, senha } = req.body;
+      const { nome, email, cargo, senha, telefone } = req.body;
       if (!nome || !email || !cargo || !senha) {
         res.status(400).json({ error: "Campos obrigatórios: nome, email, cargo, senha" });
         return;
       }
       const senhaHash = await bcrypt.hash(senha, 12);
+      const cleanTelefone = telefone ? telefone.replace(/\D/g, '') : null;
       const { rows } = await pool.query(
-        `INSERT INTO colaboradores (nome, email, cargo, senha_hash, ativo)
-         VALUES ($1, $2, $3, $4, true)
+        `INSERT INTO colaboradores (nome, email, cargo, senha_hash, ativo, telefone)
+         VALUES ($1, $2, $3, $4, true, $5)
          RETURNING id`,
-        [nome.trim(), email.trim().toLowerCase(), cargo, senhaHash]
+        [nome.trim(), email.trim().toLowerCase(), cargo, senhaHash, cleanTelefone]
       );
       const userId = rows[0].id;
-      console.log(`[COLAB] Colaborador criado: ${nome} (${email})`);
+      console.log(`[COLAB] Colaborador criado: ${nome} (${email}) cargo=${cargo}`);
       res.status(201).json({ success: true, id: userId, message: `Colaborador "${nome}" criado com sucesso!` });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -607,7 +608,7 @@ async function startServer() {
   app.get("/api/colaboradores", requireJwtOrAdmin, async (_req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
-        "SELECT id, email, nome, cargo, ativo, criado_em FROM colaboradores ORDER BY nome"
+        "SELECT id, email, nome, cargo, telefone, ativo, created_at FROM colaboradores ORDER BY nome"
       );
       res.json(rows);
     } catch (err) {
@@ -618,17 +619,18 @@ async function startServer() {
 
   app.patch("/api/colaboradores/:id", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
-      const { nome, cargo, ativo, senha } = req.body;
-      const updates: Record<string, unknown> = { atualizado_em: new Date().toISOString() };
+      const { nome, cargo, ativo, senha, telefone } = req.body;
+      const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (nome) updates.nome = nome.trim();
       if (cargo) updates.cargo = cargo;
       if (ativo !== undefined) updates.ativo = ativo;
       if (senha) updates.senha_hash = await bcrypt.hash(senha, 12);
+      if (telefone !== undefined) updates.telefone = telefone ? telefone.replace(/\D/g, '') : null;
       const keys = Object.keys(updates);
       const values = Object.values(updates);
       const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
       const { rows } = await pool.query(
-        `UPDATE colaboradores SET ${set} WHERE id = $${keys.length + 1} RETURNING id, nome, email, cargo, ativo`,
+        `UPDATE colaboradores SET ${set} WHERE id = $${keys.length + 1} RETURNING id, nome, email, cargo, telefone, ativo`,
         [...values, req.params.id]
       );
       res.json({ success: true, colaborador: rows[0] });
@@ -1240,7 +1242,7 @@ async function startServer() {
         cep, logradouro, numero, complemento, bairro, cidade, estado,
         responsavel_nome, responsavel_cpf, responsavel_cargo, responsavel_telefone, responsavel_email,
         banco_principal, agencia, conta, limite_credito_atual, score_serasa, score_spc,
-        status, origem, tags, observacoes,
+        status, origem, tags, observacoes, captador_id,
       } = req.body;
       if (!razao_social || !razao_social.trim()) {
         res.status(400).json({ error: "Razão social é obrigatória" });
@@ -1254,10 +1256,10 @@ async function startServer() {
           cep, logradouro, numero, complemento, bairro, cidade, estado,
           responsavel_nome, responsavel_cpf, responsavel_cargo, responsavel_telefone, responsavel_email,
           banco_principal, agencia, conta, limite_credito_atual, score_serasa, score_spc,
-          responsavel_id, status, origem, tags, observacoes
+          responsavel_id, status, origem, tags, observacoes, captador_id
         ) VALUES (
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
-          $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35
+          $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36
         ) RETURNING *`,
         [
           razao_social.trim(), nome_fantasia || null, cnpj || null, inscricao_estadual || null,
@@ -1266,7 +1268,7 @@ async function startServer() {
           cep || null, logradouro || null, numero || null, complemento || null, bairro || null, cidade || null, estado || null,
           responsavel_nome || null, responsavel_cpf || null, responsavel_cargo || null, responsavel_telefone || null, responsavel_email || null,
           banco_principal || null, agencia || null, conta || null, limite_credito_atual || null, score_serasa || null, score_spc || null,
-          colaborador.id, status || 'ativo', origem || 'manual', tags || [], observacoes || null,
+          colaborador.id, status || 'ativo', origem || 'manual', tags || [], observacoes || null, captador_id || null,
         ]
       );
       res.status(201).json(rows[0]);
@@ -1647,6 +1649,51 @@ Responda APENAS com um JSON válido no seguinte formato:
             [eventoDbId]
           );
           return;
+        }
+
+        // 3.5. Verificar se o telefone pertence a um CAPTADOR
+        // Captadores NÃO geram leads nem análise de IA — apenas gravam conversa/mensagem.
+        if (telefone) {
+          const cleanPhoneCaptador = telefone.replace(/\D/g, '');
+          const captadorCheck = await pool.query(
+            `SELECT id, nome FROM colaboradores
+             WHERE regexp_replace(COALESCE(telefone,''), '\\D', '', 'g') = $1
+               AND lower(cargo) = 'captador'
+               AND ativo = true
+             LIMIT 1`,
+            [cleanPhoneCaptador]
+          );
+          if (captadorCheck.rows.length > 0) {
+            const captadorNome = captadorCheck.rows[0].nome;
+            console.log(`[WEBHOOK] Telefone ${cleanPhoneCaptador} pertence ao captador "${captadorNome}" — apenas gravando conversa, sem criar lead.`);
+            // Upsert da conversa canônica sem lead_id
+            const convResCaptador = await pool.query(
+              `INSERT INTO crm_conversas (lead_id, canal, canal_id_externo, status)
+               VALUES (NULL, 'whatsapp', $1, 'aberta')
+               ON CONFLICT (canal_id_externo) DO UPDATE
+                 SET ultima_interacao_em = NOW(),
+                     updated_at = NOW()
+               RETURNING id`,
+              [chatwootConvId]
+            );
+            const conversaIdCaptador = convResCaptador.rows[0].id;
+            // Gravar mensagem se houver conteúdo
+            if (conteudo || tipo_evento === 'message_created') {
+              const tipoConteudoCaptador = payload?.message?.content_type || 'text';
+              await pool.query(
+                `INSERT INTO crm_mensagens (conversa_id, evento_id, message_id_externo, direcao, remetente_tipo, tipo_conteudo, conteudo)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                 ON CONFLICT (message_id_externo) DO NOTHING`,
+                [conversaIdCaptador, eventoDbId, messageIdExterno, direcao, remetenteType, tipoConteudoCaptador, conteudo]
+              );
+            }
+            await pool.query(
+              `UPDATE crm_eventos_webhook SET status_processamento='processado', erro_detalhe='captador — sem lead criado', processado_em=NOW() WHERE id=$1`,
+              [eventoDbId]
+            );
+            console.log(`[WEBHOOK] Evento de captador processado — conversa ${conversaIdCaptador}`);
+            return;
+          }
         }
 
         // 4. Matching de lead por telefone ou chatwoot_contact_id
