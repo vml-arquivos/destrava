@@ -1689,6 +1689,205 @@ Responda APENAS com um JSON válido no seguinte formato:
     }
   });
 
+  // ─── POST /api/webhook/chatwoot — Inbound do Chatwoot via n8n ───────────────
+  // Recebe eventos do Chatwoot (via n8n como proxy) e persiste conversas/mensagens.
+  // Autenticado por admin-key (n8n usa x-admin-key no header).
+  app.post("/api/webhook/chatwoot", requireAdmin, async (req: Request, res: Response) => {
+    const { event_id, tipo_evento, origem = 'chatwoot', payload } = req.body;
+
+    // Responde imediatamente para não bloquear o n8n
+    res.json({ received: true });
+
+    // Processamento assíncrono
+    setImmediate(async () => {
+      let eventoDbId: string | null = null;
+      try {
+        // 1. Idempotência: ignorar evento já processado
+        if (event_id) {
+          const existe = await pool.query(
+            `SELECT id, status_processamento FROM crm_eventos_webhook WHERE event_id = $1 LIMIT 1`,
+            [event_id]
+          );
+          if (existe.rows.length > 0 && existe.rows[0].status_processamento === 'processado') {
+            console.log(`[WEBHOOK] Evento ${event_id} já processado — ignorado.`);
+            return;
+          }
+        }
+
+        // 2. Gravar evento bruto
+        const evRes = await pool.query(
+          `INSERT INTO crm_eventos_webhook (event_id, origem, tipo_evento, payload, status_processamento, evento)
+           VALUES ($1, $2, $3, $4, 'pendente', $3)
+           ON CONFLICT (event_id) DO UPDATE SET payload = EXCLUDED.payload, status_processamento = 'pendente'
+           RETURNING id`,
+          [event_id || null, origem, tipo_evento || 'desconhecido', JSON.stringify(payload || {})]
+        );
+        eventoDbId = evRes.rows[0]?.id || null;
+
+        // 3. Extrair dados canônicos do payload
+        const chatwootConvId = payload?.conversation?.id?.toString()
+          || payload?.id?.toString()
+          || null;
+        const chatwootContactId = payload?.contact?.id || payload?.conversation?.meta?.sender?.id || null;
+        const telefone = payload?.contact?.phone_number
+          || payload?.conversation?.meta?.sender?.phone_number
+          || null;
+        const nomeContato = payload?.contact?.name
+          || payload?.conversation?.meta?.sender?.name
+          || null;
+        const messageIdExterno = payload?.message?.id?.toString()
+          || payload?.id?.toString()
+          || `${chatwootConvId}-${Date.now()}`;
+        const conteudo = payload?.message?.content || payload?.content || null;
+        const direcao = (payload?.message?.message_type === 'outgoing' || payload?.message_type === 'outgoing')
+          ? 'outbound' : 'inbound';
+        const remetenteType = direcao === 'outbound'
+          ? (payload?.message?.sender?.type === 'agent_bot' ? 'ia' : 'humano')
+          : 'cliente';
+
+        if (!chatwootConvId) {
+          await pool.query(
+            `UPDATE crm_eventos_webhook SET status_processamento='ignorado', erro_detalhe='sem chatwoot_conv_id', processado_em=NOW() WHERE id=$1`,
+            [eventoDbId]
+          );
+          return;
+        }
+
+        // 4. Matching de lead por telefone ou chatwoot_contact_id
+        let leadId: string | null = null;
+        if (chatwootContactId) {
+          const r = await pool.query(
+            `SELECT id FROM leads WHERE chatwoot_conv_id = $1 LIMIT 1`,
+            [parseInt(chatwootConvId)]
+          );
+          if (r.rows.length > 0) leadId = r.rows[0].id;
+        }
+        if (!leadId && telefone) {
+          const cleanPhone = telefone.replace(/\D/g, '');
+          const r = await pool.query(
+            `SELECT id FROM leads WHERE regexp_replace(telefone, '\\D', '', 'g') = $1 ORDER BY created_at DESC LIMIT 1`,
+            [cleanPhone]
+          );
+          if (r.rows.length > 0) leadId = r.rows[0].id;
+        }
+        if (!leadId && nomeContato && telefone) {
+          // Criar lead automaticamente se não existir
+          const cleanPhone = telefone.replace(/\D/g, '');
+          const r = await pool.query(
+            `INSERT INTO leads (nome, telefone, origem, status, etapa_funil, temperatura, canal_origem, chatwoot_conv_id)
+             VALUES ($1, $2, 'chatwoot', 'novo', 'novo', 'frio', 'whatsapp', $3)
+             RETURNING id`,
+            [nomeContato, cleanPhone, parseInt(chatwootConvId)]
+          );
+          leadId = r.rows[0].id;
+          console.log(`[WEBHOOK] Lead criado automaticamente: ${leadId}`);
+        }
+
+        // 5. Upsert da conversa canônica
+        const convRes = await pool.query(
+          `INSERT INTO crm_conversas (lead_id, canal, canal_id_externo, status)
+           VALUES ($1, 'whatsapp', $2, 'aberta')
+           ON CONFLICT (canal, canal_id_externo) DO UPDATE
+             SET lead_id = COALESCE(EXCLUDED.lead_id, crm_conversas.lead_id),
+                 updated_at = NOW()
+           RETURNING id`,
+          [leadId, chatwootConvId]
+        );
+        const conversaId = convRes.rows[0].id;
+
+        // 6. Persistir mensagem (com deduplicação por message_id_externo)
+        if (conteudo || tipo_evento === 'message_created') {
+          await pool.query(
+            `INSERT INTO crm_mensagens (conversa_id, evento_id, message_id_externo, direcao, remetente_tipo, conteudo)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (message_id_externo) DO NOTHING`,
+            [conversaId, eventoDbId, messageIdExterno, direcao, remetenteType, conteudo]
+          );
+        }
+
+        // 7. Atualizar status da conversa se evento for de fechamento
+        if (tipo_evento === 'conversation_resolved' || tipo_evento === 'conversation_status_changed') {
+          const novoStatus = payload?.conversation?.status === 'resolved' ? 'resolvida' : 'aberta';
+          await pool.query(
+            `UPDATE crm_conversas SET status = $1, updated_at = NOW() WHERE id = $2`,
+            [novoStatus, conversaId]
+          );
+        }
+
+        // 8. Marcar evento como processado
+        await pool.query(
+          `UPDATE crm_eventos_webhook SET status_processamento='processado', processado_em=NOW() WHERE id=$1`,
+          [eventoDbId]
+        );
+
+        console.log(`[WEBHOOK] Evento ${event_id || tipo_evento} processado — conversa ${conversaId}`);
+
+      } catch (err: any) {
+        console.error(`[WEBHOOK] Erro ao processar evento:`, err.message);
+        if (eventoDbId) {
+          await pool.query(
+            `UPDATE crm_eventos_webhook SET status_processamento='erro', erro_detalhe=$1, processado_em=NOW() WHERE id=$2`,
+            [err.message, eventoDbId]
+          ).catch(() => {});
+        }
+      }
+    });
+  });
+
+  // ─── GET /api/crm/conversas — Listar conversas com filtro de ownership ────────
+  app.get("/api/crm/conversas", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const isAdmin = ['admin','administrador','diretor','gerente','gestor'].includes(
+        (colaborador.cargo || '').toLowerCase()
+      );
+      const { lead_id, status } = req.query;
+      const params: any[] = [];
+      const conditions: string[] = [];
+
+      if (!isAdmin) {
+        // Colaborador vê apenas conversas de leads que são seus
+        params.push(colaborador.id);
+        conditions.push(`c.lead_id IN (SELECT id FROM leads WHERE responsavel_id = $${params.length})`);
+      }
+      if (lead_id) { params.push(lead_id); conditions.push(`c.lead_id = $${params.length}`); }
+      if (status) { params.push(status); conditions.push(`c.status = $${params.length}`); }
+
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const result = await pool.query(
+        `SELECT c.*, l.nome as lead_nome, l.telefone as lead_telefone
+         FROM crm_conversas c
+         LEFT JOIN leads l ON l.id = c.lead_id
+         ${where}
+         ORDER BY c.ultima_interacao_em DESC LIMIT 200`,
+        params
+      );
+      res.json(result.rows);
+    } catch (err) {
+      console.error("[GET /api/crm/conversas]", err);
+      res.status(500).json({ error: "Erro ao listar conversas" });
+    }
+  });
+
+  // ─── GET /api/crm/conversas/:id/mensagens — Mensagens de uma conversa ────────
+  app.get("/api/crm/conversas/:id/mensagens", requireJwt, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result = await pool.query(
+        `SELECT * FROM crm_mensagens WHERE conversa_id = $1 ORDER BY created_at ASC`,
+        [id]
+      );
+      res.json(result.rows);
+    } catch (err) {
+      console.error("[GET /api/crm/conversas/:id/mensagens]", err);
+      res.status(500).json({ error: "Erro ao listar mensagens" });
+    }
+  });
+
+  // ─── GET /api/leads — com filtro de ownership por perfil ─────────────────────
+  // NOTA: Esta rota já existe acima. O filtro de ownership é aplicado abaixo
+  // via patch cirúrgico na rota existente. Ver comentário na rota original.
+
   // ─── Static files ──────────────────────────────────────────────────────────────────────────────────
   const staticPath = process.env.NODE_ENV === "production"     ? path.resolve(__dirname, "public")
       : path.resolve(__dirname, "..", "dist", "public");

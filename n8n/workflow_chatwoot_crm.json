@@ -1,0 +1,153 @@
+{
+  "name": "Destrava — Chatwoot → CRM (Inbound Webhook)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot-inbound",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node_webhook_trigger",
+      "name": "Chatwoot Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "chatwoot-inbound-destrava"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ack: true }) }}",
+        "options": {}
+      },
+      "id": "node_respond_ack",
+      "name": "Responder ACK imediato",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [460, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalizar payload do Chatwoot para o formato canônico do CRM Destrava\nconst body = $input.first().json.body || $input.first().json;\n\n// Extrair event_id único para idempotência\nconst eventId = [\n  body.event,\n  body.id,\n  body.message_id,\n  body.conversation?.id,\n  Date.now()\n].filter(Boolean).join('-');\n\nconst tipoEvento = body.event || body.type || 'desconhecido';\n\n// Normalizar payload para estrutura canônica\nconst payloadNormalizado = {\n  event_id: eventId,\n  tipo_evento: tipoEvento,\n  origem: 'chatwoot',\n  payload: {\n    conversation: body.conversation || null,\n    contact: body.contact || body.conversation?.meta?.sender || null,\n    message: body.message || null,\n    message_type: body.message_type || null,\n    content: body.content || body.message?.content || null,\n    id: body.id || null,\n    event: tipoEvento,\n    account: body.account || null\n  }\n};\n\nreturn [{ json: payloadNormalizado }];"
+      },
+      "id": "node_normalizar",
+      "name": "Normalizar Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 380]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "id": "cond_tipo_evento",
+              "leftValue": "={{ $json.tipo_evento }}",
+              "rightValue": "message_created,conversation_created,conversation_resolved,conversation_status_changed,contact_created,contact_updated",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "node_filtrar_eventos",
+      "name": "Filtrar Eventos Relevantes",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://destravacredito.com/api/webhook/chatwoot",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-admin-key",
+              "value": "341328476b31a8e516c05c318ff934b2c8f49a4501a4208e53acd7918d0a902b"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "node_enviar_crm",
+      "name": "Enviar para CRM Destrava",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log de eventos ignorados\nconst tipo = $input.first().json.tipo_evento;\nconsole.log(`[Destrava n8n] Evento ignorado: ${tipo}`);\nreturn [{ json: { ignorado: true, tipo_evento: tipo } }];"
+      },
+      "id": "node_ignorar",
+      "name": "Ignorar Evento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 500]
+    }
+  ],
+  "connections": {
+    "Chatwoot Webhook Trigger": {
+      "main": [
+        [
+          { "node": "Responder ACK imediato", "type": "main", "index": 0 },
+          { "node": "Normalizar Payload", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Normalizar Payload": {
+      "main": [
+        [
+          { "node": "Filtrar Eventos Relevantes", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Filtrar Eventos Relevantes": {
+      "main": [
+        [
+          { "node": "Enviar para CRM Destrava", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Ignorar Evento", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "destrava-v1",
+  "triggerCount": 0,
+  "tags": ["destrava", "chatwoot", "crm", "webhook"]
+}
