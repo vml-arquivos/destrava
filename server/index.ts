@@ -28,140 +28,7 @@ pool.on("error", (err) => {
 // Testa a conexão ao iniciar
 pool.query("SELECT 1").then(() => {
   console.log("🗄️  PostgreSQL: ✅ Conectado");
-  // ── Auto-migration: garante que a tabela empresas existe ──────────────────
-  pool.query(`
-    CREATE TABLE IF NOT EXISTS public.empresas (
-      id                   UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-      razao_social         TEXT         NOT NULL,
-      nome_fantasia        TEXT,
-      cnpj                 TEXT,
-      inscricao_estadual   TEXT,
-      email                TEXT,
-      telefone             TEXT,
-      whatsapp             TEXT,
-      site                 TEXT,
-      segmento             TEXT,
-      porte                TEXT         DEFAULT 'mei'
-                             CHECK (porte IN ('mei','me','epp','medio','grande')),
-      faturamento_anual    NUMERIC(15,2),
-      numero_funcionarios  INTEGER,
-      cep                  TEXT,
-      logradouro           TEXT,
-      numero               TEXT,
-      complemento          TEXT,
-      bairro               TEXT,
-      cidade               TEXT,
-      estado               CHAR(2),
-      responsavel_nome     TEXT,
-      responsavel_cpf      TEXT,
-      responsavel_cargo    TEXT,
-      responsavel_telefone TEXT,
-      responsavel_email    TEXT,
-      banco_principal      TEXT,
-      agencia              TEXT,
-      conta                TEXT,
-      limite_credito_atual NUMERIC(15,2),
-      score_serasa         INTEGER,
-      score_spc            INTEGER,
-      responsavel_id       UUID         REFERENCES public.colaboradores(id) ON DELETE SET NULL,
-      status               TEXT         NOT NULL DEFAULT 'ativo'
-                             CHECK (status IN ('ativo','inativo','prospecto','cliente','ex_cliente')),
-      origem               TEXT         DEFAULT 'manual',
-      tags                 TEXT[]       DEFAULT '{}',
-      observacoes          TEXT,
-      created_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_empresas_razao_social ON public.empresas(razao_social);
-    CREATE INDEX IF NOT EXISTS idx_empresas_cnpj         ON public.empresas(cnpj) WHERE cnpj IS NOT NULL;
-    CREATE INDEX IF NOT EXISTS idx_empresas_status       ON public.empresas(status);
-  `).then(() => {
-    console.log("🗄️  Tabela empresas: ✅ Verificada/criada");
-  }).catch((e: Error) => {
-    console.error("🗄️  Tabela empresas: ❌ Erro na auto-migration —", e.message);
-  });
-
-  // ── Auto-migration: tabela triagem_leads (fila de qualificação do simulador) ─
-  pool.query(`
-    CREATE TABLE IF NOT EXISTS public.triagem_leads (
-      id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-      nome            TEXT         NOT NULL,
-      telefone        TEXT         NOT NULL,
-      email           TEXT,
-      empresa         TEXT,
-      cpf_cnpj        TEXT,
-      tipo_pessoa     TEXT         DEFAULT 'pj',
-      produto         TEXT,
-      valor           NUMERIC(15,2),
-      prazo           INTEGER,
-      parcela         NUMERIC(15,2),
-      taxa            NUMERIC(8,4),
-      cidade          TEXT,
-      estado          TEXT,
-      utm_source      TEXT,
-      utm_medium      TEXT,
-      utm_campaign    TEXT,
-      status          TEXT         NOT NULL DEFAULT 'pendente'
-                        CHECK (status IN ('pendente','possivel_cliente','curioso','sem_perfil','convertido','descartado')),
-      classificacao   TEXT,
-      observacoes     TEXT,
-      responsavel_id  UUID         REFERENCES public.colaboradores(id) ON DELETE SET NULL,
-      convertido_em   TIMESTAMPTZ,
-      lead_id         UUID         REFERENCES public.leads(id) ON DELETE SET NULL,
-      created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-      updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_triagem_status     ON public.triagem_leads(status);
-    CREATE INDEX IF NOT EXISTS idx_triagem_created_at ON public.triagem_leads(created_at DESC);
-  `).then(() => {
-    console.log("🗄️  Tabela triagem_leads: ✅ Verificada/criada");
-  }).catch((e: Error) => {
-    console.error("🗄️  Tabela triagem_leads: ❌ Erro na auto-migration —", e.message);
-  });
-
-  // Tabelas auxiliares de Empresas
-  pool.query(`
-    CREATE TABLE IF NOT EXISTS public.empresa_followups (
-      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      empresa_id  UUID NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
-      titulo      TEXT NOT NULL,
-      tipo        TEXT NOT NULL DEFAULT 'ligacao',
-      descricao   TEXT,
-      data_agendada TIMESTAMPTZ,
-      concluido   BOOLEAN NOT NULL DEFAULT false,
-      concluido_em TIMESTAMPTZ,
-      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE TABLE IF NOT EXISTS public.empresa_historico (
-      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      empresa_id  UUID NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
-      tipo        TEXT NOT NULL DEFAULT 'nota',
-      descricao   TEXT NOT NULL,
-      autor       TEXT,
-      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE TABLE IF NOT EXISTS public.empresa_documentos (
-      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      empresa_id  UUID NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
-      nome        TEXT NOT NULL,
-      tipo        TEXT,
-      tamanho     INTEGER,
-      url         TEXT,
-      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    -- Adicionar colunas de IA na triagem se não existirem
-    ALTER TABLE public.triagem_leads ADD COLUMN IF NOT EXISTS observacoes_ia TEXT;
-    ALTER TABLE public.triagem_leads ADD COLUMN IF NOT EXISTS score_ia INTEGER;
-    -- Vínculo de simulações com empresas
-    ALTER TABLE public.simulacoes_colaborador ADD COLUMN IF NOT EXISTS empresa_id UUID REFERENCES public.empresas(id) ON DELETE SET NULL;
-    ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS empresa_id UUID REFERENCES public.empresas(id) ON DELETE SET NULL;
-    ALTER TABLE public.triagem_leads ADD COLUMN IF NOT EXISTS empresa_id UUID REFERENCES public.empresas(id) ON DELETE SET NULL;
-
-  `).then(() => {
-    console.log("🗄️  Tabelas auxiliares empresas: ✅ Verificadas/criadas");
-  }).catch((e: Error) => {
-    console.error("🗄️  Tabelas auxiliares empresas: ❌ Erro —", e.message);
-  });
+  // Auto-migrate removido. Toda DDL é executada via scripts SQL manuais em /db/.
 }).catch((e) => {
   console.error("🗄️  PostgreSQL: ❌ Falha na conexão —", e.message);
 });
@@ -545,14 +412,26 @@ async function startServer() {
   });
 
   // GET /api/leads — aceita JWT (painel interno) ou admin-key (scripts/n8n)
-  // Retorna { leads: [...], total: N } para o Dashboard (admin-key) e array direto para o painel (JWT)
+  // Ownership: cargo admin/administrador/diretor/gerente/gestor vê todos.
+  // Demais cargos vêem apenas leads onde responsavel_id = colaborador.id
+  // Campo `cargo` confirmado no banco real (colaboradores.cargo, NOT NULL)
   app.get("/api/leads", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const isAdminKey = !req.headers.authorization && req.headers["x-admin-key"];
+      const isGestor = isAdminKey || ['admin','administrador','diretor','gerente','gestor'].includes(
+        (colaborador?.cargo || '').toLowerCase()
+      );
       const status = req.query.status as string | undefined;
       const busca = req.query.busca as string | undefined;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
       const params: any[] = [];
       const conditions: string[] = [];
+      // Ownership: colaborador comum vê apenas seus leads
+      if (!isGestor && colaborador?.id) {
+        params.push(colaborador.id);
+        conditions.push(`responsavel_id = $${params.length}`);
+      }
       if (status) { params.push(status); conditions.push(`status = $${params.length}`); }
       if (busca && busca.trim()) {
         const term = `%${busca.trim()}%`;
@@ -568,9 +447,7 @@ async function startServer() {
       );
       // Retorna shape compatível com ambos os consumidores:
       // Dashboard (admin-key) usa data.leads; Clientes.tsx (JWT) usa array direto
-      // Enviamos ambos para máxima compatibilidade
-      const isAdmin = !req.headers.authorization && req.headers["x-admin-key"];
-      if (isAdmin) {
+      if (isAdminKey) {
         res.json({ leads: rows, total: rows.length });
       } else {
         res.json(rows);
@@ -875,10 +752,16 @@ async function startServer() {
   app.get("/api/simulacoes", requireJwt, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const result = await pool.query(
-        "SELECT * FROM simulacoes_colaborador WHERE colaborador_id = $1 ORDER BY criado_em DESC",
-        [colaborador.id]
+      // Ownership: gestor/admin vê todas; colaborador comum vê apenas as suas
+      // Campo `cargo` confirmado no banco real (colaboradores.cargo, NOT NULL)
+      const isGestor = ['admin','administrador','diretor','gerente','gestor'].includes(
+        (colaborador?.cargo || '').toLowerCase()
       );
+      const query = isGestor
+        ? `SELECT * FROM simulacoes_colaborador ORDER BY criado_em DESC`
+        : `SELECT * FROM simulacoes_colaborador WHERE colaborador_id = $1 ORDER BY criado_em DESC`;
+      const params = isGestor ? [] : [colaborador.id];
+      const result = await pool.query(query, params);
       res.json(result.rows);
     } catch (err) {
       console.error("[GET /api/simulacoes]", err);
@@ -1296,10 +1179,22 @@ async function startServer() {
   // ─── EMPRESAS API ──────────────────────────────────────────────────────────────────────────────────────────────────── // GET /api/empresas — Listar empresas com busca e filtros
   app.get("/api/empresas", requireJwt, async (req: Request, res: Response) => {
     try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      // Ownership: gestor/admin vê todas; colaborador comum vê apenas as suas
+      // Campo `cargo` confirmado no banco real (colaboradores.cargo, NOT NULL)
+      // Campo `responsavel_id` confirmado na tabela empresas (owner: destravadb)
+      const isGestor = ['admin','administrador','diretor','gerente','gestor'].includes(
+        (colaborador?.cargo || '').toLowerCase()
+      );
       const busca = req.query.busca as string | undefined;
       const status = req.query.status as string | undefined;
       const params: any[] = [];
       const conditions: string[] = [];
+      // Ownership: colaborador comum vê apenas empresas onde é responsável
+      if (!isGestor && colaborador?.id) {
+        params.push(colaborador.id);
+        conditions.push(`responsavel_id = $${params.length}`);
+      }
       if (status && status !== "todos") {
         params.push(status);
         conditions.push(`status = $${params.length}`);
@@ -1715,9 +1610,10 @@ Responda APENAS com um JSON válido no seguinte formato:
         }
 
         // 2. Gravar evento bruto
+        // Colunas confirmadas no banco real: event_id, origem, tipo_evento, payload, status_processamento, erro_detalhe, processado_em, created_at
         const evRes = await pool.query(
-          `INSERT INTO crm_eventos_webhook (event_id, origem, tipo_evento, payload, status_processamento, evento)
-           VALUES ($1, $2, $3, $4, 'pendente', $3)
+          `INSERT INTO crm_eventos_webhook (event_id, origem, tipo_evento, payload, status_processamento)
+           VALUES ($1, $2, $3, $4, 'pendente')
            ON CONFLICT (event_id) DO UPDATE SET payload = EXCLUDED.payload, status_processamento = 'pendente'
            RETURNING id`,
           [event_id || null, origem, tipo_evento || 'desconhecido', JSON.stringify(payload || {})]
@@ -1784,11 +1680,13 @@ Responda APENAS com um JSON válido no seguinte formato:
         }
 
         // 5. Upsert da conversa canônica
+        // UNIQUE confirmada no banco real: crm_conversas_canal_id_externo_key (canal_id_externo)
         const convRes = await pool.query(
           `INSERT INTO crm_conversas (lead_id, canal, canal_id_externo, status)
            VALUES ($1, 'whatsapp', $2, 'aberta')
-           ON CONFLICT (canal, canal_id_externo) DO UPDATE
+           ON CONFLICT (canal_id_externo) DO UPDATE
              SET lead_id = COALESCE(EXCLUDED.lead_id, crm_conversas.lead_id),
+                 ultima_interacao_em = NOW(),
                  updated_at = NOW()
            RETURNING id`,
           [leadId, chatwootConvId]
@@ -1796,12 +1694,14 @@ Responda APENAS com um JSON válido no seguinte formato:
         const conversaId = convRes.rows[0].id;
 
         // 6. Persistir mensagem (com deduplicação por message_id_externo)
+        // tipo_conteudo é NOT NULL no banco real — padrão 'text' quando não informado
         if (conteudo || tipo_evento === 'message_created') {
+          const tipoConteudo = payload?.message?.content_type || 'text';
           await pool.query(
-            `INSERT INTO crm_mensagens (conversa_id, evento_id, message_id_externo, direcao, remetente_tipo, conteudo)
-             VALUES ($1, $2, $3, $4, $5, $6)
+            `INSERT INTO crm_mensagens (conversa_id, evento_id, message_id_externo, direcao, remetente_tipo, tipo_conteudo, conteudo)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
              ON CONFLICT (message_id_externo) DO NOTHING`,
-            [conversaId, eventoDbId, messageIdExterno, direcao, remetenteType, conteudo]
+            [conversaId, eventoDbId, messageIdExterno, direcao, remetenteType, tipoConteudo, conteudo]
           );
         }
 

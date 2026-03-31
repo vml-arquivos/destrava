@@ -1,38 +1,60 @@
--- ============================================================
--- DESTRAVA CRÉDITO — Rollback da Migração de Integração v2.0
--- ATENÇÃO: Destrói dados criados após a migração v2.
--- Usar APENAS em caso de emergência.
--- ============================================================
+-- =============================================================================
+-- DESTRAVA CRÉDITO — rollback_integracao_v2.sql
+-- Versão: 2.1 — Corrigida com base na auditoria real do banco de produção
+-- Data: 2026-03-30
+-- =============================================================================
+--
+-- ROLLBACK SEGURO: Remove apenas os índices criados pela migrate_integracao_v2.sql.
+-- NÃO destrói nenhuma tabela. NÃO remove nenhuma coluna.
+-- Todas as tabelas (crm_conversas, crm_mensagens, crm_eventos_webhook, etc.)
+-- JÁ EXISTIAM antes desta migração e permanecem intactas após o rollback.
+--
+-- COMO EXECUTAR:
+--   docker exec -i tr3go0jqyc5h3tuvz7f46zkc psql -U postgres -d postgres << 'SQL'
+--   [conteúdo abaixo]
+--   SQL
+-- =============================================================================
 
 BEGIN;
 
--- Remover tabelas novas (em ordem de dependência)
-DROP TABLE IF EXISTS public.crm_mensagens CASCADE;
-DROP TABLE IF EXISTS public.crm_conversas CASCADE;
+-- Índices de crm_conversas
+DROP INDEX IF EXISTS public.idx_crm_conversas_lead_id;
+DROP INDEX IF EXISTS public.idx_crm_conversas_status;
+DROP INDEX IF EXISTS public.idx_crm_conversas_ultima_interacao;
 
--- Reverter colunas adicionadas em crm_eventos_webhook
-ALTER TABLE public.crm_eventos_webhook
-  DROP COLUMN IF EXISTS event_id,
-  DROP COLUMN IF EXISTS origem,
-  DROP COLUMN IF EXISTS tipo_evento,
-  DROP COLUMN IF EXISTS status_processamento,
-  DROP COLUMN IF EXISTS erro_detalhe,
-  DROP COLUMN IF EXISTS processado_em;
+-- Índices de crm_mensagens
+DROP INDEX IF EXISTS public.idx_crm_mensagens_conversa_id;
+DROP INDEX IF EXISTS public.idx_crm_mensagens_created_at;
 
--- Reverter colunas adicionadas em colaboradores
-ALTER TABLE public.colaboradores
-  DROP COLUMN IF EXISTS perfil;
+-- Índices de crm_eventos_webhook
+DROP INDEX IF EXISTS public.idx_crm_eventos_status_proc;
+DROP INDEX IF EXISTS public.idx_crm_eventos_created_at;
 
--- Reverter colunas adicionadas em leads
-ALTER TABLE public.leads
-  DROP COLUMN IF EXISTS chatwoot_contact_id,
-  DROP COLUMN IF EXISTS whatsapp_jid,
-  DROP COLUMN IF EXISTS status_atendimento,
-  DROP COLUMN IF EXISTS ultimo_canal;
+-- Índices de leads
+DROP INDEX IF EXISTS public.idx_leads_chatwoot_conv_id;
+DROP INDEX IF EXISTS public.idx_leads_responsavel_id;
+DROP INDEX IF EXISTS public.idx_leads_empresa_id;
 
--- Reverter colunas adicionadas em empresas
-ALTER TABLE public.empresas
-  DROP COLUMN IF EXISTS owner_principal_id,
-  DROP COLUMN IF EXISTS compartilhada;
+-- Índices de simulacoes_colaborador
+DROP INDEX IF EXISTS public.idx_simulacoes_empresa_id;
+DROP INDEX IF EXISTS public.idx_simulacoes_colaborador_id;
+
+-- Índices de empresa_historico
+DROP INDEX IF EXISTS public.idx_empresa_historico_empresa_id;
+DROP INDEX IF EXISTS public.idx_empresa_historico_created_at;
+
+-- Índices de empresas
+DROP INDEX IF EXISTS public.idx_empresas_responsavel_id;
 
 COMMIT;
+
+-- =============================================================================
+-- VERIFICAÇÃO PÓS-ROLLBACK:
+-- =============================================================================
+-- docker exec -i tr3go0jqyc5h3tuvz7f46zkc psql -U destravadb -d postgres -c "
+--   SELECT indexname, tablename
+--   FROM pg_indexes
+--   WHERE schemaname = 'public'
+--     AND indexname LIKE 'idx_%'
+--   ORDER BY tablename, indexname;"
+-- =============================================================================
