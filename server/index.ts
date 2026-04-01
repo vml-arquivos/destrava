@@ -117,7 +117,6 @@ async function processarEmpresaDaSimulacao(
 }
 
 // ─── Cargos e hierarquia de permissões ──────────────────────────────────────
-// 7 cargos definitivos do sistema
 const CARGOS_VALIDOS = [
   'Administrador',
   'Diretor',
@@ -128,16 +127,9 @@ const CARGOS_VALIDOS = [
   'Estagiário',
 ] as const;
 
-// Cargos que têm acesso total (veem tudo, podem criar usuários)
 const CARGOS_GESTAO = ['administrador', 'diretor', 'gerente comercial', 'admin', 'gerente', 'gestor'];
-
-// Cargos que podem criar novos usuários (e quais cargos podem criar)
 const CARGOS_PODEM_CRIAR_USUARIOS = ['administrador', 'diretor', 'gerente comercial', 'admin'];
-
-// Cargos que NÃO podem ser responsáveis pelo atendimento de empresa
 const CARGOS_BLOQUEADOS_ATENDIMENTO = ['captador externo', 'estagiário', 'estagiario'];
-
-// Cargos que podem ser responsáveis pela captação
 const CARGOS_CAPTACAO = ['captador externo', 'gerente comercial', 'diretor', 'consultor de crédito', 'consultor de credito', 'administrador', 'admin'];
 
 function isGestorCargo(cargo: string): boolean {
@@ -156,7 +148,7 @@ async function startServer() {
   app.use(express.json({ limit: "5mb" }));
   app.use(express.urlencoded({ extended: true }));
 
-  // CORS — origens permitidas via variável de ambiente (sem hardcode)
+  // CORS
   app.use((req: Request, res: Response, next: NextFunction) => {
     const siteDomain = process.env.SITE_DOMAIN || "destravacredito.com";
     const allowedOrigins = [
@@ -185,9 +177,8 @@ async function startServer() {
     next();
   }
 
-    // ─── Middleware que aceita JWT OU admin-key (para rotas de gestão de usuários) ────
+  // ─── Middleware que aceita JWT OU admin-key ────
   function requireJwtOrAdmin(req: Request, res: Response, next: NextFunction) {
-    // Tenta JWT primeiro
     const auth = req.headers.authorization;
     if (auth?.startsWith("Bearer ")) {
       try {
@@ -196,7 +187,6 @@ async function startServer() {
         return next();
       } catch { /* cai para admin-key */ }
     }
-    // Fallback: admin-key (para scripts e n8n)
     const adminKey = req.headers["x-admin-key"];
     if (process.env.ADMIN_KEY && adminKey === process.env.ADMIN_KEY) {
       (req as Request & { colaborador: any }).colaborador = { id: 'admin', email: 'admin', nome: 'Admin', cargo: 'Admin' };
@@ -275,18 +265,15 @@ async function startServer() {
   });
 
   // ─── LEADS API ─────────────────────────────────────────────────────────────
-  // POST /api/leads — aceita tanto payload público (camelCase) quanto painel interno (snake_case)
   app.post("/api/leads", async (req: Request, res: Response) => {
     try {
       const b = req.body;
       const now = new Date().toISOString();
-      // Normaliza campos: suporta camelCase (público) e snake_case (painel interno)
       const nome         = b.nome || "";
       const email        = b.email || null;
       const telefone     = b.telefone || "";
       const empresa      = b.empresa || null;
       const cpf_cnpj     = b.cpf_cnpj || b.cpfCnpj || null;
-      // Normaliza tipo_pessoa: aceita "empresa" (frontend público) → "pj" (schema DB)
       const rawTipo      = b.tipo_pessoa || b.tipoPessoa || "pf";
       const tipo_pessoa  = rawTipo === "empresa" ? "pj" : rawTipo;
       const produto      = b.produto_interesse || b.produto || null;
@@ -302,9 +289,6 @@ async function startServer() {
       const estado       = b.estado || null;
       const observacoes_ia    = b.observacoes_ia || null;
       const proximo_followup  = b.proximo_followup || null;
-      // UTM — capturados para o payload n8n mas gravados apenas se a coluna existir no banco
-      // O banco atual (validado em produção) não tem essas colunas ainda.
-      // Elas são passadas ao n8n via payload sem precisar estar no INSERT.
       const utm_source   = b.utm_source   || null;
       const utm_medium   = b.utm_medium   || null;
       const utm_campaign = b.utm_campaign || null;
@@ -333,7 +317,6 @@ async function startServer() {
             Number(b.parcelaMensal || b.parcela_mensal) || null,
             Number(b.taxaEstimada || b.taxa_estimada) || null,
             cidade, estado,
-            
             utm_source, utm_medium, utm_campaign,
             empresa_id,
             now,
@@ -350,8 +333,6 @@ async function startServer() {
           );
         }
 
-
-        // Dispara n8n com evento específico de triagem
         dispararN8n("triagem_novo_lead", {
           event: "triagem_novo_lead",
           source: origem,
@@ -362,8 +343,6 @@ async function startServer() {
         return res.status(201).json({ ...triagem, _triagem: true });
       }
 
-      // INSERT com exatamente 20 colunas e 20 valores ($1..$19, $19 reutilizado para updated_at)
-      // Colunas confirmadas no banco real (diagnóstico 30/03/2026)
       const { rows } = await pool.query(
         `INSERT INTO leads
           (nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto_interesse,
@@ -391,7 +370,6 @@ async function startServer() {
         );
       }
 
-      // Payload canônico — alinhado com especificação Destrava v2
       dispararN8n("novo_lead", {
         event:       "novo_lead",
         source:      origem,
@@ -423,7 +401,6 @@ async function startServer() {
           priority: origem === "simulador_publico" ? "high" : "normal",
           channel:  "whatsapp",
         },
-        // Compatível com payload legado (campos na raiz)
         id:             lead.id,
         nome,
         telefone,
@@ -435,7 +412,6 @@ async function startServer() {
         criadoEm:       now,
       });
 
-      // Retorna o lead completo para que o frontend possa atualizar a lista localmente
       res.status(201).json(lead);
     } catch (err) {
       console.error("[LEAD ERROR]", err);
@@ -443,10 +419,6 @@ async function startServer() {
     }
   });
 
-  // GET /api/leads — aceita JWT (painel interno) ou admin-key (scripts/n8n)
-  // Ownership: cargo admin/administrador/diretor/gerente/gestor vê todos.
-  // Demais cargos vêem apenas leads onde responsavel_id = colaborador.id
-  // Campo `cargo` confirmado no banco real (colaboradores.cargo, NOT NULL)
   app.get("/api/leads", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
@@ -457,7 +429,6 @@ async function startServer() {
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
       const params: any[] = [];
       const conditions: string[] = [];
-      // Ownership: colaborador comum vê apenas seus leads
       if (!isGestor && colaborador?.id) {
         params.push(colaborador.id);
         conditions.push(`responsavel_id = $${params.length}`);
@@ -475,8 +446,6 @@ async function startServer() {
         `SELECT * FROM leads ${where} ORDER BY created_at DESC ${limitClause}`,
         params
       );
-      // Retorna shape compatível com ambos os consumidores:
-      // Dashboard (admin-key) usa data.leads; Clientes.tsx (JWT) usa array direto
       if (isAdminKey) {
         res.json({ leads: rows, total: rows.length });
       } else {
@@ -488,7 +457,6 @@ async function startServer() {
     }
   });
 
-  // PATCH /api/leads/:id — aceita JWT (CRM) ou admin-key
   app.patch("/api/leads/:id", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
       const fields = { ...req.body, updated_at: new Date().toISOString() };
@@ -506,12 +474,6 @@ async function startServer() {
     }
   });
 
-  // ─── SIMULAÇÕES API ────────────────────────────────────────────────────────
-  // NOTA: POST /api/simulacoes público foi REMOVIDO — era handler legado nunca chamado pelo frontend.
-  // O frontend público (SimuladorPublico.tsx, CapturaLead.tsx) usa POST /api/leads.
-  // As rotas /api/simulacoes com requireJwt (abaixo) são as corretas para o painel interno.
-
-  // GET /api/admin/simulacoes-publicas — lista leads do simulador público (admin-key)
   app.get("/api/admin/simulacoes-publicas", requireAdmin, async (_req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
@@ -524,7 +486,6 @@ async function startServer() {
     }
   });
 
-  // ─── CONTATO API ────────────────────────────────────────────────────────────
   app.post("/api/contato", async (req: Request, res: Response) => {
     try {
       const now = new Date().toISOString();
@@ -570,8 +531,6 @@ async function startServer() {
     }
   });
 
-  // ─── ESTATÍSTICAS API ──────────────────────────────────────────────────────
-  // GET /api/stats — aceita JWT (Dashboard) ou admin-key (scripts externos)
   app.get("/api/stats", requireJwtOrAdmin, async (_req: Request, res: Response) => {
     try {
       const [leadsRes, simsRes, contatosRes] = await Promise.all([
@@ -605,12 +564,11 @@ async function startServer() {
     }
   });
 
-  // ─── COLABORADORES API ─────────────────────────────────────────────────────────────────────────
+  // ─── COLABORADORES API ────────────────────────────────────────────────────
   app.post("/api/colaboradores", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
       const solicitante = (req as Request & { colaborador: any }).colaborador;
       const isAdminKey = !req.headers.authorization && req.headers["x-admin-key"];
-      // Verificar se quem está criando tem permissão
       if (!isAdminKey && !podecriarUsuarios(solicitante?.cargo || '')) {
         res.status(403).json({ error: "Apenas Administrador, Diretor e Gerente Comercial podem criar colaboradores." });
         return;
@@ -620,7 +578,6 @@ async function startServer() {
         res.status(400).json({ error: "Campos obrigatórios: nome, email, cargo, senha" });
         return;
       }
-      // Validar cargo
       const cargosValidos = CARGOS_VALIDOS.map(c => c.toLowerCase());
       if (!cargosValidos.includes((cargo || '').toLowerCase())) {
         res.status(400).json({ error: `Cargo inválido. Cargos permitidos: ${CARGOS_VALIDOS.join(', ')}` });
@@ -660,8 +617,8 @@ async function startServer() {
     }
   });
 
-
   // GET /api/colaboradores/para-empresa — retorna listas separadas para os selects do formulário de empresa
+  // NOTA: rota declarada ANTES do patch /:id para evitar conflito de parâmetro de rota
   app.get("/api/colaboradores/para-empresa", requireJwt, async (_req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
@@ -669,9 +626,11 @@ async function startServer() {
       );
       // Responsáveis pela captação: qualquer cargo exceto Analista de Crédito e Estagiário
       const captacao = rows.filter(c =>
+        !['analista de crédito', 'analista de credito', 'estagiário', 'estagiario'].includes(c.cargo.toLowerCase())
       );
       // Responsáveis pelo atendimento: qualquer cargo exceto Captador Externo e Estagiário
       const atendimento = rows.filter(c =>
+        !CARGOS_BLOQUEADOS_ATENDIMENTO.includes(c.cargo.toLowerCase())
       );
       res.json({ captacao, atendimento });
     } catch (err) {
@@ -703,28 +662,7 @@ async function startServer() {
     }
   });
 
-  // GET /api/colaboradores/para-empresa — retorna listas separadas para os selects do formulário de empresa
-  app.get("/api/colaboradores/para-empresa", requireJwt, async (_req: Request, res: Response) => {
-    try {
-      const { rows } = await pool.query(
-        "SELECT id, nome, cargo FROM colaboradores WHERE ativo = true ORDER BY nome"
-      );
-      // Responsáveis pela captação: qualquer cargo exceto Analista de Crédito e Estagiário
-      const captacao = rows.filter(c =>
-        !['analista de crédito', 'analista de credito', 'estagiário', 'estagiario'].includes(c.cargo.toLowerCase())
-      );
-      // Responsáveis pelo atendimento: qualquer cargo exceto Captador Externo e Estagiário
-      const atendimento = rows.filter(c =>
-        !CARGOS_BLOQUEADOS_ATENDIMENTO.includes(c.cargo.toLowerCase())
-      );
-      res.json({ captacao, atendimento });
-    } catch (err) {
-      console.error("[COLAB PARA-EMPRESA ERROR]", err);
-      res.status(500).json({ error: "Erro ao buscar colaboradores." });
-    }
-  });
-
-  // ─── n8n WEBHOOK CONFIG API ─────────────────────────────────────────────────────────────────────────
+  // ─── n8n WEBHOOK CONFIG API ───────────────────────────────────────────────
   app.get("/api/n8n/status", requireJwtOrAdmin, (_req: Request, res: Response) => {
     res.json({
       configured: !!process.env.N8N_WEBHOOK_URL,
@@ -745,7 +683,7 @@ async function startServer() {
     res.json({ success: ok, message: ok ? "Webhook enviado com sucesso!" : "Falha ao enviar webhook. Verifique a URL." });
   });
 
-  // ─── GET /api/me — Obter dados do usuário logado ───────────────────────────
+  // ─── GET /api/me ──────────────────────────────────────────────────────────
   app.get("/api/me", requireJwt, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
@@ -758,7 +696,6 @@ async function startServer() {
         res.status(404).json({ error: "Usuário não encontrado" });
         return;
       }
-      // Adicionar flags de permissão derivadas do cargo
       const cargoLower = (user.cargo || '').toLowerCase();
       res.json({
         ...user,
@@ -776,7 +713,7 @@ async function startServer() {
     }
   });
 
-  // ─── POST /api/simulacoes — Salvar simulação do colaborador ────────────────
+  // ─── POST /api/simulacoes ─────────────────────────────────────────────────
   app.post("/api/simulacoes", requireJwt, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
@@ -845,12 +782,10 @@ async function startServer() {
     }
   });
 
-  // ─── GET /api/simulacoes — Listar simulações do colaborador ────────────────
+  // ─── GET /api/simulacoes ──────────────────────────────────────────────────
   app.get("/api/simulacoes", requireJwt, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      // Ownership: gestor/admin vê todas; colaborador comum vê apenas as suas
-      // Campo `cargo` confirmado no banco real (colaboradores.cargo, NOT NULL)
       const isGestor = isGestorCargo(colaborador?.cargo || '');
       const query = isGestor
         ? `SELECT * FROM simulacoes_colaborador ORDER BY criado_em DESC`
@@ -864,14 +799,12 @@ async function startServer() {
     }
   });
 
-  // ─── PATCH /api/simulacoes/:id — Atualizar simulação ──────────────────────
+  // ─── PATCH /api/simulacoes/:id ────────────────────────────────────────────
   app.patch("/api/simulacoes/:id", requireJwt, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { status } = req.body;
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      
-      // Verificar se a simulação pertence ao colaborador
       const checkResult = await pool.query(
         "SELECT id FROM simulacoes_colaborador WHERE id = $1 AND colaborador_id = $2",
         [id, colaborador.id]
@@ -880,7 +813,6 @@ async function startServer() {
         res.status(403).json({ error: "Acesso negado" });
         return;
       }
-      
       await pool.query(
         "UPDATE simulacoes_colaborador SET status = $1, atualizado_em = NOW() WHERE id = $2",
         [status, id]
@@ -892,13 +824,11 @@ async function startServer() {
     }
   });
 
-  // ─── DELETE /api/simulacoes/:id — Deletar simulação ───────────────────────
+  // ─── DELETE /api/simulacoes/:id ───────────────────────────────────────────
   app.delete("/api/simulacoes/:id", requireJwt, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      
-      // Verificar se a simulação pertence ao colaborador
       const checkResult = await pool.query(
         "SELECT id FROM simulacoes_colaborador WHERE id = $1 AND colaborador_id = $2",
         [id, colaborador.id]
@@ -907,7 +837,6 @@ async function startServer() {
         res.status(403).json({ error: "Acesso negado" });
         return;
       }
-      
       await pool.query("DELETE FROM simulacoes_colaborador WHERE id = $1", [id]);
       res.json({ success: true });
     } catch (err) {
@@ -916,7 +845,7 @@ async function startServer() {
     }
   });
 
-  // ─── DELETE /api/leads/:id — Deletar lead ────────────────────────────────
+  // ─── DELETE /api/leads/:id ────────────────────────────────────────────────
   app.delete("/api/leads/:id", requireJwt, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
@@ -928,12 +857,11 @@ async function startServer() {
     }
   });
 
-   // ─── POST /api/crm/atividades — Criar atividade ──────────────────────
+  // ─── POST /api/crm/atividades ─────────────────────────────────────────────
   app.post("/api/crm/atividades", requireJwt, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const { lead_id, tipo, titulo, descricao, resultado, origem_ia } = req.body;
-      // titulo é obrigatório no schema CRM; usa descricao como fallback para compatibilidade
       const tituloFinal = titulo || descricao || tipo || 'Atividade';
       const now = new Date().toISOString();
       const result = await pool.query(
@@ -948,19 +876,17 @@ async function startServer() {
     }
   });
 
-  // ─── GET /api/crm/atividades — Listar atividades ──────────────────────────
+  // ─── GET /api/crm/atividades ──────────────────────────────────────────────
   app.get("/api/crm/atividades", requireJwt, async (req: Request, res: Response) => {
     try {
       const { lead_id } = req.query;
       let query = "SELECT * FROM crm_atividades";
       const params: any[] = [];
-      
       if (lead_id) {
         query += " WHERE lead_id = $1";
         params.push(lead_id);
       }
       query += " ORDER BY created_at DESC LIMIT 100";
-      
       const result = await pool.query(query, params);
       res.json(result.rows);
     } catch (err) {
@@ -969,7 +895,7 @@ async function startServer() {
     }
   });
 
-  // ─── POST /api/crm/documentos — Criar documento ──────────────────────
+  // ─── POST /api/crm/documentos ─────────────────────────────────────────────
   app.post("/api/crm/documentos", requireJwt, async (req: Request, res: Response) => {
     try {
       const { lead_id, nome, tipo, status, obrigatorio, observacao, url_arquivo } = req.body;
@@ -995,19 +921,17 @@ async function startServer() {
     }
   });
 
-  // ─── GET /api/crm/documentos — Listar documentos ──────────────────────────
+  // ─── GET /api/crm/documentos ──────────────────────────────────────────────
   app.get("/api/crm/documentos", requireJwt, async (req: Request, res: Response) => {
     try {
       const { lead_id } = req.query;
       let query = "SELECT * FROM crm_documentos";
       const params: any[] = [];
-      
       if (lead_id) {
         query += " WHERE lead_id = $1";
         params.push(lead_id);
       }
       query += " ORDER BY created_at DESC";
-      
       const result = await pool.query(query, params);
       res.json(result.rows);
     } catch (err) {
@@ -1016,7 +940,7 @@ async function startServer() {
     }
   });
 
-  // ─── PATCH /api/crm/documentos/:id — Atualizar documento ─────────────────
+  // ─── PATCH /api/crm/documentos/:id ───────────────────────────────────────
   app.patch("/api/crm/documentos/:id", requireJwt, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
@@ -1035,31 +959,24 @@ async function startServer() {
     }
   });
 
-  // ─── POST /api/crm/qualificacoes — Criar qualificação IA ──────────────────
+  // ─── POST /api/crm/qualificacoes ──────────────────────────────────────────
   app.post("/api/crm/qualificacoes", requireJwt, async (req: Request, res: Response) => {
     try {
       const { lead_id, score, temperatura, etapa_sugerida, resumo, proxima_acao,
               pontos_positivos, pontos_atencao, documentos_faltando, probabilidade_conv,
               recomendacao, analise } = req.body;
       const now = new Date().toISOString();
-      // Suporta tanto o schema novo (schema_crm.sql) quanto o legado
       const result = await pool.query(
         `INSERT INTO crm_qualificacoes_ia
           (lead_id, score, temperatura, etapa_sugerida, resumo, proxima_acao,
            pontos_positivos, pontos_atencao, documentos_faltando, probabilidade_conv, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
         [
-          lead_id,
-          score || 0,
-          temperatura || 'frio',
+          lead_id, score || 0, temperatura || 'frio',
           etapa_sugerida || recomendacao || 'novo',
-          resumo || analise || '',
-          proxima_acao || null,
-          pontos_positivos || [],
-          pontos_atencao || [],
-          documentos_faltando || [],
-          probabilidade_conv || null,
-          now,
+          resumo || analise || '', proxima_acao || null,
+          pontos_positivos || [], pontos_atencao || [],
+          documentos_faltando || [], probabilidade_conv || null, now,
         ]
       );
       res.json(result.rows[0]);
@@ -1069,19 +986,14 @@ async function startServer() {
     }
   });
 
-  // ─── GET /api/crm/qualificacoes — Listar qualificações ────────────────────
+  // ─── GET /api/crm/qualificacoes ───────────────────────────────────────────
   app.get("/api/crm/qualificacoes", requireJwt, async (req: Request, res: Response) => {
     try {
       const { lead_id } = req.query;
       let query = "SELECT * FROM crm_qualificacoes_ia";
       const params: any[] = [];
-      
-      if (lead_id) {
-        query += " WHERE lead_id = $1";
-        params.push(lead_id);
-      }
+      if (lead_id) { query += " WHERE lead_id = $1"; params.push(lead_id); }
       query += " ORDER BY created_at DESC LIMIT 10";
-      
       const result = await pool.query(query, params);
       res.json(result.rows);
     } catch (err) {
@@ -1090,7 +1002,7 @@ async function startServer() {
     }
   });
 
-  // ─── POST /api/crm/mover-funil — Mover lead no funil ──────────────────────
+  // ─── POST /api/crm/mover-funil ────────────────────────────────────────────
   app.post("/api/crm/mover-funil", requireJwt, async (req: Request, res: Response) => {
     try {
       const { lead_id, etapa_funil } = req.body;
@@ -1105,11 +1017,9 @@ async function startServer() {
     }
   });
 
-  // ─── GET /api/crm/pipeline — Obter leads completos para o kanban (usa view) ────
+  // ─── GET /api/crm/pipeline ────────────────────────────────────────────────
   app.get("/api/crm/pipeline", requireJwt, async (_req: Request, res: Response) => {
     try {
-      // Tenta usar a view vw_crm_pipeline (schema CRM completo)
-      // Fallback para tabela leads simples se a view não existir
       let result;
       try {
         result = await pool.query(`SELECT * FROM vw_crm_pipeline ORDER BY created_at DESC LIMIT 500`);
@@ -1123,7 +1033,7 @@ async function startServer() {
     }
   });
 
-  // ─── GET /api/crm/pipeline/metricas — Métricas agrupadas por etapa ──────────
+  // ─── GET /api/crm/pipeline/metricas ──────────────────────────────────────
   app.get("/api/crm/pipeline/metricas", requireJwt, async (_req: Request, res: Response) => {
     try {
       const result = await pool.query(
@@ -1138,7 +1048,7 @@ async function startServer() {
     }
   });
 
-  // ─── PATCH /api/colaboradores/:id/toggle — Ativar/desativar colaborador ───
+  // ─── PATCH /api/colaboradores/:id/toggle ──────────────────────────────────
   app.patch("/api/colaboradores/:id/toggle", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
@@ -1153,7 +1063,7 @@ async function startServer() {
     }
   });
 
-  // ─── POST /api/admin/sql — Executar SQL (admin) ────────────────────────────
+  // ─── POST /api/admin/sql ──────────────────────────────────────────────────
   app.post("/api/admin/sql", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { query } = req.body;
@@ -1169,8 +1079,7 @@ async function startServer() {
     }
   });
 
-  // ─── POST /api/leads/:id/solicitar-pdf — Solicitar PDF por e-mail via n8n ────
-  // Delega o envio ao n8n (que usa SMTP/Gmail configurado no workflow)
+  // ─── POST /api/leads/:id/solicitar-pdf ───────────────────────────────────
   app.post("/api/leads/:id/solicitar-pdf", async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
@@ -1191,7 +1100,6 @@ async function startServer() {
       if (ok) {
         res.json({ success: true, message: "Solicitação de PDF enviada! Você receberá por e-mail em breve." });
       } else {
-        // n8n não configurado ou falhou — informa sem quebrar o fluxo
         res.json({ success: false, message: "Envio por e-mail indisponível no momento. Use o botão de download direto." });
       }
     } catch (err) {
@@ -1200,8 +1108,7 @@ async function startServer() {
     }
   });
 
-  // ─── PATCH /api/leads/:id/ia — Atualizar campos de IA no lead ─────────────
-  // Rota dedicada para o copiloto IA atualizar score, probabilidades e recomendações
+  // ─── PATCH /api/leads/:id/ia ──────────────────────────────────────────────
   app.patch("/api/leads/:id/ia", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
@@ -1211,7 +1118,6 @@ async function startServer() {
         analise_credito_ia, resumo_ia, observacoes_ia, temperatura,
       } = req.body;
 
-      // Monta apenas os campos enviados (partial update seguro)
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (score_ia !== undefined)                updates.score_ia = score_ia;
       if (probabilidade_aprovacao !== undefined) updates.probabilidade_aprovacao = probabilidade_aprovacao;
@@ -1246,14 +1152,13 @@ async function startServer() {
     }
   });
 
-  // ─── GET /api/leads/para-ia — Leads que precisam de qualificação IA ─────────
+  // ─── GET /api/leads/para-ia ───────────────────────────────────────────────
   app.get("/api/leads/para-ia", requireJwtOrAdmin, async (_req: Request, res: Response) => {
     try {
       let result;
       try {
         result = await pool.query(`SELECT * FROM vw_leads_para_ia WHERE precisa_score = TRUE ORDER BY created_at DESC LIMIT 50`);
       } catch {
-        // Fallback se a view ainda não foi criada no banco
         result = await pool.query(
           `SELECT id, nome, telefone, email, empresa, tipo_pessoa, produto_interesse,
                   valor_solicitado, prazo_meses, origem, etapa_funil, temperatura,
@@ -1271,19 +1176,15 @@ async function startServer() {
     }
   });
 
-  // ─── EMPRESAS API ──────────────────────────────────────────────────────────────────────────────────────────────────── // GET /api/empresas — Listar empresas com busca e filtros
+  // ─── EMPRESAS API ─────────────────────────────────────────────────────────
   app.get("/api/empresas", requireJwt, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      // Ownership: gestor/admin vê todas; colaborador comum vê apenas as suas
-      // Campo `cargo` confirmado no banco real (colaboradores.cargo, NOT NULL)
-      // Campo `responsavel_id` confirmado na tabela empresas (owner: destravadb)
       const isGestor = isGestorCargo(colaborador?.cargo || '');
       const busca = req.query.busca as string | undefined;
       const status = req.query.status as string | undefined;
       const params: any[] = [];
       const conditions: string[] = [];
-      // Ownership: colaborador comum vê apenas empresas onde é responsável OU analista vinculado
       if (!isGestor && colaborador?.id) {
         params.push(colaborador.id);
         conditions.push(`(responsavel_id = $${params.length} OR analista_id = $${params.length})`);
@@ -1316,7 +1217,6 @@ async function startServer() {
     }
   });
 
-  // GET /api/empresas/:id — Buscar empresa por ID
   app.get("/api/empresas/:id", requireJwt, async (req: Request, res: Response) => {
     try {
       const { rows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [req.params.id]);
@@ -1328,7 +1228,6 @@ async function startServer() {
     }
   });
 
-  // POST /api/empresas — Criar empresa
   app.post("/api/empresas", requireJwt, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
@@ -1375,12 +1274,10 @@ async function startServer() {
     }
   });
 
-  // PATCH /api/empresas/:id — Atualizar empresa
   app.patch("/api/empresas/:id", requireJwt, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const updates = { ...req.body, updated_at: new Date().toISOString() };
-      // Remove campos que não existem na tabela
       delete updates.id;
       const keys = Object.keys(updates);
       const values = Object.values(updates);
@@ -1397,7 +1294,6 @@ async function startServer() {
     }
   });
 
-  // DELETE /api/empresas/:id — Excluir empresa
   app.delete("/api/empresas/:id", requireJwt, async (req: Request, res: Response) => {
     try {
       await pool.query("DELETE FROM empresas WHERE id = $1", [req.params.id]);
@@ -1406,9 +1302,9 @@ async function startServer() {
       console.error("[DELETE /api/empresas/:id]", err);
       res.status(500).json({ error: "Erro ao excluir empresa" });
     }
-  });  // ─── TRIAGEM API ─────────────────────────────────────────────────────────────────────────────────
+  });
 
-  // GET /api/triagem — Listar fila de triagem com filtros
+  // ─── TRIAGEM API ──────────────────────────────────────────────────────────
   app.get("/api/triagem", requireJwt, async (req: Request, res: Response) => {
     try {
       const status = req.query.status as string | undefined;
@@ -1434,7 +1330,6 @@ async function startServer() {
     }
   });
 
-  // GET /api/triagem/stats — Contadores por status
   app.get("/api/triagem/stats", requireJwt, async (_req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
@@ -1449,7 +1344,6 @@ async function startServer() {
     }
   });
 
-  // PATCH /api/triagem/:id — Atualizar status/classificação de um item da triagem
   app.patch("/api/triagem/:id", requireJwt, async (req: Request, res: Response) => {
     try {
       const { status, classificacao, observacoes, responsavel_id } = req.body;
@@ -1469,7 +1363,6 @@ async function startServer() {
     }
   });
 
-  // POST /api/triagem/:id/converter — Converter item da triagem em lead real no CRM
   app.post("/api/triagem/:id/converter", requireJwt, async (req: Request, res: Response) => {
     try {
       const { rows: tRows } = await pool.query(
@@ -1504,7 +1397,6 @@ async function startServer() {
     }
   });
 
-  // DELETE /api/triagem/:id — Descartar item da triagem
   app.delete("/api/triagem/:id", requireJwt, async (req: Request, res: Response) => {
     try {
       await pool.query(
@@ -1517,9 +1409,7 @@ async function startServer() {
     }
   });
 
-  // ─── Empresas: Followup, Histórico, Documentos ──────────────────────────────
-
-  // GET /api/empresas/:id/followups
+  // ─── Empresas: Followup, Histórico, Documentos ───────────────────────────
   app.get("/api/empresas/:id/followups", requireJwt, async (req: Request, res: Response) => {
     try {
       const r = await pool.query(
@@ -1530,7 +1420,6 @@ async function startServer() {
     } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
   });
 
-  // POST /api/empresas/:id/followups
   app.post("/api/empresas/:id/followups", requireJwt, async (req: Request, res: Response) => {
     const { titulo, tipo = "ligacao", data_agendada, descricao } = req.body;
     try {
@@ -1543,7 +1432,6 @@ async function startServer() {
     } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
   });
 
-  // PATCH /api/empresas/:id/followups/:fid/concluir
   app.patch("/api/empresas/:id/followups/:fid/concluir", requireJwt, async (req: Request, res: Response) => {
     try {
       await pool.query(
@@ -1554,7 +1442,6 @@ async function startServer() {
     } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
   });
 
-  // GET /api/empresas/:id/historico
   app.get("/api/empresas/:id/historico", requireJwt, async (req: Request, res: Response) => {
     try {
       const r = await pool.query(
@@ -1565,7 +1452,6 @@ async function startServer() {
     } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
   });
 
-  // POST /api/empresas/:id/historico
   app.post("/api/empresas/:id/historico", requireJwt, async (req: Request, res: Response) => {
     const { tipo = "nota", descricao } = req.body;
     const colab = (req as any).colaborador;
@@ -1579,7 +1465,6 @@ async function startServer() {
     } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
   });
 
-  // GET /api/empresas/:id/documentos
   app.get("/api/empresas/:id/documentos", requireJwt, async (req: Request, res: Response) => {
     try {
       const r = await pool.query(
@@ -1590,21 +1475,17 @@ async function startServer() {
     } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
   });
 
-  // POST /api/empresas/:id/documentos (upload multipart)
   app.post("/api/empresas/:id/documentos", requireJwt, async (req: Request, res: Response) => {
     try {
-      // Salva metadados (arquivo real pode ser salvo em DATA_DIR)
       const dataDir = process.env.DATA_DIR || "/data";
       const uploadDir = path.join(dataDir, "uploads", "empresas", req.params.id);
       await fs.promises.mkdir(uploadDir, { recursive: true });
 
-      // Lê o body como buffer raw (multipart simples)
       const chunks: Buffer[] = [];
       req.on("data", (chunk: Buffer) => chunks.push(chunk));
       await new Promise(r => req.on("end", r));
       const buf = Buffer.concat(chunks);
 
-      // Extrai nome do arquivo do Content-Disposition ou gera um
       const contentDisp = req.headers["content-disposition"] || "";
       const match = contentDisp.match(/filename="?([^"\n]+)"?/);
       const nomeArq = match?.[1] || `doc_${Date.now()}`;
@@ -1620,9 +1501,7 @@ async function startServer() {
     } catch (err) { console.error(err); res.status(500).json({ error: "Erro ao salvar documento" }); }
   });
 
-  // ─── Triagem: Qualificação por IA ─────────────────────────────────────────
-
-  // POST /api/triagem/:id/qualificar-ia — Qualifica o lead com GPT
+  // ─── Triagem: Qualificação por IA ────────────────────────────────────────
   app.post("/api/triagem/:id/qualificar-ia", requireJwt, async (req: Request, res: Response) => {
     try {
       const r = await pool.query("SELECT * FROM triagem_leads WHERE id=$1", [req.params.id]);
@@ -1665,7 +1544,6 @@ Responda APENAS com um JSON válido no seguinte formato:
 
       const analise = JSON.parse(completion.choices[0].message.content || "{}");
 
-      // Atualiza o status na triagem com base na classificação da IA
       const novoStatus = analise.classificacao === "possivel_cliente" ? "possivel_cliente"
         : analise.classificacao === "curioso" ? "curioso"
         : analise.classificacao === "sem_perfil" ? "sem_perfil"
@@ -1683,20 +1561,15 @@ Responda APENAS com um JSON válido no seguinte formato:
     }
   });
 
-  // ─── POST /api/webhook/chatwoot — Inbound do Chatwoot via n8n ───────────────
-  // Recebe eventos do Chatwoot (via n8n como proxy) e persiste conversas/mensagens.
-  // Autenticado por admin-key (n8n usa x-admin-key no header).
+  // ─── POST /api/webhook/chatwoot ───────────────────────────────────────────
   app.post("/api/webhook/chatwoot", requireAdmin, async (req: Request, res: Response) => {
     const { event_id, tipo_evento, origem = 'chatwoot', payload } = req.body;
 
-    // Responde imediatamente para não bloquear o n8n
     res.json({ received: true });
 
-    // Processamento assíncrono
     setImmediate(async () => {
       let eventoDbId: string | null = null;
       try {
-        // 1. Idempotência: ignorar evento já processado
         if (event_id) {
           const existe = await pool.query(
             `SELECT id, status_processamento FROM crm_eventos_webhook WHERE event_id = $1 LIMIT 1`,
@@ -1708,8 +1581,6 @@ Responda APENAS com um JSON válido no seguinte formato:
           }
         }
 
-        // 2. Gravar evento bruto
-        // Colunas confirmadas no banco real: event_id, origem, tipo_evento, payload, status_processamento, erro_detalhe, processado_em, created_at
         const evRes = await pool.query(
           `INSERT INTO crm_eventos_webhook (event_id, origem, tipo_evento, payload, status_processamento)
            VALUES ($1, $2, $3, $4, 'pendente')
@@ -1719,7 +1590,6 @@ Responda APENAS com um JSON válido no seguinte formato:
         );
         eventoDbId = evRes.rows[0]?.id || null;
 
-        // 3. Extrair dados canônicos do payload
         const chatwootConvId = payload?.conversation?.id?.toString()
           || payload?.id?.toString()
           || null;
@@ -1748,8 +1618,6 @@ Responda APENAS com um JSON válido no seguinte formato:
           return;
         }
 
-        // 3.5. Verificar se o telefone pertence a um COLABORADOR (captador, analista ou qualquer cargo)
-        // Colaboradores com telefone cadastrado NÃO geram leads nem análise de IA — apenas gravam conversa/mensagem.
         if (telefone) {
           const cleanPhoneColab = telefone.replace(/\D/g, '');
           const colaboradorCheck = await pool.query(
@@ -1765,7 +1633,6 @@ Responda APENAS com um JSON válido no seguinte formato:
             const colabNome = colaboradorCheck.rows[0].nome;
             const colabCargo = colaboradorCheck.rows[0].cargo;
             console.log(`[WEBHOOK] Telefone ${cleanPhoneColab} pertence ao colaborador "${colabNome}" (${colabCargo}) — apenas gravando conversa, sem criar lead.`);
-            // Upsert da conversa canônica sem lead_id
             const convResColab = await pool.query(
               `INSERT INTO crm_conversas (lead_id, canal, canal_id_externo, status)
                VALUES (NULL, 'whatsapp', $1, 'aberta')
@@ -1776,7 +1643,6 @@ Responda APENAS com um JSON válido no seguinte formato:
               [chatwootConvId]
             );
             const conversaIdColab = convResColab.rows[0].id;
-            // Gravar mensagem se houver conteúdo
             if (conteudo || tipo_evento === 'message_created') {
               const tipoConteudoColab = payload?.message?.content_type || 'text';
               await pool.query(
@@ -1795,7 +1661,6 @@ Responda APENAS com um JSON válido no seguinte formato:
           }
         }
 
-        // 4. Matching de lead por telefone ou chatwoot_contact_id
         let leadId: string | null = null;
         if (chatwootContactId) {
           const r = await pool.query(
@@ -1813,7 +1678,6 @@ Responda APENAS com um JSON válido no seguinte formato:
           if (r.rows.length > 0) leadId = r.rows[0].id;
         }
         if (!leadId && nomeContato && telefone) {
-          // Criar lead automaticamente se não existir
           const cleanPhone = telefone.replace(/\D/g, '');
           const r = await pool.query(
             `INSERT INTO leads (nome, telefone, origem, status, etapa_funil, temperatura, canal_origem, chatwoot_conv_id)
@@ -1825,8 +1689,6 @@ Responda APENAS com um JSON válido no seguinte formato:
           console.log(`[WEBHOOK] Lead criado automaticamente: ${leadId}`);
         }
 
-        // 5. Upsert da conversa canônica
-        // UNIQUE confirmada no banco real: crm_conversas_canal_id_externo_key (canal_id_externo)
         const convRes = await pool.query(
           `INSERT INTO crm_conversas (lead_id, canal, canal_id_externo, status)
            VALUES ($1, 'whatsapp', $2, 'aberta')
@@ -1839,8 +1701,6 @@ Responda APENAS com um JSON válido no seguinte formato:
         );
         const conversaId = convRes.rows[0].id;
 
-        // 6. Persistir mensagem (com deduplicação por message_id_externo)
-        // tipo_conteudo é NOT NULL no banco real — padrão 'text' quando não informado
         if (conteudo || tipo_evento === 'message_created') {
           const tipoConteudo = payload?.message?.content_type || 'text';
           await pool.query(
@@ -1851,7 +1711,6 @@ Responda APENAS com um JSON válido no seguinte formato:
           );
         }
 
-        // 7. Atualizar status da conversa se evento for de fechamento
         if (tipo_evento === 'conversation_resolved' || tipo_evento === 'conversation_status_changed') {
           const novoStatus = payload?.conversation?.status === 'resolved' ? 'resolvida' : 'aberta';
           await pool.query(
@@ -1860,7 +1719,6 @@ Responda APENAS com um JSON válido no seguinte formato:
           );
         }
 
-        // 8. Marcar evento como processado
         await pool.query(
           `UPDATE crm_eventos_webhook SET status_processamento='processado', processado_em=NOW() WHERE id=$1`,
           [eventoDbId]
@@ -1880,7 +1738,7 @@ Responda APENAS com um JSON válido no seguinte formato:
     });
   });
 
-  // ─── GET /api/crm/conversas — Listar conversas com filtro de ownership ────────
+  // ─── GET /api/crm/conversas ───────────────────────────────────────────────
   app.get("/api/crm/conversas", requireJwt, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
@@ -1890,7 +1748,6 @@ Responda APENAS com um JSON válido no seguinte formato:
       const conditions: string[] = [];
 
       if (!isAdmin) {
-        // Colaborador vê apenas conversas de leads que são seus
         params.push(colaborador.id);
         conditions.push(`c.lead_id IN (SELECT id FROM leads WHERE responsavel_id = $${params.length})`);
       }
@@ -1913,7 +1770,7 @@ Responda APENAS com um JSON válido no seguinte formato:
     }
   });
 
-  // ─── GET /api/crm/conversas/:id/mensagens — Mensagens de uma conversa ────────
+  // ─── GET /api/crm/conversas/:id/mensagens ────────────────────────────────
   app.get("/api/crm/conversas/:id/mensagens", requireJwt, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
@@ -1928,13 +1785,10 @@ Responda APENAS com um JSON válido no seguinte formato:
     }
   });
 
-  // ─── GET /api/leads — com filtro de ownership por perfil ─────────────────────
-  // NOTA: Esta rota já existe acima. O filtro de ownership é aplicado abaixo
-  // via patch cirúrgico na rota existente. Ver comentário na rota original.
-
-  // ─── Static files ──────────────────────────────────────────────────────────────────────────────────
-  const staticPath = process.env.NODE_ENV === "production"     ? path.resolve(__dirname, "public")
-      : path.resolve(__dirname, "..", "dist", "public");
+  // ─── Static files ─────────────────────────────────────────────────────────
+  const staticPath = process.env.NODE_ENV === "production"
+    ? path.resolve(__dirname, "public")
+    : path.resolve(__dirname, "..", "dist", "public");
 
   app.use(express.static(staticPath));
 
