@@ -172,6 +172,157 @@ function podecriarUsuarios(cargo: string): boolean {
   return CARGOS_PODEM_CRIAR_USUARIOS.includes((cargo || '').toLowerCase());
 }
 
+// ─── Cargos com escopo de gerente (vê equipe, não vê tudo) ───────────────────
+const CARGOS_GERENTE = ['gerente comercial'];
+function isGerenteCargo(cargo: string): boolean {
+  return CARGOS_GERENTE.includes((cargo || '').toLowerCase());
+}
+
+// ─── Helper: buildLeadScope ──────────────────────────────────────────────────
+// Retorna { conditions: string[], params: any[] } com os filtros de escopo
+// de visibilidade para a tabela `leads` (ou alias fornecido).
+//
+// Regras:
+//   ADMINISTRADOR / DIRETOR / ADMIN: vê tudo → sem filtro adicional
+//   GERENTE COMERCIAL: vê leads onde responsavel_id IN (equipe do gerente)
+//     A equipe é resolvida em runtime via subquery (colaboradores com gerente_id = id do gerente)
+//   CONSULTOR / ANALISTA / CAPTADOR / ESTAGIÁRIO:
+//     vê leads onde responsavel_id = próprio id
+//     OU caixa_atual = próprio id (fallback por caixa)
+//
+// @param colaborador  Payload do JWT ({ id, cargo, ... })
+// @param tableAlias   Alias da tabela leads na query (default: '')
+// @param paramOffset  Número de parâmetros já existentes na query (default: 0)
+function buildLeadScope(
+  colaborador: { id: string; cargo: string } | null | undefined,
+  tableAlias: string = '',
+  paramOffset: number = 0
+): { conditions: string[]; params: any[] } {
+  const conditions: string[] = [];
+  const params: any[] = [];
+
+  if (!colaborador?.id) {
+    // Sem colaborador autenticado: bloqueia tudo
+    conditions.push('FALSE');
+    return { conditions, params };
+  }
+
+  const cargo = (colaborador.cargo || '').toLowerCase();
+  const prefix = tableAlias ? `${tableAlias}.` : '';
+
+  // Administrador, Diretor e Admin: vê tudo
+  if (['administrador', 'admin', 'diretor'].includes(cargo)) {
+    return { conditions: [], params: [] };
+  }
+
+  // Gerente Comercial: vê leads da própria equipe
+  if (isGerenteCargo(cargo)) {
+    params.push(colaborador.id);
+    const p = paramOffset + params.length;
+    conditions.push(
+      `${prefix}responsavel_id IN (
+        SELECT id FROM public.colaboradores
+        WHERE id = $${p}::uuid OR gerente_id = $${p}::uuid
+      )`
+    );
+    return { conditions, params };
+  }
+
+  // Consultor, Analista, Captador, Estagiário: vê apenas carteira própria
+  params.push(colaborador.id);
+  const p = paramOffset + params.length;
+  conditions.push(
+    `(${prefix}responsavel_id = $${p}::uuid OR ${prefix}caixa_atual = $${p}::text)`
+  );
+  return { conditions, params };
+}
+
+// ─── Helper: buildEmpresaScope ───────────────────────────────────────────────
+// Mesmo padrão mas para a tabela `empresas`.
+function buildEmpresaScope(
+  colaborador: { id: string; cargo: string } | null | undefined,
+  tableAlias: string = 'e',
+  paramOffset: number = 0
+): { conditions: string[]; params: any[] } {
+  const conditions: string[] = [];
+  const params: any[] = [];
+
+  if (!colaborador?.id) {
+    conditions.push('FALSE');
+    return { conditions, params };
+  }
+
+  const cargo = (colaborador.cargo || '').toLowerCase();
+  const prefix = tableAlias ? `${tableAlias}.` : '';
+
+  if (['administrador', 'admin', 'diretor'].includes(cargo)) {
+    return { conditions: [], params: [] };
+  }
+
+  if (isGerenteCargo(cargo)) {
+    params.push(colaborador.id);
+    const p = paramOffset + params.length;
+    conditions.push(
+      `${prefix}responsavel_id IN (
+        SELECT id FROM public.colaboradores
+        WHERE id = $${p}::uuid OR gerente_id = $${p}::uuid
+      )`
+    );
+    return { conditions, params };
+  }
+
+  // Consultor: vê empresas onde é responsável, analista ou captador
+  params.push(colaborador.id);
+  const p = paramOffset + params.length;
+  conditions.push(
+    `(${prefix}responsavel_id = $${p}::uuid OR ${prefix}analista_id = $${p}::uuid OR ${prefix}captador_id = $${p}::uuid)`
+  );
+  return { conditions, params };
+}
+
+// ─── Helper: buildTriagemScope ───────────────────────────────────────────────
+// Filtro de escopo para triagem_leads.
+function buildTriagemScope(
+  colaborador: { id: string; cargo: string } | null | undefined,
+  tableAlias: string = '',
+  paramOffset: number = 0
+): { conditions: string[]; params: any[] } {
+  const conditions: string[] = [];
+  const params: any[] = [];
+
+  if (!colaborador?.id) {
+    conditions.push('FALSE');
+    return { conditions, params };
+  }
+
+  const cargo = (colaborador.cargo || '').toLowerCase();
+  const prefix = tableAlias ? `${tableAlias}.` : '';
+
+  if (['administrador', 'admin', 'diretor'].includes(cargo)) {
+    return { conditions: [], params: [] };
+  }
+
+  if (isGerenteCargo(cargo)) {
+    params.push(colaborador.id);
+    const p = paramOffset + params.length;
+    conditions.push(
+      `(${prefix}responsavel_id IN (
+        SELECT id FROM public.colaboradores
+        WHERE id = $${p}::uuid OR gerente_id = $${p}::uuid
+      ) OR ${prefix}responsavel_id IS NULL)`
+    );
+    return { conditions, params };
+  }
+
+  // Consultor: vê triagem atribuída a si ou sem responsável
+  params.push(colaborador.id);
+  const p = paramOffset + params.length;
+  conditions.push(
+    `(${prefix}responsavel_id = $${p}::uuid OR ${prefix}responsavel_id IS NULL)`
+  );
+  return { conditions, params };
+}
+
 // ─── App ─────────────────────────────────────────────────────────────────────
 async function startServer() {
   const app = express();
@@ -455,16 +606,16 @@ async function startServer() {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const isAdminKey = !req.headers.authorization && req.headers["x-admin-key"];
-      const isGestor = isAdminKey || isGestorCargo(colaborador?.cargo || '');
       const status = req.query.status as string | undefined;
       const busca = req.query.busca as string | undefined;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
-      const params: any[] = [];
-      const conditions: string[] = [];
-      if (!isGestor && colaborador?.id) {
-        params.push(colaborador.id);
-        conditions.push(`responsavel_id = $${params.length}`);
-      }
+
+      // Escopo de visibilidade por perfil
+      const scopeColaborador = isAdminKey ? { id: 'admin', cargo: 'administrador' } : colaborador;
+      const scope = buildLeadScope(scopeColaborador);
+      const params: any[] = [...scope.params];
+      const conditions: string[] = [...scope.conditions];
+
       if (status) { params.push(status); conditions.push(`status = $${params.length}`); }
       if (busca && busca.trim()) {
         const term = `%${busca.trim()}%`;
@@ -1218,13 +1369,24 @@ async function startServer() {
   });
 
   // ─── GET /api/crm/pipeline ────────────────────────────────────────────────
-  app.get("/api/crm/pipeline", requireJwt, async (_req: Request, res: Response) => {
+  app.get("/api/crm/pipeline", requireJwt, async (req: Request, res: Response) => {
     try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const scope = buildLeadScope(colaborador);
+      const params: any[] = [...scope.params];
+      const conditions: string[] = [...scope.conditions];
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
       let result;
       try {
-        result = await pool.query(`SELECT * FROM vw_crm_pipeline ORDER BY created_at DESC LIMIT 500`);
+        result = await pool.query(
+          `SELECT * FROM vw_crm_pipeline ${where} ORDER BY created_at DESC LIMIT 500`,
+          params
+        );
       } catch {
-        result = await pool.query(`SELECT * FROM leads ORDER BY created_at DESC LIMIT 500`);
+        result = await pool.query(
+          `SELECT * FROM leads ${where} ORDER BY created_at DESC LIMIT 500`,
+          params
+        );
       }
       res.json(result.rows);
     } catch (err) {
