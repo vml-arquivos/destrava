@@ -154,7 +154,7 @@ const ESTADOS_BR = [
   "SP","SE","TO",
 ];
 
-// ─── Componente Secao (FORA do principal para evitar remount ao digitar) ─────────────────────────────────────────────────────────────────────────────────
+// ─── Componente Secao (FORA do principal para evitar remount ao digitar) ──────
 
 function Secao({ id, titulo, icon, children, secaoAberta, setSecaoAberta }: {
   id: string;
@@ -180,15 +180,12 @@ function Secao({ id, titulo, icon, children, secaoAberta, setSecaoAberta }: {
   );
 }
 
-// ─── Componente Principal ─────────────────────────────────────────────────────────────────────────────────
-
 // ─── Função de Score/Risco (fora do componente para estabilidade) ─────────────
 
 function calcularScore(e: Empresa): { score: number; risco: "baixo" | "medio" | "alto" | "critico"; indicadores: string[] } {
   let pontos = 0;
   const indicadores: string[] = [];
 
-  // Faturamento anual
   if (e.faturamento_anual) {
     if (e.faturamento_anual >= 1_000_000) { pontos += 30; indicadores.push("Faturamento acima de R$ 1M"); }
     else if (e.faturamento_anual >= 360_000) { pontos += 20; indicadores.push("Faturamento acima de R$ 360k"); }
@@ -196,7 +193,6 @@ function calcularScore(e: Empresa): { score: number; risco: "baixo" | "medio" | 
     else { pontos -= 5; indicadores.push("Faturamento abaixo de R$ 120k"); }
   } else { indicadores.push("Faturamento não informado"); }
 
-  // Score Serasa
   if (e.score_serasa) {
     if (e.score_serasa >= 700) { pontos += 25; indicadores.push(`Serasa ${e.score_serasa} — Bom`); }
     else if (e.score_serasa >= 500) { pontos += 15; indicadores.push(`Serasa ${e.score_serasa} — Regular`); }
@@ -204,30 +200,25 @@ function calcularScore(e: Empresa): { score: number; risco: "baixo" | "medio" | 
     else { pontos -= 15; indicadores.push(`Serasa ${e.score_serasa} — Crítico`); }
   } else { indicadores.push("Score Serasa não informado"); }
 
-  // Score SPC
   if (e.score_spc) {
     if (e.score_spc >= 700) { pontos += 15; indicadores.push(`SPC ${e.score_spc} — Bom`); }
     else if (e.score_spc >= 400) { pontos += 8; indicadores.push(`SPC ${e.score_spc} — Regular`); }
     else { pontos -= 10; indicadores.push(`SPC ${e.score_spc} — Baixo`); }
   }
 
-  // Porte
   if (e.porte === "grande") { pontos += 10; }
   else if (e.porte === "medio") { pontos += 7; }
   else if (e.porte === "epp") { pontos += 5; }
   else if (e.porte === "me") { pontos += 3; }
 
-  // Limite de crédito existente
   if (e.limite_credito_atual && e.limite_credito_atual > 0) {
     pontos += 10;
     indicadores.push("Possui limite de crédito ativo");
   }
 
-  // Status
   if (e.status === "cliente") { pontos += 10; indicadores.push("Já é cliente ativo"); }
   else if (e.status === "ex_cliente") { pontos -= 5; indicadores.push("Ex-cliente"); }
 
-  // Completude do cadastro
   const campos = [e.cnpj, e.email, e.telefone, e.responsavel_nome, e.cidade];
   const preenchidos = campos.filter(Boolean).length;
   pontos += preenchidos * 2;
@@ -294,14 +285,12 @@ export default function Empresas() {
   const [tagInput, setTagInput] = useState("");
   const [secaoAberta, setSecaoAberta] = useState<string>("basico");
   const [confirmandoExclusao, setConfirmandoExclusao] = useState<string | null>(null);
-  // Listas para os selects no formulário de empresa
   const [captacao, setCaptacao] = useState<{ id: string; nome: string; cargo: string }[]>([]);
   const [atendimento, setAtendimento] = useState<{ id: string; nome: string; cargo: string }[]>([]);
-  // Manter compatibilidade com código legado
   const captadores = captacao;
   const analistas = atendimento;
 
-  // Carregar colaboradores ao montar usando rota especializada
+  // ── CORREÇÃO: fallback sem condições vazias no .filter() ──────────────────
   useEffect(() => {
     apiFetch("/api/colaboradores/para-empresa")
       .then((data: any) => {
@@ -309,20 +298,18 @@ export default function Empresas() {
         setAtendimento(data?.atendimento || []);
       })
       .catch(() => {
-        // Fallback: usar rota geral
+        // Fallback: usar rota geral — todos os ativos ficam disponíveis em ambas as listas
         apiFetch("/api/colaboradores")
           .then((data: any[]) => {
             const ativos = (data || []).filter((c: any) => c.ativo);
-            setCaptacao(ativos.filter((c: any) =>
-            ));
-            setAtendimento(ativos.filter((c: any) =>
-            ));
+            setCaptacao(ativos);
+            setAtendimento(ativos);
           })
           .catch(() => {});
       });
   }, []);
 
-  // ─── Carregar empresas ──────────────────────────────────────────────────────────────────────────────────
+  // ─── Carregar empresas ────────────────────────────────────────────────────
   const carregarEmpresas = useCallback(async () => {
     setLoading(true);
     try {
@@ -342,7 +329,6 @@ export default function Empresas() {
     return () => clearTimeout(t);
   }, [carregarEmpresas]);
 
-  // Carrega followup, histórico e documentos ao selecionar empresa
   useEffect(() => {
     if (!empresaSelecionada) return;
     setAbaAtiva("dados");
@@ -397,7 +383,7 @@ export default function Empresas() {
     } catch { toast.error("Erro ao concluir follow-up."); }
   }
 
-  // ─── Formulário ─────────────────────────────────────────────────────────────
+  // ─── Formulário ───────────────────────────────────────────────────────────
 
   function abrirNova() {
     setEditando(null);
@@ -529,7 +515,7 @@ export default function Empresas() {
     set("tags", (form.tags || []).filter(t => t !== tag));
   }
 
-  // ─── Busca CEP ──────────────────────────────────────────────────────────────
+  // ─── Busca CEP ────────────────────────────────────────────────────────────
 
   async function buscarCEP(cep: string) {
     const n = cep.replace(/\D/g, "");
@@ -545,8 +531,9 @@ export default function Empresas() {
       }
     } catch { /* silencioso */ }
   }
-  // ─── Render ─────────────────────────────────────────────────────────────────────────────────
-  const empresasFiltradas = empresas; // filtro já vem do backend
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+  const empresasFiltradas = empresas;
 
   return (
     <Layout>
@@ -757,20 +744,16 @@ export default function Empresas() {
                           <span className="text-2xl font-black text-gray-900">{score}<span className="text-sm font-normal text-gray-400">/100</span></span>
                         </div>
                       </div>
-                      {/* Barra de progresso */}
                       <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
                         <div className={`h-2 rounded-full transition-all ${cfg.bar}`} style={{ width: `${score}%` }} />
                       </div>
-                      {/* Indicadores */}
                       <div className="flex flex-wrap gap-1.5">
                         {indicadores.map((ind, i) => (
                           <span key={i} className="text-xs bg-white/70 border border-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{ind}</span>
                         ))}
                       </div>
-                      {/* Botão Nova Simulação */}
                       <button
                         onClick={() => {
-                          // Salva os dados da empresa no sessionStorage para a Calculadora ler
                           sessionStorage.setItem("calculadora_empresa", JSON.stringify({
                             nome: empresaSelecionada.responsavel_nome || empresaSelecionada.razao_social,
                             empresa: empresaSelecionada.razao_social,
@@ -819,10 +802,9 @@ export default function Empresas() {
                   <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
                 )}
 
-                {/* ─── ABA: DADOS ────────────────────────────────────────── */}
+                {/* ─── ABA: DADOS ───────────────────────────────────────── */}
                 {!loadingDetalhe && abaAtiva === "dados" && (
                 <div className="p-5 space-y-5 overflow-y-auto" style={{ maxHeight: "calc(100vh - 380px)" }}>
-                  {/* Dados básicos */}
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                     {empresaSelecionada.cnpj && (
                       <div>
@@ -864,7 +846,6 @@ export default function Empresas() {
                     </div>
                   </div>
 
-                  {/* Contato */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {empresaSelecionada.telefone && (
                       <a href={`tel:${empresaSelecionada.telefone}`} className="flex items-center gap-2 text-sm text-gray-700 hover:text-blue-600 bg-gray-50 rounded-lg px-3 py-2">
@@ -888,7 +869,6 @@ export default function Empresas() {
                     )}
                   </div>
 
-                  {/* Endereço */}
                   {(empresaSelecionada.logradouro || empresaSelecionada.cidade) && (
                     <div className="flex items-start gap-2 text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
                       <MapPin className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
@@ -906,7 +886,6 @@ export default function Empresas() {
                     </div>
                   )}
 
-                  {/* Responsável */}
                   {empresaSelecionada.responsavel_nome && (
                     <div className="border rounded-xl p-4 space-y-2">
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
@@ -943,7 +922,6 @@ export default function Empresas() {
                     </div>
                   )}
 
-                  {/* Equipe Responsável */}
                   {(empresaSelecionada.captador_nome || empresaSelecionada.analista_nome) && (
                     <div className="border rounded-xl p-4 space-y-3">
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Equipe Responsável</p>
@@ -970,7 +948,6 @@ export default function Empresas() {
                     </div>
                   )}
 
-                  {/* Tags */}
                   {(empresaSelecionada.tags || []).length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {(empresaSelecionada.tags || []).map(tag => (
@@ -981,7 +958,6 @@ export default function Empresas() {
                     </div>
                   )}
 
-                  {/* Observações */}
                   {empresaSelecionada.observacoes && (
                     <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
                       <p className="text-xs font-semibold text-yellow-700 mb-1 flex items-center gap-1">
@@ -993,7 +969,7 @@ export default function Empresas() {
                 </div>
                 )}
 
-                {/* ─── ABA: DOCUMENTOS ─────────────────────────────────── */}
+                {/* ─── ABA: DOCUMENTOS ──────────────────────────────────── */}
                 {!loadingDetalhe && abaAtiva === "documentos" && (
                   <div className="p-5 space-y-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 380px)" }}>
                     <div className="flex items-center justify-between">
@@ -1138,10 +1114,9 @@ export default function Empresas() {
                   </div>
                 )}
 
-                {/* ─── ABA: HISTÓRICO ─────────────────────────────────────── */}
+                {/* ─── ABA: HISTÓRICO ──────────────────────────────────────── */}
                 {!loadingDetalhe && abaAtiva === "historico" && (
                   <div className="p-5 space-y-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 380px)" }}>
-                    {/* Campo de nova nota */}
                     <div className="flex gap-2">
                       <textarea
                         className="flex-1 border rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
@@ -1196,7 +1171,6 @@ export default function Empresas() {
       {modalAberto && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-6">
-            {/* Header do modal */}
             <div className="flex items-center justify-between p-5 border-b">
               <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-blue-600" />
@@ -1207,10 +1181,8 @@ export default function Empresas() {
               </button>
             </div>
 
-            {/* Corpo do modal */}
             <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
 
-              {/* Seção: Dados Básicos */}
               <Secao id="basico" titulo="Dados da Empresa" icon={<Building2 className="w-4 h-4 text-blue-600" />} secaoAberta={secaoAberta} setSecaoAberta={setSecaoAberta}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2 space-y-1.5">
@@ -1321,7 +1293,6 @@ export default function Empresas() {
                 </div>
               </Secao>
 
-              {/* Seção: Contato */}
               <Secao id="contato" titulo="Contato" icon={<Phone className="w-4 h-4 text-green-600" />} secaoAberta={secaoAberta} setSecaoAberta={setSecaoAberta}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
@@ -1366,7 +1337,6 @@ export default function Empresas() {
                 </div>
               </Secao>
 
-              {/* Seção: Endereço */}
               <Secao id="endereco" titulo="Endereço" icon={<MapPin className="w-4 h-4 text-orange-500" />} secaoAberta={secaoAberta} setSecaoAberta={setSecaoAberta}>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
@@ -1443,7 +1413,6 @@ export default function Empresas() {
                 </div>
               </Secao>
 
-              {/* Seção: Sócio / Responsável */}
               <Secao id="responsavel" titulo="Sócio / Responsável" icon={<User className="w-4 h-4 text-purple-600" />} secaoAberta={secaoAberta} setSecaoAberta={setSecaoAberta}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
@@ -1496,7 +1465,6 @@ export default function Empresas() {
                 </div>
               </Secao>
 
-              {/* Seção: Dados Financeiros */}
               <Secao id="financeiro" titulo="Dados Financeiros" icon={<DollarSign className="w-4 h-4 text-emerald-600" />} secaoAberta={secaoAberta} setSecaoAberta={setSecaoAberta}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
@@ -1562,7 +1530,6 @@ export default function Empresas() {
                 </div>
               </Secao>
 
-              {/* Seção: Tags e Observações */}
               <Secao id="extras" titulo="Tags e Observações" icon={<Tag className="w-4 h-4 text-yellow-600" />} secaoAberta={secaoAberta} setSecaoAberta={setSecaoAberta}>
                 <div className="space-y-4">
                   <div className="space-y-2">
@@ -1606,7 +1573,6 @@ export default function Empresas() {
                       className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                     />
                   </div>
-                  {/* Equipe Responsável: Captação + Atendimento */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t">
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
@@ -1653,7 +1619,6 @@ export default function Empresas() {
               </Secao>
             </div>
 
-            {/* Footer do modal */}
             <div className="flex items-center justify-end gap-3 p-5 border-t bg-gray-50">
               <button
                 type="button"
