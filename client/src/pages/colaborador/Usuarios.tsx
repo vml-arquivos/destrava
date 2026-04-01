@@ -34,6 +34,9 @@ import {
   Eye,
   EyeOff,
   Phone,
+  Pencil,
+  X,
+  Save,
 } from "lucide-react";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -66,6 +69,7 @@ function gerarSenha(): string {
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function UsuariosPage() {
+  // ── Estado do formulário de criação ──────────────────────────────────────
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [cargo, setCargo] = useState("");
@@ -74,9 +78,19 @@ export default function UsuariosPage() {
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [criando, setCriando] = useState(false);
   const [mensagem, setMensagem] = useState<{ tipo: "sucesso" | "erro"; texto: string } | null>(null);
+  const [senhaCopiada, setSenhaCopiada] = useState(false);
+
+  // ── Estado da lista ───────────────────────────────────────────────────────
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
   const [carregando, setCarregando] = useState(true);
-  const [senhaCopiada, setSenhaCopiada] = useState(false);
+
+  // ── Estado de edição inline ───────────────────────────────────────────────
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [editNome, setEditNome] = useState("");
+  const [editCargo, setEditCargo] = useState("");
+  const [editTelefone, setEditTelefone] = useState("");
+  const [salvandoEdit, setSalvandoEdit] = useState(false);
+  const [mensagemEdit, setMensagemEdit] = useState<{ tipo: "sucesso" | "erro"; texto: string } | null>(null);
 
   // ─── Carregar colaboradores ───────────────────────────────────────────────
 
@@ -130,7 +144,6 @@ export default function UsuariosPage() {
         texto: `Usuário "${nome}" criado com sucesso! E-mail: ${email} | Senha: ${senha}`,
       });
 
-      // Limpar formulário
       setNome("");
       setEmail("");
       setCargo("");
@@ -143,6 +156,53 @@ export default function UsuariosPage() {
     }
 
     setCriando(false);
+  }
+
+  // ─── Editar colaborador ───────────────────────────────────────────────────
+
+  function abrirEdicao(col: Colaborador) {
+    setEditandoId(col.id);
+    setEditNome(col.nome);
+    setEditCargo(col.cargo);
+    setEditTelefone(col.telefone || "");
+    setMensagemEdit(null);
+  }
+
+  function cancelarEdicao() {
+    setEditandoId(null);
+    setMensagemEdit(null);
+  }
+
+  async function salvarEdicao(id: string) {
+    if (!editNome.trim() || !editCargo) {
+      setMensagemEdit({ tipo: "erro", texto: "Nome e cargo são obrigatórios." });
+      return;
+    }
+    if (editCargo.toLowerCase() === "captador" && !editTelefone.trim()) {
+      setMensagemEdit({ tipo: "erro", texto: "Captadores precisam de telefone para identificação." });
+      return;
+    }
+    setSalvandoEdit(true);
+    try {
+      await apiFetch(`/api/colaboradores/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          nome: editNome.trim(),
+          cargo: editCargo,
+          telefone: editTelefone.trim() || null,
+        }),
+      });
+      setMensagemEdit({ tipo: "sucesso", texto: "Salvo com sucesso!" });
+      setTimeout(() => {
+        setEditandoId(null);
+        setMensagemEdit(null);
+      }, 1200);
+      carregarColaboradores();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao salvar.";
+      setMensagemEdit({ tipo: "erro", texto: msg });
+    }
+    setSalvandoEdit(false);
   }
 
   // ─── Alternar status ativo/inativo ────────────────────────────────────────
@@ -167,6 +227,8 @@ export default function UsuariosPage() {
     if (lower === "captador") return "bg-amber-100 text-amber-800 border-amber-300";
     if (["admin","administrador","diretor"].includes(lower)) return "bg-purple-100 text-purple-800 border-purple-300";
     if (["gerente","gestor"].includes(lower)) return "bg-blue-100 text-blue-800 border-blue-300";
+    if (["analista de crédito","analista"].includes(lower)) return "bg-sky-100 text-sky-800 border-sky-300";
+    if (["consultor de crédito","consultor"].includes(lower)) return "bg-teal-100 text-teal-800 border-teal-300";
     return "bg-gray-100 text-gray-700 border-gray-300";
   }
 
@@ -182,9 +244,9 @@ export default function UsuariosPage() {
             <Users className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">Gestão de Usuários</h1>
+            <h1 className="text-2xl font-bold">Gestão de Colaboradores</h1>
             <p className="text-muted-foreground text-sm">
-              Crie e gerencie colaboradores com acesso ao painel
+              Cadastre e gerencie colaboradores, cargos e acessos ao painel
             </p>
           </div>
         </div>
@@ -252,17 +314,24 @@ export default function UsuariosPage() {
                   </Select>
                   {cargo.toLowerCase() === "captador" && (
                     <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                      Captadores não geram leads nem análise de IA no Chatwoot — apenas gravam conversas. O telefone abaixo é obrigatório para identificação.
+                      Captadores não geram leads nem análise de IA no Chatwoot. O telefone abaixo é <strong>obrigatório</strong> para identificação automática.
+                    </p>
+                  )}
+                  {["analista de crédito","consultor de crédito","estagiário"].includes(cargo.toLowerCase()) && (
+                    <p className="text-xs text-sky-700 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2">
+                      Analistas/Consultores veem apenas empresas onde são responsáveis ou analistas vinculados. Cadastre o telefone para que mensagens deles no WhatsApp não gerem leads.
                     </p>
                   )}
                 </div>
 
-                {/* Telefone (obrigatório para captador, opcional para outros) */}
+                {/* Telefone WhatsApp */}
                 <div className="space-y-1.5">
                   <Label htmlFor="telefone-user">
                     Telefone WhatsApp
-                    {cargo.toLowerCase() === "captador" && <span className="text-destructive"> *</span>}
-                    {cargo.toLowerCase() !== "captador" && <span className="text-muted-foreground text-xs ml-1">(opcional)</span>}
+                    {cargo.toLowerCase() === "captador"
+                      ? <span className="text-destructive"> *</span>
+                      : <span className="text-muted-foreground text-xs ml-1">(recomendado)</span>
+                    }
                   </Label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -275,6 +344,9 @@ export default function UsuariosPage() {
                       className="pl-9"
                     />
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Mesmo número cadastrado no Chatwoot. Impede que mensagens deste colaborador gerem leads automaticamente.
+                  </p>
                 </div>
 
                 {/* Senha */}
@@ -345,7 +417,7 @@ export default function UsuariosPage() {
 
                 <Button type="submit" className="w-full h-11 font-bold" disabled={criando}>
                   <UserPlus className="mr-2 h-4 w-4" />
-                  {criando ? "Criando usuário..." : "Criar Colaborador"}
+                  {criando ? "Criando colaborador..." : "Criar Colaborador"}
                 </Button>
               </form>
             </CardContent>
@@ -377,44 +449,128 @@ export default function UsuariosPage() {
                   <p className="text-sm mt-1 opacity-60">Crie o primeiro usando o formulário ao lado</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
                   {colaboradores.map((col) => (
                     <div
                       key={col.id}
-                      className="flex items-center justify-between p-3 rounded-xl border bg-muted/20 hover:bg-muted/40 transition-colors"
+                      className="rounded-xl border bg-muted/20 hover:bg-muted/30 transition-colors"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <span className="text-primary font-bold text-sm">
-                            {col.nome.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-sm truncate">{col.nome}</p>
-                          <p className="text-xs text-muted-foreground truncate">{col.email || "—"}</p>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${badgeCargo(col.cargo)}`}>
-                              {col.cargo}
-                            </span>
-                            {col.telefone && (
-                              <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                                <Phone className="h-3 w-3" />
-                                {col.telefone}
-                              </span>
-                            )}
+                      {editandoId === col.id ? (
+                        /* ── Modo edição inline ── */
+                        <div className="p-3 space-y-3">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Nome</Label>
+                              <Input
+                                value={editNome}
+                                onChange={e => setEditNome(e.target.value)}
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Cargo</Label>
+                              <Select value={editCargo} onValueChange={setEditCargo}>
+                                <SelectTrigger className="h-8 text-sm">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {CARGOS.map(c => (
+                                    <SelectItem key={c} value={c} className="text-sm">{c}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs flex items-center gap-1">
+                              <Phone className="h-3 w-3" />
+                              Telefone WhatsApp
+                              {editCargo.toLowerCase() === "captador"
+                                ? <span className="text-destructive"> *</span>
+                                : <span className="text-muted-foreground"> (recomendado)</span>
+                              }
+                            </Label>
+                            <Input
+                              value={editTelefone}
+                              onChange={e => setEditTelefone(e.target.value)}
+                              placeholder="(11) 99999-9999"
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          {mensagemEdit && (
+                            <p className={`text-xs px-2 py-1 rounded ${mensagemEdit.tipo === "sucesso" ? "text-green-700 bg-green-50" : "text-red-700 bg-red-50"}`}>
+                              {mensagemEdit.texto}
+                            </p>
+                          )}
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs flex-1"
+                              onClick={() => salvarEdicao(col.id)}
+                              disabled={salvandoEdit}
+                            >
+                              <Save className="h-3 w-3 mr-1" />
+                              {salvandoEdit ? "Salvando..." : "Salvar"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={cancelarEdicao}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                        <Badge
-                          variant={col.ativo ? "default" : "secondary"}
-                          className={`text-xs cursor-pointer select-none ${col.ativo ? "bg-green-600 hover:bg-green-700" : ""}`}
-                          onClick={() => toggleAtivo(col.id, col.ativo)}
-                          title="Clique para alternar status"
-                        >
-                          {col.ativo ? "Ativo" : "Inativo"}
-                        </Badge>
-                      </div>
+                      ) : (
+                        /* ── Modo visualização ── */
+                        <div className="flex items-center justify-between p-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <span className="text-primary font-bold text-sm">
+                                {col.nome.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-sm truncate">{col.nome}</p>
+                              <p className="text-xs text-muted-foreground truncate">{col.email || "—"}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${badgeCargo(col.cargo)}`}>
+                                  {col.cargo}
+                                </span>
+                                {col.telefone ? (
+                                  <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                                    <Phone className="h-3 w-3 text-green-500" />
+                                    {col.telefone}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-amber-500 flex items-center gap-0.5">
+                                    <Phone className="h-3 w-3" />
+                                    Sem telefone
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                            <button
+                              onClick={() => abrirEdicao(col)}
+                              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
+                              title="Editar colaborador"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <Badge
+                              variant={col.ativo ? "default" : "secondary"}
+                              className={`text-xs cursor-pointer select-none ${col.ativo ? "bg-green-600 hover:bg-green-700" : ""}`}
+                              onClick={() => toggleAtivo(col.id, col.ativo)}
+                              title="Clique para alternar status"
+                            >
+                              {col.ativo ? "Ativo" : "Inativo"}
+                            </Badge>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -423,20 +579,30 @@ export default function UsuariosPage() {
           </Card>
         </div>
 
-        {/* ── Legenda de cargos ── */}
+        {/* ── Legenda de cargos e permissões ── */}
         <Card className="border-blue-100 bg-blue-50/50">
           <CardContent className="pt-5">
             <div className="flex items-start gap-3">
               <Shield className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="space-y-2 text-sm text-blue-900">
+              <div className="space-y-3 text-sm text-blue-900 w-full">
                 <p className="font-semibold">Permissões por Cargo</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs">
-                  <div><strong>Admin / Diretor / Gerente:</strong> Acesso total — vê todos os leads e empresas.</div>
-                  <div><strong>Analista / Consultor / Estagiário:</strong> Acesso restrito — vê apenas seus próprios registros.</div>
-                  <div className="sm:col-span-2">
-                    <strong className="text-amber-700">Captador:</strong> Não gera leads nem análise de IA via Chatwoot. Mensagens recebidas são gravadas como conversa, mas sem criar lead. Requer telefone cadastrado para identificação automática.
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="bg-white/60 rounded-lg p-2.5 border border-blue-100">
+                    <p className="font-semibold text-purple-800 mb-1">Admin / Diretor / Gerente</p>
+                    <p className="text-gray-600">Acesso total — vê todos os leads, empresas e colaboradores.</p>
+                  </div>
+                  <div className="bg-white/60 rounded-lg p-2.5 border border-blue-100">
+                    <p className="font-semibold text-sky-800 mb-1">Analista / Consultor / Estagiário</p>
+                    <p className="text-gray-600">Acesso restrito — vê apenas empresas onde é responsável ou analista vinculado. Com telefone cadastrado, mensagens no WhatsApp não geram leads.</p>
+                  </div>
+                  <div className="bg-white/60 rounded-lg p-2.5 border border-amber-100 sm:col-span-2">
+                    <p className="font-semibold text-amber-800 mb-1">Captador</p>
+                    <p className="text-gray-600">Não gera leads nem análise de IA via Chatwoot. Mensagens recebidas são gravadas como conversa, mas sem criar lead. <strong>Telefone obrigatório</strong> para identificação automática. Pode ser vinculado a empresas como captador de origem.</p>
                   </div>
                 </div>
+                <p className="text-xs text-blue-700 bg-blue-100/60 rounded-lg px-3 py-2 border border-blue-200">
+                  <strong>Dica:</strong> Cadastre o telefone WhatsApp de todos os colaboradores que interagem pelo Chatwoot para evitar que suas mensagens gerem leads automaticamente.
+                </p>
               </div>
             </div>
           </CardContent>
@@ -448,11 +614,13 @@ export default function UsuariosPage() {
             <div className="flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
               <div className="space-y-2 text-sm text-amber-800">
-                <p className="font-semibold">Importante — Primeiro Acesso</p>
+                <p className="font-semibold">Importante — Primeiro Acesso e Configuração</p>
                 <ul className="space-y-1 list-disc list-inside text-xs">
-                  <li>Após criar o usuário, comunique a senha por canal seguro (WhatsApp, ligação).</li>
+                  <li>Após criar o colaborador, comunique a senha por canal seguro (WhatsApp, ligação).</li>
                   <li>O colaborador pode alterar a senha após o primeiro login em <strong>/colaborador/perfil</strong>.</li>
-                  <li>Para <strong>Captadores</strong>: o telefone deve ser o mesmo número cadastrado no Chatwoot para que o filtro funcione corretamente.</li>
+                  <li>Para <strong>Captadores</strong>: o telefone deve ser o mesmo número cadastrado no Chatwoot.</li>
+                  <li>Para <strong>Analistas/Consultores</strong>: cadastre o telefone e vincule-os às empresas no formulário de Empresa (campo "Analista Responsável").</li>
+                  <li>O isolamento de painel é automático — cada analista vê apenas suas empresas vinculadas.</li>
                 </ul>
               </div>
             </div>

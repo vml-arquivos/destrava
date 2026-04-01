@@ -53,6 +53,9 @@ interface Empresa {
   tags?: string[];
   observacoes?: string;
   captador_id?: string;
+  analista_id?: string;
+  captador_nome?: string;
+  analista_nome?: string;
   created_at: string;
   updated_at: string;
 }
@@ -95,6 +98,7 @@ const FORM_VAZIO: FormEmpresa = {
   tags: [],
   observacoes: "",
   captador_id: undefined,
+  analista_id: undefined,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -290,13 +294,19 @@ export default function Empresas() {
   const [tagInput, setTagInput] = useState("");
   const [secaoAberta, setSecaoAberta] = useState<string>("basico");
   const [confirmandoExclusao, setConfirmandoExclusao] = useState<string | null>(null);
-  // Lista de captadores para o select no formulário de empresa
+  // Listas de captadores e analistas para os selects no formulário de empresa
   const [captadores, setCaptadores] = useState<{ id: string; nome: string }[]>([]);
+  const [analistas, setAnalistas] = useState<{ id: string; nome: string; cargo: string }[]>([]);
 
-  // Carregar captadores ao montar
+  // Carregar colaboradores ao montar
   useEffect(() => {
     apiFetch("/api/colaboradores")
-      .then((data: any[]) => setCaptadores((data || []).filter((c: any) => c.cargo?.toLowerCase() === "captador" && c.ativo)))
+      .then((data: any[]) => {
+        const ativos = (data || []).filter((c: any) => c.ativo);
+        setCaptadores(ativos.filter((c: any) => c.cargo?.toLowerCase() === "captador"));
+        // Analistas = todos os cargos exceto captador (podem ser responsáveis por empresas)
+        setAnalistas(ativos.filter((c: any) => c.cargo?.toLowerCase() !== "captador"));
+      })
       .catch(() => {});
   }, []);
 
@@ -424,6 +434,7 @@ export default function Empresas() {
       tags: emp.tags || [],
       observacoes: emp.observacoes || "",
       captador_id: emp.captador_id || undefined,
+      analista_id: emp.analista_id || undefined,
     });
     setErros({});
     setSecaoAberta("basico");
@@ -914,6 +925,33 @@ export default function Empresas() {
                             <a href={`mailto:${empresaSelecionada.responsavel_email}`} className="font-medium text-blue-600 hover:underline truncate block">
                               {empresaSelecionada.responsavel_email}
                             </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Equipe Responsável */}
+                  {(empresaSelecionada.captador_nome || empresaSelecionada.analista_nome) && (
+                    <div className="border rounded-xl p-4 space-y-3">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Equipe Responsável</p>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        {empresaSelecionada.captador_nome && (
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-orange-400 flex-shrink-0"></span>
+                            <div>
+                              <p className="text-xs text-gray-400">Captador</p>
+                              <p className="font-medium text-gray-800">{empresaSelecionada.captador_nome}</p>
+                            </div>
+                          </div>
+                        )}
+                        {empresaSelecionada.analista_nome && (
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0"></span>
+                            <div>
+                              <p className="text-xs text-gray-400">Analista Responsável</p>
+                              <p className="font-medium text-gray-800">{empresaSelecionada.analista_nome}</p>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1556,22 +1594,46 @@ export default function Empresas() {
                       className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                     />
                   </div>
-                  {/* Captador vinculado */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-gray-600">Captador Vinculado <span className="text-gray-400 font-normal">(opcional)</span></label>
-                    <select
-                      value={form.captador_id || ""}
-                      onChange={e => set("captador_id", e.target.value || undefined)}
-                      className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    >
-                      <option value="">Nenhum captador</option>
-                      {captadores.map(c => (
-                        <option key={c.id} value={c.id}>{c.nome}</option>
-                      ))}
-                    </select>
-                    {captadores.length === 0 && (
-                      <p className="text-xs text-gray-400">Nenhum captador ativo cadastrado. Crie um em Usuários com cargo "Captador".</p>
-                    )}
+                  {/* Equipe Responsável: Captador + Analista */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-full bg-orange-400"></span>
+                        Captador <span className="text-gray-400 font-normal">(opcional)</span>
+                      </label>
+                      <select
+                        value={form.captador_id || ""}
+                        onChange={e => set("captador_id", e.target.value || undefined)}
+                        className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+                      >
+                        <option value="">Nenhum captador</option>
+                        {captadores.map(c => (
+                          <option key={c.id} value={c.id}>{c.nome}</option>
+                        ))}
+                      </select>
+                      {captadores.length === 0 && (
+                        <p className="text-xs text-gray-400">Nenhum captador ativo. Crie em Usuários com cargo "Captador".</p>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-full bg-blue-500"></span>
+                        Analista Responsável <span className="text-gray-400 font-normal">(opcional)</span>
+                      </label>
+                      <select
+                        value={form.analista_id || ""}
+                        onChange={e => set("analista_id", e.target.value || undefined)}
+                        className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="">Nenhum analista vinculado</option>
+                        {analistas.map(a => (
+                          <option key={a.id} value={a.id}>{a.nome} — {a.cargo}</option>
+                        ))}
+                      </select>
+                      {analistas.length === 0 && (
+                        <p className="text-xs text-gray-400">Nenhum analista ativo. Crie em Usuários.</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </Secao>
