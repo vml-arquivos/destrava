@@ -930,7 +930,7 @@ export default function Empresas() {
                           <div className="flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-orange-400 flex-shrink-0"></span>
                             <div>
-                              <p className="text-xs text-gray-400">Captador</p>
+                              <p className="text-xs text-gray-400">Resp. pela Captação</p>
                               <p className="font-medium text-gray-800">{empresaSelecionada.captador_nome}</p>
                             </div>
                           </div>
@@ -939,7 +939,7 @@ export default function Empresas() {
                           <div className="flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0"></span>
                             <div>
-                              <p className="text-xs text-gray-400">Analista Responsável</p>
+                              <p className="text-xs text-gray-400">Resp. pelo Atendimento</p>
                               <p className="font-medium text-gray-800">{empresaSelecionada.analista_nome}</p>
                             </div>
                           </div>

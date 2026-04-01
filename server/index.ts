@@ -660,6 +660,26 @@ async function startServer() {
     }
   });
 
+
+  // GET /api/colaboradores/para-empresa — retorna listas separadas para os selects do formulário de empresa
+  app.get("/api/colaboradores/para-empresa", requireJwt, async (_req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        "SELECT id, nome, cargo FROM colaboradores WHERE ativo = true ORDER BY nome"
+      );
+      // Responsáveis pela captação: qualquer cargo exceto Analista de Crédito e Estagiário
+      const captacao = rows.filter(c =>
+      );
+      // Responsáveis pelo atendimento: qualquer cargo exceto Captador Externo e Estagiário
+      const atendimento = rows.filter(c =>
+      );
+      res.json({ captacao, atendimento });
+    } catch (err) {
+      console.error("[COLAB PARA-EMPRESA ERROR]", err);
+      res.status(500).json({ error: "Erro ao buscar colaboradores." });
+    }
+  });
+
   app.patch("/api/colaboradores/:id", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
       const { nome, cargo, ativo, senha, telefone } = req.body;
