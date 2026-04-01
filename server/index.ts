@@ -531,13 +531,77 @@ async function startServer() {
     }
   });
 
-  app.get("/api/stats", requireJwtOrAdmin, async (_req: Request, res: Response) => {
+  app.get("/api/stats", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
-      const [leadsRes, simsRes, contatosRes] = await Promise.all([
-        pool.query("SELECT status, produto_interesse, valor_solicitado FROM leads"),
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const isGestor = isGestorCargo(colaborador?.cargo || '');
+
+      // Filtros de período via query string: ?periodo=7d|30d|90d|all
+      const periodo = (req.query.periodo as string) || '30d';
+      const captadorFiltro = req.query.captador_id as string | undefined;
+      const analistaFiltro = req.query.analista_id as string | undefined;
+
+      let dataInicio: string | null = null;
+      if (periodo === '7d')  dataInicio = new Date(Date.now() - 7  * 86400000).toISOString();
+      if (periodo === '30d') dataInicio = new Date(Date.now() - 30 * 86400000).toISOString();
+      if (periodo === '90d') dataInicio = new Date(Date.now() - 90 * 86400000).toISOString();
+
+      // Condições de filtro base para leads
+      const leadsParams: any[] = [];
+      const leadsConds: string[] = [];
+      if (dataInicio) { leadsParams.push(dataInicio); leadsConds.push(`created_at >= $${leadsParams.length}`); }
+      if (captadorFiltro) { leadsParams.push(captadorFiltro); leadsConds.push(`captador_id = $${leadsParams.length}`); }
+      if (!isGestor && colaborador?.id) { leadsParams.push(colaborador.id); leadsConds.push(`responsavel_id = $${leadsParams.length}`); }
+      const leadsWhere = leadsConds.length ? `WHERE ${leadsConds.join(' AND ')}` : '';
+
+      const [leadsRes, simsRes, contatosRes, evolucaoRes, porCaptadorRes, porAnalistaRes] = await Promise.all([
+        pool.query(`SELECT status, produto_interesse, valor_solicitado FROM leads ${leadsWhere}`, leadsParams),
         pool.query("SELECT valor_solicitado FROM leads WHERE origem = 'simulador_publico'"),
         pool.query("SELECT COUNT(*) FROM leads WHERE origem = 'contato_site'"),
+        // Evolução diária de leads (últimos 30 dias por padrão)
+        pool.query(
+          `SELECT DATE(created_at) AS dia, COUNT(*) AS total
+           FROM leads
+           WHERE created_at >= NOW() - INTERVAL '${periodo === '7d' ? 7 : periodo === '90d' ? 90 : 30} days'
+           GROUP BY DATE(created_at)
+           ORDER BY dia ASC`
+        ),
+        // Ranking por captador (apenas gestores)
+        isGestor ? pool.query(
+          `SELECT
+             c.id,
+             c.nome,
+             c.cargo,
+             COUNT(l.id)                                          AS total_leads,
+             COUNT(l.id) FILTER (WHERE l.status = 'convertido')   AS convertidos,
+             COUNT(e.id)                                          AS total_empresas
+           FROM colaboradores c
+           LEFT JOIN leads    l ON l.captador_id = c.id ${dataInicio ? `AND l.created_at >= '${dataInicio}'` : ''}
+           LEFT JOIN empresas e ON e.captador_id = c.id
+           WHERE c.ativo = true
+           GROUP BY c.id, c.nome, c.cargo
+           ORDER BY total_leads DESC, total_empresas DESC
+           LIMIT 20`
+        ) : Promise.resolve({ rows: [] }),
+        // Ranking por analista (apenas gestores)
+        isGestor ? pool.query(
+          `SELECT
+             c.id,
+             c.nome,
+             c.cargo,
+             COUNT(DISTINCT e.id)                                 AS empresas_atendidas,
+             COUNT(l.id)                                          AS total_leads,
+             COUNT(l.id) FILTER (WHERE l.status = 'convertido')   AS convertidos
+           FROM colaboradores c
+           LEFT JOIN empresas e ON e.analista_id = c.id
+           LEFT JOIN leads    l ON l.responsavel_id = c.id ${dataInicio ? `AND l.created_at >= '${dataInicio}'` : ''}
+           WHERE c.ativo = true
+           GROUP BY c.id, c.nome, c.cargo
+           ORDER BY empresas_atendidas DESC, convertidos DESC
+           LIMIT 20`
+        ) : Promise.resolve({ rows: [] }),
       ]);
+
       const leads = leadsRes.rows;
       const sims = simsRes.rows;
       const byStatus = leads.reduce((acc: Record<string, number>, l) => {
@@ -547,6 +611,7 @@ async function startServer() {
         if (l.produto_interesse) acc[l.produto_interesse] = (acc[l.produto_interesse] || 0) + 1;
         return acc;
       }, {});
+
       res.json({
         leads: { total: leads.length, byStatus, byProduto },
         simulacoes: {
@@ -556,6 +621,30 @@ async function startServer() {
         },
         contatos: { total: Number(contatosRes.rows[0].count) },
         n8n: { configured: !!process.env.N8N_WEBHOOK_URL },
+        // Novos agregados para o Dashboard Interativo
+        evolucaoDiaria: evolucaoRes.rows.map(r => ({
+          dia: r.dia instanceof Date ? r.dia.toISOString().slice(0, 10) : String(r.dia).slice(0, 10),
+          total: Number(r.total),
+        })),
+        rankingCaptadores: porCaptadorRes.rows.map(r => ({
+          id: r.id,
+          nome: r.nome,
+          cargo: r.cargo,
+          totalLeads: Number(r.total_leads),
+          convertidos: Number(r.convertidos),
+          totalEmpresas: Number(r.total_empresas),
+          taxaConversao: r.total_leads > 0 ? Math.round((r.convertidos / r.total_leads) * 100) : 0,
+        })),
+        rankingAnalistas: porAnalistaRes.rows.map(r => ({
+          id: r.id,
+          nome: r.nome,
+          cargo: r.cargo,
+          empresasAtendidas: Number(r.empresas_atendidas),
+          totalLeads: Number(r.total_leads),
+          convertidos: Number(r.convertidos),
+          taxaConversao: r.total_leads > 0 ? Math.round((r.convertidos / r.total_leads) * 100) : 0,
+        })),
+        periodo,
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
