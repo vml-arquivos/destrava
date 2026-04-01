@@ -617,6 +617,8 @@ async function startServer() {
     }
   });
 
+
+
   // GET /api/colaboradores/para-empresa — retorna listas separadas para os selects do formulário de empresa
   // NOTA: rota declarada ANTES do patch /:id para evitar conflito de parâmetro de rota
   app.get("/api/colaboradores/para-empresa", requireJwt, async (_req: Request, res: Response) => {
@@ -662,8 +664,14 @@ async function startServer() {
     }
   });
 
-  // ─── n8n WEBHOOK CONFIG API ───────────────────────────────────────────────
-  app.get("/api/n8n/status", requireJwtOrAdmin, (_req: Request, res: Response) => {
+  // ─── n8n WEBHOOK CONFIG API ─────────────────────────────────────────────────────────────────────────
+  app.get("/api/n8n/status", requireJwtOrAdmin, (req: Request, res: Response) => {
+    // Somente Administrador pode acessar integrações n8n
+    const colab = (req as Request & { colaborador?: any }).colaborador;
+    if (colab && (colab.cargo || '').toLowerCase() !== 'administrador') {
+      res.status(403).json({ error: "Acesso restrito ao Administrador." });
+      return;
+    }
     res.json({
       configured: !!process.env.N8N_WEBHOOK_URL,
       webhookUrl: process.env.N8N_WEBHOOK_URL ? "***configurado***" : null,
@@ -675,7 +683,13 @@ async function startServer() {
     });
   });
 
-  app.post("/api/n8n/test", requireJwtOrAdmin, async (_req: Request, res: Response) => {
+  app.post("/api/n8n/test", requireJwtOrAdmin, async (req: Request, res: Response) => {
+    // Somente Administrador pode testar webhook n8n
+    const colab = (req as Request & { colaborador?: any }).colaborador;
+    if (colab && (colab.cargo || '').toLowerCase() !== 'administrador') {
+      res.status(403).json({ error: "Acesso restrito ao Administrador." });
+      return;
+    }
     const ok = await dispararN8n("teste_webhook", {
       mensagem: "Teste de integração Destrava Crédito → n8n",
       ambiente: process.env.NODE_ENV || "development",

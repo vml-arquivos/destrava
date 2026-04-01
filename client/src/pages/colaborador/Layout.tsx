@@ -24,18 +24,35 @@ interface NavItem {
   label: string;
   icon: React.ElementType;
   badge?: string;
+  /** cargos que podem ver este item; undefined = todos */
+  allowedCargos?: string[];
 }
 
-const navItems: NavItem[] = [
-  { href: "/colaborador/dashboard",  label: "Dashboard",       icon: LayoutDashboard },
-  { href: "/colaborador/crm",        label: "CRM — Pipeline",  icon: Kanban },
-  { href: "/colaborador/calculadora",label: "Calculadora",     icon: Calculator },
-  { href: "/colaborador/simulacoes", label: "Simulações",      icon: FileText },
-  { href: "/colaborador/triagem",    label: "Triagem",         icon: ShieldAlert },
-  { href: "/colaborador/clientes",   label: "Clientes",        icon: Users },
-  { href: "/colaborador/empresas",   label: "Empresas",        icon: Building2 },
-  { href: "/colaborador/integracoes",label: "Integrações n8n", icon: Zap },
-  { href: "/colaborador/usuarios",   label: "Usuários",        icon: User },
+// Cargos com acesso total (gestão)
+const CARGOS_GESTAO = ['administrador', 'diretor', 'gerente comercial'];
+
+const ALL_NAV_ITEMS: NavItem[] = [
+  { href: "/colaborador/dashboard",   label: "Dashboard",       icon: LayoutDashboard },
+  { href: "/colaborador/crm",         label: "CRM — Pipeline",  icon: Kanban },
+  { href: "/colaborador/calculadora", label: "Calculadora",     icon: Calculator },
+  { href: "/colaborador/simulacoes",  label: "Simulações",      icon: FileText },
+  { href: "/colaborador/triagem",     label: "Triagem",         icon: ShieldAlert },
+  { href: "/colaborador/clientes",    label: "Clientes",        icon: Users },
+  { href: "/colaborador/empresas",    label: "Empresas",        icon: Building2 },
+  // Integrações n8n: somente Administrador
+  {
+    href: "/colaborador/integracoes",
+    label: "Integrações n8n",
+    icon: Zap,
+    allowedCargos: ['administrador'],
+  },
+  // Usuários: somente Administrador, Diretor e Gerente Comercial
+  {
+    href: "/colaborador/usuarios",
+    label: "Usuários",
+    icon: User,
+    allowedCargos: CARGOS_GESTAO,
+  },
 ];
 
 interface LayoutProps {
@@ -47,6 +64,14 @@ export default function ColaboradorLayout({ children, title }: LayoutProps) {
   const { colaborador, signOut } = useAuth();
   const [location] = useLocation();
   const [menuAberto, setMenuAberto] = useState(false);
+
+  const cargoLower = (colaborador?.cargo || '').toLowerCase();
+
+  // Filtra itens de navegação conforme cargo
+  const navItems = ALL_NAV_ITEMS.filter(item => {
+    if (!item.allowedCargos) return true;
+    return item.allowedCargos.includes(cargoLower);
+  });
 
   const handleSignOut = async () => {
     await signOut();
@@ -78,7 +103,7 @@ export default function ColaboradorLayout({ children, title }: LayoutProps) {
                 {colaborador?.nome || "Colaborador"}
               </p>
               <p className="text-xs text-gray-500 truncate">
-                {colaborador?.cargo || "Analista"}
+                {colaborador?.cargo || ""}
               </p>
             </div>
           </div>
@@ -154,7 +179,7 @@ export default function ColaboradorLayout({ children, title }: LayoutProps) {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-gray-900">{colaborador?.nome || "Colaborador"}</p>
-                  <p className="text-xs text-gray-500">{colaborador?.cargo || "Analista"}</p>
+                  <p className="text-xs text-gray-500">{colaborador?.cargo || ""}</p>
                 </div>
               </div>
             </div>

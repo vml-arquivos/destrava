@@ -43,6 +43,7 @@ import ColaboradorCRM from "./pages/colaborador/CRM";
 import ColaboradorEmpresas from "./pages/colaborador/Empresas";
 import ColaboradorTriagem from "./pages/colaborador/Triagem";
 import ProtectedRoute from "./components/ProtectedRoute";
+import CargoRoute from "./components/CargoRoute";
 
 function Router() {
   return (
@@ -113,7 +114,9 @@ function Router() {
       <Route path="/colaborador/usuarios">
         {() => (
           <ProtectedRoute>
-            <ColaboradorUsuarios />
+            <CargoRoute allowedCargos={['administrador', 'diretor', 'gerente comercial']}>
+              <ColaboradorUsuarios />
+            </CargoRoute>
           </ProtectedRoute>
         )}
       </Route>
@@ -148,7 +151,9 @@ function Router() {
       <Route path="/colaborador/integracoes">
         {() => (
           <ProtectedRoute>
-            <ColaboradorIntegracoes />
+            <CargoRoute allowedCargos={['administrador']}>
+              <ColaboradorIntegracoes />
+            </CargoRoute>
           </ProtectedRoute>
         )}
       </Route>

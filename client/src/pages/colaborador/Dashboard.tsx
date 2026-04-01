@@ -6,7 +6,8 @@ import ColaboradorLayout from "./Layout";
 import {
   Calculator, FileText, TrendingUp, DollarSign, Clock,
   CheckCircle2, XCircle, Plus, ArrowRight, Users, Zap,
-  RefreshCw, Loader2, AlertCircle, MessageSquare, ShieldAlert
+  RefreshCw, Loader2, AlertCircle, MessageSquare, ShieldAlert,
+  Building2, UserCheck
 } from "lucide-react";
 
 // Interfaces alinhadas com os shapes reais do banco
@@ -25,7 +26,6 @@ interface Stats {
   n8n: { configured: boolean };
 }
 
-// Shape real da tabela leads (snake_case do PostgreSQL)
 interface LeadRow {
   id: string;
   nome: string;
@@ -37,7 +37,6 @@ interface LeadRow {
   created_at: string;
 }
 
-// Shape real da tabela simulacoes_colaborador
 interface SimulacaoRow {
   id: string;
   cliente_nome: string;
@@ -48,6 +47,15 @@ interface SimulacaoRow {
   valor_parcela?: number;
   criado_em: string;
   status?: string;
+}
+
+interface EmpresaRow {
+  id: string;
+  razao_social: string;
+  status?: string;
+  captador_nome?: string;
+  analista_nome?: string;
+  updated_at?: string;
 }
 
 const fmt = (v: number) => v?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) ?? "R$ 0,00";
@@ -61,14 +69,28 @@ const STATUS_LEAD_COLOR: Record<string, string> = {
   convertido: "bg-purple-100 text-purple-700",
 };
 
+// Cargos com visão total
+const CARGOS_GESTOR = ["administrador", "diretor", "gerente comercial"];
+// Cargos que captam mas não atende (veem apenas suas captações)
+const CARGOS_CAPTADOR = ["captador externo"];
+// Cargos que atendem (veem apenas suas empresas vinculadas)
+const CARGOS_ANALISTA = ["analista de crédito", "consultor de crédito", "estagiário"];
+
 export default function Dashboard() {
   const { colaborador } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
   const [leadsRecentes, setLeadsRecentes] = useState<LeadRow[]>([]);
   const [simulacoesRecentes, setSimulacoesRecentes] = useState<SimulacaoRow[]>([]);
+  const [empresasRecentes, setEmpresasRecentes] = useState<EmpresaRow[]>([]);
   const [triagemPendente, setTriagemPendente] = useState(0);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+
+  const cargo = (colaborador?.cargo || "").toLowerCase();
+  const isGestor = CARGOS_GESTOR.includes(cargo);
+  const isCaptador = CARGOS_CAPTADOR.includes(cargo);
+  const isAnalista = CARGOS_ANALISTA.includes(cargo);
+  const isAdmin = cargo === "administrador";
 
   useEffect(() => { carregarDados(); }, []);
 
@@ -76,30 +98,40 @@ export default function Dashboard() {
     setLoading(true);
     setErro(null);
     try {
-      // Todas as chamadas usam JWT via apiFetch — sem ADMIN_KEY no bundle
-      const [statsData, leadsData, simsData, triagemData] = await Promise.all([
+      const promises: Promise<any>[] = [
         apiFetch("/api/stats").catch(() => null),
         apiFetch("/api/leads").catch(() => []),
         apiFetch("/api/simulacoes").catch(() => []),
         apiFetch("/api/triagem/stats").catch(() => ({})),
-      ]);
+      ];
+
+      // Captadores e analistas também carregam suas empresas vinculadas
+      if (isCaptador || isAnalista) {
+        promises.push(apiFetch("/api/empresas").catch(() => []));
+      }
+
+      const results = await Promise.all(promises);
+      const [statsData, leadsData, simsData, triagemData, empresasData] = results;
 
       if (statsData) setStats(statsData);
 
-      // GET /api/leads retorna array direto quando autenticado com JWT
       const leadsArr: LeadRow[] = Array.isArray(leadsData)
         ? leadsData
         : (leadsData?.leads ?? []);
       setLeadsRecentes(leadsArr.slice(0, 5));
 
-      // GET /api/simulacoes retorna array direto (simulacoes_colaborador do colaborador logado)
       const simsArr: SimulacaoRow[] = Array.isArray(simsData)
         ? simsData
         : (simsData?.simulacoes ?? []);
-      // Mantemos todas para exibir no dashboard; slice(0,5) apenas no bloco de recentes
       setSimulacoesRecentes(simsArr);
 
-      // Triagem pendente
+      if (empresasData) {
+        const empArr: EmpresaRow[] = Array.isArray(empresasData)
+          ? empresasData
+          : (empresasData?.empresas ?? []);
+        setEmpresasRecentes(empArr.slice(0, 5));
+      }
+
       setTriagemPendente(triagemData?.pendente ?? 0);
     } catch (e) {
       setErro("Erro ao carregar dados. Verifique a conexão.");
@@ -108,6 +140,15 @@ export default function Dashboard() {
   }
 
   const nomeColaborador = colaborador?.nome?.split(" ")[0] || "Colaborador";
+
+  // Atalhos rápidos filtrados por cargo
+  const atalhos = [
+    { href: "/colaborador/calculadora", icon: Calculator, label: "Calculadora", desc: "Nova simulação", color: "blue", visivel: true },
+    { href: "/colaborador/clientes", icon: Users, label: "Clientes CRM", desc: "Gestão de clientes", color: "green", visivel: isGestor || isAnalista },
+    { href: "/colaborador/empresas", icon: Building2, label: "Empresas", desc: "Carteira de empresas", color: "teal", visivel: true },
+    { href: "/colaborador/simulacoes", icon: FileText, label: "Simulações", desc: "Histórico completo", color: "yellow", visivel: true },
+    { href: "/colaborador/integracoes", icon: Zap, label: "n8n", desc: stats?.n8n?.configured ? "✅ Conectado" : "⚠️ Configurar", color: "purple", visivel: isAdmin },
+  ].filter(a => a.visivel);
 
   return (
     <ColaboradorLayout title="Dashboard">
@@ -123,6 +164,10 @@ export default function Dashboard() {
                 weekday: "long", day: "numeric", month: "long", year: "numeric",
               })}
             </p>
+            {/* Badge de cargo */}
+            <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+              {colaborador?.cargo || ""}
+            </span>
           </div>
           <div className="flex gap-2">
             <button
@@ -156,18 +201,49 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-xl border p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm text-gray-500">Total de Leads</p>
-                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                  <Users className="w-4 h-4 text-blue-600" />
+            {/* Card de Leads — apenas para gestores e analistas */}
+            {(isGestor || isAnalista) && (
+              <div className="bg-white rounded-xl border p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-gray-500">Total de Leads</p>
+                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                    <Users className="w-4 h-4 text-blue-600" />
+                  </div>
                 </div>
+                <p className="text-3xl font-bold text-gray-900">{stats?.leads.total ?? leadsRecentes.length}</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {stats?.leads.byStatus?.novo ?? 0} novos
+                </p>
               </div>
-              <p className="text-3xl font-bold text-gray-900">{stats?.leads.total ?? leadsRecentes.length}</p>
-              <p className="text-xs text-gray-400 mt-1">
-                {stats?.leads.byStatus?.novo ?? 0} novos
-              </p>
-            </div>
+            )}
+
+            {/* Card de Empresas — para captadores */}
+            {isCaptador && (
+              <div className="bg-white rounded-xl border p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-gray-500">Minhas Captações</p>
+                  <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center">
+                    <Building2 className="w-4 h-4 text-orange-600" />
+                  </div>
+                </div>
+                <p className="text-3xl font-bold text-gray-900">{empresasRecentes.length}</p>
+                <p className="text-xs text-gray-400 mt-1">empresas captadas</p>
+              </div>
+            )}
+
+            {/* Card de Empresas em Atendimento — para analistas */}
+            {isAnalista && (
+              <div className="bg-white rounded-xl border p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-gray-500">Minhas Empresas</p>
+                  <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center">
+                    <UserCheck className="w-4 h-4 text-teal-600" />
+                  </div>
+                </div>
+                <p className="text-3xl font-bold text-gray-900">{empresasRecentes.length}</p>
+                <p className="text-xs text-gray-400 mt-1">em atendimento</p>
+              </div>
+            )}
 
             <div className="bg-white rounded-xl border p-5 shadow-sm">
               <div className="flex items-center justify-between mb-2">
@@ -180,18 +256,21 @@ export default function Dashboard() {
               <p className="text-xs text-gray-400 mt-1">realizadas</p>
             </div>
 
-            <Link href="/colaborador/triagem">
-              <div className={`rounded-xl border p-5 shadow-sm cursor-pointer transition-all hover:shadow-md ${triagemPendente > 0 ? "bg-yellow-50 border-yellow-300" : "bg-white"}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-gray-500">Triagem Pendente</p>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${triagemPendente > 0 ? "bg-yellow-200" : "bg-gray-100"}`}>
-                    <ShieldAlert className={`w-4 h-4 ${triagemPendente > 0 ? "text-yellow-700" : "text-gray-400"}`} />
+            {/* Triagem — apenas para gestores e analistas */}
+            {(isGestor || isAnalista) && (
+              <Link href="/colaborador/triagem">
+                <div className={`rounded-xl border p-5 shadow-sm cursor-pointer transition-all hover:shadow-md ${triagemPendente > 0 ? "bg-yellow-50 border-yellow-300" : "bg-white"}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm text-gray-500">Triagem Pendente</p>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${triagemPendente > 0 ? "bg-yellow-200" : "bg-gray-100"}`}>
+                      <ShieldAlert className={`w-4 h-4 ${triagemPendente > 0 ? "text-yellow-700" : "text-gray-400"}`} />
+                    </div>
                   </div>
+                  <p className={`text-3xl font-bold ${triagemPendente > 0 ? "text-yellow-700" : "text-gray-900"}`}>{triagemPendente}</p>
+                  <p className="text-xs text-gray-400 mt-1">aguardando qualificação</p>
                 </div>
-                <p className={`text-3xl font-bold ${triagemPendente > 0 ? "text-yellow-700" : "text-gray-900"}`}>{triagemPendente}</p>
-                <p className="text-xs text-gray-400 mt-1">aguardando qualificação</p>
-              </div>
-            </Link>
+              </Link>
+            )}
 
             <div className="bg-white rounded-xl border p-5 shadow-sm">
               <div className="flex items-center justify-between mb-2">
@@ -207,27 +286,25 @@ export default function Dashboard() {
         )}
 
         {/* Atalhos rápidos */}
-        <div className="grid md:grid-cols-4 gap-3">
-          {[
-            { href: "/colaborador/calculadora", icon: Calculator, label: "Calculadora", desc: "Nova simulação", color: "blue" },
-            { href: "/colaborador/clientes", icon: Users, label: "Clientes CRM", desc: "Gestão de clientes", color: "green" },
-            { href: "/colaborador/simulacoes", icon: FileText, label: "Simulações", desc: "Histórico completo", color: "yellow" },
-            { href: "/colaborador/integracoes", icon: Zap, label: "n8n", desc: stats?.n8n?.configured ? "✅ Conectado" : "⚠️ Configurar", color: "purple" },
-          ].map(item => (
+        <div className={`grid gap-3 ${atalhos.length <= 3 ? "md:grid-cols-3" : atalhos.length === 4 ? "md:grid-cols-4" : "md:grid-cols-5"}`}>
+          {atalhos.map(item => (
             <Link key={item.href} href={item.href}>
               <div className={`bg-white rounded-xl border-2 p-4 hover:shadow-md transition-all cursor-pointer group ${
                 item.color === "blue" ? "hover:border-blue-300" :
                 item.color === "green" ? "hover:border-green-300" :
+                item.color === "teal" ? "hover:border-teal-300" :
                 item.color === "yellow" ? "hover:border-yellow-300" : "hover:border-purple-300"
               }`}>
                 <div className={`w-10 h-10 rounded-xl mb-3 flex items-center justify-center ${
                   item.color === "blue" ? "bg-blue-100" :
                   item.color === "green" ? "bg-green-100" :
+                  item.color === "teal" ? "bg-teal-100" :
                   item.color === "yellow" ? "bg-yellow-100" : "bg-purple-100"
                 }`}>
                   <item.icon className={`w-5 h-5 ${
                     item.color === "blue" ? "text-blue-600" :
                     item.color === "green" ? "text-green-600" :
+                    item.color === "teal" ? "text-teal-600" :
                     item.color === "yellow" ? "text-yellow-600" : "text-purple-600"
                   }`} />
                 </div>
@@ -238,18 +315,17 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Leads e Simulações recentes */}
-        <div className="grid md:grid-cols-2 gap-4">
-          {/* Leads Recentes */}
+        {/* Visão de Captador — Empresas captadas */}
+        {isCaptador && (
           <div className="bg-white rounded-xl border shadow-sm">
             <div className="flex items-center justify-between p-4 border-b">
               <div>
-                <h3 className="font-semibold text-gray-900">Leads Recentes</h3>
-                <p className="text-xs text-gray-500">Últimos 5 leads capturados</p>
+                <h3 className="font-semibold text-gray-900">Minhas Captações</h3>
+                <p className="text-xs text-gray-500">Empresas que você captou</p>
               </div>
-              <Link href="/colaborador/clientes">
+              <Link href="/colaborador/empresas">
                 <button className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                  Ver todos <ArrowRight className="w-3 h-3" />
+                  Ver todas <ArrowRight className="w-3 h-3" />
                 </button>
               </Link>
             </div>
@@ -258,41 +334,199 @@ export default function Dashboard() {
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
                 </div>
-              ) : leadsRecentes.length === 0 ? (
+              ) : empresasRecentes.length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
-                  <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                  <p className="text-xs">Nenhum lead ainda</p>
-                  <p className="text-xs mt-1">Os leads do simulador aparecerão aqui</p>
+                  <Building2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-xs">Nenhuma empresa captada ainda</p>
                 </div>
               ) : (
-                leadsRecentes.map(lead => (
-                  <div key={lead.id} className="flex items-center gap-3 p-3 hover:bg-gray-50">
-                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs flex-shrink-0">
-                      {(lead.nome || "?").charAt(0).toUpperCase()}
+                empresasRecentes.map(emp => (
+                  <div key={emp.id} className="flex items-center gap-3 p-3 hover:bg-gray-50">
+                    <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-700 font-bold text-xs flex-shrink-0">
+                      {(emp.razao_social || "?").charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{lead.nome}</p>
+                      <p className="text-sm font-medium text-gray-900 truncate">{emp.razao_social}</p>
                       <p className="text-xs text-gray-500 truncate">
-                        {lead.empresa || lead.telefone} · {lead.produto_interesse || "—"}
+                        Analista: {emp.analista_nome || "—"}
                       </p>
                     </div>
-                    <div className="text-right flex-shrink-0">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_LEAD_COLOR[lead.status] || "bg-gray-100 text-gray-600"}`}>
-                        {lead.status}
-                      </span>
-                      <p className="text-xs text-gray-400 mt-0.5">{fmtDate(lead.created_at)}</p>
-                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${emp.status === "ativo" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
+                      {emp.status || "—"}
+                    </span>
                   </div>
                 ))
               )}
             </div>
           </div>
+        )}
 
-          {/* Simulações Recentes */}
+        {/* Visão de Analista — Empresas em atendimento */}
+        {isAnalista && (
+          <div className="bg-white rounded-xl border shadow-sm">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div>
+                <h3 className="font-semibold text-gray-900">Minhas Empresas</h3>
+                <p className="text-xs text-gray-500">Empresas sob seu atendimento</p>
+              </div>
+              <Link href="/colaborador/empresas">
+                <button className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                  Ver todas <ArrowRight className="w-3 h-3" />
+                </button>
+              </Link>
+            </div>
+            <div className="divide-y">
+              {loading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                </div>
+              ) : empresasRecentes.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <UserCheck className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-xs">Nenhuma empresa vinculada ainda</p>
+                  <p className="text-xs mt-1">Peça ao gestor para vincular você como Responsável pelo Atendimento</p>
+                </div>
+              ) : (
+                empresasRecentes.map(emp => (
+                  <div key={emp.id} className="flex items-center gap-3 p-3 hover:bg-gray-50">
+                    <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 font-bold text-xs flex-shrink-0">
+                      {(emp.razao_social || "?").charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{emp.razao_social}</p>
+                      <p className="text-xs text-gray-500 truncate">
+                        Captador: {emp.captador_nome || "—"}
+                      </p>
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${emp.status === "ativo" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>
+                      {emp.status || "—"}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Visão de Gestor — Leads e Simulações recentes */}
+        {(isGestor || isAnalista) && (
+          <div className="grid md:grid-cols-2 gap-4">
+            {/* Leads Recentes */}
+            <div className="bg-white rounded-xl border shadow-sm">
+              <div className="flex items-center justify-between p-4 border-b">
+                <div>
+                  <h3 className="font-semibold text-gray-900">Leads Recentes</h3>
+                  <p className="text-xs text-gray-500">Últimos 5 leads capturados</p>
+                </div>
+                <Link href="/colaborador/clientes">
+                  <button className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                    Ver todos <ArrowRight className="w-3 h-3" />
+                  </button>
+                </Link>
+              </div>
+              <div className="divide-y">
+                {loading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                  </div>
+                ) : leadsRecentes.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400">
+                    <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-xs">Nenhum lead ainda</p>
+                  </div>
+                ) : (
+                  leadsRecentes.map(lead => (
+                    <div key={lead.id} className="flex items-center gap-3 p-3 hover:bg-gray-50">
+                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs flex-shrink-0">
+                        {(lead.nome || "?").charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{lead.nome}</p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {lead.empresa || lead.telefone} · {lead.produto_interesse || "—"}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_LEAD_COLOR[lead.status] || "bg-gray-100 text-gray-600"}`}>
+                          {lead.status}
+                        </span>
+                        <p className="text-xs text-gray-400 mt-0.5">{fmtDate(lead.created_at)}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Simulações Recentes */}
+            <div className="bg-white rounded-xl border shadow-sm flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b">
+                <div>
+                  <h3 className="font-semibold text-gray-900">Simulações</h3>
+                  <p className="text-xs text-gray-500">
+                    {simulacoesRecentes.length > 0
+                      ? `${simulacoesRecentes.length} simulação${simulacoesRecentes.length !== 1 ? "ões" : ""} salva${simulacoesRecentes.length !== 1 ? "s" : ""}`
+                      : "Nenhuma simulação ainda"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Link href="/colaborador/calculadora">
+                    <button className="flex items-center gap-1 text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium">
+                      <Plus className="w-3 h-3" /> Nova
+                    </button>
+                  </Link>
+                  <Link href="/colaborador/simulacoes">
+                    <button className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                      Ver todas <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </Link>
+                </div>
+              </div>
+              <div className="divide-y overflow-y-auto" style={{ maxHeight: "320px" }}>
+                {loading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                  </div>
+                ) : simulacoesRecentes.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400">
+                    <Calculator className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-xs">Nenhuma simulação ainda</p>
+                    <Link href="/colaborador/calculadora">
+                      <button className="mt-2 text-xs text-blue-600 hover:underline">
+                        + Criar primeira simulação
+                      </button>
+                    </Link>
+                  </div>
+                ) : (
+                  simulacoesRecentes.slice(0, 5).map(sim => (
+                    <div key={sim.id} className="flex items-center gap-3 p-3 hover:bg-gray-50">
+                      <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                        <Calculator className="w-4 h-4 text-green-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{sim.cliente_nome}</p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {sim.linha_credito || sim.banco || "—"}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-sm font-semibold text-gray-900">{fmt(sim.valor_solicitado ?? 0)}</p>
+                        <p className="text-xs text-gray-400">{fmtDate(sim.criado_em)}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Simulações para captadores (só simulações, sem leads) */}
+        {isCaptador && (
           <div className="bg-white rounded-xl border shadow-sm flex flex-col">
             <div className="flex items-center justify-between p-4 border-b">
               <div>
-                <h3 className="font-semibold text-gray-900">Simulações</h3>
+                <h3 className="font-semibold text-gray-900">Minhas Simulações</h3>
                 <p className="text-xs text-gray-500">
                   {simulacoesRecentes.length > 0
                     ? `${simulacoesRecentes.length} simulação${simulacoesRecentes.length !== 1 ? "ões" : ""} salva${simulacoesRecentes.length !== 1 ? "s" : ""}`
@@ -312,7 +546,7 @@ export default function Dashboard() {
                 </Link>
               </div>
             </div>
-            <div className="divide-y overflow-y-auto" style={{ maxHeight: "320px" }}>
+            <div className="divide-y overflow-y-auto" style={{ maxHeight: "280px" }}>
               {loading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
@@ -321,14 +555,9 @@ export default function Dashboard() {
                 <div className="text-center py-8 text-gray-400">
                   <Calculator className="w-8 h-8 mx-auto mb-2 opacity-30" />
                   <p className="text-xs">Nenhuma simulação ainda</p>
-                  <Link href="/colaborador/calculadora">
-                    <button className="mt-2 text-xs text-blue-600 hover:underline">
-                      + Criar primeira simulação
-                    </button>
-                  </Link>
                 </div>
               ) : (
-                simulacoesRecentes.map(sim => (
+                simulacoesRecentes.slice(0, 5).map(sim => (
                   <div key={sim.id} className="flex items-center gap-3 p-3 hover:bg-gray-50">
                     <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                       <Calculator className="w-4 h-4 text-green-600" />
@@ -337,7 +566,6 @@ export default function Dashboard() {
                       <p className="text-sm font-medium text-gray-900 truncate">{sim.cliente_nome}</p>
                       <p className="text-xs text-gray-500 truncate">
                         {sim.linha_credito || sim.banco || "—"}
-                        {sim.empresa ? ` · ${sim.empresa}` : ""}
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0">
@@ -349,10 +577,10 @@ export default function Dashboard() {
               )}
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Leads por produto */}
-        {stats && stats.leads.total > 0 && (
+        {/* Leads por produto — apenas gestores */}
+        {isGestor && stats && stats.leads.total > 0 && (
           <div className="bg-white rounded-xl border shadow-sm p-5">
             <h3 className="font-semibold text-gray-900 mb-4">Leads por Produto</h3>
             <div className="space-y-3">
