@@ -294,20 +294,32 @@ export default function Empresas() {
   const [tagInput, setTagInput] = useState("");
   const [secaoAberta, setSecaoAberta] = useState<string>("basico");
   const [confirmandoExclusao, setConfirmandoExclusao] = useState<string | null>(null);
-  // Listas de captadores e analistas para os selects no formulário de empresa
-  const [captadores, setCaptadores] = useState<{ id: string; nome: string }[]>([]);
-  const [analistas, setAnalistas] = useState<{ id: string; nome: string; cargo: string }[]>([]);
+  // Listas para os selects no formulário de empresa
+  const [captacao, setCaptacao] = useState<{ id: string; nome: string; cargo: string }[]>([]);
+  const [atendimento, setAtendimento] = useState<{ id: string; nome: string; cargo: string }[]>([]);
+  // Manter compatibilidade com código legado
+  const captadores = captacao;
+  const analistas = atendimento;
 
-  // Carregar colaboradores ao montar
+  // Carregar colaboradores ao montar usando rota especializada
   useEffect(() => {
-    apiFetch("/api/colaboradores")
-      .then((data: any[]) => {
-        const ativos = (data || []).filter((c: any) => c.ativo);
-        setCaptadores(ativos.filter((c: any) => c.cargo?.toLowerCase() === "captador"));
-        // Analistas = todos os cargos exceto captador (podem ser responsáveis por empresas)
-        setAnalistas(ativos.filter((c: any) => c.cargo?.toLowerCase() !== "captador"));
+    apiFetch("/api/colaboradores/para-empresa")
+      .then((data: any) => {
+        setCaptacao(data?.captacao || []);
+        setAtendimento(data?.atendimento || []);
       })
-      .catch(() => {});
+      .catch(() => {
+        // Fallback: usar rota geral
+        apiFetch("/api/colaboradores")
+          .then((data: any[]) => {
+            const ativos = (data || []).filter((c: any) => c.ativo);
+            setCaptacao(ativos.filter((c: any) =>
+            ));
+            setAtendimento(ativos.filter((c: any) =>
+            ));
+          })
+          .catch(() => {});
+      });
   }, []);
 
   // ─── Carregar empresas ──────────────────────────────────────────────────────────────────────────────────
@@ -1594,44 +1606,46 @@ export default function Empresas() {
                       className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                     />
                   </div>
-                  {/* Equipe Responsável: Captador + Analista */}
+                  {/* Equipe Responsável: Captação + Atendimento */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t">
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
                         <span className="inline-block w-2 h-2 rounded-full bg-orange-400"></span>
-                        Captador <span className="text-gray-400 font-normal">(opcional)</span>
+                        Responsável pela Captação <span className="text-gray-400 font-normal">(opcional)</span>
                       </label>
+                      <p className="text-xs text-gray-400">Gerente, Diretor, Consultor ou Captador Externo</p>
                       <select
                         value={form.captador_id || ""}
                         onChange={e => set("captador_id", e.target.value || undefined)}
                         className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
                       >
-                        <option value="">Nenhum captador</option>
-                        {captadores.map(c => (
-                          <option key={c.id} value={c.id}>{c.nome}</option>
+                        <option value="">Nenhum responsável pela captação</option>
+                        {captacao.map(c => (
+                          <option key={c.id} value={c.id}>{c.nome} — {c.cargo}</option>
                         ))}
                       </select>
-                      {captadores.length === 0 && (
-                        <p className="text-xs text-gray-400">Nenhum captador ativo. Crie em Usuários com cargo "Captador".</p>
+                      {captacao.length === 0 && (
+                        <p className="text-xs text-amber-500">Nenhum colaborador elegível para captação. Crie em Usuários.</p>
                       )}
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
                         <span className="inline-block w-2 h-2 rounded-full bg-blue-500"></span>
-                        Analista Responsável <span className="text-gray-400 font-normal">(opcional)</span>
+                        Responsável pelo Atendimento <span className="text-gray-400 font-normal">(opcional)</span>
                       </label>
+                      <p className="text-xs text-gray-400">Analista, Consultor, Gerente, Diretor ou Admin</p>
                       <select
                         value={form.analista_id || ""}
                         onChange={e => set("analista_id", e.target.value || undefined)}
                         className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       >
-                        <option value="">Nenhum analista vinculado</option>
-                        {analistas.map(a => (
+                        <option value="">Nenhum responsável pelo atendimento</option>
+                        {atendimento.map(a => (
                           <option key={a.id} value={a.id}>{a.nome} — {a.cargo}</option>
                         ))}
                       </select>
-                      {analistas.length === 0 && (
-                        <p className="text-xs text-gray-400">Nenhum analista ativo. Crie em Usuários.</p>
+                      {atendimento.length === 0 && (
+                        <p className="text-xs text-gray-400">Nenhum colaborador elegível. Crie em Usuários.</p>
                       )}
                     </div>
                   </div>

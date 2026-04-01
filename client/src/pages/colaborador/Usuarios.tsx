@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Layout from "./Layout";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +38,7 @@ import {
   Pencil,
   X,
   Save,
+  ShieldOff,
 } from "lucide-react";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -50,15 +52,29 @@ interface Colaborador {
   created_at: string;
 }
 
-const CARGOS = [
+// ─── 7 cargos definitivos do sistema ─────────────────────────────────────────
+const TODOS_CARGOS = [
+  "Administrador",
+  "Diretor",
+  "Gerente Comercial",
   "Analista de Crédito",
   "Consultor de Crédito",
-  "Gerente Comercial",
-  "Diretor",
-  "Administrador",
+  "Captador Externo",
   "Estagiário",
-  "Captador",
-];
+] as const;
+
+// Hierarquia: quem pode criar quem
+// Administrador → todos os cargos
+// Diretor → todos exceto Administrador
+// Gerente Comercial → Analista, Consultor, Captador Externo, Estagiário
+const CARGOS_CRIADOS_POR: Record<string, string[]> = {
+  administrador: [...TODOS_CARGOS],
+  diretor: ["Diretor", "Gerente Comercial", "Analista de Crédito", "Consultor de Crédito", "Captador Externo", "Estagiário"],
+  "gerente comercial": ["Analista de Crédito", "Consultor de Crédito", "Captador Externo", "Estagiário"],
+};
+
+// Cargos que NÃO precisam de telefone obrigatório (mas é recomendado)
+const CARGOS_TELEFONE_OBRIGATORIO = ["captador externo"];
 
 // ─── Gerador de senha segura ──────────────────────────────────────────────────
 function gerarSenha(): string {
@@ -66,9 +82,28 @@ function gerarSenha(): string {
   return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
 }
 
-// ─── Componente principal ─────────────────────────────────────────────────────
+// ─── Helpers visuais ──────────────────────────────────────────────────────────
+function badgeCargo(c: string) {
+  const lower = c.toLowerCase();
+  if (lower === "administrador") return "bg-purple-100 text-purple-800 border-purple-300";
+  if (lower === "diretor") return "bg-indigo-100 text-indigo-800 border-indigo-300";
+  if (lower === "gerente comercial") return "bg-blue-100 text-blue-800 border-blue-300";
+  if (lower === "analista de crédito") return "bg-sky-100 text-sky-800 border-sky-300";
+  if (lower === "consultor de crédito") return "bg-teal-100 text-teal-800 border-teal-300";
+  if (lower === "captador externo") return "bg-amber-100 text-amber-800 border-amber-300";
+  if (lower === "estagiário") return "bg-gray-100 text-gray-600 border-gray-300";
+  return "bg-gray-100 text-gray-700 border-gray-300";
+}
 
+// ─── Componente principal ─────────────────────────────────────────────────────
 export default function UsuariosPage() {
+  const { colaborador: eu } = useAuth();
+
+  // Cargos que o usuário logado pode criar
+  const cargoEu = (eu?.cargo || "").toLowerCase();
+  const cargosPermitidos: string[] = CARGOS_CRIADOS_POR[cargoEu] ?? [];
+  const podeGerenciar = cargosPermitidos.length > 0;
+
   // ── Estado do formulário de criação ──────────────────────────────────────
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
@@ -93,7 +128,6 @@ export default function UsuariosPage() {
   const [mensagemEdit, setMensagemEdit] = useState<{ tipo: "sucesso" | "erro"; texto: string } | null>(null);
 
   // ─── Carregar colaboradores ───────────────────────────────────────────────
-
   async function carregarColaboradores() {
     setCarregando(true);
     try {
@@ -111,16 +145,14 @@ export default function UsuariosPage() {
   }, []);
 
   // ─── Criar usuário ────────────────────────────────────────────────────────
-
   async function handleCriar(e: React.FormEvent) {
     e.preventDefault();
     if (!nome.trim() || !email.trim() || !cargo || !senha) {
       setMensagem({ tipo: "erro", texto: "Preencha todos os campos obrigatórios." });
       return;
     }
-    // Captador precisa de telefone para identificação no webhook
-    if (cargo.toLowerCase() === "captador" && !telefone.trim()) {
-      setMensagem({ tipo: "erro", texto: "Captadores precisam de telefone para identificação no Chatwoot." });
+    if (CARGOS_TELEFONE_OBRIGATORIO.includes(cargo.toLowerCase()) && !telefone.trim()) {
+      setMensagem({ tipo: "erro", texto: "Captadores Externos precisam de telefone para identificação no Chatwoot." });
       return;
     }
 
@@ -141,7 +173,7 @@ export default function UsuariosPage() {
 
       setMensagem({
         tipo: "sucesso",
-        texto: `Usuário "${nome}" criado com sucesso! E-mail: ${email} | Senha: ${senha}`,
+        texto: `Colaborador "${nome}" criado! E-mail: ${email} | Senha: ${senha}`,
       });
 
       setNome("");
@@ -151,7 +183,7 @@ export default function UsuariosPage() {
       setSenha("");
       carregarColaboradores();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erro ao criar usuário.";
+      const msg = err instanceof Error ? err.message : "Erro ao criar colaborador.";
       setMensagem({ tipo: "erro", texto: msg });
     }
 
@@ -159,7 +191,6 @@ export default function UsuariosPage() {
   }
 
   // ─── Editar colaborador ───────────────────────────────────────────────────
-
   function abrirEdicao(col: Colaborador) {
     setEditandoId(col.id);
     setEditNome(col.nome);
@@ -178,8 +209,8 @@ export default function UsuariosPage() {
       setMensagemEdit({ tipo: "erro", texto: "Nome e cargo são obrigatórios." });
       return;
     }
-    if (editCargo.toLowerCase() === "captador" && !editTelefone.trim()) {
-      setMensagemEdit({ tipo: "erro", texto: "Captadores precisam de telefone para identificação." });
+    if (CARGOS_TELEFONE_OBRIGATORIO.includes(editCargo.toLowerCase()) && !editTelefone.trim()) {
+      setMensagemEdit({ tipo: "erro", texto: "Captadores Externos precisam de telefone." });
       return;
     }
     setSalvandoEdit(true);
@@ -192,11 +223,11 @@ export default function UsuariosPage() {
           telefone: editTelefone.trim() || null,
         }),
       });
-      setMensagemEdit({ tipo: "sucesso", texto: "Salvo com sucesso!" });
+      setMensagemEdit({ tipo: "sucesso", texto: "Salvo!" });
       setTimeout(() => {
         setEditandoId(null);
         setMensagemEdit(null);
-      }, 1200);
+      }, 1000);
       carregarColaboradores();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro ao salvar.";
@@ -206,34 +237,19 @@ export default function UsuariosPage() {
   }
 
   // ─── Alternar status ativo/inativo ────────────────────────────────────────
-
   async function toggleAtivo(id: string, _ativo: boolean) {
     await apiFetch(`/api/colaboradores/${id}/toggle`, { method: "PATCH" });
     carregarColaboradores();
   }
 
   // ─── Copiar senha ─────────────────────────────────────────────────────────
-
   function copiarSenha() {
     navigator.clipboard.writeText(senha);
     setSenhaCopiada(true);
     setTimeout(() => setSenhaCopiada(false), 2000);
   }
 
-  // ─── Helpers ──────────────────────────────────────────────────────────────
-
-  function badgeCargo(c: string) {
-    const lower = c.toLowerCase();
-    if (lower === "captador") return "bg-amber-100 text-amber-800 border-amber-300";
-    if (["admin","administrador","diretor"].includes(lower)) return "bg-purple-100 text-purple-800 border-purple-300";
-    if (["gerente","gestor"].includes(lower)) return "bg-blue-100 text-blue-800 border-blue-300";
-    if (["analista de crédito","analista"].includes(lower)) return "bg-sky-100 text-sky-800 border-sky-300";
-    if (["consultor de crédito","consultor"].includes(lower)) return "bg-teal-100 text-teal-800 border-teal-300";
-    return "bg-gray-100 text-gray-700 border-gray-300";
-  }
-
   // ─── Render ───────────────────────────────────────────────────────────────
-
   return (
     <Layout>
       <div className="max-w-5xl mx-auto space-y-6">
@@ -251,10 +267,28 @@ export default function UsuariosPage() {
           </div>
         </div>
 
+        {/* Aviso se não tem permissão para criar */}
+        {!podeGerenciar && (
+          <Card className="border-red-200 bg-red-50">
+            <CardContent className="pt-5">
+              <div className="flex items-center gap-3 text-red-800">
+                <ShieldOff className="h-5 w-5 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-sm">Acesso restrito</p>
+                  <p className="text-xs mt-0.5">
+                    Seu cargo ({eu?.cargo}) não tem permissão para criar novos colaboradores.
+                    Apenas <strong>Administrador</strong>, <strong>Diretor</strong> e <strong>Gerente Comercial</strong> podem gerenciar usuários.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
           {/* ── Formulário de criação ── */}
-          <Card className="shadow-md">
+          <Card className={`shadow-md ${!podeGerenciar ? "opacity-60 pointer-events-none" : ""}`}>
             <CardHeader className="border-b pb-4">
               <CardTitle className="text-base flex items-center gap-2">
                 <UserPlus className="h-5 w-5 text-primary" />
@@ -307,20 +341,31 @@ export default function UsuariosPage() {
                       <SelectValue placeholder="Selecione o cargo..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {CARGOS.map((c) => (
+                      {cargosPermitidos.map((c) => (
                         <SelectItem key={c} value={c}>{c}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  {cargo.toLowerCase() === "captador" && (
-                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                      Captadores não geram leads nem análise de IA no Chatwoot. O telefone abaixo é <strong>obrigatório</strong> para identificação automática.
-                    </p>
-                  )}
-                  {["analista de crédito","consultor de crédito","estagiário"].includes(cargo.toLowerCase()) && (
-                    <p className="text-xs text-sky-700 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2">
-                      Analistas/Consultores veem apenas empresas onde são responsáveis ou analistas vinculados. Cadastre o telefone para que mensagens deles no WhatsApp não gerem leads.
-                    </p>
+
+                  {/* Descrição do cargo selecionado */}
+                  {cargo && (
+                    <div className={`text-xs rounded-lg px-3 py-2 border ${
+                      cargo.toLowerCase() === "captador externo"
+                        ? "bg-amber-50 border-amber-200 text-amber-800"
+                        : cargo.toLowerCase() === "administrador"
+                        ? "bg-purple-50 border-purple-200 text-purple-800"
+                        : cargo.toLowerCase() === "estagiário"
+                        ? "bg-gray-50 border-gray-200 text-gray-700"
+                        : "bg-sky-50 border-sky-200 text-sky-800"
+                    }`}>
+                      {cargo.toLowerCase() === "administrador" && "Acesso total ao sistema: dashboards, usuários, integrações n8n, todos os leads e empresas."}
+                      {cargo.toLowerCase() === "diretor" && "Acesso total a leads, empresas e pode criar usuários abaixo de Administrador."}
+                      {cargo.toLowerCase() === "gerente comercial" && "Acesso total a leads e empresas. Pode criar Analistas, Consultores, Captadores e Estagiários."}
+                      {cargo.toLowerCase() === "analista de crédito" && "Vê apenas empresas e leads onde é responsável ou analista vinculado."}
+                      {cargo.toLowerCase() === "consultor de crédito" && "Vê apenas empresas e leads onde é responsável. Pode ser captador de origem de empresas."}
+                      {cargo.toLowerCase() === "captador externo" && "Não gera leads nem análise de IA. Mensagens no Chatwoot são gravadas como conversa. Telefone obrigatório para identificação."}
+                      {cargo.toLowerCase() === "estagiário" && "Acesso restrito — vê apenas registros onde é responsável. Não pode ser responsável por atendimento de empresa."}
+                    </div>
                   )}
                 </div>
 
@@ -328,7 +373,7 @@ export default function UsuariosPage() {
                 <div className="space-y-1.5">
                   <Label htmlFor="telefone-user">
                     Telefone WhatsApp
-                    {cargo.toLowerCase() === "captador"
+                    {CARGOS_TELEFONE_OBRIGATORIO.includes(cargo.toLowerCase())
                       ? <span className="text-destructive"> *</span>
                       : <span className="text-muted-foreground text-xs ml-1">(recomendado)</span>
                     }
@@ -340,7 +385,7 @@ export default function UsuariosPage() {
                       type="tel"
                       value={telefone}
                       onChange={(e) => setTelefone(e.target.value)}
-                      placeholder="(11) 99999-9999"
+                      placeholder="(61) 99999-9999"
                       className="pl-9"
                     />
                   </div>
@@ -415,7 +460,7 @@ export default function UsuariosPage() {
                   </div>
                 )}
 
-                <Button type="submit" className="w-full h-11 font-bold" disabled={criando}>
+                <Button type="submit" className="w-full h-11 font-bold" disabled={criando || !podeGerenciar}>
                   <UserPlus className="mr-2 h-4 w-4" />
                   {criando ? "Criando colaborador..." : "Criar Colaborador"}
                 </Button>
@@ -449,7 +494,7 @@ export default function UsuariosPage() {
                   <p className="text-sm mt-1 opacity-60">Crie o primeiro usando o formulário ao lado</p>
                 </div>
               ) : (
-                <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
+                <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
                   {colaboradores.map((col) => (
                     <div
                       key={col.id}
@@ -474,7 +519,7 @@ export default function UsuariosPage() {
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {CARGOS.map(c => (
+                                  {TODOS_CARGOS.map(c => (
                                     <SelectItem key={c} value={c} className="text-sm">{c}</SelectItem>
                                   ))}
                                 </SelectContent>
@@ -485,7 +530,7 @@ export default function UsuariosPage() {
                             <Label className="text-xs flex items-center gap-1">
                               <Phone className="h-3 w-3" />
                               Telefone WhatsApp
-                              {editCargo.toLowerCase() === "captador"
+                              {CARGOS_TELEFONE_OBRIGATORIO.includes(editCargo.toLowerCase())
                                 ? <span className="text-destructive"> *</span>
                                 : <span className="text-muted-foreground"> (recomendado)</span>
                               }
@@ -493,7 +538,7 @@ export default function UsuariosPage() {
                             <Input
                               value={editTelefone}
                               onChange={e => setEditTelefone(e.target.value)}
-                              placeholder="(11) 99999-9999"
+                              placeholder="(61) 99999-9999"
                               className="h-8 text-sm"
                             />
                           </div>
@@ -539,8 +584,8 @@ export default function UsuariosPage() {
                                   {col.cargo}
                                 </span>
                                 {col.telefone ? (
-                                  <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                                    <Phone className="h-3 w-3 text-green-500" />
+                                  <span className="text-xs text-green-600 flex items-center gap-0.5">
+                                    <Phone className="h-3 w-3" />
                                     {col.telefone}
                                   </span>
                                 ) : (
@@ -553,18 +598,20 @@ export default function UsuariosPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                            <button
-                              onClick={() => abrirEdicao(col)}
-                              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
-                              title="Editar colaborador"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
+                            {podeGerenciar && (
+                              <button
+                                onClick={() => abrirEdicao(col)}
+                                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
+                                title="Editar colaborador"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                             <Badge
                               variant={col.ativo ? "default" : "secondary"}
-                              className={`text-xs cursor-pointer select-none ${col.ativo ? "bg-green-600 hover:bg-green-700" : ""}`}
-                              onClick={() => toggleAtivo(col.id, col.ativo)}
-                              title="Clique para alternar status"
+                              className={`text-xs cursor-pointer select-none ${col.ativo ? "bg-green-600 hover:bg-green-700" : ""} ${!podeGerenciar ? "pointer-events-none" : ""}`}
+                              onClick={() => podeGerenciar && toggleAtivo(col.id, col.ativo)}
+                              title={podeGerenciar ? "Clique para alternar status" : ""}
                             >
                               {col.ativo ? "Ativo" : "Inativo"}
                             </Badge>
@@ -579,26 +626,48 @@ export default function UsuariosPage() {
           </Card>
         </div>
 
-        {/* ── Legenda de cargos e permissões ── */}
+        {/* ── Tabela de permissões por cargo ── */}
         <Card className="border-blue-100 bg-blue-50/50">
           <CardContent className="pt-5">
             <div className="flex items-start gap-3">
               <Shield className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
               <div className="space-y-3 text-sm text-blue-900 w-full">
-                <p className="font-semibold">Permissões por Cargo</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  <div className="bg-white/60 rounded-lg p-2.5 border border-blue-100">
-                    <p className="font-semibold text-purple-800 mb-1">Admin / Diretor / Gerente</p>
-                    <p className="text-gray-600">Acesso total — vê todos os leads, empresas e colaboradores.</p>
-                  </div>
-                  <div className="bg-white/60 rounded-lg p-2.5 border border-blue-100">
-                    <p className="font-semibold text-sky-800 mb-1">Analista / Consultor / Estagiário</p>
-                    <p className="text-gray-600">Acesso restrito — vê apenas empresas onde é responsável ou analista vinculado. Com telefone cadastrado, mensagens no WhatsApp não geram leads.</p>
-                  </div>
-                  <div className="bg-white/60 rounded-lg p-2.5 border border-amber-100 sm:col-span-2">
-                    <p className="font-semibold text-amber-800 mb-1">Captador</p>
-                    <p className="text-gray-600">Não gera leads nem análise de IA via Chatwoot. Mensagens recebidas são gravadas como conversa, mas sem criar lead. <strong>Telefone obrigatório</strong> para identificação automática. Pode ser vinculado a empresas como captador de origem.</p>
-                  </div>
+                <p className="font-semibold">Hierarquia de Cargos e Permissões</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-blue-100/80">
+                        <th className="text-left px-3 py-2 rounded-tl-lg font-semibold">Cargo</th>
+                        <th className="text-center px-2 py-2 font-semibold">Ver tudo</th>
+                        <th className="text-center px-2 py-2 font-semibold">Criar usuários</th>
+                        <th className="text-center px-2 py-2 font-semibold">Captação</th>
+                        <th className="text-center px-2 py-2 font-semibold rounded-tr-lg">Atendimento</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-blue-100">
+                      {[
+                        { cargo: "Administrador", verTudo: true, criar: "Todos", captacao: true, atendimento: true },
+                        { cargo: "Diretor", verTudo: true, criar: "Exceto Admin", captacao: true, atendimento: true },
+                        { cargo: "Gerente Comercial", verTudo: true, criar: "Analista/Consultor/Captador/Estag.", captacao: true, atendimento: true },
+                        { cargo: "Analista de Crédito", verTudo: false, criar: "—", captacao: false, atendimento: true },
+                        { cargo: "Consultor de Crédito", verTudo: false, criar: "—", captacao: true, atendimento: true },
+                        { cargo: "Captador Externo", verTudo: false, criar: "—", captacao: true, atendimento: false },
+                        { cargo: "Estagiário", verTudo: false, criar: "—", captacao: false, atendimento: false },
+                      ].map(row => (
+                        <tr key={row.cargo} className="bg-white/50 hover:bg-white/80">
+                          <td className="px-3 py-2">
+                            <span className={`px-1.5 py-0.5 rounded border font-medium ${badgeCargo(row.cargo)}`}>
+                              {row.cargo}
+                            </span>
+                          </td>
+                          <td className="text-center px-2 py-2">{row.verTudo ? "✅" : "🔒"}</td>
+                          <td className="text-center px-2 py-2 text-gray-600">{typeof row.criar === "string" ? row.criar : (row.criar ? "✅" : "—")}</td>
+                          <td className="text-center px-2 py-2">{row.captacao ? "✅" : "—"}</td>
+                          <td className="text-center px-2 py-2">{row.atendimento ? "✅" : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
                 <p className="text-xs text-blue-700 bg-blue-100/60 rounded-lg px-3 py-2 border border-blue-200">
                   <strong>Dica:</strong> Cadastre o telefone WhatsApp de todos os colaboradores que interagem pelo Chatwoot para evitar que suas mensagens gerem leads automaticamente.
@@ -618,9 +687,9 @@ export default function UsuariosPage() {
                 <ul className="space-y-1 list-disc list-inside text-xs">
                   <li>Após criar o colaborador, comunique a senha por canal seguro (WhatsApp, ligação).</li>
                   <li>O colaborador pode alterar a senha após o primeiro login em <strong>/colaborador/perfil</strong>.</li>
-                  <li>Para <strong>Captadores</strong>: o telefone deve ser o mesmo número cadastrado no Chatwoot.</li>
-                  <li>Para <strong>Analistas/Consultores</strong>: cadastre o telefone e vincule-os às empresas no formulário de Empresa (campo "Analista Responsável").</li>
-                  <li>O isolamento de painel é automático — cada analista vê apenas suas empresas vinculadas.</li>
+                  <li>Para <strong>Captadores Externos</strong>: o telefone deve ser o mesmo número cadastrado no Chatwoot.</li>
+                  <li>Para <strong>Analistas/Consultores</strong>: vincule-os às empresas no formulário de Empresa (campo "Responsável pelo Atendimento").</li>
+                  <li>O isolamento de painel é automático — cada colaborador vê apenas seus registros vinculados.</li>
                 </ul>
               </div>
             </div>

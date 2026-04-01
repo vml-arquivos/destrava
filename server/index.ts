@@ -116,6 +116,38 @@ async function processarEmpresaDaSimulacao(
   return res.rows[0].id;
 }
 
+// ─── Cargos e hierarquia de permissões ──────────────────────────────────────
+// 7 cargos definitivos do sistema
+const CARGOS_VALIDOS = [
+  'Administrador',
+  'Diretor',
+  'Gerente Comercial',
+  'Analista de Crédito',
+  'Consultor de Crédito',
+  'Captador Externo',
+  'Estagiário',
+] as const;
+
+// Cargos que têm acesso total (veem tudo, podem criar usuários)
+const CARGOS_GESTAO = ['administrador', 'diretor', 'gerente comercial', 'admin', 'gerente', 'gestor'];
+
+// Cargos que podem criar novos usuários (e quais cargos podem criar)
+const CARGOS_PODEM_CRIAR_USUARIOS = ['administrador', 'diretor', 'gerente comercial', 'admin'];
+
+// Cargos que NÃO podem ser responsáveis pelo atendimento de empresa
+const CARGOS_BLOQUEADOS_ATENDIMENTO = ['captador externo', 'estagiário', 'estagiario'];
+
+// Cargos que podem ser responsáveis pela captação
+const CARGOS_CAPTACAO = ['captador externo', 'gerente comercial', 'diretor', 'consultor de crédito', 'consultor de credito', 'administrador', 'admin'];
+
+function isGestorCargo(cargo: string): boolean {
+  return CARGOS_GESTAO.includes((cargo || '').toLowerCase());
+}
+
+function podecriarUsuarios(cargo: string): boolean {
+  return CARGOS_PODEM_CRIAR_USUARIOS.includes((cargo || '').toLowerCase());
+}
+
 // ─── App ─────────────────────────────────────────────────────────────────────
 async function startServer() {
   const app = express();
@@ -419,9 +451,7 @@ async function startServer() {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const isAdminKey = !req.headers.authorization && req.headers["x-admin-key"];
-      const isGestor = isAdminKey || ['admin','administrador','diretor','gerente','gestor'].includes(
-        (colaborador?.cargo || '').toLowerCase()
-      );
+      const isGestor = isAdminKey || isGestorCargo(colaborador?.cargo || '');
       const status = req.query.status as string | undefined;
       const busca = req.query.busca as string | undefined;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
@@ -575,12 +605,25 @@ async function startServer() {
     }
   });
 
-  // ─── COLABORADORES API ────────────────────────────────────────────────────
+  // ─── COLABORADORES API ─────────────────────────────────────────────────────────────────────────
   app.post("/api/colaboradores", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
+      const solicitante = (req as Request & { colaborador: any }).colaborador;
+      const isAdminKey = !req.headers.authorization && req.headers["x-admin-key"];
+      // Verificar se quem está criando tem permissão
+      if (!isAdminKey && !podecriarUsuarios(solicitante?.cargo || '')) {
+        res.status(403).json({ error: "Apenas Administrador, Diretor e Gerente Comercial podem criar colaboradores." });
+        return;
+      }
       const { nome, email, cargo, senha, telefone } = req.body;
       if (!nome || !email || !cargo || !senha) {
         res.status(400).json({ error: "Campos obrigatórios: nome, email, cargo, senha" });
+        return;
+      }
+      // Validar cargo
+      const cargosValidos = CARGOS_VALIDOS.map(c => c.toLowerCase());
+      if (!cargosValidos.includes((cargo || '').toLowerCase())) {
+        res.status(400).json({ error: `Cargo inválido. Cargos permitidos: ${CARGOS_VALIDOS.join(', ')}` });
         return;
       }
       const senhaHash = await bcrypt.hash(senha, 12);
@@ -640,7 +683,28 @@ async function startServer() {
     }
   });
 
-  // ─── n8n WEBHOOK CONFIG API ────────────────────────────────────────────────
+  // GET /api/colaboradores/para-empresa — retorna listas separadas para os selects do formulário de empresa
+  app.get("/api/colaboradores/para-empresa", requireJwt, async (_req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        "SELECT id, nome, cargo FROM colaboradores WHERE ativo = true ORDER BY nome"
+      );
+      // Responsáveis pela captação: qualquer cargo exceto Analista de Crédito e Estagiário
+      const captacao = rows.filter(c =>
+        !['analista de crédito', 'analista de credito', 'estagiário', 'estagiario'].includes(c.cargo.toLowerCase())
+      );
+      // Responsáveis pelo atendimento: qualquer cargo exceto Captador Externo e Estagiário
+      const atendimento = rows.filter(c =>
+        !CARGOS_BLOQUEADOS_ATENDIMENTO.includes(c.cargo.toLowerCase())
+      );
+      res.json({ captacao, atendimento });
+    } catch (err) {
+      console.error("[COLAB PARA-EMPRESA ERROR]", err);
+      res.status(500).json({ error: "Erro ao buscar colaboradores." });
+    }
+  });
+
+  // ─── n8n WEBHOOK CONFIG API ─────────────────────────────────────────────────────────────────────────
   app.get("/api/n8n/status", requireJwtOrAdmin, (_req: Request, res: Response) => {
     res.json({
       configured: !!process.env.N8N_WEBHOOK_URL,
@@ -674,7 +738,18 @@ async function startServer() {
         res.status(404).json({ error: "Usuário não encontrado" });
         return;
       }
-      res.json(user);
+      // Adicionar flags de permissão derivadas do cargo
+      const cargoLower = (user.cargo || '').toLowerCase();
+      res.json({
+        ...user,
+        permissoes: {
+          isGestor: isGestorCargo(cargoLower),
+          podeGerenciarUsuarios: podecriarUsuarios(cargoLower),
+          podeVerTudo: isGestorCargo(cargoLower),
+          isCaptador: cargoLower === 'captador externo',
+          isEstagiario: cargoLower === 'estagiário' || cargoLower === 'estagiario',
+        },
+      });
     } catch (err) {
       console.error("[GET /api/me]", err);
       res.status(500).json({ error: "Erro ao obter usuário" });
@@ -756,9 +831,7 @@ async function startServer() {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       // Ownership: gestor/admin vê todas; colaborador comum vê apenas as suas
       // Campo `cargo` confirmado no banco real (colaboradores.cargo, NOT NULL)
-      const isGestor = ['admin','administrador','diretor','gerente','gestor'].includes(
-        (colaborador?.cargo || '').toLowerCase()
-      );
+      const isGestor = isGestorCargo(colaborador?.cargo || '');
       const query = isGestor
         ? `SELECT * FROM simulacoes_colaborador ORDER BY criado_em DESC`
         : `SELECT * FROM simulacoes_colaborador WHERE colaborador_id = $1 ORDER BY criado_em DESC`;
@@ -1185,9 +1258,7 @@ async function startServer() {
       // Ownership: gestor/admin vê todas; colaborador comum vê apenas as suas
       // Campo `cargo` confirmado no banco real (colaboradores.cargo, NOT NULL)
       // Campo `responsavel_id` confirmado na tabela empresas (owner: destravadb)
-      const isGestor = ['admin','administrador','diretor','gerente','gestor'].includes(
-        (colaborador?.cargo || '').toLowerCase()
-      );
+      const isGestor = isGestorCargo(colaborador?.cargo || '');
       const busca = req.query.busca as string | undefined;
       const status = req.query.status as string | undefined;
       const params: any[] = [];
@@ -1793,9 +1864,7 @@ Responda APENAS com um JSON válido no seguinte formato:
   app.get("/api/crm/conversas", requireJwt, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const isAdmin = ['admin','administrador','diretor','gerente','gestor'].includes(
-        (colaborador.cargo || '').toLowerCase()
-      );
+      const isAdmin = isGestorCargo(colaborador.cargo || '');
       const { lead_id, status } = req.query;
       const params: any[] = [];
       const conditions: string[] = [];
