@@ -63,13 +63,13 @@ const TODOS_CARGOS = [
   "Estagiário",
 ] as const;
 
-// Hierarquia: quem pode criar quem
-// Administrador → todos os cargos
-// Diretor → todos exceto Administrador
-// Gerente Comercial → Analista, Consultor, Captador Externo, Estagiário
+// Hierarquia estrita: cada cargo só pode criar/editar cargos de nível INFERIOR ao seu
+// Administrador (0) → todos os outros
+// Diretor (1) → Gerente Comercial e abaixo (NÃO pode criar outro Diretor)
+// Gerente Comercial (2) → Analista, Consultor, Captador Externo, Estagiário
 const CARGOS_CRIADOS_POR: Record<string, string[]> = {
-  administrador: [...TODOS_CARGOS],
-  diretor: ["Diretor", "Gerente Comercial", "Analista de Crédito", "Consultor de Crédito", "Captador Externo", "Estagiário"],
+  administrador: ["Diretor", "Gerente Comercial", "Analista de Crédito", "Consultor de Crédito", "Captador Externo", "Estagiário"],
+  diretor: ["Gerente Comercial", "Analista de Crédito", "Consultor de Crédito", "Captador Externo", "Estagiário"],
   "gerente comercial": ["Analista de Crédito", "Consultor de Crédito", "Captador Externo", "Estagiário"],
 };
 
@@ -537,7 +537,8 @@ export default function UsuariosPage() {
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {TODOS_CARGOS.map(c => (
+                                  {/* Apenas cargos que o usuário logado pode atribuir (nível inferior ao seu) */}
+                                  {cargosPermitidos.map(c => (
                                     <SelectItem key={c} value={c} className="text-sm">{c}</SelectItem>
                                   ))}
                                 </SelectContent>
@@ -664,8 +665,8 @@ export default function UsuariosPage() {
                     </thead>
                     <tbody className="divide-y divide-blue-100">
                       {[
-                        { cargo: "Administrador", verTudo: true, criar: "Todos", captacao: true, atendimento: true },
-                        { cargo: "Diretor", verTudo: true, criar: "Exceto Admin", captacao: true, atendimento: true },
+                        { cargo: "Administrador", verTudo: true, criar: "Todos (exceto outro Admin)", captacao: true, atendimento: true },
+                        { cargo: "Diretor", verTudo: true, criar: "Exceto Admin e Diretor", captacao: true, atendimento: true },
                         { cargo: "Gerente Comercial", verTudo: true, criar: "Analista/Consultor/Captador/Estag.", captacao: true, atendimento: true },
                         { cargo: "Analista de Crédito", verTudo: false, criar: "—", captacao: false, atendimento: true },
                         { cargo: "Consultor de Crédito", verTudo: false, criar: "—", captacao: true, atendimento: true },

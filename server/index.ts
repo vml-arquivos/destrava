@@ -132,6 +132,38 @@ const CARGOS_PODEM_CRIAR_USUARIOS = ['administrador', 'diretor', 'gerente comerc
 const CARGOS_BLOQUEADOS_ATENDIMENTO = ['captador externo', 'estagiário', 'estagiario'];
 const CARGOS_CAPTACAO = ['captador externo', 'gerente comercial', 'diretor', 'consultor de crédito', 'consultor de credito', 'administrador', 'admin'];
 
+// ─── Hierarquia de cargos (nível 0 = mais alto) ───────────────────────────────
+// Regra: cada cargo só pode ver/criar/editar cargos com nível ESTRITAMENTE MAIOR
+const HIERARQUIA_CARGOS: Record<string, number> = {
+  'administrador': 0,
+  'admin':         0,
+  'diretor':       1,
+  'gerente comercial': 2,
+  'analista de crédito':  3,
+  'analista de credito':  3,
+  'consultor de crédito': 4,
+  'consultor de credito': 4,
+  'captador externo': 5,
+  'estagiário': 6,
+  'estagiario': 6,
+};
+
+/** Retorna o nível numérico do cargo (menor = mais alto na hierarquia) */
+function nivelCargo(cargo: string): number {
+  return HIERARQUIA_CARGOS[(cargo || '').toLowerCase()] ?? 99;
+}
+
+/** Retorna true se o solicitante pode gerenciar o alvo (nível do alvo > nível do solicitante) */
+function podeGerenciarCargo(solicitanteCargo: string, alvoCargo: string): boolean {
+  return nivelCargo(alvoCargo) > nivelCargo(solicitanteCargo);
+}
+
+/** Retorna os cargos que o solicitante pode criar/atribuir */
+function cargosGerenciaveis(solicitanteCargo: string): string[] {
+  const nivel = nivelCargo(solicitanteCargo);
+  return CARGOS_VALIDOS.filter(c => nivelCargo(c) > nivel);
+}
+
 function isGestorCargo(cargo: string): boolean {
   return CARGOS_GESTAO.includes((cargo || '').toLowerCase());
 }
@@ -658,7 +690,9 @@ async function startServer() {
     try {
       const solicitante = (req as Request & { colaborador: any }).colaborador;
       const isAdminKey = !req.headers.authorization && req.headers["x-admin-key"];
-      if (!isAdminKey && !podecriarUsuarios(solicitante?.cargo || '')) {
+      const cargoSolicitante = isAdminKey ? 'administrador' : (solicitante?.cargo || '');
+
+      if (!isAdminKey && !podecriarUsuarios(cargoSolicitante)) {
         res.status(403).json({ error: "Apenas Administrador, Diretor e Gerente Comercial podem criar colaboradores." });
         return;
       }
@@ -670,6 +704,11 @@ async function startServer() {
       const cargosValidos = CARGOS_VALIDOS.map(c => c.toLowerCase());
       if (!cargosValidos.includes((cargo || '').toLowerCase())) {
         res.status(400).json({ error: `Cargo inválido. Cargos permitidos: ${CARGOS_VALIDOS.join(', ')}` });
+        return;
+      }
+      // Verifica hierarquia: só pode criar cargos de nível inferior ao seu
+      if (!isAdminKey && !podeGerenciarCargo(cargoSolicitante, cargo)) {
+        res.status(403).json({ error: `Você não tem permissão para criar um colaborador com cargo "${cargo}".` });
         return;
       }
       const senhaHash = await bcrypt.hash(senha, 12);
@@ -694,23 +733,41 @@ async function startServer() {
     }
   });
 
-  app.get("/api/colaboradores", requireJwtOrAdmin, async (_req: Request, res: Response) => {
+  app.get("/api/colaboradores", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
+      const solicitante = (req as Request & { colaborador: any }).colaborador;
+      const isAdminKey = !req.headers.authorization && req.headers["x-admin-key"];
+      const cargoSolicitante = isAdminKey ? 'administrador' : (solicitante?.cargo || '');
+      const nivelSolicitante = nivelCargo(cargoSolicitante);
+
       // COALESCE garante compatibilidade com schemas que usam created_at ou criado_em
       const { rows } = await pool.query(
         `SELECT id, email, nome, cargo, telefone, ativo,
                 COALESCE(created_at, criado_em, NOW()) AS created_at
          FROM colaboradores ORDER BY nome`
       );
-      res.json(rows);
+
+      // Filtra: Administrador vê todos; demais veem apenas cargos de nível inferior
+      const filtrados = nivelSolicitante === 0
+        ? rows
+        : rows.filter(r => nivelCargo(r.cargo) > nivelSolicitante);
+
+      res.json(filtrados);
     } catch (err) {
       console.error("[COLAB GET ERROR]", err);
       // Fallback: tenta sem o campo de timestamp para não quebrar a listagem
       try {
+        const solicitante = (req as Request & { colaborador: any }).colaborador;
+        const isAdminKey = !req.headers.authorization && req.headers["x-admin-key"];
+        const cargoSolicitante = isAdminKey ? 'administrador' : (solicitante?.cargo || '');
+        const nivelSolicitante = nivelCargo(cargoSolicitante);
         const { rows } = await pool.query(
           "SELECT id, email, nome, cargo, telefone, ativo FROM colaboradores ORDER BY nome"
         );
-        res.json(rows.map(r => ({ ...r, created_at: null })));
+        const filtrados = nivelSolicitante === 0
+          ? rows
+          : rows.filter(r => nivelCargo(r.cargo) > nivelSolicitante);
+        res.json(filtrados.map(r => ({ ...r, created_at: null })));
       } catch (err2) {
         console.error("[COLAB GET FALLBACK ERROR]", err2);
         res.status(500).json({ error: "Erro ao buscar colaboradores." });
@@ -744,7 +801,35 @@ async function startServer() {
 
   app.patch("/api/colaboradores/:id", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
+      const solicitante = (req as Request & { colaborador: any }).colaborador;
+      const isAdminKey = !req.headers.authorization && req.headers["x-admin-key"];
+      const cargoSolicitante = isAdminKey ? 'administrador' : (solicitante?.cargo || '');
+
+      // Busca o cargo atual do alvo para verificar hierarquia
+      const alvoResult = await pool.query(
+        "SELECT id, cargo FROM colaboradores WHERE id = $1",
+        [req.params.id]
+      );
+      if (!alvoResult.rows[0]) {
+        res.status(404).json({ error: "Colaborador não encontrado." });
+        return;
+      }
+      const cargoAlvo = alvoResult.rows[0].cargo;
+
+      // Bloqueia edição de cargos iguais ou superiores (exceto admin-key)
+      if (!isAdminKey && !podeGerenciarCargo(cargoSolicitante, cargoAlvo)) {
+        res.status(403).json({ error: "Você não tem permissão para editar este colaborador." });
+        return;
+      }
+
       const { nome, cargo, ativo, senha, telefone } = req.body;
+
+      // Se está tentando alterar o cargo, verifica se o novo cargo também é inferior
+      if (cargo && !isAdminKey && !podeGerenciarCargo(cargoSolicitante, cargo)) {
+        res.status(403).json({ error: `Você não pode atribuir o cargo "${cargo}" a este colaborador.` });
+        return;
+      }
+
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (nome) updates.nome = nome.trim();
       if (cargo) updates.cargo = cargo;
@@ -1163,9 +1248,30 @@ async function startServer() {
     }
   });
 
-  // ─── PATCH /api/colaboradores/:id/toggle ──────────────────────────────────
+  // ─── PATCH /api/colaboradores/:id/toggle ──────────────────────────────────────────────────────────────────────────────────────
   app.patch("/api/colaboradores/:id/toggle", requireJwtOrAdmin, async (req: Request, res: Response) => {
     try {
+      const solicitante = (req as Request & { colaborador: any }).colaborador;
+      const isAdminKey = !req.headers.authorization && req.headers["x-admin-key"];
+      const cargoSolicitante = isAdminKey ? 'administrador' : (solicitante?.cargo || '');
+
+      // Busca o cargo do alvo
+      const alvoResult = await pool.query(
+        "SELECT id, cargo FROM colaboradores WHERE id = $1",
+        [req.params.id]
+      );
+      if (!alvoResult.rows[0]) {
+        res.status(404).json({ error: "Colaborador não encontrado." });
+        return;
+      }
+      const cargoAlvo = alvoResult.rows[0].cargo;
+
+      // Bloqueia toggle de cargos iguais ou superiores
+      if (!isAdminKey && !podeGerenciarCargo(cargoSolicitante, cargoAlvo)) {
+        res.status(403).json({ error: "Você não tem permissão para alterar o status deste colaborador." });
+        return;
+      }
+
       const { id } = req.params;
       const result = await pool.query(
         "UPDATE colaboradores SET ativo = NOT ativo WHERE id = $1 RETURNING *",
@@ -1178,7 +1284,7 @@ async function startServer() {
     }
   });
 
-  // ─── POST /api/admin/sql ──────────────────────────────────────────────────
+  // ─── POST /api/admin/sql ──────────────────────────────────────────────────────────────────────────────────────
   app.post("/api/admin/sql", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { query } = req.body;
