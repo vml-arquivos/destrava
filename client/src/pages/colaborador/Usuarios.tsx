@@ -118,6 +118,7 @@ export default function UsuariosPage() {
   // ── Estado da lista ───────────────────────────────────────────────────────
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [erroLista, setErroLista] = useState<string | null>(null);
 
   // ── Estado de edição inline ───────────────────────────────────────────────
   const [editandoId, setEditandoId] = useState<string | null>(null);
@@ -130,11 +131,16 @@ export default function UsuariosPage() {
   // ─── Carregar colaboradores ───────────────────────────────────────────────
   async function carregarColaboradores() {
     setCarregando(true);
+    setErroLista(null);
     try {
       const data = await apiFetch("/api/colaboradores");
-      setColaboradores(data ?? []);
-    } catch (err) {
-      console.error(err);
+      // A API retorna um array diretamente
+      const lista = Array.isArray(data) ? data : (data?.colaboradores ?? data?.rows ?? []);
+      setColaboradores(lista);
+    } catch (err: unknown) {
+      console.error("[carregarColaboradores]", err);
+      const msg = err instanceof Error ? err.message : "Erro ao carregar colaboradores.";
+      setErroLista(msg);
       setColaboradores([]);
     }
     setCarregando(false);
@@ -486,6 +492,18 @@ export default function UsuariosPage() {
                 <div className="flex items-center justify-center py-12 text-muted-foreground">
                   <RefreshCw className="h-5 w-5 animate-spin mr-2" />
                   Carregando...
+                </div>
+              ) : erroLista ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center gap-2">
+                  <AlertCircle className="h-10 w-10 text-red-400" />
+                  <p className="font-medium text-red-700 text-sm">Erro ao carregar colaboradores</p>
+                  <p className="text-xs text-red-500">{erroLista}</p>
+                  <button
+                    onClick={carregarColaboradores}
+                    className="mt-2 text-xs text-blue-600 hover:underline flex items-center gap-1"
+                  >
+                    <RefreshCw className="h-3 w-3" /> Tentar novamente
+                  </button>
                 </div>
               ) : colaboradores.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">

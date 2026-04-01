@@ -696,13 +696,25 @@ async function startServer() {
 
   app.get("/api/colaboradores", requireJwtOrAdmin, async (_req: Request, res: Response) => {
     try {
+      // COALESCE garante compatibilidade com schemas que usam created_at ou criado_em
       const { rows } = await pool.query(
-        "SELECT id, email, nome, cargo, telefone, ativo, created_at FROM colaboradores ORDER BY nome"
+        `SELECT id, email, nome, cargo, telefone, ativo,
+                COALESCE(created_at, criado_em, NOW()) AS created_at
+         FROM colaboradores ORDER BY nome`
       );
       res.json(rows);
     } catch (err) {
       console.error("[COLAB GET ERROR]", err);
-      res.status(500).json({ error: "Erro ao buscar colaboradores." });
+      // Fallback: tenta sem o campo de timestamp para não quebrar a listagem
+      try {
+        const { rows } = await pool.query(
+          "SELECT id, email, nome, cargo, telefone, ativo FROM colaboradores ORDER BY nome"
+        );
+        res.json(rows.map(r => ({ ...r, created_at: null })));
+      } catch (err2) {
+        console.error("[COLAB GET FALLBACK ERROR]", err2);
+        res.status(500).json({ error: "Erro ao buscar colaboradores." });
+      }
     }
   });
 

@@ -44,6 +44,7 @@ interface EmpresaRow {
   captador_nome?: string; analista_nome?: string; updated_at?: string;
 }
 interface Colaborador { id: string; nome: string; cargo: string; }
+interface ColaboradoresFiltro { captacao: Colaborador[]; atendimento: Colaborador[]; }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmt = (v: number) => v?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) ?? "R$ 0,00";
@@ -85,7 +86,8 @@ export default function Dashboard() {
   const [periodo, setPeriodo] = useState<Periodo>("30d");
   const [captadorFiltro, setCaptadorFiltro] = useState<string>("");
   const [analistaFiltro, setAnalistaFiltro] = useState<string>("");
-  const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
+  const [captadores, setCaptadores] = useState<Colaborador[]>([]);
+  const [analistas, setAnalistas] = useState<Colaborador[]>([]);
 
   // Aba ativa do ranking
   const [rankingAba, setRankingAba] = useState<"captadores" | "analistas">("captadores");
@@ -97,11 +99,30 @@ export default function Dashboard() {
   const isAdmin   = cargo === "administrador";
 
   // Carrega lista de colaboradores para os filtros (apenas gestores)
+  // Usa /api/colaboradores/para-empresa que já filtra por ativo=true e separa por cargo
   useEffect(() => {
     if (isGestor) {
-      apiFetch("/api/colaboradores")
-        .then((data: any) => setColaboradores(Array.isArray(data) ? data : []))
-        .catch(() => {});
+      apiFetch("/api/colaboradores/para-empresa")
+        .then((data: ColaboradoresFiltro) => {
+          setCaptadores(Array.isArray(data?.captacao) ? data.captacao : []);
+          setAnalistas(Array.isArray(data?.atendimento) ? data.atendimento : []);
+        })
+        .catch(() => {
+          // Fallback: tenta a rota geral e filtra manualmente
+          apiFetch("/api/colaboradores")
+            .then((data: any) => {
+              const lista: Colaborador[] = Array.isArray(data) ? data : [];
+              setCaptadores(lista.filter(c =>
+                !["analista de crédito", "analista de credito", "estagiário", "estagiario"]
+                  .includes(c.cargo.toLowerCase())
+              ));
+              setAnalistas(lista.filter(c =>
+                !["captador externo", "estagiário", "estagiario"]
+                  .includes(c.cargo.toLowerCase())
+              ));
+            })
+            .catch(() => {});
+        });
     }
   }, [isGestor]);
 
@@ -230,10 +251,9 @@ export default function Dashboard() {
                 className="text-xs border rounded-lg px-3 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Todos os captadores</option>
-                {colaboradores
-                  .filter(c => !["analista de crédito", "analista de credito", "estagiário", "estagiario"].includes(c.cargo.toLowerCase()))
-                  .map(c => <option key={c.id} value={c.id}>{c.nome}</option>)
-                }
+                {captadores.map(c => (
+                  <option key={c.id} value={c.id}>{c.nome}</option>
+                ))}
               </select>
 
               {/* Filtro por analista */}
@@ -243,10 +263,9 @@ export default function Dashboard() {
                 className="text-xs border rounded-lg px-3 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Todos os analistas</option>
-                {colaboradores
-                  .filter(c => !["captador externo", "estagiário", "estagiario"].includes(c.cargo.toLowerCase()))
-                  .map(c => <option key={c.id} value={c.id}>{c.nome}</option>)
-                }
+                {analistas.map(c => (
+                  <option key={c.id} value={c.id}>{c.nome}</option>
+                ))}
               </select>
 
               {(captadorFiltro || analistaFiltro) && (
