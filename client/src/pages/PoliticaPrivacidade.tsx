@@ -167,7 +167,7 @@ export default function PoliticaPrivacidade() {
                 </ul>
                 <p className="text-muted-foreground leading-relaxed mt-4">
                   Para exercer seus direitos, entre em contato conosco através
-                  do e-mail: contato@destravacredito.com.br
+                  do e-mail: destravacreditooficial@gmail.com
                 </p>
               </section>
 
@@ -217,7 +217,7 @@ export default function PoliticaPrivacidade() {
                 <div className="mt-4 p-6 bg-muted/50 rounded-lg">
                   <p className="font-semibold mb-2">Destrava Crédito</p>
                   <p className="text-sm text-muted-foreground">
-                    E-mail: contato@destravacredito.com.br
+                    E-mail: destravacreditooficial@gmail.com
                   </p>
                   <p className="text-sm text-muted-foreground">
                     Telefone: (11) 9 9999-9999

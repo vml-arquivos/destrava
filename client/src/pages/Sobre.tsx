@@ -2,7 +2,8 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import CTAButton from "@/components/CTAButton";
 import SEO, { breadcrumbStructuredData } from "@/components/SEO";
-import { Target, Eye, Award, Shield, Users, TrendingUp } from "lucide-react";
+import { Target, Eye, Award, Shield, Users, TrendingUp, MapPin } from "lucide-react";
+import { COMPANY } from "@/config/company";
 
 export default function Sobre() {
   const breadcrumb = breadcrumbStructuredData([
@@ -177,6 +178,38 @@ export default function Sobre() {
                 <p className="text-sm text-muted-foreground">
                   Nossa remuneração vem da instituição financeira
                 </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Nossas Unidades */}
+      <section className="py-16 bg-muted/30">
+        <div className="container">
+          <div className="max-w-4xl mx-auto text-center mb-10">
+            <h2 className="text-3xl font-bold mb-3">Nossas Unidades</h2>
+            <p className="text-muted-foreground">Presença em Brasília e Goiânia, com atendimento em todo o Brasil.</p>
+          </div>
+          <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-6">
+            <div className="bg-card p-6 rounded-xl border border-border flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <MapPin className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <p className="font-bold text-lg mb-1">{COMPANY.sede.label}</p>
+                <p className="text-muted-foreground text-sm">{COMPANY.sede.enderecoCompleto}</p>
+                <a href={COMPANY.sede.mapUrl} target="_blank" rel="noopener noreferrer" className="text-primary text-sm font-semibold hover:underline mt-2 inline-block">Ver no mapa →</a>
+              </div>
+            </div>
+            <div className="bg-card p-6 rounded-xl border border-border flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <MapPin className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <p className="font-bold text-lg mb-1">{COMPANY.filialGoiania.label}</p>
+                <p className="text-muted-foreground text-sm">{COMPANY.filialGoiania.enderecoCompleto}</p>
+                <a href={COMPANY.filialGoiania.mapUrl} target="_blank" rel="noopener noreferrer" className="text-primary text-sm font-semibold hover:underline mt-2 inline-block">Ver no mapa →</a>
               </div>
             </div>
           </div>

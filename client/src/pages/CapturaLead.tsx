@@ -169,7 +169,7 @@ export default function CapturaLead() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  const whatsappUrl = `https://wa.me/5561986055223?text=${encodeURIComponent(
+  const whatsappUrl = `https://wa.me/556135268355?text=${encodeURIComponent(
     `Olá! Me chamo ${form.nome} e fiz uma simulação no site da Destrava Crédito.\n\n` +
       (form.empresa ? `Empresa: ${form.empresa}\n` : "") +
       (form.valorDesejado ? `Valor desejado: ${fmt.format(parseFloat(form.valorDesejado))}\n` : "") +
@@ -472,7 +472,7 @@ export default function CapturaLead() {
                               </div>
                             ))}
                             <p className="text-xs text-muted-foreground bg-amber-50 border border-amber-200 rounded-md p-2 mt-2">
-                              Estimativa baseada em taxas de mercado (1,5% a 4,5% a.m.). A taxa real depende da análise de crédito.
+                              <strong>Aviso de Simulação:</strong> Os valores apresentados são estimativas para fins de simulação e podem variar conforme análise de crédito, documentação, perfil do cliente, garantia oferecida e condições vigentes da instituição financeira no momento da contratação. Sujeito à análise e aprovação.
                             </p>
                           </div>
                         )}

@@ -54,7 +54,7 @@ export default function CertificadoDigital() {
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </Link>
-              <a href="https://wa.me/5561986055223?text=Olá! Preciso de um certificado digital." target="_blank" rel="noopener noreferrer">
+              <a href="https://wa.me/556135268355?text=Olá! Preciso de um certificado digital." target="_blank" rel="noopener noreferrer">
                 <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
                   Falar com Especialista
                 </Button>
@@ -280,7 +280,7 @@ export default function CertificadoDigital() {
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </Link>
-              <a href="https://wa.me/5561986055223?text=Olá! Preciso de um certificado digital." target="_blank" rel="noopener noreferrer">
+              <a href="https://wa.me/556135268355?text=Olá! Preciso de um certificado digital." target="_blank" rel="noopener noreferrer">
                 <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
                   Falar no WhatsApp
                 </Button>

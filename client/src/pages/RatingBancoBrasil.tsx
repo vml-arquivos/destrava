@@ -53,7 +53,7 @@ export default function RatingBancoBrasil() {
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </Link>
-              <a href="https://wa.me/5561986055223?text=Olá! Quero consultar o rating da minha empresa no Banco do Brasil." target="_blank" rel="noopener noreferrer">
+              <a href="https://wa.me/556135268355?text=Olá! Quero consultar o rating da minha empresa no Banco do Brasil." target="_blank" rel="noopener noreferrer">
                 <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
                   Falar com Especialista
                 </Button>
@@ -278,7 +278,7 @@ export default function RatingBancoBrasil() {
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </Link>
-              <a href="https://wa.me/5561986055223?text=Olá! Quero saber mais sobre rating empresarial no Banco do Brasil." target="_blank" rel="noopener noreferrer">
+              <a href="https://wa.me/556135268355?text=Olá! Quero saber mais sobre rating empresarial no Banco do Brasil." target="_blank" rel="noopener noreferrer">
                 <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
                   Falar no WhatsApp
                 </Button>

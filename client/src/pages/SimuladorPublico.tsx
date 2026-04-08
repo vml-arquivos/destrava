@@ -806,13 +806,13 @@ export default function SimuladorPublico() {
                 </div>
 
                 <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-yellow-800 mb-4">
-                  <strong>Importante:</strong> Esta é uma simulação estimada. Os valores finais dependem da análise de crédito. A Destrava Crédito atua como assessoria e não realiza aprovação de crédito.
+                  <strong>Aviso de Simulação:</strong> Os valores apresentados são estimativas para fins de simulação e podem variar conforme análise de crédito, documentação, perfil do cliente, garantia oferecida e condições vigentes da instituição financeira no momento da contratação. A Destrava Crédito atua como assessoria e não realiza aprovação de crédito. Sujeito à análise e aprovação da instituição financeira.
                 </div>
 
                 {/* CTAs principais */}
                 <div className="grid md:grid-cols-2 gap-3 mb-3">
                   <a
-                    href={`https://wa.me/5561986055223?text=Ol%C3%A1!%20Fiz%20uma%20simula%C3%A7%C3%A3o%20no%20site%20para%20${encodeURIComponent(produtoSelecionado.nome)}%20no%20valor%20de%20${encodeURIComponent(formatCurrency(valor))}%20em%20${prazo}%20meses.%20Meu%20nome%20%C3%A9%20${encodeURIComponent(form.nome)}.%20Gostaria%20de%20avan%C3%A7ar%20com%20a%20proposta.`}
+                    href={`https://wa.me/556135268355?text=Ol%C3%A1!%20Fiz%20uma%20simula%C3%A7%C3%A3o%20no%20site%20para%20${encodeURIComponent(produtoSelecionado.nome)}%20no%20valor%20de%20${encodeURIComponent(formatCurrency(valor))}%20em%20${prazo}%20meses.%20Meu%20nome%20%C3%A9%20${encodeURIComponent(form.nome)}.%20Gostaria%20de%20avan%C3%A7ar%20com%20a%20proposta.`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-4 rounded-xl transition-colors"

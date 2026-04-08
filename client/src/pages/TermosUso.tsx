@@ -237,7 +237,7 @@ export default function TermosUso() {
                 <div className="mt-4 p-6 bg-muted/50 rounded-lg">
                   <p className="font-semibold mb-2">Destrava Crédito</p>
                   <p className="text-sm text-muted-foreground">
-                    E-mail: contato@destravacredito.com.br
+                    E-mail: destravacreditooficial@gmail.com
                   </p>
                   <p className="text-sm text-muted-foreground">
                     Telefone: (11) 9 9999-9999

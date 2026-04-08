@@ -562,7 +562,7 @@ export default function CalculadoraScore() {
                             value={phone}
                             onChange={(e) => setPhone(e.target.value)}
                             required
-                            placeholder="(61) 9 8605-5223"
+                            placeholder="(61) 3526-8355"
                           />
                         </div>
                         <Button
@@ -612,7 +612,7 @@ export default function CalculadoraScore() {
                         </Button>
                       </Link>
                       <a
-                        href="https://wa.me/5561986055223?text=Olá! Calculei meu score no site e gostaria de saber mais sobre crédito."
+                        href="https://wa.me/556135268355?text=Olá! Calculei meu score no site e gostaria de saber mais sobre crédito."
                         target="_blank"
                         rel="noopener noreferrer"
                       >

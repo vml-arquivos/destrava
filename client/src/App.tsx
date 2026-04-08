@@ -31,6 +31,7 @@ import ConsultaSPCSerasa from "./pages/ConsultaSPCSerasa";
 import CreditoEmpresas from "./pages/CreditoEmpresas";
 import CreditoPessoaFisica from "./pages/CreditoPessoaFisica";
 import Contato from "./pages/Contato";
+import Cgi from "./pages/Cgi";
 // Área do Colaborador
 import ColaboradorLogin from "./pages/colaborador/Login";
 import ColaboradorDashboard from "./pages/colaborador/Dashboard";
@@ -73,6 +74,10 @@ function Router() {
 
       {/* Crédito Pessoa Física */}
       <Route path="/credito-pessoal" component={CreditoPessoaFisica} />
+
+      {/* CGI — Crédito com Garantia de Imóvel */}
+      <Route path="/credito-com-garantia-de-imovel" component={Cgi} />
+      <Route path="/cgi" component={Cgi} />
 
       {/* Serviços */}
       <Route path="/rating-banco-brasil" component={RatingBancoBrasil} />

@@ -446,12 +446,12 @@ Entre em contato conosco para uma **análise gratuita!**`,
     question: "Como entro em contato com a Destrava Crédito?",
     answer: `**Formas de contato:**
 
-📱 **WhatsApp:** (61) 9 8605-5223
+📱 **WhatsApp:** (61) 3526-8355
 - Resposta rápida
 - Atendimento direto
 - Melhor para dúvidas rápidas
 
-📧 **Email:** contato@destravacredito.com.br
+📧 **Email:** destravacreditooficial@gmail.com
 - Para assuntos mais complexos
 - Documentação por email
 
@@ -460,7 +460,7 @@ Entre em contato conosco para uma **análise gratuita!**`,
 - Calculadora de score
 - Mais informações
 
-📞 **Telefone:** (61) 3030-5223
+📞 **Telefone:** (61) 3526-8355
 - Atendimento comercial
 - Agendamento de reunião
 

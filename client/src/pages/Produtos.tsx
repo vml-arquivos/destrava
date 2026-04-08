@@ -95,7 +95,7 @@ export default function Produtos() {
                 </div>
               </div>
 
-              <a href="https://wa.me/5561986055223" target="_blank" rel="noopener noreferrer">
+              <a href="https://wa.me/556135268355" target="_blank" rel="noopener noreferrer">
                 <Button className="w-full bg-[var(--color-caixa-yellow)] hover:bg-yellow-500 text-black font-bold text-sm md:text-base py-2 md:py-3 px-4 md:px-8">
                   Conversar com Especialista
                   <ArrowRight className="w-4 md:w-5 h-4 md:h-5 ml-2" />
@@ -154,7 +154,7 @@ export default function Produtos() {
                 </div>
               </div>
 
-              <a href="https://wa.me/5561986055223" target="_blank" rel="noopener noreferrer">
+              <a href="https://wa.me/556135268355" target="_blank" rel="noopener noreferrer">
                 <Button variant="outline" className="w-full mt-6 md:mt-8 border-[var(--color-caixa-blue)] text-[var(--color-caixa-blue)] hover:bg-blue-50 font-bold text-sm md:text-base py-2 md:py-3 px-4 md:px-8">
                   Saber Mais Sobre Produtos
                   <ArrowRight className="w-4 md:w-5 h-4 md:h-5 ml-2" />
@@ -177,7 +177,7 @@ export default function Produtos() {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center">
-              <a href="https://wa.me/5561986055223" target="_blank" rel="noopener noreferrer">
+              <a href="https://wa.me/556135268355" target="_blank" rel="noopener noreferrer">
                 <Button size="lg" className="bg-[var(--color-caixa-blue)] hover:bg-blue-700 text-white font-bold text-sm md:text-base py-2 md:py-3 px-4 md:px-8">
                   Conversar com Especialista
                 </Button>

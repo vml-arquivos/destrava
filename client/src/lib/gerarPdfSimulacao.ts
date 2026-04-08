@@ -71,7 +71,7 @@ export function gerarPdfSimulacao(dados: DadosPdf): void {
   doc.text("Assessoria Especializada em Crédito Empresarial e Pessoal", MARGIN, 23);
 
   doc.setFontSize(9);
-  doc.text("destrava.permupay.com.br  |  (61) 9 8605-5223", MARGIN, 30);
+  doc.text("destravacreditooficial@gmail.com  |  (61) 3526-8355", MARGIN, 30);
 
   // Data no canto direito
   const dataHoje = new Date().toLocaleDateString("pt-BR", {
@@ -269,8 +269,7 @@ export function gerarPdfSimulacao(dados: DadosPdf): void {
   doc.setTextColor(...CINZA);
   doc.setFontSize(7);
   doc.setFont("helvetica", "italic");
-  const aviso = "Esta proposta é uma simulação estimada. Os valores apresentados são aproximados e estão sujeitos à análise de crédito e aprovação pela instituição financeira. " +
-    "Taxas e condições podem variar conforme perfil do cliente. A Destrava Crédito atua como Correspondente Bancário e Assessoria de Crédito.";
+  const aviso = "Esta simulação tem caráter informativo e não constitui proposta definitiva de crédito. Os valores, taxas, prazos e condições apresentados são estimativas e poderão sofrer alterações conforme análise cadastral, de crédito, documentação, garantia e políticas da instituição financeira no momento da contratação. A Destrava Crédito atua como assessoria empresarial e não realiza a concessão de crédito, que é de responsabilidade exclusiva da instituição financeira parceira.";
   const avisoLines = doc.splitTextToSize(aviso, CONTENT_W);
   doc.text(avisoLines, MARGIN, y);
 
@@ -280,7 +279,7 @@ export function gerarPdfSimulacao(dados: DadosPdf): void {
   doc.setTextColor(...BRANCO);
   doc.setFontSize(7.5);
   doc.setFont("helvetica", "normal");
-  doc.text("Destrava Crédito  |  contato@destravacredito.com.br  |  (61) 9 8605-5223  |  Brasília - DF", W / 2, 292, { align: "center" });
+  doc.text("Destrava Crédito  |  destravacreditooficial@gmail.com  |  (61) 3526-8355  |  Brasília/DF e Goiânia/GO", W / 2, 292, { align: "center" });
 
   // ── Salvar ─────────────────────────────────────────────────────────────────
   const nomeArquivo = `Proposta_Destrava_${(dados.cliente.nome || "cliente").replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`;

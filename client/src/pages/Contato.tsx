@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useState, FormEvent } from "react";
 import { useLocation } from "wouter";
+import { COMPANY } from "@/config/company";
 
 export default function Contato() {
   const [, setLocation] = useLocation();
@@ -52,9 +53,9 @@ export default function Contato() {
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <SEO
-        title="Contato - Fale com Nossa Equipe"
-        description="Entre em contato com a Destrava Crédito. Atendimento por WhatsApp, e-mail ou formulário. Especialistas em crédito empresarial e pessoa física."
-        keywords="contato destrava crédito, falar com especialista, atendimento crédito, WhatsApp crédito"
+        title="Contato - Fale com Nossa Equipe | Destrava Crédito"
+        description="Entre em contato com a Destrava Crédito. Atendimento por WhatsApp, e-mail ou formulário. Unidades em Brasília/DF e Goiânia/GO. Especialistas em crédito empresarial."
+        keywords="contato destrava crédito, falar com especialista, atendimento crédito, WhatsApp crédito, Brasília, Goiânia"
       />
       <Header />
 
@@ -64,7 +65,7 @@ export default function Contato() {
           <div className="max-w-2xl mx-auto text-center">
             <h1 className="text-4xl md:text-5xl font-bold mb-4">Fale Conosco</h1>
             <p className="text-lg text-white/90">
-              Nossa equipe de especialistas está pronta para ajudar você a encontrar a melhor solução de crédito.
+              Nossa equipe de especialistas está pronta para ajudar você a encontrar a melhor solução de crédito. Atendemos em Brasília, Goiânia e em todo o Brasil.
             </p>
           </div>
         </div>
@@ -77,7 +78,7 @@ export default function Contato() {
             {/* Informações de Contato */}
             <div>
               <h2 className="text-2xl font-bold text-gray-900 mb-8">Informações de Contato</h2>
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="flex items-start gap-4 p-5 bg-gray-50 rounded-2xl">
                   <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center flex-shrink-0">
                     <MessageCircle className="h-6 w-6 text-green-600" />
@@ -86,12 +87,12 @@ export default function Contato() {
                     <p className="font-bold text-gray-900 mb-1">WhatsApp</p>
                     <p className="text-gray-600 text-sm mb-2">Atendimento rápido e personalizado</p>
                     <a
-                      href="https://wa.me/5561986055223"
+                      href={COMPANY.whatsappLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-green-600 font-semibold hover:underline"
                     >
-                      (61) 9 8605-5223
+                      {COMPANY.whatsapp}
                     </a>
                   </div>
                 </div>
@@ -103,8 +104,8 @@ export default function Contato() {
                   <div>
                     <p className="font-bold text-gray-900 mb-1">Telefone</p>
                     <p className="text-gray-600 text-sm mb-2">Ligue para falar com um especialista</p>
-                    <a href="tel:+5561986055223" className="text-blue-600 font-semibold hover:underline">
-                      (61) 9 8605-5223
+                    <a href={COMPANY.telefoneLink} className="text-blue-600 font-semibold hover:underline">
+                      {COMPANY.telefone}
                     </a>
                   </div>
                 </div>
@@ -116,8 +117,8 @@ export default function Contato() {
                   <div>
                     <p className="font-bold text-gray-900 mb-1">E-mail</p>
                     <p className="text-gray-600 text-sm mb-2">Envie sua dúvida por e-mail</p>
-                    <a href="mailto:contato@destravacredito.com.br" className="text-purple-600 font-semibold hover:underline">
-                      contato@destravacredito.com.br
+                    <a href={COMPANY.emailLink} className="text-purple-600 font-semibold hover:underline">
+                      {COMPANY.email}
                     </a>
                   </div>
                 </div>
@@ -128,30 +129,19 @@ export default function Contato() {
                   </div>
                   <div>
                     <p className="font-bold text-gray-900 mb-1">Horário de Atendimento</p>
-                    <p className="text-gray-600 text-sm">Segunda a Sexta: 8h às 18h</p>
-                    <p className="text-gray-600 text-sm">Sábado: 8h às 12h</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-4 p-5 bg-gray-50 rounded-2xl">
-                  <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
-                    <MapPin className="h-6 w-6 text-red-600" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-gray-900 mb-1">Localização</p>
-                    <p className="text-gray-600 text-sm">Brasília - DF</p>
-                    <p className="text-gray-600 text-sm">Atendimento em todo o Brasil</p>
+                    <p className="text-gray-600 text-sm">{COMPANY.horario.semana}</p>
+                    <p className="text-gray-600 text-sm">{COMPANY.horario.sabado}</p>
                   </div>
                 </div>
               </div>
 
               {/* WhatsApp CTA */}
-              <div className="mt-8 p-6 bg-green-50 rounded-2xl border border-green-200 text-center">
+              <div className="mt-6 p-6 bg-green-50 rounded-2xl border border-green-200 text-center">
                 <MessageCircle className="h-10 w-10 text-green-600 mx-auto mb-3" />
                 <p className="font-bold text-gray-900 mb-2">Prefere o WhatsApp?</p>
                 <p className="text-sm text-gray-600 mb-4">Resposta em minutos durante o horário comercial</p>
                 <a
-                  href="https://wa.me/5561986055223?text=Olá! Gostaria de falar com um especialista em crédito."
+                  href={COMPANY.whatsappLinkMsg("Olá! Gostaria de falar com um especialista em crédito.")}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -243,6 +233,83 @@ export default function Contato() {
                 <p className="text-sm text-blue-800">
                   Sua mensagem será respondida em até <strong>24 horas úteis</strong>. Para atendimento imediato, use o WhatsApp.
                 </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* NOSSAS UNIDADES */}
+      <section className="py-14 bg-gray-50">
+        <div className="container px-4">
+          <div className="max-w-5xl mx-auto">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">Nossas Unidades</h2>
+            <p className="text-center text-gray-500 mb-10 text-sm">Atendemos presencialmente em Brasília e Goiânia, e remotamente em todo o Brasil.</p>
+            <div className="grid md:grid-cols-2 gap-8">
+              {/* Sede */}
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                <div className="bg-[var(--color-caixa-blue)] text-white px-6 py-4">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-5 w-5" />
+                    <span className="font-bold text-lg">Sede — Brasília / DF</span>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <p className="text-gray-700 font-medium mb-1">{COMPANY.sede.endereco}</p>
+                  <p className="text-gray-500 text-sm mb-4">{COMPANY.sede.cidade}</p>
+                  <div className="rounded-xl overflow-hidden border border-gray-200 mb-4" style={{ height: 200 }}>
+                    <iframe
+                      title="Mapa Sede Brasília"
+                      width="100%"
+                      height="200"
+                      style={{ border: 0 }}
+                      loading="lazy"
+                      allowFullScreen
+                      src={`https://maps.google.com/maps?q=${encodeURIComponent(COMPANY.sede.enderecoCompleto)}&output=embed`}
+                    />
+                  </div>
+                  <a
+                    href={COMPANY.sede.mapUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-[var(--color-caixa-blue)] font-semibold hover:underline"
+                  >
+                    <MapPin className="h-4 w-4" /> Ver no Google Maps
+                  </a>
+                </div>
+              </div>
+
+              {/* Filial Goiânia */}
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+                <div className="bg-[var(--color-caixa-blue-dark)] text-white px-6 py-4">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-5 w-5" />
+                    <span className="font-bold text-lg">Filial — Goiânia / GO</span>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <p className="text-gray-700 font-medium mb-1">{COMPANY.filialGoiania.endereco}</p>
+                  <p className="text-gray-500 text-sm mb-4">{COMPANY.filialGoiania.cidade}</p>
+                  <div className="rounded-xl overflow-hidden border border-gray-200 mb-4" style={{ height: 200 }}>
+                    <iframe
+                      title="Mapa Filial Goiânia"
+                      width="100%"
+                      height="200"
+                      style={{ border: 0 }}
+                      loading="lazy"
+                      allowFullScreen
+                      src={`https://maps.google.com/maps?q=${encodeURIComponent(COMPANY.filialGoiania.enderecoCompleto)}&output=embed`}
+                    />
+                  </div>
+                  <a
+                    href={COMPANY.filialGoiania.mapUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-[var(--color-caixa-blue)] font-semibold hover:underline"
+                  >
+                    <MapPin className="h-4 w-4" /> Ver no Google Maps
+                  </a>
+                </div>
               </div>
             </div>
           </div>

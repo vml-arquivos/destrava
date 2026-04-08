@@ -238,7 +238,7 @@ export default function FAQ() {
               </Button>
             </a>
             <a
-              href="https://wa.me/5561986055223?text=Ol%C3%A1! Gostaria de tirar algumas d%C3%BAvidas sobre cr%C3%A9dito."
+              href="https://wa.me/556135268355?text=Ol%C3%A1! Gostaria de tirar algumas d%C3%BAvidas sobre cr%C3%A9dito."
               target="_blank"
               rel="noopener noreferrer"
             >

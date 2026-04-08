@@ -263,7 +263,7 @@ export default function LimpaNome() {
               <label className="block text-sm font-bold mb-2">WhatsApp *</label>
               <Input
                 type="tel"
-                placeholder="(61) 9 8605-5223"
+                placeholder="(61) 3526-8355"
                 value={formData.telefone}
                 onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
                 className="bg-white text-black"

@@ -53,7 +53,7 @@ export default function LimpaNomeCNPJ() {
               </Button>
               <Button size="lg" variant="outline" className="border-white text-white hover:bg-white/10 font-bold text-lg px-8">
                 <Phone className="w-5 h-5 mr-2" />
-                WhatsApp (61) 9 8605-5223
+                WhatsApp (61) 3526-8355
               </Button>
             </div>
           </div>
@@ -253,7 +253,7 @@ export default function LimpaNomeCNPJ() {
               <label className="block text-sm font-bold mb-2">WhatsApp para Contato *</label>
               <Input
                 type="tel"
-                placeholder="(61) 9 8605-5223"
+                placeholder="(61) 3526-8355"
                 value={formData.telefone}
                 onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
                 className="bg-white text-black"

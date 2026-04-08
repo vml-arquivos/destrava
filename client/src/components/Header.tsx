@@ -1,8 +1,8 @@
-import { APP_LOGO } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
-import { Menu, X, ChevronDown, Building2, BarChart3, Shield, Search, Lock } from "lucide-react";
+import { Menu, X, ChevronDown, Building2, BarChart3, Shield, Search, Lock, Home } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { COMPANY } from "@/config/company";
 
 interface NavItem {
   label: string;
@@ -29,6 +29,7 @@ export default function Header() {
         { label: "PEAC FGI", href: "/peac-fgi", icon: Building2, desc: "Crédito com garantia FGI/BNDES" },
         { label: "FAMPE", href: "/fampe", icon: Building2, desc: "Complemento de garantias pelo Sebrae" },
         { label: "ProCred 360", href: "/procred360", icon: Building2, desc: "Juros subsidiados · Programa Acredita" },
+        { label: "CGI — Garantia de Imóvel", href: "/credito-com-garantia-de-imovel", icon: Home, desc: "Crédito com garantia de imóvel (home equity)" },
       ],
     },
     {
@@ -61,7 +62,11 @@ export default function Header() {
         <div className="flex h-20 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center flex-shrink-0">
-            <img src={APP_LOGO} alt="Destrava Crédito" className="h-12 w-auto" />
+            <img
+              src="/destrava-logo.svg"
+              alt={COMPANY.nome}
+              className="h-11 w-auto object-contain"
+            />
           </Link>
 
           {/* Desktop Navigation */}
@@ -79,7 +84,7 @@ export default function Header() {
                     <ChevronDown className={`h-4 w-4 transition-transform ${openDropdown === item.label ? "rotate-180" : ""}`} />
                   </button>
                   {openDropdown === item.label && (
-                    <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
+                    <div className="absolute top-full left-0 mt-1 w-72 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
                       {item.children.map((child) => (
                         <Link
                           key={child.href}
