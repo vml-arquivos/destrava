@@ -27,6 +27,8 @@ interface NavItem {
   badge?: string;
   /** cargos que podem ver este item; undefined = todos */
   allowedCargos?: string[];
+  /** item exclusivo para perfis com visão ampla de gestão */
+  managementOnly?: boolean;
 }
 
 // Cargos com acesso total (gestão)
@@ -34,14 +36,14 @@ const CARGOS_GESTAO = ['administrador', 'diretor', 'gerente comercial'];
 
 const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/colaborador/dashboard",   label: "Dashboard",          icon: LayoutDashboard },
-  { href: "/colaborador/crm",         label: "CRM Geral",          icon: Kanban },
+  { href: "/colaborador/crm",         label: "CRM Geral",          icon: Kanban, managementOnly: true },
   { href: "/colaborador/meu-crm",     label: "Meu CRM",            icon: User },
   { href: "/colaborador/fila?scope=meus", label: "Minha Fila",     icon: ListOrdered },
-  { href: "/colaborador/fila?scope=sem_responsavel", label: "Sem Responsável", icon: ShieldAlert },
+  { href: "/colaborador/fila?scope=sem_responsavel", label: "Sem Responsável", icon: ShieldAlert, managementOnly: true },
   { href: "/colaborador/calculadora", label: "Calculadora",     icon: Calculator },
   { href: "/colaborador/simulacoes",  label: "Simulações",      icon: FileText },
   { href: "/colaborador/triagem",     label: "Triagem",            icon: ShieldAlert },
-  { href: "/colaborador/fila",        label: "Fila Geral",         icon: ListOrdered },
+  { href: "/colaborador/fila",        label: "Fila Geral",         icon: ListOrdered, managementOnly: true },
   { href: "/colaborador/clientes",    label: "Clientes",        icon: Users },
   { href: "/colaborador/empresas",    label: "Empresas",        icon: Building2 },
   // Integrações n8n: somente Administrador
@@ -71,9 +73,11 @@ export default function ColaboradorLayout({ children, title }: LayoutProps) {
   const [menuAberto, setMenuAberto] = useState(false);
 
   const cargoLower = (colaborador?.cargo || '').toLowerCase();
+  const podeVerTudo = Boolean(colaborador?.pode_ver_todos_leads || colaborador?.permissoes?.podeVerTudo);
 
-  // Filtra itens de navegação conforme cargo
+  // Filtra itens de navegação conforme cargo e escopo operacional
   const navItems = ALL_NAV_ITEMS.filter(item => {
+    if (item.managementOnly && !podeVerTudo) return false;
     if (!item.allowedCargos) return true;
     return item.allowedCargos.includes(cargoLower);
   });

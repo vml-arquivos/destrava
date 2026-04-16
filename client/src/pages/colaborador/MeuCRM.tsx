@@ -75,6 +75,8 @@ const ESCOPOS = [
   { value: "todos", label: "Todos visíveis" },
 ] as const;
 
+const ESCOPOS_AGENTE: Array<(typeof ESCOPOS)[number]> = [{ value: "meus", label: "Meus leads" }];
+
 export default function MeuCRM() {
   const { colaborador } = useAuth();
   const [scope, setScope] = useState<(typeof ESCOPOS)[number]["value"]>("meus");
@@ -89,7 +91,13 @@ export default function MeuCRM() {
   const [loading, setLoading] = useState(true);
 
   const podeVerTudo = Boolean(colaborador?.pode_ver_todos_leads || colaborador?.permissoes?.podeVerTudo);
-  const escoposDisponiveis = podeVerTudo ? ESCOPOS : ESCOPOS.filter((item) => item.value !== "todos");
+  const escoposDisponiveis = podeVerTudo ? ESCOPOS : ESCOPOS_AGENTE;
+
+  useEffect(() => {
+    if (!podeVerTudo && scope !== "meus") {
+      setScope("meus");
+    }
+  }, [podeVerTudo, scope]);
 
   const carregarDados = useCallback(async () => {
     setLoading(true);
@@ -200,11 +208,13 @@ export default function MeuCRM() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Link href="/colaborador/crm">
-              <a className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-                <Kanban className="h-4 w-4" /> CRM completo
-              </a>
-            </Link>
+            {podeVerTudo && (
+              <Link href="/colaborador/crm">
+                <a className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                  <Kanban className="h-4 w-4" /> CRM completo
+                </a>
+              </Link>
+            )}
             <Link href="/colaborador/fila">
               <a className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
                 <Briefcase className="h-4 w-4" /> Fila operacional
@@ -233,7 +243,9 @@ export default function MeuCRM() {
               </SelectContent>
             </Select>
             <p className="text-xs text-gray-500">
-              Use esta visão para focar na sua carteira, nos itens sem responsável ou em toda a área visível para o seu perfil.
+              {podeVerTudo
+                ? "Use esta visão para focar na sua carteira, nos itens sem responsável ou em toda a área visível para o seu perfil."
+                : "Use esta visão para atuar exclusivamente sobre a sua própria carteira operacional."}
             </p>
           </div>
         </div>
