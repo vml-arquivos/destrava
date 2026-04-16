@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import Layout from "./Layout";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { AlertTriangle, ArrowRight, Clock, RefreshCw, Target, Thermometer, User, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -37,23 +38,31 @@ const TEMP_BADGE: Record<string, string> = {
   urgente: "bg-red-100 text-red-700 border-red-200",
 };
 
-function getScopeFromUrl(): "meus" | "sem_responsavel" | "todos" {
+function getScopeFromUrl(podeVerTudo: boolean): "meus" | "sem_responsavel" | "todos" {
   const params = new URLSearchParams(window.location.search);
   const scope = params.get("scope");
-  if (scope === "meus" || scope === "sem_responsavel") return scope;
-  return "todos";
+  if (scope === "meus") return "meus";
+  if (podeVerTudo && scope === "sem_responsavel") return "sem_responsavel";
+  return podeVerTudo ? "todos" : "meus";
 }
 
 export default function Fila() {
-  const [scope, setScope] = useState<"meus" | "sem_responsavel" | "todos">(getScopeFromUrl());
+  const { colaborador } = useAuth();
+  const podeVerTudo = Boolean(colaborador?.pode_ver_todos_leads || colaborador?.permissoes?.podeVerTudo);
+  const [scope, setScope] = useState<"meus" | "sem_responsavel" | "todos">(() => getScopeFromUrl(podeVerTudo));
   const [leads, setLeads] = useState<LeadFila[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const onPopState = () => setScope(getScopeFromUrl());
+    const onPopState = () => setScope(getScopeFromUrl(podeVerTudo));
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [podeVerTudo]);
+
+  useEffect(() => {
+    const scopeNormalizado = getScopeFromUrl(podeVerTudo);
+    if (scope !== scopeNormalizado) setScope(scopeNormalizado);
+  }, [podeVerTudo, scope]);
 
   const carregarFila = useCallback(async () => {
     setLoading(true);
@@ -114,16 +123,20 @@ export default function Fila() {
                 Minha fila
               </a>
             </Link>
-            <Link href="/colaborador/fila?scope=sem_responsavel">
-              <a className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "sem_responsavel" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
-                Sem responsável
-              </a>
-            </Link>
-            <Link href="/colaborador/fila">
-              <a className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "todos" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
-                Fila geral
-              </a>
-            </Link>
+            {podeVerTudo && (
+              <>
+                <Link href="/colaborador/fila?scope=sem_responsavel">
+                  <a className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "sem_responsavel" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
+                    Sem responsável
+                  </a>
+                </Link>
+                <Link href="/colaborador/fila">
+                  <a className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "todos" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
+                    Fila geral
+                  </a>
+                </Link>
+              </>
+            )}
             <Button variant="outline" onClick={carregarFila} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
               Atualizar fila
@@ -140,9 +153,9 @@ export default function Fila() {
           </div>
           <div className="bg-red-50 rounded-xl border border-red-200 p-4">
             <div className="flex items-center gap-2 text-red-700 text-xs font-medium mb-1">
-              <AlertTriangle className="h-4 w-4" /> Sem responsável
+              <AlertTriangle className="h-4 w-4" /> {podeVerTudo ? "Sem responsável" : "Sem follow-up no prazo"}
             </div>
-            <p className="text-2xl font-bold text-red-700">{metricas.semResponsavel}</p>
+            <p className="text-2xl font-bold text-red-700">{podeVerTudo ? metricas.semResponsavel : metricas.comFollowupAtrasado}</p>
           </div>
           <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
             <div className="flex items-center gap-2 text-amber-700 text-xs font-medium mb-1">

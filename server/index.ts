@@ -194,6 +194,83 @@ function colaboradorPodeVerTudo(colaborador: any): boolean {
   );
 }
 
+function aplicarFiltroVisibilidadeLead({
+  conditions,
+  params,
+  colaborador,
+  scope,
+  responsavelId,
+  alias = '',
+}: {
+  conditions: string[];
+  params: any[];
+  colaborador: any;
+  scope?: string;
+  responsavelId?: string;
+  alias?: string;
+}) {
+  const podeVerTudo = colaboradorPodeVerTudo(colaborador);
+  const prefix = alias ? `${alias}.` : '';
+  const responsavelExpr = `${prefix}responsavel_id`;
+  const leadIdExpr = `${prefix}id`;
+
+  if (podeVerTudo) {
+    if (scope === 'meus' && colaborador?.id) {
+      params.push(colaborador.id);
+      conditions.push(`${responsavelExpr} = $${params.length}`);
+    } else if (scope === 'sem_responsavel') {
+      conditions.push(`${responsavelExpr} IS NULL`);
+    } else if (responsavelId) {
+      params.push(responsavelId);
+      conditions.push(`${responsavelExpr} = $${params.length}`);
+    }
+    return;
+  }
+
+  if (!colaborador?.id) return;
+
+  params.push(colaborador.id);
+  const responsavelParam = params.length;
+
+  let chatwootClause = '';
+  if (colaborador?.chatwoot_agente_id !== undefined && colaborador?.chatwoot_agente_id !== null) {
+    params.push(Number(colaborador.chatwoot_agente_id));
+    const chatwootParam = params.length;
+    chatwootClause = ` OR EXISTS (
+      SELECT 1
+        FROM crm_conversas cc
+       WHERE cc.lead_id = ${leadIdExpr}
+         AND (
+           cc.agente_responsavel_id = $${responsavelParam}
+           OR cc.chatwoot_assignee_id = $${chatwootParam}
+         )
+    )`;
+  }
+
+  conditions.push(`(${responsavelExpr} = $${responsavelParam}${chatwootClause})`);
+}
+
+async function leadPertenceAoColaborador(leadId: string, colaborador: any): Promise<boolean> {
+  if (colaboradorPodeVerTudo(colaborador)) return true;
+  if (!leadId || !colaborador?.id) return false;
+
+  const params: any[] = [];
+  const conditions: string[] = ['id = $1'];
+  params.push(leadId);
+  aplicarFiltroVisibilidadeLead({
+    conditions,
+    params,
+    colaborador,
+  });
+
+  const { rows } = await pool.query(
+    `SELECT id FROM leads WHERE ${conditions.join(' AND ')} LIMIT 1`,
+    params
+  );
+
+  return rows.length > 0;
+}
+
 function validarEtapaFunil(value: string | null | undefined): string {
   return normalizarEtapaFunil(value);
 }
@@ -504,7 +581,6 @@ async function startServer() {
   app.get("/api/leads", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const podeVerTudo = colaboradorPodeVerTudo(colaborador);
       const status = req.query.status as string | undefined;
       const busca = req.query.busca as string | undefined;
       const responsavelId = req.query.responsavel_id as string | undefined;
@@ -512,24 +588,7 @@ async function startServer() {
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
       const params: any[] = [];
       const conditions: string[] = [];
-      if (podeVerTudo) {
-        if (scope === 'meus' && colaborador?.id) {
-          params.push(colaborador.id);
-          conditions.push(`responsavel_id = $${params.length}`);
-        } else if (scope === 'sem_responsavel') {
-          conditions.push(`responsavel_id IS NULL`);
-        } else if (responsavelId) {
-          params.push(responsavelId);
-          conditions.push(`responsavel_id = $${params.length}`);
-        }
-      } else if (colaborador?.id) {
-        if (scope === 'sem_responsavel') {
-          conditions.push(`responsavel_id IS NULL`);
-        } else {
-          params.push(colaborador.id);
-          conditions.push(`responsavel_id = $${params.length}`);
-        }
-      }
+      aplicarFiltroVisibilidadeLead({ conditions, params, colaborador, scope, responsavelId });
       if (status) { params.push(status); conditions.push(`status = $${params.length}`); }
       if (busca && busca.trim()) {
         const term = `%${busca.trim()}%`;
@@ -553,30 +612,11 @@ async function startServer() {
   app.get("/api/leads/fila", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const podeVerTudo = colaboradorPodeVerTudo(colaborador);
       const responsavelId = req.query.responsavel_id as string | undefined;
       const scope = (req.query.scope as string | undefined)?.toLowerCase();
       const params: any[] = [];
       const conditions = ["etapa_funil NOT IN ('ganho','perdido')"];
-
-      if (podeVerTudo) {
-        if (scope === 'meus' && colaborador?.id) {
-          params.push(colaborador.id);
-          conditions.push(`responsavel_id = $${params.length}`);
-        } else if (scope === 'sem_responsavel') {
-          conditions.push(`responsavel_id IS NULL`);
-        } else if (responsavelId) {
-          params.push(responsavelId);
-          conditions.push(`responsavel_id = $${params.length}`);
-        }
-      } else if (colaborador?.id) {
-        if (scope === 'sem_responsavel') {
-          conditions.push(`responsavel_id IS NULL`);
-        } else {
-          params.push(colaborador.id);
-          conditions.push(`(responsavel_id = $${params.length} OR responsavel_id IS NULL)`);
-        }
-      }
+      aplicarFiltroVisibilidadeLead({ conditions, params, colaborador, scope, responsavelId });
 
       const { rows } = await pool.query(
         `SELECT *
@@ -597,22 +637,15 @@ async function startServer() {
   app.get("/api/leads/atrasados", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const podeVerTudo = colaboradorPodeVerTudo(colaborador);
       const responsavelId = req.query.responsavel_id as string | undefined;
+      const scope = (req.query.scope as string | undefined)?.toLowerCase();
       const params: any[] = [];
       const conditions = [
         "proximo_followup IS NOT NULL",
         "proximo_followup < NOW()",
         "etapa_funil NOT IN ('ganho','perdido')",
       ];
-
-      if (podeVerTudo && responsavelId) {
-        params.push(responsavelId);
-        conditions.push(`responsavel_id = $${params.length}`);
-      } else if (!podeVerTudo && colaborador?.id) {
-        params.push(colaborador.id);
-        conditions.push(`responsavel_id = $${params.length}`);
-      }
+      aplicarFiltroVisibilidadeLead({ conditions, params, colaborador, scope, responsavelId });
 
       const { rows } = await pool.query(
         `SELECT * FROM leads WHERE ${conditions.join(" AND ")} ORDER BY proximo_followup ASC, created_at ASC`,
@@ -628,8 +661,8 @@ async function startServer() {
   app.get("/api/leads/hoje", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const podeVerTudo = colaboradorPodeVerTudo(colaborador);
       const responsavelId = req.query.responsavel_id as string | undefined;
+      const scope = (req.query.scope as string | undefined)?.toLowerCase();
       const params: any[] = [];
       const conditions = [
         "proximo_followup IS NOT NULL",
@@ -637,14 +670,7 @@ async function startServer() {
         "proximo_followup < date_trunc('day', NOW()) + INTERVAL '1 day'",
         "etapa_funil NOT IN ('ganho','perdido')",
       ];
-
-      if (podeVerTudo && responsavelId) {
-        params.push(responsavelId);
-        conditions.push(`responsavel_id = $${params.length}`);
-      } else if (!podeVerTudo && colaborador?.id) {
-        params.push(colaborador.id);
-        conditions.push(`responsavel_id = $${params.length}`);
-      }
+      aplicarFiltroVisibilidadeLead({ conditions, params, colaborador, scope, responsavelId });
 
       const { rows } = await pool.query(
         `SELECT * FROM leads WHERE ${conditions.join(" AND ")} ORDER BY proximo_followup ASC, created_at ASC`,
@@ -671,8 +697,8 @@ async function startServer() {
       }
 
       const atual = atuais[0];
-      const podeVerTudo = colaboradorPodeVerTudo(colaborador);
-      if (!podeVerTudo && atual.responsavel_id && atual.responsavel_id !== colaborador?.id) {
+      const podeEditarLead = await leadPertenceAoColaborador(req.params.id, colaborador);
+      if (!podeEditarLead) {
         res.status(403).json({ error: "Você não tem permissão para alterar este lead." });
         return;
       }
@@ -1498,8 +1524,8 @@ async function startServer() {
         return;
       }
 
-      const podeVerTudo = colaboradorPodeVerTudo(colaborador);
-      if (!podeVerTudo && atuais[0].responsavel_id && atuais[0].responsavel_id !== colaborador?.id) {
+      const podeMoverLead = await leadPertenceAoColaborador(lead_id, colaborador);
+      if (!podeMoverLead) {
         res.status(403).json({ error: "Você não tem permissão para mover este lead." });
         return;
       }
@@ -1549,26 +1575,11 @@ async function startServer() {
   app.get("/api/crm/pipeline", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const podeVerTudo = colaboradorPodeVerTudo(colaborador);
       const responsavelId = req.query.responsavel_id as string | undefined;
       const scope = (req.query.scope as string | undefined)?.toLowerCase();
       const params: any[] = [];
       const conditions: string[] = [];
-
-      if (podeVerTudo) {
-        if (scope === 'meus' && colaborador?.id) {
-          params.push(colaborador.id);
-          conditions.push(`responsavel_id = $${params.length}`);
-        } else if (scope === 'sem_responsavel') {
-          conditions.push(`responsavel_id IS NULL`);
-        } else if (responsavelId) {
-          params.push(responsavelId);
-          conditions.push(`responsavel_id = $${params.length}`);
-        }
-      } else if (colaborador?.id) {
-        params.push(colaborador.id);
-        conditions.push(`(responsavel_id = $${params.length} OR responsavel_id IS NULL)`);
-      }
+      aplicarFiltroVisibilidadeLead({ conditions, params, colaborador, scope, responsavelId });
 
       const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
       let result;
@@ -1588,18 +1599,11 @@ async function startServer() {
   app.get("/api/crm/pipeline/metricas", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const podeVerTudo = colaboradorPodeVerTudo(colaborador);
       const responsavelId = req.query.responsavel_id as string | undefined;
+      const scope = (req.query.scope as string | undefined)?.toLowerCase();
       const params: any[] = [];
       const conditions = ["etapa_funil IS NOT NULL"];
-
-      if (podeVerTudo && responsavelId) {
-        params.push(responsavelId);
-        conditions.push(`responsavel_id = $${params.length}`);
-      } else if (!podeVerTudo && colaborador?.id) {
-        params.push(colaborador.id);
-        conditions.push(`(responsavel_id = $${params.length} OR responsavel_id IS NULL)`);
-      }
+      aplicarFiltroVisibilidadeLead({ conditions, params, colaborador, scope, responsavelId });
 
       const result = await pool.query(
         `SELECT etapa_funil, COUNT(*) as total, SUM(valor_solicitado) as valor_total
@@ -2277,13 +2281,23 @@ Responda APENAS com um JSON válido no seguinte formato:
         if (!leadId && nomeContato && telefone) {
           const cleanPhone = telefone.replace(/\D/g, '');
           const r = await pool.query(
-            `INSERT INTO leads (nome, telefone, origem, status, etapa_funil, temperatura, canal_origem, tipo_registro, chatwoot_conv_id)
-             VALUES ($1, $2, 'chatwoot', 'entrada', 'entrada', 'frio', 'whatsapp', 'lead', $3)
+            `INSERT INTO leads (nome, telefone, origem, status, etapa_funil, temperatura, canal_origem, tipo_registro, chatwoot_conv_id, responsavel_id)
+             VALUES ($1, $2, 'chatwoot', 'entrada', 'entrada', 'frio', 'whatsapp', 'lead', $3, $4)
              RETURNING id`,
-            [nomeContato, cleanPhone, parseInt(chatwootConvId)]
+            [nomeContato, cleanPhone, parseInt(chatwootConvId), agenteResponsavelId]
           );
           leadId = r.rows[0].id;
           console.log(`[WEBHOOK] Lead criado automaticamente: ${leadId}`);
+        }
+
+        if (leadId && agenteResponsavelId) {
+          await pool.query(
+            `UPDATE leads
+                SET responsavel_id = COALESCE(responsavel_id, $2),
+                    updated_at = NOW()
+              WHERE id = $1`,
+            [leadId, agenteResponsavelId]
+          );
         }
 
         const convRes = await pool.query(
