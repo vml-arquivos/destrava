@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import Layout from "./Layout";
 import { apiFetch } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import {
   Users, Plus, Search, Phone, Mail, Building2, ChevronRight,
@@ -28,6 +29,7 @@ import {
   DropdownMenuTrigger, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_LABELS, ETAPAS_FUNIL_VALIDAS, type EtapaFunil } from "@shared/funnel";
 
 // ─── Tipos ────────────────────────────────────────────────────
 interface Lead {
@@ -56,7 +58,7 @@ interface Lead {
   resumo_ia?: string;
   observacoes_ia?: string;
   chatwoot_conv_id?: number;
-  responsavel_id?: string;
+  responsavel_id?: string | null;
   responsavel_nome?: string;
   total_docs?: number;
   docs_recebidos?: number;
@@ -108,18 +110,35 @@ interface QualificacaoIA {
   created_at: string;
 }
 
+interface Colaborador {
+  id: string;
+  nome: string;
+  cargo?: string;
+  perfil?: string;
+  ativo?: boolean;
+}
+
 // ─── Configurações ────────────────────────────────────────────
-const ETAPAS_FUNIL = [
-  { id: "novo",             label: "Novo",             color: "bg-gray-100 border-gray-300",     text: "text-gray-700",   dot: "bg-gray-400" },
-  { id: "contato_feito",    label: "Contato Feito",    color: "bg-blue-50 border-blue-300",      text: "text-blue-700",   dot: "bg-blue-500" },
-  { id: "qualificado",      label: "Qualificado",      color: "bg-cyan-50 border-cyan-300",      text: "text-cyan-700",   dot: "bg-cyan-500" },
-  { id: "proposta_enviada", label: "Proposta Enviada", color: "bg-violet-50 border-violet-300",  text: "text-violet-700", dot: "bg-violet-500" },
-  { id: "negociacao",       label: "Negociação",       color: "bg-yellow-50 border-yellow-300",  text: "text-yellow-700", dot: "bg-yellow-500" },
-  { id: "documentacao",     label: "Documentação",     color: "bg-orange-50 border-orange-300",  text: "text-orange-700", dot: "bg-orange-500" },
-  { id: "aprovacao",        label: "Aprovação",        color: "bg-lime-50 border-lime-300",      text: "text-lime-700",   dot: "bg-lime-500" },
-  { id: "ganho",            label: "Ganho ✓",          color: "bg-green-50 border-green-300",    text: "text-green-700",  dot: "bg-green-500" },
-  { id: "perdido",          label: "Perdido",          color: "bg-red-50 border-red-300",        text: "text-red-700",    dot: "bg-red-400" },
-];
+const ETAPA_FUNIL_STYLE: Record<string, { color: string; text: string; dot: string }> = {
+  entrada:      { color: "bg-gray-100 border-gray-300",    text: "text-gray-700",   dot: "bg-gray-400" },
+  triagem:      { color: "bg-slate-50 border-slate-300",   text: "text-slate-700",  dot: "bg-slate-500" },
+  contato:      { color: "bg-blue-50 border-blue-300",     text: "text-blue-700",   dot: "bg-blue-500" },
+  qualificacao: { color: "bg-cyan-50 border-cyan-300",     text: "text-cyan-700",   dot: "bg-cyan-500" },
+  documentos:   { color: "bg-orange-50 border-orange-300", text: "text-orange-700", dot: "bg-orange-500" },
+  analise:      { color: "bg-lime-50 border-lime-300",     text: "text-lime-700",   dot: "bg-lime-500" },
+  proposta:     { color: "bg-violet-50 border-violet-300", text: "text-violet-700", dot: "bg-violet-500" },
+  negociacao:   { color: "bg-yellow-50 border-yellow-300", text: "text-yellow-700", dot: "bg-yellow-500" },
+  ganho:        { color: "bg-green-50 border-green-300",   text: "text-green-700",  dot: "bg-green-500" },
+  perdido:      { color: "bg-red-50 border-red-300",       text: "text-red-700",    dot: "bg-red-400" },
+  reativacao:   { color: "bg-amber-50 border-amber-300",   text: "text-amber-700",  dot: "bg-amber-500" },
+  carteira:     { color: "bg-emerald-50 border-emerald-300", text: "text-emerald-700", dot: "bg-emerald-500" },
+};
+
+const ETAPAS_FUNIL = ETAPAS_FUNIL_VALIDAS.map((id) => ({
+  id,
+  label: ETAPAS_FUNIL_LABELS[id],
+  ...ETAPA_FUNIL_STYLE[id],
+}));
 
 const TEMPERATURA_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
   frio:    { label: "Frio",    color: "text-blue-600",  bg: "bg-blue-50",   icon: Snowflake },
@@ -317,10 +336,12 @@ function KanbanColuna({
 // ─── Modal: Ficha do Lead ─────────────────────────────────────
 function FichaLead({
   lead,
+  colaboradores,
   onClose,
   onUpdate,
 }: {
   lead: Lead;
+  colaboradores: Colaborador[];
   onClose: () => void;
   onUpdate: () => void;
 }) {
@@ -653,6 +674,23 @@ function FichaLead({
                         />
                       </div>
                       <div className="col-span-2">
+                        <label className="text-xs text-gray-500 mb-1 block">Responsável</label>
+                        <Select
+                          defaultValue={lead.responsavel_id || "__sem_responsavel__"}
+                          onValueChange={value => setDadosEdit(prev => ({ ...prev, responsavel_id: value === "__sem_responsavel__" ? null : value }))}
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue placeholder="Selecione um responsável" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__sem_responsavel__">Sem responsável</SelectItem>
+                            {colaboradores.filter(c => c.ativo !== false).map(col => (
+                              <SelectItem key={col.id} value={col.id}>{col.nome}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="col-span-2">
                         <label className="text-xs text-gray-500 mb-1 block">Follow-up</label>
                         <Input
                           className="h-8 text-sm"
@@ -949,30 +987,57 @@ function FichaLead({
 
 // ─── Página principal do CRM ──────────────────────────────────
 export default function CRM() {
+  const { colaborador } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
+  const [followupsAtrasados, setFollowupsAtrasados] = useState<Lead[]>([]);
+  const [followupsHojeLista, setFollowupsHojeLista] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [filtroTemp, setFiltroTemp] = useState("todos");
+  const [filtroEscopo, setFiltroEscopo] = useState("meus");
   const [filtroResponsavel, setFiltroResponsavel] = useState("todos");
   const [leadSelecionado, setLeadSelecionado] = useState<Lead | null>(null);
   const [visuKanban, setVisuKanban] = useState(true);
   const [showNovoLead, setShowNovoLead] = useState(false);
-  const [etapaNovoLead, setEtapaNovoLead] = useState("novo");
+  const [etapaNovoLead, setEtapaNovoLead] = useState(ETAPA_FUNIL_DEFAULT);
   const [novoLead, setNovoLead] = useState({ nome: "", telefone: "", email: "", empresa: "", produto_interesse: "", valor_solicitado: "" });
   const [salvando, setSalvando] = useState(false);
   const [metricas, setMetricas] = useState<Record<string, { total: number; valor: number }>>({});
 
-  useEffect(() => { carregarLeads(); }, []);
+  const podeVerTudo = Boolean(colaborador?.pode_ver_todos_leads || colaborador?.permissoes?.podeVerTudo);
+
+  useEffect(() => {
+    if (!podeVerTudo && filtroEscopo === "todos") {
+      setFiltroEscopo("meus");
+    }
+    if (!podeVerTudo && filtroResponsavel !== "todos") {
+      setFiltroResponsavel("todos");
+    }
+  }, [podeVerTudo, filtroEscopo, filtroResponsavel]);
 
   const carregarLeads = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await apiFetch("/api/crm/pipeline");
+      const scope = podeVerTudo ? filtroEscopo : "meus";
+      const responsavelQuery = podeVerTudo && filtroResponsavel !== "todos"
+        ? `&responsavel_id=${encodeURIComponent(filtroResponsavel)}`
+        : "";
+      const pipelineQuery = `?scope=${encodeURIComponent(scope)}${responsavelQuery}`;
+      const [data, colaboradoresData, atrasadosData, hojeData] = await Promise.all([
+        apiFetch(`/api/crm/pipeline${pipelineQuery}`),
+        apiFetch("/api/colaboradores"),
+        apiFetch(`/api/leads/atrasados${pipelineQuery}`),
+        apiFetch(`/api/leads/hoje${pipelineQuery}`),
+      ]);
       setLeads(data ?? []);
+      setColaboradores(colaboradoresData ?? []);
+      setFollowupsAtrasados(atrasadosData ?? []);
+      setFollowupsHojeLista(hojeData ?? []);
 
       // Calcular métricas por etapa
       const m: Record<string, { total: number; valor: number }> = {};
-      data.forEach((l: { etapa_funil: string; valor_solicitado?: number }) => {
+      (data ?? []).forEach((l: { etapa_funil: string; valor_solicitado?: number }) => {
         if (!m[l.etapa_funil]) m[l.etapa_funil] = { total: 0, valor: 0 };
         m[l.etapa_funil].total++;
         m[l.etapa_funil].valor += l.valor_solicitado ?? 0;
@@ -983,7 +1048,9 @@ export default function CRM() {
       setLeads([]);
     }
     setLoading(false);
-  }, []);
+  }, [filtroEscopo, filtroResponsavel, podeVerTudo]);
+
+  useEffect(() => { carregarLeads(); }, [carregarLeads]);
 
   async function criarLead() {
     if (!novoLead.nome.trim() || !novoLead.telefone.trim()) {
@@ -1060,7 +1127,9 @@ export default function CRM() {
   const totalLeads = leadsFiltrados.length;
   const totalValor = leadsFiltrados.reduce((s, l) => s + (l.valor_solicitado ?? 0), 0);
   const leadQuentes = leadsFiltrados.filter(l => l.temperatura === "quente" || l.temperatura === "urgente").length;
-  const followupHoje = leadsFiltrados.filter(l => l.proximo_followup && new Date(l.proximo_followup) <= new Date()).length;
+  const leadsSemResponsavel = leads.filter(l => !l.responsavel_id).length;
+  const followupHoje = followupsHojeLista.length;
+  const followupAtrasado = followupsAtrasados.length;
 
   return (
     <Layout title="CRM — Pipeline de Leads">
@@ -1098,16 +1167,27 @@ export default function CRM() {
                   <p className="text-lg font-bold text-gray-900">{leadQuentes}</p>
                 </div>
               </div>
-              {followupHoje > 0 && (
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
-                    <Clock className="h-4 w-4 text-red-600" />
+              {(followupHoje > 0 || followupAtrasado > 0) && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                      <AlertTriangle className="h-4 w-4 text-red-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Atrasados</p>
+                      <p className="text-lg font-bold text-red-600">{followupAtrasado}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Follow-ups</p>
-                    <p className="text-lg font-bold text-red-600">{followupHoje}</p>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
+                      <Clock className="h-4 w-4 text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Hoje</p>
+                      <p className="text-lg font-bold text-amber-600">{followupHoje}</p>
+                    </div>
                   </div>
-                </div>
+                </>
               )}
             </div>
 
@@ -1120,15 +1200,57 @@ export default function CRM() {
                 {visuKanban ? <BarChart2 className="h-4 w-4 mr-1" /> : <Target className="h-4 w-4 mr-1" />}
                 {visuKanban ? "Lista" : "Kanban"}
               </Button>
-              <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => { setEtapaNovoLead("novo"); setShowNovoLead(true); }}>
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => { setEtapaNovoLead(ETAPA_FUNIL_DEFAULT); setShowNovoLead(true); }}>
                 <Plus className="h-4 w-4 mr-1" />
                 Novo Lead
               </Button>
             </div>
           </div>
 
-          {/* Filtros */}
-          <div className="flex items-center gap-2 mt-3 flex-wrap">
+          {/* Navegação e filtros */}
+          <div className="mt-3 flex flex-col gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Link href="/colaborador/fila">
+                <a className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100">
+                  <ClipboardList className="h-4 w-4" />
+                  Fila operacional
+                  {leadsSemResponsavel > 0 && <Badge variant="secondary">{leadsSemResponsavel}</Badge>}
+                </a>
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setFiltroEscopo("meus");
+                  setFiltroResponsavel("todos");
+                }}
+                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${filtroEscopo === "meus" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}
+              >
+                <UserCheck className="h-4 w-4" />
+                Minha carteira
+              </button>
+              {podeVerTudo && (
+                <button
+                  type="button"
+                  onClick={() => setFiltroEscopo("todos")}
+                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${filtroEscopo === "todos" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}
+                >
+                  <Users className="h-4 w-4" />
+                  Visão do time
+                </button>
+              )}
+              {podeVerTudo && (
+                <button
+                  type="button"
+                  onClick={() => setFiltroEscopo("sem_responsavel")}
+                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${filtroEscopo === "sem_responsavel" ? "border-amber-200 bg-amber-50 text-amber-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}
+                >
+                  <AlertTriangle className="h-4 w-4" />
+                  Sem responsável
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
             <div className="relative flex-1 min-w-[200px] max-w-xs">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
@@ -1149,8 +1271,84 @@ export default function CRM() {
                 ))}
               </SelectContent>
             </Select>
+            {podeVerTudo && (
+              <Select value={filtroResponsavel} onValueChange={setFiltroResponsavel}>
+                <SelectTrigger className="w-52 h-8 text-sm">
+                  <SelectValue placeholder="Responsável" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os responsáveis</SelectItem>
+                  {colaboradores.filter(c => c.ativo !== false).map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </div>
+      </div>
+
+        {(followupAtrasado > 0 || followupHoje > 0) && (
+          <div className="px-6 pt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="bg-white rounded-xl border border-red-200 overflow-hidden">
+              <div className="px-4 py-3 border-b border-red-100 bg-red-50 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-red-800">Follow-ups atrasados</p>
+                  <p className="text-xs text-red-600">Prioridade operacional imediata</p>
+                </div>
+                <Badge variant="destructive">{followupAtrasado}</Badge>
+              </div>
+              <div className="max-h-56 overflow-y-auto divide-y divide-red-50">
+                {followupsAtrasados.length === 0 ? (
+                  <div className="px-4 py-5 text-sm text-gray-500">Nenhum follow-up atrasado.</div>
+                ) : followupsAtrasados.slice(0, 8).map(lead => (
+                  <button
+                    key={lead.id}
+                    className="w-full text-left px-4 py-3 hover:bg-red-50 transition-colors"
+                    onClick={() => setLeadSelecionado(lead)}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{lead.nome}</p>
+                        <p className="text-xs text-gray-500 truncate">{lead.responsavel_nome || "Sem responsável"}</p>
+                      </div>
+                      <span className="text-xs font-semibold text-red-600 whitespace-nowrap">{fmtDateTime(lead.proximo_followup)}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-amber-200 overflow-hidden">
+              <div className="px-4 py-3 border-b border-amber-100 bg-amber-50 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-amber-800">Follow-ups de hoje</p>
+                  <p className="text-xs text-amber-600">Agenda do dia para o time</p>
+                </div>
+                <Badge variant="secondary">{followupHoje}</Badge>
+              </div>
+              <div className="max-h-56 overflow-y-auto divide-y divide-amber-50">
+                {followupsHojeLista.length === 0 ? (
+                  <div className="px-4 py-5 text-sm text-gray-500">Nenhum follow-up agendado para hoje.</div>
+                ) : followupsHojeLista.slice(0, 8).map(lead => (
+                  <button
+                    key={lead.id}
+                    className="w-full text-left px-4 py-3 hover:bg-amber-50 transition-colors"
+                    onClick={() => setLeadSelecionado(lead)}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{lead.nome}</p>
+                        <p className="text-xs text-gray-500 truncate">{lead.responsavel_nome || "Sem responsável"}</p>
+                      </div>
+                      <span className="text-xs font-semibold text-amber-700 whitespace-nowrap">{fmtDateTime(lead.proximo_followup)}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Kanban ── */}
         {visuKanban ? (
@@ -1162,7 +1360,7 @@ export default function CRM() {
                   etapa={etapa}
                   leads={leadsPorEtapa[etapa.id] ?? []}
                   onCardClick={lead => setLeadSelecionado(lead)}
-                  onAddLead={e => { setEtapaNovoLead(e); setShowNovoLead(true); }}
+                  onAddLead={e => { setEtapaNovoLead(e as EtapaFunil); setShowNovoLead(true); }}
                   onDrop={novaEtapaId => moverViaArrastar(novaEtapaId)}
                   onDragStart={lead => setLeadArrastando(lead)}
                 />
@@ -1247,6 +1445,7 @@ export default function CRM() {
       {leadSelecionado && (
         <FichaLead
           lead={leadSelecionado}
+          colaboradores={colaboradores}
           onClose={() => setLeadSelecionado(null)}
           onUpdate={() => { carregarLeads(); }}
         />
@@ -1264,7 +1463,7 @@ export default function CRM() {
           <div className="space-y-3">
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Etapa inicial</label>
-              <Select value={etapaNovoLead} onValueChange={setEtapaNovoLead}>
+              <Select value={etapaNovoLead} onValueChange={(value) => setEtapaNovoLead(value as EtapaFunil)}>
                 <SelectTrigger className="text-sm">
                   <SelectValue />
                 </SelectTrigger>

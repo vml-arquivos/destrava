@@ -43,6 +43,8 @@ import ColaboradorIntegracoes from "./pages/colaborador/Integracoes";
 import ColaboradorCRM from "./pages/colaborador/CRM";
 import ColaboradorEmpresas from "./pages/colaborador/Empresas";
 import ColaboradorTriagem from "./pages/colaborador/Triagem";
+import ColaboradorFila from "./pages/colaborador/Fila";
+import ColaboradorMeuCRM from "./pages/colaborador/MeuCRM";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CargoRoute from "./components/CargoRoute";
 
@@ -150,6 +152,20 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <ColaboradorTriagem />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/fila">
+        {() => (
+          <ProtectedRoute>
+            <ColaboradorFila />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/meu-crm">
+        {() => (
+          <ProtectedRoute>
+            <ColaboradorMeuCRM />
           </ProtectedRoute>
         )}
       </Route>

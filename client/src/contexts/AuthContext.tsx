@@ -5,9 +5,19 @@ export type Colaborador = {
   id: string;
   nome: string;
   cargo: string;
+  perfil?: string;
   email: string;
   ativo: boolean;
-  created_at: string;
+  created_at?: string;
+  pode_atender_leads?: boolean;
+  pode_ver_todos_leads?: boolean;
+  permissoes?: {
+    isGestor?: boolean;
+    podeGerenciarUsuarios?: boolean;
+    podeVerTudo?: boolean;
+    isCaptador?: boolean;
+    isEstagiario?: boolean;
+  };
 };
 
 interface AuthState {

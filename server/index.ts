@@ -6,6 +6,9 @@ import fs from "fs";
 import pkg from "pg";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import { auth } from "./middleware/auth.ts";
+import { authorize } from "./middleware/authorize.ts";
+import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
 
 const { Pool } = pkg;
 
@@ -168,8 +171,61 @@ function isGestorCargo(cargo: string): boolean {
   return CARGOS_GESTAO.includes((cargo || '').toLowerCase());
 }
 
+function perfilOperacionalPorCargo(cargo: string | null | undefined): 'admin' | 'gestor' | 'agente' | 'analista' {
+  const cargoNormalizado = (cargo || '').toLowerCase();
+  if (['administrador', 'admin', 'diretor'].includes(cargoNormalizado)) return 'admin';
+  if (['gerente comercial', 'gerente', 'gestor'].includes(cargoNormalizado)) return 'gestor';
+  if (['analista de crédito', 'analista de credito', 'analista'].includes(cargoNormalizado)) return 'analista';
+  return 'agente';
+}
+
+function podeAtenderLeadsPorCargo(cargo: string | null | undefined): boolean {
+  return !CARGOS_BLOQUEADOS_ATENDIMENTO.includes((cargo || '').toLowerCase());
+}
+
+function podeVerTodosLeadsPorPerfilOuCargo(perfil: string | null | undefined, cargo: string | null | undefined): boolean {
+  return ['admin', 'gestor'].includes((perfil || '').toLowerCase()) || isGestorCargo(cargo || '');
+}
+
+function colaboradorPodeVerTudo(colaborador: any): boolean {
+  return Boolean(
+    colaborador?.pode_ver_todos_leads
+    || podeVerTodosLeadsPorPerfilOuCargo(colaborador?.perfil, colaborador?.cargo)
+  );
+}
+
+function validarEtapaFunil(value: string | null | undefined): string {
+  return normalizarEtapaFunil(value);
+}
+
+function etapaFunilPermitida(value: string | null | undefined): boolean {
+  return ETAPAS_FUNIL_VALIDAS.includes(validarEtapaFunil(value) as (typeof ETAPAS_FUNIL_VALIDAS)[number]);
+}
+
 function podecriarUsuarios(cargo: string): boolean {
   return CARGOS_PODEM_CRIAR_USUARIOS.includes((cargo || '').toLowerCase());
+}
+
+async function registrarCrmLog({
+  leadId,
+  usuarioId,
+  acao,
+}: {
+  leadId: string;
+  usuarioId?: string | null;
+  acao: string;
+}) {
+  if (!leadId || !acao) return;
+
+  try {
+    await pool.query(
+      `INSERT INTO crm_logs (lead_id, usuario_id, acao, created_at)
+       VALUES ($1, $2, $3, NOW())`,
+      [leadId, usuarioId || null, acao]
+    );
+  } catch (err) {
+    console.error("[CRM LOG ERROR]", err);
+  }
 }
 
 // ─── App ─────────────────────────────────────────────────────────────────────
@@ -194,54 +250,10 @@ async function startServer() {
       res.header("Access-Control-Allow-Origin", origin || "*");
     }
     res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Content-Type,Authorization,x-admin-key");
+    res.header("Access-Control-Allow-Headers", "Content-Type,Authorization");
     if (req.method === "OPTIONS") { res.sendStatus(200); return; }
     next();
   });
-
-  // ─── Middleware admin (x-admin-key) ──────────────────────────────────────
-  function requireAdmin(req: Request, res: Response, next: NextFunction) {
-    const adminKey = req.headers["x-admin-key"];
-    if (!process.env.ADMIN_KEY || adminKey !== process.env.ADMIN_KEY) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
-    next();
-  }
-
-  // ─── Middleware que aceita JWT OU admin-key ────
-  function requireJwtOrAdmin(req: Request, res: Response, next: NextFunction) {
-    const auth = req.headers.authorization;
-    if (auth?.startsWith("Bearer ")) {
-      try {
-        const decoded = jwt.verify(auth.slice(7), process.env.JWT_SECRET!) as any;
-        (req as Request & { colaborador: any }).colaborador = decoded;
-        return next();
-      } catch { /* cai para admin-key */ }
-    }
-    const adminKey = req.headers["x-admin-key"];
-    if (process.env.ADMIN_KEY && adminKey === process.env.ADMIN_KEY) {
-      (req as Request & { colaborador: any }).colaborador = { id: 'admin', email: 'admin', nome: 'Admin', cargo: 'Admin' };
-      return next();
-    }
-    res.status(401).json({ error: "Unauthorized" });
-  }
-
-  // ─── Middleware JWT (Bearer token) ────────────────────────────────────
-  function requireJwt(req: Request, res: Response, next: NextFunction) {
-    const auth = req.headers.authorization;
-    if (!auth?.startsWith("Bearer ")) {
-      res.status(401).json({ error: "Token não fornecido" });
-      return;
-    }
-    try {
-      const decoded = jwt.verify(auth.slice(7), process.env.JWT_SECRET!);
-      (req as Request & { colaborador: unknown }).colaborador = decoded;
-      next();
-    } catch {
-      res.status(401).json({ error: "Token inválido ou expirado" });
-    }
-  }
 
   // ─── Health check ──────────────────────────────────────────────────────────
   app.get("/api/health", async (_req: Request, res: Response) => {
@@ -265,7 +277,20 @@ async function startServer() {
         return;
       }
       const result = await pool.query(
-        "SELECT id, email, nome, cargo, senha_hash, ativo FROM colaboradores WHERE email = $1",
+        `SELECT id, email, nome, cargo, senha_hash, ativo,
+                COALESCE(perfil, CASE
+                  WHEN LOWER(COALESCE(cargo, '')) IN ('administrador', 'admin', 'diretor') THEN 'admin'
+                  WHEN LOWER(COALESCE(cargo, '')) IN ('gerente comercial', 'gerente', 'gestor') THEN 'gestor'
+                  WHEN LOWER(COALESCE(cargo, '')) IN ('analista de crédito', 'analista de credito', 'analista') THEN 'analista'
+                  ELSE 'agente'
+                END) AS perfil,
+                COALESCE(pode_atender_leads, CASE WHEN LOWER(COALESCE(cargo, '')) IN ('captador externo', 'estagiário', 'estagiario') THEN FALSE ELSE TRUE END) AS pode_atender_leads,
+                COALESCE(pode_ver_todos_leads, CASE
+                  WHEN LOWER(COALESCE(cargo, '')) IN ('administrador', 'admin', 'diretor', 'gerente comercial', 'gerente', 'gestor') THEN TRUE
+                  ELSE FALSE
+                END) AS pode_ver_todos_leads
+           FROM colaboradores
+          WHERE email = $1`,
         [email.trim().toLowerCase()]
       );
       const user = result.rows[0];
@@ -278,13 +303,30 @@ async function startServer() {
         res.status(401).json({ error: "Credenciais inválidas" });
         return;
       }
+      const colaboradorData = {
+        id: user.id,
+        email: user.email,
+        nome: user.nome,
+        cargo: user.cargo,
+        perfil: user.perfil || perfilOperacionalPorCargo(user.cargo),
+        pode_atender_leads: user.pode_atender_leads ?? podeAtenderLeadsPorCargo(user.cargo),
+        pode_ver_todos_leads: user.pode_ver_todos_leads ?? podeVerTodosLeadsPorPerfilOuCargo(user.perfil, user.cargo),
+        ativo: user.ativo,
+      };
       const token = jwt.sign(
-        { id: user.id, email: user.email, nome: user.nome, cargo: user.cargo },
+        {
+          id: user.id,
+          email: user.email,
+          nome: user.nome,
+          cargo: user.cargo,
+          perfil: colaboradorData.perfil,
+          pode_atender_leads: colaboradorData.pode_atender_leads,
+          pode_ver_todos_leads: colaboradorData.pode_ver_todos_leads,
+        },
         process.env.JWT_SECRET!,
         { expiresIn: "24h" }
       );
       console.log(`[LOGIN] Colaborador autenticado: ${user.nome} (${user.email})`);
-      const colaboradorData = { id: user.id, email: user.email, nome: user.nome, cargo: user.cargo, ativo: user.ativo };
       res.json({
         token,
         user: colaboradorData,
@@ -313,8 +355,16 @@ async function startServer() {
       const prazo        = Number(b.prazo_meses || b.prazo || b.parcelas) || null;
       const finalidade   = b.finalidade || b.mensagem || null;
       const origem       = b.origem || "site";
-      const status_lead  = b.status || "novo";
-      const etapa_funil  = b.etapa_funil || "novo";
+      const tipo_registro = (
+        b.tipo_registro
+        || (origem === "contato_site" ? "contato"
+          : origem === "simulador_publico" || origem === "simulador-publico" || origem === "site" ? "simulacao"
+          : b.etapa_funil === "carteira" ? "carteira"
+          : "lead")
+      );
+      const etapa_funilBruta = b.etapa_funil || b.status || ETAPA_FUNIL_DEFAULT;
+      const etapa_funil = validarEtapaFunil(etapa_funilBruta);
+      const status_lead  = b.status || etapa_funil;
       const temperatura  = b.temperatura || "frio";
       const score_ia     = Number(b.score_ia) || 0;
       const cidade       = b.cidade || null;
@@ -380,14 +430,14 @@ async function startServer() {
           (nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto_interesse,
            valor_solicitado, prazo_meses, finalidade, origem, status, etapa_funil,
            temperatura, score_ia, cidade, estado, observacoes_ia, proximo_followup,
-           empresa_id, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$21)
+           tipo_registro, empresa_id, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$22)
          RETURNING *`,
         [
           nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto,
           valor, prazo, finalidade, origem, status_lead, etapa_funil,
           temperatura, score_ia, cidade, estado, observacoes_ia, proximo_followup,
-          empresa_id,
+          tipo_registro, empresa_id,
           now,
         ]
       );
@@ -451,19 +501,34 @@ async function startServer() {
     }
   });
 
-  app.get("/api/leads", requireJwtOrAdmin, async (req: Request, res: Response) => {
+  app.get("/api/leads", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const isAdminKey = !req.headers.authorization && req.headers["x-admin-key"];
-      const isGestor = isAdminKey || isGestorCargo(colaborador?.cargo || '');
+      const podeVerTudo = colaboradorPodeVerTudo(colaborador);
       const status = req.query.status as string | undefined;
       const busca = req.query.busca as string | undefined;
+      const responsavelId = req.query.responsavel_id as string | undefined;
+      const scope = (req.query.scope as string | undefined)?.toLowerCase();
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
       const params: any[] = [];
       const conditions: string[] = [];
-      if (!isGestor && colaborador?.id) {
-        params.push(colaborador.id);
-        conditions.push(`responsavel_id = $${params.length}`);
+      if (podeVerTudo) {
+        if (scope === 'meus' && colaborador?.id) {
+          params.push(colaborador.id);
+          conditions.push(`responsavel_id = $${params.length}`);
+        } else if (scope === 'sem_responsavel') {
+          conditions.push(`responsavel_id IS NULL`);
+        } else if (responsavelId) {
+          params.push(responsavelId);
+          conditions.push(`responsavel_id = $${params.length}`);
+        }
+      } else if (colaborador?.id) {
+        if (scope === 'sem_responsavel') {
+          conditions.push(`responsavel_id IS NULL`);
+        } else {
+          params.push(colaborador.id);
+          conditions.push(`responsavel_id = $${params.length}`);
+        }
       }
       if (status) { params.push(status); conditions.push(`status = $${params.length}`); }
       if (busca && busca.trim()) {
@@ -478,20 +543,165 @@ async function startServer() {
         `SELECT * FROM leads ${where} ORDER BY created_at DESC ${limitClause}`,
         params
       );
-      if (isAdminKey) {
-        res.json({ leads: rows, total: rows.length });
-      } else {
-        res.json(rows);
-      }
+      res.json(rows);
     } catch (err) {
       console.error("[LEADS GET ERROR]", err);
       res.status(500).json({ error: "Erro ao buscar leads." });
     }
   });
 
-  app.patch("/api/leads/:id", requireJwtOrAdmin, async (req: Request, res: Response) => {
+  app.get("/api/leads/fila", auth, async (req: Request, res: Response) => {
     try {
-      const fields = { ...req.body, updated_at: new Date().toISOString() };
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const podeVerTudo = colaboradorPodeVerTudo(colaborador);
+      const responsavelId = req.query.responsavel_id as string | undefined;
+      const scope = (req.query.scope as string | undefined)?.toLowerCase();
+      const params: any[] = [];
+      const conditions = ["etapa_funil NOT IN ('ganho','perdido')"];
+
+      if (podeVerTudo) {
+        if (scope === 'meus' && colaborador?.id) {
+          params.push(colaborador.id);
+          conditions.push(`responsavel_id = $${params.length}`);
+        } else if (scope === 'sem_responsavel') {
+          conditions.push(`responsavel_id IS NULL`);
+        } else if (responsavelId) {
+          params.push(responsavelId);
+          conditions.push(`responsavel_id = $${params.length}`);
+        }
+      } else if (colaborador?.id) {
+        if (scope === 'sem_responsavel') {
+          conditions.push(`responsavel_id IS NULL`);
+        } else {
+          params.push(colaborador.id);
+          conditions.push(`(responsavel_id = $${params.length} OR responsavel_id IS NULL)`);
+        }
+      }
+
+      const { rows } = await pool.query(
+        `SELECT *
+           FROM leads
+          WHERE ${conditions.join(" AND ")}
+          ORDER BY score_ia DESC NULLS LAST,
+                   proximo_followup ASC NULLS LAST,
+                   created_at ASC`,
+        params
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error("[LEADS FILA GET ERROR]", err);
+      res.status(500).json({ error: "Erro ao buscar fila de leads." });
+    }
+  });
+
+  app.get("/api/leads/atrasados", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const podeVerTudo = colaboradorPodeVerTudo(colaborador);
+      const responsavelId = req.query.responsavel_id as string | undefined;
+      const params: any[] = [];
+      const conditions = [
+        "proximo_followup IS NOT NULL",
+        "proximo_followup < NOW()",
+        "etapa_funil NOT IN ('ganho','perdido')",
+      ];
+
+      if (podeVerTudo && responsavelId) {
+        params.push(responsavelId);
+        conditions.push(`responsavel_id = $${params.length}`);
+      } else if (!podeVerTudo && colaborador?.id) {
+        params.push(colaborador.id);
+        conditions.push(`responsavel_id = $${params.length}`);
+      }
+
+      const { rows } = await pool.query(
+        `SELECT * FROM leads WHERE ${conditions.join(" AND ")} ORDER BY proximo_followup ASC, created_at ASC`,
+        params
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error("[LEADS ATRASADOS GET ERROR]", err);
+      res.status(500).json({ error: "Erro ao buscar leads atrasados." });
+    }
+  });
+
+  app.get("/api/leads/hoje", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const podeVerTudo = colaboradorPodeVerTudo(colaborador);
+      const responsavelId = req.query.responsavel_id as string | undefined;
+      const params: any[] = [];
+      const conditions = [
+        "proximo_followup IS NOT NULL",
+        "proximo_followup >= date_trunc('day', NOW())",
+        "proximo_followup < date_trunc('day', NOW()) + INTERVAL '1 day'",
+        "etapa_funil NOT IN ('ganho','perdido')",
+      ];
+
+      if (podeVerTudo && responsavelId) {
+        params.push(responsavelId);
+        conditions.push(`responsavel_id = $${params.length}`);
+      } else if (!podeVerTudo && colaborador?.id) {
+        params.push(colaborador.id);
+        conditions.push(`responsavel_id = $${params.length}`);
+      }
+
+      const { rows } = await pool.query(
+        `SELECT * FROM leads WHERE ${conditions.join(" AND ")} ORDER BY proximo_followup ASC, created_at ASC`,
+        params
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error("[LEADS HOJE GET ERROR]", err);
+      res.status(500).json({ error: "Erro ao buscar follow-ups de hoje." });
+    }
+  });
+
+  app.patch("/api/leads/:id", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const { rows: atuais } = await pool.query(
+        "SELECT id, etapa_funil, responsavel_id FROM leads WHERE id = $1 LIMIT 1",
+        [req.params.id]
+      );
+
+      if (!atuais.length) {
+        res.status(404).json({ error: "Lead não encontrado." });
+        return;
+      }
+
+      const atual = atuais[0];
+      const podeVerTudo = colaboradorPodeVerTudo(colaborador);
+      if (!podeVerTudo && atual.responsavel_id && atual.responsavel_id !== colaborador?.id) {
+        res.status(403).json({ error: "Você não tem permissão para alterar este lead." });
+        return;
+      }
+      const fields: Record<string, unknown> = { ...req.body, updated_at: new Date().toISOString() };
+      const usuarioLogId = colaborador?.id || null;
+
+      if (fields.etapa_funil !== undefined) {
+        fields.etapa_funil = validarEtapaFunil(String(fields.etapa_funil));
+        fields.status = fields.etapa_funil;
+        fields.ultimo_contato_em = new Date().toISOString();
+      }
+
+      const etapaFinal = validarEtapaFunil(String(fields.etapa_funil ?? atual.etapa_funil ?? ETAPA_FUNIL_DEFAULT));
+      const responsavelFinal = (fields.responsavel_id ?? atual.responsavel_id ?? colaborador?.id ?? null) as string | null;
+
+      if (etapaFinal !== ETAPA_FUNIL_DEFAULT && !responsavelFinal) {
+        res.status(400).json({ error: "Leads fora da etapa de entrada precisam de responsável." });
+        return;
+      }
+
+      if (etapaFinal !== ETAPA_FUNIL_DEFAULT && !fields.responsavel_id && !atual.responsavel_id && colaborador?.id) {
+        fields.responsavel_id = colaborador.id;
+      }
+
+      if (fields.responsavel_id === null && etapaFinal !== ETAPA_FUNIL_DEFAULT) {
+        res.status(400).json({ error: "Não é permitido remover o responsável fora da etapa de entrada." });
+        return;
+      }
+
       const keys = Object.keys(fields);
       const values = Object.values(fields);
       const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
@@ -499,14 +709,40 @@ async function startServer() {
         `UPDATE leads SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
         [...values, req.params.id]
       );
-      res.json({ success: true, lead: rows[0] });
+      const leadAtualizado = rows[0];
+
+      if (fields.etapa_funil !== undefined && leadAtualizado?.etapa_funil !== atual.etapa_funil) {
+        await registrarCrmLog({
+          leadId: req.params.id,
+          usuarioId: usuarioLogId,
+          acao: `mudanca_etapa:${atual.etapa_funil || 'sem_etapa'}->${leadAtualizado.etapa_funil}`,
+        });
+      }
+
+      if (fields.responsavel_id !== undefined && (leadAtualizado?.responsavel_id || null) !== (atual.responsavel_id || null)) {
+        await registrarCrmLog({
+          leadId: req.params.id,
+          usuarioId: usuarioLogId,
+          acao: `mudanca_responsavel:${atual.responsavel_id || 'sem_responsavel'}->${leadAtualizado.responsavel_id || 'sem_responsavel'}`,
+        });
+      }
+
+      if (fields.proximo_followup !== undefined) {
+        await registrarCrmLog({
+          leadId: req.params.id,
+          usuarioId: usuarioLogId,
+          acao: `mudanca_followup:${leadAtualizado?.proximo_followup || 'null'}`,
+        });
+      }
+
+      res.json({ success: true, lead: leadAtualizado });
     } catch (err) {
       console.error("[LEAD PATCH ERROR]", err);
       res.status(500).json({ error: "Erro ao atualizar lead." });
     }
   });
 
-  app.get("/api/admin/simulacoes-publicas", requireAdmin, async (_req: Request, res: Response) => {
+  app.get("/api/admin/simulacoes-publicas", auth, authorize(["Administrador"]), async (_req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
         `SELECT * FROM leads WHERE origem IN ('simulador_publico','simulador-publico','site') ORDER BY created_at DESC`
@@ -524,8 +760,8 @@ async function startServer() {
       const { rows } = await pool.query(
         `INSERT INTO leads
           (nome, email, telefone, finalidade, origem, status, etapa_funil,
-           temperatura, score_ia, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,'contato_site','novo','novo','frio',0,$5,$5)
+           temperatura, score_ia, tipo_registro, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,'contato_site','entrada','entrada','frio',0,'contato',$5,$5)
          RETURNING id`,
         [
           req.body.nome || "",
@@ -551,7 +787,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/contatos", requireAdmin, async (_req: Request, res: Response) => {
+  app.get("/api/contatos", auth, authorize(["Administrador"]), async (_req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
         `SELECT * FROM leads WHERE origem = 'contato_site' ORDER BY created_at DESC`
@@ -563,7 +799,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/stats", requireJwtOrAdmin, async (req: Request, res: Response) => {
+  app.get("/api/stats", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const isGestor = isGestorCargo(colaborador?.cargo || '');
@@ -686,17 +922,16 @@ async function startServer() {
   });
 
   // ─── COLABORADORES API ────────────────────────────────────────────────────
-  app.post("/api/colaboradores", requireJwtOrAdmin, async (req: Request, res: Response) => {
+  app.post("/api/colaboradores", auth, async (req: Request, res: Response) => {
     try {
       const solicitante = (req as Request & { colaborador: any }).colaborador;
-      const isAdminKey = !req.headers.authorization && req.headers["x-admin-key"];
-      const cargoSolicitante = isAdminKey ? 'administrador' : (solicitante?.cargo || '');
+      const cargoSolicitante = solicitante?.cargo || '';
 
-      if (!isAdminKey && !podecriarUsuarios(cargoSolicitante)) {
+      if (!podecriarUsuarios(cargoSolicitante)) {
         res.status(403).json({ error: "Apenas Administrador, Diretor e Gerente Comercial podem criar colaboradores." });
         return;
       }
-      const { nome, email, cargo, senha, telefone } = req.body;
+      const { nome, email, cargo, senha, telefone, perfil, pode_atender_leads, pode_ver_todos_leads, chatwoot_agente_id } = req.body;
       if (!nome || !email || !cargo || !senha) {
         res.status(400).json({ error: "Campos obrigatórios: nome, email, cargo, senha" });
         return;
@@ -707,17 +942,23 @@ async function startServer() {
         return;
       }
       // Verifica hierarquia: só pode criar cargos de nível inferior ao seu
-      if (!isAdminKey && !podeGerenciarCargo(cargoSolicitante, cargo)) {
+      if (!podeGerenciarCargo(cargoSolicitante, cargo)) {
         res.status(403).json({ error: `Você não tem permissão para criar um colaborador com cargo "${cargo}".` });
         return;
       }
       const senhaHash = await bcrypt.hash(senha, 12);
       const cleanTelefone = telefone ? telefone.replace(/\D/g, '') : null;
+      const perfilFinal = perfil || perfilOperacionalPorCargo(cargo);
+      const podeAtenderLeadsFinal = pode_atender_leads ?? podeAtenderLeadsPorCargo(cargo);
+      const podeVerTodosLeadsFinal = pode_ver_todos_leads ?? podeVerTodosLeadsPorPerfilOuCargo(perfilFinal, cargo);
+      const chatwootAgenteIdFinal = chatwoot_agente_id !== undefined && chatwoot_agente_id !== null && String(chatwoot_agente_id).trim() !== ''
+        ? Number(chatwoot_agente_id)
+        : null;
       const { rows } = await pool.query(
-        `INSERT INTO colaboradores (nome, email, cargo, senha_hash, ativo, telefone)
-         VALUES ($1, $2, $3, $4, true, $5)
+        `INSERT INTO colaboradores (nome, email, cargo, senha_hash, ativo, telefone, perfil, pode_atender_leads, pode_ver_todos_leads, chatwoot_agente_id)
+         VALUES ($1, $2, $3, $4, true, $5, $6, $7, $8, $9)
          RETURNING id`,
-        [nome.trim(), email.trim().toLowerCase(), cargo, senhaHash, cleanTelefone]
+        [nome.trim(), email.trim().toLowerCase(), cargo, senhaHash, cleanTelefone, perfilFinal, podeAtenderLeadsFinal, podeVerTodosLeadsFinal, chatwootAgenteIdFinal]
       );
       const userId = rows[0].id;
       console.log(`[COLAB] Colaborador criado: ${nome} (${email}) cargo=${cargo}`);
@@ -733,16 +974,26 @@ async function startServer() {
     }
   });
 
-  app.get("/api/colaboradores", requireJwtOrAdmin, async (req: Request, res: Response) => {
+  app.get("/api/colaboradores", auth, async (req: Request, res: Response) => {
     try {
       const solicitante = (req as Request & { colaborador: any }).colaborador;
-      const isAdminKey = !req.headers.authorization && req.headers["x-admin-key"];
-      const cargoSolicitante = isAdminKey ? 'administrador' : (solicitante?.cargo || '');
+      const cargoSolicitante = solicitante?.cargo || '';
       const nivelSolicitante = nivelCargo(cargoSolicitante);
 
       // COALESCE garante compatibilidade com schemas que usam created_at ou criado_em
       const { rows } = await pool.query(
-        `SELECT id, email, nome, cargo, telefone, ativo,
+        `SELECT id, email, nome, cargo, telefone, ativo, chatwoot_agente_id,
+                COALESCE(perfil, CASE
+                  WHEN LOWER(COALESCE(cargo, '')) IN ('administrador', 'admin', 'diretor') THEN 'admin'
+                  WHEN LOWER(COALESCE(cargo, '')) IN ('gerente comercial', 'gerente', 'gestor') THEN 'gestor'
+                  WHEN LOWER(COALESCE(cargo, '')) IN ('analista de crédito', 'analista de credito', 'analista') THEN 'analista'
+                  ELSE 'agente'
+                END) AS perfil,
+                COALESCE(pode_atender_leads, CASE WHEN LOWER(COALESCE(cargo, '')) IN ('captador externo', 'estagiário', 'estagiario') THEN FALSE ELSE TRUE END) AS pode_atender_leads,
+                COALESCE(pode_ver_todos_leads, CASE
+                  WHEN LOWER(COALESCE(cargo, '')) IN ('administrador', 'admin', 'diretor', 'gerente comercial', 'gerente', 'gestor') THEN TRUE
+                  ELSE FALSE
+                END) AS pode_ver_todos_leads,
                 COALESCE(created_at, criado_em, NOW()) AS created_at
          FROM colaboradores ORDER BY nome`
       );
@@ -758,11 +1009,22 @@ async function startServer() {
       // Fallback: tenta sem o campo de timestamp para não quebrar a listagem
       try {
         const solicitante = (req as Request & { colaborador: any }).colaborador;
-        const isAdminKey = !req.headers.authorization && req.headers["x-admin-key"];
-        const cargoSolicitante = isAdminKey ? 'administrador' : (solicitante?.cargo || '');
+        const cargoSolicitante = solicitante?.cargo || '';
         const nivelSolicitante = nivelCargo(cargoSolicitante);
         const { rows } = await pool.query(
-          "SELECT id, email, nome, cargo, telefone, ativo FROM colaboradores ORDER BY nome"
+          `SELECT id, email, nome, cargo, telefone, ativo, chatwoot_agente_id,
+                  COALESCE(perfil, CASE
+                    WHEN LOWER(COALESCE(cargo, '')) IN ('administrador', 'admin', 'diretor') THEN 'admin'
+                    WHEN LOWER(COALESCE(cargo, '')) IN ('gerente comercial', 'gerente', 'gestor') THEN 'gestor'
+                    WHEN LOWER(COALESCE(cargo, '')) IN ('analista de crédito', 'analista de credito', 'analista') THEN 'analista'
+                    ELSE 'agente'
+                  END) AS perfil,
+                  COALESCE(pode_atender_leads, CASE WHEN LOWER(COALESCE(cargo, '')) IN ('captador externo', 'estagiário', 'estagiario') THEN FALSE ELSE TRUE END) AS pode_atender_leads,
+                  COALESCE(pode_ver_todos_leads, CASE
+                    WHEN LOWER(COALESCE(cargo, '')) IN ('administrador', 'admin', 'diretor', 'gerente comercial', 'gerente', 'gestor') THEN TRUE
+                    ELSE FALSE
+                  END) AS pode_ver_todos_leads
+             FROM colaboradores ORDER BY nome`
         );
         const filtrados = nivelSolicitante === 0
           ? rows
@@ -779,7 +1041,7 @@ async function startServer() {
 
   // GET /api/colaboradores/para-empresa — retorna listas separadas para os selects do formulário de empresa
   // NOTA: rota declarada ANTES do patch /:id para evitar conflito de parâmetro de rota
-  app.get("/api/colaboradores/para-empresa", requireJwt, async (_req: Request, res: Response) => {
+  app.get("/api/colaboradores/para-empresa", auth, async (_req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
         "SELECT id, nome, cargo FROM colaboradores WHERE ativo = true ORDER BY nome"
@@ -799,11 +1061,10 @@ async function startServer() {
     }
   });
 
-  app.patch("/api/colaboradores/:id", requireJwtOrAdmin, async (req: Request, res: Response) => {
+  app.patch("/api/colaboradores/:id", auth, async (req: Request, res: Response) => {
     try {
       const solicitante = (req as Request & { colaborador: any }).colaborador;
-      const isAdminKey = !req.headers.authorization && req.headers["x-admin-key"];
-      const cargoSolicitante = isAdminKey ? 'administrador' : (solicitante?.cargo || '');
+      const cargoSolicitante = solicitante?.cargo || '';
 
       // Busca o cargo atual do alvo para verificar hierarquia
       const alvoResult = await pool.query(
@@ -817,30 +1078,38 @@ async function startServer() {
       const cargoAlvo = alvoResult.rows[0].cargo;
 
       // Bloqueia edição de cargos iguais ou superiores (exceto admin-key)
-      if (!isAdminKey && !podeGerenciarCargo(cargoSolicitante, cargoAlvo)) {
+      if (!podeGerenciarCargo(cargoSolicitante, cargoAlvo)) {
         res.status(403).json({ error: "Você não tem permissão para editar este colaborador." });
         return;
       }
 
-      const { nome, cargo, ativo, senha, telefone } = req.body;
+      const { nome, cargo, ativo, senha, telefone, perfil, pode_atender_leads, pode_ver_todos_leads, chatwoot_agente_id } = req.body;
 
       // Se está tentando alterar o cargo, verifica se o novo cargo também é inferior
-      if (cargo && !isAdminKey && !podeGerenciarCargo(cargoSolicitante, cargo)) {
+      if (cargo && !podeGerenciarCargo(cargoSolicitante, cargo)) {
         res.status(403).json({ error: `Você não pode atribuir o cargo "${cargo}" a este colaborador.` });
         return;
       }
 
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      const cargoFinal = cargo || cargoAlvo;
       if (nome) updates.nome = nome.trim();
       if (cargo) updates.cargo = cargo;
       if (ativo !== undefined) updates.ativo = ativo;
       if (senha) updates.senha_hash = await bcrypt.hash(senha, 12);
       if (telefone !== undefined) updates.telefone = telefone ? telefone.replace(/\D/g, '') : null;
+      if (chatwoot_agente_id !== undefined) updates.chatwoot_agente_id = chatwoot_agente_id !== null && String(chatwoot_agente_id).trim() !== '' ? Number(chatwoot_agente_id) : null;
+      if (perfil !== undefined) updates.perfil = perfil || perfilOperacionalPorCargo(cargoFinal);
+      else if (cargo !== undefined) updates.perfil = perfilOperacionalPorCargo(cargoFinal);
+      if (pode_atender_leads !== undefined) updates.pode_atender_leads = pode_atender_leads;
+      else if (cargo !== undefined) updates.pode_atender_leads = podeAtenderLeadsPorCargo(cargoFinal);
+      if (pode_ver_todos_leads !== undefined) updates.pode_ver_todos_leads = pode_ver_todos_leads;
+      else if (cargo !== undefined || perfil !== undefined) updates.pode_ver_todos_leads = podeVerTodosLeadsPorPerfilOuCargo(String(updates.perfil || perfil || ''), cargoFinal);
       const keys = Object.keys(updates);
       const values = Object.values(updates);
       const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
       const { rows } = await pool.query(
-        `UPDATE colaboradores SET ${set} WHERE id = $${keys.length + 1} RETURNING id, nome, email, cargo, telefone, ativo`,
+        `UPDATE colaboradores SET ${set} WHERE id = $${keys.length + 1} RETURNING id, nome, email, cargo, telefone, ativo, perfil, pode_atender_leads, pode_ver_todos_leads, chatwoot_agente_id`,
         [...values, req.params.id]
       );
       res.json({ success: true, colaborador: rows[0] });
@@ -851,13 +1120,7 @@ async function startServer() {
   });
 
   // ─── n8n WEBHOOK CONFIG API ─────────────────────────────────────────────────────────────────────────
-  app.get("/api/n8n/status", requireJwtOrAdmin, (req: Request, res: Response) => {
-    // Somente Administrador pode acessar integrações n8n
-    const colab = (req as Request & { colaborador?: any }).colaborador;
-    if (colab && (colab.cargo || '').toLowerCase() !== 'administrador') {
-      res.status(403).json({ error: "Acesso restrito ao Administrador." });
-      return;
-    }
+  app.get("/api/n8n/status", auth, authorize(["Administrador"]), (_req: Request, res: Response) => {
     res.json({
       configured: !!process.env.N8N_WEBHOOK_URL,
       webhookUrl: process.env.N8N_WEBHOOK_URL ? "***configurado***" : null,
@@ -869,13 +1132,7 @@ async function startServer() {
     });
   });
 
-  app.post("/api/n8n/test", requireJwtOrAdmin, async (req: Request, res: Response) => {
-    // Somente Administrador pode testar webhook n8n
-    const colab = (req as Request & { colaborador?: any }).colaborador;
-    if (colab && (colab.cargo || '').toLowerCase() !== 'administrador') {
-      res.status(403).json({ error: "Acesso restrito ao Administrador." });
-      return;
-    }
+  app.post("/api/n8n/test", auth, authorize(["Administrador"]), async (_req: Request, res: Response) => {
     const ok = await dispararN8n("teste_webhook", {
       mensagem: "Teste de integração Destrava Crédito → n8n",
       ambiente: process.env.NODE_ENV || "development",
@@ -884,11 +1141,23 @@ async function startServer() {
   });
 
   // ─── GET /api/me ──────────────────────────────────────────────────────────
-  app.get("/api/me", requireJwt, async (req: Request, res: Response) => {
+  app.get("/api/me", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const result = await pool.query(
-        "SELECT id, email, nome, cargo, telefone, ativo FROM colaboradores WHERE id = $1",
+        `SELECT id, email, nome, cargo, telefone, ativo, chatwoot_agente_id,
+                COALESCE(perfil, CASE
+                  WHEN LOWER(COALESCE(cargo, '')) IN ('administrador', 'admin', 'diretor') THEN 'admin'
+                  WHEN LOWER(COALESCE(cargo, '')) IN ('gerente comercial', 'gerente', 'gestor') THEN 'gestor'
+                  WHEN LOWER(COALESCE(cargo, '')) IN ('analista de crédito', 'analista de credito', 'analista') THEN 'analista'
+                  ELSE 'agente'
+                END) AS perfil,
+                COALESCE(pode_atender_leads, CASE WHEN LOWER(COALESCE(cargo, '')) IN ('captador externo', 'estagiário', 'estagiario') THEN FALSE ELSE TRUE END) AS pode_atender_leads,
+                COALESCE(pode_ver_todos_leads, CASE
+                  WHEN LOWER(COALESCE(cargo, '')) IN ('administrador', 'admin', 'diretor', 'gerente comercial', 'gerente', 'gestor') THEN TRUE
+                  ELSE FALSE
+                END) AS pode_ver_todos_leads
+           FROM colaboradores WHERE id = $1`,
         [colaborador.id]
       );
       const user = result.rows[0];
@@ -897,12 +1166,17 @@ async function startServer() {
         return;
       }
       const cargoLower = (user.cargo || '').toLowerCase();
+      const perfil = user.perfil || perfilOperacionalPorCargo(user.cargo);
+      const podeVerTudo = user.pode_ver_todos_leads ?? podeVerTodosLeadsPorPerfilOuCargo(perfil, user.cargo);
       res.json({
         ...user,
+        perfil,
+        pode_atender_leads: user.pode_atender_leads ?? podeAtenderLeadsPorCargo(user.cargo),
+        pode_ver_todos_leads: podeVerTudo,
         permissoes: {
           isGestor: isGestorCargo(cargoLower),
           podeGerenciarUsuarios: podecriarUsuarios(cargoLower),
-          podeVerTudo: isGestorCargo(cargoLower),
+          podeVerTudo,
           isCaptador: cargoLower === 'captador externo',
           isEstagiario: cargoLower === 'estagiário' || cargoLower === 'estagiario',
         },
@@ -914,7 +1188,7 @@ async function startServer() {
   });
 
   // ─── POST /api/simulacoes ─────────────────────────────────────────────────
-  app.post("/api/simulacoes", requireJwt, async (req: Request, res: Response) => {
+  app.post("/api/simulacoes", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const now = new Date().toISOString();
@@ -983,7 +1257,7 @@ async function startServer() {
   });
 
   // ─── GET /api/simulacoes ──────────────────────────────────────────────────
-  app.get("/api/simulacoes", requireJwt, async (req: Request, res: Response) => {
+  app.get("/api/simulacoes", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const isGestor = isGestorCargo(colaborador?.cargo || '');
@@ -1000,7 +1274,7 @@ async function startServer() {
   });
 
   // ─── PATCH /api/simulacoes/:id ────────────────────────────────────────────
-  app.patch("/api/simulacoes/:id", requireJwt, async (req: Request, res: Response) => {
+  app.patch("/api/simulacoes/:id", auth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { status } = req.body;
@@ -1025,7 +1299,7 @@ async function startServer() {
   });
 
   // ─── DELETE /api/simulacoes/:id ───────────────────────────────────────────
-  app.delete("/api/simulacoes/:id", requireJwt, async (req: Request, res: Response) => {
+  app.delete("/api/simulacoes/:id", auth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const colaborador = (req as Request & { colaborador: any }).colaborador;
@@ -1046,7 +1320,7 @@ async function startServer() {
   });
 
   // ─── DELETE /api/leads/:id ────────────────────────────────────────────────
-  app.delete("/api/leads/:id", requireJwt, async (req: Request, res: Response) => {
+  app.delete("/api/leads/:id", auth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       await pool.query("DELETE FROM leads WHERE id = $1", [id]);
@@ -1058,7 +1332,7 @@ async function startServer() {
   });
 
   // ─── POST /api/crm/atividades ─────────────────────────────────────────────
-  app.post("/api/crm/atividades", requireJwt, async (req: Request, res: Response) => {
+  app.post("/api/crm/atividades", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const { lead_id, tipo, titulo, descricao, resultado, origem_ia } = req.body;
@@ -1077,7 +1351,7 @@ async function startServer() {
   });
 
   // ─── GET /api/crm/atividades ──────────────────────────────────────────────
-  app.get("/api/crm/atividades", requireJwt, async (req: Request, res: Response) => {
+  app.get("/api/crm/atividades", auth, async (req: Request, res: Response) => {
     try {
       const { lead_id } = req.query;
       let query = "SELECT * FROM crm_atividades";
@@ -1096,7 +1370,7 @@ async function startServer() {
   });
 
   // ─── POST /api/crm/documentos ─────────────────────────────────────────────
-  app.post("/api/crm/documentos", requireJwt, async (req: Request, res: Response) => {
+  app.post("/api/crm/documentos", auth, async (req: Request, res: Response) => {
     try {
       const { lead_id, nome, tipo, status, obrigatorio, observacao, url_arquivo } = req.body;
       const now = new Date().toISOString();
@@ -1122,7 +1396,7 @@ async function startServer() {
   });
 
   // ─── GET /api/crm/documentos ──────────────────────────────────────────────
-  app.get("/api/crm/documentos", requireJwt, async (req: Request, res: Response) => {
+  app.get("/api/crm/documentos", auth, async (req: Request, res: Response) => {
     try {
       const { lead_id } = req.query;
       let query = "SELECT * FROM crm_documentos";
@@ -1141,7 +1415,7 @@ async function startServer() {
   });
 
   // ─── PATCH /api/crm/documentos/:id ───────────────────────────────────────
-  app.patch("/api/crm/documentos/:id", requireJwt, async (req: Request, res: Response) => {
+  app.patch("/api/crm/documentos/:id", auth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const updates = { ...req.body, updated_at: new Date().toISOString() };
@@ -1160,7 +1434,7 @@ async function startServer() {
   });
 
   // ─── POST /api/crm/qualificacoes ──────────────────────────────────────────
-  app.post("/api/crm/qualificacoes", requireJwt, async (req: Request, res: Response) => {
+  app.post("/api/crm/qualificacoes", auth, async (req: Request, res: Response) => {
     try {
       const { lead_id, score, temperatura, etapa_sugerida, resumo, proxima_acao,
               pontos_positivos, pontos_atencao, documentos_faltando, probabilidade_conv,
@@ -1173,7 +1447,7 @@ async function startServer() {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
         [
           lead_id, score || 0, temperatura || 'frio',
-          etapa_sugerida || recomendacao || 'novo',
+          validarEtapaFunil(etapa_sugerida || recomendacao || ETAPA_FUNIL_DEFAULT),
           resumo || analise || '', proxima_acao || null,
           pontos_positivos || [], pontos_atencao || [],
           documentos_faltando || [], probabilidade_conv || null, now,
@@ -1187,7 +1461,7 @@ async function startServer() {
   });
 
   // ─── GET /api/crm/qualificacoes ───────────────────────────────────────────
-  app.get("/api/crm/qualificacoes", requireJwt, async (req: Request, res: Response) => {
+  app.get("/api/crm/qualificacoes", auth, async (req: Request, res: Response) => {
     try {
       const { lead_id } = req.query;
       let query = "SELECT * FROM crm_qualificacoes_ia";
@@ -1203,14 +1477,68 @@ async function startServer() {
   });
 
   // ─── POST /api/crm/mover-funil ────────────────────────────────────────────
-  app.post("/api/crm/mover-funil", requireJwt, async (req: Request, res: Response) => {
+  app.post("/api/crm/mover-funil", auth, async (req: Request, res: Response) => {
     try {
       const { lead_id, etapa_funil } = req.body;
-      await pool.query(
-        "UPDATE leads SET etapa_funil = $1, updated_at = NOW() WHERE id = $2",
-        [etapa_funil, lead_id]
+      const etapaNormalizada = validarEtapaFunil(etapa_funil);
+
+      if (!etapaFunilPermitida(etapa_funil)) {
+        res.status(400).json({ error: "Etapa do funil inválida." });
+        return;
+      }
+
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const { rows: atuais } = await pool.query(
+        "SELECT id, etapa_funil, responsavel_id FROM leads WHERE id = $1 LIMIT 1",
+        [lead_id]
       );
-      res.json({ success: true });
+
+      if (!atuais.length) {
+        res.status(404).json({ error: "Lead não encontrado." });
+        return;
+      }
+
+      const podeVerTudo = colaboradorPodeVerTudo(colaborador);
+      if (!podeVerTudo && atuais[0].responsavel_id && atuais[0].responsavel_id !== colaborador?.id) {
+        res.status(403).json({ error: "Você não tem permissão para mover este lead." });
+        return;
+      }
+
+      const responsavelFinal = atuais[0].responsavel_id || colaborador?.id || null;
+
+      if (etapaNormalizada !== ETAPA_FUNIL_DEFAULT && !responsavelFinal) {
+        res.status(400).json({ error: "Leads fora da etapa de entrada precisam de responsável." });
+        return;
+      }
+
+      await pool.query(
+        `UPDATE leads
+            SET etapa_funil = $1,
+                status = $1,
+                responsavel_id = COALESCE(responsavel_id, $2),
+                ultimo_contato_em = NOW(),
+                updated_at = NOW()
+          WHERE id = $3`,
+        [etapaNormalizada, responsavelFinal, lead_id]
+      );
+
+      if (atuais[0]?.etapa_funil !== etapaNormalizada) {
+        await registrarCrmLog({
+          leadId: lead_id,
+          usuarioId: colaborador?.id || null,
+          acao: `mudanca_etapa:${atuais[0]?.etapa_funil || 'sem_etapa'}->${etapaNormalizada}`,
+        });
+      }
+
+      if ((atuais[0]?.responsavel_id || null) !== (responsavelFinal || null)) {
+        await registrarCrmLog({
+          leadId: lead_id,
+          usuarioId: colaborador?.id || null,
+          acao: `mudanca_responsavel:${atuais[0]?.responsavel_id || 'sem_responsavel'}->${responsavelFinal || 'sem_responsavel'}`,
+        });
+      }
+
+      res.json({ success: true, etapa_funil: etapaNormalizada, responsavel_id: responsavelFinal });
     } catch (err) {
       console.error("[POST /api/crm/mover-funil]", err);
       res.status(500).json({ error: "Erro ao mover lead" });
@@ -1218,13 +1546,36 @@ async function startServer() {
   });
 
   // ─── GET /api/crm/pipeline ────────────────────────────────────────────────
-  app.get("/api/crm/pipeline", requireJwt, async (_req: Request, res: Response) => {
+  app.get("/api/crm/pipeline", auth, async (req: Request, res: Response) => {
     try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const podeVerTudo = colaboradorPodeVerTudo(colaborador);
+      const responsavelId = req.query.responsavel_id as string | undefined;
+      const scope = (req.query.scope as string | undefined)?.toLowerCase();
+      const params: any[] = [];
+      const conditions: string[] = [];
+
+      if (podeVerTudo) {
+        if (scope === 'meus' && colaborador?.id) {
+          params.push(colaborador.id);
+          conditions.push(`responsavel_id = $${params.length}`);
+        } else if (scope === 'sem_responsavel') {
+          conditions.push(`responsavel_id IS NULL`);
+        } else if (responsavelId) {
+          params.push(responsavelId);
+          conditions.push(`responsavel_id = $${params.length}`);
+        }
+      } else if (colaborador?.id) {
+        params.push(colaborador.id);
+        conditions.push(`(responsavel_id = $${params.length} OR responsavel_id IS NULL)`);
+      }
+
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
       let result;
       try {
-        result = await pool.query(`SELECT * FROM vw_crm_pipeline ORDER BY created_at DESC LIMIT 500`);
+        result = await pool.query(`SELECT * FROM vw_crm_pipeline ${where} ORDER BY created_at DESC LIMIT 500`, params);
       } catch {
-        result = await pool.query(`SELECT * FROM leads ORDER BY created_at DESC LIMIT 500`);
+        result = await pool.query(`SELECT * FROM leads ${where} ORDER BY created_at DESC LIMIT 500`, params);
       }
       res.json(result.rows);
     } catch (err) {
@@ -1234,12 +1585,27 @@ async function startServer() {
   });
 
   // ─── GET /api/crm/pipeline/metricas ──────────────────────────────────────
-  app.get("/api/crm/pipeline/metricas", requireJwt, async (_req: Request, res: Response) => {
+  app.get("/api/crm/pipeline/metricas", auth, async (req: Request, res: Response) => {
     try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const podeVerTudo = colaboradorPodeVerTudo(colaborador);
+      const responsavelId = req.query.responsavel_id as string | undefined;
+      const params: any[] = [];
+      const conditions = ["etapa_funil IS NOT NULL"];
+
+      if (podeVerTudo && responsavelId) {
+        params.push(responsavelId);
+        conditions.push(`responsavel_id = $${params.length}`);
+      } else if (!podeVerTudo && colaborador?.id) {
+        params.push(colaborador.id);
+        conditions.push(`(responsavel_id = $${params.length} OR responsavel_id IS NULL)`);
+      }
+
       const result = await pool.query(
         `SELECT etapa_funil, COUNT(*) as total, SUM(valor_solicitado) as valor_total
-         FROM leads WHERE etapa_funil IS NOT NULL
-         GROUP BY etapa_funil ORDER BY etapa_funil`
+         FROM leads WHERE ${conditions.join(' AND ')}
+         GROUP BY etapa_funil ORDER BY etapa_funil`,
+        params
       );
       res.json(result.rows);
     } catch (err) {
@@ -1249,11 +1615,10 @@ async function startServer() {
   });
 
   // ─── PATCH /api/colaboradores/:id/toggle ──────────────────────────────────────────────────────────────────────────────────────
-  app.patch("/api/colaboradores/:id/toggle", requireJwtOrAdmin, async (req: Request, res: Response) => {
+  app.patch("/api/colaboradores/:id/toggle", auth, async (req: Request, res: Response) => {
     try {
       const solicitante = (req as Request & { colaborador: any }).colaborador;
-      const isAdminKey = !req.headers.authorization && req.headers["x-admin-key"];
-      const cargoSolicitante = isAdminKey ? 'administrador' : (solicitante?.cargo || '');
+      const cargoSolicitante = solicitante?.cargo || '';
 
       // Busca o cargo do alvo
       const alvoResult = await pool.query(
@@ -1267,7 +1632,7 @@ async function startServer() {
       const cargoAlvo = alvoResult.rows[0].cargo;
 
       // Bloqueia toggle de cargos iguais ou superiores
-      if (!isAdminKey && !podeGerenciarCargo(cargoSolicitante, cargoAlvo)) {
+      if (!podeGerenciarCargo(cargoSolicitante, cargoAlvo)) {
         res.status(403).json({ error: "Você não tem permissão para alterar o status deste colaborador." });
         return;
       }
@@ -1285,7 +1650,7 @@ async function startServer() {
   });
 
   // ─── POST /api/admin/sql ──────────────────────────────────────────────────────────────────────────────────────
-  app.post("/api/admin/sql", requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/sql", auth, authorize(["Administrador"]), async (req: Request, res: Response) => {
     try {
       const { query } = req.body;
       if (!query || typeof query !== "string") {
@@ -1330,7 +1695,7 @@ async function startServer() {
   });
 
   // ─── PATCH /api/leads/:id/ia ──────────────────────────────────────────────
-  app.patch("/api/leads/:id/ia", requireJwtOrAdmin, async (req: Request, res: Response) => {
+  app.patch("/api/leads/:id/ia", auth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const {
@@ -1374,7 +1739,7 @@ async function startServer() {
   });
 
   // ─── GET /api/leads/para-ia ───────────────────────────────────────────────
-  app.get("/api/leads/para-ia", requireJwtOrAdmin, async (_req: Request, res: Response) => {
+  app.get("/api/leads/para-ia", auth, async (_req: Request, res: Response) => {
     try {
       let result;
       try {
@@ -1386,7 +1751,7 @@ async function startServer() {
                   score_ia, resumo_ia, proxima_acao_ia, created_at
            FROM leads
            WHERE (score_ia = 0 OR score_ia IS NULL)
-             AND etapa_funil NOT IN ('inativo','perdido','ganho')
+             AND etapa_funil NOT IN ('reativacao','perdido','ganho','carteira')
            ORDER BY created_at DESC LIMIT 50`
         );
       }
@@ -1398,7 +1763,7 @@ async function startServer() {
   });
 
   // ─── EMPRESAS API ─────────────────────────────────────────────────────────
-  app.get("/api/empresas", requireJwt, async (req: Request, res: Response) => {
+  app.get("/api/empresas", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const isGestor = isGestorCargo(colaborador?.cargo || '');
@@ -1438,7 +1803,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/empresas/:id", requireJwt, async (req: Request, res: Response) => {
+  app.get("/api/empresas/:id", auth, async (req: Request, res: Response) => {
     try {
       const { rows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [req.params.id]);
       if (rows.length === 0) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
@@ -1449,7 +1814,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/empresas", requireJwt, async (req: Request, res: Response) => {
+  app.post("/api/empresas", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const {
@@ -1495,7 +1860,7 @@ async function startServer() {
     }
   });
 
-  app.patch("/api/empresas/:id", requireJwt, async (req: Request, res: Response) => {
+  app.patch("/api/empresas/:id", auth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const updates = { ...req.body, updated_at: new Date().toISOString() };
@@ -1515,7 +1880,7 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/empresas/:id", requireJwt, async (req: Request, res: Response) => {
+  app.delete("/api/empresas/:id", auth, async (req: Request, res: Response) => {
     try {
       await pool.query("DELETE FROM empresas WHERE id = $1", [req.params.id]);
       res.json({ success: true });
@@ -1526,7 +1891,7 @@ async function startServer() {
   });
 
   // ─── TRIAGEM API ──────────────────────────────────────────────────────────
-  app.get("/api/triagem", requireJwt, async (req: Request, res: Response) => {
+  app.get("/api/triagem", auth, async (req: Request, res: Response) => {
     try {
       const status = req.query.status as string | undefined;
       const busca  = req.query.busca  as string | undefined;
@@ -1551,7 +1916,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/triagem/stats", requireJwt, async (_req: Request, res: Response) => {
+  app.get("/api/triagem/stats", auth, async (_req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
         `SELECT status, COUNT(*)::int as total FROM triagem_leads GROUP BY status`
@@ -1565,7 +1930,7 @@ async function startServer() {
     }
   });
 
-  app.patch("/api/triagem/:id", requireJwt, async (req: Request, res: Response) => {
+  app.patch("/api/triagem/:id", auth, async (req: Request, res: Response) => {
     try {
       const { status, classificacao, observacoes, responsavel_id } = req.body;
       const sets: string[] = ["updated_at = NOW()"];
@@ -1584,7 +1949,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/triagem/:id/converter", requireJwt, async (req: Request, res: Response) => {
+  app.post("/api/triagem/:id/converter", auth, async (req: Request, res: Response) => {
     try {
       const { rows: tRows } = await pool.query(
         "SELECT * FROM triagem_leads WHERE id = $1", [req.params.id]
@@ -1596,8 +1961,8 @@ async function startServer() {
         `INSERT INTO leads
           (nome, email, telefone, empresa, cpf_cnpj, tipo_pessoa, produto_interesse,
            valor_solicitado, prazo_meses, origem, status, etapa_funil, temperatura,
-           cidade, estado, score_ia, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'simulador_publico','novo','novo','morno',$10,$11,0,$12,$12)
+           cidade, estado, score_ia, tipo_registro, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'simulador_publico','entrada','entrada','morno',$10,$11,0,'simulacao',$12,$12)
          RETURNING *`,
         [t.nome, t.email, t.telefone, t.empresa, t.cpf_cnpj, t.tipo_pessoa, t.produto,
          t.valor, t.prazo, t.cidade, t.estado, now]
@@ -1618,7 +1983,7 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/triagem/:id", requireJwt, async (req: Request, res: Response) => {
+  app.delete("/api/triagem/:id", auth, async (req: Request, res: Response) => {
     try {
       await pool.query(
         "UPDATE triagem_leads SET status='descartado', updated_at=NOW() WHERE id=$1", [req.params.id]
@@ -1631,7 +1996,7 @@ async function startServer() {
   });
 
   // ─── Empresas: Followup, Histórico, Documentos ───────────────────────────
-  app.get("/api/empresas/:id/followups", requireJwt, async (req: Request, res: Response) => {
+  app.get("/api/empresas/:id/followups", auth, async (req: Request, res: Response) => {
     try {
       const r = await pool.query(
         "SELECT * FROM empresa_followups WHERE empresa_id=$1 ORDER BY data_agendada ASC NULLS LAST, created_at DESC",
@@ -1641,7 +2006,7 @@ async function startServer() {
     } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
   });
 
-  app.post("/api/empresas/:id/followups", requireJwt, async (req: Request, res: Response) => {
+  app.post("/api/empresas/:id/followups", auth, async (req: Request, res: Response) => {
     const { titulo, tipo = "ligacao", data_agendada, descricao } = req.body;
     try {
       const r = await pool.query(
@@ -1653,7 +2018,7 @@ async function startServer() {
     } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
   });
 
-  app.patch("/api/empresas/:id/followups/:fid/concluir", requireJwt, async (req: Request, res: Response) => {
+  app.patch("/api/empresas/:id/followups/:fid/concluir", auth, async (req: Request, res: Response) => {
     try {
       await pool.query(
         "UPDATE empresa_followups SET concluido=true, concluido_em=NOW() WHERE id=$1 AND empresa_id=$2",
@@ -1663,7 +2028,7 @@ async function startServer() {
     } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
   });
 
-  app.get("/api/empresas/:id/historico", requireJwt, async (req: Request, res: Response) => {
+  app.get("/api/empresas/:id/historico", auth, async (req: Request, res: Response) => {
     try {
       const r = await pool.query(
         "SELECT * FROM empresa_historico WHERE empresa_id=$1 ORDER BY created_at DESC",
@@ -1673,7 +2038,7 @@ async function startServer() {
     } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
   });
 
-  app.post("/api/empresas/:id/historico", requireJwt, async (req: Request, res: Response) => {
+  app.post("/api/empresas/:id/historico", auth, async (req: Request, res: Response) => {
     const { tipo = "nota", descricao } = req.body;
     const colab = (req as any).colaborador;
     try {
@@ -1686,7 +2051,7 @@ async function startServer() {
     } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
   });
 
-  app.get("/api/empresas/:id/documentos", requireJwt, async (req: Request, res: Response) => {
+  app.get("/api/empresas/:id/documentos", auth, async (req: Request, res: Response) => {
     try {
       const r = await pool.query(
         "SELECT * FROM empresa_documentos WHERE empresa_id=$1 ORDER BY created_at DESC",
@@ -1696,7 +2061,7 @@ async function startServer() {
     } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
   });
 
-  app.post("/api/empresas/:id/documentos", requireJwt, async (req: Request, res: Response) => {
+  app.post("/api/empresas/:id/documentos", auth, async (req: Request, res: Response) => {
     try {
       const dataDir = process.env.DATA_DIR || "/data";
       const uploadDir = path.join(dataDir, "uploads", "empresas", req.params.id);
@@ -1723,7 +2088,7 @@ async function startServer() {
   });
 
   // ─── Triagem: Qualificação por IA ────────────────────────────────────────
-  app.post("/api/triagem/:id/qualificar-ia", requireJwt, async (req: Request, res: Response) => {
+  app.post("/api/triagem/:id/qualificar-ia", auth, async (req: Request, res: Response) => {
     try {
       const r = await pool.query("SELECT * FROM triagem_leads WHERE id=$1", [req.params.id]);
       if (!r.rows[0]) return res.status(404).json({ error: "Não encontrado" });
@@ -1783,7 +2148,7 @@ Responda APENAS com um JSON válido no seguinte formato:
   });
 
   // ─── POST /api/webhook/chatwoot ───────────────────────────────────────────
-  app.post("/api/webhook/chatwoot", requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/webhook/chatwoot", auth, authorize(["Administrador"]), async (req: Request, res: Response) => {
     const { event_id, tipo_evento, origem = 'chatwoot', payload } = req.body;
 
     res.json({ received: true });
@@ -1815,6 +2180,8 @@ Responda APENAS com um JSON válido no seguinte formato:
           || payload?.id?.toString()
           || null;
         const chatwootContactId = payload?.contact?.id || payload?.conversation?.meta?.sender?.id || null;
+        const chatwootInboxId = payload?.conversation?.inbox_id || payload?.inbox?.id || null;
+        const chatwootAssigneeId = payload?.conversation?.assignee_id || payload?.assignee?.id || null;
         const telefone = payload?.contact?.phone_number
           || payload?.conversation?.meta?.sender?.phone_number
           || null;
@@ -1882,6 +2249,15 @@ Responda APENAS com um JSON válido no seguinte formato:
           }
         }
 
+        let agenteResponsavelId: string | null = null;
+        if (chatwootAssigneeId) {
+          const agenteResponsavel = await pool.query(
+            `SELECT id FROM colaboradores WHERE chatwoot_agente_id = $1 LIMIT 1`,
+            [chatwootAssigneeId]
+          );
+          agenteResponsavelId = agenteResponsavel.rows[0]?.id || null;
+        }
+
         let leadId: string | null = null;
         if (chatwootContactId) {
           const r = await pool.query(
@@ -1901,8 +2277,8 @@ Responda APENAS com um JSON válido no seguinte formato:
         if (!leadId && nomeContato && telefone) {
           const cleanPhone = telefone.replace(/\D/g, '');
           const r = await pool.query(
-            `INSERT INTO leads (nome, telefone, origem, status, etapa_funil, temperatura, canal_origem, chatwoot_conv_id)
-             VALUES ($1, $2, 'chatwoot', 'novo', 'novo', 'frio', 'whatsapp', $3)
+            `INSERT INTO leads (nome, telefone, origem, status, etapa_funil, temperatura, canal_origem, tipo_registro, chatwoot_conv_id)
+             VALUES ($1, $2, 'chatwoot', 'entrada', 'entrada', 'frio', 'whatsapp', 'lead', $3)
              RETURNING id`,
             [nomeContato, cleanPhone, parseInt(chatwootConvId)]
           );
@@ -1911,14 +2287,47 @@ Responda APENAS com um JSON válido no seguinte formato:
         }
 
         const convRes = await pool.query(
-          `INSERT INTO crm_conversas (lead_id, canal, canal_id_externo, status)
-           VALUES ($1, 'whatsapp', $2, 'aberta')
+          `INSERT INTO crm_conversas (
+             lead_id,
+             canal,
+             canal_id_externo,
+             status,
+             chatwoot_contact_id,
+             chatwoot_inbox_id,
+             chatwoot_assignee_id,
+             agente_responsavel_id,
+             origem_atribuicao_agente,
+             agente_ultima_atribuicao_em,
+             ultima_sincronizacao_chatwoot_em,
+             payload_ultimo_evento
+           )
+           VALUES ($1, 'whatsapp', $2, 'aberta', $3, $4, $5, $6, $7, CASE WHEN $6 IS NOT NULL THEN NOW() ELSE NULL END, NOW(), $8)
            ON CONFLICT (canal_id_externo) DO UPDATE
              SET lead_id = COALESCE(EXCLUDED.lead_id, crm_conversas.lead_id),
+                 chatwoot_contact_id = COALESCE(EXCLUDED.chatwoot_contact_id, crm_conversas.chatwoot_contact_id),
+                 chatwoot_inbox_id = COALESCE(EXCLUDED.chatwoot_inbox_id, crm_conversas.chatwoot_inbox_id),
+                 chatwoot_assignee_id = COALESCE(EXCLUDED.chatwoot_assignee_id, crm_conversas.chatwoot_assignee_id),
+                 agente_responsavel_id = COALESCE(EXCLUDED.agente_responsavel_id, crm_conversas.agente_responsavel_id),
+                 origem_atribuicao_agente = COALESCE(EXCLUDED.origem_atribuicao_agente, crm_conversas.origem_atribuicao_agente),
+                 agente_ultima_atribuicao_em = CASE
+                   WHEN EXCLUDED.agente_responsavel_id IS NOT NULL THEN NOW()
+                   ELSE crm_conversas.agente_ultima_atribuicao_em
+                 END,
+                 ultima_sincronizacao_chatwoot_em = NOW(),
+                 payload_ultimo_evento = $8,
                  ultima_interacao_em = NOW(),
                  updated_at = NOW()
            RETURNING id`,
-          [leadId, chatwootConvId]
+          [
+            leadId,
+            chatwootConvId,
+            chatwootContactId,
+            chatwootInboxId,
+            chatwootAssigneeId,
+            agenteResponsavelId,
+            agenteResponsavelId ? 'chatwoot_assignee' : null,
+            JSON.stringify(payload || {}),
+          ]
         );
         const conversaId = convRes.rows[0].id;
 
@@ -1960,7 +2369,7 @@ Responda APENAS com um JSON válido no seguinte formato:
   });
 
   // ─── GET /api/crm/conversas ───────────────────────────────────────────────
-  app.get("/api/crm/conversas", requireJwt, async (req: Request, res: Response) => {
+  app.get("/api/crm/conversas", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const isAdmin = isGestorCargo(colaborador.cargo || '');
@@ -1992,7 +2401,7 @@ Responda APENAS com um JSON válido no seguinte formato:
   });
 
   // ─── GET /api/crm/conversas/:id/mensagens ────────────────────────────────
-  app.get("/api/crm/conversas/:id/mensagens", requireJwt, async (req: Request, res: Response) => {
+  app.get("/api/crm/conversas/:id/mensagens", auth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const result = await pool.query(

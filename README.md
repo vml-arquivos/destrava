@@ -43,7 +43,7 @@ Site institucional completo da **Destrava Crédito**, com simulador de emprésti
 | `/api/stats` | GET | Estatísticas gerais (requer auth) |
 | `/api/crm/pipeline` | GET | Pipeline CRM (requer auth) |
 
-> **Autenticação:** JWT via header `Authorization: Bearer <token>` ou `x-admin-key: <ADMIN_KEY>` para acesso administrativo.
+> **Autenticação:** JWT via header `Authorization: Bearer <token>`, com autorização por papel para endpoints administrativos.
 
 ## Instalação e Desenvolvimento
 
@@ -72,8 +72,6 @@ As variáveis obrigatórias são:
 | Variável | Descrição |
 | :--- | :--- |
 | `DATABASE_URL` | Connection string PostgreSQL |
-| `ADMIN_KEY` | Chave de acesso admin (`openssl rand -hex 32`) |
-| `VITE_ADMIN_KEY` | Mesma chave, exposta ao frontend via Vite |
 | `JWT_SECRET` | Segredo JWT (`openssl rand -hex 48`) |
 | `NODE_ENV` | `production` |
 | `PORT` | `4000` |
