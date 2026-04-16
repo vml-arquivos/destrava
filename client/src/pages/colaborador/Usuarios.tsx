@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Layout from "./Layout";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,9 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
-  CardDescription,
 } from "@/components/ui/card";
 import {
   Select,
@@ -21,27 +21,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  UserPlus,
-  Users,
-  Mail,
-  Lock,
-  User,
-  Building2,
-  Shield,
-  CheckCircle2,
   AlertCircle,
-  RefreshCw,
+  Building2,
+  CheckCircle2,
   Copy,
   Eye,
   EyeOff,
-  Phone,
+  Lock,
+  Mail,
   Pencil,
-  X,
+  Phone,
+  RefreshCw,
   Save,
+  Settings2,
+  Shield,
   ShieldOff,
+  User,
+  UserPlus,
+  Users,
+  Workflow,
+  X,
 } from "lucide-react";
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
 interface Colaborador {
   id: string;
   nome: string;
@@ -49,10 +50,13 @@ interface Colaborador {
   email?: string;
   telefone?: string;
   ativo: boolean;
-  created_at: string;
+  perfil?: "admin" | "gestor" | "agente" | "analista";
+  pode_atender_leads?: boolean;
+  pode_ver_todos_leads?: boolean;
+  chatwoot_agente_id?: number | null;
+  created_at?: string | null;
 }
 
-// ─── 7 cargos definitivos do sistema ─────────────────────────────────────────
 const TODOS_CARGOS = [
   "Administrador",
   "Diretor",
@@ -63,28 +67,24 @@ const TODOS_CARGOS = [
   "Estagiário",
 ] as const;
 
-// Hierarquia estrita: cada cargo só pode criar/editar cargos de nível INFERIOR ao seu
-// Administrador (0) → todos os outros
-// Diretor (1) → Gerente Comercial e abaixo (NÃO pode criar outro Diretor)
-// Gerente Comercial (2) → Analista, Consultor, Captador Externo, Estagiário
+const PERFIS_OPERACIONAIS = ["admin", "gestor", "agente", "analista"] as const;
+type PerfilOperacional = typeof PERFIS_OPERACIONAIS[number];
+
 const CARGOS_CRIADOS_POR: Record<string, string[]> = {
   administrador: ["Diretor", "Gerente Comercial", "Analista de Crédito", "Consultor de Crédito", "Captador Externo", "Estagiário"],
   diretor: ["Gerente Comercial", "Analista de Crédito", "Consultor de Crédito", "Captador Externo", "Estagiário"],
   "gerente comercial": ["Analista de Crédito", "Consultor de Crédito", "Captador Externo", "Estagiário"],
 };
 
-// Cargos que NÃO precisam de telefone obrigatório (mas é recomendado)
 const CARGOS_TELEFONE_OBRIGATORIO = ["captador externo"];
 
-// ─── Gerador de senha segura ──────────────────────────────────────────────────
 function gerarSenha(): string {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#$!";
   return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
 }
 
-// ─── Helpers visuais ──────────────────────────────────────────────────────────
-function badgeCargo(c: string) {
-  const lower = c.toLowerCase();
+function badgeCargo(cargo: string) {
+  const lower = cargo.toLowerCase();
   if (lower === "administrador") return "bg-purple-100 text-purple-800 border-purple-300";
   if (lower === "diretor") return "bg-indigo-100 text-indigo-800 border-indigo-300";
   if (lower === "gerente comercial") return "bg-blue-100 text-blue-800 border-blue-300";
@@ -95,46 +95,90 @@ function badgeCargo(c: string) {
   return "bg-gray-100 text-gray-700 border-gray-300";
 }
 
-// ─── Componente principal ─────────────────────────────────────────────────────
+function perfilOperacionalPadrao(cargo: string): PerfilOperacional {
+  const lower = cargo.toLowerCase();
+  if (["administrador", "admin", "diretor"].includes(lower)) return "admin";
+  if (["gerente comercial", "gerente", "gestor"].includes(lower)) return "gestor";
+  if (["analista de crédito", "analista de credito", "analista"].includes(lower)) return "analista";
+  return "agente";
+}
+
+function podeAtenderPadrao(cargo: string) {
+  return !["captador externo", "estagiário", "estagiario"].includes(cargo.toLowerCase());
+}
+
+function podeVerTudoPadrao(perfil: string, cargo: string) {
+  if (["admin", "gestor"].includes((perfil || "").toLowerCase())) return true;
+  return ["administrador", "admin", "diretor", "gerente comercial", "gerente", "gestor"].includes((cargo || "").toLowerCase());
+}
+
+function labelPerfil(perfil?: string) {
+  const map: Record<string, string> = {
+    admin: "Admin",
+    gestor: "Gestor",
+    agente: "Agente",
+    analista: "Analista",
+  };
+  return map[(perfil || "").toLowerCase()] || perfil || "—";
+}
+
 export default function UsuariosPage() {
   const { colaborador: eu } = useAuth();
-
-  // Cargos que o usuário logado pode criar
   const cargoEu = (eu?.cargo || "").toLowerCase();
   const cargosPermitidos: string[] = CARGOS_CRIADOS_POR[cargoEu] ?? [];
   const podeGerenciar = cargosPermitidos.length > 0;
 
-  // ── Estado do formulário de criação ──────────────────────────────────────
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [cargo, setCargo] = useState("");
   const [telefone, setTelefone] = useState("");
   const [senha, setSenha] = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [perfil, setPerfil] = useState<PerfilOperacional>("agente");
+  const [podeAtenderLeads, setPodeAtenderLeads] = useState(true);
+  const [podeVerTodosLeads, setPodeVerTodosLeads] = useState(false);
+  const [chatwootAgenteId, setChatwootAgenteId] = useState("");
   const [criando, setCriando] = useState(false);
   const [mensagem, setMensagem] = useState<{ tipo: "sucesso" | "erro"; texto: string } | null>(null);
   const [senhaCopiada, setSenhaCopiada] = useState(false);
 
-  // ── Estado da lista ───────────────────────────────────────────────────────
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erroLista, setErroLista] = useState<string | null>(null);
 
-  // ── Estado de edição inline ───────────────────────────────────────────────
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [editNome, setEditNome] = useState("");
   const [editCargo, setEditCargo] = useState("");
   const [editTelefone, setEditTelefone] = useState("");
+  const [editPerfil, setEditPerfil] = useState<PerfilOperacional>("agente");
+  const [editPodeAtenderLeads, setEditPodeAtenderLeads] = useState(true);
+  const [editPodeVerTodosLeads, setEditPodeVerTodosLeads] = useState(false);
+  const [editChatwootAgenteId, setEditChatwootAgenteId] = useState("");
   const [salvandoEdit, setSalvandoEdit] = useState(false);
   const [mensagemEdit, setMensagemEdit] = useState<{ tipo: "sucesso" | "erro"; texto: string } | null>(null);
 
-  // ─── Carregar colaboradores ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!cargo) return;
+    const perfilBase = perfilOperacionalPadrao(cargo);
+    setPerfil(perfilBase);
+    setPodeAtenderLeads(podeAtenderPadrao(cargo));
+    setPodeVerTodosLeads(podeVerTudoPadrao(perfilBase, cargo));
+  }, [cargo]);
+
+  const resumoPerfis = useMemo(() => {
+    return {
+      total: colaboradores.length,
+      ativos: colaboradores.filter((col) => col.ativo).length,
+      atendem: colaboradores.filter((col) => col.pode_atender_leads).length,
+      veemTudo: colaboradores.filter((col) => col.pode_ver_todos_leads).length,
+    };
+  }, [colaboradores]);
+
   async function carregarColaboradores() {
     setCarregando(true);
     setErroLista(null);
     try {
       const data = await apiFetch("/api/colaboradores");
-      // A API retorna um array diretamente
       const lista = Array.isArray(data) ? data : (data?.colaboradores ?? data?.rows ?? []);
       setColaboradores(lista);
     } catch (err: unknown) {
@@ -150,7 +194,6 @@ export default function UsuariosPage() {
     carregarColaboradores();
   }, []);
 
-  // ─── Criar usuário ────────────────────────────────────────────────────────
   async function handleCriar(e: React.FormEvent) {
     e.preventDefault();
     if (!nome.trim() || !email.trim() || !cargo || !senha) {
@@ -174,12 +217,16 @@ export default function UsuariosPage() {
           cargo,
           senha,
           telefone: telefone.trim() || undefined,
+          perfil,
+          pode_atender_leads: podeAtenderLeads,
+          pode_ver_todos_leads: podeVerTodosLeads,
+          chatwoot_agente_id: chatwootAgenteId.trim() ? Number(chatwootAgenteId) : null,
         }),
       });
 
       setMensagem({
         tipo: "sucesso",
-        texto: `Colaborador "${nome}" criado! E-mail: ${email} | Senha: ${senha}`,
+        texto: `Colaborador "${nome}" criado com sucesso.`,
       });
 
       setNome("");
@@ -187,6 +234,10 @@ export default function UsuariosPage() {
       setCargo("");
       setTelefone("");
       setSenha("");
+      setPerfil("agente");
+      setPodeAtenderLeads(true);
+      setPodeVerTodosLeads(false);
+      setChatwootAgenteId("");
       carregarColaboradores();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro ao criar colaborador.";
@@ -196,12 +247,15 @@ export default function UsuariosPage() {
     setCriando(false);
   }
 
-  // ─── Editar colaborador ───────────────────────────────────────────────────
   function abrirEdicao(col: Colaborador) {
     setEditandoId(col.id);
     setEditNome(col.nome);
     setEditCargo(col.cargo);
     setEditTelefone(col.telefone || "");
+    setEditPerfil((col.perfil || perfilOperacionalPadrao(col.cargo)) as PerfilOperacional);
+    setEditPodeAtenderLeads(col.pode_atender_leads ?? podeAtenderPadrao(col.cargo));
+    setEditPodeVerTodosLeads(col.pode_ver_todos_leads ?? podeVerTudoPadrao(col.perfil || perfilOperacionalPadrao(col.cargo), col.cargo));
+    setEditChatwootAgenteId(col.chatwoot_agente_id ? String(col.chatwoot_agente_id) : "");
     setMensagemEdit(null);
   }
 
@@ -219,6 +273,7 @@ export default function UsuariosPage() {
       setMensagemEdit({ tipo: "erro", texto: "Captadores Externos precisam de telefone." });
       return;
     }
+
     setSalvandoEdit(true);
     try {
       await apiFetch(`/api/colaboradores/${id}`, {
@@ -227,13 +282,17 @@ export default function UsuariosPage() {
           nome: editNome.trim(),
           cargo: editCargo,
           telefone: editTelefone.trim() || null,
+          perfil: editPerfil,
+          pode_atender_leads: editPodeAtenderLeads,
+          pode_ver_todos_leads: editPodeVerTodosLeads,
+          chatwoot_agente_id: editChatwootAgenteId.trim() ? Number(editChatwootAgenteId) : null,
         }),
       });
-      setMensagemEdit({ tipo: "sucesso", texto: "Salvo!" });
+      setMensagemEdit({ tipo: "sucesso", texto: "Colaborador atualizado com sucesso." });
       setTimeout(() => {
         setEditandoId(null);
         setMensagemEdit(null);
-      }, 1000);
+      }, 900);
       carregarColaboradores();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro ao salvar.";
@@ -242,25 +301,20 @@ export default function UsuariosPage() {
     setSalvandoEdit(false);
   }
 
-  // ─── Alternar status ativo/inativo ────────────────────────────────────────
-  async function toggleAtivo(id: string, _ativo: boolean) {
+  async function toggleAtivo(id: string) {
     await apiFetch(`/api/colaboradores/${id}/toggle`, { method: "PATCH" });
     carregarColaboradores();
   }
 
-  // ─── Copiar senha ─────────────────────────────────────────────────────────
   function copiarSenha() {
     navigator.clipboard.writeText(senha);
     setSenhaCopiada(true);
     setTimeout(() => setSenhaCopiada(false), 2000);
   }
 
-  // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <Layout>
-      <div className="max-w-5xl mx-auto space-y-6">
-
-        {/* Header */}
+    <Layout title="Usuários e Perfis">
+      <div className="max-w-6xl mx-auto space-y-6 p-6">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-primary/10 rounded-xl">
             <Users className="h-6 w-6 text-primary" />
@@ -268,12 +322,38 @@ export default function UsuariosPage() {
           <div>
             <h1 className="text-2xl font-bold">Gestão de Colaboradores</h1>
             <p className="text-muted-foreground text-sm">
-              Cadastre e gerencie colaboradores, cargos e acessos ao painel
+              Administração de usuários, perfil operacional, permissões de atendimento e base futura de Chatwoot.
             </p>
           </div>
         </div>
 
-        {/* Aviso se não tem permissão para criar */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="pt-5">
+              <p className="text-xs text-muted-foreground">Total</p>
+              <p className="text-2xl font-bold">{resumoPerfis.total}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5">
+              <p className="text-xs text-muted-foreground">Ativos</p>
+              <p className="text-2xl font-bold text-green-700">{resumoPerfis.ativos}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5">
+              <p className="text-xs text-muted-foreground">Podem atender leads</p>
+              <p className="text-2xl font-bold text-blue-700">{resumoPerfis.atendem}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-5">
+              <p className="text-xs text-muted-foreground">Visão ampla</p>
+              <p className="text-2xl font-bold text-purple-700">{resumoPerfis.veemTudo}</p>
+            </CardContent>
+          </Card>
+        </div>
+
         {!podeGerenciar && (
           <Card className="border-red-200 bg-red-50">
             <CardContent className="pt-5">
@@ -282,8 +362,7 @@ export default function UsuariosPage() {
                 <div>
                   <p className="font-semibold text-sm">Acesso restrito</p>
                   <p className="text-xs mt-0.5">
-                    Seu cargo ({eu?.cargo}) não tem permissão para criar novos colaboradores.
-                    Apenas <strong>Administrador</strong>, <strong>Diretor</strong> e <strong>Gerente Comercial</strong> podem gerenciar usuários.
+                    Seu cargo ({eu?.cargo}) não tem permissão para criar ou alterar usuários. Apenas perfis de gestão podem administrar colaboradores.
                   </p>
                 </div>
               </div>
@@ -291,116 +370,90 @@ export default function UsuariosPage() {
           </Card>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-          {/* ── Formulário de criação ── */}
-          <Card className={`shadow-md ${!podeGerenciar ? "opacity-60 pointer-events-none" : ""}`}>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <Card className={!podeGerenciar ? "opacity-60 pointer-events-none" : ""}>
             <CardHeader className="border-b pb-4">
               <CardTitle className="text-base flex items-center gap-2">
-                <UserPlus className="h-5 w-5 text-primary" />
-                Novo Colaborador
+                <UserPlus className="h-5 w-5 text-primary" /> Novo colaborador
               </CardTitle>
               <CardDescription>
-                Preencha os dados para criar acesso ao painel
+                Crie acessos com perfil operacional e permissões já alinhadas ao CRM atual.
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-5">
               <form onSubmit={handleCriar} className="space-y-4">
-
-                {/* Nome */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="nome-user">Nome Completo <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="nome-user">Nome completo <span className="text-destructive">*</span></Label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="nome-user"
-                      value={nome}
-                      onChange={(e) => setNome(e.target.value)}
-                      placeholder="Nome do colaborador"
-                      className="pl-9"
-                    />
+                    <Input id="nome-user" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome do colaborador" className="pl-9" />
                   </div>
                 </div>
 
-                {/* E-mail */}
                 <div className="space-y-1.5">
                   <Label htmlFor="email-user">E-mail <span className="text-destructive">*</span></Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="email-user"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="colaborador@destrava.com.br"
-                      className="pl-9"
-                    />
+                    <Input id="email-user" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="colaborador@destrava.com.br" className="pl-9" />
                   </div>
                 </div>
 
-                {/* Cargo */}
-                <div className="space-y-1.5">
-                  <Label>Cargo <span className="text-destructive">*</span></Label>
-                  <Select value={cargo} onValueChange={setCargo}>
-                    <SelectTrigger>
-                      <Building2 className="h-4 w-4 text-muted-foreground mr-1" />
-                      <SelectValue placeholder="Selecione o cargo..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {cargosPermitidos.map((c) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Cargo <span className="text-destructive">*</span></Label>
+                    <Select value={cargo} onValueChange={setCargo}>
+                      <SelectTrigger>
+                        <Building2 className="h-4 w-4 text-muted-foreground mr-1" />
+                        <SelectValue placeholder="Selecione o cargo..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cargosPermitidos.map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Perfil operacional</Label>
+                    <Select value={perfil} onValueChange={(v) => setPerfil(v as PerfilOperacional)}>
+                      <SelectTrigger>
+                        <Workflow className="h-4 w-4 text-muted-foreground mr-1" />
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PERFIS_OPERACIONAIS.map((item) => (
+                          <SelectItem key={item} value={item}>{labelPerfil(item)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-                  {/* Descrição do cargo selecionado */}
-                  {cargo && (
-                    <div className={`text-xs rounded-lg px-3 py-2 border ${
-                      cargo.toLowerCase() === "captador externo"
-                        ? "bg-amber-50 border-amber-200 text-amber-800"
-                        : cargo.toLowerCase() === "administrador"
-                        ? "bg-purple-50 border-purple-200 text-purple-800"
-                        : cargo.toLowerCase() === "estagiário"
-                        ? "bg-gray-50 border-gray-200 text-gray-700"
-                        : "bg-sky-50 border-sky-200 text-sky-800"
-                    }`}>
-                      {cargo.toLowerCase() === "administrador" && "Acesso total ao sistema: dashboards, usuários, integrações n8n, todos os leads e empresas."}
-                      {cargo.toLowerCase() === "diretor" && "Acesso total a leads, empresas e pode criar usuários abaixo de Administrador."}
-                      {cargo.toLowerCase() === "gerente comercial" && "Acesso total a leads e empresas. Pode criar Analistas, Consultores, Captadores e Estagiários."}
-                      {cargo.toLowerCase() === "analista de crédito" && "Vê apenas empresas e leads onde é responsável ou analista vinculado."}
-                      {cargo.toLowerCase() === "consultor de crédito" && "Vê apenas empresas e leads onde é responsável. Pode ser captador de origem de empresas."}
-                      {cargo.toLowerCase() === "captador externo" && "Não gera leads nem análise de IA. Mensagens no Chatwoot são gravadas como conversa. Telefone obrigatório para identificação."}
-                      {cargo.toLowerCase() === "estagiário" && "Acesso restrito — vê apenas registros onde é responsável. Não pode ser responsável por atendimento de empresa."}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="telefone-user">Telefone WhatsApp</Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input id="telefone-user" value={telefone} onChange={(e) => setTelefone(e.target.value)} placeholder="(61) 99999-9999" className="pl-9" />
                     </div>
-                  )}
-                </div>
-
-                {/* Telefone WhatsApp */}
-                <div className="space-y-1.5">
-                  <Label htmlFor="telefone-user">
-                    Telefone WhatsApp
-                    {CARGOS_TELEFONE_OBRIGATORIO.includes(cargo.toLowerCase())
-                      ? <span className="text-destructive"> *</span>
-                      : <span className="text-muted-foreground text-xs ml-1">(recomendado)</span>
-                    }
-                  </Label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="telefone-user"
-                      type="tel"
-                      value={telefone}
-                      onChange={(e) => setTelefone(e.target.value)}
-                      placeholder="(61) 99999-9999"
-                      className="pl-9"
-                    />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Mesmo número cadastrado no Chatwoot. Impede que mensagens deste colaborador gerem leads automaticamente.
-                  </p>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="chatwoot-agent-id">Chatwoot agente ID</Label>
+                    <Input id="chatwoot-agent-id" value={chatwootAgenteId} onChange={(e) => setChatwootAgenteId(e.target.value.replace(/\D/g, ""))} placeholder="Ex.: 42" />
+                  </div>
                 </div>
 
-                {/* Senha */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-xl border bg-muted/20 p-4">
+                  <label className="flex items-center gap-3 text-sm">
+                    <input type="checkbox" checked={podeAtenderLeads} onChange={(e) => setPodeAtenderLeads(e.target.checked)} />
+                    <span>Pode atender leads</span>
+                  </label>
+                  <label className="flex items-center gap-3 text-sm">
+                    <input type="checkbox" checked={podeVerTodosLeads} onChange={(e) => setPodeVerTodosLeads(e.target.checked)} />
+                    <span>Pode ver todos os leads</span>
+                  </label>
+                </div>
+
                 <div className="space-y-1.5">
                   <Label htmlFor="senha-user">Senha <span className="text-destructive">*</span></Label>
                   <div className="relative flex gap-2">
@@ -422,66 +475,43 @@ export default function UsuariosPage() {
                         {mostrarSenha ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      title="Gerar senha segura"
-                      onClick={() => { setSenha(gerarSenha()); setMostrarSenha(true); }}
-                    >
+                    <Button type="button" variant="outline" size="icon" onClick={() => { setSenha(gerarSenha()); setMostrarSenha(true); }}>
                       <RefreshCw className="h-4 w-4" />
                     </Button>
                     {senha && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        title="Copiar senha"
-                        onClick={copiarSenha}
-                      >
-                        {senhaCopiada
-                          ? <CheckCircle2 className="h-4 w-4 text-green-600" />
-                          : <Copy className="h-4 w-4" />
-                        }
+                      <Button type="button" variant="outline" size="icon" onClick={copiarSenha}>
+                        {senhaCopiada ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
                       </Button>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Clique em <RefreshCw className="h-3 w-3 inline" /> para gerar uma senha segura automaticamente
-                  </p>
                 </div>
 
-                {/* Mensagem de feedback */}
                 {mensagem && (
-                  <div className={`flex items-start gap-2 rounded-xl px-4 py-3 text-sm ${
-                    mensagem.tipo === "sucesso"
-                      ? "bg-green-50 border border-green-200 text-green-800"
-                      : "bg-red-50 border border-red-200 text-red-800"
-                  }`}>
-                    {mensagem.tipo === "sucesso"
-                      ? <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                      : <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    }
-                    <span className="break-all">{mensagem.texto}</span>
+                  <div className={`flex items-start gap-2 rounded-xl px-4 py-3 text-sm ${mensagem.tipo === "sucesso" ? "bg-green-50 border border-green-200 text-green-800" : "bg-red-50 border border-red-200 text-red-800"}`}>
+                    {mensagem.tipo === "sucesso" ? <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" /> : <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />}
+                    <span>{mensagem.texto}</span>
                   </div>
                 )}
 
                 <Button type="submit" className="w-full h-11 font-bold" disabled={criando || !podeGerenciar}>
                   <UserPlus className="mr-2 h-4 w-4" />
-                  {criando ? "Criando colaborador..." : "Criar Colaborador"}
+                  {criando ? "Criando colaborador..." : "Criar colaborador"}
                 </Button>
               </form>
             </CardContent>
           </Card>
 
-          {/* ── Lista de colaboradores ── */}
-          <Card className="shadow-md">
+          <Card>
             <CardHeader className="border-b pb-4">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-primary" />
-                  Colaboradores Cadastrados
-                </CardTitle>
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Settings2 className="h-5 w-5 text-primary" /> Usuários cadastrados
+                  </CardTitle>
+                  <CardDescription>
+                    Edição inline de perfil, atendimento, visibilidade, ativo e mapeamento futuro do Chatwoot.
+                  </CardDescription>
+                </div>
                 <Button variant="ghost" size="sm" onClick={carregarColaboradores} disabled={carregando}>
                   <RefreshCw className={`h-4 w-4 ${carregando ? "animate-spin" : ""}`} />
                 </Button>
@@ -490,150 +520,131 @@ export default function UsuariosPage() {
             <CardContent className="pt-4">
               {carregando ? (
                 <div className="flex items-center justify-center py-12 text-muted-foreground">
-                  <RefreshCw className="h-5 w-5 animate-spin mr-2" />
-                  Carregando...
+                  <RefreshCw className="h-5 w-5 animate-spin mr-2" /> Carregando...
                 </div>
               ) : erroLista ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center gap-2">
                   <AlertCircle className="h-10 w-10 text-red-400" />
                   <p className="font-medium text-red-700 text-sm">Erro ao carregar colaboradores</p>
                   <p className="text-xs text-red-500">{erroLista}</p>
-                  <button
-                    onClick={carregarColaboradores}
-                    className="mt-2 text-xs text-blue-600 hover:underline flex items-center gap-1"
-                  >
-                    <RefreshCw className="h-3 w-3" /> Tentar novamente
-                  </button>
                 </div>
               ) : colaboradores.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <Users className="h-12 w-12 mx-auto mb-3 opacity-20" />
                   <p className="font-medium">Nenhum colaborador cadastrado</p>
-                  <p className="text-sm mt-1 opacity-60">Crie o primeiro usando o formulário ao lado</p>
                 </div>
               ) : (
-                <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
+                <div className="space-y-3 max-h-[760px] overflow-y-auto pr-1">
                   {colaboradores.map((col) => (
-                    <div
-                      key={col.id}
-                      className="rounded-xl border bg-muted/20 hover:bg-muted/30 transition-colors"
-                    >
+                    <div key={col.id} className="rounded-xl border bg-muted/20 hover:bg-muted/30 transition-colors">
                       {editandoId === col.id ? (
-                        /* ── Modo edição inline ── */
-                        <div className="p-3 space-y-3">
-                          <div className="grid grid-cols-2 gap-2">
+                        <div className="p-4 space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div className="space-y-1">
                               <Label className="text-xs">Nome</Label>
-                              <Input
-                                value={editNome}
-                                onChange={e => setEditNome(e.target.value)}
-                                className="h-8 text-sm"
-                              />
+                              <Input value={editNome} onChange={(e) => setEditNome(e.target.value)} className="h-9 text-sm" />
                             </div>
                             <div className="space-y-1">
                               <Label className="text-xs">Cargo</Label>
-                              <Select value={editCargo} onValueChange={setEditCargo}>
-                                <SelectTrigger className="h-8 text-sm">
+                              <Select value={editCargo} onValueChange={(value) => {
+                                setEditCargo(value);
+                                const perfilBase = perfilOperacionalPadrao(value);
+                                setEditPerfil(perfilBase);
+                                setEditPodeAtenderLeads(podeAtenderPadrao(value));
+                                setEditPodeVerTodosLeads(podeVerTudoPadrao(perfilBase, value));
+                              }}>
+                                <SelectTrigger className="h-9 text-sm">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {/* Apenas cargos que o usuário logado pode atribuir (nível inferior ao seu) */}
-                                  {cargosPermitidos.map(c => (
-                                    <SelectItem key={c} value={c} className="text-sm">{c}</SelectItem>
+                                  {cargosPermitidos.map((item) => (
+                                    <SelectItem key={item} value={item}>{item}</SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
                             </div>
                           </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs flex items-center gap-1">
-                              <Phone className="h-3 w-3" />
-                              Telefone WhatsApp
-                              {CARGOS_TELEFONE_OBRIGATORIO.includes(editCargo.toLowerCase())
-                                ? <span className="text-destructive"> *</span>
-                                : <span className="text-muted-foreground"> (recomendado)</span>
-                              }
-                            </Label>
-                            <Input
-                              value={editTelefone}
-                              onChange={e => setEditTelefone(e.target.value)}
-                              placeholder="(61) 99999-9999"
-                              className="h-8 text-sm"
-                            />
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Telefone</Label>
+                              <Input value={editTelefone} onChange={(e) => setEditTelefone(e.target.value)} className="h-9 text-sm" />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Perfil</Label>
+                              <Select value={editPerfil} onValueChange={(value) => setEditPerfil(value as PerfilOperacional)}>
+                                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {PERFIS_OPERACIONAIS.map((item) => (
+                                    <SelectItem key={item} value={item}>{labelPerfil(item)}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Chatwoot agente ID</Label>
+                              <Input value={editChatwootAgenteId} onChange={(e) => setEditChatwootAgenteId(e.target.value.replace(/\D/g, ""))} className="h-9 text-sm" />
+                            </div>
                           </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-xl border bg-white p-3">
+                            <label className="flex items-center gap-3 text-sm">
+                              <input type="checkbox" checked={editPodeAtenderLeads} onChange={(e) => setEditPodeAtenderLeads(e.target.checked)} />
+                              <span>Pode atender leads</span>
+                            </label>
+                            <label className="flex items-center gap-3 text-sm">
+                              <input type="checkbox" checked={editPodeVerTodosLeads} onChange={(e) => setEditPodeVerTodosLeads(e.target.checked)} />
+                              <span>Pode ver todos os leads</span>
+                            </label>
+                          </div>
+
                           {mensagemEdit && (
-                            <p className={`text-xs px-2 py-1 rounded ${mensagemEdit.tipo === "sucesso" ? "text-green-700 bg-green-50" : "text-red-700 bg-red-50"}`}>
+                            <p className={`text-xs px-3 py-2 rounded ${mensagemEdit.tipo === "sucesso" ? "text-green-700 bg-green-50" : "text-red-700 bg-red-50"}`}>
                               {mensagemEdit.texto}
                             </p>
                           )}
                           <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              className="h-7 text-xs flex-1"
-                              onClick={() => salvarEdicao(col.id)}
-                              disabled={salvandoEdit}
-                            >
-                              <Save className="h-3 w-3 mr-1" />
+                            <Button size="sm" className="flex-1" onClick={() => salvarEdicao(col.id)} disabled={salvandoEdit}>
+                              <Save className="h-3.5 w-3.5 mr-1" />
                               {salvandoEdit ? "Salvando..." : "Salvar"}
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs"
-                              onClick={cancelarEdicao}
-                            >
-                              <X className="h-3 w-3" />
+                            <Button size="sm" variant="outline" onClick={cancelarEdicao}>
+                              <X className="h-3.5 w-3.5" />
                             </Button>
                           </div>
                         </div>
                       ) : (
-                        /* ── Modo visualização ── */
-                        <div className="flex items-center justify-between p-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                              <span className="text-primary font-bold text-sm">
-                                {col.nome.charAt(0).toUpperCase()}
-                              </span>
-                            </div>
+                        <div className="p-4 space-y-3">
+                          <div className="flex items-start justify-between gap-3 flex-wrap">
                             <div className="min-w-0">
-                              <p className="font-semibold text-sm truncate">{col.nome}</p>
-                              <p className="text-xs text-muted-foreground truncate">{col.email || "—"}</p>
-                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${badgeCargo(col.cargo)}`}>
-                                  {col.cargo}
-                                </span>
-                                {col.telefone ? (
-                                  <span className="text-xs text-green-600 flex items-center gap-0.5">
-                                    <Phone className="h-3 w-3" />
-                                    {col.telefone}
-                                  </span>
-                                ) : (
-                                  <span className="text-xs text-amber-500 flex items-center gap-0.5">
-                                    <Phone className="h-3 w-3" />
-                                    Sem telefone
-                                  </span>
-                                )}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-semibold text-sm truncate">{col.nome}</p>
+                                <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${badgeCargo(col.cargo)}`}>{col.cargo}</span>
+                                <Badge variant="outline">{labelPerfil(col.perfil)}</Badge>
+                                <Badge variant={col.ativo ? "default" : "secondary"} className={col.ativo ? "bg-green-600 hover:bg-green-700" : ""}>
+                                  {col.ativo ? "Ativo" : "Inativo"}
+                                </Badge>
                               </div>
+                              <p className="text-xs text-muted-foreground mt-1">{col.email || "Sem e-mail"}</p>
+                              <p className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-3">
+                                <span>Telefone: {col.telefone || "—"}</span>
+                                <span>Atende leads: {col.pode_atender_leads ? "Sim" : "Não"}</span>
+                                <span>Visão ampla: {col.pode_ver_todos_leads ? "Sim" : "Não"}</span>
+                                <span>Chatwoot agente: {col.chatwoot_agente_id ?? "—"}</span>
+                              </p>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                            {podeGerenciar && (
-                              <button
-                                onClick={() => abrirEdicao(col)}
-                                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
-                                title="Editar colaborador"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                            <Badge
-                              variant={col.ativo ? "default" : "secondary"}
-                              className={`text-xs cursor-pointer select-none ${col.ativo ? "bg-green-600 hover:bg-green-700" : ""} ${!podeGerenciar ? "pointer-events-none" : ""}`}
-                              onClick={() => podeGerenciar && toggleAtivo(col.id, col.ativo)}
-                              title={podeGerenciar ? "Clique para alternar status" : ""}
-                            >
-                              {col.ativo ? "Ativo" : "Inativo"}
-                            </Badge>
+                            <div className="flex items-center gap-2">
+                              {podeGerenciar && (
+                                <Button size="sm" variant="outline" onClick={() => abrirEdicao(col)}>
+                                  <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
+                                </Button>
+                              )}
+                              {podeGerenciar && (
+                                <Button size="sm" variant="ghost" onClick={() => toggleAtivo(col.id)}>
+                                  {col.ativo ? "Desativar" : "Ativar"}
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       )}
@@ -645,71 +656,37 @@ export default function UsuariosPage() {
           </Card>
         </div>
 
-        {/* ── Tabela de permissões por cargo ── */}
         <Card className="border-blue-100 bg-blue-50/50">
           <CardContent className="pt-5">
             <div className="flex items-start gap-3">
               <Shield className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
               <div className="space-y-3 text-sm text-blue-900 w-full">
-                <p className="font-semibold">Hierarquia de Cargos e Permissões</p>
+                <p className="font-semibold">Referência operacional</p>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs border-collapse">
                     <thead>
                       <tr className="bg-blue-100/80">
                         <th className="text-left px-3 py-2 rounded-tl-lg font-semibold">Cargo</th>
-                        <th className="text-center px-2 py-2 font-semibold">Ver tudo</th>
-                        <th className="text-center px-2 py-2 font-semibold">Criar usuários</th>
-                        <th className="text-center px-2 py-2 font-semibold">Captação</th>
-                        <th className="text-center px-2 py-2 font-semibold rounded-tr-lg">Atendimento</th>
+                        <th className="text-left px-3 py-2 font-semibold">Perfil sugerido</th>
+                        <th className="text-center px-3 py-2 font-semibold">Pode atender</th>
+                        <th className="text-center px-3 py-2 rounded-tr-lg font-semibold">Pode ver todos</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-blue-100">
-                      {[
-                        { cargo: "Administrador", verTudo: true, criar: "Todos (exceto outro Admin)", captacao: true, atendimento: true },
-                        { cargo: "Diretor", verTudo: true, criar: "Exceto Admin e Diretor", captacao: true, atendimento: true },
-                        { cargo: "Gerente Comercial", verTudo: true, criar: "Analista/Consultor/Captador/Estag.", captacao: true, atendimento: true },
-                        { cargo: "Analista de Crédito", verTudo: false, criar: "—", captacao: false, atendimento: true },
-                        { cargo: "Consultor de Crédito", verTudo: false, criar: "—", captacao: true, atendimento: true },
-                        { cargo: "Captador Externo", verTudo: false, criar: "—", captacao: true, atendimento: false },
-                        { cargo: "Estagiário", verTudo: false, criar: "—", captacao: false, atendimento: false },
-                      ].map(row => (
-                        <tr key={row.cargo} className="bg-white/50 hover:bg-white/80">
-                          <td className="px-3 py-2">
-                            <span className={`px-1.5 py-0.5 rounded border font-medium ${badgeCargo(row.cargo)}`}>
-                              {row.cargo}
-                            </span>
-                          </td>
-                          <td className="text-center px-2 py-2">{row.verTudo ? "✅" : "🔒"}</td>
-                          <td className="text-center px-2 py-2 text-gray-600">{typeof row.criar === "string" ? row.criar : (row.criar ? "✅" : "—")}</td>
-                          <td className="text-center px-2 py-2">{row.captacao ? "✅" : "—"}</td>
-                          <td className="text-center px-2 py-2">{row.atendimento ? "✅" : "—"}</td>
-                        </tr>
-                      ))}
+                      {TODOS_CARGOS.map((item) => {
+                        const perfilBase = perfilOperacionalPadrao(item);
+                        return (
+                          <tr key={item} className="bg-white/60 hover:bg-white/90">
+                            <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded border font-medium ${badgeCargo(item)}`}>{item}</span></td>
+                            <td className="px-3 py-2">{labelPerfil(perfilBase)}</td>
+                            <td className="text-center px-3 py-2">{podeAtenderPadrao(item) ? "Sim" : "Não"}</td>
+                            <td className="text-center px-3 py-2">{podeVerTudoPadrao(perfilBase, item) ? "Sim" : "Não"}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
-                <p className="text-xs text-blue-700 bg-blue-100/60 rounded-lg px-3 py-2 border border-blue-200">
-                  <strong>Dica:</strong> Cadastre o telefone WhatsApp de todos os colaboradores que interagem pelo Chatwoot para evitar que suas mensagens gerem leads automaticamente.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* ── Instruções de primeiro acesso ── */}
-        <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="pt-5">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-              <div className="space-y-2 text-sm text-amber-800">
-                <p className="font-semibold">Importante — Primeiro Acesso e Configuração</p>
-                <ul className="space-y-1 list-disc list-inside text-xs">
-                  <li>Após criar o colaborador, comunique a senha por canal seguro (WhatsApp, ligação).</li>
-                  <li>O colaborador pode alterar a senha após o primeiro login em <strong>/colaborador/perfil</strong>.</li>
-                  <li>Para <strong>Captadores Externos</strong>: o telefone deve ser o mesmo número cadastrado no Chatwoot.</li>
-                  <li>Para <strong>Analistas/Consultores</strong>: vincule-os às empresas no formulário de Empresa (campo "Responsável pelo Atendimento").</li>
-                  <li>O isolamento de painel é automático — cada colaborador vê apenas seus registros vinculados.</li>
-                </ul>
               </div>
             </div>
           </CardContent>

@@ -17,6 +17,7 @@ import {
   Kanban,
   Building2,
   ShieldAlert,
+  ListOrdered,
 } from "lucide-react";
 
 interface NavItem {
@@ -32,11 +33,15 @@ interface NavItem {
 const CARGOS_GESTAO = ['administrador', 'diretor', 'gerente comercial'];
 
 const ALL_NAV_ITEMS: NavItem[] = [
-  { href: "/colaborador/dashboard",   label: "Dashboard",       icon: LayoutDashboard },
-  { href: "/colaborador/crm",         label: "CRM — Pipeline",  icon: Kanban },
+  { href: "/colaborador/dashboard",   label: "Dashboard",          icon: LayoutDashboard },
+  { href: "/colaborador/crm",         label: "CRM Geral",          icon: Kanban },
+  { href: "/colaborador/meu-crm",     label: "Meu CRM",            icon: User },
+  { href: "/colaborador/fila?scope=meus", label: "Minha Fila",     icon: ListOrdered },
+  { href: "/colaborador/fila?scope=sem_responsavel", label: "Sem Responsável", icon: ShieldAlert },
   { href: "/colaborador/calculadora", label: "Calculadora",     icon: Calculator },
   { href: "/colaborador/simulacoes",  label: "Simulações",      icon: FileText },
-  { href: "/colaborador/triagem",     label: "Triagem",         icon: ShieldAlert },
+  { href: "/colaborador/triagem",     label: "Triagem",            icon: ShieldAlert },
+  { href: "/colaborador/fila",        label: "Fila Geral",         icon: ListOrdered },
   { href: "/colaborador/clientes",    label: "Clientes",        icon: Users },
   { href: "/colaborador/empresas",    label: "Empresas",        icon: Building2 },
   // Integrações n8n: somente Administrador
@@ -112,7 +117,7 @@ export default function ColaboradorLayout({ children, title }: LayoutProps) {
         {/* Navegação */}
         <nav className="flex-1 p-3 space-y-0.5">
           {navItems.map((item) => {
-            const isActive = location === item.href || location.startsWith(item.href + "/");
+            const isActive = location === item.href || location.startsWith(item.href + "/") || (item.href.includes("?") && location.startsWith(item.href.split("?")[0]));
             const Icon = item.icon;
             return (
               <Link key={item.href} href={item.href}>
@@ -185,7 +190,7 @@ export default function ColaboradorLayout({ children, title }: LayoutProps) {
             </div>
             <nav className="p-3 space-y-0.5">
               {navItems.map((item) => {
-                const isActive = location === item.href;
+                const isActive = location === item.href || (item.href.includes("?") && location.startsWith(item.href.split("?")[0]));
                 const Icon = item.icon;
                 return (
                   <Link key={item.href} href={item.href}>
