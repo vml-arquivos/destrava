@@ -326,6 +326,29 @@ async function registrarCrmLog({
   }
 }
 
+async function garantirEntradaAutomaticaFunil(leadId: string) {
+  if (!leadId) return;
+
+  const { rows } = await pool.query(
+    `UPDATE leads
+        SET etapa_funil = $2,
+            status = CASE WHEN status IS NULL OR btrim(status) = '' THEN $2 ELSE status END,
+            updated_at = NOW()
+      WHERE id = $1
+        AND (etapa_funil IS NULL OR btrim(etapa_funil) = '')
+      RETURNING id`,
+    [leadId, ETAPA_FUNIL_DEFAULT]
+  );
+
+  if (rows.length > 0) {
+    await registrarCrmLog({
+      leadId,
+      usuarioId: null,
+      acao: `entrada_funil_automatica:${ETAPA_FUNIL_DEFAULT}`,
+    });
+  }
+}
+
 type ChatwootConversationPayload = {
   id?: number | string | null;
   inbox_id?: number | string | null;
@@ -482,6 +505,8 @@ async function sincronizarConversaChatwoot(conversation: ChatwootConversationPay
         WHERE id = $1`,
       updateLeadParams
     );
+
+    await garantirEntradaAutomaticaFunil(leadId);
   }
 
   const convRes = await pool.query(
@@ -1840,10 +1865,24 @@ async function startServer() {
   app.post("/api/crm/mover-funil", auth, async (req: Request, res: Response) => {
     try {
       const { lead_id, etapa_funil } = req.body;
+
+      if (!lead_id) {
+        res.status(400).json({ error: "lead_id é obrigatório." });
+        return;
+      }
+
+      if (typeof etapa_funil !== "string" || !etapa_funil.trim()) {
+        res.status(400).json({ error: "etapa_funil é obrigatória e deve ser string." });
+        return;
+      }
+
       const etapaNormalizada = validarEtapaFunil(etapa_funil);
 
-      if (!etapaFunilPermitida(etapa_funil)) {
-        res.status(400).json({ error: "Etapa do funil inválida." });
+      if (!etapaFunilPermitida(etapaNormalizada)) {
+        res.status(400).json({
+          error: "Etapa do funil inválida.",
+          detalhe: `Recebido: "${String(etapa_funil)}"`,
+        });
         return;
       }
 
@@ -1899,9 +1938,13 @@ async function startServer() {
       }
 
       res.json({ success: true, etapa_funil: etapaNormalizada, responsavel_id: responsavelFinal });
-    } catch (err) {
+    } catch (err: any) {
       console.error("[POST /api/crm/mover-funil]", err);
-      res.status(500).json({ error: "Erro ao mover lead" });
+      res.status(500).json({
+        error: "Erro ao mover lead.",
+        detalhe: err?.message || null,
+        codigo: err?.code || null,
+      });
     }
   });
 
@@ -2745,6 +2788,10 @@ Responda APENAS com um JSON válido no seguinte formato:
               WHERE id = $1`,
             [leadId, agenteResponsavelId]
           );
+        }
+
+        if (leadId) {
+          await garantirEntradaAutomaticaFunil(leadId);
         }
 
         const convRes = await pool.query(
