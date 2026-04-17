@@ -24,12 +24,13 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
 } from "@/components/ui/dialog";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_LABELS, ETAPAS_FUNIL_VALIDAS, type EtapaFunil } from "@shared/funnel";
+import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_LABELS, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil, type EtapaFunil } from "@shared/funnel";
 
 // ─── Tipos ────────────────────────────────────────────────────
 interface Lead {
@@ -359,12 +360,16 @@ function FichaLead({
   const [novaAtiv, setNovaAtiv] = useState({ tipo: "nota", titulo: "", descricao: "", resultado: "" });
   const [editando, setEditando] = useState(false);
   const [dadosEdit, setDadosEdit] = useState<Partial<Lead>>({});
-  const [novaEtapa, setNovaEtapa] = useState(lead.etapa_funil);
+  const [novaEtapa, setNovaEtapa] = useState<string>(normalizarEtapaFunil(lead.etapa_funil));
   const [novaTemp, setNovaTemp] = useState(lead.temperatura ?? "frio");
 
   useEffect(() => {
     carregarDados();
   }, [lead.id]);
+
+  useEffect(() => {
+    setNovaEtapa(normalizarEtapaFunil(lead.etapa_funil));
+  }, [lead.id, lead.etapa_funil]);
 
   async function carregarDados() {
     setLoading(true);
@@ -406,16 +411,19 @@ function FichaLead({
   }
 
   async function moverFunil() {
-    if (novaEtapa === lead.etapa_funil && novaTemp === lead.temperatura) return;
+    const etapaCanonica = normalizarEtapaFunil(novaEtapa);
+    const etapaAtualCanonica = normalizarEtapaFunil(lead.etapa_funil);
+
+    if (etapaCanonica === etapaAtualCanonica && novaTemp === lead.temperatura) return;
     setSalvando(true);
     try {
       const updates: Record<string, unknown> = { temperatura: novaTemp };
-      if (novaEtapa !== lead.etapa_funil) {
+      if (etapaCanonica !== etapaAtualCanonica) {
         await apiFetch("/api/crm/mover-funil", {
           method: "POST",
           body: JSON.stringify({
             lead_id: lead.id,
-            etapa_funil: novaEtapa,
+            etapa_funil: etapaCanonica,
           }),
         });
       }
@@ -425,9 +433,9 @@ function FichaLead({
       });
       toast.success("Lead atualizado!");
       onUpdate();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Erro ao mover funil.");
+      toast.error(err?.message || "Erro ao mover funil.");
     }
     setSalvando(false);
   }
@@ -516,10 +524,12 @@ function FichaLead({
   const temp = lead.temperatura ? TEMPERATURA_CONFIG[lead.temperatura] : null;
   const TempIcon = temp?.icon;
   const etapaAtual = ETAPAS_FUNIL.find(e => e.id === lead.etapa_funil);
+  const houveMudancaPosicao = normalizarEtapaFunil(novaEtapa) !== normalizarEtapaFunil(lead.etapa_funil)
+    || novaTemp !== lead.temperatura;
 
   return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+    <Sheet open modal={false} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <SheetContent side="right" className="w-[min(1100px,96vw)] sm:w-[min(1100px,96vw)] p-0 overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-900 to-blue-700 text-white flex-shrink-0">
           <div className="flex items-start justify-between gap-4">
@@ -646,12 +656,10 @@ function FichaLead({
                       </Select>
                     </div>
                   </div>
-                  {(novaEtapa !== lead.etapa_funil || novaTemp !== lead.temperatura) && (
-                    <Button size="sm" className="mt-3 w-full" onClick={moverFunil} disabled={salvando}>
-                      {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
-                      Salvar Posição
-                    </Button>
-                  )}
+                  <Button size="sm" className="mt-3 w-full" onClick={moverFunil} disabled={!houveMudancaPosicao || salvando}>
+                    {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
+                    {salvando ? "Salvando..." : "Salvar Posição"}
+                  </Button>
                 </div>
 
                 {/* Dados do lead */}
@@ -1023,8 +1031,8 @@ function FichaLead({
             </div>
           </Tabs>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 

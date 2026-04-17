@@ -279,6 +279,42 @@ function etapaFunilPermitida(value: string | null | undefined): boolean {
   return ETAPAS_FUNIL_VALIDAS.includes(validarEtapaFunil(value) as (typeof ETAPAS_FUNIL_VALIDAS)[number]);
 }
 
+const MAPA_ETAPA_UI_PARA_LEGADA: Record<string, string> = {
+  entrada: "novo",
+  triagem: "novo",
+  contato: "contato_feito",
+  qualificacao: "qualificado",
+  documentos: "documentacao",
+  analise: "negociacao",
+  proposta: "proposta_enviada",
+  negociacao: "negociacao",
+  ganho: "ganho",
+  perdido: "perdido",
+  reativacao: "novo",
+  carteira: "ganho",
+};
+
+const MAPA_ETAPA_LEGADA_PARA_UI: Record<string, string> = {
+  novo: "entrada",
+  contato_feito: "contato",
+  qualificado: "qualificacao",
+  documentacao: "documentos",
+  proposta_enviada: "analise",
+  negociacao: "analise",
+  ganho: "ganho",
+  perdido: "perdido",
+};
+
+function etapaUiParaLegada(value: string | null | undefined): string {
+  const etapaUi = validarEtapaFunil(value);
+  return MAPA_ETAPA_UI_PARA_LEGADA[etapaUi] || "novo";
+}
+
+function etapaLegadaParaUi(value: string | null | undefined): string {
+  const etapa = String(value || "").trim().toLowerCase();
+  return MAPA_ETAPA_LEGADA_PARA_UI[etapa] || validarEtapaFunil(etapa);
+}
+
 function podecriarUsuarios(cargo: string): boolean {
   return CARGOS_PODEM_CRIAR_USUARIOS.includes((cargo || '').toLowerCase());
 }
@@ -323,6 +359,29 @@ async function registrarCrmLog({
     );
   } catch (err) {
     console.error("[CRM LOG ERROR]", err);
+  }
+}
+
+async function garantirEntradaAutomaticaFunil(leadId: string) {
+  if (!leadId) return;
+
+  const { rows } = await pool.query(
+    `UPDATE leads
+        SET etapa_funil = $2,
+            status = CASE WHEN status IS NULL OR btrim(status) = '' THEN $2 ELSE status END,
+            updated_at = NOW()
+      WHERE id = $1
+        AND (etapa_funil IS NULL OR btrim(etapa_funil) = '')
+      RETURNING id`,
+    [leadId, ETAPA_FUNIL_DEFAULT]
+  );
+
+  if (rows.length > 0) {
+    await registrarCrmLog({
+      leadId,
+      usuarioId: null,
+      acao: `entrada_funil_automatica:${ETAPA_FUNIL_DEFAULT}`,
+    });
   }
 }
 
@@ -372,8 +431,18 @@ function toNullableNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function normalizarStatusConversaChatwoot(status: string | null | undefined): 'aberta' | 'resolvida' {
-  return String(status || '').toLowerCase() === 'resolved' ? 'resolvida' : 'aberta';
+function normalizarStatusConversaChatwoot(status: string | null | undefined): 'aberta' | 'fechada' | 'pendente_ia' {
+  const normalizedStatus = String(status || '').trim().toLowerCase();
+
+  if (['resolved', 'resolvida', 'closed'].includes(normalizedStatus)) {
+    return 'fechada';
+  }
+
+  if (['pending', 'snoozed'].includes(normalizedStatus)) {
+    return 'pendente_ia';
+  }
+
+  return 'aberta';
 }
 
 function toIsoFromUnix(value: unknown): string | null {
@@ -472,6 +541,8 @@ async function sincronizarConversaChatwoot(conversation: ChatwootConversationPay
         WHERE id = $1`,
       updateLeadParams
     );
+
+    await garantirEntradaAutomaticaFunil(leadId);
   }
 
   const convRes = await pool.query(
@@ -1829,15 +1900,38 @@ async function startServer() {
   // ─── POST /api/crm/mover-funil ────────────────────────────────────────────
   app.post("/api/crm/mover-funil", auth, async (req: Request, res: Response) => {
     try {
-      const { lead_id, etapa_funil } = req.body;
-      const etapaNormalizada = validarEtapaFunil(etapa_funil);
+      const { lead_id, etapa_funil, temperatura } = req.body;
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
 
-      if (!etapaFunilPermitida(etapa_funil)) {
-        res.status(400).json({ error: "Etapa do funil inválida." });
+      console.info("[POST /api/crm/mover-funil] payload recebido", {
+        body: req.body,
+        lead_id,
+        etapa_funil,
+        temperatura,
+        usuario: colaborador ? { id: colaborador.id, email: colaborador.email, perfil: colaborador.perfil } : null,
+      });
+
+      if (!lead_id) {
+        res.status(400).json({ error: "lead_id é obrigatório." });
         return;
       }
 
-      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      if (typeof etapa_funil !== "string" || !etapa_funil.trim()) {
+        res.status(400).json({ error: "etapa_funil é obrigatória e deve ser string." });
+        return;
+      }
+
+      const etapaNormalizada = validarEtapaFunil(etapa_funil);
+      const etapaPersistencia = etapaUiParaLegada(etapaNormalizada);
+      console.info("[POST /api/crm/mover-funil] etapa compat", { etapa_ui: etapaNormalizada, etapa_legada: etapaPersistencia });
+
+      if (!etapaFunilPermitida(etapaNormalizada)) {
+        res.status(400).json({
+          error: "Etapa do funil inválida.",
+          detalhe: `Recebido: "${String(etapa_funil)}"`,
+        });
+        return;
+      }
       const { rows: atuais } = await pool.query(
         "SELECT id, etapa_funil, responsavel_id FROM leads WHERE id = $1 LIMIT 1",
         [lead_id]
@@ -1864,19 +1958,18 @@ async function startServer() {
       await pool.query(
         `UPDATE leads
             SET etapa_funil = $1,
-                status = $1,
                 responsavel_id = COALESCE(responsavel_id, $2),
                 ultimo_contato_em = NOW(),
                 updated_at = NOW()
           WHERE id = $3`,
-        [etapaNormalizada, responsavelFinal, lead_id]
+        [etapaPersistencia, responsavelFinal, lead_id]
       );
 
-      if (atuais[0]?.etapa_funil !== etapaNormalizada) {
+      if (etapaLegadaParaUi(atuais[0]?.etapa_funil) !== etapaNormalizada) {
         await registrarCrmLog({
           leadId: lead_id,
           usuarioId: colaborador?.id || null,
-          acao: `mudanca_etapa:${atuais[0]?.etapa_funil || 'sem_etapa'}->${etapaNormalizada}`,
+          acao: `mudanca_etapa:${etapaLegadaParaUi(atuais[0]?.etapa_funil) || 'sem_etapa'}->${etapaNormalizada}`,
         });
       }
 
@@ -1889,9 +1982,25 @@ async function startServer() {
       }
 
       res.json({ success: true, etapa_funil: etapaNormalizada, responsavel_id: responsavelFinal });
-    } catch (err) {
-      console.error("[POST /api/crm/mover-funil]", err);
-      res.status(500).json({ error: "Erro ao mover lead" });
+    } catch (err: any) {
+      console.error("[POST /api/crm/mover-funil] erro", {
+        message: err?.message || null,
+        code: err?.code || null,
+        detail: err?.detail || null,
+        hint: err?.hint || null,
+        constraint: err?.constraint || null,
+        table: err?.table || null,
+        column: err?.column || null,
+        where: err?.where || null,
+      });
+      res.status(500).json({
+        error: "Erro ao mover lead.",
+        detalhe: err?.message || null,
+        codigo: err?.code || null,
+        constraint: err?.constraint || null,
+        table: err?.table || null,
+        column: err?.column || null,
+      });
     }
   });
 
@@ -1912,7 +2021,11 @@ async function startServer() {
       } catch {
         result = await pool.query(`SELECT * FROM leads ${where} ORDER BY created_at DESC LIMIT 500`, params);
       }
-      res.json(result.rows);
+      const rowsCompat = result.rows.map((row: any) => ({
+        ...row,
+        etapa_funil: etapaLegadaParaUi(row.etapa_funil),
+      }));
+      res.json(rowsCompat);
     } catch (err) {
       console.error("[GET /api/crm/pipeline]", err);
       res.status(500).json({ error: "Erro ao obter pipeline" });
@@ -2735,6 +2848,10 @@ Responda APENAS com um JSON válido no seguinte formato:
               WHERE id = $1`,
             [leadId, agenteResponsavelId]
           );
+        }
+
+        if (leadId) {
+          await garantirEntradaAutomaticaFunil(leadId);
         }
 
         const convRes = await pool.query(
