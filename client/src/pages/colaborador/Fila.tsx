@@ -23,6 +23,9 @@ interface LeadFila {
   proximo_followup?: string;
   responsavel_id?: string | null;
   responsavel_nome?: string;
+  chatwoot_conv_id?: number | null;
+  ultima_conversa?: string | null;
+  status_conversa?: string | null;
   created_at: string;
 }
 
@@ -263,7 +266,7 @@ export default function Fila() {
                         {savingId === lead.id ? "Atribuindo..." : "Assumir lead"}
                       </Button>
                     )}
-                    <Link href={podeVerTudo ? "/colaborador/crm" : "/colaborador/meu-crm"}>
+                    <Link href={`${podeVerTudo ? "/colaborador/crm" : "/colaborador/meu-crm"}?leadId=${encodeURIComponent(lead.id)}`}>
                       <a className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700">
                         {podeVerTudo ? "Abrir CRM geral" : "Abrir visão do agente"}
                         <ArrowRight className="h-4 w-4" />

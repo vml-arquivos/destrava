@@ -1031,6 +1031,7 @@ function FichaLead({
 // ─── Página principal do CRM ──────────────────────────────────
 export default function CRM() {
   const { colaborador } = useAuth();
+  const [location] = useLocation();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
   const [followupsAtrasados, setFollowupsAtrasados] = useState<Lead[]>([]);
@@ -1094,6 +1095,27 @@ export default function CRM() {
   }, [filtroEscopo, filtroResponsavel, podeVerTudo]);
 
   useEffect(() => { carregarLeads(); }, [carregarLeads]);
+
+  useEffect(() => {
+    const leadId = new URLSearchParams(window.location.search).get("leadId");
+    if (!leadId) return;
+
+    const leadNaLista = leads.find((item) => item.id === leadId);
+    if (leadNaLista) {
+      setLeadSelecionado(leadNaLista);
+      return;
+    }
+
+    apiFetch(`/api/crm/contexto/${encodeURIComponent(leadId)}`)
+      .then((contexto) => {
+        if (contexto?.lead?.id) {
+          setLeadSelecionado(contexto.lead);
+        }
+      })
+      .catch((err) => {
+        console.error(err);
+      });
+  }, [leads, location]);
 
   async function criarLead() {
     if (!novoLead.nome.trim() || !novoLead.telefone.trim()) {
