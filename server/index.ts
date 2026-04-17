@@ -372,8 +372,20 @@ function toNullableNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function normalizarStatusConversaChatwoot(status: string | null | undefined): 'aberta' | 'resolvida' {
-  return String(status || '').toLowerCase() === 'resolved' ? 'resolvida' : 'aberta';
+function normalizarStatusConversaChatwoot(
+  status: string | null | undefined
+): 'aberta' | 'fechada' | 'pendente_ia' | 'escalada_humano' {
+  const statusNormalizado = String(status || '').toLowerCase();
+
+  if (statusNormalizado === 'resolved' || statusNormalizado === 'resolvida' || statusNormalizado === 'closed') {
+    return 'fechada';
+  }
+
+  if (statusNormalizado === 'pending' || statusNormalizado === 'snoozed') {
+    return 'pendente_ia';
+  }
+
+  return 'aberta';
 }
 
 function toIsoFromUnix(value: unknown): string | null {
