@@ -29,7 +29,7 @@ import {
   DropdownMenuTrigger, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_LABELS, ETAPAS_FUNIL_VALIDAS, type EtapaFunil } from "@shared/funnel";
+import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_LABELS, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil, type EtapaFunil } from "@shared/funnel";
 
 // ─── Tipos ────────────────────────────────────────────────────
 interface Lead {
@@ -359,12 +359,16 @@ function FichaLead({
   const [novaAtiv, setNovaAtiv] = useState({ tipo: "nota", titulo: "", descricao: "", resultado: "" });
   const [editando, setEditando] = useState(false);
   const [dadosEdit, setDadosEdit] = useState<Partial<Lead>>({});
-  const [novaEtapa, setNovaEtapa] = useState(lead.etapa_funil);
+  const [novaEtapa, setNovaEtapa] = useState<string>(normalizarEtapaFunil(lead.etapa_funil));
   const [novaTemp, setNovaTemp] = useState(lead.temperatura ?? "frio");
 
   useEffect(() => {
     carregarDados();
   }, [lead.id]);
+
+  useEffect(() => {
+    setNovaEtapa(normalizarEtapaFunil(lead.etapa_funil));
+  }, [lead.id, lead.etapa_funil]);
 
   async function carregarDados() {
     setLoading(true);
@@ -406,16 +410,19 @@ function FichaLead({
   }
 
   async function moverFunil() {
-    if (novaEtapa === lead.etapa_funil && novaTemp === lead.temperatura) return;
+    const etapaCanonica = normalizarEtapaFunil(novaEtapa);
+    const etapaAtualCanonica = normalizarEtapaFunil(lead.etapa_funil);
+
+    if (etapaCanonica === etapaAtualCanonica && novaTemp === lead.temperatura) return;
     setSalvando(true);
     try {
       const updates: Record<string, unknown> = { temperatura: novaTemp };
-      if (novaEtapa !== lead.etapa_funil) {
+      if (etapaCanonica !== etapaAtualCanonica) {
         await apiFetch("/api/crm/mover-funil", {
           method: "POST",
           body: JSON.stringify({
             lead_id: lead.id,
-            etapa_funil: novaEtapa,
+            etapa_funil: etapaCanonica,
           }),
         });
       }
@@ -425,9 +432,9 @@ function FichaLead({
       });
       toast.success("Lead atualizado!");
       onUpdate();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error("Erro ao mover funil.");
+      toast.error(err?.message || "Erro ao mover funil.");
     }
     setSalvando(false);
   }
