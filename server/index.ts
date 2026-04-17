@@ -326,6 +326,262 @@ async function registrarCrmLog({
   }
 }
 
+type ChatwootConversationPayload = {
+  id?: number | string | null;
+  inbox_id?: number | string | null;
+  status?: string | null;
+  meta?: {
+    sender?: {
+      id?: number | string | null;
+      name?: string | null;
+      phone_number?: string | null;
+    } | null;
+    assignee?: {
+      id?: number | string | null;
+      name?: string | null;
+    } | null;
+  } | null;
+  messages?: Array<Record<string, any>>;
+  last_non_activity_message?: Record<string, any> | null;
+  last_activity_at?: number | string | null;
+  created_at?: number | string | null;
+  updated_at?: number | string | null;
+};
+
+function obterConfigChatwoot() {
+  const baseUrl = (process.env.CHATWOOT_URL || '').trim().replace(/\/+$/, '');
+  const apiToken = (process.env.CHATWOOT_API_TOKEN || '').trim();
+  const accountId = Number(process.env.CHATWOOT_ACCOUNT_ID || 0);
+
+  if (!baseUrl || !apiToken || !Number.isFinite(accountId) || accountId <= 0) {
+    throw new Error('Configuração do Chatwoot incompleta. Defina CHATWOOT_URL, CHATWOOT_API_TOKEN e CHATWOOT_ACCOUNT_ID.');
+  }
+
+  return { baseUrl, apiToken, accountId };
+}
+
+function normalizarTelefone(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const digits = String(value).replace(/\D/g, '');
+  return digits || null;
+}
+
+function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizarStatusConversaChatwoot(status: string | null | undefined): 'aberta' | 'resolvida' {
+  return String(status || '').toLowerCase() === 'resolved' ? 'resolvida' : 'aberta';
+}
+
+function toIsoFromUnix(value: unknown): string | null {
+  const numeric = toNullableNumber(value);
+  if (!numeric) return null;
+  const millis = numeric > 10_000_000_000 ? numeric : numeric * 1000;
+  const date = new Date(millis);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function escolherMensagemChatwoot(conversation: ChatwootConversationPayload): Record<string, any> | null {
+  if (Array.isArray(conversation.messages) && conversation.messages.length > 0) {
+    return conversation.messages[conversation.messages.length - 1] || null;
+  }
+  return conversation.last_non_activity_message || null;
+}
+
+async function sincronizarConversaChatwoot(conversation: ChatwootConversationPayload, origem: 'chatwoot_sync' | 'chatwoot_backfill' = 'chatwoot_sync') {
+  const chatwootConvId = conversation?.id?.toString() || null;
+  if (!chatwootConvId) {
+    return { updated: false, reason: 'sem_chatwoot_conv_id' };
+  }
+
+  const sender = conversation?.meta?.sender || null;
+  const assignee = conversation?.meta?.assignee || null;
+  const chatwootContactId = toNullableNumber(sender?.id);
+  const chatwootInboxId = toNullableNumber(conversation?.inbox_id);
+  const chatwootAssigneeId = toNullableNumber(assignee?.id);
+  const telefone = normalizarTelefone(sender?.phone_number);
+  const nomeContato = (sender?.name || '').trim() || null;
+  const statusConversa = normalizarStatusConversaChatwoot(conversation?.status);
+  const ultimaMensagem = escolherMensagemChatwoot(conversation);
+  const lastActivityIso = toIsoFromUnix(conversation?.last_activity_at)
+    || toIsoFromUnix(ultimaMensagem?.created_at)
+    || toIsoFromUnix(conversation?.updated_at)
+    || toIsoFromUnix(conversation?.created_at);
+
+  let agenteResponsavelId: string | null = null;
+  if (chatwootAssigneeId) {
+    const agenteResponsavel = await pool.query(
+      `SELECT id FROM colaboradores WHERE chatwoot_agente_id = $1 LIMIT 1`,
+      [chatwootAssigneeId]
+    );
+    agenteResponsavelId = agenteResponsavel.rows[0]?.id || null;
+  }
+
+  let leadId: string | null = null;
+  const leadPorConv = await pool.query(
+    `SELECT id FROM leads WHERE chatwoot_conv_id = $1 LIMIT 1`,
+    [Number(chatwootConvId)]
+  );
+  if (leadPorConv.rows.length > 0) {
+    leadId = leadPorConv.rows[0].id;
+  }
+
+  if (!leadId && telefone) {
+    const leadPorTelefone = await pool.query(
+      `SELECT id FROM leads WHERE regexp_replace(COALESCE(telefone, ''), '\\D', '', 'g') = $1 ORDER BY created_at DESC LIMIT 1`,
+      [telefone]
+    );
+    if (leadPorTelefone.rows.length > 0) {
+      leadId = leadPorTelefone.rows[0].id;
+    }
+  }
+
+  if (!leadId && nomeContato && telefone) {
+    const novoLead = await pool.query(
+      `INSERT INTO leads (nome, telefone, origem, status, etapa_funil, temperatura, canal_origem, tipo_registro, chatwoot_conv_id, responsavel_id)
+       VALUES ($1, $2, 'chatwoot', 'entrada', 'entrada', 'frio', 'whatsapp', 'lead', $3, $4)
+       RETURNING id`,
+      [nomeContato, telefone, Number(chatwootConvId), agenteResponsavelId]
+    );
+    leadId = novoLead.rows[0]?.id || null;
+  }
+
+  if (leadId) {
+    const updateLeadParams: any[] = [leadId];
+    const leadSets = [
+      `chatwoot_conv_id = COALESCE(chatwoot_conv_id, $2)`
+    ];
+    updateLeadParams.push(Number(chatwootConvId));
+
+    if (agenteResponsavelId) {
+      updateLeadParams.push(agenteResponsavelId);
+      leadSets.push(`responsavel_id = COALESCE(responsavel_id, $${updateLeadParams.length})`);
+    }
+
+    updateLeadParams.push(lastActivityIso);
+    leadSets.push(`updated_at = COALESCE($${updateLeadParams.length}::timestamptz, NOW())`);
+
+    await pool.query(
+      `UPDATE leads
+          SET ${leadSets.join(', ')}
+        WHERE id = $1`,
+      updateLeadParams
+    );
+  }
+
+  const convRes = await pool.query(
+    `INSERT INTO crm_conversas (
+       lead_id,
+       canal,
+       canal_id_externo,
+       status,
+       chatwoot_contact_id,
+       chatwoot_inbox_id,
+       chatwoot_assignee_id,
+       agente_responsavel_id,
+       origem_atribuicao_agente,
+       agente_ultima_atribuicao_em,
+       ultima_sincronizacao_chatwoot_em,
+       payload_ultimo_evento,
+       ultima_interacao_em,
+       updated_at
+     )
+     VALUES (
+       $1,
+       'whatsapp',
+       $2,
+       $3,
+       $4,
+       $5,
+       $6,
+       $7,
+       CASE WHEN $7 IS NOT NULL THEN $8 ELSE NULL END,
+       CASE WHEN $7 IS NOT NULL THEN NOW() ELSE NULL END,
+       NOW(),
+       $9,
+       COALESCE($8::timestamptz, NOW()),
+       NOW()
+     )
+     ON CONFLICT (canal_id_externo) DO UPDATE
+       SET lead_id = COALESCE(EXCLUDED.lead_id, crm_conversas.lead_id),
+           status = EXCLUDED.status,
+           chatwoot_contact_id = COALESCE(EXCLUDED.chatwoot_contact_id, crm_conversas.chatwoot_contact_id),
+           chatwoot_inbox_id = COALESCE(EXCLUDED.chatwoot_inbox_id, crm_conversas.chatwoot_inbox_id),
+           chatwoot_assignee_id = COALESCE(EXCLUDED.chatwoot_assignee_id, crm_conversas.chatwoot_assignee_id),
+           agente_responsavel_id = COALESCE(EXCLUDED.agente_responsavel_id, crm_conversas.agente_responsavel_id),
+           origem_atribuicao_agente = COALESCE(EXCLUDED.origem_atribuicao_agente, crm_conversas.origem_atribuicao_agente),
+           agente_ultima_atribuicao_em = CASE
+             WHEN EXCLUDED.agente_responsavel_id IS NOT NULL THEN NOW()
+             ELSE crm_conversas.agente_ultima_atribuicao_em
+           END,
+           ultima_sincronizacao_chatwoot_em = NOW(),
+           payload_ultimo_evento = EXCLUDED.payload_ultimo_evento,
+           ultima_interacao_em = COALESCE(EXCLUDED.ultima_interacao_em, crm_conversas.ultima_interacao_em, NOW()),
+           updated_at = NOW()
+     RETURNING id, lead_id, agente_responsavel_id`,
+    [
+      leadId,
+      chatwootConvId,
+      statusConversa,
+      chatwootContactId,
+      chatwootInboxId,
+      chatwootAssigneeId,
+      agenteResponsavelId,
+      lastActivityIso,
+      JSON.stringify(conversation || {}),
+    ]
+  );
+
+  return {
+    updated: true,
+    conversaId: convRes.rows[0]?.id || null,
+    leadId: convRes.rows[0]?.lead_id || leadId,
+    agenteResponsavelId: convRes.rows[0]?.agente_responsavel_id || agenteResponsavelId,
+    chatwootConvId,
+    chatwootAssigneeId,
+    origem,
+  };
+}
+
+async function listarConversasChatwoot({
+  status = 'all',
+  assigneeType = 'assigned',
+  page = 1,
+}: {
+  status?: 'all' | 'open' | 'resolved' | 'pending' | 'snoozed';
+  assigneeType?: 'me' | 'unassigned' | 'all' | 'assigned';
+  page?: number;
+}) {
+  const { baseUrl, apiToken, accountId } = obterConfigChatwoot();
+  const url = new URL(`${baseUrl}/api/v1/accounts/${accountId}/conversations`);
+  url.searchParams.set('status', status);
+  url.searchParams.set('assignee_type', assigneeType);
+  url.searchParams.set('page', String(page));
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'api_access_token': apiToken,
+    },
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`Falha ao consultar Chatwoot (${response.status}): ${body || 'sem detalhes'}`);
+  }
+
+  const data = await response.json() as { data?: { payload?: ChatwootConversationPayload[]; meta?: Record<string, any> } };
+  return {
+    payload: Array.isArray(data?.data?.payload) ? data.data.payload : [],
+    meta: data?.data?.meta || {},
+  };
+}
+
 // ─── App ─────────────────────────────────────────────────────────────────────
 async function startServer() {
   const app = express();
@@ -2195,6 +2451,70 @@ Responda APENAS com um JSON válido no seguinte formato:
     } catch (err) {
       console.error("[POST /api/triagem/:id/qualificar-ia]", err);
       res.status(500).json({ error: "Erro ao qualificar com IA" });
+    }
+  });
+
+  app.post("/api/chatwoot/sincronizar", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      if (!colaboradorPodeGerenciarCarteira(colaborador)) {
+        res.status(403).json({ error: "Apenas perfis de gestão podem sincronizar conversas do Chatwoot." });
+        return;
+      }
+
+      const status = ['all', 'open', 'resolved', 'pending', 'snoozed'].includes(String(req.body?.status || '').toLowerCase())
+        ? String(req.body?.status).toLowerCase() as 'all' | 'open' | 'resolved' | 'pending' | 'snoozed'
+        : 'all';
+      const assigneeType = ['me', 'unassigned', 'all', 'assigned'].includes(String(req.body?.assignee_type || '').toLowerCase())
+        ? String(req.body?.assignee_type).toLowerCase() as 'me' | 'unassigned' | 'all' | 'assigned'
+        : 'assigned';
+      const pageLimitRaw = Number(req.body?.max_paginas ?? req.query?.max_paginas ?? 10);
+      const pageLimit = Number.isFinite(pageLimitRaw) ? Math.min(Math.max(Math.trunc(pageLimitRaw), 1), 50) : 10;
+
+      const processadas: Array<Record<string, any>> = [];
+      let totalConversasLidas = 0;
+      let paginaAtual = 1;
+      let paginasPercorridas = 0;
+
+      while (paginaAtual <= pageLimit) {
+        const { payload } = await listarConversasChatwoot({
+          status,
+          assigneeType,
+          page: paginaAtual,
+        });
+
+        paginasPercorridas += 1;
+        totalConversasLidas += payload.length;
+
+        if (!payload.length) break;
+
+        for (const conversation of payload) {
+          const resultado = await sincronizarConversaChatwoot(conversation, 'chatwoot_backfill');
+          processadas.push(resultado);
+        }
+
+        if (payload.length < 25) break;
+        paginaAtual += 1;
+      }
+
+      const atualizadas = processadas.filter((item) => item?.updated).length;
+      const semAssigneeMapeado = processadas.filter((item) => item?.updated && item?.chatwootAssigneeId && !item?.agenteResponsavelId).length;
+      const semLead = processadas.filter((item) => item?.updated && !item?.leadId).length;
+
+      res.json({
+        ok: true,
+        status,
+        assignee_type: assigneeType,
+        paginas_percorridas: paginasPercorridas,
+        conversas_lidas: totalConversasLidas,
+        conversas_atualizadas: atualizadas,
+        conversas_sem_mapeamento_de_agente: semAssigneeMapeado,
+        conversas_sem_lead_vinculado: semLead,
+        exemplos: processadas.slice(0, 20),
+      });
+    } catch (err: any) {
+      console.error('[POST /api/chatwoot/sincronizar]', err);
+      res.status(500).json({ error: err?.message || 'Erro ao sincronizar conversas do Chatwoot.' });
     }
   });
 

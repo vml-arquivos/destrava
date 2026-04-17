@@ -80,6 +80,15 @@ export default function Integracoes() {
   const [loading, setLoading] = useState(true);
   const [testando, setTestando] = useState(false);
   const [resultadoTeste, setResultadoTeste] = useState<{ success: boolean; message: string } | null>(null);
+  const [sincronizandoChatwoot, setSincronizandoChatwoot] = useState(false);
+  const [resultadoSyncChatwoot, setResultadoSyncChatwoot] = useState<{
+    ok: boolean;
+    conversas_lidas: number;
+    conversas_atualizadas: number;
+    conversas_sem_mapeamento_de_agente: number;
+    conversas_sem_lead_vinculado: number;
+    paginas_percorridas: number;
+  } | null>(null);
   const [eventoAberto, setEventoAberto] = useState<string | null>("novo_lead");
   const [copiado, setCopiado] = useState<string | null>(null);
 
@@ -106,6 +115,32 @@ export default function Integracoes() {
       setResultadoTeste({ success: false, message: "Erro de conexão ao testar webhook." });
     }
     setTestando(false);
+  }
+
+  async function sincronizarChatwoot() {
+    setSincronizandoChatwoot(true);
+    setResultadoSyncChatwoot(null);
+    try {
+      const data = await apiFetch("/api/chatwoot/sincronizar", {
+        method: "POST",
+        body: JSON.stringify({
+          status: "all",
+          assignee_type: "assigned",
+          max_paginas: 10,
+        }),
+      });
+      setResultadoSyncChatwoot(data);
+    } catch {
+      setResultadoSyncChatwoot({
+        ok: false,
+        conversas_lidas: 0,
+        conversas_atualizadas: 0,
+        conversas_sem_mapeamento_de_agente: 0,
+        conversas_sem_lead_vinculado: 0,
+        paginas_percorridas: 0,
+      });
+    }
+    setSincronizandoChatwoot(false);
   }
 
   function copiar(texto: string, chave: string) {
@@ -153,13 +188,21 @@ export default function Integracoes() {
                 </p>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap justify-end">
               <button
                 onClick={carregarStatus}
                 className="p-2 text-gray-500 hover:text-blue-600 hover:bg-white rounded-lg transition-colors"
                 title="Atualizar status"
               >
                 <RefreshCw className="w-4 h-4" />
+              </button>
+              <button
+                onClick={sincronizarChatwoot}
+                disabled={sincronizandoChatwoot}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                {sincronizandoChatwoot ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                Sincronizar Chatwoot
               </button>
               {status?.configured && (
                 <button
@@ -180,6 +223,37 @@ export default function Integracoes() {
             }`}>
               {resultadoTeste.success ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
               <span className="text-sm">{resultadoTeste.message}</span>
+            </div>
+          )}
+
+          {resultadoSyncChatwoot && (
+            <div className={`mt-4 rounded-lg border p-4 ${
+              resultadoSyncChatwoot.ok ? "border-blue-200 bg-blue-50 text-blue-900" : "border-red-200 bg-red-50 text-red-800"
+            }`}>
+              <p className="text-sm font-semibold">
+                {resultadoSyncChatwoot.ok ? "Sincronização do Chatwoot concluída." : "Falha ao sincronizar o Chatwoot."}
+              </p>
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div className="rounded-lg bg-white/70 p-3 border border-current/10">
+                  <p className="text-xs uppercase tracking-wide opacity-70">Conversas lidas</p>
+                  <p className="text-lg font-bold">{resultadoSyncChatwoot.conversas_lidas}</p>
+                </div>
+                <div className="rounded-lg bg-white/70 p-3 border border-current/10">
+                  <p className="text-xs uppercase tracking-wide opacity-70">Conversas atualizadas</p>
+                  <p className="text-lg font-bold">{resultadoSyncChatwoot.conversas_atualizadas}</p>
+                </div>
+                <div className="rounded-lg bg-white/70 p-3 border border-current/10">
+                  <p className="text-xs uppercase tracking-wide opacity-70">Sem mapeamento de agente</p>
+                  <p className="text-lg font-bold">{resultadoSyncChatwoot.conversas_sem_mapeamento_de_agente}</p>
+                </div>
+                <div className="rounded-lg bg-white/70 p-3 border border-current/10">
+                  <p className="text-xs uppercase tracking-wide opacity-70">Sem lead vinculado</p>
+                  <p className="text-lg font-bold">{resultadoSyncChatwoot.conversas_sem_lead_vinculado}</p>
+                </div>
+              </div>
+              <p className="mt-3 text-xs opacity-80">
+                Páginas percorridas: <strong>{resultadoSyncChatwoot.paginas_percorridas}</strong>. Antes de executar em produção, confirme que os colaboradores possuem <code>chatwoot_agente_id</code> preenchido.
+              </p>
             </div>
           )}
         </div>
