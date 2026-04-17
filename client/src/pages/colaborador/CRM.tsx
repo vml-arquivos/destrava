@@ -524,6 +524,8 @@ function FichaLead({
   const temp = lead.temperatura ? TEMPERATURA_CONFIG[lead.temperatura] : null;
   const TempIcon = temp?.icon;
   const etapaAtual = ETAPAS_FUNIL.find(e => e.id === lead.etapa_funil);
+  const houveMudancaPosicao = normalizarEtapaFunil(novaEtapa) !== normalizarEtapaFunil(lead.etapa_funil)
+    || novaTemp !== lead.temperatura;
 
   return (
     <Sheet open modal={false} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -654,12 +656,10 @@ function FichaLead({
                       </Select>
                     </div>
                   </div>
-                  {(novaEtapa !== lead.etapa_funil || novaTemp !== lead.temperatura) && (
-                    <Button size="sm" className="mt-3 w-full" onClick={moverFunil} disabled={salvando}>
-                      {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
-                      Salvar Posição
-                    </Button>
-                  )}
+                  <Button size="sm" className="mt-3 w-full" onClick={moverFunil} disabled={!houveMudancaPosicao || salvando}>
+                    {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
+                    {salvando ? "Salvando..." : "Salvar Posição"}
+                  </Button>
                 </div>
 
                 {/* Dados do lead */}

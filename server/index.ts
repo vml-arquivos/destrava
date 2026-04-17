@@ -279,6 +279,42 @@ function etapaFunilPermitida(value: string | null | undefined): boolean {
   return ETAPAS_FUNIL_VALIDAS.includes(validarEtapaFunil(value) as (typeof ETAPAS_FUNIL_VALIDAS)[number]);
 }
 
+const MAPA_ETAPA_UI_PARA_LEGADA: Record<string, string> = {
+  entrada: "novo",
+  triagem: "novo",
+  contato: "contato_feito",
+  qualificacao: "qualificado",
+  documentos: "documentacao",
+  analise: "negociacao",
+  proposta: "proposta_enviada",
+  negociacao: "negociacao",
+  ganho: "ganho",
+  perdido: "perdido",
+  reativacao: "novo",
+  carteira: "ganho",
+};
+
+const MAPA_ETAPA_LEGADA_PARA_UI: Record<string, string> = {
+  novo: "entrada",
+  contato_feito: "contato",
+  qualificado: "qualificacao",
+  documentacao: "documentos",
+  proposta_enviada: "analise",
+  negociacao: "analise",
+  ganho: "ganho",
+  perdido: "perdido",
+};
+
+function etapaUiParaLegada(value: string | null | undefined): string {
+  const etapaUi = validarEtapaFunil(value);
+  return MAPA_ETAPA_UI_PARA_LEGADA[etapaUi] || "novo";
+}
+
+function etapaLegadaParaUi(value: string | null | undefined): string {
+  const etapa = String(value || "").trim().toLowerCase();
+  return MAPA_ETAPA_LEGADA_PARA_UI[etapa] || validarEtapaFunil(etapa);
+}
+
 function podecriarUsuarios(cargo: string): boolean {
   return CARGOS_PODEM_CRIAR_USUARIOS.includes((cargo || '').toLowerCase());
 }
@@ -1886,6 +1922,8 @@ async function startServer() {
       }
 
       const etapaNormalizada = validarEtapaFunil(etapa_funil);
+      const etapaPersistencia = etapaUiParaLegada(etapaNormalizada);
+      console.info("[POST /api/crm/mover-funil] etapa compat", { etapa_ui: etapaNormalizada, etapa_legada: etapaPersistencia });
 
       if (!etapaFunilPermitida(etapaNormalizada)) {
         res.status(400).json({
@@ -1924,14 +1962,14 @@ async function startServer() {
                 ultimo_contato_em = NOW(),
                 updated_at = NOW()
           WHERE id = $3`,
-        [etapaNormalizada, responsavelFinal, lead_id]
+        [etapaPersistencia, responsavelFinal, lead_id]
       );
 
-      if (atuais[0]?.etapa_funil !== etapaNormalizada) {
+      if (etapaLegadaParaUi(atuais[0]?.etapa_funil) !== etapaNormalizada) {
         await registrarCrmLog({
           leadId: lead_id,
           usuarioId: colaborador?.id || null,
-          acao: `mudanca_etapa:${atuais[0]?.etapa_funil || 'sem_etapa'}->${etapaNormalizada}`,
+          acao: `mudanca_etapa:${etapaLegadaParaUi(atuais[0]?.etapa_funil) || 'sem_etapa'}->${etapaNormalizada}`,
         });
       }
 
@@ -1983,7 +2021,11 @@ async function startServer() {
       } catch {
         result = await pool.query(`SELECT * FROM leads ${where} ORDER BY created_at DESC LIMIT 500`, params);
       }
-      res.json(result.rows);
+      const rowsCompat = result.rows.map((row: any) => ({
+        ...row,
+        etapa_funil: etapaLegadaParaUi(row.etapa_funil),
+      }));
+      res.json(rowsCompat);
     } catch (err) {
       console.error("[GET /api/crm/pipeline]", err);
       res.status(500).json({ error: "Erro ao obter pipeline" });
