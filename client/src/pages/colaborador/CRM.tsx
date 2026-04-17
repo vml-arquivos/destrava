@@ -24,6 +24,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
 } from "@/components/ui/dialog";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuSeparator
@@ -525,8 +526,8 @@ function FichaLead({
   const etapaAtual = ETAPAS_FUNIL.find(e => e.id === lead.etapa_funil);
 
   return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+    <Sheet open modal={false} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <SheetContent side="right" className="w-[min(1100px,96vw)] sm:w-[min(1100px,96vw)] p-0 overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-900 to-blue-700 text-white flex-shrink-0">
           <div className="flex items-start justify-between gap-4">
@@ -1030,8 +1031,8 @@ function FichaLead({
             </div>
           </Tabs>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 

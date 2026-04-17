@@ -1864,7 +1864,16 @@ async function startServer() {
   // ─── POST /api/crm/mover-funil ────────────────────────────────────────────
   app.post("/api/crm/mover-funil", auth, async (req: Request, res: Response) => {
     try {
-      const { lead_id, etapa_funil } = req.body;
+      const { lead_id, etapa_funil, temperatura } = req.body;
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+
+      console.info("[POST /api/crm/mover-funil] payload recebido", {
+        body: req.body,
+        lead_id,
+        etapa_funil,
+        temperatura,
+        usuario: colaborador ? { id: colaborador.id, email: colaborador.email, perfil: colaborador.perfil } : null,
+      });
 
       if (!lead_id) {
         res.status(400).json({ error: "lead_id é obrigatório." });
@@ -1885,8 +1894,6 @@ async function startServer() {
         });
         return;
       }
-
-      const colaborador = (req as Request & { colaborador: any }).colaborador;
       const { rows: atuais } = await pool.query(
         "SELECT id, etapa_funil, responsavel_id FROM leads WHERE id = $1 LIMIT 1",
         [lead_id]
@@ -1913,7 +1920,6 @@ async function startServer() {
       await pool.query(
         `UPDATE leads
             SET etapa_funil = $1,
-                status = $1,
                 responsavel_id = COALESCE(responsavel_id, $2),
                 ultimo_contato_em = NOW(),
                 updated_at = NOW()
@@ -1939,11 +1945,23 @@ async function startServer() {
 
       res.json({ success: true, etapa_funil: etapaNormalizada, responsavel_id: responsavelFinal });
     } catch (err: any) {
-      console.error("[POST /api/crm/mover-funil]", err);
+      console.error("[POST /api/crm/mover-funil] erro", {
+        message: err?.message || null,
+        code: err?.code || null,
+        detail: err?.detail || null,
+        hint: err?.hint || null,
+        constraint: err?.constraint || null,
+        table: err?.table || null,
+        column: err?.column || null,
+        where: err?.where || null,
+      });
       res.status(500).json({
         error: "Erro ao mover lead.",
         detalhe: err?.message || null,
         codigo: err?.code || null,
+        constraint: err?.constraint || null,
+        table: err?.table || null,
+        column: err?.column || null,
       });
     }
   });
