@@ -410,6 +410,8 @@ async function sincronizarConversaChatwoot(conversation: ChatwootConversationPay
     || toIsoFromUnix(ultimaMensagem?.created_at)
     || toIsoFromUnix(conversation?.updated_at)
     || toIsoFromUnix(conversation?.created_at);
+  const lastActivityTs = lastActivityIso ?? null;
+  const payloadUltimoEvento = conversation ? JSON.stringify(conversation) : null;
 
   let agenteResponsavelId: string | null = null;
   if (chatwootAssigneeId) {
@@ -490,19 +492,19 @@ async function sincronizarConversaChatwoot(conversation: ChatwootConversationPay
        updated_at
      )
      VALUES (
-       $1,
+       $1::uuid,
        'whatsapp',
-       $2,
-       $3,
-       $4,
-       $5,
-       $6,
-       $7,
-       CASE WHEN $7 IS NOT NULL THEN $8 ELSE NULL END,
-       CASE WHEN $7 IS NOT NULL THEN NOW() ELSE NULL END,
+       $2::text,
+       $3::text,
+       $4::bigint,
+       $5::bigint,
+       $6::bigint,
+       $7::uuid,
+       CASE WHEN $7::uuid IS NOT NULL THEN 'chatwoot_assignee'::text ELSE NULL END,
+       CASE WHEN $7::uuid IS NOT NULL THEN NOW() ELSE NULL END,
        NOW(),
-       $9,
-       COALESCE($8::timestamptz, NOW()),
+       $8::jsonb,
+       COALESCE($9::timestamptz, NOW()),
        NOW()
      )
      ON CONFLICT (canal_id_externo) DO UPDATE
@@ -530,8 +532,8 @@ async function sincronizarConversaChatwoot(conversation: ChatwootConversationPay
       chatwootInboxId,
       chatwootAssigneeId,
       agenteResponsavelId,
-      lastActivityIso,
-      JSON.stringify(conversation || {}),
+      payloadUltimoEvento,
+      lastActivityTs,
     ]
   );
 
