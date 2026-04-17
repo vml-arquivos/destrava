@@ -372,8 +372,20 @@ function toNullableNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function normalizarStatusConversaChatwoot(status: string | null | undefined): 'aberta' | 'resolvida' {
-  return String(status || '').toLowerCase() === 'resolved' ? 'resolvida' : 'aberta';
+function normalizarStatusConversaChatwoot(
+  status: string | null | undefined
+): 'aberta' | 'fechada' | 'pendente_ia' | 'escalada_humano' {
+  const statusNormalizado = String(status || '').toLowerCase();
+
+  if (statusNormalizado === 'resolved' || statusNormalizado === 'resolvida' || statusNormalizado === 'closed') {
+    return 'fechada';
+  }
+
+  if (statusNormalizado === 'pending' || statusNormalizado === 'snoozed') {
+    return 'pendente_ia';
+  }
+
+  return 'aberta';
 }
 
 function toIsoFromUnix(value: unknown): string | null {
@@ -410,6 +422,8 @@ async function sincronizarConversaChatwoot(conversation: ChatwootConversationPay
     || toIsoFromUnix(ultimaMensagem?.created_at)
     || toIsoFromUnix(conversation?.updated_at)
     || toIsoFromUnix(conversation?.created_at);
+  const lastActivityTs = lastActivityIso ?? null;
+  const payloadUltimoEvento = conversation ? JSON.stringify(conversation) : null;
 
   let agenteResponsavelId: string | null = null;
   if (chatwootAssigneeId) {
@@ -458,7 +472,7 @@ async function sincronizarConversaChatwoot(conversation: ChatwootConversationPay
 
     if (agenteResponsavelId) {
       updateLeadParams.push(agenteResponsavelId);
-      leadSets.push(`responsavel_id = COALESCE(responsavel_id, $${updateLeadParams.length})`);
+      leadSets.push(`responsavel_id = $${updateLeadParams.length}`);
     }
 
     updateLeadParams.push(lastActivityIso);
@@ -490,19 +504,19 @@ async function sincronizarConversaChatwoot(conversation: ChatwootConversationPay
        updated_at
      )
      VALUES (
-       $1,
+       $1::uuid,
        'whatsapp',
-       $2,
-       $3,
-       $4,
-       $5,
-       $6,
-       $7,
-       CASE WHEN $7 IS NOT NULL THEN $8 ELSE NULL END,
-       CASE WHEN $7 IS NOT NULL THEN NOW() ELSE NULL END,
+       $2::text,
+       $3::text,
+       $4::bigint,
+       $5::bigint,
+       $6::bigint,
+       $7::uuid,
+       CASE WHEN $7::uuid IS NOT NULL THEN 'chatwoot_assignee'::text ELSE NULL END,
+       CASE WHEN $7::uuid IS NOT NULL THEN NOW() ELSE NULL END,
        NOW(),
-       $9,
-       COALESCE($8::timestamptz, NOW()),
+       $8::jsonb,
+       COALESCE($9::timestamptz, NOW()),
        NOW()
      )
      ON CONFLICT (canal_id_externo) DO UPDATE
@@ -530,8 +544,8 @@ async function sincronizarConversaChatwoot(conversation: ChatwootConversationPay
       chatwootInboxId,
       chatwootAssigneeId,
       agenteResponsavelId,
-      lastActivityIso,
-      JSON.stringify(conversation || {}),
+      payloadUltimoEvento,
+      lastActivityTs,
     ]
   );
 
@@ -898,12 +912,31 @@ async function startServer() {
       aplicarFiltroVisibilidadeLead({ conditions, params, colaborador, scope, responsavelId });
 
       const { rows } = await pool.query(
-        `SELECT *
-           FROM leads
-          WHERE ${conditions.join(" AND ")}
-          ORDER BY score_ia DESC NULLS LAST,
-                   proximo_followup ASC NULLS LAST,
-                   created_at ASC`,
+        `SELECT
+           l.*,
+           COALESCE(
+             l.chatwoot_conv_id,
+             CASE
+               WHEN cc.canal_id_externo ~ '^[0-9]+$' THEN cc.canal_id_externo::BIGINT
+               ELSE NULL
+             END
+           ) AS chatwoot_conv_id,
+           cc.ultima_interacao_em AS ultima_conversa,
+           cc.status AS status_conversa
+         FROM leads l
+         LEFT JOIN LATERAL (
+           SELECT canal_id_externo, status, ultima_interacao_em, updated_at, created_at
+             FROM crm_conversas
+            WHERE lead_id = l.id
+            ORDER BY ultima_interacao_em DESC NULLS LAST,
+                     updated_at DESC NULLS LAST,
+                     created_at DESC NULLS LAST
+            LIMIT 1
+         ) cc ON TRUE
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY l.score_ia DESC NULLS LAST,
+                 l.proximo_followup ASC NULLS LAST,
+                 l.created_at ASC`,
         params
       );
       res.json(rows);
@@ -1895,6 +1928,55 @@ async function startServer() {
     } catch (err) {
       console.error("[GET /api/crm/pipeline]", err);
       res.status(500).json({ error: "Erro ao obter pipeline" });
+    }
+  });
+
+  app.get("/api/crm/contexto/:leadId", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const { leadId } = req.params;
+
+      const podeVisualizar = await leadPertenceAoColaborador(leadId, colaborador);
+      if (!podeVisualizar) {
+        res.status(403).json({ error: "Sem permissão para visualizar este lead." });
+        return;
+      }
+
+      const leadResult = await pool.query(
+        `SELECT *
+           FROM leads
+          WHERE id = $1
+          LIMIT 1`,
+        [leadId]
+      );
+
+      if (!leadResult.rows.length) {
+        res.status(404).json({ error: "Lead não encontrado." });
+        return;
+      }
+
+      const conversaResult = await pool.query(
+        `SELECT *
+           FROM crm_conversas
+          WHERE lead_id = $1
+          ORDER BY ultima_interacao_em DESC NULLS LAST,
+                   updated_at DESC NULLS LAST,
+                   created_at DESC NULLS LAST
+          LIMIT 1`,
+        [leadId]
+      );
+
+      const lead = leadResult.rows[0];
+      const conversaMaisRecente = conversaResult.rows[0] || null;
+
+      res.json({
+        lead,
+        conversaMaisRecente,
+        etapaAtual: lead.etapa_funil || null,
+      });
+    } catch (err) {
+      console.error("[GET /api/crm/contexto/:leadId]", err);
+      res.status(500).json({ error: "Erro ao carregar contexto do lead." });
     }
   });
 
