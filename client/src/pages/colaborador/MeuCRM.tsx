@@ -338,10 +338,14 @@ export default function MeuCRM() {
                               <UserCheck className="h-4 w-4 mr-1" /> Assumir
                             </Button>
                           )}
-                          <Button size="sm" variant="outline" onClick={() => abrirLead(lead)}>
-                            <Eye className="h-4 w-4 mr-1" /> Detalhar
-                          </Button>
-                          <Link href="/colaborador/crm">
+                          <Link href={`/colaborador/crm?leadId=${encodeURIComponent(lead.id)}`}>
+                            <a className="inline-flex">
+                              <Button size="sm" variant="outline">
+                                <Eye className="h-4 w-4 mr-1" /> Detalhar
+                              </Button>
+                            </a>
+                          </Link>
+                          <Link href={`/colaborador/crm?leadId=${encodeURIComponent(lead.id)}`}>
                             <a className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700">
                               Abrir no CRM
                               <ArrowRight className="h-4 w-4" />
