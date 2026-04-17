@@ -372,8 +372,18 @@ function toNullableNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function normalizarStatusConversaChatwoot(status: string | null | undefined): 'aberta' | 'resolvida' {
-  return String(status || '').toLowerCase() === 'resolved' ? 'resolvida' : 'aberta';
+function normalizarStatusConversaChatwoot(status: string | null | undefined): 'aberta' | 'fechada' | 'pendente_ia' {
+  const normalizedStatus = String(status || '').trim().toLowerCase();
+
+  if (['resolved', 'resolvida', 'closed'].includes(normalizedStatus)) {
+    return 'fechada';
+  }
+
+  if (['pending', 'snoozed'].includes(normalizedStatus)) {
+    return 'pendente_ia';
+  }
+
+  return 'aberta';
 }
 
 function toIsoFromUnix(value: unknown): string | null {
