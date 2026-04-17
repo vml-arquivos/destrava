@@ -283,6 +283,27 @@ function podecriarUsuarios(cargo: string): boolean {
   return CARGOS_PODEM_CRIAR_USUARIOS.includes((cargo || '').toLowerCase());
 }
 
+function colaboradorPodeGerenciarCarteira(colaborador: any): boolean {
+  return colaboradorPodeVerTudo(colaborador);
+}
+
+function colaboradorPodeAtribuirResponsavel(colaborador: any, responsavelAtual: string | null | undefined, novoResponsavel: string | null | undefined): boolean {
+  if (colaboradorPodeGerenciarCarteira(colaborador)) return true;
+  if (!colaborador?.id) return false;
+  if (!novoResponsavel) return false;
+  const colaboradorId = String(colaborador.id);
+  const responsavelAtualId = responsavelAtual ? String(responsavelAtual) : null;
+  return String(novoResponsavel) === colaboradorId && (!responsavelAtualId || responsavelAtualId === colaboradorId);
+}
+
+async function colaboradorAtivoExiste(colaboradorId: string): Promise<boolean> {
+  const { rows } = await pool.query(
+    `SELECT id FROM colaboradores WHERE id = $1 AND ativo = true LIMIT 1`,
+    [colaboradorId]
+  );
+  return rows.length > 0;
+}
+
 async function registrarCrmLog({
   leadId,
   usuarioId,
@@ -354,7 +375,7 @@ async function startServer() {
         return;
       }
       const result = await pool.query(
-        `SELECT id, email, nome, cargo, senha_hash, ativo,
+        `SELECT id, email, nome, cargo, senha_hash, ativo, chatwoot_agente_id,
                 COALESCE(perfil, CASE
                   WHEN LOWER(COALESCE(cargo, '')) IN ('administrador', 'admin', 'diretor') THEN 'admin'
                   WHEN LOWER(COALESCE(cargo, '')) IN ('gerente comercial', 'gerente', 'gestor') THEN 'gestor'
@@ -388,6 +409,7 @@ async function startServer() {
         perfil: user.perfil || perfilOperacionalPorCargo(user.cargo),
         pode_atender_leads: user.pode_atender_leads ?? podeAtenderLeadsPorCargo(user.cargo),
         pode_ver_todos_leads: user.pode_ver_todos_leads ?? podeVerTodosLeadsPorPerfilOuCargo(user.perfil, user.cargo),
+        chatwoot_agente_id: user.chatwoot_agente_id ?? null,
         ativo: user.ativo,
       };
       const token = jwt.sign(
@@ -399,6 +421,7 @@ async function startServer() {
           perfil: colaboradorData.perfil,
           pode_atender_leads: colaboradorData.pode_atender_leads,
           pode_ver_todos_leads: colaboradorData.pode_ver_todos_leads,
+          chatwoot_agente_id: colaboradorData.chatwoot_agente_id,
         },
         process.env.JWT_SECRET!,
         { expiresIn: "24h" }
@@ -709,6 +732,24 @@ async function startServer() {
         fields.etapa_funil = validarEtapaFunil(String(fields.etapa_funil));
         fields.status = fields.etapa_funil;
         fields.ultimo_contato_em = new Date().toISOString();
+      }
+
+      if (fields.responsavel_id !== undefined) {
+        const novoResponsavel = fields.responsavel_id === null || fields.responsavel_id === ''
+          ? null
+          : String(fields.responsavel_id);
+
+        if (!colaboradorPodeAtribuirResponsavel(colaborador, atual.responsavel_id, novoResponsavel)) {
+          res.status(403).json({ error: "Você não tem permissão para atribuir este lead a outro responsável." });
+          return;
+        }
+
+        if (novoResponsavel && !(await colaboradorAtivoExiste(novoResponsavel))) {
+          res.status(400).json({ error: "Responsável inválido ou inativo." });
+          return;
+        }
+
+        fields.responsavel_id = novoResponsavel;
       }
 
       const etapaFinal = validarEtapaFunil(String(fields.etapa_funil ?? atual.etapa_funil ?? ETAPA_FUNIL_DEFAULT));
@@ -1348,6 +1389,12 @@ async function startServer() {
   // ─── DELETE /api/leads/:id ────────────────────────────────────────────────
   app.delete("/api/leads/:id", auth, async (req: Request, res: Response) => {
     try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      if (!colaboradorPodeGerenciarCarteira(colaborador)) {
+        res.status(403).json({ error: "Apenas perfis de gestão podem excluir leads." });
+        return;
+      }
+
       const { id } = req.params;
       await pool.query("DELETE FROM leads WHERE id = $1", [id]);
       res.json({ success: true });
@@ -2293,7 +2340,7 @@ Responda APENAS com um JSON válido no seguinte formato:
         if (leadId && agenteResponsavelId) {
           await pool.query(
             `UPDATE leads
-                SET responsavel_id = COALESCE(responsavel_id, $2),
+                SET responsavel_id = $2,
                     updated_at = NOW()
               WHERE id = $1`,
             [leadId, agenteResponsavelId]
@@ -2393,7 +2440,16 @@ Responda APENAS com um JSON válido no seguinte formato:
 
       if (!isAdmin) {
         params.push(colaborador.id);
-        conditions.push(`c.lead_id IN (SELECT id FROM leads WHERE responsavel_id = $${params.length})`);
+        const agenteResponsavelParam = params.length;
+        let chatwootClause = '';
+        if (colaborador?.chatwoot_agente_id !== undefined && colaborador?.chatwoot_agente_id !== null) {
+          params.push(Number(colaborador.chatwoot_agente_id));
+          chatwootClause = ` OR c.chatwoot_assignee_id = $${params.length}`;
+        }
+        conditions.push(`(
+          c.agente_responsavel_id = $${agenteResponsavelParam}
+          OR c.lead_id IN (SELECT id FROM leads WHERE responsavel_id = $${agenteResponsavelParam})${chatwootClause}
+        )`);
       }
       if (lead_id) { params.push(lead_id); conditions.push(`c.lead_id = $${params.length}`); }
       if (status) { params.push(status); conditions.push(`c.status = $${params.length}`); }
@@ -2426,6 +2482,63 @@ Responda APENAS com um JSON válido no seguinte formato:
     } catch (err) {
       console.error("[GET /api/crm/conversas/:id/mensagens]", err);
       res.status(500).json({ error: "Erro ao listar mensagens" });
+    }
+  });
+
+  app.patch("/api/crm/conversas/:id/atribuir", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      if (!colaboradorPodeGerenciarCarteira(colaborador)) {
+        res.status(403).json({ error: "Apenas perfis de gestão podem atribuir conversas pelo CRM." });
+        return;
+      }
+
+      const { agente_responsavel_id } = req.body;
+      const agenteResponsavelId = agente_responsavel_id === null || agente_responsavel_id === ''
+        ? null
+        : String(agente_responsavel_id);
+
+      if (agenteResponsavelId && !(await colaboradorAtivoExiste(agenteResponsavelId))) {
+        res.status(400).json({ error: "Responsável inválido ou inativo." });
+        return;
+      }
+
+      const convResult = await pool.query(
+        `SELECT id, lead_id FROM crm_conversas WHERE id = $1 LIMIT 1`,
+        [req.params.id]
+      );
+
+      if (!convResult.rows.length) {
+        res.status(404).json({ error: "Conversa não encontrada." });
+        return;
+      }
+
+      const conversa = convResult.rows[0];
+      const convUpdate = await pool.query(
+        `UPDATE crm_conversas
+            SET agente_responsavel_id = $2,
+                origem_atribuicao_agente = CASE WHEN $2 IS NULL THEN NULL ELSE 'crm_manual' END,
+                agente_ultima_atribuicao_em = CASE WHEN $2 IS NULL THEN agente_ultima_atribuicao_em ELSE NOW() END,
+                updated_at = NOW()
+          WHERE id = $1
+          RETURNING *`,
+        [req.params.id, agenteResponsavelId]
+      );
+
+      if (conversa.lead_id) {
+        await pool.query(
+          `UPDATE leads
+              SET responsavel_id = $2,
+                  updated_at = NOW()
+            WHERE id = $1`,
+          [conversa.lead_id, agenteResponsavelId]
+        );
+      }
+
+      res.json({ success: true, conversa: convUpdate.rows[0] });
+    } catch (err) {
+      console.error("[PATCH /api/crm/conversas/:id/atribuir]", err);
+      res.status(500).json({ error: "Erro ao atribuir conversa." });
     }
   });
 

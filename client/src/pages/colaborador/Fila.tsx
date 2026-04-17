@@ -52,6 +52,7 @@ export default function Fila() {
   const [scope, setScope] = useState<"meus" | "sem_responsavel" | "todos">(() => getScopeFromUrl(podeVerTudo));
   const [leads, setLeads] = useState<LeadFila[]>([]);
   const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   useEffect(() => {
     const onPopState = () => setScope(getScopeFromUrl(podeVerTudo));
@@ -81,6 +82,27 @@ export default function Fila() {
   useEffect(() => {
     carregarFila();
   }, [carregarFila]);
+
+  async function assumirLead(leadId: string) {
+    if (!colaborador?.id) {
+      toast.error("Usuário autenticado inválido.");
+      return;
+    }
+
+    setSavingId(leadId);
+    try {
+      await apiFetch(`/api/leads/${leadId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ responsavel_id: colaborador.id }),
+      });
+      toast.success("Lead atribuído com sucesso.");
+      carregarFila();
+    } catch (err) {
+      console.error(err);
+      toast.error("Não foi possível assumir este lead.");
+    }
+    setSavingId(null);
+  }
 
   const metricas = useMemo(() => {
     const semResponsavel = leads.filter((lead) => !lead.responsavel_id).length;
@@ -231,10 +253,19 @@ export default function Fila() {
                     </div>
                   </div>
 
-                  <div className="mt-4 flex justify-end">
-                    <Link href="/colaborador/meu-crm">
+                  <div className="mt-4 flex justify-end gap-2 flex-wrap">
+                    {!lead.responsavel_id && (
+                      <Button
+                        variant="outline"
+                        onClick={() => assumirLead(lead.id)}
+                        disabled={savingId === lead.id}
+                      >
+                        {savingId === lead.id ? "Atribuindo..." : "Assumir lead"}
+                      </Button>
+                    )}
+                    <Link href={podeVerTudo ? "/colaborador/crm" : "/colaborador/meu-crm"}>
                       <a className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700">
-                        Abrir visão do agente
+                        {podeVerTudo ? "Abrir CRM geral" : "Abrir visão do agente"}
                         <ArrowRight className="h-4 w-4" />
                       </a>
                     </Link>

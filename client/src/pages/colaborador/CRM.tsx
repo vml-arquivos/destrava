@@ -345,6 +345,12 @@ function FichaLead({
   onClose: () => void;
   onUpdate: () => void;
 }) {
+  const { colaborador } = useAuth();
+  const podeGerenciarCarteira = Boolean(colaborador?.pode_ver_todos_leads || colaborador?.permissoes?.podeVerTudo);
+  const podeReatribuirLead = podeGerenciarCarteira || !lead.responsavel_id || lead.responsavel_id === colaborador?.id;
+  const colaboradoresAtribuiveis = podeGerenciarCarteira
+    ? colaboradores.filter(c => c.ativo !== false)
+    : colaboradores.filter(c => c.ativo !== false && c.id === colaborador?.id);
   const [atividades, setAtividades] = useState<Atividade[]>([]);
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [qualificacoes, setQualificacoes] = useState<QualificacaoIA[]>([]);
@@ -440,6 +446,31 @@ function FichaLead({
     } catch (err) {
       console.error(err);
       toast.error("Erro ao salvar.");
+    }
+    setSalvando(false);
+  }
+
+  async function excluirLead() {
+    if (!podeGerenciarCarteira) {
+      toast.error("Apenas perfis de gestão podem excluir leads.");
+      return;
+    }
+
+    if (!window.confirm(`Confirma a exclusão do lead ${lead.nome}? Esta ação não pode ser desfeita.`)) {
+      return;
+    }
+
+    setSalvando(true);
+    try {
+      await apiFetch(`/api/leads/${lead.id}`, {
+        method: "DELETE",
+      });
+      toast.success("Lead excluído com sucesso.");
+      onClose();
+      onUpdate();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao excluir lead.");
     }
     setSalvando(false);
   }
@@ -630,10 +661,18 @@ function FichaLead({
                       <UserCheck className="h-4 w-4 text-blue-600" />
                       Dados do Lead
                     </h3>
-                    <Button variant="ghost" size="sm" onClick={() => setEditando(!editando)}>
-                      <Edit2 className="h-3.5 w-3.5 mr-1" />
-                      {editando ? "Cancelar" : "Editar"}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {podeGerenciarCarteira && (
+                        <Button variant="ghost" size="sm" onClick={excluirLead} disabled={salvando} className="text-red-600 hover:text-red-700">
+                          <Trash2 className="h-3.5 w-3.5 mr-1" />
+                          Excluir
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="sm" onClick={() => setEditando(!editando)}>
+                        <Edit2 className="h-3.5 w-3.5 mr-1" />
+                        {editando ? "Cancelar" : "Editar"}
+                      </Button>
+                    </div>
                   </div>
 
                   {editando ? (
@@ -677,18 +716,22 @@ function FichaLead({
                         <label className="text-xs text-gray-500 mb-1 block">Responsável</label>
                         <Select
                           defaultValue={lead.responsavel_id || "__sem_responsavel__"}
+                          disabled={!podeReatribuirLead}
                           onValueChange={value => setDadosEdit(prev => ({ ...prev, responsavel_id: value === "__sem_responsavel__" ? null : value }))}
                         >
                           <SelectTrigger className="h-8 text-sm">
                             <SelectValue placeholder="Selecione um responsável" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="__sem_responsavel__">Sem responsável</SelectItem>
-                            {colaboradores.filter(c => c.ativo !== false).map(col => (
+                            {podeGerenciarCarteira && <SelectItem value="__sem_responsavel__">Sem responsável</SelectItem>}
+                            {colaboradoresAtribuiveis.map(col => (
                               <SelectItem key={col.id} value={col.id}>{col.nome}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
+                        {!podeReatribuirLead && (
+                          <p className="text-[11px] text-amber-600 mt-1">Somente perfis de gestão podem reatribuir leads entre agentes.</p>
+                        )}
                       </div>
                       <div className="col-span-2">
                         <label className="text-xs text-gray-500 mb-1 block">Follow-up</label>

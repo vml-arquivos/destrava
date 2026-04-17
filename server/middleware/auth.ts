@@ -17,6 +17,7 @@ export type AuthUser = {
   perfil?: string;
   pode_atender_leads?: boolean;
   pode_ver_todos_leads?: boolean;
+  chatwoot_agente_id?: number | null;
   role: string;
 };
 
@@ -31,6 +32,13 @@ export function auth(req: Request, res: Response, next: NextFunction) {
     const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET!) as Record<string, unknown>;
     const cargo = typeof decoded.cargo === "string" ? decoded.cargo : undefined;
     const perfil = typeof decoded.perfil === "string" ? decoded.perfil : undefined;
+    const chatwootAgenteId =
+      typeof decoded.chatwoot_agente_id === "number"
+        ? decoded.chatwoot_agente_id
+        : typeof decoded.chatwoot_agente_id === "string" && decoded.chatwoot_agente_id.trim() !== ""
+          ? Number(decoded.chatwoot_agente_id)
+          : null;
+
     const user: AuthUser = {
       id: String(decoded.id || ""),
       email: typeof decoded.email === "string" ? decoded.email : undefined,
@@ -39,6 +47,7 @@ export function auth(req: Request, res: Response, next: NextFunction) {
       perfil,
       pode_atender_leads: typeof decoded.pode_atender_leads === "boolean" ? decoded.pode_atender_leads : undefined,
       pode_ver_todos_leads: typeof decoded.pode_ver_todos_leads === "boolean" ? decoded.pode_ver_todos_leads : undefined,
+      chatwoot_agente_id: Number.isFinite(chatwootAgenteId as number) ? Number(chatwootAgenteId) : null,
       role: normalizeRole(cargo),
     };
 
