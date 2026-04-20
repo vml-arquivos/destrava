@@ -84,7 +84,7 @@ async function processarEmpresaDaSimulacao(
 
   if (cleanCnpj && cleanCnpj.length >= 11) {
     const res = await client.query(
-      `SELECT id FROM empresas WHERE regexp_replace(cnpj, '\D', '', 'g') = $1 LIMIT 1`,
+      `SELECT id FROM empresas WHERE regexp_replace(cnpj, '\\D', '', 'g') = $1 LIMIT 1`,
       [cleanCnpj]
     );
     if (res.rows.length > 0) return res.rows[0].id;
@@ -94,7 +94,7 @@ async function processarEmpresaDaSimulacao(
     const res = await client.query(
       `SELECT id FROM empresas 
        WHERE lower(trim(razao_social)) = lower($1) 
-       AND regexp_replace(telefone, '\D', '', 'g') = $2 LIMIT 1`,
+       AND regexp_replace(telefone, '\\D', '', 'g') = $2 LIMIT 1`,
       [cleanNome, cleanPhone]
     );
     if (res.rows.length > 0) return res.rows[0].id;
@@ -2702,7 +2702,18 @@ Responda APENAS com um JSON válido no seguinte formato:
   });
 
   // ─── POST /api/webhook/chatwoot ───────────────────────────────────────────
-  app.post("/api/webhook/chatwoot", auth, authorize(["Administrador"]), async (req: Request, res: Response) => {
+  // Middleware de autenticação para webhook externo do Chatwoot (server-to-server, sem JWT)
+  const chatwootWebhookAuth = (req: Request, res: Response, next: NextFunction): void => {
+    const secret = process.env.CHATWOOT_WEBHOOK_SECRET;
+    const token = req.headers['x-chatwoot-token'] || req.headers['api_access_token'];
+    if (secret && token !== secret) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    next();
+  };
+
+  app.post("/api/webhook/chatwoot", chatwootWebhookAuth, async (req: Request, res: Response) => {
     const { event_id, tipo_evento, origem = 'chatwoot', payload } = req.body;
 
     res.json({ received: true });
@@ -2854,6 +2865,9 @@ Responda APENAS com um JSON válido no seguinte formato:
           await garantirEntradaAutomaticaFunil(leadId);
         }
 
+        // Normalizar status do Chatwoot para valores aceitos pelo CHECK constraint
+        const statusWebhook = normalizarStatusConversaChatwoot(payload?.conversation?.status);
+
         const convRes = await pool.query(
           `INSERT INTO crm_conversas (
              lead_id,
@@ -2869,7 +2883,7 @@ Responda APENAS com um JSON válido no seguinte formato:
              ultima_sincronizacao_chatwoot_em,
              payload_ultimo_evento
            )
-           VALUES ($1, 'whatsapp', $2, 'aberta', $3, $4, $5, $6, $7, CASE WHEN $6 IS NOT NULL THEN NOW() ELSE NULL END, NOW(), $8)
+           VALUES ($1, 'whatsapp', $2, $9, $3, $4, $5, $6, $7, CASE WHEN $6 IS NOT NULL THEN NOW() ELSE NULL END, NOW(), $8)
            ON CONFLICT (canal_id_externo) DO UPDATE
              SET lead_id = COALESCE(EXCLUDED.lead_id, crm_conversas.lead_id),
                  chatwoot_contact_id = COALESCE(EXCLUDED.chatwoot_contact_id, crm_conversas.chatwoot_contact_id),
@@ -2895,6 +2909,7 @@ Responda APENAS com um JSON válido no seguinte formato:
             agenteResponsavelId,
             agenteResponsavelId ? 'chatwoot_assignee' : null,
             JSON.stringify(payload || {}),
+            statusWebhook,
           ]
         );
         const conversaId = convRes.rows[0].id;
@@ -2910,7 +2925,8 @@ Responda APENAS com um JSON válido no seguinte formato:
         }
 
         if (tipo_evento === 'conversation_resolved' || tipo_evento === 'conversation_status_changed') {
-          const novoStatus = payload?.conversation?.status === 'resolved' ? 'resolvida' : 'aberta';
+          // Usar normalizador para garantir valor dentro do CHECK constraint ('fechada' para resolved)
+          const novoStatus = normalizarStatusConversaChatwoot(payload?.conversation?.status);
           await pool.query(
             `UPDATE crm_conversas SET status = $1, updated_at = NOW() WHERE id = $2`,
             [novoStatus, conversaId]
