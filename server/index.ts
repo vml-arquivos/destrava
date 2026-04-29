@@ -3,6 +3,7 @@ import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import crypto from "crypto";
 import pkg from "pg";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
@@ -3064,6 +3065,509 @@ Responda APENAS com um JSON válido no seguinte formato:
       res.status(500).json({ error: "Erro ao atribuir conversa." });
     }
   });
+
+  // ─── FUNÇÕES AUXILIARES PARA CONTRATOS ────────────────────────────────────
+
+  async function gerarHtmlContrato(payload: any): Promise<string> {
+    const { contratada, contratante, parceiro, contrato } = payload;
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12px; line-height: 1.6; color: #000; margin: 40px; }
+    h1 { font-size: 16px; text-align: center; text-transform: uppercase; margin-bottom: 5px; }
+    h2 { font-size: 13px; text-transform: uppercase; margin-top: 20px; margin-bottom: 5px; border-bottom: 1px solid #000; padding-bottom: 3px; }
+    p { margin: 6px 0; text-align: justify; }
+    .cabecalho { text-align: center; margin-bottom: 20px; }
+    .assinaturas { margin-top: 40px; }
+    .linha-assinatura { margin-top: 30px; border-top: 1px solid #000; padding-top: 5px; width: 80%; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+    td, th { border: 1px solid #ccc; padding: 6px 10px; font-size: 11px; }
+    th { background: #f0f0f0; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+<div class="cabecalho">
+  <h1>Contrato de Prestação de Serviços de Assessoria de Crédito</h1>
+  <p><strong>${contratada.razao_social}</strong> — CNPJ: ${contratada.cnpj}</p>
+</div>
+
+<h2>Qualificação das Partes</h2>
+
+<p><strong>CONTRATADA:</strong> ${contratada.razao_social}, inscrita no CNPJ sob o nº ${contratada.cnpj}, com sede em ${contratada.endereco_sede} e filial em ${contratada.endereco_filial}, representada por ${contratada.representante}, CPF nº ${contratada.cpf_representante}, ${contratada.cargo_representante}.</p>
+
+<p><strong>CONTRATANTE:</strong> ${contratante.razao_social}, inscrita no CNPJ sob o nº ${contratante.cnpj}, com endereço em ${contratante.endereco}, representada por ${contratante.representante}, CPF nº ${contratante.cpf_representante}.</p>
+
+${parceiro ? `<p><strong>PARCEIRO COMERCIAL:</strong> ${parceiro.nome}, CPF nº ${parceiro.cpf}.</p>` : ''}
+
+<h2>Objeto do Contrato</h2>
+
+<p>O presente contrato tem por objeto a prestação de serviços de assessoria de crédito pela CONTRATADA à CONTRATANTE, visando à obtenção de crédito no valor de referência de <strong>${contrato.valor_referencia_formatado}</strong>, junto a instituições financeiras parceiras.</p>
+
+<h2>Honorários e Comissão</h2>
+
+<p>Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA uma comissão de <strong>${contrato.taxa_comissao}%</strong> sobre o valor do crédito efetivamente liberado, com honorário mínimo mensal de <strong>${contrato.honorario_minimo_mes}%</strong> e honorário mínimo total de <strong>${contrato.honorario_minimo_total}%</strong> sobre o valor de referência.</p>
+
+<h2>Vigência</h2>
+
+<p>O presente contrato terá vigência de <strong>${contrato.vigencia_meses} (doze) meses</strong> a contar da data de assinatura, podendo ser renovado mediante acordo entre as partes.</p>
+
+<h2>Foro</h2>
+
+<p>Para dirimir quaisquer controvérsias oriundas do CONTRATO, as partes elegem o foro da Circunscrição Judiciária de ${contrato.foro_eleito}.</p>
+
+<p>Por estarem assim justos e contratados, firmam o presente instrumento, em duas vias de igual teor.</p>
+
+<p style="text-align:right; margin-top:15px;"><strong>${contrato.data_assinatura_formatada}.</strong></p>
+
+<div class="assinaturas">
+  <div class="linha-assinatura">
+    CONTRATANTE: ${contratante.razao_social}
+  </div>
+  ${parceiro ? `<div class="linha-assinatura">PARCEIRO COMERCIAL: ${parceiro.nome} - CPF nº ${parceiro.cpf}</div>` : ''}
+  <div class="linha-assinatura">
+    CONTRATADA: ${contratada.razao_social} - CNPJ nº ${contratada.cnpj}
+  </div>
+  <div class="linha-assinatura">TESTEMUNHA 1: ____________________________________________</div>
+  <div class="linha-assinatura">TESTEMUNHA 2: ____________________________________________</div>
+</div>
+
+</body>
+</html>`;
+  }
+
+  async function gerarPdfContrato(payload: any): Promise<string> {
+    const uploadsDir = path.resolve('uploads', 'contratos');
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+    const html = await gerarHtmlContrato(payload);
+    const fileName = `contrato-${crypto.randomUUID()}.pdf`;
+    const filePath = path.join(uploadsDir, fileName);
+
+    let browser;
+    try {
+      const puppeteer = await import('puppeteer-core');
+      let executablePath: string | undefined;
+      try {
+        const chromium = await import('@sparticuz/chromium');
+        executablePath = await chromium.default.executablePath();
+      } catch {
+        // Fallback para ambiente local
+        executablePath = process.env.CHROMIUM_PATH || '/usr/bin/chromium-browser';
+      }
+      browser = await puppeteer.default.launch({
+        executablePath,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        headless: true,
+      });
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'networkidle0' });
+      await page.pdf({
+        path: filePath,
+        format: 'A4',
+        margin: { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' },
+        printBackground: true,
+      });
+    } finally {
+      if (browser) await browser.close();
+    }
+    return filePath;
+  }
+
+  async function calcularHashArquivo(filePath: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const hash = crypto.createHash('sha256');
+      const stream = fs.createReadStream(filePath);
+      stream.on('data', (chunk) => hash.update(chunk));
+      stream.on('end', () => resolve(hash.digest('hex')));
+      stream.on('error', reject);
+    });
+  }
+
+  // ─── FATURAMENTO HISTÓRICO ────────────────────────────────────────────────
+
+  app.post('/api/faturamento/historico', auth, async (req: Request, res: Response) => {
+    try {
+      const { empresa_id, registros } = req.body;
+
+      if (!empresa_id) {
+        res.status(400).json({ error: 'empresa_id é obrigatório' });
+        return;
+      }
+      if (!Array.isArray(registros) || registros.length < 12) {
+        res.status(400).json({ error: 'É necessário pelo menos 12 meses de histórico' });
+        return;
+      }
+
+      const empresaCheck = await pool.query('SELECT id FROM empresas WHERE id = $1', [empresa_id]);
+      if (!empresaCheck.rows.length) {
+        res.status(404).json({ error: 'Empresa não encontrada' });
+        return;
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const resultados = [];
+        for (const reg of registros) {
+          const competencia = new Date(reg.competencia);
+          competencia.setDate(1);
+          const r = await client.query(
+            `INSERT INTO faturamento_historico (empresa_id, competencia, valor, origem)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (empresa_id, competencia) DO UPDATE
+               SET valor = EXCLUDED.valor,
+                   origem = EXCLUDED.origem,
+                   updated_at = NOW()
+             RETURNING *`,
+            [empresa_id, competencia.toISOString().slice(0, 10), parseFloat(reg.valor), reg.origem || 'manual']
+          );
+          resultados.push(r.rows[0]);
+        }
+        await client.query('COMMIT');
+        res.status(201).json({ success: true, total: resultados.length, registros: resultados });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      console.error('[POST /api/faturamento/historico]', err);
+      res.status(500).json({ error: 'Erro ao salvar histórico de faturamento' });
+    }
+  });
+
+  app.get('/api/faturamento/historico/:empresaId', auth, async (req: Request, res: Response) => {
+    try {
+      const { empresaId } = req.params;
+      const { rows } = await pool.query(
+        `SELECT * FROM faturamento_historico
+         WHERE empresa_id = $1
+         ORDER BY competencia ASC`,
+        [empresaId]
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error('[GET /api/faturamento/historico/:empresaId]', err);
+      res.status(500).json({ error: 'Erro ao buscar histórico' });
+    }
+  });
+
+  app.post('/api/faturamento/prever', auth, async (req: Request, res: Response) => {
+    try {
+      const { empresa_id, horizonte_meses = 12 } = req.body;
+
+      if (!empresa_id) {
+        res.status(400).json({ error: 'empresa_id é obrigatório' });
+        return;
+      }
+
+      const { rows: historico } = await pool.query(
+        `SELECT TO_CHAR(competencia, 'YYYY-MM-DD') as ds, valor::float as y
+         FROM faturamento_historico
+         WHERE empresa_id = $1
+         ORDER BY competencia ASC`,
+        [empresa_id]
+      );
+
+      if (historico.length < 12) {
+        res.status(422).json({
+          error: `Mínimo de 12 meses necessário. Empresa tem ${historico.length} mês(es) cadastrado(s).`
+        });
+        return;
+      }
+
+      const predicaoUrl = process.env.PREDICAO_SERVICE_URL || 'http://localhost:8001';
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 45000);
+
+      let predicaoResult: any;
+      try {
+        const response = await fetch(`${predicaoUrl}/predict`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ historico, horizonte_meses }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          const errBody = await response.text();
+          throw new Error(`Serviço de previsão retornou ${response.status}: ${errBody}`);
+        }
+        predicaoResult = await response.json();
+      } catch (err: any) {
+        clearTimeout(timeout);
+        if (err.name === 'AbortError') {
+          res.status(504).json({ error: 'Timeout ao chamar serviço de previsão (>45s). Tente novamente.' });
+        } else {
+          res.status(502).json({ error: `Erro ao chamar serviço de previsão: ${err.message}` });
+        }
+        return;
+      }
+
+      const { rows: saved } = await pool.query(
+        `INSERT INTO previsao_faturamento
+           (empresa_id, modelo_usado, horizonte_meses, capacidade_pgto_min, capacidade_pgto_max, payload_completo)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, gerada_em, modelo_usado, capacidade_pgto_min, capacidade_pgto_max`,
+        [
+          empresa_id,
+          predicaoResult.modelo_usado,
+          horizonte_meses,
+          predicaoResult.capacidade_pgto_min,
+          predicaoResult.capacidade_pgto_max,
+          JSON.stringify(predicaoResult.pontos),
+        ]
+      );
+
+      res.json({
+        ...predicaoResult,
+        previsao_id: saved[0].id,
+        gerada_em: saved[0].gerada_em,
+      });
+    } catch (err) {
+      console.error('[POST /api/faturamento/prever]', err);
+      res.status(500).json({ error: 'Erro ao gerar previsão' });
+    }
+  });
+
+  app.get('/api/faturamento/previsao/:empresaId/ultima', auth, async (req: Request, res: Response) => {
+    try {
+      const { empresaId } = req.params;
+      const { rows } = await pool.query(
+        `SELECT * FROM previsao_faturamento
+         WHERE empresa_id = $1
+         ORDER BY gerada_em DESC
+         LIMIT 1`,
+        [empresaId]
+      );
+      if (!rows.length) {
+        res.status(404).json({ error: 'Nenhuma previsão encontrada para esta empresa' });
+        return;
+      }
+      const previsao = rows[0];
+      res.json({
+        ...previsao,
+        pontos: previsao.payload_completo,
+      });
+    } catch (err) {
+      console.error('[GET /api/faturamento/previsao/:empresaId/ultima]', err);
+      res.status(500).json({ error: 'Erro ao buscar previsão' });
+    }
+  });
+
+  // ─── PARCEIROS COMERCIAIS ────────────────────────────────────────────────
+
+  app.get('/api/parceiros', auth, async (_req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        'SELECT * FROM parceiros_comerciais WHERE ativo = true ORDER BY nome'
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error('[GET /api/parceiros]', err);
+      res.status(500).json({ error: 'Erro ao listar parceiros' });
+    }
+  });
+
+  app.post('/api/parceiros', auth, async (req: Request, res: Response) => {
+    try {
+      const { nome, cpf, email, telefone } = req.body;
+      if (!nome || !cpf) {
+        res.status(400).json({ error: 'Nome e CPF são obrigatórios' });
+        return;
+      }
+      const { rows } = await pool.query(
+        `INSERT INTO parceiros_comerciais (nome, cpf, email, telefone)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (cpf) DO UPDATE SET nome = EXCLUDED.nome, email = EXCLUDED.email
+         RETURNING *`,
+        [nome.trim(), cpf.replace(/\D/g, ''), email || null, telefone || null]
+      );
+      res.status(201).json(rows[0]);
+    } catch (err) {
+      console.error('[POST /api/parceiros]', err);
+      res.status(500).json({ error: 'Erro ao criar parceiro' });
+    }
+  });
+
+  // ─── CONTRATOS GERADOS ───────────────────────────────────────────────────
+
+  app.post('/api/contratos/gerar', auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as any).colaborador;
+      const {
+        empresa_id, parceiro_id, lead_id,
+        valor_referencia, taxa_comissao = 10,
+        data_assinatura, foro_eleito,
+      } = req.body;
+
+      if (!empresa_id || !valor_referencia || !data_assinatura || !foro_eleito) {
+        res.status(400).json({ error: 'Campos obrigatórios: empresa_id, valor_referencia, data_assinatura, foro_eleito' });
+        return;
+      }
+      if (valor_referencia < 1000) {
+        res.status(400).json({ error: 'Valor de referência mínimo é R$ 1.000,00' });
+        return;
+      }
+
+      const { rows: empresaRows } = await pool.query('SELECT * FROM empresas WHERE id = $1', [empresa_id]);
+      if (!empresaRows.length) {
+        res.status(404).json({ error: 'Empresa não encontrada' });
+        return;
+      }
+      const empresa = empresaRows[0];
+
+      let parceiro = null;
+      if (parceiro_id) {
+        const { rows: parceiroRows } = await pool.query(
+          'SELECT * FROM parceiros_comerciais WHERE id = $1',
+          [parceiro_id]
+        );
+        parceiro = parceiroRows[0] || null;
+      }
+
+      const CONTRATADA = {
+        razao_social: 'DESTRAVA CREDITO LTDA',
+        cnpj: '35.427.182/0001-66',
+        representante: 'FERNANDO ELI OLIVEIRA MARQUES',
+        cpf_representante: '718.517.041-91',
+        cargo_representante: 'Sócio Administrador',
+        endereco_sede: 'St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250',
+        endereco_filial: 'Avenida Afonso Pena, qd-25 Alt. 05, S/N sala-02 setor Goiânia 2 CEP: 74665555 Goiânia-Go',
+        email: 'fernandoelipro@gmail.com',
+      };
+
+      const payload = {
+        contratada: CONTRATADA,
+        contratante: {
+          razao_social: empresa.razao_social,
+          cnpj: empresa.cnpj || '',
+          endereco: [empresa.logradouro, empresa.numero, empresa.bairro, empresa.cidade, empresa.estado]
+            .filter(Boolean).join(', '),
+          representante: empresa.responsavel_nome || '',
+          cpf_representante: empresa.responsavel_cpf || '',
+        },
+        parceiro: parceiro ? { nome: parceiro.nome, cpf: parceiro.cpf } : null,
+        contrato: {
+          valor_referencia: parseFloat(valor_referencia),
+          valor_referencia_formatado: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor_referencia),
+          taxa_comissao: parseFloat(taxa_comissao),
+          honorario_minimo_mes: 1,
+          honorario_minimo_total: 12,
+          data_assinatura,
+          data_assinatura_formatada: new Date(data_assinatura + 'T12:00:00').toLocaleDateString('pt-BR', {
+            day: '2-digit', month: 'long', year: 'numeric'
+          }),
+          foro_eleito,
+          vigencia_meses: 12,
+        },
+      };
+
+      const pdfPath = await gerarPdfContrato(payload);
+      const hash = await calcularHashArquivo(pdfPath);
+
+      const { rows: contratoRows } = await pool.query(
+        `INSERT INTO contratos_gerados
+           (empresa_id, parceiro_id, lead_id, valor_referencia, taxa_comissao,
+            honorario_minimo_mes, honorario_minimo_total, data_assinatura,
+            foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         RETURNING id, created_at`,
+        [
+          empresa_id, parceiro_id || null, lead_id || null,
+          valor_referencia, taxa_comissao, 1, 12,
+          data_assinatura, foro_eleito, pdfPath, hash,
+          JSON.stringify(payload), colaborador.id,
+        ]
+      );
+
+      const contrato = contratoRows[0];
+      const pdfUrl = `/uploads/contratos/${path.basename(pdfPath)}`;
+
+      res.status(201).json({
+        success: true,
+        contrato_id: contrato.id,
+        pdf_url: pdfUrl,
+        hash_documento: hash,
+        created_at: contrato.created_at,
+      });
+    } catch (err) {
+      console.error('[POST /api/contratos/gerar]', err);
+      res.status(500).json({ error: 'Erro ao gerar contrato' });
+    }
+  });
+
+  app.get('/api/contratos/:id/download', auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        'SELECT pdf_path, empresa_id FROM contratos_gerados WHERE id = $1',
+        [req.params.id]
+      );
+      if (!rows.length || !rows[0].pdf_path) {
+        res.status(404).json({ error: 'Contrato não encontrado' });
+        return;
+      }
+      const filePath = path.resolve(rows[0].pdf_path);
+      if (!fs.existsSync(filePath)) {
+        res.status(404).json({ error: 'Arquivo PDF não encontrado no servidor' });
+        return;
+      }
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="contrato-${req.params.id}.pdf"`);
+      fs.createReadStream(filePath).pipe(res);
+    } catch (err) {
+      console.error('[GET /api/contratos/:id/download]', err);
+      res.status(500).json({ error: 'Erro ao fazer download do contrato' });
+    }
+  });
+
+  app.get('/api/contratos/empresa/:empresaId', auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT cg.*, pc.nome as parceiro_nome
+         FROM contratos_gerados cg
+         LEFT JOIN parceiros_comerciais pc ON pc.id = cg.parceiro_id
+         WHERE cg.empresa_id = $1
+         ORDER BY cg.created_at DESC`,
+        [req.params.empresaId]
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error('[GET /api/contratos/empresa/:empresaId]', err);
+      res.status(500).json({ error: 'Erro ao listar contratos' });
+    }
+  });
+
+  app.patch('/api/contratos/:id/status', auth, async (req: Request, res: Response) => {
+    try {
+      const { status } = req.body;
+      const statusValidos = ['gerado', 'assinado', 'cancelado'];
+      if (!statusValidos.includes(status)) {
+        res.status(400).json({ error: `Status inválido. Valores aceitos: ${statusValidos.join(', ')}` });
+        return;
+      }
+      const { rows } = await pool.query(
+        `UPDATE contratos_gerados SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING id, status`,
+        [status, req.params.id]
+      );
+      if (!rows.length) {
+        res.status(404).json({ error: 'Contrato não encontrado' });
+        return;
+      }
+      res.json({ success: true, ...rows[0] });
+    } catch (err) {
+      console.error('[PATCH /api/contratos/:id/status]', err);
+      res.status(500).json({ error: 'Erro ao atualizar status' });
+    }
+  });
+
+  // Servir arquivos de contratos gerados
+  app.use('/uploads/contratos', express.static(path.resolve('uploads', 'contratos')));
 
   // ─── Static files ─────────────────────────────────────────────────────────
   const staticPath = process.env.NODE_ENV === "production"

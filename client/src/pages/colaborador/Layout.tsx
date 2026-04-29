@@ -18,6 +18,7 @@ import {
   Building2,
   ShieldAlert,
   ListOrdered,
+  TrendingUp,
 } from "lucide-react";
 
 interface NavItem {
@@ -46,6 +47,10 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/colaborador/fila",        label: "Fila Geral",         icon: ListOrdered, managementOnly: true },
   { href: "/colaborador/clientes",    label: "Clientes",        icon: Users },
   { href: "/colaborador/empresas",    label: "Empresas",        icon: Building2 },
+  // Previsão de Faturamento: todos os colaboradores
+  { href: "/colaborador/previsao-faturamento", label: "Previsão Faturamento", icon: TrendingUp },
+  // Gerador de Contratos: todos os colaboradores
+  { href: "/colaborador/contratos",   label: "Contratos PDF",    icon: FileText },
   // Integrações n8n: somente Administrador
   {
     href: "/colaborador/integracoes",
