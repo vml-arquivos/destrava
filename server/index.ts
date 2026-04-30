@@ -750,6 +750,29 @@ async function startServer() {
         UNIQUE(cpf)
       );
       CREATE INDEX IF NOT EXISTS idx_contadores_ativo ON contadores(ativo);
+
+      CREATE TABLE IF NOT EXISTS clientes_pf (
+        id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        nome             TEXT NOT NULL,
+        cpf              TEXT NOT NULL,
+        rg               TEXT,
+        data_nascimento  DATE,
+        email            TEXT,
+        telefone         TEXT,
+        endereco         TEXT,
+        cidade           TEXT,
+        uf               CHAR(2),
+        cep              TEXT,
+        profissao        TEXT,
+        estado_civil     TEXT,
+        observacoes      TEXT,
+        ativo            BOOLEAN DEFAULT TRUE,
+        created_at       TIMESTAMPTZ DEFAULT NOW(),
+        updated_at       TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(cpf)
+      );
+      CREATE INDEX IF NOT EXISTS idx_clientes_pf_ativo ON clientes_pf(ativo);
+      CREATE INDEX IF NOT EXISTS idx_clientes_pf_nome  ON clientes_pf(nome);
     `);
     console.log('[startup] Tabelas de faturamento/contratos verificadas/criadas com sucesso.');
   } catch (err: any) {
@@ -820,6 +843,22 @@ async function startServer() {
   try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_contratos_lead     ON contratos_gerados(lead_id)`); }     catch { /* já existe */ }
   try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_contratos_tipo     ON contratos_gerados(tipo_contrato)`); } catch { /* já existe */ }
   try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_contratos_parceiro ON contratos_gerados(parceiro_id)`); }  catch { /* já existe */ }
+
+  // P12: ADD COLUMN cliente_pf_id (referência a clientes_pf para contratos Limpa Nome PF)
+  try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS cliente_pf_id UUID REFERENCES clientes_pf(id) ON DELETE SET NULL`); }
+  catch { /* já existe */ }
+  try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_contratos_cliente_pf ON contratos_gerados(cliente_pf_id)`); }
+  catch { /* já existe */ }
+
+  // P13: ADD COLUMN percentual_multa
+  try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS percentual_multa NUMERIC(5,2) DEFAULT 10.00`); }
+  catch { /* já existe */ }
+
+  // P14: ADD COLUMN contador_id para faturamento
+  try { await pool.query(`ALTER TABLE faturamento_historico ADD COLUMN IF NOT EXISTS contador_id UUID REFERENCES contadores(id) ON DELETE SET NULL`); }
+  catch { /* já existe */ }
+  try { await pool.query(`ALTER TABLE previsao_faturamento ADD COLUMN IF NOT EXISTS contador_id UUID REFERENCES contadores(id) ON DELETE SET NULL`); }
+  catch { /* já existe */ }
 
   console.log('[startup] Patches de banco (contratos_gerados) aplicados/verificados.');
   // ─────────────────────────────────────────────────────────────────────────────
@@ -4693,6 +4732,132 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
+  // ─── CLIENTES PF ─────────────────────────────────────────────────────────────
+
+  app.get('/api/clientes-pf', auth, async (_req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, nome, cpf, rg, data_nascimento, email, telefone,
+                endereco, cidade, uf, cep, profissao, estado_civil,
+                observacoes, ativo, created_at, updated_at
+           FROM clientes_pf
+          WHERE ativo = true
+          ORDER BY nome`
+      );
+      res.json(rows);
+    } catch (err: any) {
+      console.error('[GET /api/clientes-pf]', err);
+      res.status(500).json({ error: 'Erro ao listar clientes PF' });
+    }
+  });
+
+  app.get('/api/clientes-pf/buscar', auth, async (req: Request, res: Response) => {
+    try {
+      const { q = '' } = req.query as { q?: string };
+      const { rows } = await pool.query(
+        `SELECT id, nome, cpf, rg, email, telefone, cidade, uf
+           FROM clientes_pf
+          WHERE ativo = true
+            AND (nome ILIKE $1 OR cpf ILIKE $1 OR email ILIKE $1)
+          ORDER BY nome
+          LIMIT 30`,
+        [`%${q}%`]
+      );
+      res.json(rows);
+    } catch (err: any) {
+      console.error('[GET /api/clientes-pf/buscar]', err);
+      res.status(500).json({ error: 'Erro ao buscar clientes PF' });
+    }
+  });
+
+  app.get('/api/clientes-pf/:id', auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query('SELECT * FROM clientes_pf WHERE id=$1', [req.params.id]);
+      if (!rows.length) { res.status(404).json({ error: 'Cliente não encontrado' }); return; }
+      res.json(rows[0]);
+    } catch (err: any) {
+      console.error('[GET /api/clientes-pf/:id]', err);
+      res.status(500).json({ error: 'Erro ao buscar cliente' });
+    }
+  });
+
+  app.post('/api/clientes-pf', auth, async (req: Request, res: Response) => {
+    try {
+      const {
+        nome, cpf, rg, data_nascimento, email, telefone,
+        endereco, cidade, uf, cep, profissao, estado_civil, observacoes
+      } = req.body;
+      if (!nome || !cpf) {
+        res.status(400).json({ error: 'nome e cpf são obrigatórios' });
+        return;
+      }
+      const { rows } = await pool.query(
+        `INSERT INTO clientes_pf
+           (nome, cpf, rg, data_nascimento, email, telefone,
+            endereco, cidade, uf, cep, profissao, estado_civil, observacoes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         RETURNING *`,
+        [
+          nome, cpf,
+          rg || null, data_nascimento || null,
+          email || null, telefone || null,
+          endereco || null, cidade || null,
+          uf || null, cep || null,
+          profissao || null, estado_civil || null,
+          observacoes || null,
+        ]
+      );
+      res.status(201).json(rows[0]);
+    } catch (err: any) {
+      console.error('[POST /api/clientes-pf]', err);
+      const msg = err.code === '23505' ? 'CPF já cadastrado' : (err.detail || 'Erro ao criar cliente');
+      res.status(err.code === '23505' ? 409 : 500).json({ error: msg });
+    }
+  });
+
+  app.put('/api/clientes-pf/:id', auth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const {
+        nome, cpf, rg, data_nascimento, email, telefone,
+        endereco, cidade, uf, cep, profissao, estado_civil, observacoes, ativo
+      } = req.body;
+      const { rows } = await pool.query(
+        `UPDATE clientes_pf SET
+           nome=$1, cpf=$2, rg=$3, data_nascimento=$4, email=$5, telefone=$6,
+           endereco=$7, cidade=$8, uf=$9, cep=$10, profissao=$11,
+           estado_civil=$12, observacoes=$13, ativo=$14, updated_at=NOW()
+         WHERE id=$15 RETURNING *`,
+        [
+          nome, cpf,
+          rg || null, data_nascimento || null,
+          email || null, telefone || null,
+          endereco || null, cidade || null,
+          uf || null, cep || null,
+          profissao || null, estado_civil || null,
+          observacoes || null, ativo !== false,
+          id
+        ]
+      );
+      if (!rows.length) { res.status(404).json({ error: 'Cliente não encontrado' }); return; }
+      res.json(rows[0]);
+    } catch (err: any) {
+      console.error('[PUT /api/clientes-pf/:id]', err);
+      const msg = err.code === '23505' ? 'CPF já cadastrado' : (err.detail || 'Erro ao atualizar cliente');
+      res.status(err.code === '23505' ? 409 : 500).json({ error: msg });
+    }
+  });
+
+  app.delete('/api/clientes-pf/:id', auth, async (req: Request, res: Response) => {
+    try {
+      await pool.query('UPDATE clientes_pf SET ativo=false, updated_at=NOW() WHERE id=$1', [req.params.id]);
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error('[DELETE /api/clientes-pf/:id]', err);
+      res.status(500).json({ error: 'Erro ao desativar cliente' });
+    }
+  });
+
   // ─── PARCEIROS COMERCIAIS ────────────────────────────────────────────────
   const listarParceirosComerciais = async (_req: Request, res: Response) => {
     try {
@@ -4803,6 +4968,21 @@ ${(temTest1 || temTest2) ? `
             representante: e.responsavel_nome || '',
             cpf_representante: e.responsavel_cpf || '',
           };
+        } else if (cliente_tipo === 'pf' && req.body.cliente_pf_id) {
+          const { rows } = await pool.query('SELECT * FROM clientes_pf WHERE id=$1', [req.body.cliente_pf_id]);
+          if (!rows.length) { res.status(404).json({ error: 'Cliente PF não encontrado' }); return; }
+          const pf = rows[0];
+          contratanteData = {
+            nome: pf.nome,
+            cpf: pf.cpf || '',
+            rg: pf.rg || '',
+            data_nascimento: pf.data_nascimento || '',
+            estado_civil: pf.estado_civil || '',
+            profissao: pf.profissao || '',
+            email: pf.email || '',
+            telefone: pf.telefone || '',
+            domicilio: [pf.endereco, pf.cidade, pf.uf, pf.cep].filter(Boolean).join(', '),
+          };
         } else if (cliente_tipo === 'lead' && cliente_id) {
           const { rows } = await pool.query('SELECT * FROM leads WHERE id=$1', [cliente_id]);
           if (!rows.length) { res.status(404).json({ error: 'Lead não encontrado' }); return; }
@@ -4814,7 +4994,7 @@ ${(temTest1 || temTest2) ? `
             domicilio: l.endereco || '',
           };
         } else {
-          res.status(400).json({ error: 'Informe cliente_tipo (empresa/lead) e o respectivo ID' });
+          res.status(400).json({ error: 'Informe cliente_tipo (empresa/lead/pf) e o respectivo ID' });
           return;
         }
 
@@ -4862,11 +5042,11 @@ ${(temTest1 || temTest2) ? `
 
         const { rows: contratoRows2 } = await pool.query(
           `INSERT INTO contratos_gerados
-             (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id,
+             (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id, cliente_pf_id,
               valor_referencia, valor_contrato, condicao_pagamento, taxa_comissao,
               honorario_minimo_mes, honorario_minimo_total, data_assinatura,
               foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
            RETURNING id, created_at`,
           [
             'limpa_nome',
@@ -4874,6 +5054,7 @@ ${(temTest1 || temTest2) ? `
             empresaContratoId,
             parceiro_id || null,
             leadContratoId,
+            req.body.cliente_pf_id || null,
             null,
             valor_contrato,
             condicao_pagamento,
