@@ -10,7 +10,7 @@ import bcrypt from "bcryptjs";
 import { auth } from "./middleware/auth.ts";
 import { authorize } from "./middleware/authorize.ts";
 import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
-import { gerarHtmlTimbrado } from "./letterhead.ts";
+import { gerarHtmlTimbrado, getPuppeteerHeaderTemplate, getPuppeteerFooterTemplate, getDocumentStyles, CONTRATADA_DADOS } from "./letterhead.ts";
 
 const { Pool } = pkg;
 
@@ -3158,88 +3158,136 @@ Responda APENAS com um JSON válido no seguinte formato:
   // ─── FUNÇÕES AUXILIARES PARA CONTRATOS ────────────────────────────────────
 
   async function gerarHtmlContrato(payload: any): Promise<string> {
-    const { contratada, contratante, parceiro, contrato } = payload;
+    const { contratante, parceiro, contrato } = payload;
+
+    // CONTRATADA sempre é a Destrava
+    const contratada = CONTRATADA_DADOS;
+
+    const temParceiro = parceiro && parceiro.nome;
+    const vigenciaMeses = contrato.vigencia_meses || 12;
+    const comissaoPct   = contrato.taxa_comissao || 10;
+    const honorMinMes   = contrato.honorario_minimo_mes || 1;
+    const honorMinTotal = contrato.honorario_minimo_total || 12;
+    const valorRef      = contrato.valor_referencia_formatado || 'R$ 0,00';
+    const valorRefNum   = contrato.valor_referencia_str || '0,00';
+    const foro          = contrato.foro_eleito || 'Taguatinga';
+    const dataAss       = contrato.data_assinatura_formatada || '';
+    const cidadeAss     = contrato.cidade_assinatura || 'BRASÍLIA – DF';
 
     const body = `
 <h1 class="doc-title">CONTRATO DE ANÁLISE DOCUMENTAL PARA ACESSO A LINHA DE CRÉDITO</h1>
 
 <h2 class="section-title">I – IDENTIFICAÇÃO DAS PARTES</h2>
 
-<p class="clause"><strong>CONTRATADA:</strong> denominada ${contratada.razao_social}, com sede em ${contratada.endereco_sede}, inscrita no CNPJ nº ${contratada.cnpj}, devidamente representada por: ${contratada.representante}, identificado como ${contratada.cargo_representante}, CPF nº ${contratada.cpf_representante}.</p>
+<p class="clause"><strong>CONTRATADA:</strong> denominada ${contratada.razao_social}, com sede na ${contratada.endereco_sede}, inscrita no CNPJ n° ${contratada.cnpj}, devidamente representada por: ${contratada.representante}, identificado como, ${contratada.cargo_representante} nesta data através da consulta do Quadro de Sócios e Administradores – QSA, disponibilizado pela República Federativa do Brasil – RFB, CPF n° ${contratada.cpf_representante}.</p>
 
-<p class="clause"><strong>CONTRATANTE:</strong> ${contratante.razao_social}, inscrita no CNPJ nº ${contratante.cnpj}, com endereço em ${contratante.endereco}, representada por seu representante legal ${contratante.representante}, CPF nº ${contratante.cpf_representante}.</p>
+<p class="clause"><strong>CONTRATANTE:</strong> ${contratante.razao_social}, pessoa jurídica de direito privado, inscrita no CNPJ n° ${contratante.cnpj}, com sede em ${contratante.endereco}, neste ato representada por seu representante legal ${contratante.representante}, ${contratante.nacionalidade || 'brasileiro(a)'}, portador(a) do CPF n° ${contratante.cpf_representante}, conforme poderes que lhe são conferidos pelo contrato social e/ou procuração.</p>
 
-${parceiro ? `<p class="clause"><strong>PARCEIRO COMERCIAL:</strong> ${parceiro.nome}, pessoa física, inscrita no CPF nº ${parceiro.cpf}, indicada pela CONTRATANTE como parceira comercial para fins de acompanhamento e suporte nas atividades relacionadas ao presente contrato.</p>` : ''}
+${temParceiro ? `<p class="clause"><strong>PARCEIRO COMERCIAL:</strong> ${parceiro.nome}, pessoa física, inscrita no CPF n° ${parceiro.cpf}, indicada pela CONTRATANTE como parceira comercial para fins de acompanhamento e suporte nas atividades relacionadas ao presente contrato.</p>` : ''}
 
 <h2 class="section-title">II - DO OBJETO DO CONTRATO E VALOR DE REFERÊNCIA</h2>
 
-<p class="clause"><strong>Cláusula 1</strong> - O presente contrato tem como objeto a prestação de serviços de análise e organização documental pela CONTRATADA, com o objetivo de orientar a CONTRATANTE quanto à adequação de sua documentação jurídica, contábil e financeira para fins de acesso e aquisição de linhas de crédito no sistema bancário nacional, governamental ou fintech.</p>
+<p class="clause"><strong>Cláusula 1</strong> - O presente contrato tem como objeto a prestação de serviços de análise e organização documental pela CONTRATADA, com o objetivo de orientar a CONTRATANTE quanto à adequação de sua documentação jurídica, contábil e financeira para fins de acesso e aquisição de linhas de crédito no sistema bancário nacional, governamental e ou fintech.</p>
 
-<p class="clause"><strong>1.1</strong> - A CONTRATANTE estabelece que o montante de <strong>${contrato.valor_referencia_formatado}</strong> será utilizado como valor de referência para a projeção de crédito e planejamento financeiro, servindo como pilar para a análise documental a ser realizada pela CONTRATADA.</p>
+<p class="clause"><strong>1.1</strong> - A CONTRATANTE estabelece que o montante de <strong>${valorRef}</strong> será utilizado como valor de referência para a projeção de crédito e planejamento financeiro, servindo como pilar para a análise documental a ser realizada pela CONTRATADA.</p>
 
 <p class="clause"><strong>1.2</strong> - O relatório de análise documental indicará as condições atuais e ideais para que a CONTRATANTE possa acessar o valor de referência projetado. Contudo, a CONTRATADA não garante a aprovação de crédito no valor de referência nem se responsabiliza por fatores externos, restrições financeiras ou fiscais, erros cadastrais, comprometimento financeiro, incapacidade de pagamento ou políticas de crédito das instituições financeiras.</p>
 
-<h2 class="section-title">III – DAS RESPONSABILIDADES DAS PARTES</h2>
+<p class="clause"><strong>1.3</strong> - Fica expressamente acordado que, caso não seja possível alcançar dentro do prazo de validade do contrato, o valor de referência, devido a limitações documentais, cadastrais, fiscais ou financeiras da CONTRATANTE, a CONTRATADA estará isenta de qualquer responsabilidade ou obrigação de resultado, limitando-se a prestar os serviços de análise e orientação contratados.</p>
 
-<p class="clause"><strong>Cláusula 2</strong> - Toda e qualquer informação, documento, dado ou acesso fornecido à CONTRATADA será de inteira responsabilidade da CONTRATANTE, inclusive quanto à sua veracidade, legalidade e atualidade.</p>
+<p class="clause"><strong>1.4</strong> - A CONTRATADA realizará análise técnica da documentação enviada, emitirá pareceres, apontará inconsistências e poderá sugerir correções, ficando a decisão sobre acatar tais sugestões sob responsabilidade exclusiva da CONTRATANTE.</p>
+
+<h2 class="section-title">III - DAS RESPONSABILIDADES DAS PARTES</h2>
+
+<p class="clause"><strong>Cláusula 2</strong> - Toda e qualquer informação, documento, dado ou acesso fornecido à CONTRATADA será de inteira responsabilidade da CONTRATANTE, inclusive quanto à sua veracidade, legalidade e atualidade. A CONTRATADA não se responsabiliza por prejuízos diretos ou indiretos decorrentes de informações incorretas, incompletas ou fraudulentas fornecidas.</p>
+
+<p class="clause"><strong>2.1</strong> - A CONTRATADA poderá emitir pareceres e recomendações sobre a documentação enviada, sem que isso constitua obrigação de resultado ou responsabilidade técnica por atos praticados pela CONTRATANTE com base nessas orientações. Caso a CONTRATANTE opte por adotar qualquer sugestão, a responsabilidade por seus efeitos será exclusivamente sua.</p>
+
+<p class="clause"><strong>2.2</strong> - A CONTRATANTE compromete-se a apresentar, atualizados, sempre que solicitado, todos os documentos e informações para a execução dos serviços.</p>
+
+${temParceiro ? `<p class="clause"><strong>2.3</strong> - O PARCEIRO COMERCIAL poderá acompanhar o desenvolvimento dos serviços e ter acesso às informações pertinentes, mediante autorização expressa da CONTRATANTE, ficando igualmente sujeito às cláusulas de confidencialidade deste contrato.</p>` : ''}
 
 <h2 class="section-title">IV – DA VIGÊNCIA E RENOVAÇÃO</h2>
 
-<p class="clause"><strong>Cláusula 3</strong> - Este contrato terá vigência de <strong>${contrato.vigencia_meses} (doze) meses</strong> a contar da data de sua assinatura, sendo automaticamente renovado por igual período, caso não haja manifestação contrária de qualquer das partes, comunicada com no mínimo 30 (trinta) dias de antecedência do vencimento.</p>
+<p class="clause"><strong>Cláusula 3</strong> - Este contrato terá vigência de <strong>${vigenciaMeses} (doze) meses</strong> a contar da data de sua assinatura, sendo automaticamente renovado por igual período, caso não haja manifestação contrária de qualquer das partes, comunicada com no mínimo 30 (trinta) dias de antecedência do vencimento, por meio de e-mail enviado ao endereço: fernandoelipro@gmail.com.</p>
 
 <h2 class="section-title">V - DA REMUNERAÇÃO POR COMISSÃO E HONORÁRIO MÍNIMO</h2>
 
-<p class="clause"><strong>Cláusula 4</strong> - A CONTRATADA fará jus a uma comissão de <strong>${contrato.taxa_comissao}% (${contrato.taxa_comissao} por cento)</strong> sobre qualquer valor efetivamente liberado em favor da CONTRATANTE, no prazo de até 12 meses da entrega do relatório inicial.</p>
+<p class="clause"><strong>Cláusula 4</strong> - A CONTRATADA fará jus a comissão de <strong>${comissaoPct}% (${comissaoPct === 10 ? 'dez' : comissaoPct} por cento)</strong> sobre qualquer valor efetivamente liberado em favor da CONTRATANTE, no prazo de até 12 meses da entrega do relatório inicial. A CONTRATANTE compromete-se a comunicar qualquer operação de crédito aprovada e contratada dentro do período de vigência deste contrato e a fornecer cópia do contrato, comprovante de liberação e/ou extrato bancário correspondente.</p>
 
-<p class="clause"><strong>4.3</strong> - Fica estabelecido que, caso a CONTRATANTE não contrate operações de crédito em valor igual ou superior ao valor de referência no período de vigência do contrato, será devido à CONTRATADA, a título de honorário mínimo garantido, o valor de <strong>${contrato.honorario_minimo_mes}% (um por cento) por mês</strong>, totalizando <strong>${contrato.honorario_minimo_total}% (doze por cento)</strong> ao final do contrato de 12 (doze) meses, independentemente da sua renovação.</p>
+<p class="clause"><strong>4.1</strong> - A comissão deverá ser paga pela CONTRATANTE à CONTRATADA no prazo máximo de 1 (um) dia útil após a liberação do crédito, mediante transferência bancária para conta informada pela CONTRATADA.</p>
+
+<p class="clause"><strong>4.2</strong> - A CONTRATADA declara, que não realiza, direta ou indiretamente, qualquer tipo de pagamento, vantagem indevida, comissão oculta ou propina, seja a servidores públicos, agentes privados ou terceiros, sendo vedada qualquer prática que contrarie a legislação anticorrupção vigente (Lei nº 12.846/2013 e demais normas aplicáveis).</p>
+
+<p class="clause"><strong>4.3</strong> - Fica estabelecido que, caso a CONTRATANTE não contrate operações de crédito em valor igual ou superior a <strong>${valorRef}</strong> no período de vigência do contrato, 12 (doze) meses, por motivos causados por ela, será devido à CONTRATADA, a título de honorário mínimo garantido, o valor de <strong>${honorMinMes}% (um por cento) por mês</strong>, totalizando <strong>${honorMinTotal}% (doze por cento)</strong> ao final do contrato de 12 (doze) meses, independente da sua renovação.</p>
+
+<p class="clause"><strong>PARÁGRAFO ÚNICO - CAUSAS DE IMPEDIMENTO A CRÉDITO POR PARTE DA CONTRATANTE</strong><br>
+As causas de impedimento a crédito por parte da CONTRATANTE são: 1 – Apontamento, direto ou indireto (replicação) de restrição financeira, fiscal ou de simples protesto, inclusive em grupo econômico e cônjuge. 2 – Rating Bacen diferente de C, B ou A. 3 – Movimentação bancária inferior à declarada no faturamento bruto e quando exigido na declaração de imposto de renda. 4 – Anotação de apontamento de fraude documental ou ideológica no Banco Central. 5 – Mudança de endereço da sede empresarial sem comunicação prévia. 6 – Falta de comprovação de endereço da sede ou endereço divergente ao registrado nos órgãos competentes.</p>
+
+<p class="clause"><strong>4.4</strong> - O valor do honorário mínimo poderá ser cobrado integralmente ao final do contrato, ou em parcelas mensais, conforme acordo entre as partes.</p>
+
+<p class="clause"><strong>4.5</strong> - Caso a CONTRATANTE venha a contratar operações de crédito que, somadas, ultrapassem o valor de <strong>${valorRef}</strong> durante a vigência do contrato, 12 (doze) meses, a CONTRATADA renunciará ao recebimento do honorário mínimo, mantendo-se exclusivamente o direito à comissão de ${comissaoPct}% sobre o valor contratado.</p>
 
 <h2 class="section-title">VI – CONFIDENCIALIDADE</h2>
 
-<p class="clause"><strong>Cláusula 5</strong> - A CONTRATADA compromete-se a manter em absoluto sigilo todas as informações e documentos recebidos da CONTRATANTE, não os utilizando para qualquer outro fim que não seja a execução do presente contrato, exceto quando exigido por lei ou ordem judicial.</p>
+<p class="clause"><strong>Cláusula 5</strong> - A CONTRATADA compromete-se a manter em absoluto sigilo todas as informações e documentos recebidos da CONTRATANTE, não os utilizando para qualquer outro fim que não a execução do presente contrato, exceto quando exigido por lei ou ordem judicial.</p>
+
+${temParceiro ? `<p class="clause"><strong>5.1</strong> - O PARCEIRO COMERCIAL, quando autorizado pela CONTRATANTE a ter acesso às informações, compromete-se igualmente a manter sigilo absoluto sobre todos os dados e documentos relacionados ao presente contrato.</p>` : ''}
 
 <h2 class="section-title">VII – RESCISÃO</h2>
 
-<p class="clause"><strong>Cláusula 6</strong> - A CONTRATANTE poderá rescindir este contrato até a entrega pela CONTRATADA do relatório de análise dos documentos apresentados, mediante pagamento de 1% (um por cento) do valor informado na Cláusula 1.1, pelos serviços de análise documental já prestados.</p>
+<p class="clause"><strong>Cláusula 6</strong> - A CONTRATANTE poderá rescindir este contrato até a entrega pela CONTRATADA do relatório de análise dos documentos apresentados, mediante pagamento de 1% (um por cento) do valor informado na Cláusula 1.1, pelos serviços de análise documental, já prestados.</p>
+
+<p class="clause"><strong>6.1</strong> - Na ausência do pagamento pelos serviços já prestados pela CONTRATADA à CONTRATANTE, deve a CONTRATADA entender automaticamente, que é o interesse da CONTRATANTE, seguir de forma IRREVOGÁVEL e IRRETRATÁVEL as cláusulas deste contrato, sob a isenção de cobrança do pagamento de 1% (um por cento), referente ao relatório de análise dos documentos apresentados.</p>
 
 <h2 class="section-title">VIII – CLÁUSULA PENAL POR INADIMPLÊNCIA</h2>
 
 <p class="clause"><strong>Cláusula 7</strong> - Fica estabelecida uma Cláusula Penal em favor da CONTRATADA, aplicável na hipótese de inadimplência da CONTRATANTE em relação aos contratos de crédito obtidos com o suporte dos serviços objeto deste instrumento.</p>
 
+<p class="clause"><strong>7.1</strong> - A Cláusula Penal será acionada caso a CONTRATANTE atrase o pagamento de 3 (três) parcelas consecutivas ou 5 (cinco) parcelas alternadas do contrato de crédito obtido junto à instituição financeira.</p>
+
+<p class="clause"><strong>7.2</strong> - O valor da multa será de 10% (dez por cento) sobre o valor total do crédito contratado pela CONTRATANTE junto à instituição financeira, a ser pago à CONTRATADA no prazo de 10 (dez) dias úteis após a notificação da inadimplência.</p>
+
+<p class="clause"><strong>7.3</strong> - A aplicação desta Cláusula Penal não impede a CONTRATADA de buscar outras medidas legais cabíveis para a recuperação de quaisquer valores devidos, incluindo, mas não se limitando, aos honorários e comissões previstos na Cláusula 4.</p>
+
 <h2 class="section-title">IX – DO FORO E CONDIÇÕES GERAIS</h2>
 
-<p class="clause">Para dirimir quaisquer controvérsias oriundas do CONTRATO, as partes elegem o foro da Circunscrição Judiciária de <strong>${contrato.foro_eleito}</strong>.</p>
+<p class="clause">Para dirimir quaisquer controvérsias oriundas do CONTRATO, as partes elegem o foro da Circunscrição Judiciária de <strong>${foro}</strong>.</p>
 
 <p class="clause">Por estarem assim justos e contratados, firmam o presente instrumento, em duas vias de igual teor.</p>
 
-<p class="city-date"><strong>${contrato.data_assinatura_formatada}.</strong></p>
+<p class="city-date"><strong>${cidadeAss}, ${dataAss}.</strong></p>
 
-<div class="signature-block">
-  <p>CONTRATANTE:</p>
-  <div class="signature-line"></div>
-  <p class="signature-label">${contratante.razao_social}</p>
+<div class="sig-block">
+  <p><strong>CONTRATANTE:</strong></p>
+  <div class="sig-line"></div>
+  <p class="sig-name">${contratante.razao_social}</p>
 
-  ${parceiro ? `
-  <p style="margin-top:30px;">PARCEIRO COMERCIAL:</p>
-  <div class="signature-line"></div>
-  <p class="signature-label">${parceiro.nome} - CPF nº ${parceiro.cpf}</p>
+  ${temParceiro ? `
+  <p style="margin-top:28px;"><strong>PARCEIRO COMERCIAL:</strong></p>
+  <div class="sig-line"></div>
+  <p class="sig-name">${parceiro.nome} - CPF n° ${parceiro.cpf}</p>
   ` : ''}
 
-  <p style="margin-top:30px;">CONTRATADA:</p>
-  <div class="signature-line"></div>
-  <p class="signature-label">DESTRAVA CRÉDITO LTDA - CNPJ nº ${contratada.cnpj}</p>
+  <p style="margin-top:28px;"><strong>CONTRATADA:</strong></p>
+  <div class="sig-line"></div>
+  <p class="sig-name">DESTRAVA CRÉDITO LTDA - CNPJ n° ${contratada.cnpj}</p>
+</div>
 
-  <div class="page-break"></div>
+<div class="page-break"></div>
 
-  <p style="margin-top:30px;">TESTEMUNHA 1:</p>
-  <div class="signature-line"></div>
+<div class="sig-block">
+  <p style="margin-bottom:6px;"><strong>TESTEMUNHA 1:</strong></p>
+  <div class="sig-line"></div>
 
-  <p style="margin-top:50px;">TESTEMUNHA 2:</p>
-  <div class="signature-line"></div>
+  <p style="margin-top:40px;margin-bottom:6px;"><strong>TESTEMUNHA 2:</strong></p>
+  <div class="sig-line"></div>
 </div>
 `;
 
     return gerarHtmlTimbrado(body, 'CONTRATO DE ANÁLISE DOCUMENTAL');
   }
+
 
   // ─── HTML PREVISÃO DE FATURAMENTO (papel timbrado) ─────────────────────────
   function gerarHtmlPrevisaoFaturamento(payload: {
@@ -3456,8 +3504,11 @@ ${payload.chartImageBase64 ? `
       await page.pdf({
         path: filePath,
         format: 'A4',
-        margin: { top: '0', right: '0', bottom: '0', left: '0' },
         printBackground: true,
+        displayHeaderFooter: true,
+        headerTemplate: getPuppeteerHeaderTemplate(),
+        footerTemplate: getPuppeteerFooterTemplate(),
+        margin: { top: '34mm', bottom: '26mm', left: '20mm', right: '20mm' },
       });
     } finally {
       if (browser) await browser.close();
@@ -3547,8 +3598,11 @@ ${payload.chartImageBase64 ? `
         await page.pdf({
           path: filePath,
           format: 'A4',
-          margin: { top: '0', right: '0', bottom: '0', left: '0' },
           printBackground: true,
+          displayHeaderFooter: true,
+          headerTemplate: getPuppeteerHeaderTemplate(),
+          footerTemplate: getPuppeteerFooterTemplate(),
+          margin: { top: '34mm', bottom: '26mm', left: '20mm', right: '20mm' },
         });
       } finally {
         if (browser) await (browser as any).close();
