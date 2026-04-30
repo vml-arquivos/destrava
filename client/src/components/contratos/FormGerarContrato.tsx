@@ -4,6 +4,7 @@ import { getToken } from '../../lib/api';
 
 interface Empresa  { id: string; razao_social: string; cnpj?: string; }
 interface Lead     { id: string; nome?: string; razao_social?: string; cpf?: string; cnpj?: string; }
+interface ClientePF { id: string; nome: string; cpf?: string; telefone?: string; cidade?: string; uf?: string; }
 interface Parceiro { id: string; nome: string; cpf?: string; }
 
 interface Props {
@@ -183,9 +184,10 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [foroEleito, setForoEleito]         = useState('Taguatinga/DF');
 
   // ── Listas ──
-  const [empresas, setEmpresas]   = useState<Empresa[]>([]);
-  const [leads, setLeads]         = useState<Lead[]>([]);
-  const [parceiros, setParceiros] = useState<Parceiro[]>([]);
+  const [empresas, setEmpresas]       = useState<Empresa[]>([]);
+  const [leads, setLeads]             = useState<Lead[]>([]);
+  const [clientesPF, setClientesPF]   = useState<ClientePF[]>([]);
+  const [parceiros, setParceiros]     = useState<Parceiro[]>([]);
 
   const [errors, setErrors]               = useState<Record<string, string>>({});
   const [carregandoListas, setCarregandoListas] = useState(false);
@@ -200,9 +202,10 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     setCarregandoListas(true);
     setErroListas(null);
 
-    const [empresasResult, leadsResult, parceirosResult] = await Promise.allSettled([
+    const [empresasResult, leadsResult, clientesPFResult, parceirosResult] = await Promise.allSettled([
       fetchJsonApi('/api/empresas?limit=500', token),
       fetchJsonApi('/api/leads?limit=500', token),
+      fetchJsonApi('/api/clientes-pf', token),
       fetchFirstAvailable(['/api/parceiros', '/api/parceiros-comerciais'], token),
     ]);
 
@@ -220,6 +223,13 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     } else {
       setLeads([]);
       errosCriticos.push(`Clientes/leads: ${leadsResult.reason instanceof Error ? leadsResult.reason.message : String(leadsResult.reason)}`);
+    }
+
+    if (clientesPFResult.status === 'fulfilled') {
+      setClientesPF(extractArray<ClientePF>(clientesPFResult.value, ['clientes_pf', 'clientes']));
+    } else {
+      setClientesPF([]);
+      console.warn('[FormGerarContrato] Clientes PF não carregados:', clientesPFResult.reason);
     }
 
     if (parceirosResult.status === 'fulfilled') {
@@ -305,6 +315,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         tipo_contrato: 'limpa_nome',
         cliente_tipo: clienteTipo,
         empresa_id: clienteTipo === 'empresa' ? clienteId : undefined,
+        cliente_pf_id: clienteTipo === 'pf' ? clienteId : undefined,
         cliente_id: clienteTipo === 'lead' ? clienteId : undefined,
         parceiro_id: parceiroIdLimpaNome || undefined,
         valor_contrato: Number(valorContrato),
@@ -415,7 +426,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
 
       {!erroListas && !carregandoListas && (
         <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-          Listas carregadas: {empresas.length} empresas, {leads.length} clientes/leads, {parceiros.length} parceiros.
+          Listas carregadas: {empresas.length} empresas, {leads.length} leads, {clientesPF.length} clientes PF, {parceiros.length} parceiros.
         </div>
       )}
 
@@ -474,20 +485,32 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
           <div>
             <label className={lbl}>Tipo de Cliente *</label>
             <select value={clienteTipo} onChange={e => { setClienteTipo(e.target.value as any); setClienteId(''); }} className={cls}>
-              <option value="lead">Pessoa Física (Lead / Cliente)</option>
+              <option value="pf">Pessoa Física — Clientes PF Cadastrados</option>
+              <option value="lead">Pessoa Física — Lead (CRM)</option>
               <option value="empresa">Pessoa Jurídica (Empresa)</option>
             </select>
           </div>
           <div>
-            <label className={lbl}>{clienteTipo === 'empresa' ? 'Empresa (PJ) *' : 'Cliente (PF) *'}</label>
+            <label className={lbl}>
+              {clienteTipo === 'empresa' ? 'Empresa (PJ) *' : clienteTipo === 'pf' ? 'Cliente PF *' : 'Lead (CRM) *'}
+            </label>
             <select value={clienteId} onChange={e => setClienteId(e.target.value)} className={cls}>
               <option value="">Selecione...</option>
               {clienteTipo === 'empresa'
                 ? empresas.map(e => <option key={e.id} value={e.id}>{e.razao_social}{e.cnpj ? ` — ${e.cnpj}` : ''}</option>)
-                : leads.map(l => <option key={l.id} value={l.id}>{l.nome || l.razao_social || 'Cliente sem nome'}{l.cpf ? ` — CPF: ${l.cpf}` : ''}</option>)
+                : clienteTipo === 'pf'
+                  ? clientesPF.length > 0
+                    ? clientesPF.map(c => <option key={c.id} value={c.id}>{c.nome}{c.cpf ? ` — CPF: ${c.cpf}` : ''}{c.cidade ? ` — ${c.cidade}/${c.uf}` : ''}</option>)
+                    : [<option key="empty" value="" disabled>Nenhum cliente PF cadastrado — vá em "Clientes PF" para cadastrar</option>]
+                  : leads.map(l => <option key={l.id} value={l.id}>{l.nome || l.razao_social || 'Lead sem nome'}{l.cpf ? ` — CPF: ${l.cpf}` : ''}</option>)
               }
             </select>
             {errors.clienteId && <p className="text-red-500 text-xs mt-1">{errors.clienteId}</p>}
+            {clienteTipo === 'pf' && clientesPF.length === 0 && !carregandoListas && (
+              <p className="text-xs text-amber-600 mt-1">
+                Cadastre clientes PF em <a href="/colaborador/clientes-pf" className="underline font-medium">Clientes PF</a> para selecioná-los aqui.
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
