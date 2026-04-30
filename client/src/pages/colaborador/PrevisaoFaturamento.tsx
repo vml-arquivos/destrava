@@ -36,6 +36,7 @@ interface ResultadoPrevisao {
   pontos: PontoPrevisao[];
   previsao_id: string;
   gerada_em: string;
+  aviso?: string;
 }
 
 // Gerar 12 meses anteriores como template vazio
@@ -349,6 +350,7 @@ export default function PrevisaoFaturamento() {
               min={previsao.capacidade_pgto_min}
               max={previsao.capacidade_pgto_max}
               modelo={previsao.modelo_usado}
+              aviso={previsao.aviso}
             />
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-3">

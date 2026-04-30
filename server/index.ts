@@ -662,6 +662,79 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
+  // ─── AUTO-CREATE: Módulos de Faturamento e Contratos ─────────────────────────
+  // Garante que as tabelas existam mesmo sem executar a migration manual.
+  // Idempotente: usa CREATE TABLE IF NOT EXISTS e ADD COLUMN IF NOT EXISTS.
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS faturamento_historico (
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        empresa_id    UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+        competencia   DATE NOT NULL,
+        valor         NUMERIC(15, 2) NOT NULL CHECK (valor >= 0),
+        origem        TEXT NOT NULL DEFAULT 'manual' CHECK (origem IN ('manual', 'importado')),
+        created_at    TIMESTAMPTZ DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(empresa_id, competencia)
+      );
+      CREATE INDEX IF NOT EXISTS idx_fat_historico_empresa ON faturamento_historico(empresa_id);
+      CREATE INDEX IF NOT EXISTS idx_fat_historico_competencia ON faturamento_historico(competencia DESC);
+
+      CREATE TABLE IF NOT EXISTS previsao_faturamento (
+        id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        empresa_id           UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+        gerada_em            TIMESTAMPTZ DEFAULT NOW(),
+        modelo_usado         TEXT NOT NULL,
+        horizonte_meses      INTEGER NOT NULL,
+        capacidade_pgto_min  NUMERIC(15, 2) NOT NULL,
+        capacidade_pgto_max  NUMERIC(15, 2) NOT NULL,
+        payload_completo     JSONB NOT NULL,
+        created_at           TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_previsao_empresa ON previsao_faturamento(empresa_id);
+      CREATE INDEX IF NOT EXISTS idx_previsao_gerada  ON previsao_faturamento(gerada_em DESC);
+
+      CREATE TABLE IF NOT EXISTS parceiros_comerciais (
+        id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        nome       TEXT NOT NULL,
+        cpf        TEXT NOT NULL,
+        email      TEXT,
+        telefone   TEXT,
+        ativo      BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(cpf)
+      );
+
+      CREATE TABLE IF NOT EXISTS contratos_gerados (
+        id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        empresa_id             UUID NOT NULL REFERENCES empresas(id) ON DELETE RESTRICT,
+        parceiro_id            UUID REFERENCES parceiros_comerciais(id) ON DELETE SET NULL,
+        lead_id                UUID REFERENCES leads(id) ON DELETE SET NULL,
+        valor_referencia       NUMERIC(15, 2) NOT NULL,
+        taxa_comissao          NUMERIC(5, 2) NOT NULL DEFAULT 10.00,
+        honorario_minimo_mes   NUMERIC(5, 2) NOT NULL DEFAULT 1.00,
+        honorario_minimo_total NUMERIC(5, 2) NOT NULL DEFAULT 12.00,
+        data_assinatura        DATE NOT NULL,
+        foro_eleito            TEXT NOT NULL,
+        status                 TEXT NOT NULL DEFAULT 'gerado',
+        pdf_path               TEXT,
+        hash_documento         TEXT UNIQUE,
+        payload_snapshot       JSONB NOT NULL,
+        criado_por             UUID REFERENCES colaboradores(id) ON DELETE SET NULL,
+        created_at             TIMESTAMPTZ DEFAULT NOW(),
+        updated_at             TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_contratos_empresa ON contratos_gerados(empresa_id);
+      CREATE INDEX IF NOT EXISTS idx_contratos_status  ON contratos_gerados(status);
+      CREATE INDEX IF NOT EXISTS idx_contratos_created ON contratos_gerados(created_at DESC);
+    `);
+    console.log('[startup] Tabelas de faturamento/contratos verificadas/criadas com sucesso.');
+  } catch (err: any) {
+    console.error('[startup] Aviso: falha ao auto-criar tabelas de faturamento/contratos:', err.message);
+    // Não aborta o servidor — pode ser que as tabelas já existam com constraints diferentes
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   app.use(express.json({ limit: "5mb" }));
   app.use(express.urlencoded({ extended: true }));
 
@@ -3571,6 +3644,7 @@ ${payload.chartImageBase64 ? `
       const timeout = setTimeout(() => controller.abort(), 45000);
 
       let predicaoResult: any;
+      let usouFallback = false;
       try {
         const response = await fetch(`${predicaoUrl}/predict`, {
           method: 'POST',
@@ -3587,12 +3661,63 @@ ${payload.chartImageBase64 ? `
         predicaoResult = await response.json();
       } catch (err: any) {
         clearTimeout(timeout);
-        if (err.name === 'AbortError') {
-          res.status(504).json({ error: 'Timeout ao chamar serviço de previsão (>45s). Tente novamente.' });
-        } else {
-          res.status(502).json({ error: `Erro ao chamar serviço de previsão: ${err.message}` });
-        }
-        return;
+        // ── FALLBACK: Previsão linear simples quando Python está offline ──────────
+        // Usa regressão linear (mínimos quadrados) sobre o histórico para projetar
+        // os próximos N meses. Menos preciso que Prophet/ARIMA mas sempre disponível.
+        console.warn('[POST /api/faturamento/prever] Microsserviço Python indisponível. Usando fallback linear:', err.message);
+        usouFallback = true;
+
+        const n = historico.length;
+        const valores = historico.map((h: any) => parseFloat(h.y));
+
+        // Regressão linear simples: y = a + b*x
+        const sumX = (n * (n - 1)) / 2;
+        const sumX2 = (n * (n - 1) * (2 * n - 1)) / 6;
+        const sumY = valores.reduce((s: number, v: number) => s + v, 0);
+        const sumXY = valores.reduce((s: number, v: number, i: number) => s + i * v, 0);
+        const b = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+        const a = (sumY - b * sumX) / n;
+
+        // Desvio padrão para intervalo de confiança (~95% = ±1.96 * std)
+        const media = sumY / n;
+        const std = Math.sqrt(valores.reduce((s: number, v: number) => s + Math.pow(v - media, 2), 0) / n);
+        const margem = 1.96 * std;
+
+        // Montar pontos históricos
+        const pontosHistorico = historico.map((h: any, i: number) => ({
+          ds: h.ds,
+          yhat: parseFloat(h.y),
+          yhat_lower: parseFloat(h.y),
+          yhat_upper: parseFloat(h.y),
+          is_historico: true,
+        }));
+
+        // Montar pontos de previsão
+        const ultimaData = new Date(historico[n - 1].ds + 'T12:00:00');
+        const pontosPrevisao = Array.from({ length: horizonte_meses }, (_, i) => {
+          const d = new Date(ultimaData);
+          d.setMonth(d.getMonth() + i + 1);
+          const ds = d.toISOString().slice(0, 10);
+          const yhat = Math.max(0, a + b * (n + i));
+          return {
+            ds,
+            yhat: Math.round(yhat * 100) / 100,
+            yhat_lower: Math.max(0, Math.round((yhat - margem) * 100) / 100),
+            yhat_upper: Math.round((yhat + margem) * 100) / 100,
+            is_historico: false,
+          };
+        });
+
+        const mediaPrevisao = pontosPrevisao.reduce((s, p) => s + p.yhat, 0) / pontosPrevisao.length;
+        predicaoResult = {
+          modelo_usado: 'linear_fallback',
+          horizonte_meses,
+          capacidade_pgto_min: Math.round(mediaPrevisao * 0.15 * 100) / 100,
+          capacidade_pgto_max: Math.round(mediaPrevisao * 0.25 * 100) / 100,
+          pontos: [...pontosHistorico, ...pontosPrevisao],
+          aviso: 'Previsão gerada com modelo linear (serviço IA indisponível). Para maior precisão, ative o microsserviço Prophet.',
+        };
+        // ─────────────────────────────────────────────────────────────────────────
       }
 
       const { rows: saved } = await pool.query(
@@ -3610,11 +3735,16 @@ ${payload.chartImageBase64 ? `
         ]
       );
 
-      res.json({
+      const resposta: any = {
         ...predicaoResult,
         previsao_id: saved[0].id,
         gerada_em: saved[0].gerada_em,
-      });
+      };
+      if (usouFallback) {
+        resposta.aviso = predicaoResult.aviso;
+        resposta.modelo_usado = 'linear_fallback';
+      }
+      res.json(resposta);
     } catch (err) {
       console.error('[POST /api/faturamento/prever]', err);
       res.status(500).json({ error: 'Erro ao gerar previsão' });
