@@ -19,6 +19,7 @@ import {
   ShieldAlert,
   ListOrdered,
   TrendingUp,
+  BookUser,
 } from "lucide-react";
 
 interface NavItem {
@@ -51,6 +52,8 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/colaborador/previsao-faturamento", label: "Previsão Faturamento", icon: TrendingUp },
   // Gerador de Contratos: todos os colaboradores
   { href: "/colaborador/contratos",   label: "Contratos PDF",    icon: FileText },
+  // Cadastro de Contadores: somente Administrador e Diretor
+  { href: "/colaborador/contadores",  label: "Contadores",       icon: BookUser, allowedCargos: ['administrador', 'diretor'] },
   // Integrações n8n: somente Administrador
   {
     href: "/colaborador/integracoes",

@@ -727,6 +727,25 @@ async function startServer() {
       CREATE INDEX IF NOT EXISTS idx_contratos_empresa ON contratos_gerados(empresa_id);
       CREATE INDEX IF NOT EXISTS idx_contratos_status  ON contratos_gerados(status);
       CREATE INDEX IF NOT EXISTS idx_contratos_created ON contratos_gerados(created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS contadores (
+        id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        nome                 TEXT NOT NULL,
+        cpf                  TEXT NOT NULL,
+        crc                  TEXT NOT NULL,
+        email                TEXT,
+        telefone             TEXT,
+        nome_escritorio      TEXT,
+        cnpj_escritorio      TEXT,
+        endereco_escritorio  TEXT,
+        cidade_escritorio    TEXT,
+        uf_escritorio        TEXT,
+        ativo                BOOLEAN DEFAULT TRUE,
+        created_at           TIMESTAMPTZ DEFAULT NOW(),
+        updated_at           TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(cpf)
+      );
+      CREATE INDEX IF NOT EXISTS idx_contadores_ativo ON contadores(ativo);
     `);
     console.log('[startup] Tabelas de faturamento/contratos verificadas/criadas com sucesso.');
   } catch (err: any) {
@@ -3855,8 +3874,242 @@ ${payload.chartImageBase64 ? `
     }
   });
 
-  // ─── PARCEIROS COMERCIAIS ────────────────────────────────────────────────
+   // ─── CONTADORES ──────────────────────────────────────────────────────────
+  app.get('/api/contadores', auth, async (_req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        'SELECT * FROM contadores ORDER BY nome'
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error('[GET /api/contadores]', err);
+      res.status(500).json({ error: 'Erro ao listar contadores' });
+    }
+  });
 
+  app.post('/api/contadores', auth, async (req: Request, res: Response) => {
+    try {
+      const { nome, cpf, crc, email, telefone, nome_escritorio, cnpj_escritorio, endereco_escritorio, cidade_escritorio, uf_escritorio, ativo } = req.body;
+      if (!nome || !cpf || !crc) {
+        res.status(400).json({ error: 'Nome, CPF e CRC são obrigatórios' });
+        return;
+      }
+      const { rows } = await pool.query(
+        `INSERT INTO contadores (nome, cpf, crc, email, telefone, nome_escritorio, cnpj_escritorio, endereco_escritorio, cidade_escritorio, uf_escritorio, ativo)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         ON CONFLICT (cpf) DO UPDATE SET nome = EXCLUDED.nome, crc = EXCLUDED.crc, email = EXCLUDED.email, updated_at = NOW()
+         RETURNING *`,
+        [nome.trim(), cpf.replace(/\D/g, ''), crc.trim(), email || null, telefone || null, nome_escritorio || null, cnpj_escritorio ? cnpj_escritorio.replace(/\D/g, '') : null, endereco_escritorio || null, cidade_escritorio || null, uf_escritorio || null, ativo !== false]
+      );
+      res.status(201).json(rows[0]);
+    } catch (err) {
+      console.error('[POST /api/contadores]', err);
+      res.status(500).json({ error: 'Erro ao criar contador' });
+    }
+  });
+
+  app.put('/api/contadores/:id', auth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { nome, cpf, crc, email, telefone, nome_escritorio, cnpj_escritorio, endereco_escritorio, cidade_escritorio, uf_escritorio, ativo } = req.body;
+      if (!nome || !cpf || !crc) {
+        res.status(400).json({ error: 'Nome, CPF e CRC são obrigatórios' });
+        return;
+      }
+      const { rows } = await pool.query(
+        `UPDATE contadores SET nome=$1, cpf=$2, crc=$3, email=$4, telefone=$5, nome_escritorio=$6, cnpj_escritorio=$7, endereco_escritorio=$8, cidade_escritorio=$9, uf_escritorio=$10, ativo=$11, updated_at=NOW()
+         WHERE id=$12 RETURNING *`,
+        [nome.trim(), cpf.replace(/\D/g, ''), crc.trim(), email || null, telefone || null, nome_escritorio || null, cnpj_escritorio ? cnpj_escritorio.replace(/\D/g, '') : null, endereco_escritorio || null, cidade_escritorio || null, uf_escritorio || null, ativo !== false, id]
+      );
+      if (rows.length === 0) { res.status(404).json({ error: 'Contador não encontrado' }); return; }
+      res.json(rows[0]);
+    } catch (err) {
+      console.error('[PUT /api/contadores/:id]', err);
+      res.status(500).json({ error: 'Erro ao atualizar contador' });
+    }
+  });
+
+  app.delete('/api/contadores/:id', auth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      await pool.query('DELETE FROM contadores WHERE id=$1', [id]);
+      res.status(204).end();
+    } catch (err) {
+      console.error('[DELETE /api/contadores/:id]', err);
+      res.status(500).json({ error: 'Erro ao excluir contador' });
+    }
+  });
+
+  // ─── DECLARAÇÃO ANUAL DE FATURAMENTO ────────────────────────────────────
+  app.post('/api/faturamento/declaracao-anual/:empresaId/exportar-pdf', auth, async (req: Request, res: Response) => {
+    try {
+      const { empresaId } = req.params;
+      const { contador_id } = req.body;
+
+      // Buscar dados da empresa
+      const { rows: empRows } = await pool.query('SELECT * FROM empresas WHERE id=$1', [empresaId]);
+      if (empRows.length === 0) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+      const empresa = empRows[0];
+
+      // Buscar histórico de faturamento
+      const { rows: histRows } = await pool.query(
+        `SELECT competencia, valor, origem FROM faturamento_historico
+         WHERE empresa_id=$1 ORDER BY competencia ASC`,
+        [empresaId]
+      );
+      if (histRows.length === 0) {
+        res.status(422).json({ error: 'Nenhum histórico de faturamento encontrado para esta empresa.' });
+        return;
+      }
+
+      // Buscar contador (opcional)
+      let contador: any = null;
+      if (contador_id) {
+        const { rows: cRows } = await pool.query('SELECT * FROM contadores WHERE id=$1', [contador_id]);
+        if (cRows.length > 0) contador = cRows[0];
+      }
+
+      // Calcular totais por ano
+      const porAno: Record<string, { total: number; meses: { competencia: string; valor: number }[] }> = {};
+      for (const r of histRows) {
+        const ano = new Date(r.competencia).getFullYear().toString();
+        if (!porAno[ano]) porAno[ano] = { total: 0, meses: [] };
+        porAno[ano].total += parseFloat(r.valor);
+        porAno[ano].meses.push({ competencia: r.competencia, valor: parseFloat(r.valor) });
+      }
+
+      const formatBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      const formatMes = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+      const tabelaAnos = Object.entries(porAno).map(([ano, dados]) => `
+        <div class="ano-bloco">
+          <h3 class="ano-titulo">Exercício ${ano}</h3>
+          <table class="tabela-faturamento">
+            <thead><tr><th>Competência</th><th>Faturamento</th></tr></thead>
+            <tbody>
+              ${dados.meses.map(m => `<tr><td>${formatMes(m.competencia)}</td><td class="valor">${formatBRL(m.valor)}</td></tr>`).join('')}
+              <tr class="total-row"><td><strong>Total ${ano}</strong></td><td class="valor"><strong>${formatBRL(dados.total)}</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+      `).join('');
+
+      const totalGeral = histRows.reduce((s: number, r: any) => s + parseFloat(r.valor), 0);
+      const dataHoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+      const bodyHtml = `
+        <div class="declaracao-header">
+          <h2>DECLARAÇÃO DE FATURAMENTO</h2>
+          <p class="subtitulo">Documento emitido para fins de comprovação de capacidade financeira</p>
+        </div>
+
+        <div class="empresa-info">
+          <table class="info-table">
+            <tr><td class="label">Razão Social:</td><td>${empresa.razao_social || '—'}</td></tr>
+            <tr><td class="label">CNPJ:</td><td>${empresa.cnpj || '—'}</td></tr>
+            ${empresa.endereco ? `<tr><td class="label">Endereço:</td><td>${empresa.endereco}</td></tr>` : ''}
+          </table>
+        </div>
+
+        <div class="historico-section">
+          <h3>Histórico de Faturamento</h3>
+          ${tabelaAnos}
+          <div class="total-geral">
+            <strong>Total Geral do Período: ${formatBRL(totalGeral)}</strong>
+          </div>
+        </div>
+
+        <div class="declaracao-texto">
+          <p>Declaro, para os devidos fins, que as informações de faturamento acima são verdadeiras e correspondem aos registros contábeis da empresa ${empresa.razao_social || ''}, inscrita no CNPJ sob o nº ${empresa.cnpj || ''}.</p>
+          <p>Brasília, ${dataHoje}.</p>
+        </div>
+
+        ${contador ? `
+        <div class="assinatura-section">
+          <div class="linha-assinatura"></div>
+          <p><strong>${contador.nome}</strong></p>
+          <p>CRC: ${contador.crc}</p>
+          ${contador.nome_escritorio ? `<p>${contador.nome_escritorio}</p>` : ''}
+        </div>
+        ` : ''}
+
+        <style>
+          .declaracao-header { text-align: center; margin-bottom: 24px; }
+          .declaracao-header h2 { font-size: 18px; font-weight: 700; color: #1B3A6B; text-transform: uppercase; letter-spacing: 1px; }
+          .subtitulo { font-size: 12px; color: #666; margin-top: 4px; }
+          .empresa-info { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; margin-bottom: 24px; }
+          .info-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+          .info-table td { padding: 4px 8px; }
+          .info-table .label { font-weight: 600; color: #1B3A6B; width: 140px; }
+          .historico-section h3 { font-size: 14px; font-weight: 700; color: #1B3A6B; margin-bottom: 12px; }
+          .ano-bloco { margin-bottom: 20px; }
+          .ano-titulo { font-size: 13px; font-weight: 700; color: #333; margin-bottom: 8px; border-bottom: 2px solid #C9A227; padding-bottom: 4px; }
+          .tabela-faturamento { width: 100%; border-collapse: collapse; font-size: 12px; }
+          .tabela-faturamento th { background: #1B3A6B; color: white; padding: 8px 12px; text-align: left; }
+          .tabela-faturamento td { padding: 6px 12px; border-bottom: 1px solid #e9ecef; }
+          .tabela-faturamento .valor { text-align: right; font-family: monospace; }
+          .total-row td { background: #f0f4ff; font-weight: 700; }
+          .total-geral { text-align: right; font-size: 14px; margin-top: 12px; padding: 10px 12px; background: #1B3A6B; color: white; border-radius: 4px; }
+          .declaracao-texto { margin-top: 24px; font-size: 12px; color: #333; line-height: 1.6; }
+          .declaracao-texto p { margin-bottom: 8px; }
+          .assinatura-section { margin-top: 40px; text-align: center; }
+          .linha-assinatura { border-top: 1px solid #333; width: 280px; margin: 0 auto 8px; }
+          .assinatura-section p { font-size: 12px; margin: 2px 0; }
+        </style>
+      `;
+
+      const htmlFinal = gerarHtmlTimbrado(bodyHtml, 'Declaração de Faturamento');
+      const fileName = `declaracao-${crypto.randomUUID()}.pdf`;
+      const uploadsDir = path.resolve('uploads', 'declaracoes');
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+      const filePath = path.join(uploadsDir, fileName);
+
+      let browser2;
+      try {
+        const puppeteer2 = await import('puppeteer-core');
+        let executablePath2: string;
+        if (process.env.CHROMIUM_PATH) {
+          executablePath2 = process.env.CHROMIUM_PATH;
+        } else {
+          try {
+            const chromium2 = await import('@sparticuz/chromium');
+            executablePath2 = await chromium2.default.executablePath();
+          } catch {
+            executablePath2 = '/usr/bin/chromium-browser';
+          }
+        }
+        browser2 = await puppeteer2.default.launch({
+          executablePath: executablePath2,
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process'],
+          headless: true,
+        });
+        const page2 = await browser2.newPage();
+        await page2.setContent(htmlFinal, { waitUntil: 'networkidle0' });
+        await page2.pdf({
+          path: filePath,
+          format: 'A4',
+          printBackground: true,
+          displayHeaderFooter: true,
+          headerTemplate: getPuppeteerHeaderTemplate(),
+          footerTemplate: getPuppeteerFooterTemplate(),
+          margin: { top: '34mm', bottom: '26mm', left: '20mm', right: '20mm' },
+        });
+      } finally {
+        if (browser2) await (browser2 as any).close();
+      }
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="declaracao-faturamento-${empresa.razao_social?.replace(/[^a-zA-Z0-9]/g, '-') || 'empresa'}.pdf"`);
+      const stream2 = fs.createReadStream(filePath);
+      stream2.pipe(res);
+      stream2.on('end', () => { fs.unlink(filePath, () => {}); });
+    } catch (err) {
+      console.error('[POST /api/faturamento/declaracao-anual]', err);
+      res.status(500).json({ error: 'Erro ao gerar declaração anual' });
+    }
+  });
+
+  // ─── PARCEIROS COMERCIAIS ────────────────────────────────────────────────
   app.get('/api/parceiros', auth, async (_req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(

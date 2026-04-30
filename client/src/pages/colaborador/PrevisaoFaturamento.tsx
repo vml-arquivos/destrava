@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { TrendingUp, Save, RefreshCw, AlertCircle, Loader2, FileDown } from 'lucide-react';
+import { TrendingUp, Save, RefreshCw, AlertCircle, Loader2, FileDown, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch } from '../../lib/api';
 import Layout from './Layout';
@@ -12,6 +12,13 @@ interface Empresa {
   id: string;
   razao_social: string;
   cnpj?: string;
+}
+
+interface Contador {
+  id: string;
+  nome: string;
+  crc: string;
+  ativo: boolean;
 }
 
 interface RegistroHistorico {
@@ -39,17 +46,12 @@ interface ResultadoPrevisao {
   aviso?: string;
 }
 
-// Gerar 12 meses anteriores como template vazio
 function gerarMesesVazios(qtd = 12): RegistroHistorico[] {
   const meses: RegistroHistorico[] = [];
   const hoje = new Date();
   for (let i = qtd - 1; i >= 0; i--) {
     const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
-    meses.push({
-      competencia: d.toISOString().slice(0, 10),
-      valor: '',
-      origem: 'manual',
-    });
+    meses.push({ competencia: d.toISOString().slice(0, 10), valor: '', origem: 'manual' });
   }
   return meses;
 }
@@ -57,14 +59,18 @@ function gerarMesesVazios(qtd = 12): RegistroHistorico[] {
 export default function PrevisaoFaturamento() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [empresaId, setEmpresaId] = useState('');
+  const [contadores, setContadores] = useState<Contador[]>([]);
+  const [contadorId, setContadorId] = useState('');
   const [registros, setRegistros] = useState<RegistroHistorico[]>(gerarMesesVazios(12));
   const [horizonte, setHorizonte] = useState<12 | 24 | 36>(12);
   const [previsao, setPrevisao] = useState<ResultadoPrevisao | null>(null);
   const [loadingEmpresas, setLoadingEmpresas] = useState(true);
+  const [loadingContadores, setLoadingContadores] = useState(true);
   const [loadingHistorico, setLoadingHistorico] = useState(false);
   const [loadingSalvar, setLoadingSalvar] = useState(false);
   const [loadingPrevisao, setLoadingPrevisao] = useState(false);
   const [loadingPdf, setLoadingPdf] = useState(false);
+  const [loadingDeclaracao, setLoadingDeclaracao] = useState(false);
   const graficoRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -72,6 +78,11 @@ export default function PrevisaoFaturamento() {
       .then((data: any) => setEmpresas(Array.isArray(data) ? data : data.empresas || []))
       .catch(() => toast.error('Erro ao carregar empresas'))
       .finally(() => setLoadingEmpresas(false));
+
+    apiFetch('/api/contadores')
+      .then((data: any) => setContadores(Array.isArray(data) ? data.filter((c: Contador) => c.ativo) : []))
+      .catch(() => { /* contadores são opcionais */ })
+      .finally(() => setLoadingContadores(false));
   }, []);
 
   const carregarHistorico = useCallback(async (id: string) => {
@@ -88,8 +99,6 @@ export default function PrevisaoFaturamento() {
       } else {
         setRegistros(gerarMesesVazios(12));
       }
-
-      // Tentar carregar última previsão
       try {
         const prev: ResultadoPrevisao = await apiFetch(`/api/faturamento/previsao/${id}/ultima`);
         setPrevisao(prev);
@@ -150,18 +159,13 @@ export default function PrevisaoFaturamento() {
 
   const handleGerarPrevisao = async () => {
     if (!empresaId) { toast.error('Selecione uma empresa'); return; }
-
-    const registrosValidos = registros.filter(
-      r => r.valor !== '' && r.valor !== null && !isNaN(Number(r.valor))
-    );
+    const registrosValidos = registros.filter(r => r.valor !== '' && r.valor !== null && !isNaN(Number(r.valor)));
     if (registrosValidos.length < 12) {
       toast.error(`Preencha pelo menos 12 meses. Atualmente: ${registrosValidos.length}`);
       return;
     }
-
     setLoadingPrevisao(true);
     try {
-      // ── PASSO 1: Auto-save do histórico antes de chamar a IA ──
       toast.loading('Salvando histórico...', { id: 'previsao-progress' });
       await apiFetch('/api/faturamento/historico', {
         method: 'POST',
@@ -174,14 +178,11 @@ export default function PrevisaoFaturamento() {
           })),
         }),
       });
-
-      // ── PASSO 2: Chamar a IA preditiva ──
       toast.loading('Consultando IA preditiva...', { id: 'previsao-progress' });
       const result: ResultadoPrevisao = await apiFetch('/api/faturamento/prever', {
         method: 'POST',
         body: JSON.stringify({ empresa_id: empresaId, horizonte_meses: horizonte }),
       });
-
       toast.dismiss('previsao-progress');
       setPrevisao(result);
       toast.success(`Previsão gerada com modelo ${result.modelo_usado.toUpperCase()}!`);
@@ -197,19 +198,13 @@ export default function PrevisaoFaturamento() {
     if (!previsao?.previsao_id) return;
     setLoadingPdf(true);
     try {
-      // Capturar imagem do gráfico se disponível
       let chartImageBase64: string | undefined;
       if (graficoRef.current) {
         try {
           const canvas = graficoRef.current.querySelector('canvas');
-          if (canvas) {
-            chartImageBase64 = canvas.toDataURL('image/png');
-          }
-        } catch {
-          // Sem gráfico, continua sem imagem
-        }
+          if (canvas) chartImageBase64 = canvas.toDataURL('image/png');
+        } catch { /* sem gráfico */ }
       }
-
       const token = localStorage.getItem('destrava_token') || '';
       const resp = await fetch(`/api/faturamento/previsao/${previsao.previsao_id}/exportar-pdf`, {
         method: 'POST',
@@ -217,14 +212,12 @@ export default function PrevisaoFaturamento() {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ chartImageBase64 }),
+        body: JSON.stringify({ chartImageBase64, contador_id: contadorId || undefined }),
       });
-
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: 'Erro ao gerar PDF' }));
         throw new Error(err.error || 'Erro ao gerar PDF');
       }
-
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -243,37 +236,106 @@ export default function PrevisaoFaturamento() {
     }
   };
 
+  const handleDeclaracaoAnual = async () => {
+    if (!empresaId) { toast.error('Selecione uma empresa'); return; }
+    setLoadingDeclaracao(true);
+    try {
+      const token = localStorage.getItem('destrava_token') || '';
+      const resp = await fetch(`/api/faturamento/declaracao-anual/${empresaId}/exportar-pdf`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ contador_id: contadorId || undefined }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: 'Erro ao gerar declaração' }));
+        throw new Error(err.error || 'Erro ao gerar declaração');
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const empresa = empresas.find(e => e.id === empresaId);
+      a.download = `declaracao-faturamento-anual-${empresa?.razao_social?.replace(/[^a-zA-Z0-9]/g, '-') || 'empresa'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Declaração Anual gerada com sucesso!');
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao gerar declaração anual');
+    } finally {
+      setLoadingDeclaracao(false);
+    }
+  };
+
   return (
-    <Layout>
+    <Layout title="Faturamento">
       <div className="p-6 max-w-6xl mx-auto space-y-6">
         {/* Cabeçalho */}
         <div className="flex items-center gap-3">
-          <TrendingUp className="w-6 h-6 text-blue-600" />
+          <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+            <TrendingUp className="w-5 h-5 text-blue-700" />
+          </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Previsão de Faturamento</h1>
-            <p className="text-sm text-gray-500">Análise preditiva com IA (Prophet / ARIMA)</p>
+            <h1 className="text-xl font-bold text-gray-900">Faturamento</h1>
+            <p className="text-sm text-gray-500">Histórico, previsão IA e declaração anual</p>
           </div>
         </div>
 
-        {/* Seleção de empresa */}
+        {/* Seleção de empresa e contador */}
         <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-          <h2 className="font-semibold text-gray-800">Empresa</h2>
-          <div className="flex gap-3 flex-wrap">
-            <select
-              value={empresaId}
-              onChange={e => handleEmpresaChange(e.target.value)}
-              className="flex-1 min-w-[250px] border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={loadingEmpresas}
-            >
-              <option value="">
-                {loadingEmpresas ? 'Carregando empresas...' : 'Selecione uma empresa...'}
-              </option>
-              {empresas.map(e => (
-                <option key={e.id} value={e.id}>
-                  {e.razao_social}{e.cnpj ? ` — ${e.cnpj}` : ''}
+          <h2 className="font-semibold text-gray-800">Configuração</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Empresa *</label>
+              <select
+                value={empresaId}
+                onChange={e => handleEmpresaChange(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={loadingEmpresas}
+              >
+                <option value="">
+                  {loadingEmpresas ? 'Carregando empresas...' : 'Selecione uma empresa...'}
                 </option>
-              ))}
-            </select>
+                {empresas.map(e => (
+                  <option key={e.id} value={e.id}>
+                    {e.razao_social}{e.cnpj ? ` — ${e.cnpj}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Contador responsável{' '}
+                <span className="text-gray-400 font-normal">(opcional — para PDFs)</span>
+              </label>
+              <select
+                value={contadorId}
+                onChange={e => setContadorId(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={loadingContadores}
+              >
+                <option value="">
+                  {loadingContadores ? 'Carregando...' : 'Sem contador (opcional)'}
+                </option>
+                {contadores.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.nome} — CRC {c.crc}
+                  </option>
+                ))}
+              </select>
+              {contadores.length === 0 && !loadingContadores && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Nenhum contador cadastrado.{' '}
+                  <a href="/colaborador/contadores" className="text-blue-500 hover:underline">
+                    Cadastrar agora
+                  </a>
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -287,7 +349,7 @@ export default function PrevisaoFaturamento() {
                 <button
                   onClick={handleSalvarHistorico}
                   disabled={loadingSalvar}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
                 >
                   {loadingSalvar ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Salvar Histórico
@@ -303,6 +365,7 @@ export default function PrevisaoFaturamento() {
               <TabelaHistorico registros={registros} onChange={handleRegistroChange} />
             )}
 
+            {/* Ações */}
             <div className="flex items-center gap-3 pt-2 border-t border-gray-100 flex-wrap">
               <div className="flex items-center gap-2">
                 <label className="text-sm text-gray-600 font-medium">Horizonte:</label>
@@ -319,18 +382,23 @@ export default function PrevisaoFaturamento() {
               <button
                 onClick={handleGerarPrevisao}
                 disabled={loadingPrevisao}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
               >
                 {loadingPrevisao ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Gerando previsão...
-                  </>
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Gerando previsão...</>
                 ) : (
-                  <>
-                    <RefreshCw className="w-4 h-4" />
-                    Gerar Previsão IA
-                  </>
+                  <><RefreshCw className="w-4 h-4" /> Gerar Previsão IA</>
+                )}
+              </button>
+              <button
+                onClick={handleDeclaracaoAnual}
+                disabled={loadingDeclaracao}
+                className="flex items-center gap-2 px-4 py-2 bg-[#1B3A6B] text-white text-sm rounded-lg hover:bg-[#142d55] disabled:opacity-50 transition-colors"
+              >
+                {loadingDeclaracao ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Gerando declaração...</>
+                ) : (
+                  <><FileText className="w-4 h-4" /> Declaração Anual</>
                 )}
               </button>
               {loadingPrevisao && (
@@ -357,7 +425,7 @@ export default function PrevisaoFaturamento() {
                 <h2 className="font-semibold text-gray-800">
                   Gráfico de Previsão — {previsao.horizonte_meses} meses
                 </h2>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <span className="text-xs text-gray-400">
                     Gerado em {new Date(previsao.gerada_em).toLocaleString('pt-BR')}
                   </span>
@@ -367,15 +435,9 @@ export default function PrevisaoFaturamento() {
                     className="flex items-center gap-2 px-4 py-2 bg-[#1B3A6B] text-white text-sm rounded-lg hover:bg-[#142d55] disabled:opacity-50 transition-colors"
                   >
                     {loadingPdf ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Gerando PDF...
-                      </>
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Gerando PDF...</>
                     ) : (
-                      <>
-                        <FileDown className="w-4 h-4" />
-                        Exportar PDF Timbrado
-                      </>
+                      <><FileDown className="w-4 h-4" /> Exportar PDF Timbrado</>
                     )}
                   </button>
                 </div>
