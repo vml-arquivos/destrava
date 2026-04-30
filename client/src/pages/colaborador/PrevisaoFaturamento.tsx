@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { TrendingUp, Save, RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { TrendingUp, Save, RefreshCw, AlertCircle, Loader2, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch } from '../../lib/api';
 import Layout from './Layout';
@@ -57,12 +57,14 @@ export default function PrevisaoFaturamento() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [empresaId, setEmpresaId] = useState('');
   const [registros, setRegistros] = useState<RegistroHistorico[]>(gerarMesesVazios(12));
-  const [horizonte, setHorizonte] = useState<12 | 24>(12);
+  const [horizonte, setHorizonte] = useState<12 | 24 | 36>(12);
   const [previsao, setPrevisao] = useState<ResultadoPrevisao | null>(null);
   const [loadingEmpresas, setLoadingEmpresas] = useState(true);
   const [loadingHistorico, setLoadingHistorico] = useState(false);
   const [loadingSalvar, setLoadingSalvar] = useState(false);
   const [loadingPrevisao, setLoadingPrevisao] = useState(false);
+  const [loadingPdf, setLoadingPdf] = useState(false);
+  const graficoRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     apiFetch('/api/empresas?limit=500')
@@ -190,6 +192,56 @@ export default function PrevisaoFaturamento() {
     }
   };
 
+  const handleExportarPdf = async () => {
+    if (!previsao?.previsao_id) return;
+    setLoadingPdf(true);
+    try {
+      // Capturar imagem do gráfico se disponível
+      let chartImageBase64: string | undefined;
+      if (graficoRef.current) {
+        try {
+          const canvas = graficoRef.current.querySelector('canvas');
+          if (canvas) {
+            chartImageBase64 = canvas.toDataURL('image/png');
+          }
+        } catch {
+          // Sem gráfico, continua sem imagem
+        }
+      }
+
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+      const resp = await fetch(`/api/faturamento/previsao/${previsao.previsao_id}/exportar-pdf`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ chartImageBase64 }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: 'Erro ao gerar PDF' }));
+        throw new Error(err.error || 'Erro ao gerar PDF');
+      }
+
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const empresa = empresas.find(e => e.id === empresaId);
+      a.download = `previsao-faturamento-${empresa?.razao_social?.replace(/[^a-zA-Z0-9]/g, '-') || 'empresa'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('PDF gerado com papel timbrado!');
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao exportar PDF');
+    } finally {
+      setLoadingPdf(false);
+    }
+  };
+
   return (
     <Layout>
       <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -255,11 +307,12 @@ export default function PrevisaoFaturamento() {
                 <label className="text-sm text-gray-600 font-medium">Horizonte:</label>
                 <select
                   value={horizonte}
-                  onChange={e => setHorizonte(Number(e.target.value) as 12 | 24)}
+                  onChange={e => setHorizonte(Number(e.target.value) as 12 | 24 | 36)}
                   className="border border-gray-300 rounded px-2 py-1 text-sm"
                 >
                   <option value={12}>12 meses</option>
                   <option value={24}>24 meses</option>
+                  <option value={36}>36 meses</option>
                 </select>
               </div>
               <button
@@ -298,19 +351,40 @@ export default function PrevisaoFaturamento() {
               modelo={previsao.modelo_usado}
             />
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                 <h2 className="font-semibold text-gray-800">
                   Gráfico de Previsão — {previsao.horizonte_meses} meses
                 </h2>
-                <span className="text-xs text-gray-400">
-                  Gerado em {new Date(previsao.gerada_em).toLocaleString('pt-BR')}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-400">
+                    Gerado em {new Date(previsao.gerada_em).toLocaleString('pt-BR')}
+                  </span>
+                  <button
+                    onClick={handleExportarPdf}
+                    disabled={loadingPdf}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#1B3A6B] text-white text-sm rounded-lg hover:bg-[#142d55] disabled:opacity-50 transition-colors"
+                  >
+                    {loadingPdf ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Gerando PDF...
+                      </>
+                    ) : (
+                      <>
+                        <FileDown className="w-4 h-4" />
+                        Exportar PDF Timbrado
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-              <GraficoPrevisao
-                pontos={previsao.pontos}
-                capacidadeMin={previsao.capacidade_pgto_min}
-                capacidadeMax={previsao.capacidade_pgto_max}
-              />
+              <div ref={graficoRef}>
+                <GraficoPrevisao
+                  pontos={previsao.pontos}
+                  capacidadeMin={previsao.capacidade_pgto_min}
+                  capacidadeMax={previsao.capacidade_pgto_max}
+                />
+              </div>
             </div>
           </div>
         )}

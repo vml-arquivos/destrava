@@ -10,6 +10,7 @@ import bcrypt from "bcryptjs";
 import { auth } from "./middleware/auth.ts";
 import { authorize } from "./middleware/authorize.ts";
 import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
+import { gerarHtmlTimbrado } from "./letterhead.ts";
 
 const { Pool } = pkg;
 
@@ -3070,75 +3071,272 @@ Responda APENAS com um JSON válido no seguinte formato:
 
   async function gerarHtmlContrato(payload: any): Promise<string> {
     const { contratada, contratante, parceiro, contrato } = payload;
-    return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <style>
-    body { font-family: Arial, sans-serif; font-size: 12px; line-height: 1.6; color: #000; margin: 40px; }
-    h1 { font-size: 16px; text-align: center; text-transform: uppercase; margin-bottom: 5px; }
-    h2 { font-size: 13px; text-transform: uppercase; margin-top: 20px; margin-bottom: 5px; border-bottom: 1px solid #000; padding-bottom: 3px; }
-    p { margin: 6px 0; text-align: justify; }
-    .cabecalho { text-align: center; margin-bottom: 20px; }
-    .assinaturas { margin-top: 40px; }
-    .linha-assinatura { margin-top: 30px; border-top: 1px solid #000; padding-top: 5px; width: 80%; }
-    table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-    td, th { border: 1px solid #ccc; padding: 6px 10px; font-size: 11px; }
-    th { background: #f0f0f0; font-weight: bold; }
-  </style>
-</head>
-<body>
 
-<div class="cabecalho">
-  <h1>Contrato de Prestação de Serviços de Assessoria de Crédito</h1>
-  <p><strong>${contratada.razao_social}</strong> — CNPJ: ${contratada.cnpj}</p>
+    const body = `
+<h1 class="doc-title">CONTRATO DE ANÁLISE DOCUMENTAL PARA ACESSO A LINHA DE CRÉDITO</h1>
+
+<h2 class="section-title">I – IDENTIFICAÇÃO DAS PARTES</h2>
+
+<p class="clause"><strong>CONTRATADA:</strong> denominada ${contratada.razao_social}, com sede em ${contratada.endereco_sede}, inscrita no CNPJ nº ${contratada.cnpj}, devidamente representada por: ${contratada.representante}, identificado como ${contratada.cargo_representante}, CPF nº ${contratada.cpf_representante}.</p>
+
+<p class="clause"><strong>CONTRATANTE:</strong> ${contratante.razao_social}, inscrita no CNPJ nº ${contratante.cnpj}, com endereço em ${contratante.endereco}, representada por seu representante legal ${contratante.representante}, CPF nº ${contratante.cpf_representante}.</p>
+
+${parceiro ? `<p class="clause"><strong>PARCEIRO COMERCIAL:</strong> ${parceiro.nome}, pessoa física, inscrita no CPF nº ${parceiro.cpf}, indicada pela CONTRATANTE como parceira comercial para fins de acompanhamento e suporte nas atividades relacionadas ao presente contrato.</p>` : ''}
+
+<h2 class="section-title">II - DO OBJETO DO CONTRATO E VALOR DE REFERÊNCIA</h2>
+
+<p class="clause"><strong>Cláusula 1</strong> - O presente contrato tem como objeto a prestação de serviços de análise e organização documental pela CONTRATADA, com o objetivo de orientar a CONTRATANTE quanto à adequação de sua documentação jurídica, contábil e financeira para fins de acesso e aquisição de linhas de crédito no sistema bancário nacional, governamental ou fintech.</p>
+
+<p class="clause"><strong>1.1</strong> - A CONTRATANTE estabelece que o montante de <strong>${contrato.valor_referencia_formatado}</strong> será utilizado como valor de referência para a projeção de crédito e planejamento financeiro, servindo como pilar para a análise documental a ser realizada pela CONTRATADA.</p>
+
+<p class="clause"><strong>1.2</strong> - O relatório de análise documental indicará as condições atuais e ideais para que a CONTRATANTE possa acessar o valor de referência projetado. Contudo, a CONTRATADA não garante a aprovação de crédito no valor de referência nem se responsabiliza por fatores externos, restrições financeiras ou fiscais, erros cadastrais, comprometimento financeiro, incapacidade de pagamento ou políticas de crédito das instituições financeiras.</p>
+
+<h2 class="section-title">III – DAS RESPONSABILIDADES DAS PARTES</h2>
+
+<p class="clause"><strong>Cláusula 2</strong> - Toda e qualquer informação, documento, dado ou acesso fornecido à CONTRATADA será de inteira responsabilidade da CONTRATANTE, inclusive quanto à sua veracidade, legalidade e atualidade.</p>
+
+<h2 class="section-title">IV – DA VIGÊNCIA E RENOVAÇÃO</h2>
+
+<p class="clause"><strong>Cláusula 3</strong> - Este contrato terá vigência de <strong>${contrato.vigencia_meses} (doze) meses</strong> a contar da data de sua assinatura, sendo automaticamente renovado por igual período, caso não haja manifestação contrária de qualquer das partes, comunicada com no mínimo 30 (trinta) dias de antecedência do vencimento.</p>
+
+<h2 class="section-title">V - DA REMUNERAÇÃO POR COMISSÃO E HONORÁRIO MÍNIMO</h2>
+
+<p class="clause"><strong>Cláusula 4</strong> - A CONTRATADA fará jus a uma comissão de <strong>${contrato.taxa_comissao}% (${contrato.taxa_comissao} por cento)</strong> sobre qualquer valor efetivamente liberado em favor da CONTRATANTE, no prazo de até 12 meses da entrega do relatório inicial.</p>
+
+<p class="clause"><strong>4.3</strong> - Fica estabelecido que, caso a CONTRATANTE não contrate operações de crédito em valor igual ou superior ao valor de referência no período de vigência do contrato, será devido à CONTRATADA, a título de honorário mínimo garantido, o valor de <strong>${contrato.honorario_minimo_mes}% (um por cento) por mês</strong>, totalizando <strong>${contrato.honorario_minimo_total}% (doze por cento)</strong> ao final do contrato de 12 (doze) meses, independentemente da sua renovação.</p>
+
+<h2 class="section-title">VI – CONFIDENCIALIDADE</h2>
+
+<p class="clause"><strong>Cláusula 5</strong> - A CONTRATADA compromete-se a manter em absoluto sigilo todas as informações e documentos recebidos da CONTRATANTE, não os utilizando para qualquer outro fim que não seja a execução do presente contrato, exceto quando exigido por lei ou ordem judicial.</p>
+
+<h2 class="section-title">VII – RESCISÃO</h2>
+
+<p class="clause"><strong>Cláusula 6</strong> - A CONTRATANTE poderá rescindir este contrato até a entrega pela CONTRATADA do relatório de análise dos documentos apresentados, mediante pagamento de 1% (um por cento) do valor informado na Cláusula 1.1, pelos serviços de análise documental já prestados.</p>
+
+<h2 class="section-title">VIII – CLÁUSULA PENAL POR INADIMPLÊNCIA</h2>
+
+<p class="clause"><strong>Cláusula 7</strong> - Fica estabelecida uma Cláusula Penal em favor da CONTRATADA, aplicável na hipótese de inadimplência da CONTRATANTE em relação aos contratos de crédito obtidos com o suporte dos serviços objeto deste instrumento.</p>
+
+<h2 class="section-title">IX – DO FORO E CONDIÇÕES GERAIS</h2>
+
+<p class="clause">Para dirimir quaisquer controvérsias oriundas do CONTRATO, as partes elegem o foro da Circunscrição Judiciária de <strong>${contrato.foro_eleito}</strong>.</p>
+
+<p class="clause">Por estarem assim justos e contratados, firmam o presente instrumento, em duas vias de igual teor.</p>
+
+<p class="city-date"><strong>${contrato.data_assinatura_formatada}.</strong></p>
+
+<div class="signature-block">
+  <p>CONTRATANTE:</p>
+  <div class="signature-line"></div>
+  <p class="signature-label">${contratante.razao_social}</p>
+
+  ${parceiro ? `
+  <p style="margin-top:30px;">PARCEIRO COMERCIAL:</p>
+  <div class="signature-line"></div>
+  <p class="signature-label">${parceiro.nome} - CPF nº ${parceiro.cpf}</p>
+  ` : ''}
+
+  <p style="margin-top:30px;">CONTRATADA:</p>
+  <div class="signature-line"></div>
+  <p class="signature-label">DESTRAVA CRÉDITO LTDA - CNPJ nº ${contratada.cnpj}</p>
+
+  <div class="page-break"></div>
+
+  <p style="margin-top:30px;">TESTEMUNHA 1:</p>
+  <div class="signature-line"></div>
+
+  <p style="margin-top:50px;">TESTEMUNHA 2:</p>
+  <div class="signature-line"></div>
 </div>
+`;
 
-<h2>Qualificação das Partes</h2>
-
-<p><strong>CONTRATADA:</strong> ${contratada.razao_social}, inscrita no CNPJ sob o nº ${contratada.cnpj}, com sede em ${contratada.endereco_sede} e filial em ${contratada.endereco_filial}, representada por ${contratada.representante}, CPF nº ${contratada.cpf_representante}, ${contratada.cargo_representante}.</p>
-
-<p><strong>CONTRATANTE:</strong> ${contratante.razao_social}, inscrita no CNPJ sob o nº ${contratante.cnpj}, com endereço em ${contratante.endereco}, representada por ${contratante.representante}, CPF nº ${contratante.cpf_representante}.</p>
-
-${parceiro ? `<p><strong>PARCEIRO COMERCIAL:</strong> ${parceiro.nome}, CPF nº ${parceiro.cpf}.</p>` : ''}
-
-<h2>Objeto do Contrato</h2>
-
-<p>O presente contrato tem por objeto a prestação de serviços de assessoria de crédito pela CONTRATADA à CONTRATANTE, visando à obtenção de crédito no valor de referência de <strong>${contrato.valor_referencia_formatado}</strong>, junto a instituições financeiras parceiras.</p>
-
-<h2>Honorários e Comissão</h2>
-
-<p>Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA uma comissão de <strong>${contrato.taxa_comissao}%</strong> sobre o valor do crédito efetivamente liberado, com honorário mínimo mensal de <strong>${contrato.honorario_minimo_mes}%</strong> e honorário mínimo total de <strong>${contrato.honorario_minimo_total}%</strong> sobre o valor de referência.</p>
-
-<h2>Vigência</h2>
-
-<p>O presente contrato terá vigência de <strong>${contrato.vigencia_meses} (doze) meses</strong> a contar da data de assinatura, podendo ser renovado mediante acordo entre as partes.</p>
-
-<h2>Foro</h2>
-
-<p>Para dirimir quaisquer controvérsias oriundas do CONTRATO, as partes elegem o foro da Circunscrição Judiciária de ${contrato.foro_eleito}.</p>
-
-<p>Por estarem assim justos e contratados, firmam o presente instrumento, em duas vias de igual teor.</p>
-
-<p style="text-align:right; margin-top:15px;"><strong>${contrato.data_assinatura_formatada}.</strong></p>
-
-<div class="assinaturas">
-  <div class="linha-assinatura">
-    CONTRATANTE: ${contratante.razao_social}
-  </div>
-  ${parceiro ? `<div class="linha-assinatura">PARCEIRO COMERCIAL: ${parceiro.nome} - CPF nº ${parceiro.cpf}</div>` : ''}
-  <div class="linha-assinatura">
-    CONTRATADA: ${contratada.razao_social} - CNPJ nº ${contratada.cnpj}
-  </div>
-  <div class="linha-assinatura">TESTEMUNHA 1: ____________________________________________</div>
-  <div class="linha-assinatura">TESTEMUNHA 2: ____________________________________________</div>
-</div>
-
-</body>
-</html>`;
+    return gerarHtmlTimbrado(body, 'CONTRATO DE ANÁLISE DOCUMENTAL');
   }
 
-  async function gerarPdfContrato(payload: any): Promise<string> {
+  // ─── HTML PREVISÃO DE FATURAMENTO (papel timbrado) ─────────────────────────
+  function gerarHtmlPrevisaoFaturamento(payload: {
+    empresa: { razao_social: string; cnpj?: string };
+    horizonte_meses: number;
+    modelo_usado: string;
+    gerada_em: string;
+    capacidade_pgto_min: number;
+    capacidade_pgto_max: number;
+    historico: { competencia: string; valor: number }[];
+    previsoes: { ds: string; yhat: number; yhat_lower: number; yhat_upper: number }[];
+    chartImageBase64?: string;
+  }): string {
+    const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+    const fmtDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+
+    const tabelaHistorico = payload.historico.map(r => `
+      <tr>
+        <td>${fmtDate(r.competencia)}</td>
+        <td style="text-align:right">${fmt(r.valor)}</td>
+        <td style="text-align:center; color:#1B3A6B; font-weight:bold">Histórico</td>
+      </tr>`).join('');
+
+    const tabelaPrevisao = payload.previsoes.map(r => `
+      <tr>
+        <td>${fmtDate(r.ds)}</td>
+        <td style="text-align:right; font-weight:bold">${fmt(r.yhat)}</td>
+        <td style="text-align:right; color:#666; font-size:9pt">${fmt(r.yhat_lower)} – ${fmt(r.yhat_upper)}</td>
+      </tr>`).join('');
+
+    const body = `
+<h1 class="doc-title">RELATÓRIO DE PREVISÃO DE FATURAMENTO</h1>
+<h1 class="doc-title" style="font-size:11pt; font-weight:normal; margin-bottom:24px;">Análise Preditiva com Inteligência Artificial — ${payload.horizonte_meses} meses</h1>
+
+<table class="data-table" style="margin-bottom:20px">
+  <tr>
+    <th style="width:50%">Empresa</th>
+    <th style="width:25%">Modelo IA</th>
+    <th style="width:25%">Gerado em</th>
+  </tr>
+  <tr>
+    <td><strong>${payload.empresa.razao_social}</strong>${payload.empresa.cnpj ? ' — CNPJ: ' + payload.empresa.cnpj : ''}</td>
+    <td style="text-align:center">${payload.modelo_usado.toUpperCase()}</td>
+    <td style="text-align:center">${new Date(payload.gerada_em).toLocaleDateString('pt-BR')}</td>
+  </tr>
+</table>
+
+<div style="display:flex; gap:16px; margin-bottom:20px;">
+  <div class="highlight-box" style="flex:1">
+    <div class="label">Capacidade de Pagamento Mínima (15%)</div>
+    <div class="value">${fmt(payload.capacidade_pgto_min)}<span style="font-size:10pt; font-weight:normal">/mês</span></div>
+  </div>
+  <div class="highlight-box" style="flex:1">
+    <div class="label">Capacidade de Pagamento Máxima (25%)</div>
+    <div class="value">${fmt(payload.capacidade_pgto_max)}<span style="font-size:10pt; font-weight:normal">/mês</span></div>
+  </div>
+</div>
+
+${payload.chartImageBase64 ? `
+<div class="chart-container">
+  <img src="${payload.chartImageBase64}" alt="Gráfico de Previsão" style="max-width:100%; border:1px solid #ddd; border-radius:4px;" />
+</div>` : ''}
+
+<h2 class="section-title" style="margin-top:20px;">Histórico de Faturamento</h2>
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Competência</th>
+      <th style="text-align:right">Faturamento</th>
+      <th style="text-align:center">Tipo</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${tabelaHistorico}
+  </tbody>
+</table>
+
+<h2 class="section-title" style="margin-top:20px;">Previsão para os Próximos ${payload.horizonte_meses} Meses</h2>
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Competência</th>
+      <th style="text-align:right">Previsão Central</th>
+      <th style="text-align:right">Intervalo de Confiança</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${tabelaPrevisao}
+  </tbody>
+</table>
+
+<p style="margin-top:16px; font-size:9pt; color:#666; font-style:italic;">
+  <strong>Nota:</strong> Este relatório foi gerado automaticamente pelo sistema Destrava Crédito com base nos dados históricos fornecidos pela empresa. 
+  Os valores de previsão são estimativas estatísticas e não constituem garantia de resultado. 
+  O intervalo de confiança representa a faixa de variação esperada com 95% de probabilidade.
+</p>
+
+<p class="city-date" style="margin-top:24px;">Brasília – DF, ${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}.</p>
+`;
+
+    return gerarHtmlTimbrado(body, 'RELATÓRIO DE PREVISÃO DE FATURAMENTO');
+  }
+
+  // ─── HTML SIMULAÇÃO / PROPOSTA (papel timbrado) ──────────────────────────
+  function gerarHtmlSimulacao(payload: {
+    cliente: { nome: string; email?: string; telefone?: string; cnpj?: string };
+    simulacao: {
+      produto: string;
+      valor: number;
+      prazo: number;
+      parcela: number;
+      taxa: number;
+      data?: string;
+    };
+    consultor?: string;
+  }): string {
+    const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+    const fmtPct = (v: number) => v.toFixed(2).replace('.', ',') + '%';
+
+    const body = `
+<h1 class="doc-title">PROPOSTA DE CRÉDITO</h1>
+<h1 class="doc-title" style="font-size:11pt; font-weight:normal; margin-bottom:24px;">Simulação de Financiamento — Destrava Crédito</h1>
+
+<table class="data-table" style="margin-bottom:20px">
+  <tr>
+    <th colspan="2">Dados do Cliente</th>
+  </tr>
+  <tr>
+    <td style="width:30%"><strong>Nome / Razão Social</strong></td>
+    <td>${payload.cliente.nome}</td>
+  </tr>
+  ${payload.cliente.cnpj ? `<tr><td><strong>CNPJ</strong></td><td>${payload.cliente.cnpj}</td></tr>` : ''}
+  ${payload.cliente.email ? `<tr><td><strong>E-mail</strong></td><td>${payload.cliente.email}</td></tr>` : ''}
+  ${payload.cliente.telefone ? `<tr><td><strong>Telefone</strong></td><td>${payload.cliente.telefone}</td></tr>` : ''}
+  ${payload.consultor ? `<tr><td><strong>Consultor</strong></td><td>${payload.consultor}</td></tr>` : ''}
+</table>
+
+<h2 class="section-title">Detalhes da Simulação</h2>
+
+<div style="display:flex; gap:16px; margin-bottom:20px; flex-wrap:wrap;">
+  <div class="highlight-box" style="flex:1; min-width:150px;">
+    <div class="label">Produto</div>
+    <div class="value" style="font-size:14pt">${payload.simulacao.produto}</div>
+  </div>
+  <div class="highlight-box" style="flex:1; min-width:150px;">
+    <div class="label">Valor Solicitado</div>
+    <div class="value">${fmt(payload.simulacao.valor)}</div>
+  </div>
+  <div class="highlight-box" style="flex:1; min-width:150px;">
+    <div class="label">Parcela Estimada</div>
+    <div class="value">${fmt(payload.simulacao.parcela)}<span style="font-size:10pt; font-weight:normal">/mês</span></div>
+  </div>
+</div>
+
+<table class="data-table">
+  <tr>
+    <th style="width:50%">Parâmetro</th>
+    <th style="width:50%">Valor</th>
+  </tr>
+  <tr><td>Produto / Modalidade</td><td><strong>${payload.simulacao.produto}</strong></td></tr>
+  <tr><td>Valor de Crédito</td><td><strong>${fmt(payload.simulacao.valor)}</strong></td></tr>
+  <tr><td>Prazo</td><td>${payload.simulacao.prazo} meses</td></tr>
+  <tr><td>Taxa de Juros (a.m.)</td><td>${fmtPct(payload.simulacao.taxa)}</td></tr>
+  <tr><td>Parcela Estimada</td><td><strong>${fmt(payload.simulacao.parcela)}</strong></td></tr>
+  <tr><td>Total a Pagar</td><td><strong>${fmt(payload.simulacao.parcela * payload.simulacao.prazo)}</strong></td></tr>
+  <tr><td>Data da Simulação</td><td>${payload.simulacao.data || new Date().toLocaleDateString('pt-BR')}</td></tr>
+</table>
+
+<p style="margin-top:16px; font-size:9pt; color:#666; font-style:italic;">
+  <strong>Importante:</strong> Esta proposta é uma simulação com fins informativos. Os valores apresentados são estimativas e podem variar conforme análise de crédito, perfil do solicitante e condições da instituição financeira parceira. A aprovação do crédito está sujeita à análise documental completa pela equipe Destrava Crédito.
+</p>
+
+<p class="city-date" style="margin-top:24px;">Brasília – DF, ${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}.</p>
+
+<div class="signature-block">
+  <p>Consultor Responsável:</p>
+  <div class="signature-line"></div>
+  <p class="signature-label">DESTRAVA CRÉDITO LTDA — CNPJ nº 35.427.182/0001-66</p>
+</div>
+`;
+
+    return gerarHtmlTimbrado(body, 'PROPOSTA DE CRÉDITO');
+  }
+
+    async function gerarPdfContrato(payload: any): Promise<string> {
     const uploadsDir = path.resolve('uploads', 'contratos');
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
@@ -3167,7 +3365,7 @@ ${parceiro ? `<p><strong>PARCEIRO COMERCIAL:</strong> ${parceiro.nome}, CPF nº 
       await page.pdf({
         path: filePath,
         format: 'A4',
-        margin: { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' },
+        margin: { top: '0', right: '0', bottom: '0', left: '0' },
         printBackground: true,
       });
     } finally {
@@ -3186,7 +3384,95 @@ ${parceiro ? `<p><strong>PARCEIRO COMERCIAL:</strong> ${parceiro.nome}, CPF nº 
     });
   }
 
-  // ─── FATURAMENTO HISTÓRICO ────────────────────────────────────────────────
+  // ─── EXPORTAR PDF DE PREVISÃO DE FATURAMENTO ────────────────────────────────
+  app.post('/api/faturamento/previsao/:id/exportar-pdf', auth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { chartImageBase64 } = req.body || {};
+
+      // Buscar previsão
+      const { rows: prevRows } = await pool.query(
+        `SELECT pf.*, e.razao_social, e.cnpj,
+                pf.payload_completo, pf.modelo_usado, pf.horizonte_meses,
+                pf.capacidade_pgto_min, pf.capacidade_pgto_max, pf.gerada_em
+           FROM previsao_faturamento pf
+           JOIN empresas e ON e.id = pf.empresa_id
+          WHERE pf.id = $1`,
+        [id]
+      );
+      if (!prevRows.length) {
+        res.status(404).json({ error: 'Previsão não encontrada' });
+        return;
+      }
+      const prev = prevRows[0];
+      const pontos: any[] = prev.payload_completo || [];
+      const historico = pontos.filter((p: any) => p.is_historico).map((p: any) => ({
+        competencia: p.ds,
+        valor: p.yhat,
+      }));
+      const previsoes = pontos.filter((p: any) => !p.is_historico);
+
+      const htmlPayload = {
+        empresa: { razao_social: prev.razao_social, cnpj: prev.cnpj },
+        horizonte_meses: prev.horizonte_meses,
+        modelo_usado: prev.modelo_usado,
+        gerada_em: prev.gerada_em,
+        capacidade_pgto_min: parseFloat(prev.capacidade_pgto_min),
+        capacidade_pgto_max: parseFloat(prev.capacidade_pgto_max),
+        historico,
+        previsoes,
+        chartImageBase64: chartImageBase64 || undefined,
+      };
+
+      const html = gerarHtmlPrevisaoFaturamento(htmlPayload);
+
+      // Gerar PDF via Puppeteer
+      const uploadsDir = path.resolve('uploads', 'previsoes');
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+      const fileName = `previsao-${id}-${Date.now()}.pdf`;
+      const filePath = path.join(uploadsDir, fileName);
+
+      let browser;
+      try {
+        const puppeteer = await import('puppeteer-core');
+        let executablePath: string | undefined;
+        try {
+          const chromium = await import('@sparticuz/chromium');
+          executablePath = await chromium.default.executablePath();
+        } catch {
+          executablePath = process.env.CHROMIUM_PATH || '/usr/bin/chromium-browser';
+        }
+        browser = await puppeteer.default.launch({
+          executablePath,
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+          headless: true,
+        });
+        const page = await browser.newPage();
+        await page.setContent(html, { waitUntil: 'networkidle0' });
+        await page.pdf({
+          path: filePath,
+          format: 'A4',
+          margin: { top: '0', right: '0', bottom: '0', left: '0' },
+          printBackground: true,
+        });
+      } finally {
+        if (browser) await (browser as any).close();
+      }
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="previsao-faturamento-${prev.razao_social.replace(/[^a-zA-Z0-9]/g, '-')}.pdf"`);
+      const stream = fs.createReadStream(filePath);
+      stream.pipe(res);
+      stream.on('end', () => {
+        fs.unlink(filePath, () => {});
+      });
+    } catch (err: any) {
+      console.error('[POST /api/faturamento/previsao/:id/exportar-pdf]', err);
+      res.status(500).json({ error: err.message || 'Erro ao gerar PDF da previsão' });
+    }
+  });
+
+    // ─── FATURAMENTO HISTÓRICO ────────────────────────────────────────────────
 
   app.post('/api/faturamento/historico', auth, async (req: Request, res: Response) => {
     try {
