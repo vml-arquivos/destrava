@@ -20,6 +20,7 @@ import {
   ListOrdered,
   TrendingUp,
   BookUser,
+  UserCheck,
 } from "lucide-react";
 
 interface NavItem {
@@ -54,6 +55,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/colaborador/contratos",   label: "Contratos PDF",    icon: FileText },
   // Cadastro de Contadores: somente Administrador e Diretor
   { href: "/colaborador/contadores",  label: "Contadores",       icon: BookUser, allowedCargos: ['administrador', 'diretor'] },
+  { href: "/colaborador/clientes-pf",  label: "Clientes PF",      icon: UserCheck },
   // Integrações n8n: somente Administrador
   {
     href: "/colaborador/integracoes",
