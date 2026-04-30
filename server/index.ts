@@ -733,6 +733,21 @@ async function startServer() {
     console.error('[startup] Aviso: falha ao auto-criar tabelas de faturamento/contratos:', err.message);
     // Não aborta o servidor — pode ser que as tabelas já existam com constraints diferentes
   }
+
+  // ─── PATCH: Remove CHECK constraint legado de modelo_usado ─────────────────────
+  // A migration 016 criou CHECK (modelo_usado IN ('prophet','arima')).
+  // O fallback linear precisa inserir 'linear_fallback', por isso removemos
+  // o constraint. Idempotente: usa IF EXISTS.
+  try {
+    await pool.query(`
+      ALTER TABLE previsao_faturamento
+        DROP CONSTRAINT IF EXISTS previsao_faturamento_modelo_usado_check;
+    `);
+    console.log('[startup] Constraint previsao_faturamento_modelo_usado_check removido (ou já inexistente).');
+  } catch (err: any) {
+    console.error('[startup] Aviso: não foi possível remover constraint de modelo_usado:', err.message);
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
   // ─────────────────────────────────────────────────────────────────────────────
 
   app.use(express.json({ limit: "5mb" }));
@@ -3639,7 +3654,10 @@ ${payload.chartImageBase64 ? `
         return;
       }
 
-      const predicaoUrl = process.env.PREDICAO_SERVICE_URL || 'http://localhost:8001';
+      // Em Docker, 'localhost' aponta para o próprio container, não para o host.
+      // O IP padrão da interface docker0 é 172.17.0.1 — usado como fallback quando
+      // PREDICAO_SERVICE_URL não está configurado nas variáveis de ambiente.
+      const predicaoUrl = process.env.PREDICAO_SERVICE_URL || 'http://172.17.0.1:8001';
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 45000);
 
