@@ -793,8 +793,29 @@ async function startServer() {
   } catch (err: any) {
     console.error('[startup] ERRO CRÍTICO: não foi possível aplicar patch de contratos Limpa Nome:', err.message);
   }
-  // ─────────────────────────────────────────────────────────────────────────────
-  // ─────────────────────────────────────────────────────────────────────────────
+  //  // ─── PATCH: Migration 017 — Contratos Novos Tipos ──────────────────────────────
+  // Garante que bancos existentes (criados antes da migration 017) tenham
+  // as colunas e índices necessários para Limpa BACEN, Rating e Parceria Comercial.
+  // Idempotente: usa ADD COLUMN IF NOT EXISTS, DROP NOT NULL e IF NOT EXISTS.
+  try {
+    await pool.query(`
+      ALTER TABLE contratos_gerados
+        ALTER COLUMN valor_referencia DROP NOT NULL;
+      ALTER TABLE contratos_gerados
+        ALTER COLUMN taxa_comissao DROP NOT NULL;
+      ALTER TABLE contratos_gerados
+        ALTER COLUMN honorario_minimo_mes DROP NOT NULL;
+      ALTER TABLE contratos_gerados
+        ALTER COLUMN honorario_minimo_total DROP NOT NULL;
+      ALTER TABLE contratos_gerados
+        DROP CONSTRAINT IF EXISTS contratos_gerados_status_check;
+      CREATE INDEX IF NOT EXISTS idx_contratos_parceiro ON contratos_gerados(parceiro_id);
+    `);
+    console.log('[startup] Patch migration 017 (contratos novos tipos) aplicado/verificado com sucesso.');
+  } catch (err: any) {
+    console.error('[startup] Aviso: patch migration 017 falhou (pode ser inofensivo):', err.message);
+  }
+  // ───────────────────────────────────────────────────────────────────────────
 
   app.use(express.json({ limit: "5mb" }));
   app.use(express.urlencoded({ extended: true }));
