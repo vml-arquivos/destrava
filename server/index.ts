@@ -791,6 +791,15 @@ async function startServer() {
     next();
   });
 
+  // Evita cache/304 em respostas de API e impede que listas do painel fiquem presas em bundle/cache antigo.
+  app.use("/api", (_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("Surrogate-Control", "no-store");
+    next();
+  });
+
   // ─── Health check ──────────────────────────────────────────────────────────
   app.get("/api/health", async (_req: Request, res: Response) => {
     let dbOk = false;
@@ -4417,7 +4426,7 @@ ${tabelaAnos}
   });
 
   // ─── PARCEIROS COMERCIAIS ────────────────────────────────────────────────
-  app.get('/api/parceiros', auth, async (_req: Request, res: Response) => {
+  const listarParceirosComerciais = async (_req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
         'SELECT * FROM parceiros_comerciais WHERE ativo = true ORDER BY nome'
@@ -4427,7 +4436,14 @@ ${tabelaAnos}
       console.error('[GET /api/parceiros]', err);
       res.status(500).json({ error: 'Erro ao listar parceiros' });
     }
-  });
+  };
+
+  app.get('/api/parceiros', auth, listarParceirosComerciais);
+
+  // Alias mantido por compatibilidade com o frontend do gerador de contratos.
+  // Sem essa rota, o Express caía no fallback da SPA e devolvia index.html,
+  // causando "Unexpected token '<'" ao tentar fazer response.json().
+  app.get('/api/parceiros-comerciais', auth, listarParceirosComerciais);
 
   app.post('/api/parceiros', auth, async (req: Request, res: Response) => {
     try {
@@ -4723,6 +4739,14 @@ ${tabelaAnos}
 
   // Servir arquivos de contratos gerados
   app.use('/uploads/contratos', express.static(path.resolve('uploads', 'contratos')));
+
+  // Qualquer /api não encontrada deve responder JSON, nunca o index.html da SPA.
+  app.use('/api', (req: Request, res: Response) => {
+    res.status(404).json({
+      error: 'Rota API não encontrada',
+      path: req.originalUrl,
+    });
+  });
 
   // ─── Static files ─────────────────────────────────────────────────────────
   const staticPath = process.env.NODE_ENV === "production"
