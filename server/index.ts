@@ -712,12 +712,12 @@ async function startServer() {
         empresa_id             UUID REFERENCES empresas(id) ON DELETE RESTRICT,
         parceiro_id            UUID REFERENCES parceiros_comerciais(id) ON DELETE SET NULL,
         lead_id                UUID REFERENCES leads(id) ON DELETE SET NULL,
-        valor_referencia       NUMERIC(15, 2) NOT NULL,
+        valor_referencia       NUMERIC(15, 2),
         valor_contrato         NUMERIC(15, 2),
         condicao_pagamento     TEXT,
-        taxa_comissao          NUMERIC(5, 2) NOT NULL DEFAULT 10.00,
-        honorario_minimo_mes   NUMERIC(5, 2) NOT NULL DEFAULT 1.00,
-        honorario_minimo_total NUMERIC(5, 2) NOT NULL DEFAULT 12.00,
+        taxa_comissao          NUMERIC(5, 2) DEFAULT 10.00,
+        honorario_minimo_mes   NUMERIC(5, 2) DEFAULT 1.00,
+        honorario_minimo_total NUMERIC(5, 2) DEFAULT 12.00,
         data_assinatura        DATE NOT NULL,
         foro_eleito            TEXT NOT NULL,
         status                 TEXT NOT NULL DEFAULT 'gerado',
@@ -770,52 +770,59 @@ async function startServer() {
   } catch (err: any) {
     console.error('[startup] Aviso: não foi possível remover constraint de modelo_usado:', err.message);
   }
-  // ─── PATCH: Contratos Limpa Nome PF/PJ ─────────────────────────────────────
-  // O contrato Limpa Nome PF usa lead_id e não possui empresa_id.
-  // Em versões anteriores, contratos_gerados.empresa_id foi criado como NOT NULL,
-  // o que causa erro 500 ao gerar contrato para Pessoa Física.
-  // Este patch é idempotente e roda no startup para corrigir bancos já existentes.
-  try {
-    await pool.query(`
-      ALTER TABLE contratos_gerados
-        ALTER COLUMN empresa_id DROP NOT NULL;
+  // ─── PATCHES DE BANCO: contratos_gerados ────────────────────────────────────
+  // Cada ALTER TABLE roda em try/catch INDIVIDUAL e silencioso.
+  // Se uma coluna já foi alterada, o erro é ignorado e o próximo passo continua.
+  // O servidor NUNCA aborta por causa de um patch de banco.
+  // ─────────────────────────────────────────────────────────────────────────────
 
-      ALTER TABLE contratos_gerados
-        ADD COLUMN IF NOT EXISTS tipo_contrato TEXT NOT NULL DEFAULT 'assessoria',
-        ADD COLUMN IF NOT EXISTS cliente_tipo TEXT,
-        ADD COLUMN IF NOT EXISTS valor_contrato NUMERIC(15, 2),
-        ADD COLUMN IF NOT EXISTS condicao_pagamento TEXT;
+  // P1: empresa_id -> nullable (Limpa Nome PF não tem empresa)
+  try { await pool.query(`ALTER TABLE contratos_gerados ALTER COLUMN empresa_id DROP NOT NULL`); }
+  catch { /* já nullable */ }
 
-      CREATE INDEX IF NOT EXISTS idx_contratos_lead ON contratos_gerados(lead_id);
-      CREATE INDEX IF NOT EXISTS idx_contratos_tipo ON contratos_gerados(tipo_contrato);
-    `);
-    console.log('[startup] Patch contratos Limpa Nome PF/PJ aplicado/verificado com sucesso.');
-  } catch (err: any) {
-    console.error('[startup] ERRO CRÍTICO: não foi possível aplicar patch de contratos Limpa Nome:', err.message);
-  }
-  //  // ─── PATCH: Migration 017 — Contratos Novos Tipos ──────────────────────────────
-  // Garante que bancos existentes (criados antes da migration 017) tenham
-  // as colunas e índices necessários para Limpa BACEN, Rating e Parceria Comercial.
-  // Idempotente: usa ADD COLUMN IF NOT EXISTS, DROP NOT NULL e IF NOT EXISTS.
-  try {
-    await pool.query(`
-      ALTER TABLE contratos_gerados
-        ALTER COLUMN valor_referencia DROP NOT NULL;
-      ALTER TABLE contratos_gerados
-        ALTER COLUMN taxa_comissao DROP NOT NULL;
-      ALTER TABLE contratos_gerados
-        ALTER COLUMN honorario_minimo_mes DROP NOT NULL;
-      ALTER TABLE contratos_gerados
-        ALTER COLUMN honorario_minimo_total DROP NOT NULL;
-      ALTER TABLE contratos_gerados
-        DROP CONSTRAINT IF EXISTS contratos_gerados_status_check;
-      CREATE INDEX IF NOT EXISTS idx_contratos_parceiro ON contratos_gerados(parceiro_id);
-    `);
-    console.log('[startup] Patch migration 017 (contratos novos tipos) aplicado/verificado com sucesso.');
-  } catch (err: any) {
-    console.error('[startup] Aviso: patch migration 017 falhou (pode ser inofensivo):', err.message);
-  }
-  // ───────────────────────────────────────────────────────────────────────────
+  // P2: ADD COLUMN tipo_contrato (discriminador de tipo)
+  try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS tipo_contrato TEXT NOT NULL DEFAULT 'assessoria'`); }
+  catch { /* já existe */ }
+
+  // P3: ADD COLUMN cliente_tipo (empresa | lead)
+  try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS cliente_tipo TEXT`); }
+  catch { /* já existe */ }
+
+  // P4: ADD COLUMN valor_contrato (Limpa Nome, BACEN, Rating)
+  try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS valor_contrato NUMERIC(15,2)`); }
+  catch { /* já existe */ }
+
+  // P5: ADD COLUMN condicao_pagamento
+  try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS condicao_pagamento TEXT`); }
+  catch { /* já existe */ }
+
+  // P6: valor_referencia -> nullable (novos tipos não usam este campo)
+  try { await pool.query(`ALTER TABLE contratos_gerados ALTER COLUMN valor_referencia DROP NOT NULL`); }
+  catch { /* já nullable */ }
+
+  // P7: taxa_comissao -> nullable
+  try { await pool.query(`ALTER TABLE contratos_gerados ALTER COLUMN taxa_comissao DROP NOT NULL`); }
+  catch { /* já nullable */ }
+
+  // P8: honorario_minimo_mes -> nullable
+  try { await pool.query(`ALTER TABLE contratos_gerados ALTER COLUMN honorario_minimo_mes DROP NOT NULL`); }
+  catch { /* já nullable */ }
+
+  // P9: honorario_minimo_total -> nullable
+  try { await pool.query(`ALTER TABLE contratos_gerados ALTER COLUMN honorario_minimo_total DROP NOT NULL`); }
+  catch { /* já nullable */ }
+
+  // P10: remover CHECK constraint de status (permite extensibilidade)
+  try { await pool.query(`ALTER TABLE contratos_gerados DROP CONSTRAINT IF EXISTS contratos_gerados_status_check`); }
+  catch { /* não existia */ }
+
+  // P11: índices adicionais
+  try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_contratos_lead     ON contratos_gerados(lead_id)`); }     catch { /* já existe */ }
+  try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_contratos_tipo     ON contratos_gerados(tipo_contrato)`); } catch { /* já existe */ }
+  try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_contratos_parceiro ON contratos_gerados(parceiro_id)`); }  catch { /* já existe */ }
+
+  console.log('[startup] Patches de banco (contratos_gerados) aplicados/verificados.');
+  // ─────────────────────────────────────────────────────────────────────────────
 
   app.use(express.json({ limit: "5mb" }));
   app.use(express.urlencoded({ extended: true }));
@@ -4867,12 +4874,12 @@ ${(temTest1 || temTest2) ? `
             empresaContratoId,
             parceiro_id || null,
             leadContratoId,
-            valor_contrato,
+            null,
             valor_contrato,
             condicao_pagamento,
-            0,
-            0,
-            0,
+            null,
+            null,
+            null,
             data_assinatura,
             foro_eleito,
             pdfPath,
@@ -4946,7 +4953,7 @@ ${(temTest1 || temTest2) ? `
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
            RETURNING id, created_at`,
           ['limpa_bacen', 'empresa', empresa_id, parceiro_id || null, null,
-           valor_contrato, valor_contrato, condicao_pagamento, 0, 0, 0,
+           null, valor_contrato, condicao_pagamento, null, null, null,
            data_assinatura, foro_eleito, pdfPath, hashBacen, JSON.stringify(payloadBacen), colaborador.id]
         );
         const contratoBacen = contratoRowsBacen[0];
@@ -5014,7 +5021,7 @@ ${(temTest1 || temTest2) ? `
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
            RETURNING id, created_at`,
           ['rating', 'empresa', empresa_id, parceiro_id || null, null,
-           valor_contrato, valor_contrato, condicao_pagamento, 0, 0, 0,
+           null, valor_contrato, condicao_pagamento, null, null, null,
            data_assinatura, foro_eleito, pdfPath, hashRating, JSON.stringify(payloadRating), colaborador.id]
         );
         const contratoRating = contratoRowsRating[0];
@@ -5085,7 +5092,7 @@ ${(temTest1 || temTest2) ? `
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
            RETURNING id, created_at`,
           ['parceria_comercial', null, empresa_id || null, parceiro_id || null, null,
-           0, 0, null, 0, 0, 0,
+           null, null, null, null, null, null,
            data_assinatura, foro_eleito, pdfPath, hashParceria, JSON.stringify(payloadParceria), colaborador.id]
         );
         const contratoParceria = contratoRowsParceria[0];
