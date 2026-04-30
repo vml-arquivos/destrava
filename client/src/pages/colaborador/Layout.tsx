@@ -48,8 +48,8 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/colaborador/fila",        label: "Fila Geral",         icon: ListOrdered, managementOnly: true },
   { href: "/colaborador/clientes",    label: "Clientes",        icon: Users },
   { href: "/colaborador/empresas",    label: "Empresas",        icon: Building2 },
-  // Previsão de Faturamento: todos os colaboradores
-  { href: "/colaborador/previsao-faturamento", label: "Previsão Faturamento", icon: TrendingUp },
+  // Faturamento: todos os colaboradores
+  { href: "/colaborador/previsao-faturamento", label: "Faturamento", icon: TrendingUp },
   // Gerador de Contratos: todos os colaboradores
   { href: "/colaborador/contratos",   label: "Contratos PDF",    icon: FileText },
   // Cadastro de Contadores: somente Administrador e Diretor
