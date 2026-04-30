@@ -33,7 +33,21 @@ RUN pnpm exec esbuild server/index.ts \
 # ─── Stage 2: Production ─────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 
-RUN apk add --no-cache wget && npm install -g pnpm@10.4.1
+RUN apk add --no-cache \
+    wget \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    font-noto \
+    font-noto-cjk \
+    && npm install -g pnpm@10.4.1
+
+# Puppeteer: usar Chromium do sistema, não baixar binário próprio
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV CHROMIUM_PATH=/usr/bin/chromium-browser
 
 WORKDIR /app
 
