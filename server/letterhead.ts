@@ -1,6 +1,7 @@
 // ============================================================
-// PAPEL TIMBRADO DESTRAVA CRÉDITO — HTML/CSS puro (v2)
-// Substitui imagens base64 problemáticas por CSS/SVG limpo
+// PAPEL TIMBRADO DESTRAVA CRÉDITO — Fiel ao template oficial
+// Cabeçalho: logo real + linha amarela (#f0a500)
+// Rodapé: BRASÍLIA - SEDE / GOIÂNIA - FILIAL (texto simples)
 // ============================================================
 
 /** Dados fixos da CONTRATADA */
@@ -13,61 +14,37 @@ export const CONTRATADA_DADOS = {
   cpf_representante: '718.517.041-91',
 };
 
-/** SVG do logotipo Destrava Crédito */
-function getLogoSvg(): string {
-  return `<svg width="210" height="68" viewBox="0 0 210 68" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="34" cy="34" r="32" fill="#1B3A8C"/>
-  <circle cx="34" cy="34" r="22" fill="none" stroke="#F5C518" stroke-width="2.5"/>
-  <circle cx="34" cy="34" r="10" fill="#F5C518"/>
-  <line x1="34" y1="2" x2="34" y2="66" stroke="#F5C518" stroke-width="1" opacity="0.45"/>
-  <line x1="2" y1="34" x2="66" y2="34" stroke="#F5C518" stroke-width="1" opacity="0.45"/>
-  <text x="27" y="43" font-family="Arial,sans-serif" font-size="20" font-weight="900" fill="rgba(255,255,255,0.92)">D</text>
-  <text x="78" y="43" font-family="Arial,sans-serif" font-size="30" font-weight="900"><tspan fill="#1B3A8C">D</tspan><tspan fill="#1B3A8C">e</tspan><tspan fill="#1B3A8C">s</tspan><tspan fill="#1B3A8C">t</tspan><tspan fill="#1B3A8C">r</tspan><tspan fill="#F5C518">a</tspan><tspan fill="#1B3A8C">v</tspan><tspan fill="#F5C518">a</tspan></text>
-  <text x="78" y="59" font-family="Arial,sans-serif" font-size="11.5" fill="#4A7CBF" letter-spacing="4">CRÉDITO</text>
-</svg>`;
-}
-
 /**
  * Template de CABEÇALHO para Puppeteer (displayHeaderFooter: true).
+ * Logo real via URL pública + linha amarela embaixo — idêntico ao template oficial.
  */
 export function getPuppeteerHeaderTemplate(): string {
-  return `<div style="-webkit-print-color-adjust:exact;width:100%;height:30mm;display:flex;align-items:center;justify-content:center;background:#ffffff;border-bottom:3px solid #1B3A8C;margin:0;padding:0;box-sizing:border-box;">${getLogoSvg()}</div>`;
+  return `<div style="-webkit-print-color-adjust:exact;width:100%;height:28mm;display:flex;align-items:center;justify-content:flex-start;background:#ffffff;border-bottom:2px solid #f0a500;padding:0 20mm;box-sizing:border-box;margin:0;"><img src="https://destravacredito.com/logo-destrava.png" alt="Destrava Crédito" style="height:50px;display:block;" onerror="this.style.display='none'"/></div>`;
 }
 
 /**
  * Template de RODAPÉ para Puppeteer (displayHeaderFooter: true).
+ * Fiel ao template original: dois blocos de texto com borda superior cinza.
  */
 export function getPuppeteerFooterTemplate(): string {
-  return `<div style="-webkit-print-color-adjust:exact;width:100%;height:22mm;display:flex;align-items:center;background:#ffffff;border-top:1px solid #d0d0d0;margin:0;padding:0;box-sizing:border-box;overflow:hidden;">
-  <div style="flex:1;padding:0 18mm;font-family:Arial,sans-serif;font-size:6.5pt;color:#444;line-height:1.55;">
-    exclusivamente sua.<br>
-    <strong style="font-size:6.5pt;">BRASÍLIA - SEDE</strong><br>
-    <span style="font-size:6.5pt;">St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250</span><br>
-    <strong style="font-size:6.5pt;">GOIÂNIA - FILIAL</strong><br>
-    <span style="font-size:6.5pt;">Avenida Afonso Pena, qd- 25 Alt. 05, S/N sala-02 setor Goiânia 2 CEP: 74665555 Goiânia-Go</span>
-  </div>
-  <div style="flex-shrink:0;width:76px;height:22mm;position:relative;overflow:hidden;">
-    <div style="position:absolute;right:0;top:0;width:56px;height:22mm;background:#1B3A8C;transform:skewX(-8deg);transform-origin:right center;"></div>
-    <div style="position:absolute;right:0;top:0;width:30px;height:22mm;background:#F5C518;transform:skewX(-8deg);transform-origin:right center;"></div>
-  </div>
-</div>`;
+  return `<div style="-webkit-print-color-adjust:exact;width:100%;height:20mm;background:#ffffff;border-top:1px solid #cccccc;padding:6px 20mm 0 20mm;box-sizing:border-box;font-family:Arial,sans-serif;font-size:7.5pt;line-height:1.4;color:#555555;"><div style="margin-bottom:4px;"><span style="font-weight:bold;color:#000000;">BRASÍLIA - SEDE</span><br/>St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250</div><div><span style="font-weight:bold;color:#000000;">GOIÂNIA - FILIAL</span><br/>Avenida Afonso Pena, qd-25 Alt. 05, S/N sala-02 setor Goiânia 2 CEP: 74665555 Goiânia-Go</div></div>`;
 }
 
 /** CSS compartilhado para o corpo dos documentos */
 export function getDocumentStyles(): string {
   return `
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; color: #000; background: #fff; }
+    html, body { font-family: Arial, sans-serif; font-size: 11pt; color: #333; background: #fff; }
     h1.doc-title { font-size: 12pt; font-weight: bold; text-align: center; text-transform: uppercase; margin-bottom: 14px; }
     h2.section-title { font-size: 11pt; font-weight: bold; text-transform: uppercase; margin: 14px 0 6px 0; }
-    p.clause, p { text-align: justify; line-height: 1.5; margin-bottom: 7px; font-size: 11pt; }
+    p.clause, p { text-align: justify; line-height: 1.6; margin-bottom: 7px; font-size: 11pt; }
     table.data-table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt; }
     table.data-table th { background: #1B3A8C; color: #fff; padding: 5px 8px; text-align: left; font-weight: bold; }
     table.data-table td { border: 1px solid #ccc; padding: 4px 8px; vertical-align: top; }
     table.data-table tr:nth-child(even) td { background: #f4f7ff; }
     .highlight-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
     .highlight-box { border: 1.5px solid #1B3A8C; border-radius: 3px; padding: 8px 12px; background: #f0f4ff; }
-    .highlight-box .label { font-size: 8pt; color: #1B3A8C; text-transform: uppercase; font-weight: bold; margin-bottom: 3px; font-family: Arial, sans-serif; }
+    .highlight-box .label { font-size: 8pt; color: #1B3A8C; text-transform: uppercase; font-weight: bold; margin-bottom: 3px; }
     .highlight-box .value { font-size: 16pt; font-weight: bold; color: #1B3A8C; }
     .highlight-box .unit { font-size: 9pt; color: #555; }
     .sig-block { margin-top: 22px; }
@@ -81,9 +58,9 @@ export function getDocumentStyles(): string {
 }
 
 /**
- * Gera HTML completo (fallback / documentos simples sem multi-página).
- * Para PDFs multi-página use getPuppeteerHeaderTemplate() + getPuppeteerFooterTemplate()
- * diretamente no page.pdf() com displayHeaderFooter: true.
+ * Gera HTML completo para visualização inline / fallback sem Puppeteer.
+ * Layout idêntico ao template oficial: logo + linha amarela no topo,
+ * conteúdo no meio, rodapé com endereços no rodapé.
  */
 export function gerarHtmlTimbrado(body: string, titulo?: string): string {
   return `<!DOCTYPE html>
@@ -91,8 +68,52 @@ export function gerarHtmlTimbrado(body: string, titulo?: string): string {
 <head>
   <meta charset="UTF-8"/>
   <title>Destrava Crédito${titulo ? ' — ' + titulo : ''}</title>
-  <style>${getDocumentStyles()}</style>
+  <style>
+    ${getDocumentStyles()}
+    body { display: flex; flex-direction: column; min-height: 100vh; padding: 0; }
+    .page-header {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 16px 2cm;
+      border-bottom: 2px solid #f0a500;
+      background: #ffffff;
+      margin-bottom: 0;
+    }
+    .page-header img { height: 50px; }
+    .page-content { flex-grow: 1; padding: 1.2cm 2cm; }
+    .page-footer {
+      width: 100%;
+      padding: 10px 2cm 14px 2cm;
+      border-top: 1px solid #ccc;
+      font-size: 9px;
+      line-height: 1.4;
+      color: #555;
+      background: #ffffff;
+      margin-top: auto;
+    }
+    .page-footer .footer-col { margin-bottom: 5px; }
+    .page-footer .footer-title { font-weight: bold; color: #000; }
+  </style>
 </head>
-<body>${body}</body>
+<body>
+  <div class="page-header">
+    <img src="https://destravacredito.com/logo-destrava.png" alt="Destrava Crédito" onerror="this.style.display='none'"/>
+  </div>
+  <div class="page-content">
+    ${body}
+  </div>
+  <div class="page-footer">
+    <div class="footer-col">
+      <span class="footer-title">BRASÍLIA - SEDE</span><br/>
+      St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250
+    </div>
+    <div class="footer-col">
+      <span class="footer-title">GOIÂNIA - FILIAL</span><br/>
+      Avenida Afonso Pena, qd-25 Alt. 05, S/N sala-02 setor Goiânia 2 CEP: 74665555 Goiânia-Go
+    </div>
+  </div>
+</body>
 </html>`;
 }
