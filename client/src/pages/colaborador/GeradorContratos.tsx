@@ -90,6 +90,34 @@ export default function GeradorContratos() {
 
   // PASSO 1: Formulário preenchido → abre visualizador (não gera PDF ainda)
   const handlePreVisualizar = async (formData: any) => {
+    // Limpa Nome: gera PDF diretamente sem visualizador
+    if (formData.tipo_contrato === 'limpa_nome') {
+      setLoadingPdf(true);
+      try {
+        const result: any = await apiFetch('/api/contratos/gerar', {
+          method: 'POST',
+          body: JSON.stringify(formData),
+        });
+        toast.success('Contrato Limpa Nome gerado! Baixando PDF...');
+        const token = localStorage.getItem('destrava_token');
+        const response = await fetch(`/api/contratos/${result.contrato_id}/download`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `contrato-limpa-nome-${result.contrato_id}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err: any) {
+        toast.error(err.message || 'Erro ao gerar contrato Limpa Nome');
+      } finally {
+        setLoadingPdf(false);
+      }
+      return;
+    }
+    // Assessoria: abre visualizador
     const empresa = empresas.find(e => e.id === formData.empresa_id);
     if (!empresa) { toast.error('Empresa não encontrada'); return; }
     const parceiro = formData.parceiro_id
@@ -246,8 +274,6 @@ export default function GeradorContratos() {
                 Preencha os dados e clique em "Visualizar Contrato" para revisar e editar antes de gerar o PDF.
               </p>
               <FormGerarContrato
-                empresas={empresas}
-                parceiros={parceiros}
                 onSubmit={handlePreVisualizar}
                 loading={loading}
               />

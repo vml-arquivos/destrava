@@ -1,171 +1,276 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Loader2, Eye } from 'lucide-react';
 
-interface FormData {
-  empresa_id: string;
-  parceiro_id?: string;
-  valor_referencia: number;
-  taxa_comissao: number;
-  data_assinatura: string;
-  foro_eleito: string;
-}
-
-interface Empresa {
-  id: string;
-  razao_social: string;
-  cnpj?: string;
-}
-
-interface Parceiro {
-  id: string;
-  nome: string;
-  cpf: string;
-}
+interface Empresa  { id: string; razao_social: string; cnpj?: string; }
+interface Lead     { id: string; nome?: string; razao_social?: string; cpf?: string; cnpj?: string; }
+interface Parceiro { id: string; nome: string; cpf: string; }
+interface Contador { id: string; nome: string; crc: string; nome_escritorio?: string; }
 
 interface Props {
-  empresas: Empresa[];
-  parceiros: Parceiro[];
-  onSubmit: (data: FormData) => Promise<void>;
+  onSubmit: (data: any) => Promise<void>;
   loading: boolean;
 }
 
-export function FormGerarContrato({ empresas, parceiros, onSubmit, loading }: Props) {
-  const [fields, setFields] = useState<FormData>({
-    empresa_id: '',
-    parceiro_id: '',
-    valor_referencia: 0,
-    taxa_comissao: 10,
-    data_assinatura: new Date().toISOString().slice(0, 10),
-    foro_eleito: '',
-  });
-  const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
+export function FormGerarContrato({ onSubmit, loading }: Props) {
+  const [tipoContrato, setTipoContrato] = useState<'assessoria' | 'limpa_nome'>('assessoria');
 
-  const validate = (): boolean => {
-    const errs: Partial<Record<keyof FormData, string>> = {};
-    if (!fields.empresa_id) errs.empresa_id = 'Selecione uma empresa';
-    if (!fields.valor_referencia || fields.valor_referencia < 1000)
-      errs.valor_referencia = 'Valor mínimo: R$ 1.000,00';
-    if (!fields.data_assinatura) errs.data_assinatura = 'Data obrigatória';
-    if (!fields.foro_eleito) errs.foro_eleito = 'Foro obrigatório';
+  // Assessoria
+  const [empresaId, setEmpresaId]           = useState('');
+  const [parceiroId, setParceiroId]         = useState('');
+  const [valorReferencia, setValorReferencia] = useState('');
+  const [taxaComissao, setTaxaComissao]     = useState('10');
+  const [percentualMulta, setPercentualMulta] = useState('10');
+  const [contadorId, setContadorId]         = useState('');
+
+  // Limpa Nome
+  const [clienteTipo, setClienteTipo]       = useState<'empresa' | 'lead'>('empresa');
+  const [clienteId, setClienteId]           = useState('');
+  const [valorContrato, setValorContrato]   = useState('');
+  const [condicaoPgto, setCondicaoPgto]     = useState('');
+  const [prazoEntrega, setPrazoEntrega]     = useState('30');
+  const [prazoGarantia, setPrazoGarantia]   = useState('6');
+  const [taxaConsulta, setTaxaConsulta]     = useState('R$ 50,00');
+  const [taxaReprotocolo, setTaxaReprotocolo] = useState('R$ 300,00');
+
+  // Comuns
+  const [dataAssinatura, setDataAssinatura] = useState(new Date().toISOString().slice(0, 10));
+  const [foroEleito, setForoEleito]         = useState('Taguatinga');
+
+  // Listas
+  const [empresas, setEmpresas]   = useState<Empresa[]>([]);
+  const [leads, setLeads]         = useState<Lead[]>([]);
+  const [parceiros, setParceiros] = useState<Parceiro[]>([]);
+  const [contadores, setContadores] = useState<Contador[]>([]);
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const token = localStorage.getItem('token');
+  const headers = { Authorization: `Bearer ${token}` };
+
+  useEffect(() => {
+    fetch('/api/empresas?limit=500', { headers }).then(r => r.json())
+      .then(d => setEmpresas(Array.isArray(d) ? d : d.empresas || [])).catch(() => {});
+    fetch('/api/parceiros-comerciais', { headers }).then(r => r.json())
+      .then(d => setParceiros(Array.isArray(d) ? d : [])).catch(() => {});
+    fetch('/api/contadores', { headers }).then(r => r.json())
+      .then(d => setContadores(Array.isArray(d) ? d : [])).catch(() => {});
+    fetch('/api/leads?limit=500', { headers }).then(r => r.json())
+      .then(d => setLeads(Array.isArray(d) ? d : d.leads || [])).catch(() => {});
+  }, []);
+
+  const cls = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+  const lbl = 'block text-sm font-medium text-gray-700 mb-1';
+
+  const validate = () => {
+    const errs: Record<string, string> = {};
+    if (!dataAssinatura) errs.dataAssinatura = 'Data obrigatória';
+    if (!foroEleito)     errs.foroEleito = 'Foro obrigatório';
+    if (tipoContrato === 'assessoria') {
+      if (!empresaId) errs.empresaId = 'Selecione uma empresa';
+      if (!valorReferencia || parseFloat(valorReferencia) < 1000)
+        errs.valorReferencia = 'Valor mínimo: R$ 1.000,00';
+    } else {
+      if (!clienteId) errs.clienteId = 'Selecione o cliente';
+      if (!valorContrato || parseFloat(valorContrato) <= 0)
+        errs.valorContrato = 'Informe o valor do contrato';
+      if (!condicaoPgto) errs.condicaoPgto = 'Informe a condição de pagamento';
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
 
-  const set = (key: keyof FormData, value: string | number) =>
-    setFields(prev => ({ ...prev, [key]: value }));
-
-  const handleFormSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    await onSubmit(fields);
+
+    if (tipoContrato === 'assessoria') {
+      await onSubmit({
+        tipo_contrato: 'assessoria',
+        empresa_id: empresaId,
+        parceiro_id: parceiroId || undefined,
+        valor_referencia: parseFloat(valorReferencia),
+        taxa_comissao: parseFloat(taxaComissao),
+        percentual_multa: parseFloat(percentualMulta),
+        data_assinatura: dataAssinatura,
+        foro_eleito: foroEleito,
+        contador_id: contadorId || undefined,
+      });
+    } else {
+      await onSubmit({
+        tipo_contrato: 'limpa_nome',
+        cliente_tipo: clienteTipo,
+        empresa_id: clienteTipo === 'empresa' ? clienteId : undefined,
+        cliente_id: clienteTipo === 'lead' ? clienteId : undefined,
+        valor_contrato: parseFloat(valorContrato),
+        condicao_pagamento: condicaoPgto,
+        prazo_entrega_dias: parseInt(prazoEntrega),
+        prazo_garantia_meses: parseInt(prazoGarantia),
+        taxa_consulta_serasa: taxaConsulta,
+        taxa_reprotocolo: taxaReprotocolo,
+        data_assinatura: dataAssinatura,
+        foro_eleito: foroEleito,
+      });
+    }
   };
 
   return (
-    <form onSubmit={handleFormSubmit} className="space-y-4">
-      {/* Empresa */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Empresa *</label>
-        <select
-          value={fields.empresa_id}
-          onChange={e => set('empresa_id', e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">Selecione uma empresa...</option>
-          {empresas.map(e => (
-            <option key={e.id} value={e.id}>
-              {e.razao_social}{e.cnpj ? ` — ${e.cnpj}` : ''}
-            </option>
-          ))}
-        </select>
-        {errors.empresa_id && <p className="text-red-500 text-xs mt-1">{errors.empresa_id}</p>}
-      </div>
+    <form onSubmit={handleSubmit} className="space-y-4">
 
-      {/* Parceiro */}
+      {/* Tipo de Contrato */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Parceiro Comercial</label>
-        <select
-          value={fields.parceiro_id || ''}
-          onChange={e => set('parceiro_id', e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">Sem parceiro</option>
-          {parceiros.map(p => (
-            <option key={p.id} value={p.id}>
-              {p.nome} — CPF: {p.cpf}
-            </option>
-          ))}
+        <label className={lbl}>Tipo de Contrato *</label>
+        <select value={tipoContrato} onChange={e => setTipoContrato(e.target.value as any)} className={cls}>
+          <option value="assessoria">Contrato de Assessoria Empresarial</option>
+          <option value="limpa_nome">Contrato Limpa Nome (PF / PJ)</option>
         </select>
       </div>
 
-      {/* Valor de referência */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Valor de Referência (R$) *</label>
-        <input
-          type="number"
-          min="1000"
-          step="0.01"
-          value={fields.valor_referencia || ''}
-          onChange={e => set('valor_referencia', parseFloat(e.target.value) || 0)}
-          placeholder="Ex: 100000"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        {errors.valor_referencia && <p className="text-red-500 text-xs mt-1">{errors.valor_referencia}</p>}
+      {/* ── ASSESSORIA ── */}
+      {tipoContrato === 'assessoria' && (
+        <>
+          <div>
+            <label className={lbl}>Empresa *</label>
+            <select value={empresaId} onChange={e => setEmpresaId(e.target.value)} className={cls}>
+              <option value="">Selecione uma empresa...</option>
+              {empresas.map(e => (
+                <option key={e.id} value={e.id}>{e.razao_social}{e.cnpj ? ` — ${e.cnpj}` : ''}</option>
+              ))}
+            </select>
+            {errors.empresaId && <p className="text-red-500 text-xs mt-1">{errors.empresaId}</p>}
+          </div>
+
+          <div>
+            <label className={lbl}>Parceiro Comercial</label>
+            <select value={parceiroId} onChange={e => setParceiroId(e.target.value)} className={cls}>
+              <option value="">Sem parceiro</option>
+              {parceiros.map(p => <option key={p.id} value={p.id}>{p.nome} — CPF: {p.cpf}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className={lbl}>Contador Responsável</label>
+            <select value={contadorId} onChange={e => setContadorId(e.target.value)} className={cls}>
+              <option value="">Sem contador</option>
+              {contadores.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.nome} — CRC: {c.crc}{c.nome_escritorio ? ` | ${c.nome_escritorio}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Valor de Referência (R$) *</label>
+              <input type="number" min="1000" step="0.01" value={valorReferencia}
+                onChange={e => setValorReferencia(e.target.value)} placeholder="Ex: 100000" className={cls} />
+              {errors.valorReferencia && <p className="text-red-500 text-xs mt-1">{errors.valorReferencia}</p>}
+            </div>
+            <div>
+              <label className={lbl}>Taxa de Comissão (%)</label>
+              <input type="number" min="1" max="100" step="0.1" value={taxaComissao}
+                onChange={e => setTaxaComissao(e.target.value)} className={cls} />
+            </div>
+          </div>
+
+          <div>
+            <label className={lbl}>Multa por Rescisão Antecipada (%)</label>
+            <input type="number" min="1" max="100" step="0.1" value={percentualMulta}
+              onChange={e => setPercentualMulta(e.target.value)} placeholder="Ex: 10" className={cls} />
+            <p className="text-xs text-gray-500 mt-1">
+              Percentual aplicado sobre o valor do contrato em caso de rescisão antecipada.
+            </p>
+          </div>
+        </>
+      )}
+
+      {/* ── LIMPA NOME ── */}
+      {tipoContrato === 'limpa_nome' && (
+        <>
+          <div>
+            <label className={lbl}>Tipo de Cliente *</label>
+            <select value={clienteTipo} onChange={e => { setClienteTipo(e.target.value as any); setClienteId(''); }} className={cls}>
+              <option value="empresa">Pessoa Jurídica (Empresa)</option>
+              <option value="lead">Pessoa Física (Lead / Cliente)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className={lbl}>{clienteTipo === 'empresa' ? 'Empresa (PJ)' : 'Cliente (PF)'} *</label>
+            <select value={clienteId} onChange={e => setClienteId(e.target.value)} className={cls}>
+              <option value="">Selecione...</option>
+              {clienteTipo === 'empresa'
+                ? empresas.map(e => <option key={e.id} value={e.id}>{e.razao_social}{e.cnpj ? ` — ${e.cnpj}` : ''}</option>)
+                : leads.map(l => <option key={l.id} value={l.id}>{l.nome || l.razao_social}{l.cpf ? ` — CPF: ${l.cpf}` : ''}</option>)
+              }
+            </select>
+            {errors.clienteId && <p className="text-red-500 text-xs mt-1">{errors.clienteId}</p>}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Valor do Contrato (R$) *</label>
+              <input type="number" min="1" step="0.01" value={valorContrato}
+                onChange={e => setValorContrato(e.target.value)} placeholder="Ex: 1500" className={cls} />
+              {errors.valorContrato && <p className="text-red-500 text-xs mt-1">{errors.valorContrato}</p>}
+            </div>
+            <div>
+              <label className={lbl}>Condição de Pagamento *</label>
+              <input type="text" value={condicaoPgto}
+                onChange={e => setCondicaoPgto(e.target.value)} placeholder="Ex: 50% entrada + 50% na entrega" className={cls} />
+              {errors.condicaoPgto && <p className="text-red-500 text-xs mt-1">{errors.condicaoPgto}</p>}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Prazo de Entrega (dias)</label>
+              <input type="number" min="1" value={prazoEntrega}
+                onChange={e => setPrazoEntrega(e.target.value)} className={cls} />
+            </div>
+            <div>
+              <label className={lbl}>Prazo de Garantia (meses)</label>
+              <input type="number" min="1" value={prazoGarantia}
+                onChange={e => setPrazoGarantia(e.target.value)} className={cls} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Taxa Consulta Serasa</label>
+              <input type="text" value={taxaConsulta}
+                onChange={e => setTaxaConsulta(e.target.value)} placeholder="R$ 50,00" className={cls} />
+            </div>
+            <div>
+              <label className={lbl}>Taxa de Reprotocolo</label>
+              <input type="text" value={taxaReprotocolo}
+                onChange={e => setTaxaReprotocolo(e.target.value)} placeholder="R$ 300,00" className={cls} />
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── CAMPOS COMUNS ── */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={lbl}>Data de Assinatura *</label>
+          <input type="date" value={dataAssinatura} onChange={e => setDataAssinatura(e.target.value)} className={cls} />
+          {errors.dataAssinatura && <p className="text-red-500 text-xs mt-1">{errors.dataAssinatura}</p>}
+        </div>
+        <div>
+          <label className={lbl}>Foro Eleito *</label>
+          <input type="text" value={foroEleito} onChange={e => setForoEleito(e.target.value)}
+            placeholder="Ex: Taguatinga" className={cls} />
+          {errors.foroEleito && <p className="text-red-500 text-xs mt-1">{errors.foroEleito}</p>}
+        </div>
       </div>
 
-      {/* Taxa de comissão */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Taxa de Comissão (%)</label>
-        <input
-          type="number"
-          min="1"
-          max="100"
-          step="0.1"
-          value={fields.taxa_comissao}
-          onChange={e => set('taxa_comissao', parseFloat(e.target.value) || 10)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
-      {/* Data de assinatura */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Data de Assinatura *</label>
-        <input
-          type="date"
-          value={fields.data_assinatura}
-          onChange={e => set('data_assinatura', e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        {errors.data_assinatura && <p className="text-red-500 text-xs mt-1">{errors.data_assinatura}</p>}
-      </div>
-
-      {/* Foro eleito */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Foro Eleito *</label>
-        <input
-          type="text"
-          value={fields.foro_eleito}
-          onChange={e => set('foro_eleito', e.target.value)}
-          placeholder="Ex: Brasília/DF"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        {errors.foro_eleito && <p className="text-red-500 text-xs mt-1">{errors.foro_eleito}</p>}
-      </div>
-
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1B3A8C] text-white font-medium rounded-lg hover:bg-[#142d6e] disabled:opacity-50 transition-colors"
-      >
+      <button type="submit" disabled={loading}
+        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1B3A8C] text-white font-medium rounded-lg hover:bg-[#142d6e] disabled:opacity-50 transition-colors">
         {loading ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Preparando visualização...
-          </>
+          <><Loader2 className="w-4 h-4 animate-spin" />Gerando contrato...</>
         ) : (
-          <>
-            <Eye className="w-4 h-4" />
-            Visualizar Contrato
-          </>
+          <><Eye className="w-4 h-4" />Gerar Contrato PDF</>
         )}
       </button>
     </form>

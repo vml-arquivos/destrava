@@ -3192,6 +3192,8 @@ Responda APENAS com um JSON válido no seguinte formato:
     const foro          = contrato.foro_eleito || 'Taguatinga';
     const dataAss       = contrato.data_assinatura_formatada || '';
     const cidadeAss     = contrato.cidade_assinatura || 'BRASÍLIA – DF';
+    const pctMulta      = contrato.percentual_multa || 10;
+    const pctMultaExtenso = pctMulta === 10 ? 'dez' : pctMulta === 5 ? 'cinco' : pctMulta === 15 ? 'quinze' : pctMulta === 20 ? 'vinte' : pctMulta === 25 ? 'vinte e cinco' : String(pctMulta);
 
     const body = `
 <h1 class="doc-title">CONTRATO DE ANÁLISE DOCUMENTAL PARA ACESSO A LINHA DE CRÉDITO</h1>
@@ -3265,7 +3267,7 @@ ${temParceiro ? `<p class="clause"><strong>5.1</strong> - O PARCEIRO COMERCIAL, 
 
 <p class="clause"><strong>7.1</strong> - A Cláusula Penal será acionada caso a CONTRATANTE atrase o pagamento de 3 (três) parcelas consecutivas ou 5 (cinco) parcelas alternadas do contrato de crédito obtido junto à instituição financeira.</p>
 
-<p class="clause"><strong>7.2</strong> - O valor da multa será de 10% (dez por cento) sobre o valor total do crédito contratado pela CONTRATANTE junto à instituição financeira, a ser pago à CONTRATADA no prazo de 10 (dez) dias úteis após a notificação da inadimplência.</p>
+<p class="clause"><strong>7.2</strong> - O valor da multa será de ${pctMulta}% (${pctMultaExtenso} por cento) sobre o valor total do crédito contratado pela CONTRATANTE junto à instituição financeira, a ser pago à CONTRATADA no prazo de 10 (dez) dias úteis após a notificação da inadimplência.</p>
 
 <p class="clause"><strong>7.3</strong> - A aplicação desta Cláusula Penal não impede a CONTRATADA de buscar outras medidas legais cabíveis para a recuperação de quaisquer valores devidos, incluindo, mas não se limitando, aos honorários e comissões previstos na Cláusula 4.</p>
 
@@ -3319,6 +3321,7 @@ ${temParceiro ? `<p class="clause"><strong>5.1</strong> - O PARCEIRO COMERCIAL, 
     historico: { competencia: string; valor: number }[];
     previsoes: { ds: string; yhat: number; yhat_lower: number; yhat_upper: number }[];
     chartImageBase64?: string;
+    contador?: { nome: string; crc: string; cpf?: string; nome_escritorio?: string; cnpj_escritorio?: string; cidade_escritorio?: string; uf_escritorio?: string } | null;
   }): string {
     const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
     const fmtDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
@@ -3405,6 +3408,37 @@ ${payload.chartImageBase64 ? `
 </p>
 
 <p class="city-date" style="margin-top:24px;">Brasília – DF, ${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}.</p>
+
+${payload.contador ? `
+<div style="margin-top:40px; display:flex; justify-content:space-between; align-items:flex-end;">
+  <div style="text-align:center; width:45%;">
+    <div style="border-top:1px solid #333; padding-top:8px;">
+      <p style="font-size:10pt; font-weight:bold; margin:2px 0;">${payload.contador.nome}</p>
+      <p style="font-size:9pt; margin:2px 0;">CRC: ${payload.contador.crc}</p>
+      ${payload.contador.cpf ? `<p style="font-size:9pt; margin:2px 0;">CPF: ${payload.contador.cpf}</p>` : ''}
+      ${payload.contador.nome_escritorio ? `<p style="font-size:9pt; margin:2px 0; color:#555;">${payload.contador.nome_escritorio}</p>` : ''}
+      ${payload.contador.cnpj_escritorio ? `<p style="font-size:9pt; margin:2px 0; color:#555;">CNPJ: ${payload.contador.cnpj_escritorio}</p>` : ''}
+      ${(payload.contador.cidade_escritorio || payload.contador.uf_escritorio) ? `<p style="font-size:9pt; margin:2px 0; color:#555;">${[payload.contador.cidade_escritorio, payload.contador.uf_escritorio].filter(Boolean).join(' – ')}</p>` : ''}
+    </div>
+  </div>
+  <div style="text-align:center; width:45%;">
+    <img src="https://destravacredito.com/logo-destrava.png" alt="Destrava Crédito" style="height:40px; margin-bottom:8px;" onerror="this.style.display='none'"/>
+    <div style="border-top:1px solid #333; padding-top:8px;">
+      <p style="font-size:10pt; font-weight:bold; margin:2px 0;">DESTRAVA CRÉDITO LTDA</p>
+      <p style="font-size:9pt; margin:2px 0;">CNPJ: 35.427.182/0001-66</p>
+      <p style="font-size:9pt; margin:2px 0; color:#555;">Responsável Técnico</p>
+    </div>
+  </div>
+</div>
+` : `
+<div style="margin-top:40px; text-align:center;">
+  <img src="https://destravacredito.com/logo-destrava.png" alt="Destrava Crédito" style="height:40px; margin-bottom:8px;" onerror="this.style.display='none'"/>
+  <div style="border-top:1px solid #333; width:280px; margin:0 auto; padding-top:8px;">
+    <p style="font-size:10pt; font-weight:bold; margin:2px 0;">DESTRAVA CRÉDITO LTDA</p>
+    <p style="font-size:9pt; margin:2px 0;">CNPJ: 35.427.182/0001-66</p>
+  </div>
+</div>
+`}
 `;
 
     return gerarHtmlTimbrado(body, 'RELATÓRIO DE PREVISÃO DE FATURAMENTO');
@@ -3491,6 +3525,111 @@ ${payload.chartImageBase64 ? `
     return gerarHtmlTimbrado(body, 'PROPOSTA DE CRÉDITO');
   }
 
+  // ─── HTML CONTRATO LIMPA NOME (papel timbrado) ──────────────────────────────
+  async function gerarHtmlContratoLimpaNome(payload: any): Promise<string> {
+    const { contratante, contrato } = payload;
+    const contratada = CONTRATADA_DADOS;
+    const valorContrato   = contrato.valor_contrato_formatado || 'R$ 0,00';
+    const condicaoPgto    = contrato.condicao_pagamento || 'a combinar';
+    const prazoEntrega    = contrato.prazo_entrega_dias || 30;
+    const prazoGarantia   = contrato.prazo_garantia_meses || 6;
+    const foro            = contrato.foro_eleito || 'Taguatinga';
+    const dataAss         = contrato.data_assinatura_formatada || new Date().toLocaleDateString('pt-BR');
+    const cidadeAss       = contrato.cidade_assinatura || 'BRASÍLIA – DF';
+    const taxaConsulta    = contrato.taxa_consulta_serasa || 'R$ 50,00';
+    const taxaReprotocolo = contrato.taxa_reprotocolo || 'R$ 300,00';
+    const isPJ = !!contratante.cnpj;
+    const endContratante  = contratante.endereco || contratante.domicilio || '';
+
+    const body = `
+<h1 class="doc-title">CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE ASSESSORIA JURÍDICA</h1>
+<h1 class="doc-title" style="font-size:10pt; font-weight:normal; margin-bottom:20px;">PARA NÃO EXPOSIÇÃO DE RESTRIÇÕES</h1>
+
+<h2 class="section-title">QUADRO RESUMIDO</h2>
+<table class="data-table" style="margin-bottom:20px;">
+  <tr><td style="width:40%; font-weight:bold; background:#f0f4ff;">CONTRATADA</td><td>${contratada.razao_social} — CNPJ: ${contratada.cnpj}</td></tr>
+  <tr><td style="font-weight:bold; background:#f0f4ff;">Endereço</td><td>${contratada.endereco_sede}</td></tr>
+  <tr><td style="font-weight:bold; background:#f0f4ff;">CONTRATANTE</td><td>${contratante.nome || contratante.razao_social}</td></tr>
+  <tr><td style="font-weight:bold; background:#f0f4ff;">${isPJ ? 'CNPJ' : 'CPF'}</td><td>${isPJ ? contratante.cnpj : contratante.cpf}</td></tr>
+  <tr><td style="font-weight:bold; background:#f0f4ff;">Domicílio</td><td>${endContratante}</td></tr>
+  <tr><td style="font-weight:bold; background:#f0f4ff;">Valor do Contrato</td><td><strong>${valorContrato}</strong></td></tr>
+  <tr><td style="font-weight:bold; background:#f0f4ff;">Condição de Pagamento</td><td>${condicaoPgto}</td></tr>
+  <tr><td style="font-weight:bold; background:#f0f4ff;">Prazo de Entrega</td><td>Até ${prazoEntrega} dias corridos</td></tr>
+  <tr><td style="font-weight:bold; background:#f0f4ff;">Prazo Total de Garantia</td><td>${prazoGarantia} meses</td></tr>
+</table>
+
+<h2 class="section-title">CLÁUSULA 1 – DO OBJETO</h2>
+<p class="clause"><strong>1.1</strong> - O presente instrumento tem por objeto a prestação de serviços de assessoria jurídica pela CONTRATADA, consistente na elaboração, protocolo e acompanhamento de medida judicial para a não exposição pública das restrições financeiras do CONTRATANTE perante os órgãos de proteção ao crédito (Serasa, SPC e similares), por meio de liminar judicial.</p>
+<p class="clause"><strong>1.2</strong> - O serviço consiste exclusivamente na não exposição das restrições, não implicando na quitação ou cancelamento das dívidas subjacentes.</p>
+
+<h2 class="section-title">CLÁUSULA 2 – DA NATUREZA JURÍDICA DO SERVIÇO E DA POSSIBILIDADE DE CASSAÇÃO DA LIMINAR</h2>
+<p class="clause"><strong>2.1</strong> - O CONTRATANTE está ciente de que o serviço é baseado em medida judicial liminar, de caráter provisório, podendo ser cassada a qualquer momento por decisão judicial superveniente, independentemente da vontade das partes.</p>
+<p class="clause"><strong>2.2</strong> - A CONTRATADA não se responsabiliza pela cassação da liminar por decisão judicial, sendo que, neste caso, o serviço será reprotocolado sem custo adicional, desde que dentro do prazo de garantia contratual.</p>
+
+<h2 class="section-title">CLÁUSULA 3 – DO PRAZO DE ENTREGA DO SERVIÇO</h2>
+<p class="clause"><strong>3.1</strong> - A CONTRATADA se compromete a entregar o serviço no prazo de até ${prazoEntrega} (${prazoEntrega === 30 ? 'trinta' : String(prazoEntrega)}) dias corridos, contados da data de assinatura deste contrato e do pagamento integral do valor acordado.</p>
+<p class="clause"><strong>3.2</strong> - Em casos excepcionais, devidamente justificados, o prazo poderá ser prorrogado por mais 30 (trinta) dias, mediante comunicação prévia ao CONTRATANTE.</p>
+
+<h2 class="section-title">CLÁUSULA 4 – DO PREÇO E DA CONDIÇÃO DE PAGAMENTO</h2>
+<p class="clause"><strong>4.1</strong> - Pelo serviço ora contratado, o CONTRATANTE pagará à CONTRATADA o valor de <strong>${valorContrato}</strong>, nas seguintes condições: <strong>${condicaoPgto}</strong>.</p>
+<p class="clause"><strong>4.2</strong> - O não pagamento nas condições acordadas implicará na suspensão imediata dos serviços, sem prejuízo das medidas legais cabíveis.</p>
+
+<h2 class="section-title">CLÁUSULA 5 – DA CONCLUSÃO DO SERVIÇO</h2>
+<p class="clause"><strong>5.1</strong> - O serviço será considerado concluído quando o CONTRATANTE apresentar consulta ao Serasa demonstrando a não exposição das restrições financeiras.</p>
+
+<h2 class="section-title">CLÁUSULA 6 – DA GARANTIA CONTRATUAL DE ${prazoGarantia} MESES</h2>
+<p class="clause"><strong>6.1</strong> - A CONTRATADA oferece garantia de ${prazoGarantia} (${prazoGarantia === 6 ? 'seis' : String(prazoGarantia)}) meses, contados da data da consulta Serasa que comprove a não exposição das restrições.</p>
+<p class="clause"><strong>6.2</strong> - Durante o período de garantia, caso haja retorno da exposição das restrições, a CONTRATADA reprotocolará o serviço sem custo adicional, desde que comprovado mediante consulta ao Serasa, cujo custo de ${taxaConsulta} será de responsabilidade do CONTRATANTE.</p>
+
+<h2 class="section-title">CLÁUSULA 7 – DA NECESSIDADE DE CONSULTA PARA COMPROVAÇÃO DE RETORNO DA RESTRIÇÃO</h2>
+<p class="clause"><strong>7.1</strong> - Para acionamento da garantia, o CONTRATANTE deverá apresentar consulta ao Serasa, com custo de ${taxaConsulta}, a ser pago pelo CONTRATANTE, comprovando o retorno da exposição da restrição.</p>
+
+<h2 class="section-title">CLÁUSULA 8 – DAS NOVAS RESTRIÇÕES E DA TAXA DE REPROTOCOLO</h2>
+<p class="clause"><strong>8.1</strong> - Restrições financeiras inseridas após a data de assinatura deste contrato não estão cobertas pela garantia e serão tratadas como novo serviço.</p>
+<p class="clause"><strong>8.2</strong> - Caso o CONTRATANTE solicite o reprotocolo de novas restrições, será cobrada taxa de ${taxaReprotocolo} por restrição.</p>
+
+<h2 class="section-title">CLÁUSULA 9 – DAS OBRIGAÇÕES DO CONTRATANTE</h2>
+<p class="clause"><strong>9.1</strong> - Fornecer todos os documentos necessários para a prestação do serviço.</p>
+<p class="clause"><strong>9.2</strong> - Não contrair novas dívidas durante o período de prestação do serviço.</p>
+<p class="clause"><strong>9.3</strong> - Efetuar o pagamento nas condições acordadas.</p>
+
+<h2 class="section-title">CLÁUSULA 10 – DAS OBRIGAÇÕES DA CONTRATADA</h2>
+<p class="clause"><strong>10.1</strong> - Prestar o serviço com diligência, técnica e dentro do prazo acordado.</p>
+<p class="clause"><strong>10.2</strong> - Manter sigilo sobre todas as informações do CONTRATANTE.</p>
+<p class="clause"><strong>10.3</strong> - Comunicar ao CONTRATANTE qualquer impedimento ou dificuldade na prestação do serviço.</p>
+
+<h2 class="section-title">CLÁUSULA 11 – DA AUSÊNCIA DE VÍNCULO E DO SIGILO</h2>
+<p class="clause"><strong>11.1</strong> - O presente contrato não estabelece qualquer vínculo empregatício entre as partes.</p>
+<p class="clause"><strong>11.2</strong> - As partes se comprometem a manter sigilo sobre todas as informações trocadas em razão deste contrato.</p>
+
+<h2 class="section-title">CLÁUSULA 12 – DA RESCISÃO</h2>
+<p class="clause"><strong>12.1</strong> - O presente contrato poderá ser rescindido por qualquer das partes, mediante notificação prévia de 15 (quinze) dias.</p>
+<p class="clause"><strong>12.2</strong> - Em caso de rescisão por iniciativa do CONTRATANTE após o início dos serviços, será devida à CONTRATADA a remuneração proporcional aos serviços já prestados.</p>
+
+<h2 class="section-title">CLÁUSULA 13 – DO FORO</h2>
+<p class="clause">Para dirimir quaisquer controvérsias oriundas deste contrato, as partes elegem o foro da Circunscrição Judiciária de <strong>${foro}</strong>, com renúncia expressa a qualquer outro, por mais privilegiado que seja.</p>
+
+<p class="city-date">${cidadeAss}, ${dataAss}.</p>
+
+<div class="sig-block" style="display:flex; justify-content:space-between; margin-top:40px;">
+  <div style="text-align:center; width:45%;">
+    <div class="sig-line"></div>
+    <p class="sig-name">${contratante.nome || contratante.razao_social}</p>
+    <p class="sig-sub">${isPJ ? 'CNPJ: ' + contratante.cnpj : 'CPF: ' + contratante.cpf}</p>
+    <p class="sig-sub">CONTRATANTE</p>
+  </div>
+  <div style="text-align:center; width:45%;">
+    <div class="sig-line"></div>
+    <p class="sig-name">${contratada.razao_social}</p>
+    <p class="sig-sub">CNPJ: ${contratada.cnpj}</p>
+    <p class="sig-sub">CONTRATADA</p>
+  </div>
+</div>
+`;
+
+    return gerarHtmlTimbrado(body, 'CONTRATO LIMPA NOME');
+  }
+
     async function gerarPdfContrato(payload: any): Promise<string> {
     const uploadsDir = path.resolve('uploads', 'contratos');
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -3549,7 +3688,17 @@ ${payload.chartImageBase64 ? `
   app.post('/api/faturamento/previsao/:id/exportar-pdf', auth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { chartImageBase64 } = req.body || {};
+      const { chartImageBase64, contador_id } = req.body || {};
+
+      // Buscar dados do contador se informado
+      let contadorData: any = null;
+      if (contador_id) {
+        const { rows: cRows } = await pool.query('SELECT * FROM contadores WHERE id=$1', [contador_id]);
+        if (cRows.length) {
+          const c = cRows[0];
+          contadorData = { nome: c.nome, crc: c.crc, cpf: c.cpf, nome_escritorio: c.nome_escritorio, cnpj_escritorio: c.cnpj_escritorio, cidade_escritorio: c.cidade_escritorio, uf_escritorio: c.uf_escritorio };
+        }
+      }
 
       // Buscar previsão
       const { rows: prevRows } = await pool.query(
@@ -3583,6 +3732,7 @@ ${payload.chartImageBase64 ? `
         historico,
         previsoes,
         chartImageBase64: chartImageBase64 || undefined,
+        contador: contadorData,
       };
 
       const html = gerarHtmlPrevisaoFaturamento(htmlPayload);
@@ -4024,14 +4174,27 @@ ${payload.chartImageBase64 ? `
           <p>Brasília, ${dataHoje}.</p>
         </div>
 
-        ${contador ? `
-        <div class="assinatura-section">
-          <div class="linha-assinatura"></div>
-          <p><strong>${contador.nome}</strong></p>
-          <p>CRC: ${contador.crc}</p>
-          ${contador.nome_escritorio ? `<p>${contador.nome_escritorio}</p>` : ''}
+        <div style="margin-top:40px; display:flex; justify-content:space-between; align-items:flex-end;">
+          ${contador ? `
+          <div style="text-align:center; width:45%;">
+            <div style="border-top:1px solid #333; padding-top:8px;">
+              <p style="font-size:10pt; font-weight:bold; margin:2px 0;">${contador.nome}</p>
+              <p style="font-size:9pt; margin:2px 0;">CRC: ${contador.crc}</p>
+              ${contador.cpf ? `<p style="font-size:9pt; margin:2px 0;">CPF: ${contador.cpf}</p>` : ''}
+              ${contador.nome_escritorio ? `<p style="font-size:9pt; margin:2px 0; color:#555;">${contador.nome_escritorio}</p>` : ''}
+              ${contador.cnpj_escritorio ? `<p style="font-size:9pt; margin:2px 0; color:#555;">CNPJ: ${contador.cnpj_escritorio}</p>` : ''}
+              ${(contador.cidade_escritorio || contador.uf_escritorio) ? `<p style="font-size:9pt; margin:2px 0; color:#555;">${[contador.cidade_escritorio, contador.uf_escritorio].filter(Boolean).join(' – ')}</p>` : ''}
+            </div>
+          </div>
+          ` : '<div style="width:45%;"></div>'}
+          <div style="text-align:center; width:45%;">
+            <img src="https://destravacredito.com/logo-destrava.png" alt="Destrava Crédito" style="height:40px; margin-bottom:8px;" onerror="this.style.display='none'"/>
+            <div style="border-top:1px solid #333; padding-top:8px;">
+              <p style="font-size:10pt; font-weight:bold; margin:2px 0;">DESTRAVA CRÉDITO LTDA</p>
+              <p style="font-size:9pt; margin:2px 0;">CNPJ: 35.427.182/0001-66</p>
+            </div>
+          </div>
         </div>
-        ` : ''}
 
         <style>
           .declaracao-header { text-align: center; margin-bottom: 24px; }
@@ -4149,12 +4312,122 @@ ${payload.chartImageBase64 ? `
     try {
       const colaborador = (req as any).colaborador;
       const {
+        tipo_contrato = 'assessoria',
         empresa_id, parceiro_id, lead_id,
-        valor_referencia, taxa_comissao = 10,
+        // campos contrato assessoria
+        valor_referencia, taxa_comissao = 10, percentual_multa = 10,
+        // campos contrato limpa nome
+        cliente_id, cliente_tipo, // 'empresa' ou 'lead'
+        valor_contrato, condicao_pagamento, prazo_entrega_dias = 30,
+        prazo_garantia_meses = 6, taxa_consulta_serasa, taxa_reprotocolo,
+        // campos comuns
         data_assinatura, foro_eleito,
       } = req.body;
 
-      if (!empresa_id || !valor_referencia || !data_assinatura || !foro_eleito) {
+      if (!data_assinatura || !foro_eleito) {
+        res.status(400).json({ error: 'Campos obrigatórios: data_assinatura, foro_eleito' });
+        return;
+      }
+
+      const CONTRATADA = {
+        razao_social: 'DESTRAVA CREDITO LTDA',
+        cnpj: '35.427.182/0001-66',
+        representante: 'FERNANDO ELI OLIVEIRA MARQUES',
+        cpf_representante: '718.517.041-91',
+        cargo_representante: 'Sócio Administrador',
+        endereco_sede: 'St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250',
+        endereco_filial: 'Avenida Afonso Pena, qd-25 Alt. 05, S/N sala-02 setor Goiânia 2 CEP: 74665555 Goiânia-Go',
+        email: 'fernandoelipro@gmail.com',
+      };
+
+      let pdfPath: string;
+
+      if (tipo_contrato === 'limpa_nome') {
+        // ── CONTRATO LIMPA NOME (PF ou PJ) ──────────────────────────────────
+        if (!valor_contrato || !condicao_pagamento) {
+          res.status(400).json({ error: 'Campos obrigatórios para Limpa Nome: valor_contrato, condicao_pagamento' });
+          return;
+        }
+
+        // Buscar contratante: pode ser empresa (PJ) ou lead (PF)
+        let contratanteData: any = null;
+        if (cliente_tipo === 'empresa' && empresa_id) {
+          const { rows } = await pool.query('SELECT * FROM empresas WHERE id=$1', [empresa_id]);
+          if (!rows.length) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+          const e = rows[0];
+          contratanteData = {
+            razao_social: e.razao_social,
+            cnpj: e.cnpj || '',
+            endereco: [e.logradouro, e.numero, e.bairro, e.cidade, e.estado].filter(Boolean).join(', '),
+            representante: e.responsavel_nome || '',
+            cpf_representante: e.responsavel_cpf || '',
+          };
+        } else if (cliente_tipo === 'lead' && cliente_id) {
+          const { rows } = await pool.query('SELECT * FROM leads WHERE id=$1', [cliente_id]);
+          if (!rows.length) { res.status(404).json({ error: 'Lead não encontrado' }); return; }
+          const l = rows[0];
+          contratanteData = {
+            nome: l.nome || l.razao_social || '',
+            cpf: l.cpf || '',
+            cnpj: l.cnpj || '',
+            domicilio: l.endereco || '',
+          };
+        } else {
+          res.status(400).json({ error: 'Informe cliente_tipo (empresa/lead) e o respectivo ID' });
+          return;
+        }
+
+        const payloadLN = {
+          contratante: contratanteData,
+          contrato: {
+            valor_contrato_formatado: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(valor_contrato)),
+            condicao_pagamento,
+            prazo_entrega_dias: parseInt(prazo_entrega_dias),
+            prazo_garantia_meses: parseInt(prazo_garantia_meses),
+            taxa_consulta_serasa: taxa_consulta_serasa || 'R$ 50,00',
+            taxa_reprotocolo: taxa_reprotocolo || 'R$ 300,00',
+            data_assinatura_formatada: new Date(data_assinatura + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }),
+            foro_eleito,
+          },
+        };
+
+        const htmlLN = await gerarHtmlContratoLimpaNome(payloadLN);
+        const uploadsDir2 = path.resolve('uploads', 'contratos');
+        if (!fs.existsSync(uploadsDir2)) fs.mkdirSync(uploadsDir2, { recursive: true });
+        const fileNameLN = `contrato-limpa-nome-${crypto.randomUUID()}.pdf`;
+        const filePathLN = path.join(uploadsDir2, fileNameLN);
+        let browser2;
+        try {
+          const puppeteer2 = await import('puppeteer-core');
+          let executablePath2: string;
+          if (process.env.CHROMIUM_PATH) {
+            executablePath2 = process.env.CHROMIUM_PATH;
+          } else {
+            const chromium2 = await import('@sparticuz/chromium');
+            executablePath2 = await chromium2.default.executablePath();
+          }
+          browser2 = await puppeteer2.default.launch({ executablePath: executablePath2, args: ['--no-sandbox','--disable-setuid-sandbox'], headless: true });
+          const page2 = await browser2.newPage();
+          await page2.setContent(htmlLN, { waitUntil: 'networkidle0' });
+          await page2.pdf({ path: filePathLN, format: 'A4', printBackground: true, margin: { top: '35mm', bottom: '28mm', left: '20mm', right: '20mm' }, displayHeaderFooter: true, headerTemplate: getPuppeteerHeaderTemplate(), footerTemplate: getPuppeteerFooterTemplate() });
+        } finally {
+          if (browser2) await (browser2 as any).close();
+        }
+        pdfPath = filePathLN;
+
+        const hash2 = await calcularHashArquivo(pdfPath);
+        const { rows: contratoRows2 } = await pool.query(
+          `INSERT INTO contratos_gerados (empresa_id, parceiro_id, lead_id, valor_referencia, taxa_comissao, honorario_minimo_mes, honorario_minimo_total, data_assinatura, foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, created_at`,
+          [empresa_id || null, parceiro_id || null, cliente_id || null, valor_contrato, 0, 0, 0, data_assinatura, foro_eleito, pdfPath, hash2, JSON.stringify(payloadLN), colaborador.id]
+        );
+        const contrato2 = contratoRows2[0];
+        res.status(201).json({ success: true, contrato_id: contrato2.id, pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`, hash_documento: hash2, created_at: contrato2.created_at });
+        return;
+      }
+
+      // ── CONTRATO DE ASSESSORIA (padrão) ─────────────────────────────────────
+      if (!empresa_id || !valor_referencia) {
         res.status(400).json({ error: 'Campos obrigatórios: empresa_id, valor_referencia, data_assinatura, foro_eleito' });
         return;
       }
@@ -4179,17 +4452,6 @@ ${payload.chartImageBase64 ? `
         parceiro = parceiroRows[0] || null;
       }
 
-      const CONTRATADA = {
-        razao_social: 'DESTRAVA CREDITO LTDA',
-        cnpj: '35.427.182/0001-66',
-        representante: 'FERNANDO ELI OLIVEIRA MARQUES',
-        cpf_representante: '718.517.041-91',
-        cargo_representante: 'Sócio Administrador',
-        endereco_sede: 'St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250',
-        endereco_filial: 'Avenida Afonso Pena, qd-25 Alt. 05, S/N sala-02 setor Goiânia 2 CEP: 74665555 Goiânia-Go',
-        email: 'fernandoelipro@gmail.com',
-      };
-
       const payload = {
         contratada: CONTRATADA,
         contratante: {
@@ -4205,6 +4467,7 @@ ${payload.chartImageBase64 ? `
           valor_referencia: parseFloat(valor_referencia),
           valor_referencia_formatado: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor_referencia),
           taxa_comissao: parseFloat(taxa_comissao),
+          percentual_multa: parseFloat(percentual_multa),
           honorario_minimo_mes: 1,
           honorario_minimo_total: 12,
           data_assinatura,
@@ -4216,7 +4479,7 @@ ${payload.chartImageBase64 ? `
         },
       };
 
-      const pdfPath = await gerarPdfContrato(payload);
+      pdfPath = await gerarPdfContrato(payload);
       const hash = await calcularHashArquivo(pdfPath);
 
       const { rows: contratoRows } = await pool.query(
