@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Loader2, FileText } from 'lucide-react';
+import { Loader2, Eye } from 'lucide-react';
 
 interface FormData {
   empresa_id: string;
@@ -154,17 +154,17 @@ export function FormGerarContrato({ empresas, parceiros, onSubmit, loading }: Pr
       <button
         type="submit"
         disabled={loading}
-        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1B3A8C] text-white font-medium rounded-lg hover:bg-[#142d6e] disabled:opacity-50 transition-colors"
       >
         {loading ? (
           <>
             <Loader2 className="w-4 h-4 animate-spin" />
-            Gerando contrato...
+            Preparando visualização...
           </>
         ) : (
           <>
-            <FileText className="w-4 h-4" />
-            Gerar Contrato PDF
+            <Eye className="w-4 h-4" />
+            Visualizar Contrato
           </>
         )}
       </button>
