@@ -3900,6 +3900,219 @@ ${tabelaAnos}
     return gerarHtmlTimbrado(body, 'CONTRATO LIMPA NOME');
   }
 
+  // ─── CONTRATO LIMPA BACEN ─────────────────────────────────────────────────
+  async function gerarHtmlContratoBacen(payload: any): Promise<string> {
+    const { contratante, representante, contrato } = payload;
+    const contratada = CONTRATADA_DADOS;
+    const valorContrato    = contrato.valor_contrato_formatado || 'R$ 0,00';
+    const condicaoPgto     = contrato.condicao_pagamento || 'a combinar';
+    const prazoExecucao    = contrato.prazo_execucao_dias_uteis || 120;
+    const prazoAtualizacao = contrato.prazo_atualizacao_orgao_dias || 60;
+    const foro             = contrato.foro_eleito || 'Brasília/DF';
+    const dataAss          = contrato.data_assinatura_formatada || new Date().toLocaleDateString('pt-BR');
+    const cidadeAss        = contrato.cidade_assinatura || 'BRASÍLIA – DF';
+    const body = `
+<h1 class="doc-title">CONTRATO DE PRESTAÇÃO DE SERVIÇOS EM ASSESSORIA FINANCEIRA (BACEN)</h1>
+<h2 class="section-title">IDENTIFICAÇÃO DAS PARTES</h2>
+<p class="clause"><strong>CONTRATADA:</strong> ${contratada.razao_social}, CNPJ n° ${contratada.cnpj}, com sede na ${contratada.endereco_sede}, representada neste ato por ${contratada.representante}, ${contratada.cargo_representante}, CPF n° ${contratada.cpf_representante}.</p>
+<p class="clause"><strong>CONTRATANTE:</strong> ${contratante.razao_social}, CNPJ n° ${contratante.cnpj}, com sede em ${contratante.endereco}, representada neste ato por ${representante.nome}, sócio administrador, CPF n° ${representante.cpf}.</p>
+<h2 class="section-title">1. CLÁUSULA PRIMEIRA – OBJETO DO CONTRATO</h2>
+<p class="clause"><strong>1.1.</strong> O presente CONTRATO, mediante a propositura de ação judicial, objetiva a suspensão da exposição dos apontamentos do CONTRATANTE identificados no relatório BACEN/SCR. Desta forma serão retiradas as anotações de prejuízos e vencidos do relatório SCR, existentes até o mês de referência da consulta feita no ato da assinatura deste contrato.</p>
+<p class="clause"><strong>1.2.</strong> Os serviços contratados diante deste contrato não são uma garantia de crédito para o CONTRATANTE.</p>
+<h2 class="section-title">2. CLÁUSULA SEGUNDA – DAS DESPESAS E HONORÁRIOS</h2>
+<p class="clause"><strong>2.1.</strong> As despesas extraordinárias, custas e despesas administrativas são de responsabilidade do CONTRATANTE.</p>
+<p class="clause"><strong>2.2.</strong> O valor do serviço contratado é de <strong>${valorContrato}</strong> e deve ser pago nas seguintes condições: <strong>${condicaoPgto}</strong>, em conta corrente jurídica de titularidade da CONTRATADA, inexistindo a possibilidade de cancelamento após o processo ser protocolado em órgão competente.</p>
+<h2 class="section-title">3. CLÁUSULA TERCEIRA – PRAZO</h2>
+<p class="clause"><strong>3.1.</strong> A CONTRATADA pede o prazo máximo de <strong>${prazoExecucao} (${prazoExecucao === 120 ? 'cento e vinte' : String(prazoExecucao)}) dias úteis</strong> contados da data da assinatura do contrato, para a execução integral do serviço e <strong>${prazoAtualizacao} dias</strong> após a conclusão do processo, para atualização do órgão competente.</p>
+<h2 class="section-title">4. CLÁUSULA QUARTA – DISPOSIÇÕES GERAIS</h2>
+<p class="clause"><strong>4.1.</strong> O CONTRATANTE declara ter sido devidamente cientificado pela CONTRATADA de todas as peculiaridades da situação em que se encontra, com base no relatório SCR/BACEN. Contrato em aberto (EM DIA) não está incluso neste processo e, vindo a ser inserido posteriormente no relatório de VENCIDO ou PREJUÍZO, deverá o CONTRATANTE solicitar e pagar à CONTRATADA um novo contrato de prestação de serviço.</p>
+<p class="clause"><strong>4.2.</strong> Sob exclusiva responsabilidade do CONTRATANTE, e a seu ônus, serão contratados profissionais da área para a prática dos atos que forem privativos de profissões regulamentadas, quando assim for determinado judicialmente, tais como Perito Judicial e Assistente Técnico.</p>
+<p class="clause"><strong>4.3.</strong> Se, sem culpa da CONTRATADA, lhe for cassado o mandato, ou se o CONTRATANTE ajustar outro patrono ou terceiros, ou ainda acordar diretamente com a outra parte sem a ciência e anuência da CONTRATADA, ou se por ato prejudicial aos objetivos do presente instrumento por parte do CONTRATANTE a CONTRATADA vier a renunciar ao mandato, a quantia fixada na cláusula segunda torna o presente contrato imediatamente exigível como dívida líquida e certa, independentemente de quaisquer formalidades, inclusive notificação ou interpelação, e serão cobrados por via de Ação de Execução.</p>
+<h2 class="section-title">5. CLÁUSULA QUINTA – DISPOSIÇÕES FINAIS</h2>
+<p class="clause"><strong>5.1.</strong> O CONTRATANTE se obriga por si, seus herdeiros e sucessores ao fiel cumprimento de todas as cláusulas e condições pactuadas. Qualquer tolerância ou concessão por parte da CONTRATADA não implicará em novação e não terá a faculdade de alterar o pactuado, permanecendo íntegras todas as cláusulas e condições ora avençadas.</p>
+<p class="clause"><strong>5.2.</strong> O presente contrato é um título executivo extrajudicial conforme previsão legal e, em caso de inadimplemento do cliente, permite a propositura de ação de execução autônoma para o recebimento dos honorários devidos e não pagos.</p>
+<p class="clause"><strong>5.3.</strong> Suficientemente informado, declaro que li e compreendi o conceito do "BACEN/SCR".</p>
+<h2 class="section-title">6. CLÁUSULA SEXTA – DO FORO</h2>
+<p class="clause"><strong>6.1.</strong> Para dirimir quaisquer controvérsias oriundas do CONTRATO, as partes elegem o foro da comarca de <strong>${foro}</strong>.</p>
+<p class="clause">Por estarem assim justos e contratados, firmam o presente instrumento, em duas vias de igual teor.</p>
+<p class="city-date">${cidadeAss}, ${dataAss}.</p>
+<div class="sig-block" style="display:flex; justify-content:space-between; margin-top:40px;">
+  <div style="text-align:center; width:45%;">
+    <div class="sig-line"></div>
+    <p class="sig-name">${contratante.razao_social}</p>
+    <p class="sig-sub">CNPJ: ${contratante.cnpj}</p>
+    <p class="sig-sub">CONTRATANTE</p>
+  </div>
+  <div style="text-align:center; width:45%;">
+    <div class="sig-line"></div>
+    <p class="sig-name">${contratada.razao_social}</p>
+    <p class="sig-sub">CNPJ: ${contratada.cnpj}</p>
+    <p class="sig-sub">CONTRATADA</p>
+  </div>
+</div>
+`;
+    return gerarHtmlTimbrado(body, 'CONTRATO LIMPA BACEN');
+  }
+
+  // ─── CONTRATO RATING ──────────────────────────────────────────────────────
+  async function gerarHtmlContratoRating(payload: any): Promise<string> {
+    const { contratante, representante, contrato } = payload;
+    const contratada   = CONTRATADA_DADOS;
+    const valorContrato = contrato.valor_contrato_formatado || 'R$ 0,00';
+    const condicaoPgto  = contrato.condicao_pagamento || 'a combinar';
+    const prazoAcomp    = contrato.prazo_acompanhamento_dias || 90;
+    const prazoProrrog  = contrato.prazo_prorrogacao_dias || 90;
+    const foro          = contrato.foro_eleito || 'Taguatinga/DF';
+    const dataAss       = contrato.data_assinatura_formatada || new Date().toLocaleDateString('pt-BR');
+    const cidadeAss     = contrato.cidade_assinatura || 'BRASÍLIA – DF';
+    const body = `
+<h1 class="doc-title">CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE ASSESSORIA FINANCEIRA</h1>
+<h1 class="doc-title" style="font-size:10pt; font-weight:normal; margin-bottom:20px;">ALGORITMO FINANCEIRO / RATING DE CRÉDITO</h1>
+<h2 class="section-title">I – IDENTIFICAÇÃO DAS PARTES</h2>
+<p class="clause"><strong>CONTRATADA:</strong> ${contratada.razao_social}, CNPJ n° ${contratada.cnpj}, com sede na ${contratada.endereco_sede}, representada neste ato por ${contratada.representante}, ${contratada.cargo_representante}, CPF n° ${contratada.cpf_representante}.</p>
+<p class="clause"><strong>CONTRATANTE:</strong> ${contratante.razao_social}, CNPJ n° ${contratante.cnpj}, com sede em ${contratante.endereco}, representada neste ato por ${representante.nome}, CPF n° ${representante.cpf}.</p>
+<h2 class="section-title">CLÁUSULA PRIMEIRA – DO OBJETO</h2>
+<p class="clause"><strong>1.1.</strong> O presente contrato tem por objeto a prestação de serviços de assessoria financeira especializada pela CONTRATADA, consistente na análise, monitoramento e orientação para melhoria do rating de crédito e do score financeiro do CONTRATANTE junto às instituições financeiras, bureaus de crédito e demais órgãos competentes, por meio da aplicação de metodologias e algoritmos financeiros proprietários.</p>
+<p class="clause"><strong>1.2.</strong> Os serviços incluem: análise do perfil financeiro atual, identificação de pontos de melhoria, orientação sobre boas práticas financeiras, acompanhamento da evolução do rating e emissão de relatórios periódicos de desempenho.</p>
+<p class="clause"><strong>1.3.</strong> A CONTRATADA não garante resultado específico de score, aprovação de crédito ou liberação de financiamentos, uma vez que tais decisões são de competência exclusiva das instituições financeiras.</p>
+<h2 class="section-title">CLÁUSULA SEGUNDA – DO PRAZO</h2>
+<p class="clause"><strong>2.1.</strong> O acompanhamento será realizado pelo prazo de <strong>${prazoAcomp} (${prazoAcomp === 90 ? 'noventa' : String(prazoAcomp)}) dias</strong>, podendo ser prorrogado por igual período mediante acordo entre as partes.</p>
+<p class="clause"><strong>2.2.</strong> Em casos excepcionais devidamente justificados, o prazo poderá ser prorrogado por mais <strong>${prazoProrrog} (${prazoProrrog === 90 ? 'noventa' : String(prazoProrrog)}) dias</strong>, mediante comunicação prévia ao CONTRATANTE.</p>
+<h2 class="section-title">CLÁUSULA TERCEIRA – DO PREÇO E DA CONDIÇÃO DE PAGAMENTO</h2>
+<p class="clause"><strong>3.1.</strong> Pelos serviços ora contratados, o CONTRATANTE pagará à CONTRATADA o valor de <strong>${valorContrato}</strong>, nas seguintes condições: <strong>${condicaoPgto}</strong>.</p>
+<p class="clause"><strong>3.2.</strong> O não pagamento nas condições acordadas implicará na suspensão imediata dos serviços, sem prejuízo das medidas legais cabíveis.</p>
+<h2 class="section-title">CLÁUSULA QUARTA – DAS OBRIGAÇÕES DA CONTRATADA</h2>
+<p class="clause"><strong>4.1.</strong> Realizar análise técnica do perfil financeiro do CONTRATANTE e apresentar relatório inicial no prazo de até 15 (quinze) dias úteis após a assinatura do contrato e recebimento da documentação necessária.</p>
+<p class="clause"><strong>4.2.</strong> Fornecer orientações personalizadas e acompanhamento periódico durante a vigência do contrato.</p>
+<p class="clause"><strong>4.3.</strong> Manter sigilo absoluto sobre todas as informações financeiras do CONTRATANTE.</p>
+<h2 class="section-title">CLÁUSULA QUINTA – DAS OBRIGAÇÕES DO CONTRATANTE</h2>
+<p class="clause"><strong>5.1.</strong> Fornecer todos os documentos e informações necessários para a prestação do serviço, garantindo sua veracidade e atualidade.</p>
+<p class="clause"><strong>5.2.</strong> Seguir as orientações fornecidas pela CONTRATADA para a melhoria do rating de crédito.</p>
+<p class="clause"><strong>5.3.</strong> Efetuar o pagamento nas condições acordadas.</p>
+<h2 class="section-title">CLÁUSULA SEXTA – DA AUSÊNCIA DE VÍNCULO E DO SIGILO</h2>
+<p class="clause"><strong>6.1.</strong> O presente contrato não estabelece qualquer vínculo empregatício, societário ou de representação comercial entre as partes.</p>
+<p class="clause"><strong>6.2.</strong> As partes se comprometem a manter sigilo sobre todas as informações trocadas em razão deste contrato, inclusive após o seu término.</p>
+<h2 class="section-title">CLÁUSULA SÉTIMA – DA RESCISÃO</h2>
+<p class="clause"><strong>7.1.</strong> O presente contrato poderá ser rescindido por qualquer das partes mediante notificação prévia de 15 (quinze) dias, sem prejuízo das obrigações já constituídas.</p>
+<h2 class="section-title">CLÁUSULA OITAVA – DO FORO</h2>
+<p class="clause">Para dirimir quaisquer controvérsias oriundas deste contrato, as partes elegem o foro da Circunscrição Judiciária de <strong>${foro}</strong>, com renúncia expressa a qualquer outro, por mais privilegiado que seja.</p>
+<p class="city-date">${cidadeAss}, ${dataAss}.</p>
+<div class="sig-block" style="display:flex; justify-content:space-between; margin-top:40px;">
+  <div style="text-align:center; width:45%;">
+    <div class="sig-line"></div>
+    <p class="sig-name">${contratante.razao_social}</p>
+    <p class="sig-sub">CNPJ: ${contratante.cnpj}</p>
+    <p class="sig-sub">CONTRATANTE</p>
+  </div>
+  <div style="text-align:center; width:45%;">
+    <div class="sig-line"></div>
+    <p class="sig-name">${contratada.razao_social}</p>
+    <p class="sig-sub">CNPJ: ${contratada.cnpj}</p>
+    <p class="sig-sub">CONTRATADA</p>
+  </div>
+</div>
+`;
+    return gerarHtmlTimbrado(body, 'CONTRATO RATING');
+  }
+
+  // ─── CONTRATO PARCERIA COMERCIAL ──────────────────────────────────────────
+  async function gerarHtmlContratoParceriaComercial(payload: any): Promise<string> {
+    const { parceiro, contrato } = payload;
+    const contratada  = CONTRATADA_DADOS;
+    const pctDestrava = contrato.percentual_destrava || 70;
+    const pctParceiro = contrato.percentual_parceiro || 30;
+    const prazoPgto   = contrato.prazo_pagamento_dias_uteis || 5;
+    const avisoPrevio = contrato.aviso_previo_rescisao_dias || 30;
+    const foro        = contrato.foro_eleito || 'Taguatinga/DF';
+    const dataAss     = contrato.data_assinatura_formatada || new Date().toLocaleDateString('pt-BR');
+    const cidadeAss   = contrato.cidade_assinatura || 'BRASÍLIA – DF';
+    const temTest1    = !!(contrato.testemunha_1_nome);
+    const temTest2    = !!(contrato.testemunha_2_nome);
+    const qualificacaoParceiro = [
+      parceiro.estado_civil ? `, ${parceiro.estado_civil}` : '',
+      parceiro.profissao ? `, ${parceiro.profissao}` : '',
+      `, inscrita no CPF sob o n° ${parceiro.cpf}`,
+      parceiro.cnpj ? ` e no CNPJ sob o n° ${parceiro.cnpj}` : '',
+      `, residente e domiciliada em ${parceiro.endereco}`,
+    ].join('');
+    const body = `
+<h1 class="doc-title">CONTRATO DE PARCERIA COMERCIAL</h1>
+<p class="clause"><strong>CONTRATADA:</strong> DESTRAVA CREDITO LTDA, pessoa jurídica de direito privado, inscrita no CNPJ sob o n° ${contratada.cnpj}, com sede na ${contratada.endereco_sede}, doravante denominada simplesmente DESTRAVA CRÉDITO, neste ato representada por seu sócio administrador, Sr. ${contratada.representante}, brasileiro, portador do CPF n° ${contratada.cpf_representante}.</p>
+<p class="clause"><strong>PARCEIRA COMERCIAL:</strong> ${parceiro.nome}, brasileira${qualificacaoParceiro}, doravante denominada simplesmente PARCEIRA.</p>
+<p class="clause">As partes acima qualificadas celebram o presente Contrato de Parceria Comercial, que se regerá pelas seguintes cláusulas e condições:</p>
+<h2 class="section-title">CLÁUSULA PRIMEIRA – DO OBJETO</h2>
+<p class="clause"><strong>1.1.</strong> O presente contrato tem como objeto a formalização de parceria comercial entre a DESTRAVA CRÉDITO e a PARCEIRA para a prospecção e captação de clientes (pessoas físicas ou jurídicas) interessados na obtenção de crédito bancário, doravante denominados CLIENTES.</p>
+<p class="clause"><strong>1.2.</strong> A PARCEIRA atuará como intermediária autônoma, identificando potenciais CLIENTES, apresentando os serviços da DESTRAVA CRÉDITO, recolhendo a documentação necessária para análise de crédito e prestando o suporte inicial.</p>
+<p class="clause"><strong>1.3.</strong> A DESTRAVA CRÉDITO será responsável por analisar a documentação fornecida, avaliar o perfil de crédito do CLIENTE, identificar a instituição financeira mais adequada e orientar o CLIENTE no processo de contratação do crédito.</p>
+<h2 class="section-title">CLÁUSULA SEGUNDA – DAS OBRIGAÇÕES DA DESTRAVA CRÉDITO</h2>
+<p class="clause"><strong>2.1.</strong> Realizar a análise técnica e criteriosa dos documentos dos CLIENTES indicados pela PARCEIRA.</p>
+<p class="clause"><strong>2.2.</strong> Indicar ao CLIENTE a instituição financeira que apresente a linha de crédito mais vantajosa e compatível com seu perfil, ou identificar oportunidades em bancos com os quais o CLIENTE já possua relacionamento.</p>
+<p class="clause"><strong>2.3.</strong> Prestar assessoria ao CLIENTE durante o processo de negociação e formalização do crédito junto à instituição financeira.</p>
+<p class="clause"><strong>2.4.</strong> Repassar à PARCEIRA a quota-parte da comissão de sucesso, conforme estipulado na Cláusula Quarta, após o efetivo recebimento dos valores pagos pelo CLIENTE.</p>
+<p class="clause"><strong>2.5.</strong> Manter a PARCEIRA informada sobre o andamento das negociações com os CLIENTES por ela captados.</p>
+<h2 class="section-title">CLÁUSULA TERCEIRA – DAS OBRIGAÇÕES DA PARCEIRA</h2>
+<p class="clause"><strong>3.1.</strong> Prospectar e captar ativamente novos CLIENTES com potencial interesse na contratação de produtos de crédito bancário.</p>
+<p class="clause"><strong>3.2.</strong> Realizar o atendimento inicial, apresentar os serviços da DESTRAVA CRÉDITO e esclarecer as condições gerais da prestação de serviços.</p>
+<p class="clause"><strong>3.3.</strong> Recolher junto aos CLIENTES toda a documentação solicitada pela DESTRAVA CRÉDITO, garantindo sua correta e completa entrega.</p>
+<p class="clause"><strong>3.4.</strong> Arcar integralmente com todas as despesas decorrentes de sua atividade de prospecção e captação, incluindo, mas não se limitando a, custos com transporte, comunicação, alimentação e material de escritório. A DESTRAVA CRÉDITO não realizará qualquer tipo de reembolso ou ajuda de custo.</p>
+<p class="clause"><strong>3.5.</strong> Atuar com ética, boa-fé e transparência, zelando pela imagem e bom nome da DESTRAVA CRÉDITO perante os CLIENTES e o mercado.</p>
+<p class="clause"><strong>3.6.</strong> Encaminhar à DESTRAVA CRÉDITO todas as propostas e documentos dos CLIENTES captados para a devida análise e processamento.</p>
+<h2 class="section-title">CLÁUSULA QUARTA – DA REMUNERAÇÃO E FORMA DE PAGAMENTO</h2>
+<p class="clause"><strong>4.1.</strong> A título de remuneração pelos serviços de assessoria prestados pela DESTRAVA CRÉDITO, o CLIENTE pagará uma comissão de sucesso correspondente a 10% (dez por cento) sobre o valor total do crédito efetivamente contratado ou liberado pela instituição financeira.</p>
+<p class="clause"><strong>4.2.</strong> A comissão de sucesso mencionada no item 4.1 será dividida em 2 partes entre a DESTRAVA CRÉDITO e a PARCEIRA, cabendo <strong>${pctDestrava}% (${pctDestrava === 70 ? 'setenta' : String(pctDestrava)} por cento)</strong> para DESTRAVA CRÉDITO e <strong>${pctParceiro}% (${pctParceiro === 30 ? 'trinta' : String(pctParceiro)} por cento)</strong> para a PARCEIRA COMERCIAL.</p>
+<p class="clause"><strong>4.3.</strong> O pagamento da parcela devida à PARCEIRA será realizado pela DESTRAVA CRÉDITO em até <strong>${prazoPgto} (${prazoPgto === 5 ? 'cinco' : String(prazoPgto)}) dias úteis</strong> após a confirmação do recebimento integral da comissão paga pelo CLIENTE.</p>
+<p class="clause"><strong>4.4.</strong> Fica expressamente estabelecido que a remuneração somente será devida em caso de sucesso na operação, ou seja, com a efetiva contratação e liberação dos recursos ao CLIENTE. Nenhuma remuneração será devida pela simples assinatura do contrato de prestação de serviços ou pela análise de documentos.</p>
+<h2 class="section-title">CLÁUSULA QUINTA – DA AUSÊNCIA DE OBRIGAÇÃO DE RESULTADO</h2>
+<p class="clause"><strong>5.1.</strong> As partes reconhecem que a prestação de serviços objeto deste contrato é uma atividade de meio, e não de resultado. A DESTRAVA CRÉDITO e a PARCEIRA se comprometem a empregar seus melhores esforços e conhecimentos técnicos na busca pela obtenção do crédito para o CLIENTE, contudo, não garantem a sua efetiva contratação, que depende de critérios exclusivos da instituição financeira.</p>
+<p class="clause"><strong>5.2.</strong> A não obtenção do crédito não gerará qualquer direito a indenização ou penalidade para qualquer das partes, tampouco obrigará a DESTRAVA CRÉDITO ou a PARCEIRA a devolverem eventuais valores recebidos a título de taxas administrativas ou custos operacionais, caso aplicável e previamente acordado com o CLIENTE.</p>
+<h2 class="section-title">CLÁUSULA SEXTA – DA AUSÊNCIA DE VÍNCULO EMPREGATÍCIO</h2>
+<p class="clause"><strong>6.1.</strong> O presente contrato é de natureza estritamente cível e comercial, não gerando qualquer tipo de vínculo empregatício, societário ou de representação comercial entre a DESTRAVA CRÉDITO e a PARCEIRA.</p>
+<p class="clause"><strong>6.2.</strong> A PARCEIRA declara ser profissional autônoma, com total liberdade para definir seus horários, métodos de trabalho e carteira de clientes, não estando sujeita a qualquer tipo de subordinação hierárquica ou cumprimento de jornada de trabalho.</p>
+<h2 class="section-title">CLÁUSULA SÉTIMA – DA CONFIDENCIALIDADE</h2>
+<p class="clause"><strong>7.1.</strong> As partes se obrigam a manter sigilo absoluto sobre todas as informações comerciais, financeiras, técnicas e dados pessoais de clientes a que tiverem acesso em razão deste contrato, não podendo divulgá-las, compartilhá-las ou utilizá-las para fins diversos dos aqui previstos, sob pena de rescisão imediata e apuração de perdas e danos.</p>
+<p class="clause"><strong>7.2.</strong> A obrigação de sigilo perdurará mesmo após o término ou rescisão deste contrato.</p>
+<h2 class="section-title">CLÁUSULA OITAVA – DA VIGÊNCIA E RESCISÃO</h2>
+<p class="clause"><strong>8.1.</strong> O presente contrato vigorará por prazo indeterminado, a contar da data de sua assinatura.</p>
+<p class="clause"><strong>8.2.</strong> Qualquer das partes poderá rescindir o presente contrato a qualquer tempo, sem ônus ou penalidades, mediante comunicação por escrito à outra parte com antecedência mínima de <strong>${avisoPrevio} (${avisoPrevio === 30 ? 'trinta' : String(avisoPrevio)}) dias</strong>.</p>
+<p class="clause"><strong>8.3.</strong> A rescisão do contrato não afetará o direito ao recebimento das comissões por negócios já concluídos ou em andamento, que serão pagas na forma da Cláusula Quarta.</p>
+<h2 class="section-title">CLÁUSULA NONA – DO FORO</h2>
+<p class="clause"><strong>9.1.</strong> Para dirimir quaisquer controvérsias oriundas deste contrato, as partes elegem o foro da Circunscrição Judiciária de <strong>${foro}</strong>, com renúncia expressa a qualquer outro, por mais privilegiado que seja.</p>
+<p class="clause">E, por estarem justas e contratadas, as partes assinam o presente instrumento em 2 (duas) vias de igual teor e forma, na presença de 2 (duas) testemunhas.</p>
+<p class="city-date">${cidadeAss}, ${dataAss}.</p>
+<div class="sig-block" style="display:flex; justify-content:space-between; margin-top:40px;">
+  <div style="text-align:center; width:45%;">
+    <div class="sig-line"></div>
+    <p class="sig-name">${contratada.razao_social}</p>
+    <p class="sig-sub">CNPJ: ${contratada.cnpj}</p>
+  </div>
+  <div style="text-align:center; width:45%;">
+    <div class="sig-line"></div>
+    <p class="sig-name">${parceiro.nome}</p>
+    <p class="sig-sub">CPF: ${parceiro.cpf}</p>
+  </div>
+</div>
+${(temTest1 || temTest2) ? `
+<div style="margin-top:32px;">
+  <p style="font-size:10pt; font-weight:bold; margin-bottom:16px;">Testemunhas:</p>
+  <div style="display:flex; justify-content:space-between;">
+    <div style="text-align:center; width:45%;">
+      <p style="margin-bottom:28px;">1.</p>
+      <div class="sig-line"></div>
+      <p class="sig-sub">Nome: ${contrato.testemunha_1_nome || ''}</p>
+      <p class="sig-sub">CPF: ${contrato.testemunha_1_cpf || ''}</p>
+    </div>
+    <div style="text-align:center; width:45%;">
+      <p style="margin-bottom:28px;">2.</p>
+      <div class="sig-line"></div>
+      <p class="sig-sub">Nome: ${contrato.testemunha_2_nome || ''}</p>
+      <p class="sig-sub">CPF: ${contrato.testemunha_2_cpf || ''}</p>
+    </div>
+  </div>
+</div>` : ''}
+`;
+    return gerarHtmlTimbrado(body, 'CONTRATO DE PARCERIA COMERCIAL');
+  }
+
     async function gerarPdfContrato(payload: any): Promise<string> {
     const uploadsDir = path.resolve('uploads', 'contratos');
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -4507,8 +4720,21 @@ ${tabelaAnos}
         cliente_id, cliente_tipo, // 'empresa' ou 'lead'
         valor_contrato, condicao_pagamento, prazo_entrega_dias = 30,
         prazo_garantia_meses = 6, taxa_consulta_serasa, taxa_reprotocolo,
+        // campos contrato bacen
+        prazo_execucao_dias_uteis = 120, prazo_atualizacao_orgao_dias = 60,
+        // campos contrato rating
+        prazo_acompanhamento_dias = 90, prazo_prorrogacao_dias = 90,
+        // campos contrato parceria comercial
+        percentual_destrava = 70, percentual_parceiro = 30,
+        prazo_pagamento_dias_uteis = 5, aviso_previo_rescisao_dias = 30,
+        testemunha_1_nome, testemunha_1_cpf, testemunha_2_nome, testemunha_2_cpf,
+        // representante (bacen/rating)
+        representante_nome, representante_cpf,
+        // parceiro comercial (parceria)
+        parceiro_nome, parceiro_cpf, parceiro_cnpj, parceiro_estado_civil,
+        parceiro_profissao, parceiro_endereco,
         // campos comuns
-        data_assinatura, foro_eleito,
+        data_assinatura, foro_eleito, cidade_assinatura,
       } = req.body;
 
       if (!data_assinatura || !foro_eleito) {
@@ -4636,6 +4862,213 @@ ${tabelaAnos}
         );
         const contrato2 = contratoRows2[0];
         res.status(201).json({ success: true, contrato_id: contrato2.id, pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`, hash_documento: hash2, created_at: contrato2.created_at });
+        return;
+      }
+
+      // ── CONTRATO LIMPA BACEN ────────────────────────────────────────────────
+      if (tipo_contrato === 'limpa_bacen') {
+        if (!valor_contrato || !condicao_pagamento) {
+          res.status(400).json({ error: 'Campos obrigatórios para Limpa BACEN: empresa_id, valor_contrato, condicao_pagamento' });
+          return;
+        }
+        if (!empresa_id) {
+          res.status(400).json({ error: 'empresa_id é obrigatório para contrato Limpa BACEN' });
+          return;
+        }
+        const { rows: empBacen } = await pool.query('SELECT * FROM empresas WHERE id=$1', [empresa_id]);
+        if (!empBacen.length) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+        const eb = empBacen[0];
+        const payloadBacen = {
+          contratante: {
+            razao_social: eb.razao_social,
+            cnpj: eb.cnpj || '',
+            endereco: [eb.logradouro, eb.numero, eb.bairro, eb.cidade, eb.estado].filter(Boolean).join(', '),
+          },
+          representante: {
+            nome: representante_nome || eb.responsavel_nome || '',
+            cpf: representante_cpf || eb.responsavel_cpf || '',
+          },
+          contrato: {
+            valor_contrato_formatado: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(valor_contrato)),
+            condicao_pagamento,
+            prazo_execucao_dias_uteis: parseInt(prazo_execucao_dias_uteis),
+            prazo_atualizacao_orgao_dias: parseInt(prazo_atualizacao_orgao_dias),
+            data_assinatura_formatada: new Date(data_assinatura + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }),
+            foro_eleito,
+            cidade_assinatura: cidade_assinatura || 'BRASÍLIA – DF',
+          },
+        };
+        const htmlBacen = await gerarHtmlContratoBacen(payloadBacen);
+        const uploadsDir3 = path.resolve('uploads', 'contratos');
+        if (!fs.existsSync(uploadsDir3)) fs.mkdirSync(uploadsDir3, { recursive: true });
+        const fileNameBacen = `contrato-limpa-bacen-${crypto.randomUUID()}.pdf`;
+        const filePathBacen = path.join(uploadsDir3, fileNameBacen);
+        let browserBacen;
+        try {
+          const puppeteerB = await import('puppeteer-core');
+          let execPathB: string;
+          if (process.env.CHROMIUM_PATH) { execPathB = process.env.CHROMIUM_PATH; }
+          else { try { const chromB = await import('@sparticuz/chromium'); execPathB = await chromB.default.executablePath(); } catch { execPathB = '/usr/bin/chromium-browser'; } }
+          browserBacen = await puppeteerB.default.launch({ executablePath: execPathB, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu','--single-process'], headless: true });
+          const pageB = await browserBacen.newPage();
+          await pageB.setContent(htmlBacen, { waitUntil: 'networkidle0' });
+          await pageB.pdf({ path: filePathBacen, format: 'A4', printBackground: true, margin: { top: '35mm', bottom: '28mm', left: '20mm', right: '20mm' }, displayHeaderFooter: true, headerTemplate: getPuppeteerHeaderTemplate(), footerTemplate: getPuppeteerFooterTemplate() });
+        } finally { if (browserBacen) await (browserBacen as any).close(); }
+        pdfPath = filePathBacen;
+        const hashBacen = await calcularHashArquivo(pdfPath);
+        const { rows: contratoRowsBacen } = await pool.query(
+          `INSERT INTO contratos_gerados
+             (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id,
+              valor_referencia, valor_contrato, condicao_pagamento, taxa_comissao,
+              honorario_minimo_mes, honorario_minimo_total, data_assinatura,
+              foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+           RETURNING id, created_at`,
+          ['limpa_bacen', 'empresa', empresa_id, parceiro_id || null, null,
+           valor_contrato, valor_contrato, condicao_pagamento, 0, 0, 0,
+           data_assinatura, foro_eleito, pdfPath, hashBacen, JSON.stringify(payloadBacen), colaborador.id]
+        );
+        const contratoBacen = contratoRowsBacen[0];
+        res.status(201).json({ success: true, contrato_id: contratoBacen.id, pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`, hash_documento: hashBacen, created_at: contratoBacen.created_at });
+        return;
+      }
+
+      // ── CONTRATO RATING ─────────────────────────────────────────────────────
+      if (tipo_contrato === 'rating') {
+        if (!valor_contrato || !condicao_pagamento) {
+          res.status(400).json({ error: 'Campos obrigatórios para Rating: empresa_id, valor_contrato, condicao_pagamento' });
+          return;
+        }
+        if (!empresa_id) {
+          res.status(400).json({ error: 'empresa_id é obrigatório para contrato Rating' });
+          return;
+        }
+        const { rows: empRating } = await pool.query('SELECT * FROM empresas WHERE id=$1', [empresa_id]);
+        if (!empRating.length) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+        const er = empRating[0];
+        const payloadRating = {
+          contratante: {
+            razao_social: er.razao_social,
+            cnpj: er.cnpj || '',
+            endereco: [er.logradouro, er.numero, er.bairro, er.cidade, er.estado].filter(Boolean).join(', '),
+          },
+          representante: {
+            nome: representante_nome || er.responsavel_nome || '',
+            cpf: representante_cpf || er.responsavel_cpf || '',
+          },
+          contrato: {
+            valor_contrato_formatado: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(valor_contrato)),
+            condicao_pagamento,
+            prazo_acompanhamento_dias: parseInt(prazo_acompanhamento_dias),
+            prazo_prorrogacao_dias: parseInt(prazo_prorrogacao_dias),
+            data_assinatura_formatada: new Date(data_assinatura + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }),
+            foro_eleito,
+            cidade_assinatura: cidade_assinatura || 'BRASÍLIA – DF',
+          },
+        };
+        const htmlRating = await gerarHtmlContratoRating(payloadRating);
+        const uploadsDir4 = path.resolve('uploads', 'contratos');
+        if (!fs.existsSync(uploadsDir4)) fs.mkdirSync(uploadsDir4, { recursive: true });
+        const fileNameRating = `contrato-rating-${crypto.randomUUID()}.pdf`;
+        const filePathRating = path.join(uploadsDir4, fileNameRating);
+        let browserRating;
+        try {
+          const puppeteerR = await import('puppeteer-core');
+          let execPathR: string;
+          if (process.env.CHROMIUM_PATH) { execPathR = process.env.CHROMIUM_PATH; }
+          else { try { const chromR = await import('@sparticuz/chromium'); execPathR = await chromR.default.executablePath(); } catch { execPathR = '/usr/bin/chromium-browser'; } }
+          browserRating = await puppeteerR.default.launch({ executablePath: execPathR, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu','--single-process'], headless: true });
+          const pageR = await browserRating.newPage();
+          await pageR.setContent(htmlRating, { waitUntil: 'networkidle0' });
+          await pageR.pdf({ path: filePathRating, format: 'A4', printBackground: true, margin: { top: '35mm', bottom: '28mm', left: '20mm', right: '20mm' }, displayHeaderFooter: true, headerTemplate: getPuppeteerHeaderTemplate(), footerTemplate: getPuppeteerFooterTemplate() });
+        } finally { if (browserRating) await (browserRating as any).close(); }
+        pdfPath = filePathRating;
+        const hashRating = await calcularHashArquivo(pdfPath);
+        const { rows: contratoRowsRating } = await pool.query(
+          `INSERT INTO contratos_gerados
+             (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id,
+              valor_referencia, valor_contrato, condicao_pagamento, taxa_comissao,
+              honorario_minimo_mes, honorario_minimo_total, data_assinatura,
+              foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+           RETURNING id, created_at`,
+          ['rating', 'empresa', empresa_id, parceiro_id || null, null,
+           valor_contrato, valor_contrato, condicao_pagamento, 0, 0, 0,
+           data_assinatura, foro_eleito, pdfPath, hashRating, JSON.stringify(payloadRating), colaborador.id]
+        );
+        const contratoRating = contratoRowsRating[0];
+        res.status(201).json({ success: true, contrato_id: contratoRating.id, pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`, hash_documento: hashRating, created_at: contratoRating.created_at });
+        return;
+      }
+
+      // ── CONTRATO PARCERIA COMERCIAL ─────────────────────────────────────────
+      if (tipo_contrato === 'parceria_comercial') {
+        // Apenas Administrador e Diretor podem gerar contrato de parceria comercial
+        const cargoColaborador = (colaborador.cargo || colaborador.role || '').toLowerCase();
+        const CARGOS_PARCERIA = ['administrador', 'admin', 'diretor'];
+        if (!CARGOS_PARCERIA.includes(cargoColaborador)) {
+          res.status(403).json({ error: 'Apenas Administradores e Diretores podem gerar contratos de Parceria Comercial.' });
+          return;
+        }
+        if (!parceiro_nome || !parceiro_cpf) {
+          res.status(400).json({ error: 'Campos obrigatórios para Parceria Comercial: parceiro_nome, parceiro_cpf' });
+          return;
+        }
+        const payloadParceria = {
+          parceiro: {
+            nome: parceiro_nome,
+            cpf: parceiro_cpf,
+            cnpj: parceiro_cnpj || '',
+            estado_civil: parceiro_estado_civil || '',
+            profissao: parceiro_profissao || '',
+            endereco: parceiro_endereco || '',
+          },
+          contrato: {
+            percentual_destrava: parseFloat(percentual_destrava),
+            percentual_parceiro: parseFloat(percentual_parceiro),
+            prazo_pagamento_dias_uteis: parseInt(prazo_pagamento_dias_uteis),
+            aviso_previo_rescisao_dias: parseInt(aviso_previo_rescisao_dias),
+            data_assinatura_formatada: new Date(data_assinatura + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }),
+            foro_eleito,
+            cidade_assinatura: cidade_assinatura || 'BRASÍLIA – DF',
+            testemunha_1_nome: testemunha_1_nome || '',
+            testemunha_1_cpf: testemunha_1_cpf || '',
+            testemunha_2_nome: testemunha_2_nome || '',
+            testemunha_2_cpf: testemunha_2_cpf || '',
+          },
+        };
+        const htmlParceria = await gerarHtmlContratoParceriaComercial(payloadParceria);
+        const uploadsDir5 = path.resolve('uploads', 'contratos');
+        if (!fs.existsSync(uploadsDir5)) fs.mkdirSync(uploadsDir5, { recursive: true });
+        const fileNameParceria = `contrato-parceria-${crypto.randomUUID()}.pdf`;
+        const filePathParceria = path.join(uploadsDir5, fileNameParceria);
+        let browserParceria;
+        try {
+          const puppeteerP = await import('puppeteer-core');
+          let execPathP: string;
+          if (process.env.CHROMIUM_PATH) { execPathP = process.env.CHROMIUM_PATH; }
+          else { try { const chromP = await import('@sparticuz/chromium'); execPathP = await chromP.default.executablePath(); } catch { execPathP = '/usr/bin/chromium-browser'; } }
+          browserParceria = await puppeteerP.default.launch({ executablePath: execPathP, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu','--single-process'], headless: true });
+          const pageP = await browserParceria.newPage();
+          await pageP.setContent(htmlParceria, { waitUntil: 'networkidle0' });
+          await pageP.pdf({ path: filePathParceria, format: 'A4', printBackground: true, margin: { top: '35mm', bottom: '28mm', left: '20mm', right: '20mm' }, displayHeaderFooter: true, headerTemplate: getPuppeteerHeaderTemplate(), footerTemplate: getPuppeteerFooterTemplate() });
+        } finally { if (browserParceria) await (browserParceria as any).close(); }
+        pdfPath = filePathParceria;
+        const hashParceria = await calcularHashArquivo(pdfPath);
+        const { rows: contratoRowsParceria } = await pool.query(
+          `INSERT INTO contratos_gerados
+             (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id,
+              valor_referencia, valor_contrato, condicao_pagamento, taxa_comissao,
+              honorario_minimo_mes, honorario_minimo_total, data_assinatura,
+              foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+           RETURNING id, created_at`,
+          ['parceria_comercial', null, empresa_id || null, parceiro_id || null, null,
+           0, 0, null, 0, 0, 0,
+           data_assinatura, foro_eleito, pdfPath, hashParceria, JSON.stringify(payloadParceria), colaborador.id]
+        );
+        const contratoParceria = contratoRowsParceria[0];
+        res.status(201).json({ success: true, contrato_id: contratoParceria.id, pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`, hash_documento: hashParceria, created_at: contratoParceria.created_at });
         return;
       }
 
@@ -4820,6 +5253,78 @@ ${tabelaAnos}
     } catch (err) {
       console.error('[PATCH /api/contratos/:id/status]', err);
       res.status(500).json({ error: 'Erro ao atualizar status' });
+    }
+  });
+
+  // ─── LISTA GERAL DE CONTRATOS (todos os tipos) ───────────────────────────────
+  app.get('/api/contratos', auth, async (req: Request, res: Response) => {
+    try {
+      const { tipo, status, empresa_id: empId, limit = '50', offset = '0' } = req.query as Record<string, string>;
+      const params: any[] = [];
+      const conditions: string[] = [];
+      if (tipo) { params.push(tipo); conditions.push(`cg.tipo_contrato = $${params.length}`); }
+      if (status) { params.push(status); conditions.push(`cg.status = $${params.length}`); }
+      if (empId) { params.push(empId); conditions.push(`cg.empresa_id = $${params.length}`); }
+      const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+      params.push(parseInt(limit) || 50);
+      params.push(parseInt(offset) || 0);
+      const { rows } = await pool.query(
+        `SELECT cg.id, cg.tipo_contrato, cg.status, cg.data_assinatura, cg.created_at,
+                cg.valor_referencia, cg.valor_contrato, cg.condicao_pagamento,
+                cg.foro_eleito, cg.hash_documento, cg.pdf_path,
+                cg.empresa_id, cg.lead_id, cg.parceiro_id, cg.criado_por,
+                e.razao_social AS empresa_nome,
+                l.nome AS lead_nome,
+                pc.nome AS parceiro_nome,
+                col.nome AS criado_por_nome
+         FROM contratos_gerados cg
+         LEFT JOIN empresas e ON e.id = cg.empresa_id
+         LEFT JOIN leads l ON l.id = cg.lead_id
+         LEFT JOIN parceiros_comerciais pc ON pc.id = cg.parceiro_id
+         LEFT JOIN colaboradores col ON col.id = cg.criado_por
+         ${where}
+         ORDER BY cg.created_at DESC
+         LIMIT $${params.length - 1} OFFSET $${params.length}`,
+        params
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error('[GET /api/contratos]', err);
+      res.status(500).json({ error: 'Erro ao listar contratos' });
+    }
+  });
+
+  // ─── EXCLUIR CONTRATO (apenas Administrador e Diretor) ─────────────────────────
+  app.delete('/api/contratos/:id', auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as any).colaborador;
+      const cargoColaborador = (colaborador.cargo || colaborador.role || '').toLowerCase();
+      const CARGOS_PODEM_EXCLUIR = ['administrador', 'admin', 'diretor'];
+      if (!CARGOS_PODEM_EXCLUIR.includes(cargoColaborador)) {
+        res.status(403).json({ error: 'Apenas Administradores e Diretores podem excluir contratos.' });
+        return;
+      }
+      const { rows } = await pool.query(
+        'SELECT id, pdf_path FROM contratos_gerados WHERE id = $1',
+        [req.params.id]
+      );
+      if (!rows.length) {
+        res.status(404).json({ error: 'Contrato não encontrado' });
+        return;
+      }
+      const contrato = rows[0];
+      // Remover arquivo PDF do disco se existir
+      if (contrato.pdf_path) {
+        const filePath = path.resolve(contrato.pdf_path);
+        if (fs.existsSync(filePath)) {
+          try { fs.unlinkSync(filePath); } catch (e) { console.warn('[DELETE contrato] Não foi possível remover PDF:', e); }
+        }
+      }
+      await pool.query('DELETE FROM contratos_gerados WHERE id = $1', [req.params.id]);
+      res.json({ success: true, message: 'Contrato excluído com sucesso.' });
+    } catch (err) {
+      console.error('[DELETE /api/contratos/:id]', err);
+      res.status(500).json({ error: 'Erro ao excluir contrato' });
     }
   });
 

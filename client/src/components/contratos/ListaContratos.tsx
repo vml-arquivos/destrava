@@ -1,47 +1,81 @@
-import { Download, CheckCircle, XCircle } from 'lucide-react';
-import { apiFetch } from '../../lib/api';
+import { Download, CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import { apiFetch, getToken } from '../../lib/api';
 import { toast } from 'sonner';
 
 interface Contrato {
   id: string;
-  empresa_id: string;
+  tipo_contrato?: string;
+  empresa_id?: string;
+  lead_id?: string;
+  parceiro_id?: string;
   parceiro_nome?: string;
-  valor_referencia: number;
-  taxa_comissao: number;
+  empresa_nome?: string;
+  lead_nome?: string;
+  valor_referencia?: number;
+  valor_contrato?: number;
+  taxa_comissao?: number;
   data_assinatura: string;
   foro_eleito: string;
   status: 'gerado' | 'assinado' | 'cancelado';
   created_at: string;
   pdf_path?: string;
+  criado_por_nome?: string;
 }
 
 interface Props {
   contratos: Contrato[];
   onStatusChange: (id: string, status: string) => void;
+  onDelete?: (id: string) => void;
+  userCargo?: string;
 }
 
-const formatBRL = (v: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+const formatBRL = (v: number | undefined | null) => {
+  if (v == null) return '—';
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v));
+};
+
+const tipoLabel: Record<string, string> = {
+  assessoria:          'Assessoria',
+  limpa_nome:          'Limpa Nome',
+  limpa_bacen:         'Limpa BACEN',
+  rating:              'Rating',
+  parceria_comercial:  'Parceria Comercial',
+};
 
 const statusConfig = {
-  gerado: { label: 'Gerado', class: 'bg-blue-100 text-blue-800' },
-  assinado: { label: 'Assinado', class: 'bg-emerald-100 text-emerald-800' },
+  gerado:    { label: 'Gerado',    class: 'bg-blue-100 text-blue-800' },
+  assinado:  { label: 'Assinado',  class: 'bg-emerald-100 text-emerald-800' },
   cancelado: { label: 'Cancelado', class: 'bg-red-100 text-red-800' },
 };
 
-export function ListaContratos({ contratos, onStatusChange }: Props) {
+/** Normaliza cargo para lowercase sem acentos */
+function normalizeCargo(cargo: string | undefined | null): string {
+  return (cargo || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+/** Apenas administrador e diretor podem excluir contratos */
+function podeExcluir(cargo: string | undefined | null): boolean {
+  const c = normalizeCargo(cargo);
+  return ['administrador', 'admin', 'diretor'].includes(c);
+}
+
+export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo }: Props) {
+  const podeExcluirContrato = podeExcluir(userCargo);
+
   const handleDownload = (id: string) => {
-    const token = localStorage.getItem('destrava_token');
+    const token = getToken();
     const url = `/api/contratos/${id}/download`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.setAttribute('download', `contrato-${id}.pdf`);
-    // Usar fetch para download autenticado
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    fetch(url, { headers: { Authorization: `Bearer ${token || ''}` } })
       .then(res => res.blob())
       .then(blob => {
         const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
         a.href = blobUrl;
+        a.download = `contrato-${id}.pdf`;
         a.click();
         URL.revokeObjectURL(blobUrl);
       })
@@ -61,10 +95,21 @@ export function ListaContratos({ contratos, onStatusChange }: Props) {
     }
   };
 
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir este contrato? Esta ação não pode ser desfeita.')) return;
+    try {
+      await apiFetch(`/api/contratos/${id}`, { method: 'DELETE' });
+      toast.success('Contrato excluído com sucesso.');
+      onDelete?.(id);
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao excluir contrato');
+    }
+  };
+
   if (!contratos.length) {
     return (
       <div className="text-center py-8 text-gray-400 text-sm">
-        Nenhum contrato gerado para esta empresa.
+        Nenhum contrato encontrado.
       </div>
     );
   }
@@ -74,11 +119,12 @@ export function ListaContratos({ contratos, onStatusChange }: Props) {
       <table className="w-full text-sm border-collapse">
         <thead>
           <tr className="bg-gray-50 border-b border-gray-200">
-            <th className="text-left py-2 px-3 font-medium text-gray-600">Data</th>
-            <th className="text-left py-2 px-3 font-medium text-gray-600">Valor Ref.</th>
-            <th className="text-left py-2 px-3 font-medium text-gray-600">Comissão</th>
+            <th className="text-left py-2 px-3 font-medium text-gray-600">Tipo</th>
+            <th className="text-left py-2 px-3 font-medium text-gray-600">Cliente / Empresa</th>
             <th className="text-left py-2 px-3 font-medium text-gray-600">Parceiro</th>
-            <th className="text-left py-2 px-3 font-medium text-gray-600">Foro</th>
+            <th className="text-left py-2 px-3 font-medium text-gray-600">Valor</th>
+            <th className="text-left py-2 px-3 font-medium text-gray-600">Data</th>
+            <th className="text-left py-2 px-3 font-medium text-gray-600">Responsável</th>
             <th className="text-left py-2 px-3 font-medium text-gray-600">Status</th>
             <th className="text-left py-2 px-3 font-medium text-gray-600">Ações</th>
           </tr>
@@ -86,17 +132,22 @@ export function ListaContratos({ contratos, onStatusChange }: Props) {
         <tbody>
           {contratos.map(c => {
             const sc = statusConfig[c.status] || statusConfig.gerado;
+            const nomeCliente = c.empresa_nome || c.lead_nome || '—';
+            const valor = c.valor_contrato ?? c.valor_referencia;
             return (
               <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50">
                 <td className="py-2 px-3 text-gray-700">
+                  <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                    {tipoLabel[c.tipo_contrato || ''] || c.tipo_contrato || '—'}
+                  </span>
+                </td>
+                <td className="py-2 px-3 text-gray-700 max-w-[180px] truncate">{nomeCliente}</td>
+                <td className="py-2 px-3 text-gray-600">{c.parceiro_nome || '—'}</td>
+                <td className="py-2 px-3 font-medium text-gray-900">{formatBRL(valor)}</td>
+                <td className="py-2 px-3 text-gray-700">
                   {new Date(c.data_assinatura + 'T12:00:00').toLocaleDateString('pt-BR')}
                 </td>
-                <td className="py-2 px-3 font-medium text-gray-900">
-                  {formatBRL(parseFloat(String(c.valor_referencia)))}
-                </td>
-                <td className="py-2 px-3 text-gray-600">{c.taxa_comissao}%</td>
-                <td className="py-2 px-3 text-gray-600">{c.parceiro_nome || '—'}</td>
-                <td className="py-2 px-3 text-gray-600">{c.foro_eleito}</td>
+                <td className="py-2 px-3 text-gray-600">{c.criado_por_nome || '—'}</td>
                 <td className="py-2 px-3">
                   <span className={`text-xs px-2 py-1 rounded-full font-medium ${sc.class}`}>
                     {sc.label}
@@ -104,30 +155,27 @@ export function ListaContratos({ contratos, onStatusChange }: Props) {
                 </td>
                 <td className="py-2 px-3">
                   <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleDownload(c.id)}
-                      title="Baixar PDF"
-                      className="p-1 text-blue-600 hover:text-blue-800 rounded"
-                    >
+                    <button onClick={() => handleDownload(c.id)} title="Baixar PDF"
+                      className="p-1 text-blue-600 hover:text-blue-800 rounded">
                       <Download className="w-4 h-4" />
                     </button>
                     {c.status === 'gerado' && (
                       <>
-                        <button
-                          onClick={() => handleStatusChange(c.id, 'assinado')}
-                          title="Marcar como assinado"
-                          className="p-1 text-emerald-600 hover:text-emerald-800 rounded"
-                        >
+                        <button onClick={() => handleStatusChange(c.id, 'assinado')} title="Marcar como assinado"
+                          className="p-1 text-emerald-600 hover:text-emerald-800 rounded">
                           <CheckCircle className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => handleStatusChange(c.id, 'cancelado')}
-                          title="Cancelar contrato"
-                          className="p-1 text-red-500 hover:text-red-700 rounded"
-                        >
+                        <button onClick={() => handleStatusChange(c.id, 'cancelado')} title="Cancelar contrato"
+                          className="p-1 text-red-500 hover:text-red-700 rounded">
                           <XCircle className="w-4 h-4" />
                         </button>
                       </>
+                    )}
+                    {podeExcluirContrato && (
+                      <button onClick={() => handleDelete(c.id)} title="Excluir contrato"
+                        className="p-1 text-red-600 hover:text-red-800 rounded">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     )}
                   </div>
                 </td>
