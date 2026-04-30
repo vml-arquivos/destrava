@@ -3435,17 +3435,20 @@ ${payload.chartImageBase64 ? `
     let browser;
     try {
       const puppeteer = await import('puppeteer-core');
-      let executablePath: string | undefined;
-      try {
-        const chromium = await import('@sparticuz/chromium');
-        executablePath = await chromium.default.executablePath();
-      } catch {
-        // Fallback para ambiente local
-        executablePath = process.env.CHROMIUM_PATH || '/usr/bin/chromium-browser';
+      let executablePath: string;
+      if (process.env.CHROMIUM_PATH) {
+        executablePath = process.env.CHROMIUM_PATH;
+      } else {
+        try {
+          const chromium = await import('@sparticuz/chromium');
+          executablePath = await chromium.default.executablePath();
+        } catch {
+          executablePath = '/usr/bin/chromium-browser';
+        }
       }
       browser = await puppeteer.default.launch({
         executablePath,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process'],
         headless: true,
       });
       const page = await browser.newPage();
@@ -3523,16 +3526,20 @@ ${payload.chartImageBase64 ? `
       let browser;
       try {
         const puppeteer = await import('puppeteer-core');
-        let executablePath: string | undefined;
-        try {
-          const chromium = await import('@sparticuz/chromium');
-          executablePath = await chromium.default.executablePath();
-        } catch {
-          executablePath = process.env.CHROMIUM_PATH || '/usr/bin/chromium-browser';
+        let executablePath: string;
+        if (process.env.CHROMIUM_PATH) {
+          executablePath = process.env.CHROMIUM_PATH;
+        } else {
+          try {
+            const chromium = await import('@sparticuz/chromium');
+            executablePath = await chromium.default.executablePath();
+          } catch {
+            executablePath = '/usr/bin/chromium-browser';
+          }
         }
         browser = await puppeteer.default.launch({
           executablePath,
-          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process'],
           headless: true,
         });
         const page = await browser.newPage();
