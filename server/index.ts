@@ -707,10 +707,14 @@ async function startServer() {
 
       CREATE TABLE IF NOT EXISTS contratos_gerados (
         id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        empresa_id             UUID NOT NULL REFERENCES empresas(id) ON DELETE RESTRICT,
+        tipo_contrato          TEXT NOT NULL DEFAULT 'assessoria',
+        cliente_tipo           TEXT,
+        empresa_id             UUID REFERENCES empresas(id) ON DELETE RESTRICT,
         parceiro_id            UUID REFERENCES parceiros_comerciais(id) ON DELETE SET NULL,
         lead_id                UUID REFERENCES leads(id) ON DELETE SET NULL,
         valor_referencia       NUMERIC(15, 2) NOT NULL,
+        valor_contrato         NUMERIC(15, 2),
+        condicao_pagamento     TEXT,
         taxa_comissao          NUMERIC(5, 2) NOT NULL DEFAULT 10.00,
         honorario_minimo_mes   NUMERIC(5, 2) NOT NULL DEFAULT 1.00,
         honorario_minimo_total NUMERIC(5, 2) NOT NULL DEFAULT 12.00,
@@ -765,6 +769,29 @@ async function startServer() {
     console.log('[startup] Constraint previsao_faturamento_modelo_usado_check removido (ou já inexistente).');
   } catch (err: any) {
     console.error('[startup] Aviso: não foi possível remover constraint de modelo_usado:', err.message);
+  }
+  // ─── PATCH: Contratos Limpa Nome PF/PJ ─────────────────────────────────────
+  // O contrato Limpa Nome PF usa lead_id e não possui empresa_id.
+  // Em versões anteriores, contratos_gerados.empresa_id foi criado como NOT NULL,
+  // o que causa erro 500 ao gerar contrato para Pessoa Física.
+  // Este patch é idempotente e roda no startup para corrigir bancos já existentes.
+  try {
+    await pool.query(`
+      ALTER TABLE contratos_gerados
+        ALTER COLUMN empresa_id DROP NOT NULL;
+
+      ALTER TABLE contratos_gerados
+        ADD COLUMN IF NOT EXISTS tipo_contrato TEXT NOT NULL DEFAULT 'assessoria',
+        ADD COLUMN IF NOT EXISTS cliente_tipo TEXT,
+        ADD COLUMN IF NOT EXISTS valor_contrato NUMERIC(15, 2),
+        ADD COLUMN IF NOT EXISTS condicao_pagamento TEXT;
+
+      CREATE INDEX IF NOT EXISTS idx_contratos_lead ON contratos_gerados(lead_id);
+      CREATE INDEX IF NOT EXISTS idx_contratos_tipo ON contratos_gerados(tipo_contrato);
+    `);
+    console.log('[startup] Patch contratos Limpa Nome PF/PJ aplicado/verificado com sucesso.');
+  } catch (err: any) {
+    console.error('[startup] ERRO CRÍTICO: não foi possível aplicar patch de contratos Limpa Nome:', err.message);
   }
   // ─────────────────────────────────────────────────────────────────────────────
   // ─────────────────────────────────────────────────────────────────────────────
@@ -4576,10 +4603,36 @@ ${tabelaAnos}
         pdfPath = filePathLN;
 
         const hash2 = await calcularHashArquivo(pdfPath);
+        const empresaContratoId = cliente_tipo === 'empresa' ? empresa_id : null;
+        const leadContratoId = cliente_tipo === 'lead' ? cliente_id : null;
+
         const { rows: contratoRows2 } = await pool.query(
-          `INSERT INTO contratos_gerados (empresa_id, parceiro_id, lead_id, valor_referencia, taxa_comissao, honorario_minimo_mes, honorario_minimo_total, data_assinatura, foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, created_at`,
-          [empresa_id || null, parceiro_id || null, cliente_id || null, valor_contrato, 0, 0, 0, data_assinatura, foro_eleito, pdfPath, hash2, JSON.stringify(payloadLN), colaborador.id]
+          `INSERT INTO contratos_gerados
+             (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id,
+              valor_referencia, valor_contrato, condicao_pagamento, taxa_comissao,
+              honorario_minimo_mes, honorario_minimo_total, data_assinatura,
+              foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+           RETURNING id, created_at`,
+          [
+            'limpa_nome',
+            cliente_tipo || null,
+            empresaContratoId,
+            parceiro_id || null,
+            leadContratoId,
+            valor_contrato,
+            valor_contrato,
+            condicao_pagamento,
+            0,
+            0,
+            0,
+            data_assinatura,
+            foro_eleito,
+            pdfPath,
+            hash2,
+            JSON.stringify(payloadLN),
+            colaborador.id,
+          ]
         );
         const contrato2 = contratoRows2[0];
         res.status(201).json({ success: true, contrato_id: contrato2.id, pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`, hash_documento: hash2, created_at: contrato2.created_at });
@@ -4644,16 +4697,30 @@ ${tabelaAnos}
 
       const { rows: contratoRows } = await pool.query(
         `INSERT INTO contratos_gerados
-           (empresa_id, parceiro_id, lead_id, valor_referencia, taxa_comissao,
+           (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id,
+            valor_referencia, valor_contrato, condicao_pagamento, taxa_comissao,
             honorario_minimo_mes, honorario_minimo_total, data_assinatura,
             foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
          RETURNING id, created_at`,
         [
-          empresa_id, parceiro_id || null, lead_id || null,
-          valor_referencia, taxa_comissao, 1, 12,
-          data_assinatura, foro_eleito, pdfPath, hash,
-          JSON.stringify(payload), colaborador.id,
+          'assessoria',
+          null,
+          empresa_id,
+          parceiro_id || null,
+          lead_id || null,
+          valor_referencia,
+          null,
+          null,
+          taxa_comissao,
+          1,
+          12,
+          data_assinatura,
+          foro_eleito,
+          pdfPath,
+          hash,
+          JSON.stringify(payload),
+          colaborador.id,
         ]
       );
 
@@ -4667,9 +4734,28 @@ ${tabelaAnos}
         hash_documento: hash,
         created_at: contrato.created_at,
       });
-    } catch (err) {
-      console.error('[POST /api/contratos/gerar]', err);
-      res.status(500).json({ error: 'Erro ao gerar contrato' });
+    } catch (err: any) {
+      const message = err?.message || 'Erro desconhecido';
+      const code = err?.code || undefined;
+      const detail = err?.detail || undefined;
+
+      console.error('[POST /api/contratos/gerar]', {
+        message,
+        code,
+        detail,
+        stack: err?.stack,
+        body: {
+          tipo_contrato: req.body?.tipo_contrato,
+          cliente_tipo: req.body?.cliente_tipo,
+          empresa_id: req.body?.empresa_id || null,
+          cliente_id: req.body?.cliente_id || null,
+        },
+      });
+
+      res.status(500).json({
+        error: `Erro ao gerar contrato: ${message}`,
+        code,
+      });
     }
   });
 
