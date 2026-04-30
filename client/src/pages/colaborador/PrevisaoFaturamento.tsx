@@ -147,15 +147,43 @@ export default function PrevisaoFaturamento() {
 
   const handleGerarPrevisao = async () => {
     if (!empresaId) { toast.error('Selecione uma empresa'); return; }
+
+    const registrosValidos = registros.filter(
+      r => r.valor !== '' && r.valor !== null && !isNaN(Number(r.valor))
+    );
+    if (registrosValidos.length < 12) {
+      toast.error(`Preencha pelo menos 12 meses. Atualmente: ${registrosValidos.length}`);
+      return;
+    }
+
     setLoadingPrevisao(true);
     try {
+      // ── PASSO 1: Auto-save do histórico antes de chamar a IA ──
+      toast.loading('Salvando histórico...', { id: 'previsao-progress' });
+      await apiFetch('/api/faturamento/historico', {
+        method: 'POST',
+        body: JSON.stringify({
+          empresa_id: empresaId,
+          registros: registrosValidos.map(r => ({
+            competencia: r.competencia,
+            valor: parseFloat(String(r.valor)),
+            origem: r.origem || 'manual',
+          })),
+        }),
+      });
+
+      // ── PASSO 2: Chamar a IA preditiva ──
+      toast.loading('Consultando IA preditiva...', { id: 'previsao-progress' });
       const result: ResultadoPrevisao = await apiFetch('/api/faturamento/prever', {
         method: 'POST',
         body: JSON.stringify({ empresa_id: empresaId, horizonte_meses: horizonte }),
       });
+
+      toast.dismiss('previsao-progress');
       setPrevisao(result);
       toast.success(`Previsão gerada com modelo ${result.modelo_usado.toUpperCase()}!`);
     } catch (err: any) {
+      toast.dismiss('previsao-progress');
       toast.error(err.message || 'Erro ao gerar previsão');
     } finally {
       setLoadingPrevisao(false);

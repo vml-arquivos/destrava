@@ -3275,7 +3275,7 @@ ${parceiro ? `<p><strong>PARCEIRO COMERCIAL:</strong> ${parceiro.nome}, CPF nº 
 
       if (historico.length < 12) {
         res.status(422).json({
-          error: `Mínimo de 12 meses necessário. Empresa tem ${historico.length} mês(es) cadastrado(s).`
+          error: `Erro de validação: Você precisa preencher pelo menos 12 meses na tabela antes de gerar a previsão. O banco detectou apenas ${historico.length} mês(es).`
         });
         return;
       }
