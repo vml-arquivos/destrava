@@ -210,12 +210,12 @@ export default function PrevisaoFaturamento() {
         }
       }
 
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+      const token = localStorage.getItem('destrava_token') || '';
       const resp = await fetch(`/api/faturamento/previsao/${previsao.previsao_id}/exportar-pdf`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ chartImageBase64 }),
       });
