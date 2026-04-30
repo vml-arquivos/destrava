@@ -198,7 +198,9 @@ function Router() {
       <Route path="/colaborador/contadores">
         {() => (
           <ProtectedRoute>
-            <Contadores />
+            <CargoRoute allowedCargos={['administrador', 'diretor']}>
+              <Contadores />
+            </CargoRoute>
           </ProtectedRoute>
         )}
       </Route>
