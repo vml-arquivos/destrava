@@ -3444,6 +3444,240 @@ ${payload.contador ? `
     return gerarHtmlTimbrado(body, 'RELATÓRIO DE PREVISÃO DE FATURAMENTO');
   }
 
+
+  // ─── HTML DECLARAÇÃO ANUAL DE FATURAMENTO (papel timbrado) ────────────────
+  function gerarHtmlDeclaracaoAnual(payload: {
+    empresa: {
+      razao_social?: string | null;
+      cnpj?: string | null;
+      endereco?: string | null;
+      endereco_completo?: string | null;
+    };
+    historico: { competencia: string | Date; valor: number | string }[];
+    contador?: {
+      nome?: string | null;
+      cpf?: string | null;
+      crc?: string | null;
+      nome_escritorio?: string | null;
+      cnpj_escritorio?: string | null;
+      cidade_escritorio?: string | null;
+      uf_escritorio?: string | null;
+    } | null;
+    cidade?: string;
+    dataEmissao?: Date;
+  }): string {
+    const esc = (value: unknown) => String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    const fmt = (v: number) => new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(v);
+
+    const toDate = (value: string | Date) => {
+      if (value instanceof Date) return value;
+      const raw = String(value || '').trim();
+      const normalized = raw.includes('T') ? raw : `${raw.slice(0, 10)}T12:00:00`;
+      return new Date(normalized);
+    };
+
+    const fmtMes = (value: string | Date) => toDate(value).toLocaleDateString('pt-BR', {
+      month: 'long',
+      year: 'numeric',
+    });
+
+    const porAno: Record<string, { total: number; meses: { competencia: string | Date; valor: number }[] }> = {};
+
+    for (const registro of payload.historico) {
+      const competencia = toDate(registro.competencia);
+      const ano = Number.isNaN(competencia.getTime())
+        ? 'Sem competência'
+        : String(competencia.getFullYear());
+      const valor = Number(registro.valor) || 0;
+
+      if (!porAno[ano]) porAno[ano] = { total: 0, meses: [] };
+      porAno[ano].total += valor;
+      porAno[ano].meses.push({ competencia: registro.competencia, valor });
+    }
+
+    const tabelaAnos = Object.entries(porAno)
+      .sort(([anoA], [anoB]) => Number(anoA) - Number(anoB))
+      .map(([ano, dados]) => `
+        <div class="ano-bloco">
+          <h3 class="ano-titulo">Exercício ${esc(ano)}</h3>
+          <table class="data-table tabela-faturamento">
+            <thead>
+              <tr>
+                <th>Competência</th>
+                <th style="text-align:right">Faturamento</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${dados.meses
+                .sort((a, b) => toDate(a.competencia).getTime() - toDate(b.competencia).getTime())
+                .map(m => `
+                  <tr>
+                    <td>${esc(fmtMes(m.competencia))}</td>
+                    <td style="text-align:right">${fmt(m.valor)}</td>
+                  </tr>
+                `).join('')}
+              <tr class="total-row">
+                <td><strong>Total ${esc(ano)}</strong></td>
+                <td style="text-align:right"><strong>${fmt(dados.total)}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      `).join('');
+
+    const totalGeral = payload.historico.reduce((s, r) => s + (Number(r.valor) || 0), 0);
+    const dataEmissao = payload.dataEmissao || new Date();
+    const cidadeEmissao = payload.contador?.cidade_escritorio || payload.cidade || 'Brasília';
+    const empresaNome = payload.empresa.razao_social || '—';
+    const empresaCnpj = payload.empresa.cnpj || '—';
+    const empresaEndereco = payload.empresa.endereco_completo || payload.empresa.endereco || '';
+
+    const contadorHtml = payload.contador ? `
+      <div class="assinatura-box">
+        <div class="assinatura-linha"></div>
+        <p class="assinatura-nome">${esc(payload.contador.nome || '')}</p>
+        ${payload.contador.crc ? `<p>CRC: ${esc(payload.contador.crc)}</p>` : ''}
+        ${payload.contador.cpf ? `<p>CPF: ${esc(payload.contador.cpf)}</p>` : ''}
+        ${payload.contador.nome_escritorio ? `<p class="assinatura-meta">${esc(payload.contador.nome_escritorio)}</p>` : ''}
+        ${payload.contador.cnpj_escritorio ? `<p class="assinatura-meta">CNPJ: ${esc(payload.contador.cnpj_escritorio)}</p>` : ''}
+        ${(payload.contador.cidade_escritorio || payload.contador.uf_escritorio)
+          ? `<p class="assinatura-meta">${esc([payload.contador.cidade_escritorio, payload.contador.uf_escritorio].filter(Boolean).join(' – '))}</p>`
+          : ''}
+      </div>
+    ` : `
+      <div class="assinatura-box assinatura-vazia">
+        <div class="assinatura-linha"></div>
+        <p class="assinatura-nome">Contador responsável</p>
+        <p>CRC</p>
+      </div>
+    `;
+
+    const body = `
+<h1 class="doc-title">DECLARAÇÃO DE FATURAMENTO</h1>
+<h1 class="doc-title" style="font-size:11pt; font-weight:normal; margin-bottom:24px;">
+  Documento emitido para fins de comprovação de capacidade financeira
+</h1>
+
+<table class="data-table" style="margin-bottom:20px">
+  <tr>
+    <th colspan="2">Dados da Empresa</th>
+  </tr>
+  <tr>
+    <td style="width:28%"><strong>Razão Social</strong></td>
+    <td>${esc(empresaNome)}</td>
+  </tr>
+  <tr>
+    <td><strong>CNPJ</strong></td>
+    <td>${esc(empresaCnpj)}</td>
+  </tr>
+  ${empresaEndereco ? `<tr><td><strong>Endereço</strong></td><td>${esc(empresaEndereco)}</td></tr>` : ''}
+</table>
+
+<h2 class="section-title">Histórico de Faturamento Declarado</h2>
+${tabelaAnos}
+
+<div class="total-geral">
+  <span>Total Geral do Período</span>
+  <strong>${fmt(totalGeral)}</strong>
+</div>
+
+<div class="declaracao-texto">
+  <p>
+    Declaramos, para os devidos fins, que as informações de faturamento acima
+    correspondem aos registros informados para a empresa <strong>${esc(empresaNome)}</strong>,
+    inscrita no CNPJ sob o nº <strong>${esc(empresaCnpj)}</strong>.
+  </p>
+  <p>
+    Este documento é emitido pelo sistema Destrava Crédito com base nos dados
+    cadastrados no módulo de faturamento e deve ser conferido pelo responsável
+    contábil antes de uso externo.
+  </p>
+</div>
+
+<p class="city-date">
+  ${esc(cidadeEmissao)} – ${esc(payload.contador?.uf_escritorio || 'DF')},
+  ${dataEmissao.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}.
+</p>
+
+<div class="assinaturas-grid">
+  ${contadorHtml}
+  <div class="assinatura-box">
+    <div class="assinatura-linha"></div>
+    <p class="assinatura-nome">DESTRAVA CRÉDITO LTDA</p>
+    <p>CNPJ: ${esc(CONTRATADA_DADOS.cnpj)}</p>
+    <p class="assinatura-meta">Responsável pela emissão do documento</p>
+  </div>
+</div>
+
+<style>
+  .ano-bloco { margin-bottom: 18px; }
+  .ano-titulo {
+    font-size: 12pt;
+    color: #1B3A6B;
+    margin: 14px 0 8px;
+    border-bottom: 2px solid #C9A227;
+    padding-bottom: 4px;
+  }
+  .tabela-faturamento td, .tabela-faturamento th { font-size: 9.5pt; }
+  .total-row td { background: #f4f7fb; }
+  .total-geral {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: #1B3A6B;
+    color: #fff;
+    border-radius: 4px;
+    font-size: 11pt;
+  }
+  .declaracao-texto {
+    margin-top: 22px;
+    font-size: 10.5pt;
+    line-height: 1.65;
+    color: #333;
+    text-align: justify;
+  }
+  .assinaturas-grid {
+    margin-top: 44px;
+    display: flex;
+    justify-content: space-between;
+    gap: 32px;
+    align-items: flex-start;
+  }
+  .assinatura-box {
+    width: 48%;
+    text-align: center;
+    font-size: 9.5pt;
+    color: #333;
+  }
+  .assinatura-linha {
+    border-top: 1px solid #333;
+    margin-bottom: 8px;
+  }
+  .assinatura-nome {
+    font-weight: 700;
+    margin: 2px 0;
+  }
+  .assinatura-box p { margin: 2px 0; }
+  .assinatura-meta { color: #555; }
+  .assinatura-vazia { color: #777; }
+</style>
+`;
+
+    return gerarHtmlTimbrado(body, 'DECLARAÇÃO DE FATURAMENTO');
+  }
+
+
   // ─── HTML SIMULAÇÃO / PROPOSTA (papel timbrado) ──────────────────────────
   function gerarHtmlSimulacao(payload: {
     cliente: { nome: string; email?: string; telefone?: string; cnpj?: string };
@@ -4094,161 +4328,69 @@ ${payload.contador ? `
   app.post('/api/faturamento/declaracao-anual/:empresaId/exportar-pdf', auth, async (req: Request, res: Response) => {
     try {
       const { empresaId } = req.params;
-      const { contador_id } = req.body;
+      const { contador_id } = req.body || {};
 
-      // Buscar dados da empresa
       const { rows: empRows } = await pool.query('SELECT * FROM empresas WHERE id=$1', [empresaId]);
-      if (empRows.length === 0) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
-      const empresa = empRows[0];
+      if (empRows.length === 0) {
+        res.status(404).json({ error: 'Empresa não encontrada' });
+        return;
+      }
 
-      // Buscar histórico de faturamento
       const { rows: histRows } = await pool.query(
-        `SELECT competencia, valor, origem FROM faturamento_historico
-         WHERE empresa_id=$1 ORDER BY competencia ASC`,
+        `SELECT competencia, valor, origem
+           FROM faturamento_historico
+          WHERE empresa_id=$1
+          ORDER BY competencia ASC`,
         [empresaId]
       );
+
       if (histRows.length === 0) {
         res.status(422).json({ error: 'Nenhum histórico de faturamento encontrado para esta empresa.' });
         return;
       }
 
-      // Buscar contador (opcional)
       let contador: any = null;
       if (contador_id) {
         const { rows: cRows } = await pool.query('SELECT * FROM contadores WHERE id=$1', [contador_id]);
         if (cRows.length > 0) contador = cRows[0];
       }
 
-      // Calcular totais por ano
-      const porAno: Record<string, { total: number; meses: { competencia: string; valor: number }[] }> = {};
-      for (const r of histRows) {
-        const ano = new Date(r.competencia).getFullYear().toString();
-        if (!porAno[ano]) porAno[ano] = { total: 0, meses: [] };
-        porAno[ano].total += parseFloat(r.valor);
-        porAno[ano].meses.push({ competencia: r.competencia, valor: parseFloat(r.valor) });
-      }
+      const htmlFinal = gerarHtmlDeclaracaoAnual({
+        empresa: empRows[0],
+        historico: histRows,
+        contador,
+      });
 
-      const formatBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-      const formatMes = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-
-      const tabelaAnos = Object.entries(porAno).map(([ano, dados]) => `
-        <div class="ano-bloco">
-          <h3 class="ano-titulo">Exercício ${ano}</h3>
-          <table class="tabela-faturamento">
-            <thead><tr><th>Competência</th><th>Faturamento</th></tr></thead>
-            <tbody>
-              ${dados.meses.map(m => `<tr><td>${formatMes(m.competencia)}</td><td class="valor">${formatBRL(m.valor)}</td></tr>`).join('')}
-              <tr class="total-row"><td><strong>Total ${ano}</strong></td><td class="valor"><strong>${formatBRL(dados.total)}</strong></td></tr>
-            </tbody>
-          </table>
-        </div>
-      `).join('');
-
-      const totalGeral = histRows.reduce((s: number, r: any) => s + parseFloat(r.valor), 0);
-      const dataHoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-
-      const bodyHtml = `
-        <div class="declaracao-header">
-          <h2>DECLARAÇÃO DE FATURAMENTO</h2>
-          <p class="subtitulo">Documento emitido para fins de comprovação de capacidade financeira</p>
-        </div>
-
-        <div class="empresa-info">
-          <table class="info-table">
-            <tr><td class="label">Razão Social:</td><td>${empresa.razao_social || '—'}</td></tr>
-            <tr><td class="label">CNPJ:</td><td>${empresa.cnpj || '—'}</td></tr>
-            ${empresa.endereco ? `<tr><td class="label">Endereço:</td><td>${empresa.endereco}</td></tr>` : ''}
-          </table>
-        </div>
-
-        <div class="historico-section">
-          <h3>Histórico de Faturamento</h3>
-          ${tabelaAnos}
-          <div class="total-geral">
-            <strong>Total Geral do Período: ${formatBRL(totalGeral)}</strong>
-          </div>
-        </div>
-
-        <div class="declaracao-texto">
-          <p>Declaro, para os devidos fins, que as informações de faturamento acima são verdadeiras e correspondem aos registros contábeis da empresa ${empresa.razao_social || ''}, inscrita no CNPJ sob o nº ${empresa.cnpj || ''}.</p>
-          <p>Brasília, ${dataHoje}.</p>
-        </div>
-
-        <div style="margin-top:40px; display:flex; justify-content:space-between; align-items:flex-end;">
-          ${contador ? `
-          <div style="text-align:center; width:45%;">
-            <div style="border-top:1px solid #333; padding-top:8px;">
-              <p style="font-size:10pt; font-weight:bold; margin:2px 0;">${contador.nome}</p>
-              <p style="font-size:9pt; margin:2px 0;">CRC: ${contador.crc}</p>
-              ${contador.cpf ? `<p style="font-size:9pt; margin:2px 0;">CPF: ${contador.cpf}</p>` : ''}
-              ${contador.nome_escritorio ? `<p style="font-size:9pt; margin:2px 0; color:#555;">${contador.nome_escritorio}</p>` : ''}
-              ${contador.cnpj_escritorio ? `<p style="font-size:9pt; margin:2px 0; color:#555;">CNPJ: ${contador.cnpj_escritorio}</p>` : ''}
-              ${(contador.cidade_escritorio || contador.uf_escritorio) ? `<p style="font-size:9pt; margin:2px 0; color:#555;">${[contador.cidade_escritorio, contador.uf_escritorio].filter(Boolean).join(' – ')}</p>` : ''}
-            </div>
-          </div>
-          ` : '<div style="width:45%;"></div>'}
-          <div style="text-align:center; width:45%;">
-            <img src="https://destravacredito.com/logo-destrava.png" alt="Destrava Crédito" style="height:40px; margin-bottom:8px;" onerror="this.style.display='none'"/>
-            <div style="border-top:1px solid #333; padding-top:8px;">
-              <p style="font-size:10pt; font-weight:bold; margin:2px 0;">DESTRAVA CRÉDITO LTDA</p>
-              <p style="font-size:9pt; margin:2px 0;">CNPJ: 35.427.182/0001-66</p>
-            </div>
-          </div>
-        </div>
-
-        <style>
-          .declaracao-header { text-align: center; margin-bottom: 24px; }
-          .declaracao-header h2 { font-size: 18px; font-weight: 700; color: #1B3A6B; text-transform: uppercase; letter-spacing: 1px; }
-          .subtitulo { font-size: 12px; color: #666; margin-top: 4px; }
-          .empresa-info { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 16px; margin-bottom: 24px; }
-          .info-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-          .info-table td { padding: 4px 8px; }
-          .info-table .label { font-weight: 600; color: #1B3A6B; width: 140px; }
-          .historico-section h3 { font-size: 14px; font-weight: 700; color: #1B3A6B; margin-bottom: 12px; }
-          .ano-bloco { margin-bottom: 20px; }
-          .ano-titulo { font-size: 13px; font-weight: 700; color: #333; margin-bottom: 8px; border-bottom: 2px solid #C9A227; padding-bottom: 4px; }
-          .tabela-faturamento { width: 100%; border-collapse: collapse; font-size: 12px; }
-          .tabela-faturamento th { background: #1B3A6B; color: white; padding: 8px 12px; text-align: left; }
-          .tabela-faturamento td { padding: 6px 12px; border-bottom: 1px solid #e9ecef; }
-          .tabela-faturamento .valor { text-align: right; font-family: monospace; }
-          .total-row td { background: #f0f4ff; font-weight: 700; }
-          .total-geral { text-align: right; font-size: 14px; margin-top: 12px; padding: 10px 12px; background: #1B3A6B; color: white; border-radius: 4px; }
-          .declaracao-texto { margin-top: 24px; font-size: 12px; color: #333; line-height: 1.6; }
-          .declaracao-texto p { margin-bottom: 8px; }
-          .assinatura-section { margin-top: 40px; text-align: center; }
-          .linha-assinatura { border-top: 1px solid #333; width: 280px; margin: 0 auto 8px; }
-          .assinatura-section p { font-size: 12px; margin: 2px 0; }
-        </style>
-      `;
-
-      const htmlFinal = gerarHtmlTimbrado(bodyHtml, 'Declaração de Faturamento');
       const fileName = `declaracao-${crypto.randomUUID()}.pdf`;
       const uploadsDir = path.resolve('uploads', 'declaracoes');
       if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
       const filePath = path.join(uploadsDir, fileName);
 
-      let browser2;
+      let browser;
       try {
-        const puppeteer2 = await import('puppeteer-core');
-        let executablePath2: string;
+        const puppeteer = await import('puppeteer-core');
+        let executablePath: string;
+
         if (process.env.CHROMIUM_PATH) {
-          executablePath2 = process.env.CHROMIUM_PATH;
+          executablePath = process.env.CHROMIUM_PATH;
         } else {
           try {
-            const chromium2 = await import('@sparticuz/chromium');
-            executablePath2 = await chromium2.default.executablePath();
+            const chromium = await import('@sparticuz/chromium');
+            executablePath = await chromium.default.executablePath();
           } catch {
-            executablePath2 = '/usr/bin/chromium-browser';
+            executablePath = '/usr/bin/chromium-browser';
           }
         }
-        browser2 = await puppeteer2.default.launch({
-          executablePath: executablePath2,
+
+        browser = await puppeteer.default.launch({
+          executablePath,
           args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process'],
           headless: true,
         });
-        const page2 = await browser2.newPage();
-        await page2.setContent(htmlFinal, { waitUntil: 'networkidle0' });
-        await page2.pdf({
+
+        const page = await browser.newPage();
+        await page.setContent(htmlFinal, { waitUntil: 'networkidle0' });
+        await page.pdf({
           path: filePath,
           format: 'A4',
           printBackground: true,
@@ -4258,14 +4400,16 @@ ${payload.contador ? `
           margin: { top: '34mm', bottom: '26mm', left: '20mm', right: '20mm' },
         });
       } finally {
-        if (browser2) await (browser2 as any).close();
+        if (browser) await (browser as any).close();
       }
 
+      const nomeArquivoEmpresa = (empRows[0].razao_social || 'empresa').replace(/[^a-zA-Z0-9]/g, '-');
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="declaracao-faturamento-${empresa.razao_social?.replace(/[^a-zA-Z0-9]/g, '-') || 'empresa'}.pdf"`);
-      const stream2 = fs.createReadStream(filePath);
-      stream2.pipe(res);
-      stream2.on('end', () => { fs.unlink(filePath, () => {}); });
+      res.setHeader('Content-Disposition', `attachment; filename="declaracao-faturamento-${nomeArquivoEmpresa}.pdf"`);
+
+      const stream = fs.createReadStream(filePath);
+      stream.pipe(res);
+      stream.on('end', () => { fs.unlink(filePath, () => {}); });
     } catch (err) {
       console.error('[POST /api/faturamento/declaracao-anual]', err);
       res.status(500).json({ error: 'Erro ao gerar declaração anual' });
