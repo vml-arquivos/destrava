@@ -3431,9 +3431,21 @@ ${temParceiro ? `<p class="clause"><strong>5.1</strong> - O PARCEIRO COMERCIAL, 
   }
 
 
-  // ─── HTML PREVISÃO DE FATURAMENTO (papel timbrado) ─────────────────────────
+  // ─── HTML PREVISÃO DE FATURAMENTO (documento contábil) ───────────────────────
   function gerarHtmlPrevisaoFaturamento(payload: {
-    empresa: { razao_social: string; cnpj?: string };
+    empresa: {
+      razao_social?: string | null;
+      cnpj?: string | null;
+      endereco_completo?: string | null;
+      endereco?: string | null;
+      logradouro?: string | null;
+      numero?: string | null;
+      complemento?: string | null;
+      bairro?: string | null;
+      cidade?: string | null;
+      estado?: string | null;
+      segmento?: string | null;
+    };
     horizonte_meses: number;
     modelo_usado: string;
     gerada_em: string;
@@ -3442,150 +3454,18 @@ ${temParceiro ? `<p class="clause"><strong>5.1</strong> - O PARCEIRO COMERCIAL, 
     historico: { competencia: string; valor: number }[];
     previsoes: { ds: string; yhat: number; yhat_lower: number; yhat_upper: number }[];
     chartImageBase64?: string;
-    contador?: { nome: string; crc: string; cpf?: string; nome_escritorio?: string; cnpj_escritorio?: string; cidade_escritorio?: string; uf_escritorio?: string } | null;
-  }): string {
-    const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
-    const fmtDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
-
-    const tabelaHistorico = payload.historico.map(r => `
-      <tr>
-        <td>${fmtDate(r.competencia)}</td>
-        <td style="text-align:right">${fmt(r.valor)}</td>
-        <td style="text-align:center; color:#1B3A6B; font-weight:bold">Histórico</td>
-      </tr>`).join('');
-
-    const tabelaPrevisao = payload.previsoes.map(r => `
-      <tr>
-        <td>${fmtDate(r.ds)}</td>
-        <td style="text-align:right; font-weight:bold">${fmt(r.yhat)}</td>
-        <td style="text-align:right; color:#666; font-size:9pt">${fmt(r.yhat_lower)} – ${fmt(r.yhat_upper)}</td>
-      </tr>`).join('');
-
-    const body = `
-<h1 class="doc-title">RELATÓRIO DE PREVISÃO DE FATURAMENTO</h1>
-<h1 class="doc-title" style="font-size:11pt; font-weight:normal; margin-bottom:24px;">Análise Preditiva com Inteligência Artificial — ${payload.horizonte_meses} meses</h1>
-
-<table class="data-table" style="margin-bottom:20px">
-  <tr>
-    <th style="width:50%">Empresa</th>
-    <th style="width:25%">Modelo IA</th>
-    <th style="width:25%">Gerado em</th>
-  </tr>
-  <tr>
-    <td><strong>${payload.empresa.razao_social}</strong>${payload.empresa.cnpj ? ' — CNPJ: ' + payload.empresa.cnpj : ''}</td>
-    <td style="text-align:center">${payload.modelo_usado.toUpperCase()}</td>
-    <td style="text-align:center">${new Date(payload.gerada_em).toLocaleDateString('pt-BR')}</td>
-  </tr>
-</table>
-
-<div style="display:flex; gap:16px; margin-bottom:20px;">
-  <div class="highlight-box" style="flex:1">
-    <div class="label">Capacidade de Pagamento Mínima (15%)</div>
-    <div class="value">${fmt(payload.capacidade_pgto_min)}<span style="font-size:10pt; font-weight:normal">/mês</span></div>
-  </div>
-  <div class="highlight-box" style="flex:1">
-    <div class="label">Capacidade de Pagamento Máxima (25%)</div>
-    <div class="value">${fmt(payload.capacidade_pgto_max)}<span style="font-size:10pt; font-weight:normal">/mês</span></div>
-  </div>
-</div>
-
-${payload.chartImageBase64 ? `
-<div class="chart-container">
-  <img src="${payload.chartImageBase64}" alt="Gráfico de Previsão" style="max-width:100%; border:1px solid #ddd; border-radius:4px;" />
-</div>` : ''}
-
-<h2 class="section-title" style="margin-top:20px;">Histórico de Faturamento</h2>
-<table class="data-table">
-  <thead>
-    <tr>
-      <th>Competência</th>
-      <th style="text-align:right">Faturamento</th>
-      <th style="text-align:center">Tipo</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${tabelaHistorico}
-  </tbody>
-</table>
-
-<h2 class="section-title" style="margin-top:20px;">Previsão para os Próximos ${payload.horizonte_meses} Meses</h2>
-<table class="data-table">
-  <thead>
-    <tr>
-      <th>Competência</th>
-      <th style="text-align:right">Previsão Central</th>
-      <th style="text-align:right">Intervalo de Confiança</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${tabelaPrevisao}
-  </tbody>
-</table>
-
-<p style="margin-top:16px; font-size:9pt; color:#666; font-style:italic;">
-  <strong>Nota:</strong> Este relatório foi gerado automaticamente pelo sistema Destrava Crédito com base nos dados históricos fornecidos pela empresa. 
-  Os valores de previsão são estimativas estatísticas e não constituem garantia de resultado. 
-  O intervalo de confiança representa a faixa de variação esperada com 95% de probabilidade.
-</p>
-
-<p class="city-date" style="margin-top:24px;">Brasília – DF, ${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}.</p>
-
-${payload.contador ? `
-<div style="margin-top:40px; display:flex; justify-content:space-between; align-items:flex-end;">
-  <div style="text-align:center; width:45%;">
-    <div style="border-top:1px solid #333; padding-top:8px;">
-      <p style="font-size:10pt; font-weight:bold; margin:2px 0;">${payload.contador.nome}</p>
-      <p style="font-size:9pt; margin:2px 0;">CRC: ${payload.contador.crc}</p>
-      ${payload.contador.cpf ? `<p style="font-size:9pt; margin:2px 0;">CPF: ${payload.contador.cpf}</p>` : ''}
-      ${payload.contador.nome_escritorio ? `<p style="font-size:9pt; margin:2px 0; color:#555;">${payload.contador.nome_escritorio}</p>` : ''}
-      ${payload.contador.cnpj_escritorio ? `<p style="font-size:9pt; margin:2px 0; color:#555;">CNPJ: ${payload.contador.cnpj_escritorio}</p>` : ''}
-      ${(payload.contador.cidade_escritorio || payload.contador.uf_escritorio) ? `<p style="font-size:9pt; margin:2px 0; color:#555;">${[payload.contador.cidade_escritorio, payload.contador.uf_escritorio].filter(Boolean).join(' – ')}</p>` : ''}
-    </div>
-  </div>
-  <div style="text-align:center; width:45%;">
-    <img src="https://destravacredito.com/logo-destrava.png" alt="Destrava Crédito" style="height:40px; margin-bottom:8px;" onerror="this.style.display='none'"/>
-    <div style="border-top:1px solid #333; padding-top:8px;">
-      <p style="font-size:10pt; font-weight:bold; margin:2px 0;">DESTRAVA CRÉDITO LTDA</p>
-      <p style="font-size:9pt; margin:2px 0;">CNPJ: 35.427.182/0001-66</p>
-      <p style="font-size:9pt; margin:2px 0; color:#555;">Responsável Técnico</p>
-    </div>
-  </div>
-</div>
-` : `
-<div style="margin-top:40px; text-align:center;">
-  <img src="https://destravacredito.com/logo-destrava.png" alt="Destrava Crédito" style="height:40px; margin-bottom:8px;" onerror="this.style.display='none'"/>
-  <div style="border-top:1px solid #333; width:280px; margin:0 auto; padding-top:8px;">
-    <p style="font-size:10pt; font-weight:bold; margin:2px 0;">DESTRAVA CRÉDITO LTDA</p>
-    <p style="font-size:9pt; margin:2px 0;">CNPJ: 35.427.182/0001-66</p>
-  </div>
-</div>
-`}
-`;
-
-    return gerarHtmlTimbrado(body, 'RELATÓRIO DE PREVISÃO DE FATURAMENTO');
-  }
-
-
-  // ─── HTML DECLARAÇÃO ANUAL DE FATURAMENTO (papel timbrado) ────────────────
-  function gerarHtmlDeclaracaoAnual(payload: {
-    empresa: {
-      razao_social?: string | null;
-      cnpj?: string | null;
-      endereco?: string | null;
-      endereco_completo?: string | null;
-    };
-    historico: { competencia: string | Date; valor: number | string }[];
     contador?: {
       nome?: string | null;
-      cpf?: string | null;
       crc?: string | null;
+      cpf?: string | null;
+      email?: string | null;
+      telefone?: string | null;
       nome_escritorio?: string | null;
       cnpj_escritorio?: string | null;
+      endereco_escritorio?: string | null;
       cidade_escritorio?: string | null;
       uf_escritorio?: string | null;
     } | null;
-    cidade?: string;
-    dataEmissao?: Date;
   }): string {
     const esc = (value: unknown) => String(value ?? '')
       .replace(/&/g, '&amp;')
@@ -3594,208 +3474,286 @@ ${payload.contador ? `
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
 
-    const fmt = (v: number) => new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(v);
+    const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v) || 0);
+    const fmtMes = (value: string | Date) => new Date(String(value).slice(0, 10) + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    const dataEmissao = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+    const enderecoEmpresa = payload.empresa.endereco_completo
+      || payload.empresa.endereco
+      || [payload.empresa.logradouro, payload.empresa.numero, payload.empresa.complemento, payload.empresa.bairro, payload.empresa.cidade, payload.empresa.estado]
+        .filter(Boolean)
+        .join(', ')
+      || '—';
+    const enderecoContador = [payload.contador?.endereco_escritorio, [payload.contador?.cidade_escritorio, payload.contador?.uf_escritorio].filter(Boolean).join('/')]
+      .filter(Boolean)
+      .join(', ') || '—';
+    const totalPrevisto = payload.previsoes.reduce((s, r) => s + (Number(r.yhat) || 0), 0);
+    const linhasPrevisao = payload.previsoes.map(r => `
+      <tr>
+        <td>${esc(fmtMes(r.ds))}</td>
+        <td>${fmt(r.yhat)}</td>
+        <td>R$ 0,00</td>
+        <td>${fmt(r.yhat)}</td>
+      </tr>`).join('');
 
-    const toDate = (value: string | Date) => {
-      if (value instanceof Date) return value;
-      const raw = String(value || '').trim();
-      const normalized = raw.includes('T') ? raw : `${raw.slice(0, 10)}T12:00:00`;
-      return new Date(normalized);
-    };
-
-    const fmtMes = (value: string | Date) => toDate(value).toLocaleDateString('pt-BR', {
-      month: 'long',
-      year: 'numeric',
-    });
-
-    const porAno: Record<string, { total: number; meses: { competencia: string | Date; valor: number }[] }> = {};
-
-    for (const registro of payload.historico) {
-      const competencia = toDate(registro.competencia);
-      const ano = Number.isNaN(competencia.getTime())
-        ? 'Sem competência'
-        : String(competencia.getFullYear());
-      const valor = Number(registro.valor) || 0;
-
-      if (!porAno[ano]) porAno[ano] = { total: 0, meses: [] };
-      porAno[ano].total += valor;
-      porAno[ano].meses.push({ competencia: registro.competencia, valor });
-    }
-
-    const tabelaAnos = Object.entries(porAno)
-      .sort(([anoA], [anoB]) => Number(anoA) - Number(anoB))
-      .map(([ano, dados]) => `
-        <div class="ano-bloco">
-          <h3 class="ano-titulo">Exercício ${esc(ano)}</h3>
-          <table class="data-table tabela-faturamento">
-            <thead>
-              <tr>
-                <th>Competência</th>
-                <th style="text-align:right">Faturamento</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${dados.meses
-                .sort((a, b) => toDate(a.competencia).getTime() - toDate(b.competencia).getTime())
-                .map(m => `
-                  <tr>
-                    <td>${esc(fmtMes(m.competencia))}</td>
-                    <td style="text-align:right">${fmt(m.valor)}</td>
-                  </tr>
-                `).join('')}
-              <tr class="total-row">
-                <td><strong>Total ${esc(ano)}</strong></td>
-                <td style="text-align:right"><strong>${fmt(dados.total)}</strong></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      `).join('');
-
-    const totalGeral = payload.historico.reduce((s, r) => s + (Number(r.valor) || 0), 0);
-    const dataEmissao = payload.dataEmissao || new Date();
-    const cidadeEmissao = payload.contador?.cidade_escritorio || payload.cidade || 'Brasília';
-    const empresaNome = payload.empresa.razao_social || '—';
-    const empresaCnpj = payload.empresa.cnpj || '—';
-    const empresaEndereco = payload.empresa.endereco_completo || payload.empresa.endereco || '';
-
-    const contadorHtml = payload.contador ? `
-      <div class="assinatura-box">
-        <div class="assinatura-linha"></div>
-        <p class="assinatura-nome">${esc(payload.contador.nome || '')}</p>
-        ${payload.contador.crc ? `<p>CRC: ${esc(payload.contador.crc)}</p>` : ''}
-        ${payload.contador.cpf ? `<p>CPF: ${esc(payload.contador.cpf)}</p>` : ''}
-        ${payload.contador.nome_escritorio ? `<p class="assinatura-meta">${esc(payload.contador.nome_escritorio)}</p>` : ''}
-        ${payload.contador.cnpj_escritorio ? `<p class="assinatura-meta">CNPJ: ${esc(payload.contador.cnpj_escritorio)}</p>` : ''}
-        ${(payload.contador.cidade_escritorio || payload.contador.uf_escritorio)
-          ? `<p class="assinatura-meta">${esc([payload.contador.cidade_escritorio, payload.contador.uf_escritorio].filter(Boolean).join(' – '))}</p>`
-          : ''}
-      </div>
-    ` : `
-      <div class="assinatura-box assinatura-vazia">
-        <div class="assinatura-linha"></div>
-        <p class="assinatura-nome">Contador responsável</p>
-        <p>CRC</p>
-      </div>
-    `;
-
-    const body = `
-<h1 class="doc-title">DECLARAÇÃO DE FATURAMENTO</h1>
-<h1 class="doc-title" style="font-size:11pt; font-weight:normal; margin-bottom:24px;">
-  Documento emitido para fins de comprovação de capacidade financeira
-</h1>
-
-<table class="data-table" style="margin-bottom:20px">
-  <tr>
-    <th colspan="2">Dados da Empresa</th>
-  </tr>
-  <tr>
-    <td style="width:28%"><strong>Razão Social</strong></td>
-    <td>${esc(empresaNome)}</td>
-  </tr>
-  <tr>
-    <td><strong>CNPJ</strong></td>
-    <td>${esc(empresaCnpj)}</td>
-  </tr>
-  ${empresaEndereco ? `<tr><td><strong>Endereço</strong></td><td>${esc(empresaEndereco)}</td></tr>` : ''}
-</table>
-
-<h2 class="section-title">Histórico de Faturamento Declarado</h2>
-${tabelaAnos}
-
-<div class="total-geral">
-  <span>Total Geral do Período</span>
-  <strong>${fmt(totalGeral)}</strong>
-</div>
-
-<div class="declaracao-texto">
-  <p>
-    Declaramos, para os devidos fins, que as informações de faturamento acima
-    correspondem aos registros informados para a empresa <strong>${esc(empresaNome)}</strong>,
-    inscrita no CNPJ sob o nº <strong>${esc(empresaCnpj)}</strong>.
-  </p>
-  <p>
-    Este documento é emitido pelo sistema Destrava Crédito com base nos dados
-    cadastrados no módulo de faturamento e deve ser conferido pelo responsável
-    contábil antes de uso externo.
-  </p>
-</div>
-
-<p class="city-date">
-  ${esc(cidadeEmissao)} – ${esc(payload.contador?.uf_escritorio || 'DF')},
-  ${dataEmissao.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}.
-</p>
-
-<div class="assinaturas-grid">
-  ${contadorHtml}
-  <div class="assinatura-box">
-    <div class="assinatura-linha"></div>
-    <p class="assinatura-nome">DESTRAVA CRÉDITO LTDA</p>
-    <p>CNPJ: ${esc(CONTRATADA_DADOS.cnpj)}</p>
-    <p class="assinatura-meta">Responsável pela emissão do documento</p>
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Demonstrativo de Previsão de Faturamento</title>
+  <style>
+body { font-family: Arial, sans-serif; font-size: 11pt; color: #222; margin: 0; padding: 24px 32px; }
+.header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 16px; }
+.col-title { color: #1B3A8C; font-weight: bold; font-size: 11pt; border-bottom: 2px solid #1B3A8C; padding-bottom: 4px; margin-bottom: 8px; }
+.col-row { font-size: 10pt; margin-bottom: 4px; }
+.col-row strong { font-weight: bold; }
+hr.divider { border: none; border-top: 1px solid #888; margin: 16px 0; }
+.doc-title { text-align: center; font-size: 16pt; font-weight: bold; color: #1B3A8C; margin: 20px 0 8px; }
+.doc-subtitle { text-align: center; font-size: 11pt; color: #555; margin-bottom: 16px; }
+.declaracao { text-align: justify; font-size: 10.5pt; margin: 12px 0 20px; line-height: 1.6; }
+table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-bottom: 20px; }
+th { background: #1B3A8C; color: #fff; padding: 9px 10px; text-align: center; font-weight: bold; }
+td { border: 1px solid #ccc; padding: 7px 10px; text-align: center; }
+tr:nth-child(even) td { background: #f4f7ff; }
+.total-row td { font-weight: bold; background: #dce3f5; border: 1px solid #999; }
+.city-date { text-align: right; font-style: italic; margin: 20px 0 36px; font-size: 10.5pt; }
+.sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 16px; }
+.sig-line { border-top: 1px solid #333; padding-top: 6px; margin-bottom: 4px; }
+.sig-name { font-weight: bold; font-size: 10pt; }
+.sig-sub { font-size: 9.5pt; color: #444; }
+  </style>
+</head>
+<body>
+  <div class="header-grid">
+    <div>
+      <div class="col-title">DADOS DO CONTADOR RESPONSÁVEL</div>
+      <div class="col-row"><strong>Escritório:</strong> ${esc(payload.contador?.nome_escritorio || 'Não informado')}</div>
+      <div class="col-row"><strong>Contador:</strong> ${esc(payload.contador?.nome || 'Não informado')}</div>
+      <div class="col-row"><strong>CRC:</strong> ${esc(payload.contador?.crc || '—')}</div>
+      <div class="col-row"><strong>Endereço:</strong> ${esc(enderecoContador)}</div>
+      <div class="col-row"><strong>Telefone:</strong> ${esc(payload.contador?.telefone || '—')}</div>
+      <div class="col-row"><strong>E-mail:</strong> ${esc(payload.contador?.email || '—')}</div>
+    </div>
+    <div>
+      <div class="col-title">DADOS DA EMPRESA (CLIENTE)</div>
+      <div class="col-row"><strong>Razão Social:</strong> ${esc(payload.empresa.razao_social || '—')}</div>
+      <div class="col-row"><strong>CNPJ:</strong> ${esc(payload.empresa.cnpj || '—')}</div>
+      <div class="col-row"><strong>Endereço:</strong> ${esc(enderecoEmpresa)}</div>
+      <div class="col-row"><strong>Atividade Principal:</strong> ${esc(payload.empresa.segmento || '—')}</div>
+    </div>
   </div>
-</div>
 
-<style>
-  .ano-bloco { margin-bottom: 18px; }
-  .ano-titulo {
-    font-size: 12pt;
-    color: #1B3A6B;
-    margin: 14px 0 8px;
-    border-bottom: 2px solid #C9A227;
-    padding-bottom: 4px;
-  }
-  .tabela-faturamento td, .tabela-faturamento th { font-size: 9.5pt; }
-  .total-row td { background: #f4f7fb; }
-  .total-geral {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 14px;
-    padding: 10px 12px;
-    background: #1B3A6B;
-    color: #fff;
-    border-radius: 4px;
-    font-size: 11pt;
-  }
-  .declaracao-texto {
-    margin-top: 22px;
-    font-size: 10.5pt;
-    line-height: 1.65;
-    color: #333;
-    text-align: justify;
-  }
-  .assinaturas-grid {
-    margin-top: 44px;
-    display: flex;
-    justify-content: space-between;
-    gap: 32px;
-    align-items: flex-start;
-  }
-  .assinatura-box {
-    width: 48%;
-    text-align: center;
-    font-size: 9.5pt;
-    color: #333;
-  }
-  .assinatura-linha {
-    border-top: 1px solid #333;
-    margin-bottom: 8px;
-  }
-  .assinatura-nome {
-    font-weight: 700;
-    margin: 2px 0;
-  }
-  .assinatura-box p { margin: 2px 0; }
-  .assinatura-meta { color: #555; }
-  .assinatura-vazia { color: #777; }
-</style>
-`;
+  <hr class="divider">
 
-    return gerarHtmlTimbrado(body, 'DECLARAÇÃO DE FATURAMENTO');
+  <div class="doc-title">DEMONSTRATIVO DE PREVISÃO DE FATURAMENTO</div>
+
+  <p class="declaracao">
+    Declaramos para os devidos fins, a pedido da empresa supra qualificada,
+    e sob as penas da lei, que a previsão de faturamento para os próximos
+    ${esc(payload.horizonte_meses)} meses, baseada no histórico de crescimento, contratos
+    vigentes e projeções de mercado, apresenta os seguintes valores estimados:
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Mês/Ano</th>
+        <th>Receita Bruta de Vendas (R$)</th>
+        <th>Receita de Serviços (R$)</th>
+        <th>Faturamento Total (R$)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${linhasPrevisao}
+      <tr class="total-row">
+        <td>TOTAL PREVISTO</td>
+        <td>${fmt(totalPrevisto)}</td>
+        <td>R$ 0,00</td>
+        <td>${fmt(totalPrevisto)}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="city-date">Brasília - DF, ${esc(dataEmissao)}.</div>
+
+  <div class="sig-grid">
+    <div>
+      <div class="sig-line"></div>
+      <div class="sig-name">${esc(payload.contador?.nome || '________________________________')}</div>
+      <div class="sig-sub">Contador Responsável</div>
+      <div class="sig-sub">CRC: ${esc(payload.contador?.crc || '—')}</div>
+    </div>
+    <div>
+      <div class="sig-line"></div>
+      <div class="sig-name">${esc(payload.empresa.razao_social || '—')}</div>
+      <div class="sig-sub">Representante Legal</div>
+      <div class="sig-sub">CNPJ: ${esc(payload.empresa.cnpj || '—')}</div>
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
+
+  // ─── HTML DECLARAÇÃO ANUAL DE FATURAMENTO (documento contábil) ─────────────
+  function gerarHtmlDeclaracaoAnual(payload: {
+    empresa: {
+      razao_social?: string | null;
+      cnpj?: string | null;
+      endereco?: string | null;
+      endereco_completo?: string | null;
+      logradouro?: string | null;
+      numero?: string | null;
+      complemento?: string | null;
+      bairro?: string | null;
+      cidade?: string | null;
+      estado?: string | null;
+      segmento?: string | null;
+    };
+    historico: { competencia: string | Date; valor: number | string }[];
+    contador?: {
+      nome?: string | null;
+      cpf?: string | null;
+      crc?: string | null;
+      email?: string | null;
+      telefone?: string | null;
+      nome_escritorio?: string | null;
+      cnpj_escritorio?: string | null;
+      endereco_escritorio?: string | null;
+      cidade_escritorio?: string | null;
+      uf_escritorio?: string | null;
+    } | null;
+    cidade?: string;
+    dataEmissao?: Date;
+    ano_referencia?: number | string;
+  }): string {
+    const esc = (value: unknown) => String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v) || 0);
+    const toDate = (value: string | Date) => value instanceof Date ? value : new Date(String(value).slice(0, 10) + 'T12:00:00');
+    const fmtMes = (value: string | Date) => toDate(value).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    const anosHistorico = payload.historico
+      .map(r => toDate(r.competencia).getFullYear())
+      .filter(ano => !Number.isNaN(ano));
+    const anoReferencia = String(payload.ano_referencia || (anosHistorico.length ? Math.max(...anosHistorico) : new Date().getFullYear()));
+    const registrosAno = payload.historico
+      .filter(r => String(toDate(r.competencia).getFullYear()) === anoReferencia)
+      .sort((a, b) => toDate(a.competencia).getTime() - toDate(b.competencia).getTime());
+    const registrosTabela = registrosAno.length ? registrosAno : payload.historico
+      .slice()
+      .sort((a, b) => toDate(a.competencia).getTime() - toDate(b.competencia).getTime());
+    const totalAnual = registrosTabela.reduce((s, r) => s + (Number(r.valor) || 0), 0);
+    const dataEmissao = payload.dataEmissao || new Date();
+    const enderecoEmpresa = payload.empresa.endereco_completo
+      || payload.empresa.endereco
+      || [payload.empresa.logradouro, payload.empresa.numero, payload.empresa.complemento, payload.empresa.bairro, payload.empresa.cidade, payload.empresa.estado]
+        .filter(Boolean)
+        .join(', ')
+      || '—';
+    const enderecoContador = [payload.contador?.endereco_escritorio, [payload.contador?.cidade_escritorio, payload.contador?.uf_escritorio].filter(Boolean).join('/')]
+      .filter(Boolean)
+      .join(', ') || '—';
+    const linhasHistorico = registrosTabela.map(r => `
+      <tr>
+        <td>${esc(fmtMes(r.competencia))}</td>
+        <td>${fmt(Number(r.valor) || 0)}</td>
+      </tr>`).join('');
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Declaração de Faturamento Anual</title>
+  <style>
+body { font-family: Arial, sans-serif; font-size: 11pt; color: #222; margin: 0; padding: 24px 32px; }
+.header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 16px; }
+.col-title { color: #1B3A8C; font-weight: bold; font-size: 11pt; border-bottom: 2px solid #1B3A8C; padding-bottom: 4px; margin-bottom: 8px; }
+.col-row { font-size: 10pt; margin-bottom: 4px; }
+.col-row strong { font-weight: bold; }
+hr.divider { border: none; border-top: 1px solid #888; margin: 16px 0; }
+.doc-title { text-align: center; font-size: 16pt; font-weight: bold; color: #1B3A8C; margin: 20px 0 8px; }
+.doc-subtitle { text-align: center; font-size: 11pt; color: #555; margin-bottom: 16px; }
+.declaracao { text-align: justify; font-size: 10.5pt; margin: 12px 0 20px; line-height: 1.6; }
+table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-bottom: 20px; }
+th { background: #1B3A8C; color: #fff; padding: 9px 10px; text-align: center; font-weight: bold; }
+td { border: 1px solid #ccc; padding: 7px 10px; text-align: center; }
+tr:nth-child(even) td { background: #f4f7ff; }
+.total-row td { font-weight: bold; background: #dce3f5; border: 1px solid #999; }
+.city-date { text-align: right; font-style: italic; margin: 20px 0 36px; font-size: 10.5pt; }
+.sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 16px; }
+.sig-line { border-top: 1px solid #333; padding-top: 6px; margin-bottom: 4px; }
+.sig-name { font-weight: bold; font-size: 10pt; }
+.sig-sub { font-size: 9.5pt; color: #444; }
+  </style>
+</head>
+<body>
+  <div class="header-grid">
+    <div>
+      <div class="col-title">DADOS DO CONTADOR RESPONSÁVEL</div>
+      <div class="col-row"><strong>Escritório:</strong> ${esc(payload.contador?.nome_escritorio || 'Não informado')}</div>
+      <div class="col-row"><strong>Contador:</strong> ${esc(payload.contador?.nome || 'Não informado')}</div>
+      <div class="col-row"><strong>CRC:</strong> ${esc(payload.contador?.crc || '—')}</div>
+      <div class="col-row"><strong>Endereço:</strong> ${esc(enderecoContador)}</div>
+      <div class="col-row"><strong>Telefone:</strong> ${esc(payload.contador?.telefone || '—')}</div>
+      <div class="col-row"><strong>E-mail:</strong> ${esc(payload.contador?.email || '—')}</div>
+    </div>
+    <div>
+      <div class="col-title">DADOS DA EMPRESA (CLIENTE)</div>
+      <div class="col-row"><strong>Razão Social:</strong> ${esc(payload.empresa.razao_social || '—')}</div>
+      <div class="col-row"><strong>CNPJ:</strong> ${esc(payload.empresa.cnpj || '—')}</div>
+      <div class="col-row"><strong>Endereço:</strong> ${esc(enderecoEmpresa)}</div>
+      <div class="col-row"><strong>Atividade Principal:</strong> ${esc(payload.empresa.segmento || '—')}</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="doc-title">DECLARAÇÃO DE FATURAMENTO ANUAL — EXERCÍCIO ${esc(anoReferencia)}</div>
+
+  <p class="declaracao">
+    Declaramos para os devidos fins, a pedido da empresa supra qualificada,
+    e sob as penas da lei, que o faturamento realizado no exercício de
+    ${esc(anoReferencia)} apresentou os seguintes valores:
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Mês/Ano</th>
+        <th>Faturamento Total (R$)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${linhasHistorico}
+      <tr class="total-row">
+        <td>TOTAL ANUAL</td>
+        <td>${fmt(totalAnual)}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="city-date">Brasília - DF, ${esc(dataEmissao.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }))}.</div>
+
+  <div class="sig-grid">
+    <div>
+      <div class="sig-line"></div>
+      <div class="sig-name">${esc(payload.contador?.nome || '________________________________')}</div>
+      <div class="sig-sub">Contador Responsável</div>
+      <div class="sig-sub">CRC: ${esc(payload.contador?.crc || '—')}</div>
+    </div>
+    <div>
+      <div class="sig-line"></div>
+      <div class="sig-name">${esc(payload.empresa.razao_social || '—')}</div>
+      <div class="sig-sub">Representante Legal</div>
+      <div class="sig-sub">CNPJ: ${esc(payload.empresa.cnpj || '—')}</div>
+    </div>
+  </div>
+</body>
+</html>`;
   }
 
 
@@ -4322,15 +4280,13 @@ ${(temTest1 || temTest2) ? `
       let contadorData: any = null;
       if (contador_id) {
         const { rows: cRows } = await pool.query('SELECT * FROM contadores WHERE id=$1', [contador_id]);
-        if (cRows.length) {
-          const c = cRows[0];
-          contadorData = { nome: c.nome, crc: c.crc, cpf: c.cpf, nome_escritorio: c.nome_escritorio, cnpj_escritorio: c.cnpj_escritorio, cidade_escritorio: c.cidade_escritorio, uf_escritorio: c.uf_escritorio };
-        }
+        if (cRows.length) contadorData = cRows[0];
       }
 
       // Buscar previsão
       const { rows: prevRows } = await pool.query(
-        `SELECT pf.*, e.razao_social, e.cnpj,
+        `SELECT pf.*, e.razao_social, e.cnpj, e.logradouro, e.numero, e.complemento,
+                e.bairro, e.cidade, e.estado, e.segmento,
                 pf.payload_completo, pf.modelo_usado, pf.horizonte_meses,
                 pf.capacidade_pgto_min, pf.capacidade_pgto_max, pf.gerada_em
            FROM previsao_faturamento pf
@@ -4343,6 +4299,13 @@ ${(temTest1 || temTest2) ? `
         return;
       }
       const prev = prevRows[0];
+      if (!contadorData && prev.contador_id) {
+        const { rows: ctRows } = await pool.query(
+          'SELECT * FROM contadores WHERE id=$1',
+          [prev.contador_id]
+        );
+        if (ctRows.length) contadorData = ctRows[0];
+      }
       const pontos: any[] = prev.payload_completo || [];
       const historico = pontos.filter((p: any) => p.is_historico).map((p: any) => ({
         competencia: p.ds,
@@ -4351,7 +4314,17 @@ ${(temTest1 || temTest2) ? `
       const previsoes = pontos.filter((p: any) => !p.is_historico);
 
       const htmlPayload = {
-        empresa: { razao_social: prev.razao_social, cnpj: prev.cnpj },
+        empresa: {
+          razao_social: prev.razao_social,
+          cnpj: prev.cnpj,
+          logradouro: prev.logradouro,
+          numero: prev.numero,
+          complemento: prev.complemento,
+          bairro: prev.bairro,
+          cidade: prev.cidade,
+          estado: prev.estado,
+          segmento: prev.segmento,
+        },
         horizonte_meses: prev.horizonte_meses,
         modelo_usado: prev.modelo_usado,
         gerada_em: prev.gerada_em,
@@ -4396,10 +4369,8 @@ ${(temTest1 || temTest2) ? `
           path: filePath,
           format: 'A4',
           printBackground: true,
-          displayHeaderFooter: true,
-          headerTemplate: getPuppeteerHeaderTemplate(),
-          footerTemplate: getPuppeteerFooterTemplate(),
-          margin: { top: '34mm', bottom: '26mm', left: '20mm', right: '20mm' },
+          displayHeaderFooter: false,
+          margin: { top: '18mm', bottom: '18mm', left: '20mm', right: '20mm' },
         });
       } finally {
         if (browser) await (browser as any).close();
@@ -4788,10 +4759,8 @@ ${(temTest1 || temTest2) ? `
           path: filePath,
           format: 'A4',
           printBackground: true,
-          displayHeaderFooter: true,
-          headerTemplate: getPuppeteerHeaderTemplate(),
-          footerTemplate: getPuppeteerFooterTemplate(),
-          margin: { top: '34mm', bottom: '26mm', left: '20mm', right: '20mm' },
+          displayHeaderFooter: false,
+          margin: { top: '18mm', bottom: '18mm', left: '20mm', right: '20mm' },
         });
       } finally {
         if (browser) await (browser as any).close();
