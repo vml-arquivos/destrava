@@ -117,3 +117,19 @@ export function gerarHtmlTimbrado(body: string, titulo?: string): string {
 </body>
 </html>`;
 }
+
+/**
+ * Cabeçalho embutido no fluxo normal do HTML.
+ * Usado para aparecer apenas na primeira página do PDF.
+ */
+export function getHtmlHeaderEmbutido(): string {
+  return `<div style="-webkit-print-color-adjust:exact;width:100%;display:block;text-align:center;background:#ffffff;border-bottom:3px solid #1B3A8C;padding:16px 0 12px;box-sizing:border-box;margin:0 0 24px 0;"><img src="https://destravacredito.com/logo-destrava.png" alt="Destrava Crédito" style="height:50px;display:inline-block;" onerror="this.style.display='none'"/></div>`;
+}
+
+/**
+ * Rodapé embutido no fluxo normal do HTML.
+ * Usado para aparecer apenas na última página do PDF.
+ */
+export function getHtmlFooterEmbutido(): string {
+  return `<div style="-webkit-print-color-adjust:exact;width:100%;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;background:#ffffff;border-top:1px solid #d0d0d0;padding-top:12px;box-sizing:border-box;font-family:Arial,sans-serif;font-size:7.5pt;line-height:1.4;color:#555555;margin-top:60px;"><div style="flex:1;"><div style="margin-bottom:4px;"><span style="font-weight:bold;color:#000000;">BRASÍLIA - SEDE</span><br/>St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250</div><div><span style="font-weight:bold;color:#000000;">GOIÂNIA - FILIAL</span><br/>Avenida Afonso Pena, qd-25 Alt. 05, S/N sala-02 setor Goiânia 2 CEP: 74665555 Goiânia-Go</div></div><div style="display:flex;align-items:stretch;gap:4px;height:28px;margin-left:16px;overflow:hidden;"><span style="display:block;width:10px;background:#1B3A8C;transform:skewX(-22deg);"></span><span style="display:block;width:10px;background:#f0a500;transform:skewX(-22deg);"></span><span style="display:block;width:10px;background:#1B3A8C;transform:skewX(-22deg);"></span></div></div>`;
+}
