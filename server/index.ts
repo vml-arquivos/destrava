@@ -10,7 +10,7 @@ import bcrypt from "bcryptjs";
 import { auth } from "./middleware/auth.ts";
 import { authorize } from "./middleware/authorize.ts";
 import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
-import { gerarHtmlTimbrado, getPuppeteerHeaderTemplate, getPuppeteerFooterTemplate, getDocumentStyles, CONTRATADA_DADOS } from "./letterhead.ts";
+import { gerarHtmlTimbrado, getPuppeteerHeaderTemplate, getPuppeteerFooterTemplate, getDocumentStyles, CONTRATADA_DADOS, getHtmlHeaderEmbutido, getHtmlFooterEmbutido } from "./letterhead.ts";
 
 const { Pool } = pkg;
 
@@ -3409,7 +3409,25 @@ ${temParceiro ? `<p class="clause"><strong>5.1</strong> - O PARCEIRO COMERCIAL, 
 </div>
 `;
 
-    return gerarHtmlTimbrado(body, 'CONTRATO DE ANÁLISE DOCUMENTAL');
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Destrava Crédito — CONTRATO DE ANÁLISE DOCUMENTAL</title>
+  <style>
+    ${getDocumentStyles()}
+    body { padding: 0; background: #fff; }
+    .contract-content { width: 100%; }
+  </style>
+</head>
+<body>
+  ${getHtmlHeaderEmbutido()}
+  <main class="contract-content">
+    ${body}
+  </main>
+  ${getHtmlFooterEmbutido()}
+</body>
+</html>`;
   }
 
 
@@ -3865,7 +3883,6 @@ ${tabelaAnos}
   // ─── HTML CONTRATO LIMPA NOME (papel timbrado) ──────────────────────────────
   async function gerarHtmlContratoLimpaNome(payload: any): Promise<string> {
     const { contratante, contrato } = payload;
-    const contratada = CONTRATADA_DADOS;
     const valorContrato   = contrato.valor_contrato_formatado || 'R$ 0,00';
     const condicaoPgto    = contrato.condicao_pagamento || 'a combinar';
     const prazoEntrega    = contrato.prazo_entrega_dias || 30;
@@ -3879,13 +3896,11 @@ ${tabelaAnos}
     const endContratante  = contratante.endereco || contratante.domicilio || '';
 
     const body = `
-<h1 class="doc-title">CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE ASSESSORIA JURÍDICA</h1>
-<h1 class="doc-title" style="font-size:10pt; font-weight:normal; margin-bottom:20px;">PARA NÃO EXPOSIÇÃO DE RESTRIÇÕES</h1>
+<h1 class="doc-title">CONTRATO DE PRESTAÇÃO DE SERVIÇOS</h1>
 
 <h2 class="section-title">QUADRO RESUMIDO</h2>
 <table class="data-table" style="margin-bottom:20px;">
-  <tr><td style="width:40%; font-weight:bold; background:#f0f4ff;">CONTRATADA</td><td>${contratada.razao_social} — CNPJ: ${contratada.cnpj}</td></tr>
-  <tr><td style="font-weight:bold; background:#f0f4ff;">Endereço</td><td>${contratada.endereco_sede}</td></tr>
+  <tr><td style="width:40%; font-weight:bold; background:#f0f4ff;">CONTRATADA</td><td>PRESTADORA DE SERVIÇOS</td></tr>
   <tr><td style="font-weight:bold; background:#f0f4ff;">CONTRATANTE</td><td>${contratante.nome || contratante.razao_social}</td></tr>
   <tr><td style="font-weight:bold; background:#f0f4ff;">${isPJ ? 'CNPJ' : 'CPF'}</td><td>${isPJ ? contratante.cnpj : contratante.cpf}</td></tr>
   <tr><td style="font-weight:bold; background:#f0f4ff;">Domicílio</td><td>${endContratante}</td></tr>
@@ -3957,20 +3972,34 @@ ${tabelaAnos}
   </div>
   <div style="text-align:center; width:45%;">
     <div class="sig-line"></div>
-    <p class="sig-name">${contratada.razao_social}</p>
-    <p class="sig-sub">CNPJ: ${contratada.cnpj}</p>
+    <p class="sig-name">CONTRATADA</p>
     <p class="sig-sub">CONTRATADA</p>
   </div>
 </div>
 `;
 
-    return gerarHtmlTimbrado(body, 'CONTRATO LIMPA NOME');
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>CONTRATO DE PRESTAÇÃO DE SERVIÇOS</title>
+  <style>
+    ${getDocumentStyles()}
+    body { padding: 0; background: #fff; }
+    .contract-content { width: 100%; }
+  </style>
+</head>
+<body>
+  <main class="contract-content">
+    ${body}
+  </main>
+</body>
+</html>`;
   }
 
   // ─── CONTRATO LIMPA BACEN ─────────────────────────────────────────────────
   async function gerarHtmlContratoBacen(payload: any): Promise<string> {
     const { contratante, representante, contrato } = payload;
-    const contratada = CONTRATADA_DADOS;
     const valorContrato    = contrato.valor_contrato_formatado || 'R$ 0,00';
     const condicaoPgto     = contrato.condicao_pagamento || 'a combinar';
     const prazoExecucao    = contrato.prazo_execucao_dias_uteis || 120;
@@ -3979,9 +4008,9 @@ ${tabelaAnos}
     const dataAss          = contrato.data_assinatura_formatada || new Date().toLocaleDateString('pt-BR');
     const cidadeAss        = contrato.cidade_assinatura || 'BRASÍLIA – DF';
     const body = `
-<h1 class="doc-title">CONTRATO DE PRESTAÇÃO DE SERVIÇOS EM ASSESSORIA FINANCEIRA (BACEN)</h1>
+<h1 class="doc-title">CONTRATO DE PRESTAÇÃO DE SERVIÇOS</h1>
 <h2 class="section-title">IDENTIFICAÇÃO DAS PARTES</h2>
-<p class="clause"><strong>CONTRATADA:</strong> ${contratada.razao_social}, CNPJ n° ${contratada.cnpj}, com sede na ${contratada.endereco_sede}, representada neste ato por ${contratada.representante}, ${contratada.cargo_representante}, CPF n° ${contratada.cpf_representante}.</p>
+<p class="clause"><strong>CONTRATADA:</strong> PRESTADORA DE SERVIÇOS.</p>
 <p class="clause"><strong>CONTRATANTE:</strong> ${contratante.razao_social}, CNPJ n° ${contratante.cnpj}, com sede em ${contratante.endereco}, representada neste ato por ${representante.nome}, sócio administrador, CPF n° ${representante.cpf}.</p>
 <h2 class="section-title">1. CLÁUSULA PRIMEIRA – OBJETO DO CONTRATO</h2>
 <p class="clause"><strong>1.1.</strong> O presente CONTRATO, mediante a propositura de ação judicial, objetiva a suspensão da exposição dos apontamentos do CONTRATANTE identificados no relatório BACEN/SCR. Desta forma serão retiradas as anotações de prejuízos e vencidos do relatório SCR, existentes até o mês de referência da consulta feita no ato da assinatura deste contrato.</p>
@@ -4012,13 +4041,28 @@ ${tabelaAnos}
   </div>
   <div style="text-align:center; width:45%;">
     <div class="sig-line"></div>
-    <p class="sig-name">${contratada.razao_social}</p>
-    <p class="sig-sub">CNPJ: ${contratada.cnpj}</p>
+    <p class="sig-name">CONTRATADA</p>
     <p class="sig-sub">CONTRATADA</p>
   </div>
 </div>
 `;
-    return gerarHtmlTimbrado(body, 'CONTRATO LIMPA BACEN');
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>CONTRATO DE PRESTAÇÃO DE SERVIÇOS</title>
+  <style>
+    ${getDocumentStyles()}
+    body { padding: 0; background: #fff; }
+    .contract-content { width: 100%; }
+  </style>
+</head>
+<body>
+  <main class="contract-content">
+    ${body}
+  </main>
+</body>
+</html>`;
   }
 
   // ─── CONTRATO RATING ──────────────────────────────────────────────────────
@@ -4079,7 +4123,25 @@ ${tabelaAnos}
   </div>
 </div>
 `;
-    return gerarHtmlTimbrado(body, 'CONTRATO RATING');
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Destrava Crédito — CONTRATO RATING</title>
+  <style>
+    ${getDocumentStyles()}
+    body { padding: 0; background: #fff; }
+    .contract-content { width: 100%; }
+  </style>
+</head>
+<body>
+  ${getHtmlHeaderEmbutido()}
+  <main class="contract-content">
+    ${body}
+  </main>
+  ${getHtmlFooterEmbutido()}
+</body>
+</html>`;
   }
 
   // ─── CONTRATO PARCERIA COMERCIAL ──────────────────────────────────────────
@@ -4177,7 +4239,25 @@ ${(temTest1 || temTest2) ? `
   </div>
 </div>` : ''}
 `;
-    return gerarHtmlTimbrado(body, 'CONTRATO DE PARCERIA COMERCIAL');
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Destrava Crédito — CONTRATO DE PARCERIA COMERCIAL</title>
+  <style>
+    ${getDocumentStyles()}
+    body { padding: 0; background: #fff; }
+    .contract-content { width: 100%; }
+  </style>
+</head>
+<body>
+  ${getHtmlHeaderEmbutido()}
+  <main class="contract-content">
+    ${body}
+  </main>
+  ${getHtmlFooterEmbutido()}
+</body>
+</html>`;
   }
 
     async function gerarPdfContrato(payload: any): Promise<string> {
@@ -4213,10 +4293,8 @@ ${(temTest1 || temTest2) ? `
         path: filePath,
         format: 'A4',
         printBackground: true,
-        displayHeaderFooter: true,
-        headerTemplate: getPuppeteerHeaderTemplate(),
-        footerTemplate: getPuppeteerFooterTemplate(),
-        margin: { top: '34mm', bottom: '26mm', left: '20mm', right: '20mm' },
+        displayHeaderFooter: false,
+        margin: { top: '18mm', bottom: '18mm', left: '22mm', right: '22mm' },
       });
     } finally {
       if (browser) await browser.close();
@@ -5030,7 +5108,7 @@ ${(temTest1 || temTest2) ? `
           browser2 = await puppeteer2.default.launch({ executablePath: executablePath2, args: ['--no-sandbox','--disable-setuid-sandbox'], headless: true });
           const page2 = await browser2.newPage();
           await page2.setContent(htmlLN, { waitUntil: 'networkidle0' });
-          await page2.pdf({ path: filePathLN, format: 'A4', printBackground: true, margin: { top: '35mm', bottom: '28mm', left: '20mm', right: '20mm' }, displayHeaderFooter: true, headerTemplate: getPuppeteerHeaderTemplate(), footerTemplate: getPuppeteerFooterTemplate() });
+          await page2.pdf({ path: filePathLN, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '20mm', bottom: '20mm', left: '22mm', right: '22mm' } });
         } finally {
           if (browser2) await (browser2 as any).close();
         }
@@ -5121,7 +5199,7 @@ ${(temTest1 || temTest2) ? `
           browserBacen = await puppeteerB.default.launch({ executablePath: execPathB, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu','--single-process'], headless: true });
           const pageB = await browserBacen.newPage();
           await pageB.setContent(htmlBacen, { waitUntil: 'networkidle0' });
-          await pageB.pdf({ path: filePathBacen, format: 'A4', printBackground: true, margin: { top: '35mm', bottom: '28mm', left: '20mm', right: '20mm' }, displayHeaderFooter: true, headerTemplate: getPuppeteerHeaderTemplate(), footerTemplate: getPuppeteerFooterTemplate() });
+          await pageB.pdf({ path: filePathBacen, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '20mm', bottom: '20mm', left: '22mm', right: '22mm' } });
         } finally { if (browserBacen) await (browserBacen as any).close(); }
         pdfPath = filePathBacen;
         const hashBacen = await calcularHashArquivo(pdfPath);
@@ -5189,7 +5267,7 @@ ${(temTest1 || temTest2) ? `
           browserRating = await puppeteerR.default.launch({ executablePath: execPathR, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu','--single-process'], headless: true });
           const pageR = await browserRating.newPage();
           await pageR.setContent(htmlRating, { waitUntil: 'networkidle0' });
-          await pageR.pdf({ path: filePathRating, format: 'A4', printBackground: true, margin: { top: '35mm', bottom: '28mm', left: '20mm', right: '20mm' }, displayHeaderFooter: true, headerTemplate: getPuppeteerHeaderTemplate(), footerTemplate: getPuppeteerFooterTemplate() });
+          await pageR.pdf({ path: filePathRating, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '18mm', bottom: '18mm', left: '22mm', right: '22mm' } });
         } finally { if (browserRating) await (browserRating as any).close(); }
         pdfPath = filePathRating;
         const hashRating = await calcularHashArquivo(pdfPath);
@@ -5260,7 +5338,7 @@ ${(temTest1 || temTest2) ? `
           browserParceria = await puppeteerP.default.launch({ executablePath: execPathP, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu','--single-process'], headless: true });
           const pageP = await browserParceria.newPage();
           await pageP.setContent(htmlParceria, { waitUntil: 'networkidle0' });
-          await pageP.pdf({ path: filePathParceria, format: 'A4', printBackground: true, margin: { top: '35mm', bottom: '28mm', left: '20mm', right: '20mm' }, displayHeaderFooter: true, headerTemplate: getPuppeteerHeaderTemplate(), footerTemplate: getPuppeteerFooterTemplate() });
+          await pageP.pdf({ path: filePathParceria, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '18mm', bottom: '18mm', left: '22mm', right: '22mm' } });
         } finally { if (browserParceria) await (browserParceria as any).close(); }
         pdfPath = filePathParceria;
         const hashParceria = await calcularHashArquivo(pdfPath);
