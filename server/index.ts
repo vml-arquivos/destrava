@@ -902,6 +902,19 @@ async function startServer() {
   } catch { /* tabela já existe ou usuário sem permissão */ }
   try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_prestadores_servico_ativo ON prestadores_servico(ativo)`); } catch { /* já existe */ }
   try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_prestadores_servico_nome ON prestadores_servico(razao_social, nome)`); } catch { /* já existe */ }
+
+  // P11C: identidade visual opcional das contratadas no PDF
+  try { await pool.query(`ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS logo_url TEXT`); } catch { /* já existe */ }
+  try { await pool.query(`ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS logo_path TEXT`); } catch { /* já existe */ }
+  try { await pool.query(`ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS usar_papel_personalizado BOOLEAN NOT NULL DEFAULT true`); } catch { /* já existe */ }
+  try { await pool.query(`ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS cabecalho_html TEXT`); } catch { /* já existe */ }
+  try { await pool.query(`ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS rodape_html TEXT`); } catch { /* já existe */ }
+  try { await pool.query(`ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS cor_primaria TEXT`); } catch { /* já existe */ }
+  try { await pool.query(`ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS cor_secundaria TEXT`); } catch { /* já existe */ }
+  try { await pool.query(`ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS cidade_assinatura TEXT`); } catch { /* já existe */ }
+  try { await pool.query(`ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS uf_assinatura TEXT`); } catch { /* já existe */ }
+  try { await pool.query(`ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS mostrar_logo_contrato BOOLEAN NOT NULL DEFAULT true`); } catch { /* já existe */ }
+
   try {
     await pool.query(`
       INSERT INTO prestadores_servico (
@@ -3972,6 +3985,16 @@ tr:nth-child(even) td { background: #f4f7ff; }
       representante_cpf: row.representante_cpf || '',
       representante_cargo: row.representante_cargo || '',
       observacoes: row.observacoes || '',
+      logo_url: row.logo_url || '',
+      logo_path: row.logo_path || '',
+      usar_papel_personalizado: row.usar_papel_personalizado !== false,
+      cabecalho_html: row.cabecalho_html || '',
+      rodape_html: row.rodape_html || '',
+      cor_primaria: row.cor_primaria || '',
+      cor_secundaria: row.cor_secundaria || '',
+      cidade_assinatura: row.cidade_assinatura || '',
+      uf_assinatura: row.uf_assinatura || '',
+      mostrar_logo_contrato: row.mostrar_logo_contrato !== false,
     };
   }
 
@@ -4010,6 +4033,318 @@ tr:nth-child(even) td { background: #f4f7ff; }
     return rows[0] || null;
   }
 
+  function escapeHtmlContrato(value: any): string {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function corContrato(value: any, fallback: string): string {
+    const cor = String(value || '').trim();
+    return /^#[0-9A-Fa-f]{6}$/.test(cor) ? cor : fallback;
+  }
+
+  function cidadeUfAssinaturaContrato(contrato: any, contratada: any, fallback = 'BRASÍLIA – DF'): string {
+    if (contrato?.cidade_assinatura) return contrato.cidade_assinatura;
+    const cidade = contratada?.cidade_assinatura || contratada?.cidade || '';
+    const uf = contratada?.uf_assinatura || contratada?.uf || '';
+    if (cidade && uf) return `${cidade.toUpperCase()} – ${uf.toUpperCase()}`;
+    if (cidade) return cidade.toUpperCase();
+    return fallback;
+  }
+
+  function renderContratoPdfHtml(titulo: string, body: string, contratada: any): string {
+    const nome = contratada?.nome_exibicao || contratada?.razao_social || contratada?.nome || 'DESTRAVA CRÉDITO';
+    const documento = contratada?.documento
+      ? `${contratada.documento_label || 'Documento'}: ${contratada.documento}`
+      : '';
+    const contato = [contratada?.telefone, contratada?.email].filter(Boolean).join(' • ');
+    const endereco = contratada?.endereco || '';
+    const corPrimaria = corContrato(contratada?.cor_primaria, '#1e3a8a');
+    const corSecundaria = corContrato(contratada?.cor_secundaria, '#334155');
+    const logo = contratada?.mostrar_logo_contrato !== false ? (contratada?.logo_url || contratada?.logo_path || '') : '';
+    const logoHtml = logo
+      ? `<img class="brand-logo" src="${escapeHtmlContrato(logo)}" alt="${escapeHtmlContrato(nome)}" />`
+      : `<div class="brand-mark">${escapeHtmlContrato((nome || 'D').trim().charAt(0).toUpperCase())}</div>`;
+
+    const cabecalhoCustom = contratada?.usar_papel_personalizado !== false && contratada?.cabecalho_html
+      ? `<div class="brand-custom-header">${contratada.cabecalho_html}</div>`
+      : '';
+
+    const rodapeDefault = `
+      <strong>${escapeHtmlContrato(nome)}</strong>
+      ${documento ? ` • ${escapeHtmlContrato(documento)}` : ''}
+      ${contato ? ` • ${escapeHtmlContrato(contato)}` : ''}
+      ${endereco ? `<br/>${escapeHtmlContrato(endereco)}` : ''}
+    `;
+
+    const rodapeHtml = contratada?.usar_papel_personalizado !== false && contratada?.rodape_html
+      ? contratada.rodape_html
+      : rodapeDefault;
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>${escapeHtmlContrato(titulo)}</title>
+  <style>
+    ${getDocumentStyles()}
+
+    :root {
+      --brand-primary: ${corPrimaria};
+      --brand-secondary: ${corSecundaria};
+      --text-main: #0f172a;
+      --text-muted: #475569;
+      --line-soft: #d7deea;
+      --table-soft: #f4f7fb;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      background: #fff;
+      color: var(--text-main);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 10.6pt;
+      line-height: 1.48;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .page-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 22mm;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line-soft);
+      padding-bottom: 7px;
+      background: #fff;
+      z-index: 2;
+    }
+
+    .brand-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brand-logo {
+      max-width: 38mm;
+      max-height: 14mm;
+      object-fit: contain;
+      display: block;
+    }
+
+    .brand-mark {
+      width: 12mm;
+      height: 12mm;
+      border-radius: 50%;
+      background: var(--brand-primary);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13pt;
+      font-weight: 700;
+    }
+
+    .brand-info {
+      min-width: 0;
+    }
+
+    .brand-name {
+      color: var(--brand-primary);
+      font-size: 10.5pt;
+      font-weight: 800;
+      line-height: 1.2;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 115mm;
+    }
+
+    .brand-doc {
+      color: var(--text-muted);
+      font-size: 8.4pt;
+      margin-top: 2px;
+    }
+
+    .brand-custom-header {
+      color: var(--text-muted);
+      font-size: 8.4pt;
+      text-align: right;
+      max-width: 62mm;
+      line-height: 1.25;
+    }
+
+    .page-footer {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      min-height: 14mm;
+      border-top: 1px solid var(--line-soft);
+      padding-top: 5px;
+      color: #64748b;
+      font-size: 7.8pt;
+      line-height: 1.28;
+      background: #fff;
+      z-index: 2;
+      text-align: center;
+    }
+
+    .contract-content {
+      width: 100%;
+      padding-top: 28mm;
+      padding-bottom: 20mm;
+    }
+
+    .doc-title {
+      color: var(--brand-primary);
+      text-align: center;
+      font-size: 15pt;
+      line-height: 1.2;
+      letter-spacing: .03em;
+      text-transform: uppercase;
+      margin: 0 0 18px 0;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--brand-primary);
+    }
+
+    .section-title {
+      color: var(--brand-primary);
+      font-size: 10.4pt;
+      font-weight: 800;
+      letter-spacing: .01em;
+      text-transform: uppercase;
+      margin: 18px 0 8px;
+      padding: 6px 8px;
+      background: linear-gradient(90deg, rgba(30,58,138,.10), rgba(30,58,138,.02));
+      border-left: 3px solid var(--brand-primary);
+      break-after: avoid;
+      page-break-after: avoid;
+    }
+
+    .clause {
+      margin: 0 0 7px;
+      text-align: justify;
+      orphans: 3;
+      widows: 3;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.3pt;
+      margin: 8px 0 16px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .data-table td {
+      border: 1px solid var(--line-soft);
+      padding: 7px 8px;
+      vertical-align: top;
+    }
+
+    .data-table td:first-child {
+      color: var(--brand-primary);
+      background: var(--table-soft) !important;
+      font-weight: 800;
+      width: 38%;
+    }
+
+    .city-date {
+      text-align: right;
+      margin: 24px 0 26px;
+      font-weight: 500;
+    }
+
+    .signature-grid {
+      width: 100%;
+      max-width: 148mm;
+      margin: 32px auto 0;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 22mm;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .signature-party {
+      flex: 0 0 58mm;
+      max-width: 58mm;
+      text-align: center;
+    }
+
+    .sig-line {
+      width: 58mm;
+      height: 1px;
+      border-top: 1.2px solid #111827;
+      margin: 0 auto 8px;
+    }
+
+    .sig-name {
+      margin: 0 0 3px;
+      font-size: 9.2pt;
+      line-height: 1.25;
+      font-weight: 800;
+      color: #111827;
+      text-transform: none;
+    }
+
+    .sig-sub {
+      margin: 0 0 2px;
+      font-size: 8.2pt;
+      line-height: 1.2;
+      color: #334155;
+    }
+
+    @media print {
+      .section-title,
+      .data-table,
+      .signature-grid {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <div class="brand-left">
+      ${logoHtml}
+      <div class="brand-info">
+        <div class="brand-name">${escapeHtmlContrato(nome)}</div>
+        ${documento ? `<div class="brand-doc">${escapeHtmlContrato(documento)}</div>` : ''}
+      </div>
+    </div>
+    ${cabecalhoCustom}
+  </header>
+
+  <footer class="page-footer">
+    ${rodapeHtml}
+  </footer>
+
+  <main class="contract-content">
+    ${body}
+  </main>
+</body>
+</html>`;
+  }
+
   // ─── HTML CONTRATO LIMPA NOME (papel timbrado) ──────────────────────────────
   async function gerarHtmlContratoLimpaNome(payload: any): Promise<string> {
     const { contratante, contrato } = payload;
@@ -4027,7 +4362,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
     const prazoGarantia   = contrato.prazo_garantia_meses || 6;
     const foro            = contrato.foro_eleito || 'Taguatinga';
     const dataAss         = contrato.data_assinatura_formatada || new Date().toLocaleDateString('pt-BR');
-    const cidadeAss       = contrato.cidade_assinatura || 'BRASÍLIA – DF';
+    const cidadeAss       = cidadeUfAssinaturaContrato(contrato, contratada, 'BRASÍLIA – DF');
     const taxaConsulta    = contrato.taxa_consulta_serasa || 'R$ 50,00';
     const taxaReprotocolo = contrato.taxa_reprotocolo || 'R$ 300,00';
     const isPJ = !!contratante.cnpj;
@@ -4106,14 +4441,14 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
 
 <p class="city-date">${cidadeAss}, ${dataAss}.</p>
 
-<div class="sig-block" style="display:flex; justify-content:space-between; margin-top:40px;">
-  <div style="text-align:center; width:45%;">
+<div class="signature-grid">
+  <div class="signature-party">
     <div class="sig-line"></div>
     <p class="sig-name">${contratante.nome || contratante.razao_social}</p>
     <p class="sig-sub">${isPJ ? 'CNPJ: ' + contratante.cnpj : 'CPF: ' + contratante.cpf}</p>
     <p class="sig-sub">CONTRATANTE</p>
   </div>
-  <div style="text-align:center; width:45%;">
+  <div class="signature-party">
     <div class="sig-line"></div>
     <p class="sig-name">${nomeContratada}</p>
     ${docContratada ? `<p class="sig-sub">${docContratada}</p>` : ''}
@@ -4122,23 +4457,7 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
 </div>
 `;
 
-    return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8"/>
-  <title>CONTRATO DE PRESTAÇÃO DE SERVIÇOS</title>
-  <style>
-    ${getDocumentStyles()}
-    body { padding: 0; background: #fff; }
-    .contract-content { width: 100%; }
-  </style>
-</head>
-<body>
-  <main class="contract-content">
-    ${body}
-  </main>
-</body>
-</html>`;
+    return renderContratoPdfHtml('CONTRATO DE PRESTAÇÃO DE SERVIÇOS', body, contratada);
   }
 
   // ─── CONTRATO LIMPA BACEN ─────────────────────────────────────────────────
@@ -4158,19 +4477,33 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
     const prazoAtualizacao = contrato.prazo_atualizacao_orgao_dias || 60;
     const foro             = contrato.foro_eleito || 'Brasília/DF';
     const dataAss          = contrato.data_assinatura_formatada || new Date().toLocaleDateString('pt-BR');
-    const cidadeAss        = contrato.cidade_assinatura || 'BRASÍLIA – DF';
+    const cidadeAss        = cidadeUfAssinaturaContrato(contrato, contratada, 'BRASÍLIA – DF');
+
+    const isContratantePJ = !!contratante?.cnpj && !!contratante?.razao_social;
+    const nomeContratante = isContratantePJ
+      ? contratante.razao_social
+      : (contratante?.nome || contratante?.razao_social || 'CONTRATANTE');
+    const docContratante = isContratantePJ ? (contratante.cnpj || '') : (contratante?.cpf || '');
+    const docContratanteLabel = isContratantePJ ? 'CNPJ' : 'CPF';
+    const enderecoContratante = contratante?.endereco || contratante?.domicilio || '';
+    const representanteNome = representante?.nome || contratante?.representante || '';
+    const representanteCpf = representante?.cpf || contratante?.cpf_representante || '';
+    const qualifContratante = isContratantePJ
+      ? `${nomeContratante}, CNPJ n° ${docContratante}${enderecoContratante ? `, com sede em ${enderecoContratante}` : ''}${representanteNome ? `, representada neste ato por ${representanteNome}${representanteCpf ? `, CPF n° ${representanteCpf}` : ''}` : ''}.`
+      : `${nomeContratante}${docContratante ? `, CPF n° ${docContratante}` : ''}${contratante?.rg ? `, RG n° ${contratante.rg}` : ''}${contratante?.estado_civil ? `, ${contratante.estado_civil}` : ''}${contratante?.profissao ? `, ${contratante.profissao}` : ''}${enderecoContratante ? `, residente e domiciliado(a) em ${enderecoContratante}` : ''}.`;
+
     const body = `
 <h1 class="doc-title">CONTRATO DE PRESTAÇÃO DE SERVIÇOS</h1>
 <h2 class="section-title">IDENTIFICAÇÃO DAS PARTES</h2>
 <p class="clause"><strong>CONTRATADA:</strong> ${qualifContratada}</p>
 ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA ASSESSORIA:</strong> ${responsavelTexto}.</p>` : ''}
-<p class="clause"><strong>CONTRATANTE:</strong> ${contratante.razao_social}, CNPJ n° ${contratante.cnpj}, com sede em ${contratante.endereco}, representada neste ato por ${representante.nome}, sócio administrador, CPF n° ${representante.cpf}.</p>
+<p class="clause"><strong>CONTRATANTE:</strong> ${qualifContratante}</p>
 <h2 class="section-title">1. CLÁUSULA PRIMEIRA – OBJETO DO CONTRATO</h2>
-<p class="clause"><strong>1.1.</strong> O presente CONTRATO, mediante a propositura de ação judicial, objetiva a suspensão da exposição dos apontamentos do CONTRATANTE identificados no relatório BACEN/SCR. Desta forma serão retiradas as anotações  e vencidos do relatório SCR, existentes até o mês de referência da consulta feita no ato da assinatura deste contrato.</p>
+<p class="clause"><strong>1.1.</strong> O presente CONTRATO, mediante a propositura de ação judicial, objetiva a suspensão da exposição dos apontamentos do CONTRATANTE identificados no relatório BACEN/SCR. Desta forma serão retiradas as anotações e vencidos do relatório SCR, existentes até o mês de referência da consulta feita no ato da assinatura deste contrato.</p>
 <p class="clause"><strong>1.2.</strong> Os serviços contratados diante deste contrato não são uma garantia de crédito para o CONTRATANTE.</p>
 <h2 class="section-title">2. CLÁUSULA SEGUNDA – DAS DESPESAS E HONORÁRIOS</h2>
 <p class="clause"><strong>2.1.</strong> As despesas extraordinárias, custas e despesas administrativas são de responsabilidade do CONTRATANTE.</p>
-<p class="clause"><strong>2.2.</strong> O valor do serviço contratado é de <strong>${valorContrato}</strong> e deve ser pago nas seguintes condições: <strong>${condicaoPgto}</strong>ou em conta corrente jurídica de titularidade da CONTRATADA, inexistindo a possibilidade de cancelamento após o processo ser protocolado em órgão competente.</p>
+<p class="clause"><strong>2.2.</strong> O valor do serviço contratado é de <strong>${valorContrato}</strong> e deve ser pago nas seguintes condições: <strong>${condicaoPgto}</strong>, ou em conta corrente jurídica de titularidade da CONTRATADA, inexistindo a possibilidade de cancelamento após o processo ser protocolado em órgão competente.</p>
 <h2 class="section-title">3. CLÁUSULA TERCEIRA – PRAZO</h2>
 <p class="clause"><strong>3.1.</strong> A CONTRATADA pede o prazo máximo de <strong>${prazoExecucao} (${prazoExecucao === 120 ? 'cento e vinte' : String(prazoExecucao)}) dias úteis</strong> contados da data da assinatura do contrato, para a execução integral do serviço e <strong>${prazoAtualizacao} dias</strong> após a conclusão do processo, para atualização do órgão competente.</p>
 <h2 class="section-title">4. CLÁUSULA QUARTA – DISPOSIÇÕES GERAIS</h2>
@@ -4185,14 +4518,14 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
 <p class="clause"><strong>6.1.</strong> Para dirimir quaisquer controvérsias oriundas do CONTRATO, as partes elegem o foro da comarca de <strong>${foro}</strong>.</p>
 <p class="clause">Por estarem assim justos e contratados, firmam o presente instrumento, em duas vias de igual teor.</p>
 <p class="city-date">${cidadeAss}, ${dataAss}.</p>
-<div class="sig-block" style="display:flex; justify-content:space-between; margin-top:40px;">
-  <div style="text-align:center; width:45%;">
+<div class="signature-grid">
+  <div class="signature-party">
     <div class="sig-line"></div>
-    <p class="sig-name">${contratante.razao_social}</p>
-    <p class="sig-sub">CNPJ: ${contratante.cnpj}</p>
+    <p class="sig-name">${nomeContratante}</p>
+    ${docContratante ? `<p class="sig-sub">${docContratanteLabel}: ${docContratante}</p>` : ''}
     <p class="sig-sub">CONTRATANTE</p>
   </div>
-  <div style="text-align:center; width:45%;">
+  <div class="signature-party">
     <div class="sig-line"></div>
     <p class="sig-name">${nomeContratada}</p>
     ${docContratada ? `<p class="sig-sub">${docContratada}</p>` : ''}
@@ -4200,23 +4533,7 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
   </div>
 </div>
 `;
-    return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8"/>
-  <title>CONTRATO DE PRESTAÇÃO DE SERVIÇOS</title>
-  <style>
-    ${getDocumentStyles()}
-    body { padding: 0; background: #fff; }
-    .contract-content { width: 100%; }
-  </style>
-</head>
-<body>
-  <main class="contract-content">
-    ${body}
-  </main>
-</body>
-</html>`;
+    return renderContratoPdfHtml('CONTRATO DE PRESTAÇÃO DE SERVIÇOS', body, contratada);
   }
 
   // ─── CONTRATO RATING ──────────────────────────────────────────────────────
@@ -5533,12 +5850,22 @@ ${(temTest1 || temTest2) ? `
 
       // ── CONTRATO LIMPA BACEN ────────────────────────────────────────────────
       if (tipo_contrato === 'limpa_bacen') {
+        const clienteTipoBacen = cliente_tipo || (req.body.cliente_pf_id ? 'pf' : 'empresa');
+
         if (!valor_contrato || !condicao_pagamento) {
-          res.status(400).json({ error: 'Campos obrigatórios para Limpa BACEN: empresa_id, valor_contrato, condicao_pagamento' });
+          res.status(400).json({ error: 'Campos obrigatórios para Limpa BACEN: cliente, valor_contrato, condicao_pagamento' });
           return;
         }
-        if (!empresa_id) {
-          res.status(400).json({ error: 'empresa_id é obrigatório para contrato Limpa BACEN' });
+        if (clienteTipoBacen === 'empresa' && !empresa_id) {
+          res.status(400).json({ error: 'Selecione uma empresa para o contrato Limpa BACEN.' });
+          return;
+        }
+        if (clienteTipoBacen === 'pf' && !req.body.cliente_pf_id) {
+          res.status(400).json({ error: 'Selecione uma pessoa física para o contrato Limpa BACEN.' });
+          return;
+        }
+        if (clienteTipoBacen === 'lead' && !cliente_id) {
+          res.status(400).json({ error: 'Selecione um lead para o contrato Limpa BACEN.' });
           return;
         }
         if (!contratada_id) {
@@ -5556,19 +5883,52 @@ ${(temTest1 || temTest2) ? `
           ? await buscarResponsavelContrato(responsavel_contrato_id)
           : null;
 
-        const { rows: empBacen } = await pool.query('SELECT * FROM empresas WHERE id=$1', [empresa_id]);
-        if (!empBacen.length) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
-        const eb = empBacen[0];
-        const payloadBacen = {
-          contratante: {
+        let contratanteBacenData: any = null;
+        let representanteBacenData: any = { nome: '', cpf: '' };
+
+        if (clienteTipoBacen === 'empresa') {
+          const { rows: empBacen } = await pool.query('SELECT * FROM empresas WHERE id=$1', [empresa_id]);
+          if (!empBacen.length) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+          const eb = empBacen[0];
+          contratanteBacenData = {
             razao_social: eb.razao_social,
             cnpj: eb.cnpj || '',
             endereco: [eb.logradouro, eb.numero, eb.bairro, eb.cidade, eb.estado].filter(Boolean).join(', '),
-          },
-          representante: {
+          };
+          representanteBacenData = {
             nome: representante_nome || eb.responsavel_nome || '',
             cpf: representante_cpf || eb.responsavel_cpf || '',
-          },
+          };
+        } else if (clienteTipoBacen === 'pf') {
+          const { rows: pfRows } = await pool.query('SELECT * FROM clientes_pf WHERE id=$1', [req.body.cliente_pf_id]);
+          if (!pfRows.length) { res.status(404).json({ error: 'Cliente PF não encontrado' }); return; }
+          const pf = pfRows[0];
+          contratanteBacenData = {
+            nome: pf.nome,
+            cpf: pf.cpf || '',
+            rg: pf.rg || '',
+            data_nascimento: pf.data_nascimento || '',
+            estado_civil: pf.estado_civil || '',
+            profissao: pf.profissao || '',
+            email: pf.email || '',
+            telefone: pf.telefone || '',
+            domicilio: [pf.endereco, pf.cidade, pf.uf, pf.cep].filter(Boolean).join(', '),
+          };
+        } else {
+          const { rows: leadRows } = await pool.query('SELECT * FROM leads WHERE id=$1', [cliente_id]);
+          if (!leadRows.length) { res.status(404).json({ error: 'Lead não encontrado' }); return; }
+          const l = leadRows[0];
+          contratanteBacenData = {
+            nome: l.nome || l.razao_social || '',
+            cpf: l.cpf || '',
+            cnpj: l.cnpj || '',
+            domicilio: l.endereco || '',
+          };
+        }
+
+        const payloadBacen = {
+          contratante: contratanteBacenData,
+          representante: representanteBacenData,
           contratada: contratadaSelecionada,
           responsavel_contrato: responsavelContrato,
           contrato: {
@@ -5601,15 +5961,20 @@ ${(temTest1 || temTest2) ? `
         const hashBacen = await calcularHashArquivo(pdfPath);
         const { rows: contratoRowsBacen } = await pool.query(
           `INSERT INTO contratos_gerados
-             (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id,
+             (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id, cliente_pf_id,
               contratada_id, responsavel_contrato_id,
               valor_referencia, valor_contrato, condicao_pagamento, taxa_comissao,
               honorario_minimo_mes, honorario_minimo_total, data_assinatura,
               foro_eleito, pdf_path, hash_documento, payload_snapshot,
               contratada_snapshot, responsavel_contrato_snapshot, criado_por)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
            RETURNING id, created_at`,
-          ['limpa_bacen', 'empresa', empresa_id, parceiro_id || null, null,
+          ['limpa_bacen',
+           clienteTipoBacen,
+           clienteTipoBacen === 'empresa' ? empresa_id : null,
+           parceiro_id || null,
+           clienteTipoBacen === 'lead' ? cliente_id : null,
+           clienteTipoBacen === 'pf' ? req.body.cliente_pf_id : null,
            contratadaSelecionada.id, responsavelContrato?.id || null,
            null, valor_contrato, condicao_pagamento, null, null, null,
            data_assinatura, foro_eleito, pdfPath, hashBacen, JSON.stringify(payloadBacen),
