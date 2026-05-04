@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, Plus, Users } from 'lucide-react';
+import { Building2, FileText, Plus, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch, getToken } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
@@ -15,6 +15,28 @@ interface Parceiro {
   telefone?: string;
 }
 
+interface PrestadorServico {
+  id: string;
+  tipo_pessoa: 'pj' | 'pf';
+  razao_social?: string;
+  nome_fantasia?: string;
+  nome?: string;
+  cnpj?: string;
+  cpf?: string;
+  email?: string;
+  telefone?: string;
+  endereco?: string;
+  cidade?: string;
+  uf?: string;
+  cep?: string;
+  representante_nome?: string;
+  representante_cpf?: string;
+  representante_cargo?: string;
+  nome_exibicao?: string;
+  documento?: string;
+  documento_label?: string;
+}
+
 interface Contrato {
   id: string;
   tipo_contrato?: string;
@@ -22,6 +44,8 @@ interface Contrato {
   lead_id?: string;
   parceiro_id?: string;
   parceiro_nome?: string;
+  contratada_nome?: string;
+  responsavel_contrato_nome?: string;
   empresa_nome?: string;
   lead_nome?: string;
   valor_referencia?: number;
@@ -33,9 +57,6 @@ interface Contrato {
   created_at: string;
   pdf_path?: string;
   criado_por_nome?: string;
-  contratado_id?: string;
-  contratado_nome?: string;
-  contratado_cargo?: string;
 }
 
 export default function GeradorContratos() {
@@ -44,19 +65,45 @@ export default function GeradorContratos() {
 
   const [contratos, setContratos]         = useState<Contrato[]>([]);
   const [parceiros, setParceiros]         = useState<Parceiro[]>([]);
+  const [prestadores, setPrestadores]     = useState<PrestadorServico[]>([]);
   const [loading, setLoading]             = useState(false);
   const [loadingContratos, setLoadingContratos] = useState(false);
-  const [abaAtiva, setAbaAtiva]           = useState<'gerar' | 'lista' | 'parceiros'>('gerar');
+  const [abaAtiva, setAbaAtiva]           = useState<'gerar' | 'lista' | 'parceiros' | 'contratadas'>('gerar');
 
   // Novo parceiro
   const [novoParceiro, setNovoParceiro]   = useState({ nome: '', cpf: '', email: '', telefone: '' });
   const [salvandoParceiro, setSalvandoParceiro] = useState(false);
 
-  // Carrega parceiros para a aba de gestão
+  // Nova contratada/prestadora
+  const [novoPrestador, setNovoPrestador] = useState({
+    tipo_pessoa: 'pj' as 'pj' | 'pf',
+    razao_social: '',
+    nome_fantasia: '',
+    nome: '',
+    cnpj: '',
+    cpf: '',
+    email: '',
+    telefone: '',
+    endereco: '',
+    cidade: '',
+    uf: '',
+    cep: '',
+    representante_nome: '',
+    representante_cpf: '',
+    representante_cargo: '',
+    observacoes: '',
+  });
+  const [salvandoPrestador, setSalvandoPrestador] = useState(false);
+
+  // Carrega parceiros e contratadas para as abas de gestão
   useEffect(() => {
     apiFetch('/api/parceiros')
       .then((par: any) => setParceiros(Array.isArray(par) ? par : par?.parceiros || []))
       .catch(() => { /* silencioso — parceiros são opcionais */ });
+
+    apiFetch('/api/prestadores-servico')
+      .then((items: any) => setPrestadores(Array.isArray(items) ? items : items?.prestadores || []))
+      .catch(() => { /* silencioso — prestadores dependem da migration 018 */ });
   }, []);
 
   const carregarContratos = async () => {
@@ -144,6 +191,66 @@ export default function GeradorContratos() {
     }
   };
 
+  const carregarPrestadores = async () => {
+    const data: PrestadorServico[] = await apiFetch('/api/prestadores-servico');
+    setPrestadores(Array.isArray(data) ? data : []);
+  };
+
+  const handleSalvarPrestador = async () => {
+    const tipo = novoPrestador.tipo_pessoa;
+    if (tipo === 'pj' && (!novoPrestador.razao_social || !novoPrestador.cnpj)) {
+      toast.error('Para empresa contratada, razão social e CNPJ são obrigatórios.');
+      return;
+    }
+    if (tipo === 'pf' && (!novoPrestador.nome || !novoPrestador.cpf)) {
+      toast.error('Para pessoa física contratada, nome e CPF são obrigatórios.');
+      return;
+    }
+
+    setSalvandoPrestador(true);
+    try {
+      const novo: PrestadorServico = await apiFetch('/api/prestadores-servico', {
+        method: 'POST',
+        body: JSON.stringify(novoPrestador),
+      });
+      setPrestadores(prev => [...prev, novo]);
+      setNovoPrestador({
+        tipo_pessoa: 'pj',
+        razao_social: '',
+        nome_fantasia: '',
+        nome: '',
+        cnpj: '',
+        cpf: '',
+        email: '',
+        telefone: '',
+        endereco: '',
+        cidade: '',
+        uf: '',
+        cep: '',
+        representante_nome: '',
+        representante_cpf: '',
+        representante_cargo: '',
+        observacoes: '',
+      });
+      toast.success('Contratada/prestadora cadastrada com sucesso!');
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao cadastrar contratada/prestadora');
+    } finally {
+      setSalvandoPrestador(false);
+    }
+  };
+
+  const handleDesativarPrestador = async (id: string) => {
+    if (!confirm('Desativar esta contratada/prestadora? Ela não aparecerá mais para novos contratos.')) return;
+    try {
+      await apiFetch(`/api/prestadores-servico/${id}`, { method: 'DELETE' });
+      await carregarPrestadores();
+      toast.success('Contratada/prestadora desativada.');
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao desativar contratada/prestadora');
+    }
+  };
+
   return (
     <Layout>
       <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -152,7 +259,7 @@ export default function GeradorContratos() {
           <FileText className="w-6 h-6 text-blue-600" />
           <div>
             <h1 className="text-xl font-bold text-gray-900">Gerador de Contratos</h1>
-            <p className="text-sm text-gray-500">Gere contratos PDF com papel timbrado da Destrava Crédito</p>
+            <p className="text-sm text-gray-500">Gere contratos PDF e escolha a contratada nos contratos Limpa Nome e Limpa BACEN</p>
           </div>
         </div>
 
@@ -160,8 +267,9 @@ export default function GeradorContratos() {
         <div className="flex gap-1 border-b border-gray-200">
           {[
             { key: 'gerar',     label: 'Gerar Contrato',   icon: FileText },
-            { key: 'lista',     label: 'Lista de Contratos', icon: FileText },
-            { key: 'parceiros', label: 'Parceiros',          icon: Users },
+            { key: 'lista',       label: 'Lista de Contratos', icon: FileText },
+            { key: 'contratadas', label: 'Contratadas',        icon: Building2 },
+            { key: 'parceiros',   label: 'Parceiros',          icon: Users },
           ].map(({ key, label, icon: Icon }) => (
             <button
               key={key}
@@ -189,7 +297,6 @@ export default function GeradorContratos() {
               onSubmit={handleGerarContrato}
               loading={loading}
               userCargo={userCargo}
-              currentUserId={colaborador?.id}
             />
           </div>
         )}
@@ -217,6 +324,208 @@ export default function GeradorContratos() {
                 userCargo={userCargo}
               />
             )}
+          </div>
+        )}
+
+        {/* Aba: Contratadas / Prestadoras */}
+        {abaAtiva === 'contratadas' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+              <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                Cadastrar Contratada / Prestadora
+              </h2>
+
+              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                Essa lista será usada somente nos contratos <strong>Limpa Nome</strong> e <strong>Limpa BACEN</strong>, no campo de quem aparece como CONTRATADA/PRESTADORA no PDF.
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Tipo *</label>
+                  <select
+                    value={novoPrestador.tipo_pessoa}
+                    onChange={e => setNovoPrestador(p => ({ ...p, tipo_pessoa: e.target.value as 'pj' | 'pf' }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="pj">Pessoa Jurídica / Empresa</option>
+                    <option value="pf">Pessoa Física</option>
+                  </select>
+                </div>
+
+                {novoPrestador.tipo_pessoa === 'pj' ? (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Razão Social *</label>
+                      <input type="text" value={novoPrestador.razao_social}
+                        onChange={e => setNovoPrestador(p => ({ ...p, razao_social: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Ex: DESTRAVA CREDITO LTDA" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">CNPJ *</label>
+                      <input type="text" value={novoPrestador.cnpj}
+                        onChange={e => setNovoPrestador(p => ({ ...p, cnpj: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="00.000.000/0001-00" />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Nome *</label>
+                      <input type="text" value={novoPrestador.nome}
+                        onChange={e => setNovoPrestador(p => ({ ...p, nome: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Nome completo" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">CPF *</label>
+                      <input type="text" value={novoPrestador.cpf}
+                        onChange={e => setNovoPrestador(p => ({ ...p, cpf: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="000.000.000-00" />
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Nome Fantasia</label>
+                  <input type="text" value={novoPrestador.nome_fantasia}
+                    onChange={e => setNovoPrestador(p => ({ ...p, nome_fantasia: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Nome comercial" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">E-mail</label>
+                  <input type="email" value={novoPrestador.email}
+                    onChange={e => setNovoPrestador(p => ({ ...p, email: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="email@empresa.com" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Telefone</label>
+                  <input type="text" value={novoPrestador.telefone}
+                    onChange={e => setNovoPrestador(p => ({ ...p, telefone: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="(61) 99999-9999" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Endereço / Sede</label>
+                <input type="text" value={novoPrestador.endereco}
+                  onChange={e => setNovoPrestador(p => ({ ...p, endereco: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Rua, número, bairro" />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Cidade</label>
+                  <input type="text" value={novoPrestador.cidade}
+                    onChange={e => setNovoPrestador(p => ({ ...p, cidade: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Brasília" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">UF</label>
+                  <input type="text" maxLength={2} value={novoPrestador.uf}
+                    onChange={e => setNovoPrestador(p => ({ ...p, uf: e.target.value.toUpperCase() }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="DF" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">CEP</label>
+                  <input type="text" value={novoPrestador.cep}
+                    onChange={e => setNovoPrestador(p => ({ ...p, cep: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="00000-000" />
+                </div>
+              </div>
+
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-xs font-semibold text-gray-600 mb-2">Representante da contratada, quando for PJ</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Nome do representante</label>
+                    <input type="text" value={novoPrestador.representante_nome}
+                      onChange={e => setNovoPrestador(p => ({ ...p, representante_nome: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Nome completo" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">CPF do representante</label>
+                    <input type="text" value={novoPrestador.representante_cpf}
+                      onChange={e => setNovoPrestador(p => ({ ...p, representante_cpf: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="000.000.000-00" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Cargo</label>
+                    <input type="text" value={novoPrestador.representante_cargo}
+                      onChange={e => setNovoPrestador(p => ({ ...p, representante_cargo: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Sócio Administrador" />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Observações internas</label>
+                <input type="text" value={novoPrestador.observacoes}
+                  onChange={e => setNovoPrestador(p => ({ ...p, observacoes: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ex: empresa do grupo, prestador parceiro, uso apenas em BACEN..." />
+              </div>
+
+              <button onClick={handleSalvarPrestador} disabled={salvandoPrestador}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {salvandoPrestador ? 'Salvando...' : 'Cadastrar Contratada'}
+              </button>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h2 className="font-semibold text-gray-800 mb-3">Contratadas / Prestadoras Cadastradas</h2>
+              {prestadores.length === 0 ? (
+                <p className="text-sm text-gray-400">Nenhuma contratada cadastrada.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <th className="text-left py-2 px-3 font-medium text-gray-600">Nome/Razão Social</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-600">Documento</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-600">Representante</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-600">Cidade/UF</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-600">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {prestadores.map(p => (
+                        <tr key={p.id} className="border-b border-gray-100">
+                          <td className="py-2 px-3 font-medium text-gray-900">{p.nome_exibicao || p.razao_social || p.nome || '—'}</td>
+                          <td className="py-2 px-3 text-gray-600">{p.documento ? `${p.documento_label || (p.tipo_pessoa === 'pf' ? 'CPF' : 'CNPJ')}: ${p.documento}` : p.cnpj || p.cpf || '—'}</td>
+                          <td className="py-2 px-3 text-gray-600">{p.representante_nome || '—'}</td>
+                          <td className="py-2 px-3 text-gray-600">{[p.cidade, p.uf].filter(Boolean).join('/') || '—'}</td>
+                          <td className="py-2 px-3">
+                            <button
+                              onClick={() => handleDesativarPrestador(p.id)}
+                              className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              Desativar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
