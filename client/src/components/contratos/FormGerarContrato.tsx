@@ -6,13 +6,30 @@ interface Empresa  { id: string; razao_social: string; cnpj?: string; }
 interface Lead     { id: string; nome?: string; razao_social?: string; cpf?: string; cnpj?: string; }
 interface ClientePF { id: string; nome: string; cpf?: string; telefone?: string; cidade?: string; uf?: string; }
 interface Parceiro { id: string; nome: string; cpf?: string; }
-interface Colaborador { id: string; nome: string; cargo?: string; email?: string; telefone?: string; }
+interface PrestadorServico {
+  id: string;
+  tipo_pessoa: 'pj' | 'pf';
+  razao_social?: string;
+  nome_fantasia?: string;
+  nome?: string;
+  cnpj?: string;
+  cpf?: string;
+  nome_exibicao?: string;
+  documento?: string;
+  documento_label?: string;
+}
+interface ResponsavelContrato {
+  id: string;
+  nome: string;
+  cargo?: string;
+  email?: string;
+  telefone?: string;
+}
 
 interface Props {
   onSubmit: (data: any) => Promise<void>;
   loading: boolean;
   userCargo?: string;
-  currentUserId?: string;
 }
 
 type TipoContrato = 'assessoria' | 'limpa_nome' | 'limpa_bacen' | 'rating' | 'parceria_comercial';
@@ -112,7 +129,7 @@ function podeVerParceriaComercial(cargo: string | undefined | null): boolean {
   return ['administrador', 'admin', 'diretor', 'gerente', 'gerente comercial', 'gestor'].includes(c);
 }
 
-export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId }: Props) {
+export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const tiposDisponiveis: { value: TipoContrato; label: string }[] = [
     { value: 'assessoria',         label: 'Contrato de Assessoria Empresarial' },
     { value: 'limpa_nome',         label: 'Contrato Limpa Nome / Não Exposição de Restrições' },
@@ -124,7 +141,6 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
   ];
 
   const [tipoContrato, setTipoContrato] = useState<TipoContrato>('assessoria');
-  const [contratadoId, setContratadoId] = useState('');
 
   // ── Assessoria ──
   const [empresaId, setEmpresaId]             = useState('');
@@ -144,6 +160,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
   const [taxaConsulta, setTaxaConsulta]       = useState('R$ 50,00');
   const [taxaReprotocolo, setTaxaReprotocolo] = useState('R$ 300,00');
   const [parceiroIdLimpaNome, setParceiroIdLimpaNome] = useState('');
+  const [contratadaIdLimpaNome, setContratadaIdLimpaNome] = useState('');
+  const [responsavelContratoIdLimpaNome, setResponsavelContratoIdLimpaNome] = useState('');
 
   // ── Limpa BACEN ──
   const [empresaIdBacen, setEmpresaIdBacen]           = useState('');
@@ -154,6 +172,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
   const [prazoExecucaoBacen, setPrazoExecucaoBacen]   = useState('120');
   const [prazoAtualizacaoBacen, setPrazoAtualizacaoBacen] = useState('60');
   const [parceiroIdBacen, setParceiroIdBacen]         = useState('');
+  const [contratadaIdBacen, setContratadaIdBacen]     = useState('');
+  const [responsavelContratoIdBacen, setResponsavelContratoIdBacen] = useState('');
 
   // ── Rating ──
   const [empresaIdRating, setEmpresaIdRating]             = useState('');
@@ -191,7 +211,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
   const [leads, setLeads]             = useState<Lead[]>([]);
   const [clientesPF, setClientesPF]   = useState<ClientePF[]>([]);
   const [parceiros, setParceiros]     = useState<Parceiro[]>([]);
-  const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
+  const [prestadores, setPrestadores] = useState<PrestadorServico[]>([]);
+  const [responsaveisContrato, setResponsaveisContrato] = useState<ResponsavelContrato[]>([]);
 
   const [errors, setErrors]               = useState<Record<string, string>>({});
   const [carregandoListas, setCarregandoListas] = useState(false);
@@ -206,12 +227,13 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
     setCarregandoListas(true);
     setErroListas(null);
 
-    const [empresasResult, leadsResult, clientesPFResult, parceirosResult, contratadosResult] = await Promise.allSettled([
+    const [empresasResult, leadsResult, clientesPFResult, parceirosResult, prestadoresResult, responsaveisResult] = await Promise.allSettled([
       fetchJsonApi('/api/empresas?limit=500', token),
       fetchJsonApi('/api/leads?limit=500', token),
       fetchJsonApi('/api/clientes-pf', token),
       fetchFirstAvailable(['/api/parceiros', '/api/parceiros-comerciais'], token),
-      fetchJsonApi('/api/contratos/contratados', token),
+      fetchJsonApi('/api/prestadores-servico', token),
+      fetchJsonApi('/api/contratos/responsaveis', token),
     ]);
 
     const errosCriticos: string[] = [];
@@ -244,16 +266,18 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
       console.warn('[FormGerarContrato] Parceiros comerciais não carregados:', parceirosResult.reason);
     }
 
-    if (contratadosResult.status === 'fulfilled') {
-      const listaContratados = extractArray<Colaborador>(contratadosResult.value, ['contratados', 'colaboradores']);
-      setColaboradores(listaContratados);
-      if (!contratadoId) {
-        const atual = currentUserId ? listaContratados.find(c => c.id === currentUserId) : null;
-        setContratadoId((atual || listaContratados[0])?.id || '');
-      }
+    if (prestadoresResult.status === 'fulfilled') {
+      setPrestadores(extractArray<PrestadorServico>(prestadoresResult.value, ['prestadores', 'prestadores_servico', 'contratadas']));
     } else {
-      setColaboradores([]);
-      errosCriticos.push(`Contratados: ${contratadosResult.reason instanceof Error ? contratadosResult.reason.message : String(contratadosResult.reason)}`);
+      setPrestadores([]);
+      errosCriticos.push(`Contratadas/prestadoras: ${prestadoresResult.reason instanceof Error ? prestadoresResult.reason.message : String(prestadoresResult.reason)}`);
+    }
+
+    if (responsaveisResult.status === 'fulfilled') {
+      setResponsaveisContrato(extractArray<ResponsavelContrato>(responsaveisResult.value, ['responsaveis', 'colaboradores']));
+    } else {
+      setResponsaveisContrato([]);
+      console.warn('[FormGerarContrato] Responsáveis pelo contrato não carregados:', responsaveisResult.reason);
     }
 
     if (errosCriticos.length > 0) {
@@ -272,7 +296,6 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
     const errs: Record<string, string> = {};
     if (!dataAssinatura) errs.dataAssinatura = 'Data obrigatória';
     if (!foroEleito)     errs.foroEleito     = 'Foro obrigatório';
-    if (!contratadoId)   errs.contratadoId   = 'Selecione o contratado responsável pelo contrato';
 
     if (tipoContrato === 'assessoria') {
       if (!empresaId) errs.empresaId = 'Selecione uma empresa';
@@ -281,12 +304,14 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
 
     if (tipoContrato === 'limpa_nome') {
       if (!clienteId) errs.clienteId = 'Selecione o cliente';
+      if (!contratadaIdLimpaNome) errs.contratadaIdLimpaNome = 'Selecione a contratada/prestadora';
       if (!valorContrato || Number(valorContrato) <= 0) errs.valorContrato = 'Informe o valor do contrato';
       if (!condicaoPgto) errs.condicaoPgto = 'Informe a condição de pagamento';
     }
 
     if (tipoContrato === 'limpa_bacen') {
       if (!empresaIdBacen) errs.empresaIdBacen = 'Selecione uma empresa';
+      if (!contratadaIdBacen) errs.contratadaIdBacen = 'Selecione a contratada/prestadora';
       if (!representanteNomeBacen) errs.representanteNomeBacen = 'Informe o nome do representante';
       if (!representanteCpfBacen) errs.representanteCpfBacen = 'Informe o CPF do representante';
       if (!valorContratoBacen || Number(valorContratoBacen) <= 0) errs.valorContratoBacen = 'Informe o valor do contrato';
@@ -320,7 +345,6 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
     if (tipoContrato === 'assessoria') {
       await onSubmit({
         tipo_contrato: 'assessoria',
-        contratado_id: contratadoId,
         empresa_id: empresaId,
         parceiro_id: parceiroIdAssessoria || undefined,
         valor_referencia: Number(valorReferencia),
@@ -332,12 +356,13 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
     } else if (tipoContrato === 'limpa_nome') {
       await onSubmit({
         tipo_contrato: 'limpa_nome',
-        contratado_id: contratadoId,
         cliente_tipo: clienteTipo,
         empresa_id: clienteTipo === 'empresa' ? clienteId : undefined,
         cliente_pf_id: clienteTipo === 'pf' ? clienteId : undefined,
         cliente_id: clienteTipo === 'lead' ? clienteId : undefined,
         parceiro_id: parceiroIdLimpaNome || undefined,
+        contratada_id: contratadaIdLimpaNome,
+        responsavel_contrato_id: responsavelContratoIdLimpaNome || undefined,
         valor_contrato: Number(valorContrato),
         condicao_pagamento: condicaoPgto,
         prazo_entrega_dias: Number.parseInt(prazoEntrega, 10),
@@ -351,11 +376,12 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
     } else if (tipoContrato === 'limpa_bacen') {
       await onSubmit({
         tipo_contrato: 'limpa_bacen',
-        contratado_id: contratadoId,
         empresa_id: empresaIdBacen,
         representante_nome: representanteNomeBacen,
         representante_cpf: representanteCpfBacen,
         parceiro_id: parceiroIdBacen || undefined,
+        contratada_id: contratadaIdBacen,
+        responsavel_contrato_id: responsavelContratoIdBacen || undefined,
         valor_contrato: Number(valorContratoBacen),
         condicao_pagamento: condicaoPgtoBacen,
         prazo_execucao_dias_uteis: Number.parseInt(prazoExecucaoBacen, 10),
@@ -366,7 +392,6 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
     } else if (tipoContrato === 'rating') {
       await onSubmit({
         tipo_contrato: 'rating',
-        contratado_id: contratadoId,
         empresa_id: empresaIdRating,
         representante_nome: representanteNomeRating,
         representante_cpf: representanteCpfRating,
@@ -382,7 +407,6 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
       const pc = parceiroSelecionado(parceiroIdPC);
       await onSubmit({
         tipo_contrato: 'parceria_comercial',
-        contratado_id: contratadoId,
         parceiro_id: parceiroIdPC,
         parceiro_nome: pc?.nome || '',
         parceiro_cpf: parceiroCpfPC,
@@ -417,26 +441,51 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
     </div>
   );
 
-  const SelectContratado = () => (
-    <div>
-      <label className={lbl}>Escolher contratado *</label>
-      <select
-        value={contratadoId}
-        onChange={e => setContratadoId(e.target.value)}
-        className={cls}
-        disabled={carregandoListas || colaboradores.length === 0}
-      >
-        <option value="">Selecione o colaborador contratado...</option>
-        {colaboradores.map(c => (
-          <option key={c.id} value={c.id}>
-            {c.nome}{c.cargo ? ` — ${c.cargo}` : ''}
-          </option>
-        ))}
-      </select>
-      {errors.contratadoId && <p className="text-red-500 text-xs mt-1">{errors.contratadoId}</p>}
-      <p className="mt-1 text-xs text-gray-500">
-        Este colaborador será gravado no contrato como contratado/assinante. O campo "criado por" continua registrando quem gerou o PDF.
-      </p>
+  const SelectContratadaResponsavel = ({
+    contratadaId,
+    onContratadaChange,
+    responsavelId,
+    onResponsavelChange,
+    errorKey,
+  }: {
+    contratadaId: string;
+    onContratadaChange: (v: string) => void;
+    responsavelId: string;
+    onResponsavelChange: (v: string) => void;
+    errorKey: 'contratadaIdLimpaNome' | 'contratadaIdBacen';
+  }) => (
+    <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 space-y-3">
+      <div>
+        <label className={lbl}>Contratada / Prestadora de Serviço *</label>
+        <select value={contratadaId} onChange={e => onContratadaChange(e.target.value)} className={cls}>
+          <option value="">Selecione quem aparecerá como CONTRATADA...</option>
+          {prestadores.map(p => (
+            <option key={p.id} value={p.id}>
+              {p.nome_exibicao || p.razao_social || p.nome || 'Prestador sem nome'}
+              {p.documento ? ` — ${p.documento_label || (p.tipo_pessoa === 'pf' ? 'CPF' : 'CNPJ')}: ${p.documento}` : p.cnpj ? ` — CNPJ: ${p.cnpj}` : p.cpf ? ` — CPF: ${p.cpf}` : ''}
+            </option>
+          ))}
+        </select>
+        {errors[errorKey] && <p className="text-red-500 text-xs mt-1">{errors[errorKey]}</p>}
+        {prestadores.length === 0 && !carregandoListas && (
+          <p className="text-xs text-amber-700 mt-1">
+            Nenhuma contratada cadastrada. Use a aba "Contratadas" do gerador de contratos para cadastrar empresas do grupo ou prestadores PF.
+          </p>
+        )}
+      </div>
+
+      <div>
+        <label className={lbl}>Responsável pela assessoria/contrato (opcional)</label>
+        <select value={responsavelId} onChange={e => onResponsavelChange(e.target.value)} className={cls}>
+          <option value="">Sem responsável específico</option>
+          {responsaveisContrato.map(r => (
+            <option key={r.id} value={r.id}>{r.nome}{r.cargo ? ` — ${r.cargo}` : ''}</option>
+          ))}
+        </select>
+        <p className="text-[11px] text-gray-500 mt-1">
+          A contratada é a empresa/PF que assina como prestadora. O responsável é o colaborador que conduziu a assessoria.
+        </p>
+      </div>
     </div>
   );
 
@@ -472,7 +521,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
 
       {!erroListas && !carregandoListas && (
         <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-          Listas carregadas: {empresas.length} empresas, {leads.length} leads, {clientesPF.length} clientes PF, {parceiros.length} parceiros, {colaboradores.length} contratados.
+          Listas carregadas: {empresas.length} empresas, {leads.length} leads, {clientesPF.length} clientes PF, {parceiros.length} parceiros, {prestadores.length} contratadas.
         </div>
       )}
 
@@ -489,8 +538,6 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
           ))}
         </select>
       </div>
-
-      <SelectContratado />
 
       {/* ── ASSESSORIA ── */}
       {tipoContrato === 'assessoria' && (
@@ -560,6 +607,15 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
               </p>
             )}
           </div>
+
+          <SelectContratadaResponsavel
+            contratadaId={contratadaIdLimpaNome}
+            onContratadaChange={setContratadaIdLimpaNome}
+            responsavelId={responsavelContratoIdLimpaNome}
+            onResponsavelChange={setResponsavelContratoIdLimpaNome}
+            errorKey="contratadaIdLimpaNome"
+          />
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Valor do Contrato (R$) *</label>
@@ -613,6 +669,15 @@ export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId 
             </select>
             {errors.empresaIdBacen && <p className="text-red-500 text-xs mt-1">{errors.empresaIdBacen}</p>}
           </div>
+
+          <SelectContratadaResponsavel
+            contratadaId={contratadaIdBacen}
+            onContratadaChange={setContratadaIdBacen}
+            responsavelId={responsavelContratoIdBacen}
+            onResponsavelChange={setResponsavelContratoIdBacen}
+            errorKey="contratadaIdBacen"
+          />
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Nome do Representante *</label>
