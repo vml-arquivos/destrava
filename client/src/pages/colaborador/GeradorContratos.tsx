@@ -33,6 +33,9 @@ interface Contrato {
   created_at: string;
   pdf_path?: string;
   criado_por_nome?: string;
+  contratado_id?: string;
+  contratado_nome?: string;
+  contratado_cargo?: string;
 }
 
 export default function GeradorContratos() {
@@ -186,6 +189,7 @@ export default function GeradorContratos() {
               onSubmit={handleGerarContrato}
               loading={loading}
               userCargo={userCargo}
+              currentUserId={colaborador?.id}
             />
           </div>
         )}
