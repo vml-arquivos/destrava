@@ -38,6 +38,86 @@ pool.query("SELECT 1").then(() => {
   console.error("🗄️  PostgreSQL: ❌ Falha na conexão —", e.message);
 });
 
+type DadosContratadaContrato = {
+  razao_social: string;
+  cnpj: string;
+  endereco_sede: string;
+  representante: string;
+  cargo_representante: string;
+  cpf_representante?: string;
+  email_representante?: string | null;
+  telefone_representante?: string | null;
+  contratado_id?: string | null;
+};
+
+function montarDadosContratada(colaborador: any | null): DadosContratadaContrato {
+  if (!colaborador?.id) {
+    return { ...CONTRATADA_DADOS };
+  }
+
+  return {
+    ...CONTRATADA_DADOS,
+    contratado_id: colaborador.id,
+    representante: colaborador.nome || CONTRATADA_DADOS.representante,
+    cargo_representante: colaborador.cargo || 'representante autorizado',
+    // A tabela colaboradores atual não possui CPF. Não reaproveitamos o CPF do sócio
+    // quando outro colaborador é selecionado, para evitar documento incorreto no contrato.
+    cpf_representante: colaborador.cpf || '',
+    email_representante: colaborador.email || null,
+    telefone_representante: colaborador.telefone || null,
+  };
+}
+
+async function carregarDadosContratada(contratadoId: string | null | undefined, colaboradorFallback: any): Promise<DadosContratadaContrato> {
+  const id = contratadoId || colaboradorFallback?.id;
+  if (!id) return montarDadosContratada(null);
+
+  const { rows } = await pool.query(
+    `SELECT id, nome, cargo, email, telefone
+       FROM colaboradores
+      WHERE id = $1
+        AND COALESCE(ativo, true) = true
+      LIMIT 1`,
+    [id]
+  );
+
+  if (!rows.length) {
+    throw new Error('Contratado selecionado não encontrado ou inativo.');
+  }
+
+  return montarDadosContratada(rows[0]);
+}
+
+function qualificacaoContratadaHtml(contratada: Partial<DadosContratadaContrato>): string {
+  const partes = [
+    `${contratada.razao_social || CONTRATADA_DADOS.razao_social}, pessoa jurídica de direito privado`,
+    `inscrita no CNPJ n° ${contratada.cnpj || CONTRATADA_DADOS.cnpj}`,
+    `com sede na ${contratada.endereco_sede || CONTRATADA_DADOS.endereco_sede}`,
+  ];
+
+  if (contratada.representante) {
+    let representante = `neste ato representada por ${contratada.representante}`;
+    if (contratada.cargo_representante) representante += `, ${contratada.cargo_representante}`;
+    if (contratada.cpf_representante) representante += `, CPF n° ${contratada.cpf_representante}`;
+    partes.push(representante);
+  }
+
+  return partes.join(', ') + '.';
+}
+
+function assinaturaContratadaHtml(contratada: Partial<DadosContratadaContrato>): string {
+  const representante = contratada.representante
+    ? `<p class="sig-sub">${contratada.representante}${contratada.cargo_representante ? ` — ${contratada.cargo_representante}` : ''}</p>`
+    : '';
+
+  return `
+    <p class="sig-name">${contratada.razao_social || CONTRATADA_DADOS.razao_social}</p>
+    <p class="sig-sub">CNPJ: ${contratada.cnpj || CONTRATADA_DADOS.cnpj}</p>
+    ${representante}
+  `;
+}
+
+
 // ─── n8n Webhook helper ──────────────────────────────────────────────────────
 async function dispararN8n(evento: string, payload: Record<string, unknown>): Promise<boolean> {
   const webhookUrl = process.env.N8N_WEBHOOK_URL;
@@ -724,6 +804,8 @@ async function startServer() {
         pdf_path               TEXT,
         hash_documento         TEXT UNIQUE,
         payload_snapshot       JSONB NOT NULL,
+        contratado_id          UUID REFERENCES colaboradores(id) ON DELETE SET NULL,
+        contratado_snapshot    JSONB,
         criado_por             UUID REFERENCES colaboradores(id) ON DELETE SET NULL,
         created_at             TIMESTAMPTZ DEFAULT NOW(),
         updated_at             TIMESTAMPTZ DEFAULT NOW()
@@ -852,6 +934,15 @@ async function startServer() {
 
   // P13: ADD COLUMN percentual_multa
   try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS percentual_multa NUMERIC(5,2) DEFAULT 10.00`); }
+  catch { /* já existe */ }
+
+
+  // P13B: contratado selecionado para o contrato
+  try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS contratado_id UUID REFERENCES colaboradores(id) ON DELETE SET NULL`); }
+  catch { /* já existe */ }
+  try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS contratado_snapshot JSONB`); }
+  catch { /* já existe */ }
+  try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_contratos_contratado ON contratos_gerados(contratado_id)`); }
   catch { /* já existe */ }
 
   // P14: ADD COLUMN contador_id para faturamento
@@ -3281,9 +3372,7 @@ Responda APENAS com um JSON válido no seguinte formato:
 
   async function gerarHtmlContrato(payload: any): Promise<string> {
     const { contratante, parceiro, contrato } = payload;
-
-    // CONTRATADA sempre é a Destrava
-    const contratada = CONTRATADA_DADOS;
+    const contratada = payload.contratada || CONTRATADA_DADOS;
 
     const temParceiro = parceiro && parceiro.nome;
     const vigenciaMeses = contrato.vigencia_meses || 12;
@@ -3303,7 +3392,7 @@ Responda APENAS com um JSON válido no seguinte formato:
 
 <h2 class="section-title">I – IDENTIFICAÇÃO DAS PARTES</h2>
 
-<p class="clause"><strong>CONTRATADA:</strong> denominada ${contratada.razao_social}, com sede na ${contratada.endereco_sede}, inscrita no CNPJ n° ${contratada.cnpj}, devidamente representada por: ${contratada.representante}, identificado como, ${contratada.cargo_representante} nesta data através da consulta do Quadro de Sócios e Administradores – QSA, disponibilizado pela República Federativa do Brasil – RFB, CPF n° ${contratada.cpf_representante}.</p>
+<p class="clause"><strong>CONTRATADA:</strong> ${qualificacaoContratadaHtml(contratada)}</p>
 
 <p class="clause"><strong>CONTRATANTE:</strong> ${contratante.razao_social}, pessoa jurídica de direito privado, inscrita no CNPJ n° ${contratante.cnpj}, com sede em ${contratante.endereco}, neste ato representada por seu representante legal ${contratante.representante}, ${contratante.nacionalidade || 'brasileiro(a)'}, portador(a) do CPF n° ${contratante.cpf_representante}, conforme poderes que lhe são conferidos pelo contrato social e/ou procuração.</p>
 
@@ -3395,7 +3484,7 @@ ${temParceiro ? `<p class="clause"><strong>5.1</strong> - O PARCEIRO COMERCIAL, 
 
   <p style="margin-top:28px;"><strong>CONTRATADA:</strong></p>
   <div class="sig-line"></div>
-  <p class="sig-name">DESTRAVA CRÉDITO LTDA - CNPJ n° ${contratada.cnpj}</p>
+  ${assinaturaContratadaHtml(contratada)}
 </div>
 
 <div class="page-break"></div>
@@ -3841,6 +3930,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
   // ─── HTML CONTRATO LIMPA NOME (papel timbrado) ──────────────────────────────
   async function gerarHtmlContratoLimpaNome(payload: any): Promise<string> {
     const { contratante, contrato } = payload;
+    const contratada = payload.contratada || CONTRATADA_DADOS;
     const valorContrato   = contrato.valor_contrato_formatado || 'R$ 0,00';
     const condicaoPgto    = contrato.condicao_pagamento || 'a combinar';
     const prazoEntrega    = contrato.prazo_entrega_dias || 30;
@@ -3858,7 +3948,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
 
 <h2 class="section-title">QUADRO RESUMIDO</h2>
 <table class="data-table" style="margin-bottom:20px;">
-  <tr><td style="width:40%; font-weight:bold; background:#f0f4ff;">CONTRATADA</td><td>PRESTADORA DE SERVIÇOS</td></tr>
+  <tr><td style="width:40%; font-weight:bold; background:#f0f4ff;">CONTRATADA</td><td>${contratada.razao_social} — ${contratada.representante || 'representante autorizado'}</td></tr>
   <tr><td style="font-weight:bold; background:#f0f4ff;">CONTRATANTE</td><td>${contratante.nome || contratante.razao_social}</td></tr>
   <tr><td style="font-weight:bold; background:#f0f4ff;">${isPJ ? 'CNPJ' : 'CPF'}</td><td>${isPJ ? contratante.cnpj : contratante.cpf}</td></tr>
   <tr><td style="font-weight:bold; background:#f0f4ff;">Domicílio</td><td>${endContratante}</td></tr>
@@ -3930,7 +4020,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
   </div>
   <div style="text-align:center; width:45%;">
     <div class="sig-line"></div>
-    <p class="sig-name">CONTRATADA</p>
+    ${assinaturaContratadaHtml(contratada)}
     <p class="sig-sub">CONTRATADA</p>
   </div>
 </div>
@@ -3958,6 +4048,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
   // ─── CONTRATO LIMPA BACEN ─────────────────────────────────────────────────
   async function gerarHtmlContratoBacen(payload: any): Promise<string> {
     const { contratante, representante, contrato } = payload;
+    const contratada = payload.contratada || CONTRATADA_DADOS;
     const valorContrato    = contrato.valor_contrato_formatado || 'R$ 0,00';
     const condicaoPgto     = contrato.condicao_pagamento || 'a combinar';
     const prazoExecucao    = contrato.prazo_execucao_dias_uteis || 120;
@@ -3968,7 +4059,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
     const body = `
 <h1 class="doc-title">CONTRATO DE PRESTAÇÃO DE SERVIÇOS</h1>
 <h2 class="section-title">IDENTIFICAÇÃO DAS PARTES</h2>
-<p class="clause"><strong>CONTRATADA:</strong> PRESTADORA DE SERVIÇOS.</p>
+<p class="clause"><strong>CONTRATADA:</strong> ${qualificacaoContratadaHtml(contratada)}</p>
 <p class="clause"><strong>CONTRATANTE:</strong> ${contratante.razao_social}, CNPJ n° ${contratante.cnpj}, com sede em ${contratante.endereco}, representada neste ato por ${representante.nome}, sócio administrador, CPF n° ${representante.cpf}.</p>
 <h2 class="section-title">1. CLÁUSULA PRIMEIRA – OBJETO DO CONTRATO</h2>
 <p class="clause"><strong>1.1.</strong> O presente CONTRATO, mediante a propositura de ação judicial, objetiva a suspensão da exposição dos apontamentos do CONTRATANTE identificados no relatório BACEN/SCR. Desta forma serão retiradas as anotações de prejuízos e vencidos do relatório SCR, existentes até o mês de referência da consulta feita no ato da assinatura deste contrato.</p>
@@ -3999,7 +4090,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
   </div>
   <div style="text-align:center; width:45%;">
     <div class="sig-line"></div>
-    <p class="sig-name">CONTRATADA</p>
+    ${assinaturaContratadaHtml(contratada)}
     <p class="sig-sub">CONTRATADA</p>
   </div>
 </div>
@@ -4026,7 +4117,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
   // ─── CONTRATO RATING ──────────────────────────────────────────────────────
   async function gerarHtmlContratoRating(payload: any): Promise<string> {
     const { contratante, representante, contrato } = payload;
-    const contratada   = CONTRATADA_DADOS;
+    const contratada   = payload.contratada || CONTRATADA_DADOS;
     const valorContrato = contrato.valor_contrato_formatado || 'R$ 0,00';
     const condicaoPgto  = contrato.condicao_pagamento || 'a combinar';
     const prazoAcomp    = contrato.prazo_acompanhamento_dias || 90;
@@ -4038,7 +4129,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
 <h1 class="doc-title">CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE ASSESSORIA FINANCEIRA</h1>
 <h1 class="doc-title" style="font-size:10pt; font-weight:normal; margin-bottom:20px;">ALGORITMO FINANCEIRO / RATING DE CRÉDITO</h1>
 <h2 class="section-title">I – IDENTIFICAÇÃO DAS PARTES</h2>
-<p class="clause"><strong>CONTRATADA:</strong> ${contratada.razao_social}, CNPJ n° ${contratada.cnpj}, com sede na ${contratada.endereco_sede}, representada neste ato por ${contratada.representante}, ${contratada.cargo_representante}, CPF n° ${contratada.cpf_representante}.</p>
+<p class="clause"><strong>CONTRATADA:</strong> ${qualificacaoContratadaHtml(contratada)}</p>
 <p class="clause"><strong>CONTRATANTE:</strong> ${contratante.razao_social}, CNPJ n° ${contratante.cnpj}, com sede em ${contratante.endereco}, representada neste ato por ${representante.nome}, CPF n° ${representante.cpf}.</p>
 <h2 class="section-title">CLÁUSULA PRIMEIRA – DO OBJETO</h2>
 <p class="clause"><strong>1.1.</strong> O presente contrato tem por objeto a prestação de serviços de assessoria financeira especializada pela CONTRATADA, consistente na análise, monitoramento e orientação para melhoria do rating de crédito e do score financeiro do CONTRATANTE junto às instituições financeiras, bureaus de crédito e demais órgãos competentes, por meio da aplicação de metodologias e algoritmos financeiros proprietários.</p>
@@ -4075,8 +4166,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
   </div>
   <div style="text-align:center; width:45%;">
     <div class="sig-line"></div>
-    <p class="sig-name">${contratada.razao_social}</p>
-    <p class="sig-sub">CNPJ: ${contratada.cnpj}</p>
+    ${assinaturaContratadaHtml(contratada)}
     <p class="sig-sub">CONTRATADA</p>
   </div>
 </div>
@@ -4105,7 +4195,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
   // ─── CONTRATO PARCERIA COMERCIAL ──────────────────────────────────────────
   async function gerarHtmlContratoParceriaComercial(payload: any): Promise<string> {
     const { parceiro, contrato } = payload;
-    const contratada  = CONTRATADA_DADOS;
+    const contratada  = payload.contratada || CONTRATADA_DADOS;
     const pctDestrava = contrato.percentual_destrava || 70;
     const pctParceiro = contrato.percentual_parceiro || 30;
     const prazoPgto   = contrato.prazo_pagamento_dias_uteis || 5;
@@ -4124,7 +4214,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
     ].join('');
     const body = `
 <h1 class="doc-title">CONTRATO DE PARCERIA COMERCIAL</h1>
-<p class="clause"><strong>CONTRATADA:</strong> DESTRAVA CREDITO LTDA, pessoa jurídica de direito privado, inscrita no CNPJ sob o n° ${contratada.cnpj}, com sede na ${contratada.endereco_sede}, doravante denominada simplesmente DESTRAVA CRÉDITO, neste ato representada por seu sócio administrador, Sr. ${contratada.representante}, brasileiro, portador do CPF n° ${contratada.cpf_representante}.</p>
+<p class="clause"><strong>CONTRATADA:</strong> ${qualificacaoContratadaHtml(contratada)}, doravante denominada simplesmente DESTRAVA CRÉDITO.</p>
 <p class="clause"><strong>PARCEIRA COMERCIAL:</strong> ${parceiro.nome}, brasileira${qualificacaoParceiro}, doravante denominada simplesmente PARCEIRA.</p>
 <p class="clause">As partes acima qualificadas celebram o presente Contrato de Parceria Comercial, que se regerá pelas seguintes cláusulas e condições:</p>
 <h2 class="section-title">CLÁUSULA PRIMEIRA – DO OBJETO</h2>
@@ -4169,8 +4259,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
 <div class="sig-block" style="display:flex; justify-content:space-between; margin-top:40px;">
   <div style="text-align:center; width:45%;">
     <div class="sig-line"></div>
-    <p class="sig-name">${contratada.razao_social}</p>
-    <p class="sig-sub">CNPJ: ${contratada.cnpj}</p>
+    ${assinaturaContratadaHtml(contratada)}
   </div>
   <div style="text-align:center; width:45%;">
     <div class="sig-line"></div>
@@ -4948,11 +5037,28 @@ ${(temTest1 || temTest2) ? `
 
   // ─── CONTRATOS GERADOS ───────────────────────────────────────────────────
 
+
+  app.get('/api/contratos/contratados', auth, async (_req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, nome, cargo, email, telefone
+           FROM colaboradores
+          WHERE COALESCE(ativo, true) = true
+          ORDER BY nome`
+      );
+      res.json({ contratados: rows });
+    } catch (err) {
+      console.error('[GET /api/contratos/contratados]', err);
+      res.status(500).json({ error: 'Erro ao listar contratados' });
+    }
+  });
+
   app.post('/api/contratos/gerar', auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as any).colaborador;
       const {
         tipo_contrato = 'assessoria',
+        contratado_id,
         empresa_id, parceiro_id, lead_id,
         // campos contrato assessoria
         valor_referencia, taxa_comissao = 10, percentual_multa = 10,
@@ -4981,17 +5087,7 @@ ${(temTest1 || temTest2) ? `
         res.status(400).json({ error: 'Campos obrigatórios: data_assinatura, foro_eleito' });
         return;
       }
-
-      const CONTRATADA = {
-        razao_social: 'DESTRAVA CREDITO LTDA',
-        cnpj: '35.427.182/0001-66',
-        representante: 'FERNANDO ELI OLIVEIRA MARQUES',
-        cpf_representante: '718.517.041-91',
-        cargo_representante: 'Sócio Administrador',
-        endereco_sede: 'St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250',
-        endereco_filial: 'Avenida Afonso Pena, qd-25 Alt. 05, S/N sala-02 setor Goiânia 2 CEP: 74665555 Goiânia-Go',
-        email: 'fernandoelipro@gmail.com',
-      };
+      const contratada = await carregarDadosContratada(contratado_id, colaborador);
 
       let pdfPath: string;
 
@@ -5046,6 +5142,7 @@ ${(temTest1 || temTest2) ? `
         }
 
         const payloadLN = {
+          contratada,
           contratante: contratanteData,
           contrato: {
             valor_contrato_formatado: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(valor_contrato)),
@@ -5092,8 +5189,8 @@ ${(temTest1 || temTest2) ? `
              (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id, cliente_pf_id,
               valor_referencia, valor_contrato, condicao_pagamento, taxa_comissao,
               honorario_minimo_mes, honorario_minimo_total, data_assinatura,
-              foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+              foro_eleito, pdf_path, hash_documento, payload_snapshot, contratado_id, contratado_snapshot, criado_por)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
            RETURNING id, created_at`,
           [
             'limpa_nome',
@@ -5113,6 +5210,8 @@ ${(temTest1 || temTest2) ? `
             pdfPath,
             hash2,
             JSON.stringify(payloadLN),
+            contratada.contratado_id || null,
+            JSON.stringify(contratada),
             colaborador.id,
           ]
         );
@@ -5135,6 +5234,7 @@ ${(temTest1 || temTest2) ? `
         if (!empBacen.length) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
         const eb = empBacen[0];
         const payloadBacen = {
+          contratada,
           contratante: {
             razao_social: eb.razao_social,
             cnpj: eb.cnpj || '',
@@ -5177,12 +5277,12 @@ ${(temTest1 || temTest2) ? `
              (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id,
               valor_referencia, valor_contrato, condicao_pagamento, taxa_comissao,
               honorario_minimo_mes, honorario_minimo_total, data_assinatura,
-              foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+              foro_eleito, pdf_path, hash_documento, payload_snapshot, contratado_id, contratado_snapshot, criado_por)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
            RETURNING id, created_at`,
           ['limpa_bacen', 'empresa', empresa_id, parceiro_id || null, null,
            null, valor_contrato, condicao_pagamento, null, null, null,
-           data_assinatura, foro_eleito, pdfPath, hashBacen, JSON.stringify(payloadBacen), colaborador.id]
+           data_assinatura, foro_eleito, pdfPath, hashBacen, JSON.stringify(payloadBacen), contratada.contratado_id || null, JSON.stringify(contratada), colaborador.id]
         );
         const contratoBacen = contratoRowsBacen[0];
         res.status(201).json({ success: true, contrato_id: contratoBacen.id, pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`, hash_documento: hashBacen, created_at: contratoBacen.created_at });
@@ -5203,6 +5303,7 @@ ${(temTest1 || temTest2) ? `
         if (!empRating.length) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
         const er = empRating[0];
         const payloadRating = {
+          contratada,
           contratante: {
             razao_social: er.razao_social,
             cnpj: er.cnpj || '',
@@ -5245,12 +5346,12 @@ ${(temTest1 || temTest2) ? `
              (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id,
               valor_referencia, valor_contrato, condicao_pagamento, taxa_comissao,
               honorario_minimo_mes, honorario_minimo_total, data_assinatura,
-              foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+              foro_eleito, pdf_path, hash_documento, payload_snapshot, contratado_id, contratado_snapshot, criado_por)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
            RETURNING id, created_at`,
           ['rating', 'empresa', empresa_id, parceiro_id || null, null,
            null, valor_contrato, condicao_pagamento, null, null, null,
-           data_assinatura, foro_eleito, pdfPath, hashRating, JSON.stringify(payloadRating), colaborador.id]
+           data_assinatura, foro_eleito, pdfPath, hashRating, JSON.stringify(payloadRating), contratada.contratado_id || null, JSON.stringify(contratada), colaborador.id]
         );
         const contratoRating = contratoRowsRating[0];
         res.status(201).json({ success: true, contrato_id: contratoRating.id, pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`, hash_documento: hashRating, created_at: contratoRating.created_at });
@@ -5271,6 +5372,7 @@ ${(temTest1 || temTest2) ? `
           return;
         }
         const payloadParceria = {
+          contratada,
           parceiro: {
             nome: parceiro_nome,
             cpf: parceiro_cpf,
@@ -5316,12 +5418,12 @@ ${(temTest1 || temTest2) ? `
              (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id,
               valor_referencia, valor_contrato, condicao_pagamento, taxa_comissao,
               honorario_minimo_mes, honorario_minimo_total, data_assinatura,
-              foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+              foro_eleito, pdf_path, hash_documento, payload_snapshot, contratado_id, contratado_snapshot, criado_por)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
            RETURNING id, created_at`,
           ['parceria_comercial', null, empresa_id || null, parceiro_id || null, null,
            null, null, null, null, null, null,
-           data_assinatura, foro_eleito, pdfPath, hashParceria, JSON.stringify(payloadParceria), colaborador.id]
+           data_assinatura, foro_eleito, pdfPath, hashParceria, JSON.stringify(payloadParceria), contratada.contratado_id || null, JSON.stringify(contratada), colaborador.id]
         );
         const contratoParceria = contratoRowsParceria[0];
         res.status(201).json({ success: true, contrato_id: contratoParceria.id, pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`, hash_documento: hashParceria, created_at: contratoParceria.created_at });
@@ -5355,7 +5457,7 @@ ${(temTest1 || temTest2) ? `
       }
 
       const payload = {
-        contratada: CONTRATADA,
+        contratada,
         contratante: {
           razao_social: empresa.razao_social,
           cnpj: empresa.cnpj || '',
@@ -5389,8 +5491,8 @@ ${(temTest1 || temTest2) ? `
            (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id,
             valor_referencia, valor_contrato, condicao_pagamento, taxa_comissao,
             honorario_minimo_mes, honorario_minimo_total, data_assinatura,
-            foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            foro_eleito, pdf_path, hash_documento, payload_snapshot, contratado_id, contratado_snapshot, criado_por)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
          RETURNING id, created_at`,
         [
           'assessoria',
@@ -5409,6 +5511,8 @@ ${(temTest1 || temTest2) ? `
           pdfPath,
           hash,
           JSON.stringify(payload),
+          contratada.contratado_id || null,
+          JSON.stringify(contratada),
           colaborador.id,
         ]
       );
@@ -5475,9 +5579,12 @@ ${(temTest1 || temTest2) ? `
   app.get('/api/contratos/empresa/:empresaId', auth, async (req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
-        `SELECT cg.*, pc.nome as parceiro_nome
+        `SELECT cg.*, pc.nome as parceiro_nome,
+                contratado.nome AS contratado_nome,
+                contratado.cargo AS contratado_cargo
          FROM contratos_gerados cg
          LEFT JOIN parceiros_comerciais pc ON pc.id = cg.parceiro_id
+         LEFT JOIN colaboradores contratado ON contratado.id = cg.contratado_id
          WHERE cg.empresa_id = $1
          ORDER BY cg.created_at DESC`,
         [req.params.empresaId]
@@ -5529,15 +5636,19 @@ ${(temTest1 || temTest2) ? `
                 cg.valor_referencia, cg.valor_contrato, cg.condicao_pagamento,
                 cg.foro_eleito, cg.hash_documento, cg.pdf_path,
                 cg.empresa_id, cg.lead_id, cg.parceiro_id, cg.criado_por,
+                cg.contratado_id, cg.contratado_snapshot,
                 e.razao_social AS empresa_nome,
                 l.nome AS lead_nome,
                 pc.nome AS parceiro_nome,
-                col.nome AS criado_por_nome
+                col.nome AS criado_por_nome,
+                contratado.nome AS contratado_nome,
+                contratado.cargo AS contratado_cargo
          FROM contratos_gerados cg
          LEFT JOIN empresas e ON e.id = cg.empresa_id
          LEFT JOIN leads l ON l.id = cg.lead_id
          LEFT JOIN parceiros_comerciais pc ON pc.id = cg.parceiro_id
          LEFT JOIN colaboradores col ON col.id = cg.criado_por
+         LEFT JOIN colaboradores contratado ON contratado.id = cg.contratado_id
          ${where}
          ORDER BY cg.created_at DESC
          LIMIT $${params.length - 1} OFFSET $${params.length}`,
