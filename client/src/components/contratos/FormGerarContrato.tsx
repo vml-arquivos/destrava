@@ -6,11 +6,13 @@ interface Empresa  { id: string; razao_social: string; cnpj?: string; }
 interface Lead     { id: string; nome?: string; razao_social?: string; cpf?: string; cnpj?: string; }
 interface ClientePF { id: string; nome: string; cpf?: string; telefone?: string; cidade?: string; uf?: string; }
 interface Parceiro { id: string; nome: string; cpf?: string; }
+interface Colaborador { id: string; nome: string; cargo?: string; email?: string; telefone?: string; }
 
 interface Props {
   onSubmit: (data: any) => Promise<void>;
   loading: boolean;
   userCargo?: string;
+  currentUserId?: string;
 }
 
 type TipoContrato = 'assessoria' | 'limpa_nome' | 'limpa_bacen' | 'rating' | 'parceria_comercial';
@@ -110,7 +112,7 @@ function podeVerParceriaComercial(cargo: string | undefined | null): boolean {
   return ['administrador', 'admin', 'diretor', 'gerente', 'gerente comercial', 'gestor'].includes(c);
 }
 
-export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
+export function FormGerarContrato({ onSubmit, loading, userCargo, currentUserId }: Props) {
   const tiposDisponiveis: { value: TipoContrato; label: string }[] = [
     { value: 'assessoria',         label: 'Contrato de Assessoria Empresarial' },
     { value: 'limpa_nome',         label: 'Contrato Limpa Nome / Não Exposição de Restrições' },
@@ -122,6 +124,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   ];
 
   const [tipoContrato, setTipoContrato] = useState<TipoContrato>('assessoria');
+  const [contratadoId, setContratadoId] = useState('');
 
   // ── Assessoria ──
   const [empresaId, setEmpresaId]             = useState('');
@@ -131,7 +134,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [percentualMulta, setPercentualMulta] = useState('10');
 
   // ── Limpa Nome ──
-  const [clienteTipo, setClienteTipo]         = useState<'empresa' | 'lead'>('lead');
+  const [clienteTipo, setClienteTipo]         = useState<'empresa' | 'lead' | 'pf'>('lead');
   const [clienteId, setClienteId]             = useState('');
   const [valorContrato, setValorContrato]     = useState('');
   const [condicaoPgto, setCondicaoPgto]       = useState('');
@@ -188,6 +191,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [leads, setLeads]             = useState<Lead[]>([]);
   const [clientesPF, setClientesPF]   = useState<ClientePF[]>([]);
   const [parceiros, setParceiros]     = useState<Parceiro[]>([]);
+  const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
 
   const [errors, setErrors]               = useState<Record<string, string>>({});
   const [carregandoListas, setCarregandoListas] = useState(false);
@@ -202,11 +206,12 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     setCarregandoListas(true);
     setErroListas(null);
 
-    const [empresasResult, leadsResult, clientesPFResult, parceirosResult] = await Promise.allSettled([
+    const [empresasResult, leadsResult, clientesPFResult, parceirosResult, contratadosResult] = await Promise.allSettled([
       fetchJsonApi('/api/empresas?limit=500', token),
       fetchJsonApi('/api/leads?limit=500', token),
       fetchJsonApi('/api/clientes-pf', token),
       fetchFirstAvailable(['/api/parceiros', '/api/parceiros-comerciais'], token),
+      fetchJsonApi('/api/contratos/contratados', token),
     ]);
 
     const errosCriticos: string[] = [];
@@ -239,6 +244,18 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
       console.warn('[FormGerarContrato] Parceiros comerciais não carregados:', parceirosResult.reason);
     }
 
+    if (contratadosResult.status === 'fulfilled') {
+      const listaContratados = extractArray<Colaborador>(contratadosResult.value, ['contratados', 'colaboradores']);
+      setColaboradores(listaContratados);
+      if (!contratadoId) {
+        const atual = currentUserId ? listaContratados.find(c => c.id === currentUserId) : null;
+        setContratadoId((atual || listaContratados[0])?.id || '');
+      }
+    } else {
+      setColaboradores([]);
+      errosCriticos.push(`Contratados: ${contratadosResult.reason instanceof Error ? contratadosResult.reason.message : String(contratadosResult.reason)}`);
+    }
+
     if (errosCriticos.length > 0) {
       setErroListas(errosCriticos.join(' | '));
       console.error('[FormGerarContrato] Erro ao carregar listas:', errosCriticos);
@@ -255,6 +272,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     const errs: Record<string, string> = {};
     if (!dataAssinatura) errs.dataAssinatura = 'Data obrigatória';
     if (!foroEleito)     errs.foroEleito     = 'Foro obrigatório';
+    if (!contratadoId)   errs.contratadoId   = 'Selecione o contratado responsável pelo contrato';
 
     if (tipoContrato === 'assessoria') {
       if (!empresaId) errs.empresaId = 'Selecione uma empresa';
@@ -302,6 +320,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     if (tipoContrato === 'assessoria') {
       await onSubmit({
         tipo_contrato: 'assessoria',
+        contratado_id: contratadoId,
         empresa_id: empresaId,
         parceiro_id: parceiroIdAssessoria || undefined,
         valor_referencia: Number(valorReferencia),
@@ -313,6 +332,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     } else if (tipoContrato === 'limpa_nome') {
       await onSubmit({
         tipo_contrato: 'limpa_nome',
+        contratado_id: contratadoId,
         cliente_tipo: clienteTipo,
         empresa_id: clienteTipo === 'empresa' ? clienteId : undefined,
         cliente_pf_id: clienteTipo === 'pf' ? clienteId : undefined,
@@ -331,6 +351,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     } else if (tipoContrato === 'limpa_bacen') {
       await onSubmit({
         tipo_contrato: 'limpa_bacen',
+        contratado_id: contratadoId,
         empresa_id: empresaIdBacen,
         representante_nome: representanteNomeBacen,
         representante_cpf: representanteCpfBacen,
@@ -345,6 +366,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     } else if (tipoContrato === 'rating') {
       await onSubmit({
         tipo_contrato: 'rating',
+        contratado_id: contratadoId,
         empresa_id: empresaIdRating,
         representante_nome: representanteNomeRating,
         representante_cpf: representanteCpfRating,
@@ -360,6 +382,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
       const pc = parceiroSelecionado(parceiroIdPC);
       await onSubmit({
         tipo_contrato: 'parceria_comercial',
+        contratado_id: contratadoId,
         parceiro_id: parceiroIdPC,
         parceiro_nome: pc?.nome || '',
         parceiro_cpf: parceiroCpfPC,
@@ -391,6 +414,29 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
           <option key={p.id} value={p.id}>{p.nome}{p.cpf ? ` — CPF: ${p.cpf}` : ''}</option>
         ))}
       </select>
+    </div>
+  );
+
+  const SelectContratado = () => (
+    <div>
+      <label className={lbl}>Escolher contratado *</label>
+      <select
+        value={contratadoId}
+        onChange={e => setContratadoId(e.target.value)}
+        className={cls}
+        disabled={carregandoListas || colaboradores.length === 0}
+      >
+        <option value="">Selecione o colaborador contratado...</option>
+        {colaboradores.map(c => (
+          <option key={c.id} value={c.id}>
+            {c.nome}{c.cargo ? ` — ${c.cargo}` : ''}
+          </option>
+        ))}
+      </select>
+      {errors.contratadoId && <p className="text-red-500 text-xs mt-1">{errors.contratadoId}</p>}
+      <p className="mt-1 text-xs text-gray-500">
+        Este colaborador será gravado no contrato como contratado/assinante. O campo "criado por" continua registrando quem gerou o PDF.
+      </p>
     </div>
   );
 
@@ -426,7 +472,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
 
       {!erroListas && !carregandoListas && (
         <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-          Listas carregadas: {empresas.length} empresas, {leads.length} leads, {clientesPF.length} clientes PF, {parceiros.length} parceiros.
+          Listas carregadas: {empresas.length} empresas, {leads.length} leads, {clientesPF.length} clientes PF, {parceiros.length} parceiros, {colaboradores.length} contratados.
         </div>
       )}
 
@@ -443,6 +489,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
           ))}
         </select>
       </div>
+
+      <SelectContratado />
 
       {/* ── ASSESSORIA ── */}
       {tipoContrato === 'assessoria' && (
