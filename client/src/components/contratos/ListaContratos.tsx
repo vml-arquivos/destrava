@@ -20,6 +20,9 @@ interface Contrato {
   created_at: string;
   pdf_path?: string;
   criado_por_nome?: string;
+  contratado_id?: string;
+  contratado_nome?: string;
+  contratado_cargo?: string;
 }
 
 interface Props {
@@ -124,7 +127,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo 
             <th className="text-left py-2 px-3 font-medium text-gray-600">Parceiro</th>
             <th className="text-left py-2 px-3 font-medium text-gray-600">Valor</th>
             <th className="text-left py-2 px-3 font-medium text-gray-600">Data</th>
-            <th className="text-left py-2 px-3 font-medium text-gray-600">Responsável</th>
+            <th className="text-left py-2 px-3 font-medium text-gray-600">Contratado</th>
             <th className="text-left py-2 px-3 font-medium text-gray-600">Status</th>
             <th className="text-left py-2 px-3 font-medium text-gray-600">Ações</th>
           </tr>
@@ -147,7 +150,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo 
                 <td className="py-2 px-3 text-gray-700">
                   {new Date(c.data_assinatura + 'T12:00:00').toLocaleDateString('pt-BR')}
                 </td>
-                <td className="py-2 px-3 text-gray-600">{c.criado_por_nome || '—'}</td>
+                <td className="py-2 px-3 text-gray-600">{c.contratado_nome || c.criado_por_nome || '—'}</td>
                 <td className="py-2 px-3">
                   <span className={`text-xs px-2 py-1 rounded-full font-medium ${sc.class}`}>
                     {sc.label}
