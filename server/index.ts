@@ -3281,28 +3281,43 @@ Responda APENAS com um JSON válido no seguinte formato:
           );
           if (r.rows.length > 0) leadId = r.rows[0].id;
         }
-        if (!leadId && nomeContato && telefone) {
-          const cleanPhone = telefone.replace(/\D/g, '');
+        // Tentar deduplicar por email se não encontrou por telefone/conv_id
+        const emailContato = payload?.contact?.email || null;
+        if (!leadId && emailContato) {
+          const rEmail = await pool.query(
+            `SELECT id FROM leads WHERE LOWER(email) = LOWER($1) ORDER BY created_at DESC LIMIT 1`,
+            [emailContato]
+          );
+          if (rEmail.rows.length > 0) leadId = rEmail.rows[0].id;
+        }
+        const isNovoLead = !leadId;
+        if (!leadId && nomeContato && (telefone || emailContato)) {
+          const cleanPhone = telefone ? telefone.replace(/\D/g, '') : null;
           const r = await pool.query(
-            `INSERT INTO leads (nome, telefone, origem, status, etapa_funil, temperatura, canal_origem, tipo_registro, chatwoot_conv_id, responsavel_id)
-             VALUES ($1, $2, 'chatwoot', 'entrada', 'entrada', 'frio', 'whatsapp', 'lead', $3, $4)
+            `INSERT INTO leads (nome, telefone, email, origem, status, etapa_funil, temperatura, canal_origem, tipo_registro, chatwoot_conv_id, responsavel_id, ultimo_contato_em)
+             VALUES ($1, $2, $3, 'chatwoot', 'entrada', 'entrada', 'frio', 'whatsapp', 'lead', $4, $5, NOW())
              RETURNING id`,
-            [nomeContato, cleanPhone, parseInt(chatwootConvId), agenteResponsavelId]
+            [nomeContato, cleanPhone, emailContato, parseInt(chatwootConvId), agenteResponsavelId]
           );
           leadId = r.rows[0].id;
           console.log(`[WEBHOOK] Lead criado automaticamente: ${leadId}`);
         }
-
-        if (leadId && agenteResponsavelId) {
+        if (leadId && !isNovoLead) {
           await pool.query(
             `UPDATE leads
-                SET responsavel_id = $2,
+                SET chatwoot_conv_id = COALESCE(chatwoot_conv_id, $2),
+                    responsavel_id = COALESCE($3::uuid, responsavel_id),
+                    ultimo_contato_em = NOW(),
                     updated_at = NOW()
               WHERE id = $1`,
+            [leadId, parseInt(chatwootConvId), agenteResponsavelId]
+          );
+        } else if (leadId && agenteResponsavelId) {
+          await pool.query(
+            `UPDATE leads SET responsavel_id = $2, updated_at = NOW() WHERE id = $1`,
             [leadId, agenteResponsavelId]
           );
         }
-
         if (leadId) {
           await garantirEntradaAutomaticaFunil(leadId);
         }
@@ -3375,6 +3390,21 @@ Responda APENAS com um JSON válido no seguinte formato:
           );
         }
 
+        // Registrar atividade no CRM para mensagens e eventos relevantes
+        if (leadId && (tipo_evento === 'message_created' || tipo_evento === 'conversation_created' || tipo_evento === 'conversation_resolved')) {
+          const tipoAtiv = tipo_evento === 'conversation_resolved' ? 'whatsapp_encerrado'
+            : tipo_evento === 'conversation_created' ? 'whatsapp_inicio'
+            : 'whatsapp_mensagem';
+          const tituloAtiv = tipo_evento === 'conversation_resolved' ? 'Conversa encerrada (Chatwoot)'
+            : tipo_evento === 'conversation_created' ? `Nova conversa via WhatsApp — ${nomeContato || 'contato'}`
+            : `Mensagem WhatsApp ${direcao === 'inbound' ? 'recebida' : 'enviada'}`;
+          const descAtiv = conteudo ? String(conteudo).slice(0, 500) : `Evento: ${tipo_evento}`;
+          await pool.query(
+            `INSERT INTO crm_atividades (lead_id, colaborador_id, tipo, titulo, descricao, created_at)
+             VALUES ($1, $2, $3, $4, $5, NOW())`,
+            [leadId, agenteResponsavelId, tipoAtiv, tituloAtiv, descAtiv]
+          ).catch((e: any) => console.warn('[WEBHOOK] crm_atividades warn:', e.message));
+        }
         await pool.query(
           `UPDATE crm_eventos_webhook SET status_processamento='processado', processado_em=NOW() WHERE id=$1`,
           [eventoDbId]
@@ -3731,59 +3761,34 @@ ${temParceiro ? `<p class="clause"><strong>5.1</strong> - O PARCEIRO COMERCIAL, 
   <meta charset="UTF-8"/>
   <title>Demonstrativo de Previsão de Faturamento</title>
   <style>
-body { font-family: Arial, sans-serif; font-size: 10pt; color: #222; margin: 0; padding: 16px 24px; }
-.header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 16px; }
-.col-title { color: #1B3A8C; font-weight: bold; font-size: 11pt; border-bottom: 2px solid #1B3A8C; padding-bottom: 4px; margin-bottom: 8px; }
-.col-row { font-size: 10pt; margin-bottom: 4px; }
-.col-row strong { font-weight: bold; }
-hr.divider { border: none; border-top: 1px solid #888; margin: 16px 0; }
-.doc-title { text-align: center; font-size: 16pt; font-weight: bold; color: #1B3A8C; margin: 20px 0 8px; }
-.doc-subtitle { text-align: center; font-size: 11pt; color: #555; margin-bottom: 16px; }
-.declaracao { text-align: justify; font-size: 10.5pt; margin: 12px 0 20px; line-height: 1.6; }
-table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-bottom: 20px; }
-th { background: #1B3A8C; color: #fff; padding: 9px 10px; text-align: center; font-weight: bold; }
-td { border: 1px solid #ccc; padding: 7px 10px; text-align: center; }
+@page { size: A4; margin: 12mm 14mm; }
+body { font-family: Arial, sans-serif; font-size: 9.5pt; color: #222; margin: 0; padding: 0; line-height: 1.3; }
+.doc-title { text-align: center; font-size: 14pt; font-weight: bold; color: #1B3A8C; margin: 0 0 4px; }
+.empresa-linha { text-align: center; font-size: 9.5pt; margin-bottom: 8px; }
+hr.divider { border: none; border-top: 1px solid #aaa; margin: 8px 0; }
+.declaracao { text-align: justify; font-size: 9.5pt; margin: 8px 0 12px; line-height: 1.4; }
+table { width: 100%; border-collapse: collapse; font-size: 9pt; margin-bottom: 12px; }
+th { background: #1B3A8C; color: #fff; padding: 6px 8px; text-align: center; font-weight: bold; font-size: 9pt; }
+td { border: 1px solid #ccc; padding: 5px 8px; text-align: center; }
 tr:nth-child(even) td { background: #f4f7ff; }
 .total-row td { font-weight: bold; background: #dce3f5; border: 1px solid #999; }
-.city-date { text-align: right; font-style: italic; margin: 20px 0 36px; font-size: 10.5pt; }
-.sig-grid { display: table; width: 100%; table-layout: fixed; margin-top: 24px; page-break-inside: avoid; break-inside: avoid; }
-.sig-col { display: table-cell; width: 50%; text-align: center; padding: 0 12px; vertical-align: top; }
-.sig-line { border-top: 1px solid #333; padding-top: 6px; margin-bottom: 4px; }
-.sig-name { font-weight: bold; font-size: 9.5pt; word-break: break-word; }
-.sig-sub { font-size: 9pt; color: #444; }
+.city-date { text-align: right; font-style: italic; margin: 10px 0 16px; font-size: 9.5pt; }
+.signature-section { margin-top: 18px; page-break-inside: avoid; break-inside: avoid; }
+.signature-grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 32px; justify-content: center; align-items: start; }
+.signature-card { text-align: center; font-size: 9.5pt; line-height: 1.25; min-width: 220px; max-width: 280px; word-break: normal; overflow-wrap: normal; white-space: normal; }
+.signature-line { border-top: 1px solid #111; margin: 0 auto 6px auto; width: 100%; }
   </style>
 </head>
 <body>
-  <div class="header-grid">
-    <div>
-      <div class="col-title">DADOS DO CONTADOR RESPONSÁVEL</div>
-      <div class="col-row"><strong>Escritório:</strong> ${esc(payload.contador?.nome_escritorio || 'Não informado')}</div>
-      <div class="col-row"><strong>Contador:</strong> ${esc(payload.contador?.nome || 'Não informado')}</div>
-      <div class="col-row"><strong>CRC:</strong> ${esc(payload.contador?.crc || '—')}</div>
-      <div class="col-row"><strong>Endereço:</strong> ${esc(enderecoContador)}</div>
-      <div class="col-row"><strong>Telefone:</strong> ${esc(payload.contador?.telefone || '—')}</div>
-      <div class="col-row"><strong>E-mail:</strong> ${esc(payload.contador?.email || '—')}</div>
-    </div>
-    <div>
-      <div class="col-title">DADOS DA EMPRESA (CLIENTE)</div>
-      <div class="col-row"><strong>Razão Social:</strong> ${esc(payload.empresa.razao_social || '—')}</div>
-      <div class="col-row"><strong>CNPJ:</strong> ${esc(payload.empresa.cnpj || '—')}</div>
-      <div class="col-row"><strong>Endereço:</strong> ${esc(enderecoEmpresa)}</div>
-      <div class="col-row"><strong>Atividade Principal:</strong> ${esc(payload.empresa.segmento || '—')}</div>
-    </div>
-  </div>
-
-  <hr class="divider">
-
   <div class="doc-title">DEMONSTRATIVO DE PREVISÃO DE FATURAMENTO</div>
-
+  <div class="empresa-linha"><strong>${esc(payload.empresa.razao_social || '—')}</strong>${payload.empresa.cnpj ? ` &nbsp;|&nbsp; CNPJ: ${esc(payload.empresa.cnpj)}` : ''}</div>
+  <hr class="divider">
   <p class="declaracao">
     Declaramos para os devidos fins, a pedido da empresa supra qualificada,
     e sob as penas da lei, que a previsão de faturamento para os próximos
     ${esc(payload.horizonte_meses)} meses, baseada no histórico de crescimento, contratos
     vigentes e projeções de mercado, apresenta os seguintes valores estimados:
   </p>
-
   <table>
     <thead>
       <tr>
@@ -3803,28 +3808,26 @@ tr:nth-child(even) td { background: #f4f7ff; }
       </tr>
     </tbody>
   </table>
-
   <div class="city-date">Brasília - DF, ${esc(dataEmissao)}.</div>
-
-  <div class="sig-grid">
-    <div class="sig-col">
-      <div class="sig-line"></div>
-      <div class="sig-name">${esc(payload.contador?.nome || '________________________________')}</div>
-      <div class="sig-sub">Contador Responsável</div>
-      <div class="sig-sub">CRC: ${esc(payload.contador?.crc || '—')}</div>
-    </div>
-    <div class="sig-col">
-      <div class="sig-line"></div>
-      <div class="sig-name">${esc(payload.empresa.razao_social || '—')}</div>
-      <div class="sig-sub">Representante Legal</div>
-      <div class="sig-sub">CNPJ: ${esc(payload.empresa.cnpj || '—')}</div>
+  <div class="signature-section">
+    <div class="signature-grid">
+      <div class="signature-card">
+        <div class="signature-line"></div>
+        <div><strong>${esc(payload.contador?.nome || '________________________________')}</strong></div>
+        <div>Contador Responsável</div>
+        <div>CRC: ${esc(payload.contador?.crc || '—')}</div>
+      </div>
+      <div class="signature-card">
+        <div class="signature-line"></div>
+        <div><strong>${esc(payload.empresa.razao_social || '—')}</strong></div>
+        <div>Representante Legal</div>
+        <div>CNPJ: ${esc(payload.empresa.cnpj || '—')}</div>
+      </div>
     </div>
   </div>
 </body>
 </html>`;
   }
-
-
   // ─── HTML DECLARAÇÃO ANUAL DE FATURAMENTO (documento contábil) ─────────────
   function gerarHtmlDeclaracaoAnual(payload: {
     empresa: {
@@ -3855,7 +3858,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
     } | null;
     cidade?: string;
     dataEmissao?: Date;
-    ano_referencia?: number | string;
+    data_referencia?: Date | string | null;
   }): string {
     const esc = (value: unknown) => String(value ?? '')
       .replace(/&/g, '&amp;')
@@ -3863,95 +3866,79 @@ tr:nth-child(even) td { background: #f4f7ff; }
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
-
     const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v) || 0);
     const toDate = (value: string | Date) => value instanceof Date ? value : new Date(String(value).slice(0, 10) + 'T12:00:00');
-    const fmtMes = (value: string | Date) => toDate(value).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-    const anosHistorico = payload.historico
-      .map(r => toDate(r.competencia).getFullYear())
-      .filter(ano => !Number.isNaN(ano));
-    const anoReferencia = String(payload.ano_referencia || (anosHistorico.length ? Math.max(...anosHistorico) : new Date().getFullYear()));
-    const registrosAno = payload.historico
-      .filter(r => String(toDate(r.competencia).getFullYear()) === anoReferencia)
-      .sort((a, b) => toDate(a.competencia).getTime() - toDate(b.competencia).getTime());
-    const registrosTabela = registrosAno.length ? registrosAno : payload.historico
-      .slice()
-      .sort((a, b) => toDate(a.competencia).getTime() - toDate(b.competencia).getTime());
-    const totalAnual = registrosTabela.reduce((s, r) => s + (Number(r.valor) || 0), 0);
+    const fmtMesAno = (value: string | Date) => toDate(value).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    const fmtMesAnoAbrev = (value: string | Date) => toDate(value).toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' });
     const dataEmissao = payload.dataEmissao || new Date();
-    const enderecoEmpresa = payload.empresa.endereco_completo
-      || payload.empresa.endereco
-      || [payload.empresa.logradouro, payload.empresa.numero, payload.empresa.complemento, payload.empresa.bairro, payload.empresa.cidade, payload.empresa.estado]
-        .filter(Boolean)
-        .join(', ')
-      || '—';
-    const enderecoContador = [payload.contador?.endereco_escritorio, [payload.contador?.cidade_escritorio, payload.contador?.uf_escritorio].filter(Boolean).join('/')]
-      .filter(Boolean)
-      .join(', ') || '—';
-    const linhasHistorico = registrosTabela.map(r => `
+    // ── Rolling 12 meses a partir da data de referência (ou hoje) ──
+    const dataRef = payload.data_referencia
+      ? (payload.data_referencia instanceof Date ? payload.data_referencia : new Date(String(payload.data_referencia).slice(0, 10) + 'T12:00:00'))
+      : new Date();
+    const anoFim = dataRef.getFullYear();
+    const mesFim = dataRef.getMonth();
+    const meses12: { ano: number; mes: number; chave: string }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      let m = mesFim - i;
+      let a = anoFim;
+      while (m < 0) { m += 12; a--; }
+      const chave = `${a}-${String(m + 1).padStart(2, '0')}`;
+      meses12.push({ ano: a, mes: m, chave });
+    }
+    const periodoInicio = meses12[0].chave + '-01';
+    const periodoFim = meses12[11].chave + '-01';
+    const mapaHistorico: Record<string, number> = {};
+    for (const r of payload.historico) {
+      const d = toDate(r.competencia);
+      const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      mapaHistorico[chave] = (mapaHistorico[chave] || 0) + (Number(r.valor) || 0);
+    }
+    const registros12 = meses12.map(({ chave }) => ({
+      competencia: chave + '-01',
+      valor: mapaHistorico[chave] || 0,
+    }));
+    const total12 = registros12.reduce((s, r) => s + r.valor, 0);
+    const linhasHistorico = registros12.map(r => `
       <tr>
-        <td>${esc(fmtMes(r.competencia))}</td>
-        <td>${fmt(Number(r.valor) || 0)}</td>
+        <td>${esc(fmtMesAno(r.competencia))}</td>
+        <td>${fmt(r.valor)}</td>
       </tr>`).join('');
-
+    const labelPeriodo = `${fmtMesAnoAbrev(periodoInicio)} a ${fmtMesAnoAbrev(periodoFim)}`;
     return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8"/>
-  <title>Declaração de Faturamento Anual</title>
+  <title>Declaração de Faturamento — Últimos 12 Meses</title>
   <style>
-body { font-family: Arial, sans-serif; font-size: 10pt; color: #222; margin: 0; padding: 16px 24px; }
-.header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 16px; }
-.col-title { color: #1B3A8C; font-weight: bold; font-size: 11pt; border-bottom: 2px solid #1B3A8C; padding-bottom: 4px; margin-bottom: 8px; }
-.col-row { font-size: 10pt; margin-bottom: 4px; }
-.col-row strong { font-weight: bold; }
-hr.divider { border: none; border-top: 1px solid #888; margin: 16px 0; }
-.doc-title { text-align: center; font-size: 16pt; font-weight: bold; color: #1B3A8C; margin: 20px 0 8px; }
-.doc-subtitle { text-align: center; font-size: 11pt; color: #555; margin-bottom: 16px; }
-.declaracao { text-align: justify; font-size: 10.5pt; margin: 12px 0 20px; line-height: 1.6; }
-table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-bottom: 20px; }
-th { background: #1B3A8C; color: #fff; padding: 9px 10px; text-align: center; font-weight: bold; }
-td { border: 1px solid #ccc; padding: 7px 10px; text-align: center; }
+@page { size: A4; margin: 12mm 14mm; }
+body { font-family: Arial, sans-serif; font-size: 9.5pt; color: #222; margin: 0; padding: 0; line-height: 1.3; }
+.doc-title { text-align: center; font-size: 14pt; font-weight: bold; color: #1B3A8C; margin: 0 0 4px; }
+.empresa-linha { text-align: center; font-size: 9.5pt; margin-bottom: 2px; }
+.periodo-linha { text-align: center; font-size: 9.5pt; color: #1B3A8C; font-weight: bold; margin-bottom: 10px; }
+hr.divider { border: none; border-top: 1px solid #aaa; margin: 8px 0; }
+.declaracao { text-align: justify; font-size: 9.5pt; margin: 8px 0 12px; line-height: 1.4; }
+table { width: 100%; border-collapse: collapse; font-size: 9pt; margin-bottom: 12px; }
+th { background: #1B3A8C; color: #fff; padding: 6px 8px; text-align: center; font-weight: bold; font-size: 9pt; }
+td { border: 1px solid #ccc; padding: 5px 8px; text-align: center; }
 tr:nth-child(even) td { background: #f4f7ff; }
 .total-row td { font-weight: bold; background: #dce3f5; border: 1px solid #999; }
-.city-date { text-align: right; font-style: italic; margin: 20px 0 36px; font-size: 10.5pt; }
-.sig-grid { display: table; width: 100%; table-layout: fixed; margin-top: 24px; page-break-inside: avoid; break-inside: avoid; }
-.sig-col { display: table-cell; width: 50%; text-align: center; padding: 0 12px; vertical-align: top; }
-.sig-line { border-top: 1px solid #333; padding-top: 6px; margin-bottom: 4px; }
-.sig-name { font-weight: bold; font-size: 9.5pt; word-break: break-word; }
-.sig-sub { font-size: 9pt; color: #444; }
+.city-date { text-align: right; font-style: italic; margin: 10px 0 16px; font-size: 9.5pt; }
+.signature-section { margin-top: 18px; page-break-inside: avoid; break-inside: avoid; }
+.signature-grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 32px; justify-content: center; align-items: start; }
+.signature-card { text-align: center; font-size: 9.5pt; line-height: 1.25; min-width: 220px; max-width: 280px; word-break: normal; overflow-wrap: normal; white-space: normal; }
+.signature-line { border-top: 1px solid #111; margin: 0 auto 6px auto; width: 100%; }
   </style>
 </head>
 <body>
-  <div class="header-grid">
-    <div>
-      <div class="col-title">DADOS DO CONTADOR RESPONSÁVEL</div>
-      <div class="col-row"><strong>Escritório:</strong> ${esc(payload.contador?.nome_escritorio || 'Não informado')}</div>
-      <div class="col-row"><strong>Contador:</strong> ${esc(payload.contador?.nome || 'Não informado')}</div>
-      <div class="col-row"><strong>CRC:</strong> ${esc(payload.contador?.crc || '—')}</div>
-      <div class="col-row"><strong>Endereço:</strong> ${esc(enderecoContador)}</div>
-      <div class="col-row"><strong>Telefone:</strong> ${esc(payload.contador?.telefone || '—')}</div>
-      <div class="col-row"><strong>E-mail:</strong> ${esc(payload.contador?.email || '—')}</div>
-    </div>
-    <div>
-      <div class="col-title">DADOS DA EMPRESA (CLIENTE)</div>
-      <div class="col-row"><strong>Razão Social:</strong> ${esc(payload.empresa.razao_social || '—')}</div>
-      <div class="col-row"><strong>CNPJ:</strong> ${esc(payload.empresa.cnpj || '—')}</div>
-      <div class="col-row"><strong>Endereço:</strong> ${esc(enderecoEmpresa)}</div>
-      <div class="col-row"><strong>Atividade Principal:</strong> ${esc(payload.empresa.segmento || '—')}</div>
-    </div>
-  </div>
-
+  <div class="doc-title">DECLARAÇÃO DE FATURAMENTO DOS ÚLTIMOS 12 MESES</div>
+  <div class="empresa-linha"><strong>${esc(payload.empresa.razao_social || '—')}</strong>${payload.empresa.cnpj ? ` &nbsp;|&nbsp; CNPJ: ${esc(payload.empresa.cnpj)}` : ''}</div>
+  <div class="periodo-linha">Período apurado: ${esc(labelPeriodo)}</div>
   <hr class="divider">
-
-  <div class="doc-title">DECLARAÇÃO DE FATURAMENTO ANUAL — EXERCÍCIO ${esc(anoReferencia)}</div>
-
   <p class="declaracao">
     Declaramos para os devidos fins, a pedido da empresa supra qualificada,
-    e sob as penas da lei, que o faturamento realizado no exercício de
-    ${esc(anoReferencia)} apresentou os seguintes valores:
+    e sob as penas da lei, que o faturamento realizado nos últimos 12 meses
+    apresentou os seguintes valores:
   </p>
-
   <table>
     <thead>
       <tr>
@@ -3962,26 +3949,26 @@ tr:nth-child(even) td { background: #f4f7ff; }
     <tbody>
       ${linhasHistorico}
       <tr class="total-row">
-        <td>TOTAL ANUAL</td>
-        <td>${fmt(totalAnual)}</td>
+        <td>TOTAL (12 MESES)</td>
+        <td>${fmt(total12)}</td>
       </tr>
     </tbody>
   </table>
-
   <div class="city-date">Brasília - DF, ${esc(dataEmissao.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }))}.</div>
-
-  <div class="sig-grid">
-    <div class="sig-col">
-      <div class="sig-line"></div>
-      <div class="sig-name">${esc(payload.contador?.nome || '________________________________')}</div>
-      <div class="sig-sub">Contador Responsável</div>
-      <div class="sig-sub">CRC: ${esc(payload.contador?.crc || '—')}</div>
-    </div>
-    <div class="sig-col">
-      <div class="sig-line"></div>
-      <div class="sig-name">${esc(payload.empresa.razao_social || '—')}</div>
-      <div class="sig-sub">Representante Legal</div>
-      <div class="sig-sub">CNPJ: ${esc(payload.empresa.cnpj || '—')}</div>
+  <div class="signature-section">
+    <div class="signature-grid">
+      <div class="signature-card">
+        <div class="signature-line"></div>
+        <div><strong>${esc(payload.contador?.nome || '________________________________')}</strong></div>
+        <div>Contador Responsável</div>
+        <div>CRC: ${esc(payload.contador?.crc || '—')}</div>
+      </div>
+      <div class="signature-card">
+        <div class="signature-line"></div>
+        <div><strong>${esc(payload.empresa.razao_social || '—')}</strong></div>
+        <div>Representante Legal</div>
+        <div>CNPJ: ${esc(payload.empresa.cnpj || '—')}</div>
+      </div>
     </div>
   </div>
 </body>
@@ -5333,41 +5320,43 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
-  // ─── DECLARAÇÃO ANUAL DE FATURAMENTO ────────────────────────────────────
+  // ─── DECLARAÇÃO ANUAL DE FATURAMENTO (rolling 12 meses) ────────────────────
   app.post('/api/faturamento/declaracao-anual/:empresaId/exportar-pdf', auth, async (req: Request, res: Response) => {
     try {
       const { empresaId } = req.params;
-      const { contador_id } = req.body || {};
-
+      const { contador_id, data_referencia } = req.body || {};
       const { rows: empRows } = await pool.query('SELECT * FROM empresas WHERE id=$1', [empresaId]);
       if (empRows.length === 0) {
         res.status(404).json({ error: 'Empresa não encontrada' });
         return;
       }
-
+      // Rolling 12 meses: data de referência ou hoje
+      const dataRef = data_referencia
+        ? new Date(String(data_referencia).slice(0, 10) + 'T12:00:00')
+        : new Date();
+      const dataInicio = new Date(dataRef);
+      dataInicio.setMonth(dataInicio.getMonth() - 11);
+      dataInicio.setDate(1);
       const { rows: histRows } = await pool.query(
         `SELECT competencia, valor, origem
            FROM faturamento_historico
           WHERE empresa_id=$1
+            AND competencia >= $2::date
+            AND competencia <= $3::date
           ORDER BY competencia ASC`,
-        [empresaId]
+        [empresaId, dataInicio.toISOString().slice(0, 10), dataRef.toISOString().slice(0, 10)]
       );
-
-      if (histRows.length === 0) {
-        res.status(422).json({ error: 'Nenhum histórico de faturamento encontrado para esta empresa.' });
-        return;
-      }
-
+      // Gera mesmo sem histórico (meses sem lançamento aparecem como R$ 0,00)
       let contador: any = null;
       if (contador_id) {
         const { rows: cRows } = await pool.query('SELECT * FROM contadores WHERE id=$1', [contador_id]);
         if (cRows.length > 0) contador = cRows[0];
       }
-
       const htmlFinal = gerarHtmlDeclaracaoAnual({
         empresa: empRows[0],
         historico: histRows,
         contador,
+        data_referencia: dataRef,
       });
 
       const fileName = `declaracao-${crypto.randomUUID()}.pdf`;

@@ -71,6 +71,10 @@ export default function PrevisaoFaturamento() {
   const [loadingPrevisao, setLoadingPrevisao] = useState(false);
   const [loadingPdf, setLoadingPdf] = useState(false);
   const [loadingDeclaracao, setLoadingDeclaracao] = useState(false);
+  const [dataReferenciaDeclaracao, setDataReferenciaDeclaracao] = useState<string>(() => {
+    const hoje = new Date();
+    return hoje.toISOString().slice(0, 7); // YYYY-MM
+  });
   const graficoRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -247,7 +251,7 @@ export default function PrevisaoFaturamento() {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ contador_id: contadorId || undefined }),
+        body: JSON.stringify({ contador_id: contadorId || undefined, data_referencia: dataReferenciaDeclaracao ? dataReferenciaDeclaracao + '-01' : undefined }),
       });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: 'Erro ao gerar declaração' }));
@@ -390,6 +394,16 @@ export default function PrevisaoFaturamento() {
                   <><RefreshCw className="w-4 h-4" /> Gerar Previsão IA</>
                 )}
               </button>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-500 whitespace-nowrap">Mês ref.:</label>
+                <input
+                  type="month"
+                  value={dataReferenciaDeclaracao}
+                  onChange={e => setDataReferenciaDeclaracao(e.target.value)}
+                  className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  title="Mês de referência para os últimos 12 meses"
+                />
+              </div>
               <button
                 onClick={handleDeclaracaoAnual}
                 disabled={loadingDeclaracao}
@@ -398,7 +412,7 @@ export default function PrevisaoFaturamento() {
                 {loadingDeclaracao ? (
                   <><Loader2 className="w-4 h-4 animate-spin" /> Gerando declaração...</>
                 ) : (
-                  <><FileText className="w-4 h-4" /> Declaração Anual</>
+                  <><FileText className="w-4 h-4" /> Declaração 12 Meses</>
                 )}
               </button>
               {loadingPrevisao && (
