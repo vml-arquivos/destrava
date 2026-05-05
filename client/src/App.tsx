@@ -34,6 +34,9 @@ import Contato from "./pages/Contato";
 import Cgi from "./pages/Cgi";
 // Área do Colaborador
 import ColaboradorLogin from "./pages/colaborador/Login";
+import RecuperarSenha from "./pages/colaborador/RecuperarSenha";
+import RedefinirSenha from "./pages/colaborador/RedefinirSenha";
+import MeuPerfil from "./pages/colaborador/MeuPerfil";
 import ColaboradorDashboard from "./pages/colaborador/Dashboard";
 import ColaboradorCalculadora from "./pages/colaborador/CalculadoraPage";
 import ColaboradorSimulacoes from "./pages/colaborador/Simulacoes";
@@ -101,6 +104,15 @@ function Router() {
 
       {/* Área do Colaborador */}
       <Route path="/colaborador/login" component={ColaboradorLogin} />
+      <Route path="/colaborador/recuperar-senha" component={RecuperarSenha} />
+      <Route path="/colaborador/redefinir-senha" component={RedefinirSenha} />
+      <Route path="/colaborador/meu-perfil">
+        {() => (
+          <ProtectedRoute>
+            <MeuPerfil />
+          </ProtectedRoute>
+        )}
+      </Route>
       <Route path="/colaborador/dashboard">
         {() => (
           <ProtectedRoute>

@@ -39,6 +39,7 @@ const CARGOS_GESTAO = ['administrador', 'diretor', 'gerente comercial'];
 
 const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/colaborador/dashboard",   label: "Dashboard",          icon: LayoutDashboard },
+  { href: "/colaborador/meu-perfil",  label: "Meu Perfil",         icon: User },
   { href: "/colaborador/crm",         label: "CRM Geral",          icon: Kanban, managementOnly: true },
   { href: "/colaborador/meu-crm",     label: "Meu CRM",            icon: User },
   { href: "/colaborador/fila?scope=meus", label: "Minha Fila",     icon: ListOrdered },
@@ -247,6 +248,12 @@ export default function ColaboradorLayout({ children, title }: LayoutProps) {
             <span className="text-sm text-gray-500">
               <strong className="text-gray-900">{colaborador?.nome?.split(" ")[0] || "Colaborador"}</strong>
             </span>
+            <Link href="/colaborador/meu-perfil">
+              <a className="inline-flex items-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
+                <User className="h-4 w-4 mr-1" />
+                Perfil
+              </a>
+            </Link>
             <Button variant="outline" size="sm" onClick={handleSignOut} className="text-gray-500 hover:text-red-600">
               <LogOut className="h-4 w-4 mr-1" />
               Sair

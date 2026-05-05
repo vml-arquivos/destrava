@@ -1,5 +1,5 @@
 import { useState, FormEvent } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -101,7 +101,12 @@ export default function ColaboradorLogin() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="password">Senha</Label>
+                  <Link href="/colaborador/recuperar-senha">
+                    <a className="text-xs font-medium text-primary hover:underline">Esqueci minha senha</a>
+                  </Link>
+                </div>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input

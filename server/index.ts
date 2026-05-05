@@ -972,6 +972,100 @@ async function startServer() {
   try { await pool.query(`ALTER TABLE previsao_faturamento ADD COLUMN IF NOT EXISTS contador_id UUID REFERENCES contadores(id) ON DELETE SET NULL`); }
   catch { /* já existe */ }
 
+  // P15: módulo completo de contratos, parceiros/responsáveis e usuários (espelho seguro da migration 020)
+  const alteracoesPrestadores020 = [
+    `ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS rg TEXT`,
+    `ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS data_nascimento DATE`,
+    `ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS estado_civil TEXT`,
+    `ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS profissao TEXT`,
+    `ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS numero TEXT`,
+    `ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS complemento TEXT`,
+    `ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS bairro TEXT`,
+    `ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS cargo TEXT`,
+    `ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS texto_cabecalho TEXT`,
+    `ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS texto_rodape TEXT`,
+    `ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS origem_cadastro TEXT`,
+    `ALTER TABLE prestadores_servico ADD COLUMN IF NOT EXISTS metadados JSONB NOT NULL DEFAULT '{}'::jsonb`,
+  ];
+  for (const sql of alteracoesPrestadores020) { try { await pool.query(sql); } catch { /* compat */ } }
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS pessoa_juridica_responsaveis (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        prestador_id UUID REFERENCES prestadores_servico(id) ON DELETE CASCADE,
+        nome TEXT NOT NULL,
+        cpf TEXT,
+        rg TEXT,
+        email TEXT,
+        telefone TEXT,
+        cargo TEXT,
+        profissao TEXT,
+        estado_civil TEXT,
+        nacionalidade TEXT,
+        endereco TEXT,
+        numero TEXT,
+        complemento TEXT,
+        bairro TEXT,
+        cidade TEXT,
+        uf TEXT,
+        cep TEXT,
+        principal BOOLEAN NOT NULL DEFAULT false,
+        ativo BOOLEAN NOT NULL DEFAULT true,
+        observacoes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+  } catch { /* compat */ }
+  try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_pj_responsaveis_prestador ON pessoa_juridica_responsaveis(prestador_id, ativo)`); } catch { /* compat */ }
+  try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_pj_responsaveis_cpf ON pessoa_juridica_responsaveis(cpf)`); } catch { /* compat */ }
+
+  const alteracoesContratos020 = [
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS parceiro_snapshot JSONB`,
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS parceiro_responsavel_id UUID REFERENCES pessoa_juridica_responsaveis(id) ON DELETE SET NULL`,
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS parceiro_responsavel_snapshot JSONB`,
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS contratante_tipo TEXT`,
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS contratante_pf_id UUID`,
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS contratante_pj_id UUID`,
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS contratante_snapshot JSONB`,
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS contratante_responsavel_id UUID REFERENCES pessoa_juridica_responsaveis(id) ON DELETE SET NULL`,
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS contratante_responsavel_snapshot JSONB`,
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS responsavel_interno_id UUID REFERENCES colaboradores(id) ON DELETE SET NULL`,
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS responsavel_interno_snapshot JSONB`,
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS local_assinatura TEXT`,
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS observacoes TEXT`,
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS dados_editaveis JSONB NOT NULL DEFAULT '{}'::jsonb`,
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS pdf_regenerado_em TIMESTAMPTZ`,
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS assinado_em TIMESTAMPTZ`,
+    `ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS assinado_pdf_path TEXT`,
+  ];
+  for (const sql of alteracoesContratos020) { try { await pool.query(sql); } catch { /* compat */ } }
+  try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_contratos_gerados_contratante_pf ON contratos_gerados(contratante_pf_id)`); } catch { /* compat */ }
+  try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_contratos_gerados_contratante_pj ON contratos_gerados(contratante_pj_id)`); } catch { /* compat */ }
+
+  const alteracoesColaboradores020 = [
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS cpf TEXT`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS rg TEXT`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS data_nascimento DATE`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS estado_civil TEXT`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS profissao TEXT`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS endereco TEXT`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS numero TEXT`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS complemento TEXT`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS bairro TEXT`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS cidade TEXT`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS uf TEXT`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS cep TEXT`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS assinatura_url TEXT`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS precisa_redefinir_senha BOOLEAN NOT NULL DEFAULT false`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS ultimo_reset_senha_em TIMESTAMPTZ`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS reset_senha_solicitado_em TIMESTAMPTZ`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS reset_senha_token_hash TEXT`,
+    `ALTER TABLE colaboradores ADD COLUMN IF NOT EXISTS reset_senha_expira_em TIMESTAMPTZ`,
+  ];
+  for (const sql of alteracoesColaboradores020) { try { await pool.query(sql); } catch { /* compat */ } }
+  try { await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_colaboradores_email_lower_unique ON colaboradores(LOWER(email))`); } catch { /* compat */ }
+
   console.log('[startup] Patches de banco (contratos_gerados) aplicados/verificados.');
   // ─────────────────────────────────────────────────────────────────────────────
 
@@ -5440,22 +5534,89 @@ ${(temTest1 || temTest2) ? `
 
   app.post('/api/parceiros', auth, async (req: Request, res: Response) => {
     try {
-      const { nome, cpf, email, telefone } = req.body;
+      const {
+        nome, cpf, rg, data_nascimento, email, telefone, endereco, numero,
+        complemento, bairro, cidade, uf, cep, profissao, estado_civil,
+        observacoes, percentual_comissao, ativo,
+      } = req.body || {};
+      if (!nome || !cpf) {
+        res.status(400).json({ error: 'Nome e CPF são obrigatórios' });
+        return;
+      }
+      const cpfLimpo = String(cpf).replace(/\D/g, '');
+      const { rows } = await pool.query(
+        `INSERT INTO parceiros_comerciais (
+           nome, cpf, rg, data_nascimento, email, telefone, endereco, numero,
+           complemento, bairro, cidade, uf, cep, profissao, estado_civil,
+           observacoes, percentual_comissao, ativo
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         ON CONFLICT (cpf) DO UPDATE SET
+           nome=EXCLUDED.nome, rg=EXCLUDED.rg, data_nascimento=EXCLUDED.data_nascimento,
+           email=EXCLUDED.email, telefone=EXCLUDED.telefone, endereco=EXCLUDED.endereco,
+           numero=EXCLUDED.numero, complemento=EXCLUDED.complemento, bairro=EXCLUDED.bairro,
+           cidade=EXCLUDED.cidade, uf=EXCLUDED.uf, cep=EXCLUDED.cep, profissao=EXCLUDED.profissao,
+           estado_civil=EXCLUDED.estado_civil, observacoes=EXCLUDED.observacoes,
+           percentual_comissao=EXCLUDED.percentual_comissao, ativo=EXCLUDED.ativo,
+           updated_at=NOW()
+         RETURNING *`,
+        [
+          nome.trim(), cpfLimpo, rg || null, data_nascimento || null, email || null,
+          telefone || null, endereco || null, numero || null, complemento || null,
+          bairro || null, cidade || null, uf ? String(uf).toUpperCase().slice(0, 2) : null,
+          cep || null, profissao || null, estado_civil || null, observacoes || null,
+          percentual_comissao === '' || percentual_comissao == null ? null : Number(percentual_comissao),
+          ativo !== false,
+        ]
+      );
+      res.status(201).json(rows[0]);
+    } catch (err: any) {
+      console.error('[POST /api/parceiros]', err);
+      res.status(500).json({ error: err?.detail || 'Erro ao criar parceiro' });
+    }
+  });
+
+  app.patch('/api/parceiros/:id', auth, async (req: Request, res: Response) => {
+    try {
+      const {
+        nome, cpf, rg, data_nascimento, email, telefone, endereco, numero,
+        complemento, bairro, cidade, uf, cep, profissao, estado_civil,
+        observacoes, percentual_comissao, ativo,
+      } = req.body || {};
       if (!nome || !cpf) {
         res.status(400).json({ error: 'Nome e CPF são obrigatórios' });
         return;
       }
       const { rows } = await pool.query(
-        `INSERT INTO parceiros_comerciais (nome, cpf, email, telefone)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (cpf) DO UPDATE SET nome = EXCLUDED.nome, email = EXCLUDED.email
-         RETURNING *`,
-        [nome.trim(), cpf.replace(/\D/g, ''), email || null, telefone || null]
+        `UPDATE parceiros_comerciais SET
+           nome=$1, cpf=$2, rg=$3, data_nascimento=$4, email=$5, telefone=$6,
+           endereco=$7, numero=$8, complemento=$9, bairro=$10, cidade=$11,
+           uf=$12, cep=$13, profissao=$14, estado_civil=$15, observacoes=$16,
+           percentual_comissao=$17, ativo=$18, updated_at=NOW()
+         WHERE id=$19 RETURNING *`,
+        [
+          nome.trim(), String(cpf).replace(/\D/g, ''), rg || null, data_nascimento || null,
+          email || null, telefone || null, endereco || null, numero || null, complemento || null,
+          bairro || null, cidade || null, uf ? String(uf).toUpperCase().slice(0, 2) : null,
+          cep || null, profissao || null, estado_civil || null, observacoes || null,
+          percentual_comissao === '' || percentual_comissao == null ? null : Number(percentual_comissao),
+          ativo !== false, req.params.id,
+        ]
       );
-      res.status(201).json(rows[0]);
+      if (!rows.length) { res.status(404).json({ error: 'Parceiro não encontrado' }); return; }
+      res.json(rows[0]);
+    } catch (err: any) {
+      console.error('[PATCH /api/parceiros/:id]', err);
+      res.status(500).json({ error: err?.detail || 'Erro ao atualizar parceiro' });
+    }
+  });
+
+  app.delete('/api/parceiros/:id', auth, async (req: Request, res: Response) => {
+    try {
+      await pool.query('UPDATE parceiros_comerciais SET ativo=false, updated_at=NOW() WHERE id=$1', [req.params.id]);
+      res.json({ ok: true });
     } catch (err) {
-      console.error('[POST /api/parceiros]', err);
-      res.status(500).json({ error: 'Erro ao criar parceiro' });
+      console.error('[DELETE /api/parceiros/:id]', err);
+      res.status(500).json({ error: 'Erro ao desativar parceiro' });
     }
   });
 
@@ -6357,6 +6518,157 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
+  async function buscarContratoDetalhado(id: string) {
+    const { rows } = await pool.query(
+      `SELECT cg.*,
+              e.razao_social AS empresa_nome,
+              l.nome AS lead_nome,
+              pc.nome AS parceiro_nome,
+              COALESCE(ps.razao_social, ps.nome, ps.nome_fantasia, cg.contratada_snapshot->>'nome_exibicao') AS contratada_nome,
+              col_resp.nome AS responsavel_contrato_nome,
+              col.nome AS criado_por_nome
+         FROM contratos_gerados cg
+         LEFT JOIN empresas e ON e.id = cg.empresa_id
+         LEFT JOIN leads l ON l.id = cg.lead_id
+         LEFT JOIN parceiros_comerciais pc ON pc.id = cg.parceiro_id
+         LEFT JOIN prestadores_servico ps ON ps.id = cg.contratada_id
+         LEFT JOIN colaboradores col_resp ON col_resp.id = cg.responsavel_contrato_id
+         LEFT JOIN colaboradores col ON col.id = cg.criado_por
+        WHERE cg.id=$1`,
+      [id]
+    );
+    return rows[0] || null;
+  }
+
+  async function renderizarPdfContratoExistente(contrato: any): Promise<{ pdfPath: string; hash: string }> {
+    const payload = {
+      ...(contrato.payload_snapshot || {}),
+      contrato: {
+        ...((contrato.payload_snapshot || {}).contrato || {}),
+        ...(contrato.dados_editaveis || {}),
+      },
+    };
+    let html: string;
+    switch (contrato.tipo_contrato) {
+      case 'limpa_nome': html = await gerarHtmlContratoLimpaNome(payload); break;
+      case 'limpa_bacen': html = await gerarHtmlContratoBacen(payload); break;
+      case 'rating': html = await gerarHtmlContratoRating(payload); break;
+      case 'parceria_comercial': html = await gerarHtmlContratoParceriaComercial(payload); break;
+      default: html = await gerarHtmlContrato(payload); break;
+    }
+    const uploadsDir = path.resolve('uploads', 'contratos');
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+    const fileName = `contrato-${contrato.tipo_contrato || 'gerado'}-${crypto.randomUUID()}.pdf`;
+    const pdfPath = path.join(uploadsDir, fileName);
+    let browser: any;
+    try {
+      const puppeteer = await import('puppeteer-core');
+      let executablePath: string;
+      if (process.env.CHROMIUM_PATH) executablePath = process.env.CHROMIUM_PATH;
+      else {
+        const chromium = await import('@sparticuz/chromium');
+        executablePath = await chromium.default.executablePath();
+      }
+      browser = await puppeteer.default.launch({ executablePath, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage'], headless: true });
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'networkidle0' });
+      await page.pdf({ path: pdfPath, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '20mm', bottom: '20mm', left: '22mm', right: '22mm' } });
+    } finally {
+      if (browser) await browser.close();
+    }
+    const hash = await calcularHashArquivo(pdfPath);
+    return { pdfPath, hash };
+  }
+
+  app.get('/api/contratos/:id', auth, async (req: Request, res: Response) => {
+    try {
+      const contrato = await buscarContratoDetalhado(req.params.id);
+      if (!contrato) { res.status(404).json({ error: 'Contrato não encontrado' }); return; }
+      res.json(contrato);
+    } catch (err) {
+      console.error('[GET /api/contratos/:id]', err);
+      res.status(500).json({ error: 'Erro ao carregar contrato' });
+    }
+  });
+
+  app.patch('/api/contratos/:id', auth, async (req: Request, res: Response) => {
+    try {
+      const permitido = ['gerado', 'assinado', 'cancelado'];
+      const { dados_editaveis, status, data_assinatura, foro_eleito, local_assinatura, observacoes } = req.body || {};
+      if (status && !permitido.includes(status)) {
+        res.status(400).json({ error: 'Status inválido.' });
+        return;
+      }
+      const { rows } = await pool.query(
+        `UPDATE contratos_gerados SET
+           dados_editaveis=COALESCE($1::jsonb, dados_editaveis),
+           status=COALESCE($2, status),
+           data_assinatura=COALESCE($3::date, data_assinatura),
+           foro_eleito=COALESCE($4, foro_eleito),
+           local_assinatura=COALESCE($5, local_assinatura),
+           observacoes=COALESCE($6, observacoes),
+           updated_at=NOW()
+         WHERE id=$7 RETURNING *`,
+        [
+          dados_editaveis ? JSON.stringify(dados_editaveis) : null,
+          status || null,
+          data_assinatura || null,
+          foro_eleito || null,
+          local_assinatura || null,
+          observacoes || null,
+          req.params.id,
+        ]
+      );
+      if (!rows.length) { res.status(404).json({ error: 'Contrato não encontrado' }); return; }
+      res.json(rows[0]);
+    } catch (err) {
+      console.error('[PATCH /api/contratos/:id]', err);
+      res.status(500).json({ error: 'Erro ao atualizar contrato' });
+    }
+  });
+
+  app.post('/api/contratos/:id/regenerar', auth, async (req: Request, res: Response) => {
+    try {
+      const contrato = await buscarContratoDetalhado(req.params.id);
+      if (!contrato) { res.status(404).json({ error: 'Contrato não encontrado' }); return; }
+      const { pdfPath, hash } = await renderizarPdfContratoExistente(contrato);
+      const { rows } = await pool.query(
+        `UPDATE contratos_gerados
+            SET pdf_path=$1, hash_documento=$2, pdf_regenerado_em=NOW(), updated_at=NOW()
+          WHERE id=$3 RETURNING id, pdf_path, hash_documento, pdf_regenerado_em`,
+        [pdfPath, hash, req.params.id]
+      );
+      res.json({ success: true, ...rows[0], pdf_url: `/uploads/contratos/${path.basename(pdfPath)}` });
+    } catch (err) {
+      console.error('[POST /api/contratos/:id/regenerar]', err);
+      res.status(500).json({ error: 'Erro ao regenerar contrato' });
+    }
+  });
+
+  app.post('/api/contratos/:id/anexo-assinado', auth, async (req: Request, res: Response) => {
+    try {
+      const { arquivo_base64, pdf_base64, nome_arquivo } = req.body || {};
+      const conteudo = arquivo_base64 || pdf_base64;
+      if (!conteudo) { res.status(400).json({ error: 'Informe o PDF assinado em base64.' }); return; }
+      const base64 = String(conteudo).includes(',') ? String(conteudo).split(',').pop()! : String(conteudo);
+      const uploadsDir = path.resolve('uploads', 'contratos', 'assinados');
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+      const fileName = `${crypto.randomUUID()}-${String(nome_arquivo || 'contrato-assinado.pdf').replace(/[^a-zA-Z0-9_.-]/g, '-')}`;
+      const pdfPath = path.join(uploadsDir, fileName);
+      fs.writeFileSync(pdfPath, Buffer.from(base64, 'base64'));
+      const { rows } = await pool.query(
+        `UPDATE contratos_gerados SET status='assinado', assinado_em=NOW(), assinado_pdf_path=$1, updated_at=NOW()
+          WHERE id=$2 RETURNING id, status, assinado_em, assinado_pdf_path`,
+        [pdfPath, req.params.id]
+      );
+      if (!rows.length) { res.status(404).json({ error: 'Contrato não encontrado' }); return; }
+      res.json({ success: true, ...rows[0] });
+    } catch (err) {
+      console.error('[POST /api/contratos/:id/anexo-assinado]', err);
+      res.status(500).json({ error: 'Erro ao anexar contrato assinado' });
+    }
+  });
+
   // ─── EXCLUIR CONTRATO (apenas Administrador e Diretor) ─────────────────────────
   app.delete('/api/contratos/:id', auth, async (req: Request, res: Response) => {
     try {
@@ -6393,6 +6705,139 @@ ${(temTest1 || temTest2) ? `
 
   // Servir arquivos de contratos gerados
   app.use('/uploads/contratos', express.static(path.resolve('uploads', 'contratos')));
+
+  app.patch('/api/me', auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as any).colaborador;
+      const {
+        nome, telefone, cpf, rg, data_nascimento, estado_civil, profissao,
+        endereco, numero, complemento, bairro, cidade, uf, cep, assinatura_url,
+      } = req.body || {};
+      const { rows } = await pool.query(
+        `UPDATE colaboradores SET
+           nome=COALESCE($1, nome), telefone=COALESCE($2, telefone), cpf=COALESCE($3, cpf),
+           rg=COALESCE($4, rg), data_nascimento=COALESCE($5::date, data_nascimento),
+           estado_civil=COALESCE($6, estado_civil), profissao=COALESCE($7, profissao),
+           endereco=COALESCE($8, endereco), numero=COALESCE($9, numero), complemento=COALESCE($10, complemento),
+           bairro=COALESCE($11, bairro), cidade=COALESCE($12, cidade), uf=COALESCE($13, uf),
+           cep=COALESCE($14, cep), assinatura_url=COALESCE($15, assinatura_url), updated_at=NOW()
+         WHERE id=$16 RETURNING id, nome, email, cargo, perfil, telefone, ativo,
+           pode_atender_leads, pode_ver_todos_leads, chatwoot_agente_id, cpf, rg,
+           data_nascimento, estado_civil, profissao, endereco, numero, complemento,
+           bairro, cidade, uf, cep, assinatura_url, precisa_redefinir_senha`,
+        [nome || null, telefone || null, cpf || null, rg || null, data_nascimento || null,
+         estado_civil || null, profissao || null, endereco || null, numero || null,
+         complemento || null, bairro || null, cidade || null,
+         uf ? String(uf).toUpperCase().slice(0, 2) : null, cep || null,
+         assinatura_url || null, colaborador.id]
+      );
+      res.json(rows[0]);
+    } catch (err) {
+      console.error('[PATCH /api/me]', err);
+      res.status(500).json({ error: 'Erro ao atualizar perfil' });
+    }
+  });
+
+  app.post('/api/me/alterar-senha', auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as any).colaborador;
+      const { senha_atual, nova_senha } = req.body || {};
+      if (!nova_senha || String(nova_senha).length < 8) {
+        res.status(400).json({ error: 'A nova senha deve ter pelo menos 8 caracteres.' });
+        return;
+      }
+      const { rows } = await pool.query('SELECT senha_hash FROM colaboradores WHERE id=$1', [colaborador.id]);
+      if (!rows.length) { res.status(404).json({ error: 'Usuário não encontrado' }); return; }
+      if (rows[0].senha_hash && senha_atual) {
+        const ok = await bcrypt.compare(String(senha_atual), rows[0].senha_hash);
+        if (!ok) { res.status(400).json({ error: 'Senha atual incorreta.' }); return; }
+      }
+      const hash = await bcrypt.hash(String(nova_senha), 10);
+      await pool.query(
+        `UPDATE colaboradores
+            SET senha_hash=$1, precisa_redefinir_senha=false, reset_senha_token_hash=NULL,
+                reset_senha_expira_em=NULL, ultimo_reset_senha_em=NOW(), updated_at=NOW()
+          WHERE id=$2`,
+        [hash, colaborador.id]
+      );
+      res.json({ success: true });
+    } catch (err) {
+      console.error('[POST /api/me/alterar-senha]', err);
+      res.status(500).json({ error: 'Erro ao alterar senha' });
+    }
+  });
+
+  app.post('/api/auth/solicitar-reset-senha', async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body || {};
+      if (!email) { res.status(400).json({ error: 'Informe o e-mail.' }); return; }
+      const tokenReset = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(tokenReset).digest('hex');
+      const { rows } = await pool.query(
+        `UPDATE colaboradores
+            SET reset_senha_solicitado_em=NOW(), reset_senha_token_hash=$1,
+                reset_senha_expira_em=NOW() + INTERVAL '2 hours', updated_at=NOW()
+          WHERE LOWER(email)=LOWER($2) AND ativo=true
+          RETURNING id, email, nome`,
+        [tokenHash, String(email).trim()]
+      );
+      if (rows.length) {
+        console.log(`[auth] Token de redefinição para ${rows[0].email}: ${tokenReset}`);
+      }
+      res.json({ success: true, message: 'Se o e-mail estiver cadastrado, as instruções de redefinição serão enviadas pelo canal configurado.', token_dev: process.env.NODE_ENV !== 'production' && rows.length ? tokenReset : undefined });
+    } catch (err) {
+      console.error('[POST /api/auth/solicitar-reset-senha]', err);
+      res.status(500).json({ error: 'Erro ao solicitar redefinição de senha' });
+    }
+  });
+
+  app.post('/api/auth/redefinir-senha', async (req: Request, res: Response) => {
+    try {
+      const { token, nova_senha } = req.body || {};
+      if (!token || !nova_senha || String(nova_senha).length < 8) {
+        res.status(400).json({ error: 'Token e nova senha com pelo menos 8 caracteres são obrigatórios.' });
+        return;
+      }
+      const tokenHash = crypto.createHash('sha256').update(String(token)).digest('hex');
+      const senhaHash = await bcrypt.hash(String(nova_senha), 10);
+      const { rows } = await pool.query(
+        `UPDATE colaboradores
+            SET senha_hash=$1, precisa_redefinir_senha=false, reset_senha_token_hash=NULL,
+                reset_senha_expira_em=NULL, ultimo_reset_senha_em=NOW(), updated_at=NOW()
+          WHERE reset_senha_token_hash=$2 AND reset_senha_expira_em > NOW() AND ativo=true
+          RETURNING id`,
+        [senhaHash, tokenHash]
+      );
+      if (!rows.length) { res.status(400).json({ error: 'Token inválido ou expirado.' }); return; }
+      res.json({ success: true });
+    } catch (err) {
+      console.error('[POST /api/auth/redefinir-senha]', err);
+      res.status(500).json({ error: 'Erro ao redefinir senha' });
+    }
+  });
+
+  app.post('/api/colaboradores/:id/resetar-senha', auth, async (req: Request, res: Response) => {
+    try {
+      const ator = (req as any).colaborador;
+      const cargo = String(ator.cargo || ator.role || '').toLowerCase();
+      if (!['administrador', 'admin', 'diretor', 'gerente comercial'].includes(cargo)) {
+        res.status(403).json({ error: 'Sem permissão para redefinir senhas.' });
+        return;
+      }
+      const senhaTemporaria = req.body?.senha_temporaria || crypto.randomBytes(6).toString('base64url') + 'A1!';
+      const hash = await bcrypt.hash(String(senhaTemporaria), 10);
+      const { rows } = await pool.query(
+        `UPDATE colaboradores SET senha_hash=$1, precisa_redefinir_senha=true,
+          ultimo_reset_senha_em=NOW(), updated_at=NOW() WHERE id=$2 RETURNING id, email, nome`,
+        [hash, req.params.id]
+      );
+      if (!rows.length) { res.status(404).json({ error: 'Colaborador não encontrado' }); return; }
+      res.json({ success: true, senha_temporaria: senhaTemporaria });
+    } catch (err) {
+      console.error('[POST /api/colaboradores/:id/resetar-senha]', err);
+      res.status(500).json({ error: 'Erro ao resetar senha' });
+    }
+  });
 
   // Qualquer /api não encontrada deve responder JSON, nunca o index.html da SPA.
   app.use('/api', (req: Request, res: Response) => {

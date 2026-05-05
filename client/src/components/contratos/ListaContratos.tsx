@@ -1,4 +1,4 @@
-import { Download, CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import { Download, CheckCircle, XCircle, Trash2, Eye, RefreshCw, Upload } from 'lucide-react';
 import { apiFetch, getToken } from '../../lib/api';
 import { toast } from 'sonner';
 
@@ -68,6 +68,26 @@ function podeExcluir(cargo: string | undefined | null): boolean {
 export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo }: Props) {
   const podeExcluirContrato = podeExcluir(userCargo);
 
+  const abrirPdf = (id: string, download = false) => {
+    const token = getToken();
+    const url = `/api/contratos/${id}/download`;
+    fetch(url, { headers: { Authorization: `Bearer ${token || ''}` } })
+      .then(res => res.blob())
+      .then(blob => {
+        const blobUrl = URL.createObjectURL(blob);
+        if (!download) {
+          window.open(blobUrl, '_blank', 'noopener,noreferrer');
+          return;
+        }
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = `contrato-${id}.pdf`;
+        a.click();
+        URL.revokeObjectURL(blobUrl);
+      })
+      .catch(() => toast.error('Erro ao abrir contrato'));
+  };
+
   const handleDownload = (id: string) => {
     const token = getToken();
     const url = `/api/contratos/${id}/download`;
@@ -106,6 +126,41 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo 
     } catch (err: any) {
       toast.error(err.message || 'Erro ao excluir contrato');
     }
+  };
+
+  const handleRegenerar = async (id: string) => {
+    if (!window.confirm('Regenerar o PDF deste contrato com os dados atuais?')) return;
+    try {
+      await apiFetch(`/api/contratos/${id}/regenerar`, { method: 'POST' });
+      toast.success('PDF regenerado com sucesso.');
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao regenerar contrato');
+    }
+  };
+
+  const handleUploadAssinado = (id: string) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/pdf';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          await apiFetch(`/api/contratos/${id}/anexo-assinado`, {
+            method: 'POST',
+            body: JSON.stringify({ arquivo_base64: reader.result, nome_arquivo: file.name }),
+          });
+          toast.success('Contrato assinado anexado com sucesso.');
+          onStatusChange(id, 'assinado');
+        } catch (err: any) {
+          toast.error(err.message || 'Erro ao anexar contrato assinado');
+        }
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
   };
 
   if (!contratos.length) {
@@ -161,9 +216,21 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo 
                 </td>
                 <td className="py-2 px-3">
                   <div className="flex items-center gap-1">
+                    <button onClick={() => abrirPdf(c.id)} title="Visualizar PDF"
+                      className="p-1 text-slate-600 hover:text-slate-800 rounded">
+                      <Eye className="w-4 h-4" />
+                    </button>
                     <button onClick={() => handleDownload(c.id)} title="Baixar PDF"
                       className="p-1 text-blue-600 hover:text-blue-800 rounded">
                       <Download className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => handleRegenerar(c.id)} title="Regenerar PDF"
+                      className="p-1 text-amber-600 hover:text-amber-800 rounded">
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => handleUploadAssinado(c.id)} title="Anexar contrato assinado"
+                      className="p-1 text-purple-600 hover:text-purple-800 rounded">
+                      <Upload className="w-4 h-4" />
                     </button>
                     {c.status === 'gerado' && (
                       <>
