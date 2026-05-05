@@ -148,6 +148,8 @@ export default function UsuariosPage() {
 
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [editNome, setEditNome] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editSenha, setEditSenha] = useState("");
   const [editCargo, setEditCargo] = useState("");
   const [editTelefone, setEditTelefone] = useState("");
   const [editPerfil, setEditPerfil] = useState<PerfilOperacional>("agente");
@@ -250,6 +252,8 @@ export default function UsuariosPage() {
   function abrirEdicao(col: Colaborador) {
     setEditandoId(col.id);
     setEditNome(col.nome);
+    setEditEmail(col.email || "");
+    setEditSenha("");
     setEditCargo(col.cargo);
     setEditTelefone(col.telefone || "");
     setEditPerfil((col.perfil || perfilOperacionalPadrao(col.cargo)) as PerfilOperacional);
@@ -280,12 +284,14 @@ export default function UsuariosPage() {
         method: "PATCH",
         body: JSON.stringify({
           nome: editNome.trim(),
+          email: editEmail.trim() || undefined,
           cargo: editCargo,
           telefone: editTelefone.trim() || null,
           perfil: editPerfil,
           pode_atender_leads: editPodeAtenderLeads,
           pode_ver_todos_leads: editPodeVerTodosLeads,
           chatwoot_agente_id: editChatwootAgenteId.trim() ? Number(editChatwootAgenteId) : null,
+          ...(editSenha.trim() ? { senha: editSenha.trim() } : {}),
         }),
       });
       setMensagemEdit({ tipo: "sucesso", texto: "Colaborador atualizado com sucesso." });
@@ -580,6 +586,14 @@ export default function UsuariosPage() {
                                   ))}
                                 </SelectContent>
                               </Select>
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">E-mail</Label>
+                              <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} className="h-9 text-sm" placeholder="colaborador@destrava.com.br" />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Nova senha <span className="text-muted-foreground font-normal">(deixe em branco para não alterar)</span></Label>
+                              <Input type="password" value={editSenha} onChange={(e) => setEditSenha(e.target.value)} className="h-9 text-sm" placeholder="••••••••" autoComplete="new-password" />
                             </div>
                           </div>
 

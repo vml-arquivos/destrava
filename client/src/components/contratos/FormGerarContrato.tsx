@@ -164,7 +164,9 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [responsavelContratoIdLimpaNome, setResponsavelContratoIdLimpaNome] = useState('');
 
   // ── Limpa BACEN ──
+  const [clienteTipoBacen, setClienteTipoBacen]       = useState<'empresa' | 'pf'>('empresa');
   const [empresaIdBacen, setEmpresaIdBacen]           = useState('');
+  const [clientePfIdBacen, setClientePfIdBacen]       = useState('');
   const [representanteNomeBacen, setRepresentanteNomeBacen] = useState('');
   const [representanteCpfBacen, setRepresentanteCpfBacen]   = useState('');
   const [valorContratoBacen, setValorContratoBacen]   = useState('');
@@ -310,10 +312,11 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     }
 
     if (tipoContrato === 'limpa_bacen') {
-      if (!empresaIdBacen) errs.empresaIdBacen = 'Selecione uma empresa';
+      if (clienteTipoBacen === 'empresa' && !empresaIdBacen) errs.empresaIdBacen = 'Selecione uma empresa';
+      if (clienteTipoBacen === 'pf' && !clientePfIdBacen) errs.clientePfIdBacen = 'Selecione uma pessoa física';
       if (!contratadaIdBacen) errs.contratadaIdBacen = 'Selecione a contratada/prestadora';
-      if (!representanteNomeBacen) errs.representanteNomeBacen = 'Informe o nome do representante';
-      if (!representanteCpfBacen) errs.representanteCpfBacen = 'Informe o CPF do representante';
+      if (clienteTipoBacen === 'empresa' && !representanteNomeBacen) errs.representanteNomeBacen = 'Informe o nome do representante';
+      if (clienteTipoBacen === 'empresa' && !representanteCpfBacen) errs.representanteCpfBacen = 'Informe o CPF do representante';
       if (!valorContratoBacen || Number(valorContratoBacen) <= 0) errs.valorContratoBacen = 'Informe o valor do contrato';
       if (!condicaoPgtoBacen) errs.condicaoPgtoBacen = 'Informe a condição de pagamento';
     }
@@ -376,9 +379,11 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     } else if (tipoContrato === 'limpa_bacen') {
       await onSubmit({
         tipo_contrato: 'limpa_bacen',
-        empresa_id: empresaIdBacen,
-        representante_nome: representanteNomeBacen,
-        representante_cpf: representanteCpfBacen,
+        cliente_tipo: clienteTipoBacen,
+        empresa_id: clienteTipoBacen === 'empresa' ? empresaIdBacen : undefined,
+        cliente_pf_id: clienteTipoBacen === 'pf' ? clientePfIdBacen : undefined,
+        representante_nome: clienteTipoBacen === 'empresa' ? representanteNomeBacen : undefined,
+        representante_cpf: clienteTipoBacen === 'empresa' ? representanteCpfBacen : undefined,
         parceiro_id: parceiroIdBacen || undefined,
         contratada_id: contratadaIdBacen,
         responsavel_contrato_id: responsavelContratoIdBacen || undefined,
@@ -662,14 +667,47 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
       {tipoContrato === 'limpa_bacen' && (
         <>
           <div>
-            <label className={lbl}>Empresa (PJ) *</label>
-            <select value={empresaIdBacen} onChange={e => setEmpresaIdBacen(e.target.value)} className={cls}>
-              <option value="">Selecione uma empresa...</option>
-              {empresas.map(e => <option key={e.id} value={e.id}>{e.razao_social}{e.cnpj ? ` — ${e.cnpj}` : ''}</option>)}
+            <label className={lbl}>Tipo de Contratante *</label>
+            <select value={clienteTipoBacen} onChange={e => { setClienteTipoBacen(e.target.value as 'empresa' | 'pf'); setEmpresaIdBacen(''); setClientePfIdBacen(''); }} className={cls}>
+              <option value="empresa">Pessoa Jurídica (Empresa)</option>
+              <option value="pf">Pessoa Física</option>
             </select>
-            {errors.empresaIdBacen && <p className="text-red-500 text-xs mt-1">{errors.empresaIdBacen}</p>}
           </div>
-
+          {clienteTipoBacen === 'empresa' ? (
+            <>
+              <div>
+                <label className={lbl}>Empresa (PJ) *</label>
+                <select value={empresaIdBacen} onChange={e => setEmpresaIdBacen(e.target.value)} className={cls}>
+                  <option value="">Selecione uma empresa...</option>
+                  {empresas.map(e => <option key={e.id} value={e.id}>{e.razao_social}{e.cnpj ? ` — ${e.cnpj}` : ''}</option>)}
+                </select>
+                {errors.empresaIdBacen && <p className="text-red-500 text-xs mt-1">{errors.empresaIdBacen}</p>}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={lbl}>Nome do Representante *</label>
+                  <input type="text" value={representanteNomeBacen} onChange={e => setRepresentanteNomeBacen(e.target.value)}
+                    placeholder="Nome completo" className={cls} />
+                  {errors.representanteNomeBacen && <p className="text-red-500 text-xs mt-1">{errors.representanteNomeBacen}</p>}
+                </div>
+                <div>
+                  <label className={lbl}>CPF do Representante *</label>
+                  <input type="text" value={representanteCpfBacen} onChange={e => setRepresentanteCpfBacen(e.target.value)}
+                    placeholder="000.000.000-00" className={cls} />
+                  {errors.representanteCpfBacen && <p className="text-red-500 text-xs mt-1">{errors.representanteCpfBacen}</p>}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div>
+              <label className={lbl}>Pessoa Física *</label>
+              <select value={clientePfIdBacen} onChange={e => setClientePfIdBacen(e.target.value)} className={cls}>
+                <option value="">Selecione uma pessoa física...</option>
+                {clientesPF.map(p => <option key={p.id} value={p.id}>{p.nome}{p.cpf ? ` — ${p.cpf}` : ''}</option>)}
+              </select>
+              {errors.clientePfIdBacen && <p className="text-red-500 text-xs mt-1">{errors.clientePfIdBacen}</p>}
+            </div>
+          )}
           <SelectContratadaResponsavel
             contratadaId={contratadaIdBacen}
             onContratadaChange={setContratadaIdBacen}
@@ -677,21 +715,6 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
             onResponsavelChange={setResponsavelContratoIdBacen}
             errorKey="contratadaIdBacen"
           />
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={lbl}>Nome do Representante *</label>
-              <input type="text" value={representanteNomeBacen} onChange={e => setRepresentanteNomeBacen(e.target.value)}
-                placeholder="Nome completo" className={cls} />
-              {errors.representanteNomeBacen && <p className="text-red-500 text-xs mt-1">{errors.representanteNomeBacen}</p>}
-            </div>
-            <div>
-              <label className={lbl}>CPF do Representante *</label>
-              <input type="text" value={representanteCpfBacen} onChange={e => setRepresentanteCpfBacen(e.target.value)}
-                placeholder="000.000.000-00" className={cls} />
-              {errors.representanteCpfBacen && <p className="text-red-500 text-xs mt-1">{errors.representanteCpfBacen}</p>}
-            </div>
-          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Valor do Contrato (R$) *</label>

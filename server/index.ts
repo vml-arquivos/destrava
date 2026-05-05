@@ -1066,6 +1066,29 @@ async function startServer() {
   for (const sql of alteracoesColaboradores020) { try { await pool.query(sql); } catch { /* compat */ } }
   try { await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_colaboradores_email_lower_unique ON colaboradores(LOWER(email))`); } catch { /* compat */ }
 
+  // P16: colunas de identidade visual em parceiros_comerciais
+  const alteracoesParceiros016 = [
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS rg TEXT`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS data_nascimento DATE`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS estado_civil TEXT`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS profissao TEXT`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS endereco TEXT`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS numero TEXT`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS complemento TEXT`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS bairro TEXT`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS cidade TEXT`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS uf CHAR(2)`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS cep TEXT`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS observacoes TEXT`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS percentual_comissao NUMERIC(5,2)`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS logo_url TEXT`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS cabecalho_html TEXT`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS rodape_html TEXT`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS cor_primaria TEXT`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS cor_secundaria TEXT`,
+    `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
+  ];
+  for (const sql of alteracoesParceiros016) { try { await pool.query(sql); } catch { /* compat */ } }
   console.log('[startup] Patches de banco (contratos_gerados) aplicados/verificados.');
   // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1916,7 +1939,7 @@ async function startServer() {
         return;
       }
 
-      const { nome, cargo, ativo, senha, telefone, perfil, pode_atender_leads, pode_ver_todos_leads, chatwoot_agente_id } = req.body;
+      const { nome, email, cargo, ativo, senha, telefone, perfil, pode_atender_leads, pode_ver_todos_leads, chatwoot_agente_id } = req.body;
 
       // Se está tentando alterar o cargo, verifica se o novo cargo também é inferior
       if (cargo && !podeGerenciarCargo(cargoSolicitante, cargo)) {
@@ -1927,6 +1950,7 @@ async function startServer() {
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
       const cargoFinal = cargo || cargoAlvo;
       if (nome) updates.nome = nome.trim();
+      if (email) updates.email = email.trim().toLowerCase();
       if (cargo) updates.cargo = cargo;
       if (ativo !== undefined) updates.ativo = ativo;
       if (senha) updates.senha_hash = await bcrypt.hash(senha, 12);
@@ -3707,7 +3731,7 @@ ${temParceiro ? `<p class="clause"><strong>5.1</strong> - O PARCEIRO COMERCIAL, 
   <meta charset="UTF-8"/>
   <title>Demonstrativo de Previsão de Faturamento</title>
   <style>
-body { font-family: Arial, sans-serif; font-size: 11pt; color: #222; margin: 0; padding: 24px 32px; }
+body { font-family: Arial, sans-serif; font-size: 10pt; color: #222; margin: 0; padding: 16px 24px; }
 .header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 16px; }
 .col-title { color: #1B3A8C; font-weight: bold; font-size: 11pt; border-bottom: 2px solid #1B3A8C; padding-bottom: 4px; margin-bottom: 8px; }
 .col-row { font-size: 10pt; margin-bottom: 4px; }
@@ -3722,10 +3746,11 @@ td { border: 1px solid #ccc; padding: 7px 10px; text-align: center; }
 tr:nth-child(even) td { background: #f4f7ff; }
 .total-row td { font-weight: bold; background: #dce3f5; border: 1px solid #999; }
 .city-date { text-align: right; font-style: italic; margin: 20px 0 36px; font-size: 10.5pt; }
-.sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 16px; }
+.sig-grid { display: table; width: 100%; table-layout: fixed; margin-top: 24px; page-break-inside: avoid; break-inside: avoid; }
+.sig-col { display: table-cell; width: 50%; text-align: center; padding: 0 12px; vertical-align: top; }
 .sig-line { border-top: 1px solid #333; padding-top: 6px; margin-bottom: 4px; }
-.sig-name { font-weight: bold; font-size: 10pt; }
-.sig-sub { font-size: 9.5pt; color: #444; }
+.sig-name { font-weight: bold; font-size: 9.5pt; word-break: break-word; }
+.sig-sub { font-size: 9pt; color: #444; }
   </style>
 </head>
 <body>
@@ -3782,13 +3807,13 @@ tr:nth-child(even) td { background: #f4f7ff; }
   <div class="city-date">Brasília - DF, ${esc(dataEmissao)}.</div>
 
   <div class="sig-grid">
-    <div>
+    <div class="sig-col">
       <div class="sig-line"></div>
       <div class="sig-name">${esc(payload.contador?.nome || '________________________________')}</div>
       <div class="sig-sub">Contador Responsável</div>
       <div class="sig-sub">CRC: ${esc(payload.contador?.crc || '—')}</div>
     </div>
-    <div>
+    <div class="sig-col">
       <div class="sig-line"></div>
       <div class="sig-name">${esc(payload.empresa.razao_social || '—')}</div>
       <div class="sig-sub">Representante Legal</div>
@@ -3875,7 +3900,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
   <meta charset="UTF-8"/>
   <title>Declaração de Faturamento Anual</title>
   <style>
-body { font-family: Arial, sans-serif; font-size: 11pt; color: #222; margin: 0; padding: 24px 32px; }
+body { font-family: Arial, sans-serif; font-size: 10pt; color: #222; margin: 0; padding: 16px 24px; }
 .header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 16px; }
 .col-title { color: #1B3A8C; font-weight: bold; font-size: 11pt; border-bottom: 2px solid #1B3A8C; padding-bottom: 4px; margin-bottom: 8px; }
 .col-row { font-size: 10pt; margin-bottom: 4px; }
@@ -3890,10 +3915,11 @@ td { border: 1px solid #ccc; padding: 7px 10px; text-align: center; }
 tr:nth-child(even) td { background: #f4f7ff; }
 .total-row td { font-weight: bold; background: #dce3f5; border: 1px solid #999; }
 .city-date { text-align: right; font-style: italic; margin: 20px 0 36px; font-size: 10.5pt; }
-.sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 16px; }
+.sig-grid { display: table; width: 100%; table-layout: fixed; margin-top: 24px; page-break-inside: avoid; break-inside: avoid; }
+.sig-col { display: table-cell; width: 50%; text-align: center; padding: 0 12px; vertical-align: top; }
 .sig-line { border-top: 1px solid #333; padding-top: 6px; margin-bottom: 4px; }
-.sig-name { font-weight: bold; font-size: 10pt; }
-.sig-sub { font-size: 9.5pt; color: #444; }
+.sig-name { font-weight: bold; font-size: 9.5pt; word-break: break-word; }
+.sig-sub { font-size: 9pt; color: #444; }
   </style>
 </head>
 <body>
@@ -3945,13 +3971,13 @@ tr:nth-child(even) td { background: #f4f7ff; }
   <div class="city-date">Brasília - DF, ${esc(dataEmissao.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }))}.</div>
 
   <div class="sig-grid">
-    <div>
+    <div class="sig-col">
       <div class="sig-line"></div>
       <div class="sig-name">${esc(payload.contador?.nome || '________________________________')}</div>
       <div class="sig-sub">Contador Responsável</div>
       <div class="sig-sub">CRC: ${esc(payload.contador?.crc || '—')}</div>
     </div>
-    <div>
+    <div class="sig-col">
       <div class="sig-line"></div>
       <div class="sig-name">${esc(payload.empresa.razao_social || '—')}</div>
       <div class="sig-sub">Representante Legal</div>
@@ -4202,8 +4228,8 @@ tr:nth-child(even) td { background: #f4f7ff; }
       background: #fff;
       color: var(--text-main);
       font-family: Arial, Helvetica, sans-serif;
-      font-size: 10.6pt;
-      line-height: 1.48;
+      font-size: 9.2pt;
+      line-height: 1.38;
       margin: 0;
       padding: 0;
       -webkit-print-color-adjust: exact;
@@ -4301,30 +4327,30 @@ tr:nth-child(even) td { background: #f4f7ff; }
 
     .contract-content {
       width: 100%;
-      padding-top: 28mm;
-      padding-bottom: 20mm;
+      padding-top: 22mm;
+      padding-bottom: 14mm;
     }
 
     .doc-title {
       color: var(--brand-primary);
       text-align: center;
-      font-size: 15pt;
+      font-size: 12pt;
       line-height: 1.2;
       letter-spacing: .03em;
       text-transform: uppercase;
-      margin: 0 0 18px 0;
-      padding-bottom: 10px;
+      margin: 0 0 12px 0;
+      padding-bottom: 7px;
       border-bottom: 2px solid var(--brand-primary);
     }
 
     .section-title {
       color: var(--brand-primary);
-      font-size: 10.4pt;
+      font-size: 9pt;
       font-weight: 800;
       letter-spacing: .01em;
       text-transform: uppercase;
-      margin: 18px 0 8px;
-      padding: 6px 8px;
+      margin: 8px 0 3px;
+      padding: 3px 6px;
       background: linear-gradient(90deg, rgba(30,58,138,.10), rgba(30,58,138,.02));
       border-left: 3px solid var(--brand-primary);
       break-after: avoid;
@@ -4332,7 +4358,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
     }
 
     .clause {
-      margin: 0 0 7px;
+      margin: 0 0 4px;
       text-align: justify;
       orphans: 3;
       widows: 3;
@@ -4341,8 +4367,8 @@ tr:nth-child(even) td { background: #f4f7ff; }
     .data-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 9.3pt;
-      margin: 8px 0 16px;
+      font-size: 8.8pt;
+      margin: 6px 0 12px;
       page-break-inside: avoid;
       break-inside: avoid;
     }
@@ -4362,39 +4388,44 @@ tr:nth-child(even) td { background: #f4f7ff; }
 
     .city-date {
       text-align: right;
-      margin: 24px 0 26px;
+      margin: 16px 0 18px;
       font-weight: 500;
+    }
+    .sig-wrapper {
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
 
     .signature-grid {
       width: 100%;
       max-width: 148mm;
-      margin: 32px auto 0;
+      margin: 14px auto 0;
       display: flex;
       justify-content: center;
       align-items: flex-start;
-      gap: 22mm;
+      gap: 14mm;
       page-break-inside: avoid;
       break-inside: avoid;
+      page-break-before: avoid;
     }
 
     .signature-party {
-      flex: 0 0 58mm;
-      max-width: 58mm;
+      flex: 0 0 60mm;
+      max-width: 60mm;
       text-align: center;
     }
 
     .sig-line {
-      width: 58mm;
+      width: 60mm;
       height: 1px;
       border-top: 1.2px solid #111827;
-      margin: 0 auto 8px;
+      margin: 0 auto 6px;
     }
 
     .sig-name {
       margin: 0 0 3px;
-      font-size: 9.2pt;
-      line-height: 1.25;
+      font-size: 8.8pt;
+      line-height: 1.2;
       font-weight: 800;
       color: #111827;
       text-transform: none;
@@ -4402,7 +4433,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
 
     .sig-sub {
       margin: 0 0 2px;
-      font-size: 8.2pt;
+      font-size: 7.8pt;
       line-height: 1.2;
       color: #334155;
     }
@@ -4410,8 +4441,14 @@ tr:nth-child(even) td { background: #f4f7ff; }
     @media print {
       .section-title,
       .data-table,
-      .signature-grid {
+      .signature-grid,
+      .sig-wrapper {
         break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .city-date + .signature-grid,
+      .sig-wrapper {
+        page-break-before: avoid;
       }
     }
   </style>
@@ -4448,7 +4485,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
     const docContratada   = contratada?.documento ? `${contratada.documento_label || 'Documento'}: ${contratada.documento}` : '';
     const qualifContratada = qualificacaoContratada(contratada);
     const responsavelTexto = responsavelContrato?.nome
-      ? `${responsavelContrato.nome}${responsavelContrato.cargo ? ` — ${responsavelContrato.cargo}` : ''}`
+      ? responsavelContrato.nome
       : '';
     const valorContrato   = contrato.valor_contrato_formatado || 'R$ 0,00';
     const condicaoPgto    = contrato.condicao_pagamento || 'a combinar';
@@ -4563,7 +4600,7 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
     const docContratada   = contratada?.documento ? `${contratada.documento_label || 'Documento'}: ${contratada.documento}` : '';
     const qualifContratada = qualificacaoContratada(contratada);
     const responsavelTexto = responsavelContrato?.nome
-      ? `${responsavelContrato.nome}${responsavelContrato.cargo ? ` — ${responsavelContrato.cargo}` : ''}`
+      ? responsavelContrato.nome
       : '';
     const valorContrato    = contrato.valor_contrato_formatado || 'R$ 0,00';
     const condicaoPgto     = contrato.condicao_pagamento || 'a combinar';
@@ -5575,12 +5612,13 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
-  app.patch('/api/parceiros/:id', auth, async (req: Request, res: Response) => {
+  const patchParceiroHandler = async (req: Request, res: Response) => {
     try {
       const {
         nome, cpf, rg, data_nascimento, email, telefone, endereco, numero,
         complemento, bairro, cidade, uf, cep, profissao, estado_civil,
         observacoes, percentual_comissao, ativo,
+        logo_url, cabecalho_html, rodape_html, cor_primaria, cor_secundaria,
       } = req.body || {};
       if (!nome || !cpf) {
         res.status(400).json({ error: 'Nome e CPF são obrigatórios' });
@@ -5591,15 +5629,27 @@ ${(temTest1 || temTest2) ? `
            nome=$1, cpf=$2, rg=$3, data_nascimento=$4, email=$5, telefone=$6,
            endereco=$7, numero=$8, complemento=$9, bairro=$10, cidade=$11,
            uf=$12, cep=$13, profissao=$14, estado_civil=$15, observacoes=$16,
-           percentual_comissao=$17, ativo=$18, updated_at=NOW()
-         WHERE id=$19 RETURNING *`,
+           percentual_comissao=$17, ativo=$18,
+           logo_url=COALESCE($19::text, logo_url),
+           cabecalho_html=COALESCE($20::text, cabecalho_html),
+           rodape_html=COALESCE($21::text, rodape_html),
+           cor_primaria=COALESCE($22::text, cor_primaria),
+           cor_secundaria=COALESCE($23::text, cor_secundaria),
+           updated_at=NOW()
+         WHERE id=$24 RETURNING *`,
         [
           nome.trim(), String(cpf).replace(/\D/g, ''), rg || null, data_nascimento || null,
           email || null, telefone || null, endereco || null, numero || null, complemento || null,
           bairro || null, cidade || null, uf ? String(uf).toUpperCase().slice(0, 2) : null,
           cep || null, profissao || null, estado_civil || null, observacoes || null,
           percentual_comissao === '' || percentual_comissao == null ? null : Number(percentual_comissao),
-          ativo !== false, req.params.id,
+          ativo !== false,
+          logo_url !== undefined ? (logo_url?.trim() || null) : null,
+          cabecalho_html !== undefined ? (cabecalho_html?.trim() || null) : null,
+          rodape_html !== undefined ? (rodape_html?.trim() || null) : null,
+          cor_primaria !== undefined ? (cor_primaria?.trim() || null) : null,
+          cor_secundaria !== undefined ? (cor_secundaria?.trim() || null) : null,
+          req.params.id,
         ]
       );
       if (!rows.length) { res.status(404).json({ error: 'Parceiro não encontrado' }); return; }
@@ -5608,7 +5658,9 @@ ${(temTest1 || temTest2) ? `
       console.error('[PATCH /api/parceiros/:id]', err);
       res.status(500).json({ error: err?.detail || 'Erro ao atualizar parceiro' });
     }
-  });
+  };
+  app.patch('/api/parceiros/:id', auth, patchParceiroHandler);
+  app.patch('/api/parceiros-comerciais/:id', auth, patchParceiroHandler);
 
   app.delete('/api/parceiros/:id', auth, async (req: Request, res: Response) => {
     try {
@@ -5727,10 +5779,17 @@ ${(temTest1 || temTest2) ? `
         representante_cargo,
         observacoes,
         ativo,
+        logo_url,
+        cabecalho_html,
+        rodape_html,
+        cor_primaria,
+        cor_secundaria,
+        cidade_assinatura,
+        uf_assinatura,
+        usar_papel_personalizado,
+        mostrar_logo_contrato,
       } = req.body || {};
-
       const tipo = tipo_pessoa === 'pf' ? 'pf' : 'pj';
-
       if (tipo === 'pj' && (!razao_social || !cnpj)) {
         res.status(400).json({ error: 'Para pessoa jurídica, razão social e CNPJ são obrigatórios.' });
         return;
@@ -5739,15 +5798,24 @@ ${(temTest1 || temTest2) ? `
         res.status(400).json({ error: 'Para pessoa física, nome e CPF são obrigatórios.' });
         return;
       }
-
       const { rows } = await pool.query(
         `UPDATE prestadores_servico SET
            tipo_pessoa=$1, razao_social=$2, nome_fantasia=$3, nome=$4,
            cnpj=$5, cpf=$6, email=$7, telefone=$8, endereco=$9,
            cidade=$10, uf=$11, cep=$12, representante_nome=$13,
            representante_cpf=$14, representante_cargo=$15, observacoes=$16,
-           ativo=$17, updated_at=NOW()
-         WHERE id=$18
+           ativo=$17,
+           logo_url=COALESCE($18::text, logo_url),
+           cabecalho_html=COALESCE($19::text, cabecalho_html),
+           rodape_html=COALESCE($20::text, rodape_html),
+           cor_primaria=COALESCE($21::text, cor_primaria),
+           cor_secundaria=COALESCE($22::text, cor_secundaria),
+           cidade_assinatura=COALESCE($23::text, cidade_assinatura),
+           uf_assinatura=COALESCE($24::text, uf_assinatura),
+           usar_papel_personalizado=COALESCE($25::boolean, usar_papel_personalizado),
+           mostrar_logo_contrato=COALESCE($26::boolean, mostrar_logo_contrato),
+           updated_at=NOW()
+         WHERE id=$27
          RETURNING *`,
         [
           tipo,
@@ -5767,15 +5835,22 @@ ${(temTest1 || temTest2) ? `
           representante_cargo?.trim() || null,
           observacoes?.trim() || null,
           ativo !== false,
+          logo_url !== undefined ? (logo_url?.trim() || null) : null,
+          cabecalho_html !== undefined ? (cabecalho_html?.trim() || null) : null,
+          rodape_html !== undefined ? (rodape_html?.trim() || null) : null,
+          cor_primaria !== undefined ? (cor_primaria?.trim() || null) : null,
+          cor_secundaria !== undefined ? (cor_secundaria?.trim() || null) : null,
+          cidade_assinatura !== undefined ? (cidade_assinatura?.trim() || null) : null,
+          uf_assinatura !== undefined ? (uf_assinatura?.trim()?.toUpperCase()?.slice(0, 2) || null) : null,
+          usar_papel_personalizado !== undefined ? usar_papel_personalizado : null,
+          mostrar_logo_contrato !== undefined ? mostrar_logo_contrato : null,
           id,
         ]
       );
-
       if (!rows.length) {
         res.status(404).json({ error: 'Prestador/contratada não encontrado.' });
         return;
       }
-
       res.json(normalizarPrestadorServico(rows[0]));
     } catch (err: any) {
       console.error('[PATCH /api/prestadores-servico/:id]', err);
@@ -6428,6 +6503,73 @@ ${(temTest1 || temTest2) ? `
     } catch (err) {
       console.error('[GET /api/contratos/:id/download]', err);
       res.status(500).json({ error: 'Erro ao fazer download do contrato' });
+    }
+  });
+
+  // ─── VISUALIZAR CONTRATO (inline, abre no browser) ────────────────────────
+  app.get('/api/contratos/:id/visualizar', auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        'SELECT * FROM contratos_gerados WHERE id = $1',
+        [req.params.id]
+      );
+      if (!rows.length) {
+        res.status(404).json({ error: 'Contrato não encontrado' });
+        return;
+      }
+      const contrato = rows[0];
+
+      // Tenta localizar o arquivo PDF em múltiplos caminhos possíveis
+      const candidatos: string[] = [];
+      if (contrato.pdf_path) {
+        candidatos.push(path.resolve(contrato.pdf_path));
+        candidatos.push(path.join('/app/uploads/contratos', path.basename(contrato.pdf_path)));
+        candidatos.push(path.join('/app/uploads', path.basename(contrato.pdf_path)));
+        candidatos.push(path.join('/var/data/destrava', path.basename(contrato.pdf_path)));
+        if (process.env.DATA_DIR) {
+          candidatos.push(path.join(process.env.DATA_DIR, path.basename(contrato.pdf_path)));
+        }
+      }
+      candidatos.push(path.join(path.resolve('uploads', 'contratos'), `contrato-${req.params.id}.pdf`));
+
+      let filePath: string | null = null;
+      for (const c of candidatos) {
+        if (fs.existsSync(c)) { filePath = c; break; }
+      }
+
+      // Se não encontrou, tenta regenerar pelo payload_snapshot
+      if (!filePath) {
+        try {
+          const contratoDetalhado = await buscarContratoDetalhado(req.params.id);
+          if (contratoDetalhado && contratoDetalhado.payload_snapshot) {
+            const { pdfPath } = await renderizarPdfContratoExistente(contratoDetalhado);
+            await pool.query(
+              'UPDATE contratos_gerados SET pdf_path=$1, pdf_regenerado_em=NOW() WHERE id=$2',
+              [pdfPath, req.params.id]
+            );
+            filePath = pdfPath;
+          }
+        } catch (regenErr) {
+          console.warn('[GET /api/contratos/:id/visualizar] Falha ao regenerar:', regenErr);
+        }
+      }
+
+      if (!filePath || !fs.existsSync(filePath)) {
+        res.status(404).json({
+          error: 'PDF não encontrado no servidor. Use "Regenerar PDF" para recriá-lo.',
+          contrato_id: req.params.id,
+          pdf_path_registrado: contrato.pdf_path || null,
+        });
+        return;
+      }
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="contrato-${req.params.id}.pdf"`);
+      res.setHeader('Cache-Control', 'no-cache');
+      fs.createReadStream(filePath).pipe(res);
+    } catch (err) {
+      console.error('[GET /api/contratos/:id/visualizar]', err);
+      res.status(500).json({ error: 'Erro ao visualizar contrato' });
     }
   });
 

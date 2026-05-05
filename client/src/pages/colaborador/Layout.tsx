@@ -53,7 +53,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   // Faturamento: todos os colaboradores
   { href: "/colaborador/previsao-faturamento", label: "Faturamento", icon: TrendingUp },
   // Gerador de Contratos: todos os colaboradores
-  { href: "/colaborador/contratos",   label: "Contratos PDF",    icon: FileText },
+  { href: "/colaborador/contratos",   label: "Contratos",    icon: FileText },
   // Cadastro de Contadores: somente Administrador e Diretor
   { href: "/colaborador/contadores",  label: "Contadores",       icon: BookUser, allowedCargos: ['administrador', 'diretor'] },
   { href: "/colaborador/clientes-pf",  label: "Clientes PF",      icon: UserCheck },

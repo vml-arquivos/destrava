@@ -68,24 +68,19 @@ function podeExcluir(cargo: string | undefined | null): boolean {
 export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo }: Props) {
   const podeExcluirContrato = podeExcluir(userCargo);
 
-  const abrirPdf = (id: string, download = false) => {
+  const abrirPdf = (id: string) => {
     const token = getToken();
-    const url = `/api/contratos/${id}/download`;
+    const url = `/api/contratos/${id}/visualizar`;
     fetch(url, { headers: { Authorization: `Bearer ${token || ''}` } })
-      .then(res => res.blob())
+      .then(res => {
+        if (!res.ok) return res.json().then((j: any) => { throw new Error(j?.error || 'PDF não encontrado'); });
+        return res.blob();
+      })
       .then(blob => {
         const blobUrl = URL.createObjectURL(blob);
-        if (!download) {
-          window.open(blobUrl, '_blank', 'noopener,noreferrer');
-          return;
-        }
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = `contrato-${id}.pdf`;
-        a.click();
-        URL.revokeObjectURL(blobUrl);
+        window.open(blobUrl, '_blank', 'noopener,noreferrer');
       })
-      .catch(() => toast.error('Erro ao abrir contrato'));
+      .catch((err: any) => toast.error(err?.message || 'Erro ao visualizar contrato'));
   };
 
   const handleDownload = (id: string) => {
@@ -206,7 +201,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo 
                 </td>
                 <td className="py-2 px-3 font-medium text-gray-900">{formatBRL(valor)}</td>
                 <td className="py-2 px-3 text-gray-700">
-                  {new Date(c.data_assinatura + 'T12:00:00').toLocaleDateString('pt-BR')}
+                  {c.data_assinatura ? new Date(c.data_assinatura + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
                 </td>
                 <td className="py-2 px-3 text-gray-600">{c.responsavel_contrato_nome || c.criado_por_nome || '—'}</td>
                 <td className="py-2 px-3">

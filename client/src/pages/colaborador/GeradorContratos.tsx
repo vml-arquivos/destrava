@@ -13,6 +13,11 @@ interface Parceiro {
   cpf: string;
   email?: string;
   telefone?: string;
+  logo_url?: string;
+  cabecalho_html?: string;
+  rodape_html?: string;
+  cor_primaria?: string;
+  cor_secundaria?: string;
 }
 
 interface PrestadorServico {
@@ -72,6 +77,9 @@ export default function GeradorContratos() {
 
   // Novo parceiro
   const [novoParceiro, setNovoParceiro]   = useState({ nome: '', cpf: '', email: '', telefone: '' });
+  const [editandoParceiro, setEditandoParceiro] = useState<string | null>(null);
+  const [editParceiro, setEditParceiro] = useState<Partial<Parceiro>>({});
+  const [salvandoEditParceiro, setSalvandoEditParceiro] = useState(false);
   const [salvandoParceiro, setSalvandoParceiro] = useState(false);
 
   // Nova contratada/prestadora
@@ -168,6 +176,20 @@ export default function GeradorContratos() {
 
   const handleDelete = (id: string) => {
     setContratos(prev => prev.filter(c => c.id !== id));
+  };
+
+  const handleEditarParceiro = async (id: string) => {
+    setSalvandoEditParceiro(true);
+    try {
+      const body = { tipo_pessoa: 'pf', nome: editParceiro.nome, cpf: editParceiro.cpf, email: editParceiro.email, telefone: editParceiro.telefone, logo_url: editParceiro.logo_url, cabecalho_html: editParceiro.cabecalho_html, rodape_html: editParceiro.rodape_html, cor_primaria: editParceiro.cor_primaria, cor_secundaria: editParceiro.cor_secundaria };
+      const updated = await apiFetch(`/api/parceiros-comerciais/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      setParceiros(prev => prev.map(p => p.id === id ? { ...p, ...updated } : p));
+      setEditandoParceiro(null);
+      toast.success('Parceiro atualizado!');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao salvar parceiro');
+    }
+    setSalvandoEditParceiro(false);
   };
 
   const handleSalvarParceiro = async () => {
@@ -578,27 +600,70 @@ export default function GeradorContratos() {
               {parceiros.length === 0 ? (
                 <p className="text-sm text-gray-400">Nenhum parceiro cadastrado.</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm border-collapse">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        <th className="text-left py-2 px-3 font-medium text-gray-600">Nome</th>
-                        <th className="text-left py-2 px-3 font-medium text-gray-600">CPF</th>
-                        <th className="text-left py-2 px-3 font-medium text-gray-600">E-mail</th>
-                        <th className="text-left py-2 px-3 font-medium text-gray-600">Telefone</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {parceiros.map(p => (
-                        <tr key={p.id} className="border-b border-gray-100">
-                          <td className="py-2 px-3 font-medium text-gray-900">{p.nome}</td>
-                          <td className="py-2 px-3 text-gray-600">{p.cpf}</td>
-                          <td className="py-2 px-3 text-gray-600">{p.email || '—'}</td>
-                          <td className="py-2 px-3 text-gray-600">{p.telefone || '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="space-y-2">
+                  {parceiros.map(p => (
+                    <div key={p.id} className="border border-gray-200 rounded-lg">
+                      {editandoParceiro === p.id ? (
+                        <div className="p-4 space-y-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Nome *</label>
+                              <input type="text" value={editParceiro.nome || ''} onChange={e => setEditParceiro(v => ({ ...v, nome: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">CPF *</label>
+                              <input type="text" value={editParceiro.cpf || ''} onChange={e => setEditParceiro(v => ({ ...v, cpf: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">E-mail</label>
+                              <input type="email" value={editParceiro.email || ''} onChange={e => setEditParceiro(v => ({ ...v, email: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Telefone</label>
+                              <input type="text" value={editParceiro.telefone || ''} onChange={e => setEditParceiro(v => ({ ...v, telefone: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">URL do Logo</label>
+                              <input type="url" value={editParceiro.logo_url || ''} onChange={e => setEditParceiro(v => ({ ...v, logo_url: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="https://..." />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Cor Primária</label>
+                              <input type="text" value={editParceiro.cor_primaria || ''} onChange={e => setEditParceiro(v => ({ ...v, cor_primaria: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="#1B3A8C" />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <label className="block text-xs font-medium text-gray-600 mb-1">HTML do Cabeçalho (contrato)</label>
+                              <textarea value={editParceiro.cabecalho_html || ''} onChange={e => setEditParceiro(v => ({ ...v, cabecalho_html: e.target.value }))} rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" placeholder="<div>...</div>" />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <label className="block text-xs font-medium text-gray-600 mb-1">HTML do Rodapé (contrato)</label>
+                              <textarea value={editParceiro.rodape_html || ''} onChange={e => setEditParceiro(v => ({ ...v, rodape_html: e.target.value }))} rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" placeholder="<div>...</div>" />
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => handleEditarParceiro(p.id)} disabled={salvandoEditParceiro} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                              {salvandoEditParceiro ? 'Salvando...' : 'Salvar'}
+                            </button>
+                            <button onClick={() => setEditandoParceiro(null)} className="px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200">
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between px-4 py-3">
+                          <div>
+                            <span className="font-medium text-gray-900 text-sm">{p.nome}</span>
+                            <span className="text-gray-500 text-xs ml-3">{p.cpf}</span>
+                            {p.email && <span className="text-gray-500 text-xs ml-3">{p.email}</span>}
+                            {p.telefone && <span className="text-gray-500 text-xs ml-3">{p.telefone}</span>}
+                            {p.logo_url && <span className="text-blue-500 text-xs ml-3">Logo configurado</span>}
+                          </div>
+                          <button onClick={() => { setEditandoParceiro(p.id); setEditParceiro({ nome: p.nome, cpf: p.cpf, email: p.email, telefone: p.telefone, logo_url: p.logo_url, cabecalho_html: p.cabecalho_html, rodape_html: p.rodape_html, cor_primaria: p.cor_primaria, cor_secundaria: p.cor_secundaria }); }} className="p-1.5 text-gray-500 hover:text-blue-600 rounded">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
