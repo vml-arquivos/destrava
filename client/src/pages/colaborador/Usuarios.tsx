@@ -306,6 +306,24 @@ export default function UsuariosPage() {
     carregarColaboradores();
   }
 
+  async function resetarSenha(col: Colaborador) {
+    if (!confirm(`Gerar uma senha temporária para ${col.nome}?`)) return;
+    try {
+      const resp = await apiFetch(`/api/colaboradores/${col.id}/resetar-senha`, { method: "POST" });
+      const temporaria = resp?.senha_temporaria || "";
+      if (temporaria) {
+        await navigator.clipboard.writeText(temporaria);
+        setMensagemEdit({ tipo: "sucesso", texto: `Senha temporária gerada e copiada: ${temporaria}` });
+      } else {
+        setMensagemEdit({ tipo: "sucesso", texto: "Senha temporária gerada com sucesso." });
+      }
+      carregarColaboradores();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao resetar senha.";
+      setMensagemEdit({ tipo: "erro", texto: msg });
+    }
+  }
+
   function copiarSenha() {
     navigator.clipboard.writeText(senha);
     setSenhaCopiada(true);
@@ -637,6 +655,11 @@ export default function UsuariosPage() {
                               {podeGerenciar && (
                                 <Button size="sm" variant="outline" onClick={() => abrirEdicao(col)}>
                                   <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
+                                </Button>
+                              )}
+                              {podeGerenciar && (
+                                <Button size="sm" variant="ghost" onClick={() => resetarSenha(col)}>
+                                  <Lock className="h-3.5 w-3.5 mr-1" /> Resetar senha
                                 </Button>
                               )}
                               {podeGerenciar && (
