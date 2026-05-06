@@ -773,10 +773,10 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
         {resultado ? (
           <Card className="border-0 shadow-lg sticky top-6">
             <CardHeader className="pb-3 border-b">
-              <CardTitle className="text-base flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
-                Resultado — {form.nome}
-                <Badge className="ml-auto bg-blue-600 text-white text-xs">Cenário A · Com Imposto</Badge>
+              <CardTitle className="text-base flex items-center gap-2 min-w-0">
+                <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-green-600" />
+                <span className="truncate min-w-0 flex-1">Resultado — {form.nome}</span>
+                <Badge className="ml-auto flex-shrink-0 bg-blue-600 text-white text-xs">Cenário A · Com Imposto</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-4">
@@ -942,10 +942,10 @@ function CenarioSemImposto({ initialData }: { initialData?: { nome: string; empr
         {resultado ? (
           <Card className="border-0 shadow-lg sticky top-6">
             <CardHeader className="pb-3 border-b">
-              <CardTitle className="text-base flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
-                Resultado — {form.nome}
-                <Badge variant="outline" className="ml-auto text-xs">Cenário B · Sem Imposto</Badge>
+              <CardTitle className="text-base flex items-center gap-2 min-w-0">
+                <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-green-600" />
+                <span className="truncate min-w-0 flex-1">Resultado — {form.nome}</span>
+                <Badge variant="outline" className="ml-auto flex-shrink-0 text-xs">Cenário B · Sem Imposto</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-4">

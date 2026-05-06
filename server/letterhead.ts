@@ -47,12 +47,12 @@ export function getDocumentStyles(): string {
     .highlight-box .label { font-size: 8pt; color: #1B3A8C; text-transform: uppercase; font-weight: bold; margin-bottom: 3px; }
     .highlight-box .value { font-size: 16pt; font-weight: bold; color: #1B3A8C; }
     .highlight-box .unit { font-size: 9pt; color: #555; }
-    .sig-block { margin-top: 22px; }
+    .sig-block { margin-top: 36px; page-break-inside: avoid; break-inside: avoid; }
     .sig-line { border-top: 1px solid #000; width: 78%; margin: 32px 0 5px 0; }
     .sig-name { font-size: 10pt; font-weight: bold; }
     .sig-sub { font-size: 9.5pt; }
     .nota { font-style: italic; font-size: 9pt; text-align: justify; margin: 12px 0; }
-    .city-date { text-align: right; margin: 18px 0 8px 0; }
+    .city-date { text-align: right; margin: 22px 0 14px 0; }
     .page-break { page-break-after: always; }
   `;
 }

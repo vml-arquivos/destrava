@@ -3772,8 +3772,8 @@ th { background: #1B3A8C; color: #fff; padding: 6px 8px; text-align: center; fon
 td { border: 1px solid #ccc; padding: 5px 8px; text-align: center; }
 tr:nth-child(even) td { background: #f4f7ff; }
 .total-row td { font-weight: bold; background: #dce3f5; border: 1px solid #999; }
-.city-date { text-align: right; font-style: italic; margin: 10px 0 16px; font-size: 9.5pt; }
-.signature-section { margin-top: 18px; page-break-inside: avoid; break-inside: avoid; }
+.city-date { text-align: right; font-style: italic; margin: 14px 0 28px; font-size: 9.5pt; }
+.signature-section { margin-top: 32px; page-break-inside: avoid; break-inside: avoid; }
 .signature-grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 32px; justify-content: center; align-items: start; }
 .signature-card { text-align: center; font-size: 9.5pt; line-height: 1.25; min-width: 220px; max-width: 280px; word-break: normal; overflow-wrap: normal; white-space: normal; }
 .signature-line { border-top: 1px solid #111; margin: 0 auto 6px auto; width: 100%; }
@@ -3922,8 +3922,8 @@ th { background: #1B3A8C; color: #fff; padding: 6px 8px; text-align: center; fon
 td { border: 1px solid #ccc; padding: 5px 8px; text-align: center; }
 tr:nth-child(even) td { background: #f4f7ff; }
 .total-row td { font-weight: bold; background: #dce3f5; border: 1px solid #999; }
-.city-date { text-align: right; font-style: italic; margin: 10px 0 16px; font-size: 9.5pt; }
-.signature-section { margin-top: 18px; page-break-inside: avoid; break-inside: avoid; }
+.city-date { text-align: right; font-style: italic; margin: 14px 0 28px; font-size: 9.5pt; }
+.signature-section { margin-top: 32px; page-break-inside: avoid; break-inside: avoid; }
 .signature-grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 32px; justify-content: center; align-items: start; }
 .signature-card { text-align: center; font-size: 9.5pt; line-height: 1.25; min-width: 220px; max-width: 280px; word-break: normal; overflow-wrap: normal; white-space: normal; }
 .signature-line { border-top: 1px solid #111; margin: 0 auto 6px auto; width: 100%; }
@@ -4045,7 +4045,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
   <strong>Importante:</strong> Esta proposta é uma simulação com fins informativos. Os valores apresentados são estimativas e podem variar conforme análise de crédito, perfil do solicitante e condições da instituição financeira parceira. A aprovação do crédito está sujeita à análise documental completa pela equipe Destrava Crédito.
 </p>
 
-<p class="city-date" style="margin-top:24px;">Brasília – DF, ${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}.</p>
+<p class="city-date" style="margin-top:36px;">Brasília – DF, ${new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}.</p>
 
 <div class="signature-block">
   <p>Consultor Responsável:</p>
@@ -4375,7 +4375,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
 
     .city-date {
       text-align: right;
-      margin: 16px 0 18px;
+      margin: 20px 0 28px;
       font-weight: 500;
     }
     .sig-wrapper {
@@ -4386,7 +4386,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
     .signature-grid {
       width: 100%;
       max-width: 148mm;
-      margin: 14px auto 0;
+      margin: 24px auto 0;
       display: flex;
       justify-content: center;
       align-items: flex-start;
