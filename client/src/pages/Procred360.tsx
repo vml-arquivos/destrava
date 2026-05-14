@@ -19,13 +19,35 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+/**
+ * FAQ atualizado para o ProCred 360 (Desenrola Empresas) com as novas regras de 2026.
+ * Inclui carência maior, prazo estendido e limite de crédito ampliado.
+ */
 const faqs = [
-  { q: 'O que é o ProCred 360?', a: 'O ProCred 360 é uma linha de crédito do Programa Acredita do Governo Federal, que oferece juros até 50% menores que o mercado para MEI e microempresas com faturamento anual de até R$ 360 mil.' },
-  { q: 'Qual o valor máximo disponível?', a: 'Até R$ 150.000 por CNPJ, conforme análise de crédito e faturamento da empresa.' },
-  { q: 'Quais são as taxas de juros?', a: 'As taxas são subsidiadas pelo governo e chegam a ser até 50% menores que as taxas de mercado convencionais para capital de giro.' },
-  { q: 'Qual o prazo para pagamento?', a: 'Até 48 meses para pagamento, com possibilidade de carência de até 6 meses dependendo da instituição financeira.' },
-  { q: 'Preciso ter conta no banco para contratar?', a: 'Não necessariamente. O ProCred 360 está disponível em diversas instituições financeiras parceiras do programa.' },
-  { q: 'Como a Destrava me ajuda no ProCred 360?', a: 'Fazemos a análise completa do seu perfil, verificamos a elegibilidade, organizamos a documentação e conduzimos o processo junto à instituição financeira parceira.' },
+  {
+    q: 'O que é o ProCred 360?',
+    a: 'O ProCred 360 é uma linha de crédito do Programa Acredita (Desenrola Empresas) do Governo Federal para MEI e microempresas com faturamento anual de até R$ 360 mil. O programa oferece juros subsidiados e agora possui condições mais flexíveis.'
+  },
+  {
+    q: 'Qual o valor máximo disponível?',
+    a: 'Até 50% do faturamento anual da empresa, limitado a R$ 180.000 por CNPJ. Para empresas lideradas por mulheres, o limite sobe para 60% do faturamento, mantido o teto de R$ 180.000.'
+  },
+  {
+    q: 'Quais são as taxas de juros?',
+    a: 'As taxas são subsidiadas pelo governo e podem ser até 50% menores que as taxas de mercado convencional, variando conforme a instituição financeira.'
+  },
+  {
+    q: 'Qual o prazo para pagamento?',
+    a: 'Até 96 meses para pagamento, com carência de até 24 meses para começar a amortizar.'
+  },
+  {
+    q: 'Preciso ter conta no banco para contratar?',
+    a: 'Não necessariamente. O ProCred 360 está disponível em diversas instituições financeiras parceiras do programa, e nossa equipe indica a melhor opção para o seu perfil.'
+  },
+  {
+    q: 'Como a Destrava me ajuda no ProCred 360?',
+    a: 'Fazemos a análise completa do seu perfil, verificamos a elegibilidade, organizamos a documentação e conduzimos o processo junto à instituição financeira parceira até a aprovação.'
+  },
 ];
 
 export default function Procred360() {
@@ -34,10 +56,13 @@ export default function Procred360() {
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <SEO
-        title="ProCred 360 - Crédito com Juros Reduzidos para MEI e Microempresas | Destrava"
-        description="ProCred 360: juros até 50% menores para MEI e microempresas com faturamento até R$ 360 mil. Programa Acredita do Governo Federal. Assessoria completa da Destrava."
-        keywords="procred 360, crédito com juros reduzidos para mei e microempresas"
-        structuredData={serviceStructuredData("ProCred 360", "ProCred 360: juros até 50% menores para MEI e microempresas com faturamento até R$ 360 mil. Programa Acredita do Governo Federal. Assessoria completa da Destrava.")}
+        title="ProCred 360 - Crédito para MEI e Microempresas com Carência de 24 Meses | Destrava"
+        description="ProCred 360 (Desenrola Empresas): até 50% do faturamento da empresa, limite de R$ 180 mil, carência de 24 meses e prazo de pagamento de 96 meses. Assessoria completa da Destrava."
+        keywords="procred 360, desenrola empresas, crédito MEI, crédito microempresa, carência 24 meses, prazo 96 meses"
+        structuredData={serviceStructuredData(
+          "ProCred 360",
+          "ProCred 360 (Desenrola Empresas): crédito de até 50% do faturamento anual (máximo R$ 180 mil), carência de 24 meses e prazo total de 96 meses para MEI e microempresas com faturamento até R$ 360 mil. Assessoria completa da Destrava."
+        )}
       />
       <Header />
 
@@ -55,10 +80,10 @@ export default function Procred360() {
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4">ProCred 360</h1>
             <p className="text-xl text-white/90 mb-2 font-medium">
-              Crédito com juros até 50% menores para MEI e Microempresas
+              Crédito com condições ampliadas para MEI e Microempresas
             </p>
             <p className="text-lg text-white/80 leading-relaxed mb-8">
-              Linha de crédito do Programa Acredita do Governo Federal para MEI e microempresas com faturamento anual de até R$ 360 mil. Condições diferenciadas para quem mais precisa.
+              Linha de crédito do Programa Acredita (Desenrola Empresas) para MEI e microempresas com faturamento anual de até R$ 360 mil. Até 50% do faturamento (limite R$ 180 mil), carência de 24 meses e prazo de 96 meses para pagar.
             </p>
             <div className="flex flex-wrap gap-3">
               <Link href="/simular">
@@ -83,20 +108,20 @@ export default function Procred360() {
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <DollarSign className="h-12 w-12 text-primary mx-auto mb-4" />
               <h3 className="font-bold text-lg mb-2">Valor Máximo</h3>
-              <p className="text-2xl font-bold text-primary mb-2">Até R$ 150k</p>
-              <p className="text-sm text-muted-foreground">Conforme análise de crédito</p>
+              <p className="text-2xl font-bold text-primary mb-2">Até R$ 180k</p>
+              <p className="text-sm text-muted-foreground">50% do faturamento anual (60% para empresas lideradas por mulheres)</p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <Percent className="h-12 w-12 text-primary mx-auto mb-4" />
               <h3 className="font-bold text-lg mb-2">Taxa de Juros</h3>
-              <p className="text-2xl font-bold text-primary mb-2">Até 50% menor</p>
-              <p className="text-sm text-muted-foreground">Comparado ao mercado convencional</p>
+              <p className="text-2xl font-bold text-primary mb-2">Juros subsidiados*</p>
+              <p className="text-sm text-muted-foreground">*Até 50% menores que o mercado convencional</p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <Calendar className="h-12 w-12 text-primary mx-auto mb-4" />
               <h3 className="font-bold text-lg mb-2">Prazo</h3>
-              <p className="text-2xl font-bold text-primary mb-2">Até 48 meses</p>
-              <p className="text-sm text-muted-foreground">Com possibilidade de carência</p>
+              <p className="text-2xl font-bold text-primary mb-2">Até 96 meses</p>
+              <p className="text-sm text-muted-foreground">Com carência de até 24 meses</p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <Building2 className="h-12 w-12 text-primary mx-auto mb-4" />
