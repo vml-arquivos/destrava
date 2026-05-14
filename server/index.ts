@@ -6994,20 +6994,51 @@ ${(temTest1 || temTest2) ? `
     return `https://wa.me/${numero}?text=${encodeURIComponent(mensagem || "")}`;
   };
 
-  app.get("/api/acompanhamentos-bancarios", auth, async (req: Request, res: Response) => {
+
+  const normalizePermValue = (value: unknown): string => String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/-/g, "_");
+
+  const colaboradorPodeAcessarAcompanhamento = (user: any): boolean => {
+    if (!user) return false;
+    if (user.acesso_acompanhamento_bancario === true) return true;
+
+    const permitidos = new Set([
+      "admin",
+      "administrador",
+      "super_admin",
+      "superadmin",
+      "gestor_credito",
+    ]);
+
+    const cargo = normalizePermValue(user.cargo);
+    const perfil = normalizePermValue(user.perfil);
+    const role = normalizePermValue(user.role); // compatibilidade legada
+
+    return permitidos.has(cargo) || permitidos.has(perfil) || permitidos.has(role);
+  };
+
+  const requireAcessoAcompanhamento = (req: Request, res: Response, next: any) => {
+    const colaborador = (req as Request & { colaborador?: any }).colaborador;
+    if (!colaboradorPodeAcessarAcompanhamento(colaborador)) {
+      res.status(403).json({ error: "Acesso restrito a Gestor de Crédito ou superior." });
+      return;
+    }
+    next();
+  };
+
+  app.get("/api/acompanhamentos-bancarios", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const isGestor = isGestorCargo(colaborador?.cargo || '') || Boolean(colaborador?.pode_ver_todos_leads || colaborador?.permissoes?.podeVerTudo);
       const status = String(req.query.status || "todos");
       const busca = String(req.query.busca || "").trim();
       const somentePendentes = String(req.query.pendentes || "false") === "true";
       const params: any[] = [];
       const conditions: string[] = [];
-
-      if (!isGestor && colaborador?.id) {
-        params.push(colaborador.id);
-        conditions.push(`a.responsavel_id = $${params.length}`);
-      }
 
       if (status && status !== "todos") {
         params.push(status);
@@ -7064,6 +7095,7 @@ ${(temTest1 || temTest2) ? `
         return {
           ...row,
           atualizacao_pendente: Boolean(row.proxima_atualizacao && row.proxima_atualizacao <= hoje && ['em_acompanhamento','atualizacao_pendente','prorrogado'].includes(row.status)),
+          status_pendente: Boolean(row.proxima_atualizacao && row.proxima_atualizacao <= hoje && ['em_acompanhamento','atualizacao_pendente','prorrogado'].includes(row.status)),
           whatsapp_lembrete_url: montarWhatsapp(telefone, msg),
         };
       });
@@ -7075,7 +7107,7 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
-  app.get("/api/acompanhamentos-bancarios/alertas", auth, async (req: Request, res: Response) => {
+  app.get("/api/acompanhamentos-bancarios/alertas", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
         `SELECT a.id, a.nome_empresa, a.cnpj, a.status, a.proxima_atualizacao, a.responsavel_id,
@@ -7097,7 +7129,7 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
-  app.get("/api/acompanhamentos-bancarios/:id", auth, async (req: Request, res: Response) => {
+  app.get("/api/acompanhamentos-bancarios/:id", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
         `SELECT a.*, c.nome AS responsavel_nome,
@@ -7128,7 +7160,20 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
-  app.post("/api/acompanhamentos-bancarios", auth, async (req: Request, res: Response) => {
+  app.get("/api/acompanhamentos-bancarios/:id/atualizacoes", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT * FROM acompanhamento_bancario_atualizacoes WHERE acompanhamento_id = $1 ORDER BY numero_semana DESC, created_at DESC`,
+        [req.params.id]
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error("[GET /api/acompanhamentos-bancarios/:id/atualizacoes]", err);
+      res.status(500).json({ error: "Erro ao listar atualizações" });
+    }
+  });
+
+  app.post("/api/acompanhamentos-bancarios", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const {
@@ -7201,7 +7246,7 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
-  app.patch("/api/acompanhamentos-bancarios/:id", auth, async (req: Request, res: Response) => {
+  app.patch("/api/acompanhamentos-bancarios/:id", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
       const updates = { ...req.body, updated_at: new Date().toISOString() };
       delete updates.id;
@@ -7222,7 +7267,7 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
-  app.post("/api/acompanhamentos-bancarios/:id/atualizacoes", auth, async (req: Request, res: Response) => {
+  app.post("/api/acompanhamentos-bancarios/:id/atualizacoes", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const a = await pool.query("SELECT * FROM acompanhamentos_bancarios WHERE id = $1", [req.params.id]);
@@ -7292,7 +7337,7 @@ ${(temTest1 || temTest2) ? `
           req.body.data_referencia_inicio || null,
           req.body.data_referencia_fim || null,
           req.body.data_atualizacao || null,
-          normalizarNumero(req.body.entrada_maquina) || 0,
+          normalizarNumero(req.body.entrada_maquininha ?? req.body.entrada_maquina) || 0,
           normalizarNumero(req.body.entrada_pix) || 0,
           normalizarNumero(req.body.entrada_boleto) || 0,
           normalizarNumero(req.body.entrada_ted) || 0,
@@ -7304,16 +7349,23 @@ ${(temTest1 || temTest2) ? `
           Number(req.body.quantidade_transacoes || 0),
           req.body.rating_bacen || null,
           req.body.rating_interno || null,
-          req.body.restricao_scr || null,
-          req.body.restricao_cenprot || null,
-          req.body.restricao_serasa || null,
-          req.body.cnd_regular || null,
-          req.body.pld_aml || null,
-          req.body.operacao_suspeita_coaf || null,
+          ((req.body.scr_status ?? req.body.restricao_scr) || null),
+          ((req.body.cenprot_status ?? req.body.restricao_cenprot) || null),
+          ((req.body.serasa_status ?? req.body.restricao_serasa) || null),
+          ((req.body.cnd_status ?? req.body.cnd_regular) || null),
+          ((req.body.pld_aml_status ?? req.body.pld_aml) || null),
+          ((req.body.coaf_status ?? req.body.operacao_suspeita_coaf) || null),
           Boolean(req.body.restricao_nova),
           Boolean(req.body.devolucao_ou_estorno),
           Boolean(req.body.ocorrencia_negativa),
-          req.body.status || "registrada",
+          (() => {
+            const entradas = (normalizarNumero(req.body.entrada_maquininha ?? req.body.entrada_maquina) || 0) + (normalizarNumero(req.body.entrada_pix) || 0) + (normalizarNumero(req.body.entrada_boleto) || 0) + (normalizarNumero(req.body.entrada_ted) || 0) + (normalizarNumero(req.body.entrada_dinheiro) || 0) + (normalizarNumero(req.body.outras_entradas) || 0);
+            const saldo = entradas - (normalizarNumero(req.body.total_saidas) || 0);
+            if (Boolean(req.body.restricao_nova) || Boolean(req.body.ocorrencia_negativa) || Boolean(req.body.devolucao_ou_estorno)) return "atencao";
+            if (saldo > 0) return "positiva";
+            if (saldo < 0) return "negativa";
+            return "neutra";
+          })(),
           req.body.analise_semana || null,
           req.body.orientacao_cliente || null,
           req.body.proxima_acao || null,
@@ -7325,6 +7377,7 @@ ${(temTest1 || temTest2) ? `
       await pool.query(
         `UPDATE acompanhamentos_bancarios
          SET ultima_atualizacao_em = now(),
+             ultimo_update_em = now(),
              proxima_atualizacao = $2,
              status = CASE WHEN status = 'atualizacao_pendente' THEN 'em_acompanhamento' ELSE status END,
              rating_bacen_atual = COALESCE($3, rating_bacen_atual),
@@ -7346,7 +7399,7 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
-  app.post("/api/acompanhamentos-bancarios/:id/prorrogar", auth, async (req: Request, res: Response) => {
+  app.post("/api/acompanhamentos-bancarios/:id/prorrogar", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
       const atual = await pool.query("SELECT * FROM acompanhamentos_bancarios WHERE id = $1", [req.params.id]);
       if (!atual.rows.length) { res.status(404).json({ error: "Acompanhamento não encontrado" }); return; }
@@ -7371,7 +7424,7 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
-  app.post("/api/acompanhamentos-bancarios/:id/encerrar", auth, async (req: Request, res: Response) => {
+  app.post("/api/acompanhamentos-bancarios/:id/encerrar", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
         `UPDATE acompanhamentos_bancarios
