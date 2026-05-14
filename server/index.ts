@@ -3640,51 +3640,33 @@ ${temParceiro ? `<p class="clause"><strong>5.1</strong> - O PARCEIRO COMERCIAL, 
 
 <p class="clause">Por estarem assim justos e contratados, firmam o presente instrumento, em duas vias de igual teor.</p>
 
-<section class="signature-section keep-together">
-  <p class="city-date"><strong>${cidadeAss}, ${dataAss}.</strong></p>
+<p class="city-date"><strong>${cidadeAss}, ${dataAss}.</strong></p>
 
-  <div class="signature-grid">
-    <div class="signature-party">
-      <div class="sig-line"></div>
-      <p class="sig-name">${contratante.razao_social}</p>
-      <p class="sig-sub">CONTRATANTE</p>
-    </div>
-
-    <div class="signature-party">
-      <div class="sig-line"></div>
-      <p class="sig-name">DESTRAVA CRÉDITO LTDA</p>
-      <p class="sig-sub">CNPJ n° ${contratada.cnpj}</p>
-      <p class="sig-sub">CONTRATADA</p>
-    </div>
-  </div>
+<div class="sig-block">
+  <p><strong>CONTRATANTE:</strong></p>
+  <div class="sig-line"></div>
+  <p class="sig-name">${contratante.razao_social}</p>
 
   ${temParceiro ? `
-  <div class="signature-grid" style="grid-template-columns: 1fr; max-width: 85mm; margin-left: auto; margin-right: auto;">
-    <div class="signature-party">
-      <div class="sig-line"></div>
-      <p class="sig-name">${parceiro.nome}</p>
-      <p class="sig-sub">CPF n° ${parceiro.cpf}</p>
-      <p class="sig-sub">PARCEIRO COMERCIAL</p>
-    </div>
-  </div>
+  <p style="margin-top:28px;"><strong>PARCEIRO COMERCIAL:</strong></p>
+  <div class="sig-line"></div>
+  <p class="sig-name">${parceiro.nome} - CPF n° ${parceiro.cpf}</p>
   ` : ''}
 
-  <div class="witness-grid">
-    <div class="witness-box">
-      <div class="sig-line"></div>
-      <p class="sig-sub"><strong>TESTEMUNHA 1</strong></p>
-      <p class="sig-sub">Nome:</p>
-      <p class="sig-sub">CPF:</p>
-    </div>
+  <p style="margin-top:28px;"><strong>CONTRATADA:</strong></p>
+  <div class="sig-line"></div>
+  <p class="sig-name">DESTRAVA CRÉDITO LTDA - CNPJ n° ${contratada.cnpj}</p>
+</div>
 
-    <div class="witness-box">
-      <div class="sig-line"></div>
-      <p class="sig-sub"><strong>TESTEMUNHA 2</strong></p>
-      <p class="sig-sub">Nome:</p>
-      <p class="sig-sub">CPF:</p>
-    </div>
-  </div>
-</section>
+<div class="page-break"></div>
+
+<div class="sig-block">
+  <p style="margin-bottom:6px;"><strong>TESTEMUNHA 1:</strong></p>
+  <div class="sig-line"></div>
+
+  <p style="margin-top:40px;margin-bottom:6px;"><strong>TESTEMUNHA 2:</strong></p>
+  <div class="sig-line"></div>
+</div>
 `;
 
     return `<!DOCTYPE html>
@@ -4227,18 +4209,34 @@ tr:nth-child(even) td { background: #f4f7ff; }
       --table-soft: #f4f7fb;
     }
 
+    * { box-sizing: border-box; }
+
+    html, body {
+      background: #fff;
+      color: var(--text-main);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 9.2pt;
+      line-height: 1.38;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
     .page-header {
-      width: 100%;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 22mm;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
       border-bottom: 1px solid var(--line-soft);
-      padding-bottom: 9px;
-      margin-bottom: 16px;
+      padding-bottom: 7px;
       background: #fff;
-      page-break-inside: avoid;
-      break-inside: avoid;
+      z-index: 2;
     }
 
     .brand-left {
@@ -4266,7 +4264,6 @@ tr:nth-child(even) td { background: #f4f7ff; }
       justify-content: center;
       font-size: 13pt;
       font-weight: 700;
-      flex-shrink: 0;
     }
 
     .brand-info {
@@ -4275,7 +4272,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
 
     .brand-name {
       color: var(--brand-primary);
-      font-size: 10.2pt;
+      font-size: 10.5pt;
       font-weight: 800;
       line-height: 1.2;
       text-transform: uppercase;
@@ -4287,20 +4284,38 @@ tr:nth-child(even) td { background: #f4f7ff; }
 
     .brand-doc {
       color: var(--text-muted);
-      font-size: 8.2pt;
+      font-size: 8.4pt;
       margin-top: 2px;
     }
 
     .brand-custom-header {
       color: var(--text-muted);
-      font-size: 8.2pt;
+      font-size: 8.4pt;
       text-align: right;
       max-width: 62mm;
       line-height: 1.25;
     }
 
+    .page-footer {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      min-height: 14mm;
+      border-top: 1px solid var(--line-soft);
+      padding-top: 5px;
+      color: #64748b;
+      font-size: 7.8pt;
+      line-height: 1.28;
+      background: #fff;
+      z-index: 2;
+      text-align: center;
+    }
+
     .contract-content {
       width: 100%;
+      padding-top: 22mm;
+      padding-bottom: 14mm;
     }
 
     .doc-title {
@@ -4317,16 +4332,38 @@ tr:nth-child(even) td { background: #f4f7ff; }
 
     .section-title {
       color: var(--brand-primary);
-      font-size: 9.4pt;
+      font-size: 9pt;
       font-weight: 800;
       letter-spacing: .01em;
       text-transform: uppercase;
-      margin: 9px 0 4px;
+      margin: 8px 0 3px;
       padding: 3px 6px;
       background: linear-gradient(90deg, rgba(30,58,138,.10), rgba(30,58,138,.02));
       border-left: 3px solid var(--brand-primary);
       break-after: avoid;
       page-break-after: avoid;
+    }
+
+    .clause {
+      margin: 0 0 4px;
+      text-align: justify;
+      orphans: 3;
+      widows: 3;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8.8pt;
+      margin: 6px 0 12px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .data-table td {
+      border: 1px solid var(--line-soft);
+      padding: 7px 8px;
+      vertical-align: top;
     }
 
     .data-table td:first-child {
@@ -4336,35 +4373,91 @@ tr:nth-child(even) td { background: #f4f7ff; }
       width: 38%;
     }
 
-    .contract-footer-final {
-      color: #64748b;
-      font-size: 7.8pt;
-      line-height: 1.3;
+    .city-date {
+      text-align: right;
+      margin: 20px 0 28px;
+      font-weight: 500;
+    }
+    .sig-wrapper {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .signature-grid {
+      width: 100%;
+      max-width: 148mm;
+      margin: 24px auto 0;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 14mm;
+      page-break-inside: avoid;
+      break-inside: avoid;
+      page-break-before: avoid;
+    }
+
+    .signature-party {
+      flex: 0 0 60mm;
+      max-width: 60mm;
       text-align: center;
-      border-top: 1px solid var(--line-soft);
-      margin-top: 28px;
-      padding-top: 8px;
+    }
+
+    .sig-line {
+      width: 60mm;
+      height: 1px;
+      border-top: 1.2px solid #111827;
+      margin: 0 auto 6px;
+    }
+
+    .sig-name {
+      margin: 0 0 3px;
+      font-size: 8.8pt;
+      line-height: 1.2;
+      font-weight: 800;
+      color: #111827;
+      text-transform: none;
+    }
+
+    .sig-sub {
+      margin: 0 0 2px;
+      font-size: 7.8pt;
+      line-height: 1.2;
+      color: #334155;
+    }
+
+    @media print {
+      .section-title,
+      .data-table,
+      .signature-grid,
+      .sig-wrapper {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .city-date + .signature-grid,
+      .sig-wrapper {
+        page-break-before: avoid;
+      }
     }
   </style>
 </head>
 <body>
-  <main class="contract-content">
-    <header class="page-header">
-      <div class="brand-left">
-        ${logoHtml}
-        <div class="brand-info">
-          <div class="brand-name">${escapeHtmlContrato(nome)}</div>
-          ${documento ? `<div class="brand-doc">${escapeHtmlContrato(documento)}</div>` : ''}
-        </div>
+  <header class="page-header">
+    <div class="brand-left">
+      ${logoHtml}
+      <div class="brand-info">
+        <div class="brand-name">${escapeHtmlContrato(nome)}</div>
+        ${documento ? `<div class="brand-doc">${escapeHtmlContrato(documento)}</div>` : ''}
       </div>
-      ${cabecalhoCustom}
-    </header>
+    </div>
+    ${cabecalhoCustom}
+  </header>
 
+  <footer class="page-footer">
+    ${rodapeHtml}
+  </footer>
+
+  <main class="contract-content">
     ${body}
-
-    <footer class="contract-footer-final">
-      ${rodapeHtml}
-    </footer>
   </main>
 </body>
 </html>`;
@@ -4464,24 +4557,22 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
 <h2 class="section-title">CLÁUSULA 13 – DO FORO</h2>
 <p class="clause">Para dirimir quaisquer controvérsias oriundas deste contrato, as partes elegem o foro da Circunscrição Judiciária de <strong>${foro}</strong>, com renúncia expressa a qualquer outro, por mais privilegiado que seja.</p>
 
-<section class="signature-section keep-together">
-  <p class="city-date">${cidadeAss}, ${dataAss}.</p>
+<p class="city-date">${cidadeAss}, ${dataAss}.</p>
 
-  <div class="signature-grid">
-    <div class="signature-party">
-      <div class="sig-line"></div>
-      <p class="sig-name">${contratante.nome || contratante.razao_social}</p>
-      <p class="sig-sub">${isPJ ? 'CNPJ: ' + contratante.cnpj : 'CPF: ' + contratante.cpf}</p>
-      <p class="sig-sub">CONTRATANTE</p>
-    </div>
-    <div class="signature-party">
-      <div class="sig-line"></div>
-      <p class="sig-name">${nomeContratada}</p>
-      ${docContratada ? `<p class="sig-sub">${docContratada}</p>` : ''}
-      <p class="sig-sub">CONTRATADA</p>
-    </div>
+<div class="signature-grid">
+  <div class="signature-party">
+    <div class="sig-line"></div>
+    <p class="sig-name">${contratante.nome || contratante.razao_social}</p>
+    <p class="sig-sub">${isPJ ? 'CNPJ: ' + contratante.cnpj : 'CPF: ' + contratante.cpf}</p>
+    <p class="sig-sub">CONTRATANTE</p>
   </div>
-</section>
+  <div class="signature-party">
+    <div class="sig-line"></div>
+    <p class="sig-name">${nomeContratada}</p>
+    ${docContratada ? `<p class="sig-sub">${docContratada}</p>` : ''}
+    <p class="sig-sub">CONTRATADA</p>
+  </div>
+</div>
 `;
 
     return renderContratoPdfHtml('CONTRATO DE PRESTAÇÃO DE SERVIÇOS', body, contratada);
@@ -4544,23 +4635,21 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
 <h2 class="section-title">6. CLÁUSULA SEXTA – DO FORO</h2>
 <p class="clause"><strong>6.1.</strong> Para dirimir quaisquer controvérsias oriundas do CONTRATO, as partes elegem o foro da comarca de <strong>${foro}</strong>.</p>
 <p class="clause">Por estarem assim justos e contratados, firmam o presente instrumento, em duas vias de igual teor.</p>
-<section class="signature-section keep-together">
-  <p class="city-date">${cidadeAss}, ${dataAss}.</p>
-  <div class="signature-grid">
-    <div class="signature-party">
-      <div class="sig-line"></div>
-      <p class="sig-name">${nomeContratante}</p>
-      ${docContratante ? `<p class="sig-sub">${docContratanteLabel}: ${docContratante}</p>` : ''}
-      <p class="sig-sub">CONTRATANTE</p>
-    </div>
-    <div class="signature-party">
-      <div class="sig-line"></div>
-      <p class="sig-name">${nomeContratada}</p>
-      ${docContratada ? `<p class="sig-sub">${docContratada}</p>` : ''}
-      <p class="sig-sub">CONTRATADA</p>
-    </div>
+<p class="city-date">${cidadeAss}, ${dataAss}.</p>
+<div class="signature-grid">
+  <div class="signature-party">
+    <div class="sig-line"></div>
+    <p class="sig-name">${nomeContratante}</p>
+    ${docContratante ? `<p class="sig-sub">${docContratanteLabel}: ${docContratante}</p>` : ''}
+    <p class="sig-sub">CONTRATANTE</p>
   </div>
-</section>
+  <div class="signature-party">
+    <div class="sig-line"></div>
+    <p class="sig-name">${nomeContratada}</p>
+    ${docContratada ? `<p class="sig-sub">${docContratada}</p>` : ''}
+    <p class="sig-sub">CONTRATADA</p>
+  </div>
+</div>
 `;
     return renderContratoPdfHtml('CONTRATO DE PRESTAÇÃO DE SERVIÇOS', body, contratada);
   }
@@ -4794,7 +4883,7 @@ ${(temTest1 || temTest2) ? `
         format: 'A4',
         printBackground: true,
         displayHeaderFooter: false,
-        margin: { top: '22mm', right: '18mm', bottom: '26mm', left: '18mm' },
+        margin: { top: '18mm', bottom: '18mm', left: '22mm', right: '22mm' },
       });
     } finally {
       if (browser) await browser.close();
@@ -5934,7 +6023,7 @@ ${(temTest1 || temTest2) ? `
           browser2 = await puppeteer2.default.launch({ executablePath: executablePath2, args: ['--no-sandbox','--disable-setuid-sandbox'], headless: true });
           const page2 = await browser2.newPage();
           await page2.setContent(htmlLN, { waitUntil: 'networkidle0' });
-          await page2.pdf({ path: filePathLN, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '22mm', right: '18mm', bottom: '26mm', left: '18mm' } });
+          await page2.pdf({ path: filePathLN, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '20mm', bottom: '20mm', left: '22mm', right: '22mm' } });
         } finally {
           if (browser2) await (browser2 as any).close();
         }
@@ -6091,7 +6180,7 @@ ${(temTest1 || temTest2) ? `
           browserBacen = await puppeteerB.default.launch({ executablePath: execPathB, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu','--single-process'], headless: true });
           const pageB = await browserBacen.newPage();
           await pageB.setContent(htmlBacen, { waitUntil: 'networkidle0' });
-          await pageB.pdf({ path: filePathBacen, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '22mm', right: '18mm', bottom: '26mm', left: '18mm' } });
+          await pageB.pdf({ path: filePathBacen, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '20mm', bottom: '20mm', left: '22mm', right: '22mm' } });
         } finally { if (browserBacen) await (browserBacen as any).close(); }
         pdfPath = filePathBacen;
         const hashBacen = await calcularHashArquivo(pdfPath);
@@ -6170,7 +6259,7 @@ ${(temTest1 || temTest2) ? `
           browserRating = await puppeteerR.default.launch({ executablePath: execPathR, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu','--single-process'], headless: true });
           const pageR = await browserRating.newPage();
           await pageR.setContent(htmlRating, { waitUntil: 'networkidle0' });
-          await pageR.pdf({ path: filePathRating, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '22mm', right: '18mm', bottom: '26mm', left: '18mm' } });
+          await pageR.pdf({ path: filePathRating, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '18mm', bottom: '18mm', left: '22mm', right: '22mm' } });
         } finally { if (browserRating) await (browserRating as any).close(); }
         pdfPath = filePathRating;
         const hashRating = await calcularHashArquivo(pdfPath);
@@ -6241,7 +6330,7 @@ ${(temTest1 || temTest2) ? `
           browserParceria = await puppeteerP.default.launch({ executablePath: execPathP, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu','--single-process'], headless: true });
           const pageP = await browserParceria.newPage();
           await pageP.setContent(htmlParceria, { waitUntil: 'networkidle0' });
-          await pageP.pdf({ path: filePathParceria, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '22mm', right: '18mm', bottom: '26mm', left: '18mm' } });
+          await pageP.pdf({ path: filePathParceria, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '18mm', bottom: '18mm', left: '22mm', right: '22mm' } });
         } finally { if (browserParceria) await (browserParceria as any).close(); }
         pdfPath = filePathParceria;
         const hashParceria = await calcularHashArquivo(pdfPath);
@@ -6614,7 +6703,7 @@ ${(temTest1 || temTest2) ? `
       browser = await puppeteer.default.launch({ executablePath, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage'], headless: true });
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
-      await page.pdf({ path: pdfPath, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '22mm', right: '18mm', bottom: '26mm', left: '18mm' } });
+      await page.pdf({ path: pdfPath, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '20mm', bottom: '20mm', left: '22mm', right: '22mm' } });
     } finally {
       if (browser) await browser.close();
     }
@@ -6880,6 +6969,424 @@ ${(temTest1 || temTest2) ? `
       res.status(500).json({ error: 'Erro ao resetar senha' });
     }
   });
+
+
+  // ─── ACOMPANHAMENTO BANCÁRIO API ───────────────────────────────────────────
+  const normalizarNumero = (valor: unknown): number | null => {
+    if (valor === null || valor === undefined || valor === "") return null;
+    const n = Number(String(valor).replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const proximaQuartaFeira = (base = new Date()): string => {
+    const d = new Date(base);
+    d.setHours(12, 0, 0, 0);
+    const dia = d.getDay(); // 0 dom ... 3 qua
+    const diff = (3 - dia + 7) % 7 || 7;
+    d.setDate(d.getDate() + diff);
+    return d.toISOString().slice(0, 10);
+  };
+
+  const montarWhatsapp = (telefone?: string | null, mensagem?: string): string | null => {
+    const digits = String(telefone || "").replace(/\D/g, "");
+    if (!digits) return null;
+    const numero = digits.startsWith("55") ? digits : `55${digits}`;
+    return `https://wa.me/${numero}?text=${encodeURIComponent(mensagem || "")}`;
+  };
+
+  app.get("/api/acompanhamentos-bancarios", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const isGestor = isGestorCargo(colaborador?.cargo || '') || Boolean(colaborador?.pode_ver_todos_leads || colaborador?.permissoes?.podeVerTudo);
+      const status = String(req.query.status || "todos");
+      const busca = String(req.query.busca || "").trim();
+      const somentePendentes = String(req.query.pendentes || "false") === "true";
+      const params: any[] = [];
+      const conditions: string[] = [];
+
+      if (!isGestor && colaborador?.id) {
+        params.push(colaborador.id);
+        conditions.push(`a.responsavel_id = $${params.length}`);
+      }
+
+      if (status && status !== "todos") {
+        params.push(status);
+        conditions.push(`a.status = $${params.length}`);
+      }
+
+      if (somentePendentes) {
+        conditions.push(`(a.proxima_atualizacao IS NOT NULL AND a.proxima_atualizacao <= CURRENT_DATE)`);
+        conditions.push(`a.status IN ('em_acompanhamento','atualizacao_pendente','prorrogado')`);
+      }
+
+      if (busca) {
+        params.push(`%${busca}%`);
+        const idx = params.length;
+        conditions.push(`(a.nome_empresa ILIKE $${idx} OR a.cnpj ILIKE $${idx} OR a.banco_observado ILIKE $${idx})`);
+      }
+
+      const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+      const { rows } = await pool.query(
+        `SELECT a.*,
+                c.nome AS responsavel_nome,
+                e.razao_social AS empresa_razao_social,
+                e.nome_fantasia AS empresa_nome_fantasia,
+                e.whatsapp AS empresa_whatsapp,
+                e.telefone AS empresa_telefone,
+                e.email AS empresa_email,
+                COALESCE((
+                  SELECT COUNT(*)::int FROM acompanhamento_bancario_atualizacoes u
+                  WHERE u.acompanhamento_id = a.id
+                ), 0) AS total_atualizacoes,
+                COALESCE((
+                  SELECT SUM(u.total_entradas) FROM acompanhamento_bancario_atualizacoes u
+                  WHERE u.acompanhamento_id = a.id
+                ), 0) AS total_entradas,
+                COALESCE((
+                  SELECT SUM(u.total_saidas) FROM acompanhamento_bancario_atualizacoes u
+                  WHERE u.acompanhamento_id = a.id
+                ), 0) AS total_saidas
+         FROM acompanhamentos_bancarios a
+         LEFT JOIN colaboradores c ON c.id = a.responsavel_id
+         LEFT JOIN empresas e ON e.id = a.empresa_id
+         ${where}
+         ORDER BY
+           CASE WHEN a.proxima_atualizacao IS NOT NULL AND a.proxima_atualizacao <= CURRENT_DATE THEN 0 ELSE 1 END,
+           a.proxima_atualizacao ASC NULLS LAST,
+           a.created_at DESC`,
+        params
+      );
+
+      const hoje = new Date().toISOString().slice(0, 10);
+      const enriquecidos = rows.map((row: any) => {
+        const telefone = row.empresa_whatsapp || row.empresa_telefone || null;
+        const msg = `Olá! Aqui é a equipe da Destrava Crédito. Estamos aguardando os dados semanais da empresa ${row.nome_empresa} para atualizar o acompanhamento bancário e evolução de rating. Pode nos enviar as movimentações da semana (PIX, maquininha, boletos, TED, dinheiro, saídas e saldo)?`;
+        return {
+          ...row,
+          atualizacao_pendente: Boolean(row.proxima_atualizacao && row.proxima_atualizacao <= hoje && ['em_acompanhamento','atualizacao_pendente','prorrogado'].includes(row.status)),
+          whatsapp_lembrete_url: montarWhatsapp(telefone, msg),
+        };
+      });
+
+      res.json(enriquecidos);
+    } catch (err) {
+      console.error("[GET /api/acompanhamentos-bancarios]", err);
+      res.status(500).json({ error: "Erro ao listar acompanhamentos bancários" });
+    }
+  });
+
+  app.get("/api/acompanhamentos-bancarios/alertas", auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT a.id, a.nome_empresa, a.cnpj, a.status, a.proxima_atualizacao, a.responsavel_id,
+                c.nome AS responsavel_nome,
+                e.whatsapp AS empresa_whatsapp,
+                e.telefone AS empresa_telefone
+         FROM acompanhamentos_bancarios a
+         LEFT JOIN colaboradores c ON c.id = a.responsavel_id
+         LEFT JOIN empresas e ON e.id = a.empresa_id
+         WHERE a.status IN ('em_acompanhamento','atualizacao_pendente','prorrogado')
+           AND a.proxima_atualizacao IS NOT NULL
+           AND a.proxima_atualizacao <= CURRENT_DATE
+         ORDER BY a.proxima_atualizacao ASC, a.nome_empresa ASC`
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error("[GET /api/acompanhamentos-bancarios/alertas]", err);
+      res.status(500).json({ error: "Erro ao listar alertas de acompanhamento" });
+    }
+  });
+
+  app.get("/api/acompanhamentos-bancarios/:id", auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT a.*, c.nome AS responsavel_nome,
+                e.razao_social AS empresa_razao_social,
+                e.nome_fantasia AS empresa_nome_fantasia,
+                e.whatsapp AS empresa_whatsapp,
+                e.telefone AS empresa_telefone,
+                e.email AS empresa_email
+         FROM acompanhamentos_bancarios a
+         LEFT JOIN colaboradores c ON c.id = a.responsavel_id
+         LEFT JOIN empresas e ON e.id = a.empresa_id
+         WHERE a.id = $1`,
+        [req.params.id]
+      );
+      if (!rows.length) { res.status(404).json({ error: "Acompanhamento não encontrado" }); return; }
+
+      const atualizacoes = await pool.query(
+        `SELECT * FROM acompanhamento_bancario_atualizacoes
+         WHERE acompanhamento_id = $1
+         ORDER BY numero_semana ASC`,
+        [req.params.id]
+      );
+
+      res.json({ ...rows[0], atualizacoes: atualizacoes.rows });
+    } catch (err) {
+      console.error("[GET /api/acompanhamentos-bancarios/:id]", err);
+      res.status(500).json({ error: "Erro ao buscar acompanhamento" });
+    }
+  });
+
+  app.post("/api/acompanhamentos-bancarios", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const {
+        empresa_id, nome_empresa, cnpj, banco_observado, agencia, conta,
+        objetivo_credito, valor_credito_pretendido, linha_credito_pretendida,
+        data_inicio, rating_bacen_inicial, rating_interno_inicial,
+        faturamento_anual, observacoes_iniciais,
+      } = req.body;
+
+      let empresa: any = null;
+      if (empresa_id) {
+        const result = await pool.query("SELECT * FROM empresas WHERE id = $1", [empresa_id]);
+        empresa = result.rows[0] || null;
+      }
+
+      const nomeFinal = (nome_empresa || empresa?.razao_social || "").trim();
+      if (!nomeFinal) {
+        res.status(400).json({ error: "Informe a empresa do acompanhamento." });
+        return;
+      }
+
+      const inicio = data_inicio || new Date().toISOString().slice(0, 10);
+      const dtInicio = new Date(`${inicio}T12:00:00`);
+      const fim = new Date(dtInicio);
+      fim.setDate(fim.getDate() + 30);
+
+      const faturamento = normalizarNumero(faturamento_anual ?? empresa?.faturamento_anual);
+      const mediaMensal = faturamento ? faturamento / 12 : null;
+      const margem30 = mediaMensal ? mediaMensal * 1.3 : null;
+
+      const { rows } = await pool.query(
+        `INSERT INTO acompanhamentos_bancarios (
+          empresa_id, nome_empresa, cnpj, banco_observado, agencia, conta,
+          objetivo_credito, valor_credito_pretendido, linha_credito_pretendida,
+          data_inicio, data_fim_prevista, responsavel_id,
+          rating_bacen_inicial, rating_interno_inicial, rating_bacen_atual, rating_interno_atual,
+          faturamento_anual, media_mensal, margem_30,
+          proxima_atualizacao, observacoes_iniciais
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$13,$14,$15,$16,$17,$18,$19
+        ) RETURNING *`,
+        [
+          empresa_id || null,
+          nomeFinal,
+          cnpj || empresa?.cnpj || null,
+          banco_observado || empresa?.banco_principal || null,
+          agencia || empresa?.agencia || null,
+          conta || empresa?.conta || null,
+          objetivo_credito || null,
+          normalizarNumero(valor_credito_pretendido),
+          linha_credito_pretendida || null,
+          inicio,
+          fim.toISOString().slice(0, 10),
+          colaborador?.id || null,
+          rating_bacen_inicial || null,
+          rating_interno_inicial || null,
+          faturamento,
+          mediaMensal,
+          margem30,
+          proximaQuartaFeira(dtInicio),
+          observacoes_iniciais || null,
+        ]
+      );
+
+      await dispararN8n("acompanhamento_bancario_criado", { acompanhamento: rows[0] });
+      res.status(201).json(rows[0]);
+    } catch (err) {
+      console.error("[POST /api/acompanhamentos-bancarios]", err);
+      res.status(500).json({ error: "Erro ao criar acompanhamento bancário" });
+    }
+  });
+
+  app.patch("/api/acompanhamentos-bancarios/:id", auth, async (req: Request, res: Response) => {
+    try {
+      const updates = { ...req.body, updated_at: new Date().toISOString() };
+      delete updates.id;
+      delete updates.atualizacoes;
+      const keys = Object.keys(updates);
+      if (!keys.length) { res.json({ success: true }); return; }
+      const values = Object.values(updates);
+      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+      const { rows } = await pool.query(
+        `UPDATE acompanhamentos_bancarios SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
+        [...values, req.params.id]
+      );
+      if (!rows.length) { res.status(404).json({ error: "Acompanhamento não encontrado" }); return; }
+      res.json(rows[0]);
+    } catch (err) {
+      console.error("[PATCH /api/acompanhamentos-bancarios/:id]", err);
+      res.status(500).json({ error: "Erro ao atualizar acompanhamento" });
+    }
+  });
+
+  app.post("/api/acompanhamentos-bancarios/:id/atualizacoes", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const a = await pool.query("SELECT * FROM acompanhamentos_bancarios WHERE id = $1", [req.params.id]);
+      if (!a.rows.length) { res.status(404).json({ error: "Acompanhamento não encontrado" }); return; }
+
+      const count = await pool.query(
+        "SELECT COALESCE(MAX(numero_semana), 0)::int AS ultima FROM acompanhamento_bancario_atualizacoes WHERE acompanhamento_id = $1",
+        [req.params.id]
+      );
+      const numeroSemana = Number(req.body.numero_semana || count.rows[0].ultima + 1);
+
+      const { rows } = await pool.query(
+        `INSERT INTO acompanhamento_bancario_atualizacoes (
+          acompanhamento_id, numero_semana, periodo, data_referencia_inicio, data_referencia_fim, data_atualizacao,
+          entrada_maquina, entrada_pix, entrada_boleto, entrada_ted, entrada_dinheiro, outras_entradas,
+          total_saidas, saldo_medio, saldo_final, quantidade_transacoes,
+          rating_bacen, rating_interno,
+          restricao_scr, restricao_cenprot, restricao_serasa, cnd_regular, pld_aml, operacao_suspeita_coaf,
+          restricao_nova, devolucao_ou_estorno, ocorrencia_negativa,
+          status, analise_semana, orientacao_cliente, proxima_acao, criado_por
+        ) VALUES (
+          $1,$2,$3,$4,$5,COALESCE($6::date,CURRENT_DATE),
+          $7,$8,$9,$10,$11,$12,
+          $13,$14,$15,$16,
+          $17,$18,
+          $19,$20,$21,$22,$23,$24,
+          $25,$26,$27,
+          $28,$29,$30,$31,$32
+        )
+        ON CONFLICT (acompanhamento_id, numero_semana)
+        DO UPDATE SET
+          periodo = EXCLUDED.periodo,
+          data_referencia_inicio = EXCLUDED.data_referencia_inicio,
+          data_referencia_fim = EXCLUDED.data_referencia_fim,
+          data_atualizacao = EXCLUDED.data_atualizacao,
+          entrada_maquina = EXCLUDED.entrada_maquina,
+          entrada_pix = EXCLUDED.entrada_pix,
+          entrada_boleto = EXCLUDED.entrada_boleto,
+          entrada_ted = EXCLUDED.entrada_ted,
+          entrada_dinheiro = EXCLUDED.entrada_dinheiro,
+          outras_entradas = EXCLUDED.outras_entradas,
+          total_saidas = EXCLUDED.total_saidas,
+          saldo_medio = EXCLUDED.saldo_medio,
+          saldo_final = EXCLUDED.saldo_final,
+          quantidade_transacoes = EXCLUDED.quantidade_transacoes,
+          rating_bacen = EXCLUDED.rating_bacen,
+          rating_interno = EXCLUDED.rating_interno,
+          restricao_scr = EXCLUDED.restricao_scr,
+          restricao_cenprot = EXCLUDED.restricao_cenprot,
+          restricao_serasa = EXCLUDED.restricao_serasa,
+          cnd_regular = EXCLUDED.cnd_regular,
+          pld_aml = EXCLUDED.pld_aml,
+          operacao_suspeita_coaf = EXCLUDED.operacao_suspeita_coaf,
+          restricao_nova = EXCLUDED.restricao_nova,
+          devolucao_ou_estorno = EXCLUDED.devolucao_ou_estorno,
+          ocorrencia_negativa = EXCLUDED.ocorrencia_negativa,
+          status = EXCLUDED.status,
+          analise_semana = EXCLUDED.analise_semana,
+          orientacao_cliente = EXCLUDED.orientacao_cliente,
+          proxima_acao = EXCLUDED.proxima_acao,
+          updated_at = now()
+        RETURNING *`,
+        [
+          req.params.id,
+          numeroSemana,
+          req.body.periodo || null,
+          req.body.data_referencia_inicio || null,
+          req.body.data_referencia_fim || null,
+          req.body.data_atualizacao || null,
+          normalizarNumero(req.body.entrada_maquina) || 0,
+          normalizarNumero(req.body.entrada_pix) || 0,
+          normalizarNumero(req.body.entrada_boleto) || 0,
+          normalizarNumero(req.body.entrada_ted) || 0,
+          normalizarNumero(req.body.entrada_dinheiro) || 0,
+          normalizarNumero(req.body.outras_entradas) || 0,
+          normalizarNumero(req.body.total_saidas) || 0,
+          normalizarNumero(req.body.saldo_medio) || 0,
+          normalizarNumero(req.body.saldo_final) || 0,
+          Number(req.body.quantidade_transacoes || 0),
+          req.body.rating_bacen || null,
+          req.body.rating_interno || null,
+          req.body.restricao_scr || null,
+          req.body.restricao_cenprot || null,
+          req.body.restricao_serasa || null,
+          req.body.cnd_regular || null,
+          req.body.pld_aml || null,
+          req.body.operacao_suspeita_coaf || null,
+          Boolean(req.body.restricao_nova),
+          Boolean(req.body.devolucao_ou_estorno),
+          Boolean(req.body.ocorrencia_negativa),
+          req.body.status || "registrada",
+          req.body.analise_semana || null,
+          req.body.orientacao_cliente || null,
+          req.body.proxima_acao || null,
+          colaborador?.id || null,
+        ]
+      );
+
+      const prox = proximaQuartaFeira(new Date());
+      await pool.query(
+        `UPDATE acompanhamentos_bancarios
+         SET ultima_atualizacao_em = now(),
+             proxima_atualizacao = $2,
+             status = CASE WHEN status = 'atualizacao_pendente' THEN 'em_acompanhamento' ELSE status END,
+             rating_bacen_atual = COALESCE($3, rating_bacen_atual),
+             rating_interno_atual = COALESCE($4, rating_interno_atual),
+             updated_at = now()
+         WHERE id = $1`,
+        [req.params.id, prox, req.body.rating_bacen || null, req.body.rating_interno || null]
+      );
+
+      await dispararN8n("acompanhamento_bancario_atualizado", {
+        acompanhamento_id: req.params.id,
+        atualizacao: rows[0],
+      });
+
+      res.status(201).json(rows[0]);
+    } catch (err) {
+      console.error("[POST /api/acompanhamentos-bancarios/:id/atualizacoes]", err);
+      res.status(500).json({ error: "Erro ao registrar atualização semanal" });
+    }
+  });
+
+  app.post("/api/acompanhamentos-bancarios/:id/prorrogar", auth, async (req: Request, res: Response) => {
+    try {
+      const atual = await pool.query("SELECT * FROM acompanhamentos_bancarios WHERE id = $1", [req.params.id]);
+      if (!atual.rows.length) { res.status(404).json({ error: "Acompanhamento não encontrado" }); return; }
+      const base = atual.rows[0].data_fim_prorrogada || atual.rows[0].data_fim_prevista || new Date().toISOString().slice(0, 10);
+      const fim = new Date(`${base}T12:00:00`);
+      fim.setDate(fim.getDate() + 30);
+      const { rows } = await pool.query(
+        `UPDATE acompanhamentos_bancarios
+         SET prorrogado = true,
+             data_prorrogacao = CURRENT_DATE,
+             data_fim_prorrogada = $2,
+             status = 'prorrogado',
+             proxima_atualizacao = COALESCE(proxima_atualizacao, $3),
+             updated_at = now()
+         WHERE id = $1 RETURNING *`,
+        [req.params.id, fim.toISOString().slice(0, 10), proximaQuartaFeira()]
+      );
+      res.json(rows[0]);
+    } catch (err) {
+      console.error("[POST /api/acompanhamentos-bancarios/:id/prorrogar]", err);
+      res.status(500).json({ error: "Erro ao prorrogar acompanhamento" });
+    }
+  });
+
+  app.post("/api/acompanhamentos-bancarios/:id/encerrar", auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `UPDATE acompanhamentos_bancarios
+         SET status = $2, etapa = 'encerrado', observacoes_finais = $3, updated_at = now()
+         WHERE id = $1 RETURNING *`,
+        [req.params.id, req.body.status || 'encerrado', req.body.observacoes_finais || null]
+      );
+      if (!rows.length) { res.status(404).json({ error: "Acompanhamento não encontrado" }); return; }
+      res.json(rows[0]);
+    } catch (err) {
+      console.error("[POST /api/acompanhamentos-bancarios/:id/encerrar]", err);
+      res.status(500).json({ error: "Erro ao encerrar acompanhamento" });
+    }
+  });
+
 
   // Qualquer /api não encontrada deve responder JSON, nunca o index.html da SPA.
   app.use('/api', (req: Request, res: Response) => {
