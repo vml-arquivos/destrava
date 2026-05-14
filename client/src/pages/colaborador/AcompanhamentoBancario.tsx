@@ -1,273 +1,56 @@
-import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import ColaboradorLayout from "./Layout";
 import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  LayoutDashboard,
-  Calculator,
-  FileText,
-  LogOut,
-  Menu,
-  X,
-  ChevronRight,
-  User,
-  Users,
-  Zap,
-  Kanban,
-  Building2,
-  ShieldAlert,
-  ListOrdered,
-  TrendingUp,
-  BookUser,
-  UserCheck,
-  Activity,
-} from "lucide-react";
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: React.ElementType;
-  badge?: string;
-  /** cargos que podem ver este item; undefined = todos */
-  allowedCargos?: string[];
-  /** item exclusivo para perfis com visão ampla de gestão */
-  managementOnly?: boolean;
+function normalizePermValue(value?: string | null) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/-/g, "_");
 }
 
-// Cargos com acesso total (gestão)
-const CARGOS_GESTAO = ['administrador', 'diretor', 'gerente comercial'];
+function podeAcessarAcompanhamentoBancario(user: any): boolean {
+  if (!user) return false;
+  if (user?.acesso_acompanhamento_bancario === true) return true;
 
-const ALL_NAV_ITEMS: NavItem[] = [
-  { href: "/colaborador/dashboard",   label: "Dashboard",          icon: LayoutDashboard },
-  { href: "/colaborador/meu-perfil",  label: "Meu Perfil",         icon: User },
-  { href: "/colaborador/crm",         label: "CRM Geral",          icon: Kanban, managementOnly: true },
-  { href: "/colaborador/meu-crm",     label: "Meu CRM",            icon: User },
-  { href: "/colaborador/fila?scope=meus", label: "Minha Fila",     icon: ListOrdered },
-  { href: "/colaborador/fila?scope=sem_responsavel", label: "Sem Responsável", icon: ShieldAlert, managementOnly: true },
-  { href: "/colaborador/calculadora", label: "Calculadora",     icon: Calculator },
-  { href: "/colaborador/simulacoes",  label: "Simulações",      icon: FileText },
-  { href: "/colaborador/triagem",     label: "Triagem",            icon: ShieldAlert },
-  { href: "/colaborador/fila",        label: "Fila Geral",         icon: ListOrdered, managementOnly: true },
-  { href: "/colaborador/clientes",    label: "Clientes",        icon: Users },
-  { href: "/colaborador/empresas",    label: "Empresas",        icon: Building2 },
-  { href: "/colaborador/acompanhamento-bancario", label: "Acompanhamento", icon: Activity },
-  // Faturamento: todos os colaboradores
-  { href: "/colaborador/previsao-faturamento", label: "Faturamento", icon: TrendingUp },
-  // Gerador de Contratos: todos os colaboradores
-  { href: "/colaborador/contratos",   label: "Contratos",    icon: FileText },
-  // Cadastro de Contadores: somente Administrador e Diretor
-  { href: "/colaborador/contadores",  label: "Contadores",       icon: BookUser, allowedCargos: ['administrador', 'diretor'] },
-  { href: "/colaborador/clientes-pf",  label: "Clientes PF",      icon: UserCheck },
-  // Integrações n8n: somente Administrador
-  {
-    href: "/colaborador/integracoes",
-    label: "Integrações n8n",
-    icon: Zap,
-    allowedCargos: ['administrador'],
-  },
-  // Usuários: somente Administrador, Diretor e Gerente Comercial
-  {
-    href: "/colaborador/usuarios",
-    label: "Usuários",
-    icon: User,
-    allowedCargos: CARGOS_GESTAO,
-  },
-];
+  const permitidos = new Set([
+    "admin",
+    "administrador",
+    "super_admin",
+    "superadmin",
+    "gestor_credito",
+  ]);
 
-interface LayoutProps {
-  children: React.ReactNode;
-  title?: string;
+  const cargo = normalizePermValue(user?.cargo);
+  const perfil = normalizePermValue(user?.perfil);
+  const role = normalizePermValue(user?.role);
+
+  return permitidos.has(cargo) || permitidos.has(perfil) || permitidos.has(role);
 }
 
-export default function ColaboradorLayout({ children, title }: LayoutProps) {
-  const { colaborador, signOut } = useAuth();
-  const [location] = useLocation();
-  const [menuAberto, setMenuAberto] = useState(false);
-
-  const cargoLower = (colaborador?.cargo || '').toLowerCase();
-  const podeVerTudo = Boolean(colaborador?.pode_ver_todos_leads || colaborador?.permissoes?.podeVerTudo);
-
-  // Filtra itens de navegação conforme cargo e escopo operacional
-  const navItems = ALL_NAV_ITEMS.filter(item => {
-    if (item.managementOnly && !podeVerTudo) return false;
-    if (!item.allowedCargos) return true;
-    return item.allowedCargos.includes(cargoLower);
-  });
-
-  const handleSignOut = async () => {
-    await signOut();
-    window.location.href = "/colaborador/login";
-  };
+export default function AcompanhamentoBancario() {
+  const { colaborador } = useAuth();
+  const permitido = podeAcessarAcompanhamentoBancario(colaborador);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* ── Sidebar Desktop ── */}
-      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-gray-200 shadow-sm">
-        {/* Logo */}
-        <div className="p-5 border-b border-gray-200">
-          <a href="/" className="flex items-center gap-2">
-            <img src="/destrava-logo.svg" alt="Destrava Crédito" className="h-8" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-          </a>
-          <div className="mt-2">
-            <Badge variant="secondary" className="text-xs">Área do Colaborador</Badge>
+    <ColaboradorLayout title="Acompanhamento Bancário">
+      <div className="p-6">
+        {!permitido ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+            <h2 className="text-lg font-semibold text-red-700">Acesso restrito</h2>
+            <p className="text-sm text-red-600 mt-1">Este módulo é exclusivo para Gestor de Crédito ou superior.</p>
           </div>
-        </div>
-
-        {/* Perfil */}
-        <div className="p-4 border-b border-gray-100 bg-gray-50">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-              <User className="h-5 w-5 text-blue-600" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate">
-                {colaborador?.nome || "Colaborador"}
-              </p>
-              <p className="text-xs text-gray-500 truncate">
-                {colaborador?.cargo || ""}
-              </p>
-            </div>
+        ) : (
+          <div className="rounded-lg border border-gray-200 bg-white p-6">
+            <h1 className="text-xl font-semibold">Acompanhamento Bancário</h1>
+            <p className="text-sm text-gray-600 mt-2">
+              Módulo disponível para perfis autorizados (Admin, Super Admin e Gestor de Crédito).
+            </p>
           </div>
-        </div>
-
-        {/* Navegação */}
-        <nav className="flex-1 p-3 space-y-0.5">
-          {navItems.map((item) => {
-            const isActive = location === item.href || location.startsWith(item.href + "/") || (item.href.includes("?") && location.startsWith(item.href.split("?")[0]));
-            const Icon = item.icon;
-            return (
-              <Link key={item.href} href={item.href}>
-                <a
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                  }`}
-                >
-                  <Icon className="h-4 w-4 flex-shrink-0" />
-                  <span className="flex-1">{item.label}</span>
-                  {item.badge && (
-                    <span className="text-xs bg-yellow-400 text-yellow-900 px-1.5 py-0.5 rounded-full font-bold">
-                      {item.badge}
-                    </span>
-                  )}
-                  {isActive && <ChevronRight className="h-3 w-3 opacity-60" />}
-                </a>
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Sair */}
-        <div className="p-3 border-t border-gray-200">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start text-gray-500 hover:text-red-600 hover:bg-red-50"
-            onClick={handleSignOut}
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            Sair
-          </Button>
-        </div>
-      </aside>
-
-      {/* ── Mobile: Header + Drawer ── */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 px-4 h-14 flex items-center justify-between shadow-sm">
-        <a href="/" className="flex items-center gap-2">
-          <img src="/destrava-logo.svg" alt="Destrava Crédito" className="h-7" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-          <Badge variant="secondary" className="text-xs">Colaborador</Badge>
-        </a>
-        <button
-          onClick={() => setMenuAberto(!menuAberto)}
-          className="p-2 rounded-md hover:bg-gray-100"
-        >
-          {menuAberto ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
+        )}
       </div>
-
-      {/* Mobile Drawer */}
-      {menuAberto && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMenuAberto(false)}>
-          <div
-            className="absolute left-0 top-14 bottom-0 w-64 bg-white shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 border-b border-gray-100 bg-gray-50">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center">
-                  <User className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{colaborador?.nome || "Colaborador"}</p>
-                  <p className="text-xs text-gray-500">{colaborador?.cargo || ""}</p>
-                </div>
-              </div>
-            </div>
-            <nav className="p-3 space-y-0.5">
-              {navItems.map((item) => {
-                const isActive = location === item.href || (item.href.includes("?") && location.startsWith(item.href.split("?")[0]));
-                const Icon = item.icon;
-                return (
-                  <Link key={item.href} href={item.href}>
-                    <a
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                        isActive
-                          ? "bg-blue-600 text-white"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                      }`}
-                      onClick={() => setMenuAberto(false)}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {item.label}
-                    </a>
-                  </Link>
-                );
-              })}
-            </nav>
-            <div className="p-3 border-t border-gray-200">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start text-gray-500 hover:text-red-600"
-                onClick={handleSignOut}
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                Sair
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Conteúdo principal ── */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Topbar */}
-        <div className="hidden lg:flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200">
-          <h2 className="text-base font-semibold text-gray-900">{title || "Painel"}</h2>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">
-              <strong className="text-gray-900">{colaborador?.nome?.split(" ")[0] || "Colaborador"}</strong>
-            </span>
-            <Link href="/colaborador/meu-perfil">
-              <a className="inline-flex items-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
-                <User className="h-4 w-4 mr-1" />
-                Perfil
-              </a>
-            </Link>
-            <Button variant="outline" size="sm" onClick={handleSignOut} className="text-gray-500 hover:text-red-600">
-              <LogOut className="h-4 w-4 mr-1" />
-              Sair
-            </Button>
-          </div>
-        </div>
-
-        {/* Conteúdo */}
-        <div className="flex-1 mt-14 lg:mt-0 overflow-auto">
-          {children}
-        </div>
-      </main>
-    </div>
+    </ColaboradorLayout>
   );
 }
