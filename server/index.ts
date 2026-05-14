@@ -3640,33 +3640,51 @@ ${temParceiro ? `<p class="clause"><strong>5.1</strong> - O PARCEIRO COMERCIAL, 
 
 <p class="clause">Por estarem assim justos e contratados, firmam o presente instrumento, em duas vias de igual teor.</p>
 
-<p class="city-date"><strong>${cidadeAss}, ${dataAss}.</strong></p>
+<section class="signature-section keep-together">
+  <p class="city-date"><strong>${cidadeAss}, ${dataAss}.</strong></p>
 
-<div class="sig-block">
-  <p><strong>CONTRATANTE:</strong></p>
-  <div class="sig-line"></div>
-  <p class="sig-name">${contratante.razao_social}</p>
+  <div class="signature-grid">
+    <div class="signature-party">
+      <div class="sig-line"></div>
+      <p class="sig-name">${contratante.razao_social}</p>
+      <p class="sig-sub">CONTRATANTE</p>
+    </div>
+
+    <div class="signature-party">
+      <div class="sig-line"></div>
+      <p class="sig-name">DESTRAVA CRÉDITO LTDA</p>
+      <p class="sig-sub">CNPJ n° ${contratada.cnpj}</p>
+      <p class="sig-sub">CONTRATADA</p>
+    </div>
+  </div>
 
   ${temParceiro ? `
-  <p style="margin-top:28px;"><strong>PARCEIRO COMERCIAL:</strong></p>
-  <div class="sig-line"></div>
-  <p class="sig-name">${parceiro.nome} - CPF n° ${parceiro.cpf}</p>
+  <div class="signature-grid" style="grid-template-columns: 1fr; max-width: 85mm; margin-left: auto; margin-right: auto;">
+    <div class="signature-party">
+      <div class="sig-line"></div>
+      <p class="sig-name">${parceiro.nome}</p>
+      <p class="sig-sub">CPF n° ${parceiro.cpf}</p>
+      <p class="sig-sub">PARCEIRO COMERCIAL</p>
+    </div>
+  </div>
   ` : ''}
 
-  <p style="margin-top:28px;"><strong>CONTRATADA:</strong></p>
-  <div class="sig-line"></div>
-  <p class="sig-name">DESTRAVA CRÉDITO LTDA - CNPJ n° ${contratada.cnpj}</p>
-</div>
+  <div class="witness-grid">
+    <div class="witness-box">
+      <div class="sig-line"></div>
+      <p class="sig-sub"><strong>TESTEMUNHA 1</strong></p>
+      <p class="sig-sub">Nome:</p>
+      <p class="sig-sub">CPF:</p>
+    </div>
 
-<div class="page-break"></div>
-
-<div class="sig-block">
-  <p style="margin-bottom:6px;"><strong>TESTEMUNHA 1:</strong></p>
-  <div class="sig-line"></div>
-
-  <p style="margin-top:40px;margin-bottom:6px;"><strong>TESTEMUNHA 2:</strong></p>
-  <div class="sig-line"></div>
-</div>
+    <div class="witness-box">
+      <div class="sig-line"></div>
+      <p class="sig-sub"><strong>TESTEMUNHA 2</strong></p>
+      <p class="sig-sub">Nome:</p>
+      <p class="sig-sub">CPF:</p>
+    </div>
+  </div>
+</section>
 `;
 
     return `<!DOCTYPE html>
@@ -4209,34 +4227,18 @@ tr:nth-child(even) td { background: #f4f7ff; }
       --table-soft: #f4f7fb;
     }
 
-    * { box-sizing: border-box; }
-
-    html, body {
-      background: #fff;
-      color: var(--text-main);
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 9.2pt;
-      line-height: 1.38;
-      margin: 0;
-      padding: 0;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-
     .page-header {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 22mm;
+      width: 100%;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
       border-bottom: 1px solid var(--line-soft);
-      padding-bottom: 7px;
+      padding-bottom: 9px;
+      margin-bottom: 16px;
       background: #fff;
-      z-index: 2;
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
 
     .brand-left {
@@ -4264,6 +4266,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
       justify-content: center;
       font-size: 13pt;
       font-weight: 700;
+      flex-shrink: 0;
     }
 
     .brand-info {
@@ -4272,7 +4275,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
 
     .brand-name {
       color: var(--brand-primary);
-      font-size: 10.5pt;
+      font-size: 10.2pt;
       font-weight: 800;
       line-height: 1.2;
       text-transform: uppercase;
@@ -4284,38 +4287,20 @@ tr:nth-child(even) td { background: #f4f7ff; }
 
     .brand-doc {
       color: var(--text-muted);
-      font-size: 8.4pt;
+      font-size: 8.2pt;
       margin-top: 2px;
     }
 
     .brand-custom-header {
       color: var(--text-muted);
-      font-size: 8.4pt;
+      font-size: 8.2pt;
       text-align: right;
       max-width: 62mm;
       line-height: 1.25;
     }
 
-    .page-footer {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      min-height: 14mm;
-      border-top: 1px solid var(--line-soft);
-      padding-top: 5px;
-      color: #64748b;
-      font-size: 7.8pt;
-      line-height: 1.28;
-      background: #fff;
-      z-index: 2;
-      text-align: center;
-    }
-
     .contract-content {
       width: 100%;
-      padding-top: 22mm;
-      padding-bottom: 14mm;
     }
 
     .doc-title {
@@ -4332,38 +4317,16 @@ tr:nth-child(even) td { background: #f4f7ff; }
 
     .section-title {
       color: var(--brand-primary);
-      font-size: 9pt;
+      font-size: 9.4pt;
       font-weight: 800;
       letter-spacing: .01em;
       text-transform: uppercase;
-      margin: 8px 0 3px;
+      margin: 9px 0 4px;
       padding: 3px 6px;
       background: linear-gradient(90deg, rgba(30,58,138,.10), rgba(30,58,138,.02));
       border-left: 3px solid var(--brand-primary);
       break-after: avoid;
       page-break-after: avoid;
-    }
-
-    .clause {
-      margin: 0 0 4px;
-      text-align: justify;
-      orphans: 3;
-      widows: 3;
-    }
-
-    .data-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 8.8pt;
-      margin: 6px 0 12px;
-      page-break-inside: avoid;
-      break-inside: avoid;
-    }
-
-    .data-table td {
-      border: 1px solid var(--line-soft);
-      padding: 7px 8px;
-      vertical-align: top;
     }
 
     .data-table td:first-child {
@@ -4373,91 +4336,35 @@ tr:nth-child(even) td { background: #f4f7ff; }
       width: 38%;
     }
 
-    .city-date {
-      text-align: right;
-      margin: 20px 0 28px;
-      font-weight: 500;
-    }
-    .sig-wrapper {
-      page-break-inside: avoid;
-      break-inside: avoid;
-    }
-
-    .signature-grid {
-      width: 100%;
-      max-width: 148mm;
-      margin: 24px auto 0;
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      gap: 14mm;
-      page-break-inside: avoid;
-      break-inside: avoid;
-      page-break-before: avoid;
-    }
-
-    .signature-party {
-      flex: 0 0 60mm;
-      max-width: 60mm;
-      text-align: center;
-    }
-
-    .sig-line {
-      width: 60mm;
-      height: 1px;
-      border-top: 1.2px solid #111827;
-      margin: 0 auto 6px;
-    }
-
-    .sig-name {
-      margin: 0 0 3px;
-      font-size: 8.8pt;
-      line-height: 1.2;
-      font-weight: 800;
-      color: #111827;
-      text-transform: none;
-    }
-
-    .sig-sub {
-      margin: 0 0 2px;
+    .contract-footer-final {
+      color: #64748b;
       font-size: 7.8pt;
-      line-height: 1.2;
-      color: #334155;
-    }
-
-    @media print {
-      .section-title,
-      .data-table,
-      .signature-grid,
-      .sig-wrapper {
-        break-inside: avoid;
-        page-break-inside: avoid;
-      }
-      .city-date + .signature-grid,
-      .sig-wrapper {
-        page-break-before: avoid;
-      }
+      line-height: 1.3;
+      text-align: center;
+      border-top: 1px solid var(--line-soft);
+      margin-top: 28px;
+      padding-top: 8px;
     }
   </style>
 </head>
 <body>
-  <header class="page-header">
-    <div class="brand-left">
-      ${logoHtml}
-      <div class="brand-info">
-        <div class="brand-name">${escapeHtmlContrato(nome)}</div>
-        ${documento ? `<div class="brand-doc">${escapeHtmlContrato(documento)}</div>` : ''}
-      </div>
-    </div>
-    ${cabecalhoCustom}
-  </header>
-
-  <footer class="page-footer">
-    ${rodapeHtml}
-  </footer>
-
   <main class="contract-content">
+    <header class="page-header">
+      <div class="brand-left">
+        ${logoHtml}
+        <div class="brand-info">
+          <div class="brand-name">${escapeHtmlContrato(nome)}</div>
+          ${documento ? `<div class="brand-doc">${escapeHtmlContrato(documento)}</div>` : ''}
+        </div>
+      </div>
+      ${cabecalhoCustom}
+    </header>
+
     ${body}
+
+    <footer class="contract-footer-final">
+      ${rodapeHtml}
+    </footer>
   </main>
 </body>
 </html>`;
@@ -4557,22 +4464,24 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
 <h2 class="section-title">CLÁUSULA 13 – DO FORO</h2>
 <p class="clause">Para dirimir quaisquer controvérsias oriundas deste contrato, as partes elegem o foro da Circunscrição Judiciária de <strong>${foro}</strong>, com renúncia expressa a qualquer outro, por mais privilegiado que seja.</p>
 
-<p class="city-date">${cidadeAss}, ${dataAss}.</p>
+<section class="signature-section keep-together">
+  <p class="city-date">${cidadeAss}, ${dataAss}.</p>
 
-<div class="signature-grid">
-  <div class="signature-party">
-    <div class="sig-line"></div>
-    <p class="sig-name">${contratante.nome || contratante.razao_social}</p>
-    <p class="sig-sub">${isPJ ? 'CNPJ: ' + contratante.cnpj : 'CPF: ' + contratante.cpf}</p>
-    <p class="sig-sub">CONTRATANTE</p>
+  <div class="signature-grid">
+    <div class="signature-party">
+      <div class="sig-line"></div>
+      <p class="sig-name">${contratante.nome || contratante.razao_social}</p>
+      <p class="sig-sub">${isPJ ? 'CNPJ: ' + contratante.cnpj : 'CPF: ' + contratante.cpf}</p>
+      <p class="sig-sub">CONTRATANTE</p>
+    </div>
+    <div class="signature-party">
+      <div class="sig-line"></div>
+      <p class="sig-name">${nomeContratada}</p>
+      ${docContratada ? `<p class="sig-sub">${docContratada}</p>` : ''}
+      <p class="sig-sub">CONTRATADA</p>
+    </div>
   </div>
-  <div class="signature-party">
-    <div class="sig-line"></div>
-    <p class="sig-name">${nomeContratada}</p>
-    ${docContratada ? `<p class="sig-sub">${docContratada}</p>` : ''}
-    <p class="sig-sub">CONTRATADA</p>
-  </div>
-</div>
+</section>
 `;
 
     return renderContratoPdfHtml('CONTRATO DE PRESTAÇÃO DE SERVIÇOS', body, contratada);
@@ -4635,21 +4544,23 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
 <h2 class="section-title">6. CLÁUSULA SEXTA – DO FORO</h2>
 <p class="clause"><strong>6.1.</strong> Para dirimir quaisquer controvérsias oriundas do CONTRATO, as partes elegem o foro da comarca de <strong>${foro}</strong>.</p>
 <p class="clause">Por estarem assim justos e contratados, firmam o presente instrumento, em duas vias de igual teor.</p>
-<p class="city-date">${cidadeAss}, ${dataAss}.</p>
-<div class="signature-grid">
-  <div class="signature-party">
-    <div class="sig-line"></div>
-    <p class="sig-name">${nomeContratante}</p>
-    ${docContratante ? `<p class="sig-sub">${docContratanteLabel}: ${docContratante}</p>` : ''}
-    <p class="sig-sub">CONTRATANTE</p>
+<section class="signature-section keep-together">
+  <p class="city-date">${cidadeAss}, ${dataAss}.</p>
+  <div class="signature-grid">
+    <div class="signature-party">
+      <div class="sig-line"></div>
+      <p class="sig-name">${nomeContratante}</p>
+      ${docContratante ? `<p class="sig-sub">${docContratanteLabel}: ${docContratante}</p>` : ''}
+      <p class="sig-sub">CONTRATANTE</p>
+    </div>
+    <div class="signature-party">
+      <div class="sig-line"></div>
+      <p class="sig-name">${nomeContratada}</p>
+      ${docContratada ? `<p class="sig-sub">${docContratada}</p>` : ''}
+      <p class="sig-sub">CONTRATADA</p>
+    </div>
   </div>
-  <div class="signature-party">
-    <div class="sig-line"></div>
-    <p class="sig-name">${nomeContratada}</p>
-    ${docContratada ? `<p class="sig-sub">${docContratada}</p>` : ''}
-    <p class="sig-sub">CONTRATADA</p>
-  </div>
-</div>
+</section>
 `;
     return renderContratoPdfHtml('CONTRATO DE PRESTAÇÃO DE SERVIÇOS', body, contratada);
   }
@@ -4883,7 +4794,7 @@ ${(temTest1 || temTest2) ? `
         format: 'A4',
         printBackground: true,
         displayHeaderFooter: false,
-        margin: { top: '18mm', bottom: '18mm', left: '22mm', right: '22mm' },
+        margin: { top: '22mm', right: '18mm', bottom: '26mm', left: '18mm' },
       });
     } finally {
       if (browser) await browser.close();
@@ -6023,7 +5934,7 @@ ${(temTest1 || temTest2) ? `
           browser2 = await puppeteer2.default.launch({ executablePath: executablePath2, args: ['--no-sandbox','--disable-setuid-sandbox'], headless: true });
           const page2 = await browser2.newPage();
           await page2.setContent(htmlLN, { waitUntil: 'networkidle0' });
-          await page2.pdf({ path: filePathLN, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '20mm', bottom: '20mm', left: '22mm', right: '22mm' } });
+          await page2.pdf({ path: filePathLN, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '22mm', right: '18mm', bottom: '26mm', left: '18mm' } });
         } finally {
           if (browser2) await (browser2 as any).close();
         }
@@ -6180,7 +6091,7 @@ ${(temTest1 || temTest2) ? `
           browserBacen = await puppeteerB.default.launch({ executablePath: execPathB, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu','--single-process'], headless: true });
           const pageB = await browserBacen.newPage();
           await pageB.setContent(htmlBacen, { waitUntil: 'networkidle0' });
-          await pageB.pdf({ path: filePathBacen, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '20mm', bottom: '20mm', left: '22mm', right: '22mm' } });
+          await pageB.pdf({ path: filePathBacen, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '22mm', right: '18mm', bottom: '26mm', left: '18mm' } });
         } finally { if (browserBacen) await (browserBacen as any).close(); }
         pdfPath = filePathBacen;
         const hashBacen = await calcularHashArquivo(pdfPath);
@@ -6259,7 +6170,7 @@ ${(temTest1 || temTest2) ? `
           browserRating = await puppeteerR.default.launch({ executablePath: execPathR, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu','--single-process'], headless: true });
           const pageR = await browserRating.newPage();
           await pageR.setContent(htmlRating, { waitUntil: 'networkidle0' });
-          await pageR.pdf({ path: filePathRating, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '18mm', bottom: '18mm', left: '22mm', right: '22mm' } });
+          await pageR.pdf({ path: filePathRating, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '22mm', right: '18mm', bottom: '26mm', left: '18mm' } });
         } finally { if (browserRating) await (browserRating as any).close(); }
         pdfPath = filePathRating;
         const hashRating = await calcularHashArquivo(pdfPath);
@@ -6330,7 +6241,7 @@ ${(temTest1 || temTest2) ? `
           browserParceria = await puppeteerP.default.launch({ executablePath: execPathP, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu','--single-process'], headless: true });
           const pageP = await browserParceria.newPage();
           await pageP.setContent(htmlParceria, { waitUntil: 'networkidle0' });
-          await pageP.pdf({ path: filePathParceria, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '18mm', bottom: '18mm', left: '22mm', right: '22mm' } });
+          await pageP.pdf({ path: filePathParceria, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '22mm', right: '18mm', bottom: '26mm', left: '18mm' } });
         } finally { if (browserParceria) await (browserParceria as any).close(); }
         pdfPath = filePathParceria;
         const hashParceria = await calcularHashArquivo(pdfPath);
@@ -6703,7 +6614,7 @@ ${(temTest1 || temTest2) ? `
       browser = await puppeteer.default.launch({ executablePath, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage'], headless: true });
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
-      await page.pdf({ path: pdfPath, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '20mm', bottom: '20mm', left: '22mm', right: '22mm' } });
+      await page.pdf({ path: pdfPath, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '22mm', right: '18mm', bottom: '26mm', left: '18mm' } });
     } finally {
       if (browser) await browser.close();
     }
