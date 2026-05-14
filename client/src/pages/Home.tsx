@@ -92,9 +92,9 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col">
       <SEO
-        title="Simulador de Crédito Empresarial | Destrava Crédito"
-        description="Simule gratuitamente o crédito da sua empresa e descubra as melhores linhas de financiamento. A Destrava oferece assessoria especializada para MEI, micro e pequenas empresas, incluindo Pronampe 2026, ProCred 360 (Desenrola Empresas), Giro CAIXA Fácil e outras opções com prazos de até 96 meses e carência de 24 meses."
-        keywords="simulador de crédito empresarial, simular empréstimo para empresas, pronampe 2026, procred 360, crédito para MEI, crédito para microempresa, crédito para pequena empresa, financiamento empresarial, assessoria empresarial"
+        title="Destrave o crédito da sua empresa | Destrava Crédito"
+        description="Destrave o crédito da sua empresa com assessoria empresarial completa. Analisamos seu cenário, identificamos as melhores linhas de financiamento e conduzimos todo o processo, incluindo Pronampe 2026, ProCred 360 e outras opções com prazos de até 96 meses e carência de 24 meses. Simulação gratuita e atendimento consultivo."
+        keywords="assessoria de crédito empresarial, consultoria de crédito, captação de recursos para empresas, destravar crédito, financiamento empresarial, Pronampe 2026, ProCred 360, crédito para MEI, crédito para microempresa, crédito para pequena empresa"
         image="https://destravacredito.com/3.png"
         structuredData={structuredData}
       />
@@ -110,9 +110,9 @@ export default function Home() {
         <div className="container relative z-10">
           <div className="grid md:grid-cols-2 gap-6 md:gap-10 items-start">
             <div>
-              <h1 className="text-4xl md:text-5xl font-bold mb-5 leading-tight">
-                Simule o crédito da sua empresa com assessoria especializada em crédito bancário e governamental.
-              </h1>
+               <h1 className="text-4xl md:text-5xl font-bold mb-5 leading-tight">
+                 Destrave o crédito da sua empresa com assessoria especializada em crédito bancário e governamental.
+               </h1>
               <p className="text-xl md:text-2xl mb-4 text-white/90 leading-relaxed">
                 A Destrava atua ao lado da sua empresa para identificar as melhores linhas de crédito, organizar a operação e conduzir todo o processo com mais segurança, estratégia e clareza.
               </p>
@@ -120,14 +120,14 @@ export default function Home() {
                 Cuidamos da estruturação da demanda, do direcionamento correto e do acompanhamento da operação para que sua empresa avance com menos desgaste, mais previsibilidade e melhores condições de crédito.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 mb-10">
-                <Link href="/simular">
-                  <Button
-                    size="lg"
-                    className="bg-[var(--color-caixa-yellow)] hover:bg-yellow-500 text-black font-bold shadow-lg w-full sm:w-auto"
-                  >
-                    → Simule seu crédito
-                  </Button>
-                </Link>
+                 <Link href="/simular">
+                   <Button
+                     size="lg"
+                     className="bg-[var(--color-caixa-yellow)] hover:bg-yellow-500 text-black font-bold shadow-lg w-full sm:w-auto"
+                   >
+                     → Destrave seu crédito
+                   </Button>
+                 </Link>
                 <a
                   href="https://wa.me/556135268355"
                   target="_blank"
