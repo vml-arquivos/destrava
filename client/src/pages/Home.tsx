@@ -92,10 +92,10 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col">
       <SEO
-        title="Assessoria Empresarial para Captação de Recursos e Crédito para Empresas | Destrava"
-        description="A Destrava oferece assessoria empresarial para captação de recursos e crédito para empresas, com condução completa do processo, atendimento consultivo e mais clareza para o empresário."
-        keywords="assessoria empresarial, captação de recursos, crédito para empresas, crédito empresarial, assessoria para empresas, captação de recursos para empresas, assessoria de crédito empresarial, soluções para empresas, recursos para empresas"
-        image="https://destrava.permupay.com.br/3.png"
+        title="Simulador de Crédito Empresarial | Destrava Crédito"
+        description="Simule gratuitamente o crédito da sua empresa e descubra as melhores linhas de financiamento. A Destrava oferece assessoria especializada para MEI, micro e pequenas empresas, incluindo Pronampe 2026, ProCred 360 (Desenrola Empresas), Giro CAIXA Fácil e outras opções com prazos de até 96 meses e carência de 24 meses."
+        keywords="simulador de crédito empresarial, simular empréstimo para empresas, pronampe 2026, procred 360, crédito para MEI, crédito para microempresa, crédito para pequena empresa, financiamento empresarial, assessoria empresarial"
+        image="https://destravacredito.com/3.png"
         structuredData={structuredData}
       />
       <Header />
@@ -111,7 +111,7 @@ export default function Home() {
           <div className="grid md:grid-cols-2 gap-6 md:gap-10 items-start">
             <div>
               <h1 className="text-4xl md:text-5xl font-bold mb-5 leading-tight">
-                Assessoria Especializada em Captação de Crédito Bancário e Governamental.
+                Simule o crédito da sua empresa com assessoria especializada em crédito bancário e governamental.
               </h1>
               <p className="text-xl md:text-2xl mb-4 text-white/90 leading-relaxed">
                 A Destrava atua ao lado da sua empresa para identificar as melhores linhas de crédito, organizar a operação e conduzir todo o processo com mais segurança, estratégia e clareza.
