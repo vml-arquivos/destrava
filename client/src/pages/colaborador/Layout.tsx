@@ -75,6 +75,36 @@ const ALL_NAV_ITEMS: NavItem[] = [
   },
 ];
 
+
+function normalizePermValue(value?: string | null) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/-/g, "_");
+}
+
+function podeAcessarAcompanhamentoBancario(user: any): boolean {
+  if (!user) return false;
+  if (user?.acesso_acompanhamento_bancario === true) return true;
+
+  const permitidos = new Set([
+    "admin",
+    "administrador",
+    "super_admin",
+    "superadmin",
+    "gestor_credito",
+  ]);
+
+  const cargo = normalizePermValue(user?.cargo);
+  const perfil = normalizePermValue(user?.perfil);
+  const role = normalizePermValue(user?.role);
+
+  return permitidos.has(cargo) || permitidos.has(perfil) || permitidos.has(role);
+}
+
 interface LayoutProps {
   children: React.ReactNode;
   title?: string;
@@ -91,6 +121,7 @@ export default function ColaboradorLayout({ children, title }: LayoutProps) {
   // Filtra itens de navegação conforme cargo e escopo operacional
   const navItems = ALL_NAV_ITEMS.filter(item => {
     if (item.managementOnly && !podeVerTudo) return false;
+    if (item.href === "/colaborador/acompanhamento-bancario" && !podeAcessarAcompanhamentoBancario(colaborador)) return false;
     if (!item.allowedCargos) return true;
     return item.allowedCargos.includes(cargoLower);
   });
