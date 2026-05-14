@@ -19,13 +19,35 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+/**
+ * FAQ atualizado para o Novo Pronampe 2026.
+ * Destaca as novas regras de faturamento elegível, limite de crédito, carência e prazo.
+ */
 const faqs = [
-  { q: 'Quem pode solicitar o PRONAMPE?', a: 'MEIs, microempresas e empresas de pequeno porte com faturamento anual de ate R$ 4,8 milhoes. Para empresas lideradas por mulheres, o limite de credito sobe para 50% do faturamento.' },
-  { q: 'Qual o valor maximo que posso obter?', a: 'Ate 30% do faturamento anual bruto, limitado a R$ 150.000 por CNPJ. Para empresas lideradas por mulheres, o limite sobe para 50% do faturamento.' },
-  { q: 'Qual a taxa de juros do PRONAMPE?', a: 'A taxa maxima e Selic + 6% ao ano, sem tarifas de credito adicionais. E uma das menores taxas disponiveis para micro e pequenas empresas no Brasil.' },
-  { q: 'Qual o prazo de pagamento?', a: 'Ate 48 meses para pagamento, com 6 meses de carencia. Contratos podem ser renegociados para ate 72 meses em situacoes especificas.' },
-  { q: 'Quais garantias sao exigidas?', a: 'Aval dos socios e apoio do Fundo Garantidor de Operacoes (FGO), que facilita a aprovacao mesmo para empresas sem bens para oferecer como garantia.' },
-  { q: 'Como a Destrava Credito me ajuda no PRONAMPE?', a: 'Nossa equipe analisa seu faturamento, organiza toda a documentacao, identifica o banco com melhores condicoes e acompanha o processo ate a aprovacao e liberacao do credito.' },
+  {
+    q: 'Quem pode solicitar o Novo Pronampe?',
+    a: 'Micro e pequenas empresas (MEI, ME e EPP) com faturamento anual de até R$ 4,8 milhões. Para empresas lideradas por mulheres, o limite de crédito é maior, podendo chegar a 60% do faturamento anual.'
+  },
+    {
+    q: 'Qual o valor máximo que posso obter?',
+    a: 'Até 50% do faturamento anual bruto, limitado a R$ 500.000 por CNPJ. Para empresas lideradas por mulheres, o limite sobe para 60% do faturamento.'
+  },
+  {
+    q: 'Qual a taxa de juros do Novo Pronampe?',
+    a: 'A taxa de juros parte de Selic + 6% ao ano, podendo variar conforme a instituição financeira, com condições competitivas para micro e pequenas empresas.'
+  },
+  {
+    q: 'Qual o prazo de pagamento?',
+    a: 'Até 96 meses para pagamento, com carência de até 24 meses para começar a amortizar o principal.'
+  },
+  {
+    q: 'Quais garantias são exigidas?',
+    a: 'Aval dos sócios e apoio do Fundo Garantidor de Operações (FGO), que facilita a aprovação mesmo para empresas sem bens para oferecer como garantia.'
+  },
+  {
+    q: 'Como a Destrava Crédito me ajuda no Novo Pronampe?',
+    a: 'Nossa equipe analisa o faturamento, organiza toda a documentação, identifica o banco com melhores condições e acompanha o processo até a aprovação e liberação do crédito.'
+  },
 ];
 
 export default function Pronampe() {
@@ -34,10 +56,13 @@ export default function Pronampe() {
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <SEO
-        title="PRONAMPE - Credito para Micro e Pequenas Empresas | Destrava Credito"
-        description="PRONAMPE: ate R$ 150 mil com Selic + 6% ao ano para MEI, ME e EPP. 48 meses para pagar, 6 de carencia. A Destrava Credito cuida de tudo para voce."
-        keywords="pronampe, credito micro empresa, credito pequena empresa, pronampe 2025, emprestimo MEI"
-        structuredData={serviceStructuredData("PRONAMPE", "Programa Nacional de Apoio as Micro e Pequenas Empresas com assessoria completa da Destrava Credito.")}
+        title="Novo Pronampe 2026 - Crédito para Micro e Pequenas Empresas | Destrava"
+        description="Novo Pronampe 2026: até R$ 500 mil, com carência de 24 meses e prazo de pagamento de 96 meses. Assessoria completa para MEI, ME e EPP."
+        keywords="novo pronampe 2026, crédito para micro e pequenas empresas, pronampe 2026, empréstimo MEI, capital de giro"
+        structuredData={serviceStructuredData(
+          "Novo Pronampe 2026",
+          "Programa Nacional de Apoio às Micro e Pequenas Empresas: até 50% do faturamento (limitado a R$ 500 mil), com carência de 24 meses e prazo total de 96 meses. Assessoria completa da Destrava."
+        )}
       />
       <Header />
 
@@ -55,11 +80,11 @@ export default function Pronampe() {
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4">PRONAMPE</h1>
             <p className="text-xl text-white/90 mb-2 font-medium">
-              Programa Nacional de Apoio às Micro e Pequenas Empresas
+              Programa Nacional de Apoio às Micro e Pequenas Empresas – Versão 2026
             </p>
             <p className="text-lg text-white/80 leading-relaxed mb-8">
-              Até <strong>R$ 150.000</strong> com taxa <strong>Selic + 6% ao ano</strong> e carência de 6 meses.
-              Para MEI, microempresas e empresas de pequeno porte. A Destrava cuida de todo o processo.
+              Até <strong>R$ 500.000</strong> de crédito, com carência de até <strong>24 meses</strong> e prazo total de pagamento de <strong>96 meses</strong>.
+              A Destrava cuida de todo o processo, desde a análise até a aprovação.
             </p>
             <div className="flex flex-wrap gap-3">
               <Link href="/simular">
@@ -84,20 +109,20 @@ export default function Pronampe() {
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <DollarSign className="h-12 w-12 text-primary mx-auto mb-4" />
               <h3 className="font-bold text-lg mb-2">Valor Máximo</h3>
-              <p className="text-2xl font-bold text-primary mb-2">Até R$ 150k</p>
-              <p className="text-sm text-muted-foreground">30% do faturamento anual</p>
+              <p className="text-2xl font-bold text-primary mb-2">Até R$ 500k</p>
+              <p className="text-sm text-muted-foreground">50% do faturamento anual (60% para empresas lideradas por mulheres)</p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <Percent className="h-12 w-12 text-primary mx-auto mb-4" />
               <h3 className="font-bold text-lg mb-2">Taxa de Juros</h3>
-              <p className="text-2xl font-bold text-primary mb-2">Selic + 6% a.a.</p>
-              <p className="text-sm text-muted-foreground">Uma das menores do mercado</p>
+              <p className="text-2xl font-bold text-primary mb-2">Selic + 6% a.a.*</p>
+              <p className="text-sm text-muted-foreground">*Pode variar conforme a instituição financeira</p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <Calendar className="h-12 w-12 text-primary mx-auto mb-4" />
               <h3 className="font-bold text-lg mb-2">Prazo</h3>
-              <p className="text-2xl font-bold text-primary mb-2">Até 48 meses</p>
-              <p className="text-sm text-muted-foreground">Com carência de 6 meses</p>
+              <p className="text-2xl font-bold text-primary mb-2">Até 96 meses</p>
+              <p className="text-sm text-muted-foreground">Com carência de 24 meses</p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <Building2 className="h-12 w-12 text-primary mx-auto mb-4" />
