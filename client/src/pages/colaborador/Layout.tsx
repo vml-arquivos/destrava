@@ -21,6 +21,7 @@ import {
   TrendingUp,
   BookUser,
   UserCheck,
+  Activity,
 } from "lucide-react";
 
 interface NavItem {
@@ -50,6 +51,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/colaborador/fila",        label: "Fila Geral",         icon: ListOrdered, managementOnly: true },
   { href: "/colaborador/clientes",    label: "Clientes",        icon: Users },
   { href: "/colaborador/empresas",    label: "Empresas",        icon: Building2 },
+  { href: "/colaborador/acompanhamento-bancario", label: "Acompanhamento", icon: Activity },
   // Faturamento: todos os colaboradores
   { href: "/colaborador/previsao-faturamento", label: "Faturamento", icon: TrendingUp },
   // Gerador de Contratos: todos os colaboradores
