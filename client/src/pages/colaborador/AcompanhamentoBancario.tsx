@@ -557,6 +557,43 @@ const NOVO_FIELDS = [
   },
 ];
 
+
+// ─── Estado inicial do formulário de atualização ──────────────────────────────
+function updFormInicial(): AtualizacaoForm {
+  return {
+    numero_semana: 1,
+    data_referencia_inicio: "",
+    data_referencia_fim: "",
+    data_atualizacao: "",
+    proxima_atualizacao_apos_salvar: "",
+    entrada_maquininha: 0,
+    entrada_pix: 0,
+    entrada_boleto: 0,
+    entrada_ted: 0,
+    entrada_dinheiro: 0,
+    outras_entradas: 0,
+    total_saidas: 0,
+    saldo_medio: 0,
+    saldo_final: 0,
+    quantidade_transacoes: 0,
+    rating_bacen: "",
+    rating_interno: "",
+    scr_status: "",
+    cenprot_status: "",
+    serasa_status: "",
+    cnd_status: "",
+    pld_aml_status: "",
+    coaf_status: "",
+    possui_restricao: false,
+    restricao_nova: false,
+    devolucao_ou_estorno: false,
+    ocorrencia_negativa: false,
+    analise_semana: "",
+    orientacao_cliente: "",
+    proxima_acao: "",
+  };
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function AcompanhamentoBancario() {
   const { colaborador } = useAuth();
