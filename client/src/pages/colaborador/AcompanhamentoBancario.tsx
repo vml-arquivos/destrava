@@ -1655,286 +1655,272 @@ export default function AcompanhamentoBancario() {
         )}
 
         {/* ── Modal — Detalhes ─────────────────────────────────────────────── */}
+        {/* ── Modal — Detalhes ─────────────────────────────────────────────── */}
         {detalhe && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/45 p-3 sm:p-5">
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 p-3 sm:p-5">
             <div className="mx-auto flex min-h-[calc(100vh-40px)] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+
+              {/* ── Cabeçalho sticky ── */}
               <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-4 backdrop-blur sm:px-6">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
-                      Relatório operacional
-                    </p>
-                    <h3 className="mt-1 text-xl font-bold text-slate-950">
-                      Detalhes do Acompanhamento
-                    </h3>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {detalhe.nome_empresa} — {detalhe.banco_observado}
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">Relatório operacional</p>
+                    <h3 className="mt-0.5 text-xl font-bold text-slate-950">Detalhes do Acompanhamento</h3>
+                    <p className="mt-0.5 text-sm text-slate-500">
+                      {detalhe.nome_empresa} — CNPJ {detalhe.cnpj || "-"} — {detalhe.banco_observado}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
-                      onClick={() => abrirAtualizacao(detalhe)}
-                    >
-                      Atualizar semana
-                    </button>
-                    <button
-                      className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
-                      onClick={() => adicionarOutroBanco(detalhe)}
-                    >
-                      + Outro banco
-                    </button>
-                    <button
-                      className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100"
-                      onClick={() => exportarCSV(detalhe)}
-                    >
-                      Exportar XLS
-                    </button>
-                    <button
-                      className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-100"
-                      onClick={() => {
-                        setImprimirOpen(detalhe);
-                        setDetalhe(null);
-                      }}
-                    >
-                      Imprimir
-                    </button>
-                    <button
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                      onClick={() => setDetalhe(null)}
-                    >
-                      Fechar
-                    </button>
+                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(detalhe.status_semana || detalhe.status)}`}>
+                      {labelStatus(detalhe.status_semana || detalhe.status)}
+                    </span>
+                    <button className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100" onClick={() => abrirAtualizacao(detalhe)}>Atualizar semana</button>
+                    <button className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100" onClick={() => adicionarOutroBanco(detalhe)}>+ Outro banco</button>
+                    <button className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100" onClick={() => exportarCSV(detalhe)}>Exportar XLS</button>
+                    <button className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-100" onClick={() => { setImprimirOpen(detalhe); setDetalhe(null); }}>Imprimir</button>
+                    <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50" onClick={() => setDetalhe(null)}>Fechar</button>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-5 overflow-y-auto bg-slate-50 px-4 py-5 sm:px-6">
-                {/* Resumo executivo */}
-                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                      <h4 className="text-base font-bold text-slate-900">
-                        Resumo executivo
-                      </h4>
-                      <p className="text-xs text-slate-500">
-                        Visão rápida do acompanhamento, próximo vencimento e situação atual.
-                      </p>
-                    </div>
-                    <span
-                      className={`w-fit rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(detalhe.status_semana || detalhe.status)}`}
-                    >
-                      {labelStatus(detalhe.status_semana || detalhe.status)}
-                    </span>
-                  </div>
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <InfoCard label="Empresa" value={detalhe.nome_empresa} />
-                    <InfoCard label="CNPJ" value={detalhe.cnpj} />
-                    <InfoCard label="Banco observado" value={detalhe.banco_observado} />
-                    <InfoCard label="Responsável" value={detalhe.responsavel_nome || "Admin"} />
-                    <InfoCard label="Início do acompanhamento" value={formatDateBR(detalhe.data_inicio)} />
-                    <InfoCard label="Fim previsto" value={formatDateBR(detalhe.data_fim_prevista)} />
-                    <InfoCard label="Próxima atualização" value={formatDateBR(detalhe.proxima_atualizacao)} />
-                    <InfoCard label="Prorrogado" value={detalhe.prorrogado ? "Sim" : "Não"} />
+                {/* ── Bloco 1: Dados gerais + Indicadores + Recomendação ── */}
+                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Resumo geral</h4>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-0 sm:grid-cols-3 lg:grid-cols-6">
+                    {[
+                      { label: "Banco observado", value: detalhe.banco_observado },
+                      { label: "Responsável", value: detalhe.responsavel_nome || "Admin" },
+                      { label: "Início", value: formatDateBR(detalhe.data_inicio) },
+                      { label: "Fim previsto", value: formatDateBR(detalhe.data_fim_prevista) },
+                      { label: "Próxima atualização", value: formatDateBR(detalhe.proxima_atualizacao) },
+                      { label: "Prorrogado", value: detalhe.prorrogado ? "Sim" : "Não" },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="border-b border-slate-100 py-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+                        <div className="mt-0.5 text-sm font-semibold text-slate-800">{value || "-"}</div>
+                      </div>
+                    ))}
                   </div>
                 </section>
 
-                {/* Indicadores */}
+                {/* ── Bloco 2: Indicadores financeiros + Recomendação ── */}
                 <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
-                    <h4 className="text-base font-bold text-slate-900">
-                      Indicadores financeiros e rating
-                    </h4>
-                    <p className="mb-3 text-xs text-slate-500">
-                      Números centrais para análise de evolução e capacidade.
-                    </p>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      <InfoCard label="Rating Bacen atual" value={detalhe.rating_bacen_atual || detalhe.rating_bacen_inicial} />
-                      <InfoCard label="Rating interno inicial" value={detalhe.rating_interno_inicial} />
-                      <InfoCard label="Rating interno atual" value={detalhe.rating_interno_atual} />
-                      <InfoCard label="Faturamento anual" value={moneyBR(detalhe.faturamento_anual)} />
-                      <InfoCard label="Média mensal" value={moneyBR(detalhe.media_mensal)} />
-                      <InfoCard label="Margem ±30%" value={moneyBR(detalhe.margem_seguranca_30)} />
+                    <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Indicadores financeiros e rating</h4>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-0 sm:grid-cols-3">
+                      {[
+                        { label: "Rating Bacen atual", value: detalhe.rating_bacen_atual || detalhe.rating_bacen_inicial },
+                        { label: "Rating interno inicial", value: detalhe.rating_interno_inicial },
+                        { label: "Rating interno atual", value: detalhe.rating_interno_atual },
+                        { label: "Faturamento anual", value: moneyBR(detalhe.faturamento_anual) },
+                        { label: "Média mensal", value: moneyBR(detalhe.media_mensal) },
+                        { label: "Margem ±30%", value: moneyBR(detalhe.margem_seguranca_30) },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="border-b border-slate-100 py-2">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+                          <div className="mt-0.5 text-sm font-semibold text-slate-800">{value || "-"}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
                   <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 shadow-sm">
-                    <h4 className="text-base font-bold text-blue-950">
-                      Recomendação operacional
-                    </h4>
-                    <p className="mt-2 text-sm leading-6 text-blue-900">
-                      {calcularRecomendacao(detalhe)}
-                    </p>
+                    <h4 className="text-sm font-bold uppercase tracking-wide text-blue-700">Recomendação operacional</h4>
+                    <p className="mt-2 text-sm leading-6 text-blue-900">{calcularRecomendacao(detalhe)}</p>
                     <div className="mt-4 rounded-xl border border-blue-200 bg-white/70 p-3">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-                        Saldo última semana
-                      </div>
-                      <div
-                        className={`mt-1 text-lg font-bold ${
-                          Number(detalhe.saldo_semanal || 0) < 0
-                            ? "text-red-600"
-                            : "text-emerald-700"
-                        }`}
-                      >
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">Saldo última semana</div>
+                      <div className={`mt-1 text-lg font-bold ${Number(detalhe.saldo_semanal || 0) < 0 ? "text-red-600" : "text-emerald-700"}`}>
                         {moneyBR(detalhe.saldo_semanal)}
                       </div>
                     </div>
                   </div>
                 </section>
 
-                {/* Objetivo e dados bancários */}
-                <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <h4 className="text-base font-bold text-slate-900">
-                      Objetivo e estratégia de crédito
-                    </h4>
-                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <InfoCard label="Objetivo do crédito" value={detalhe.objetivo_credito} />
-                      <InfoCard label="Linha pretendida" value={detalhe.linha_credito_pretendida} />
-                      <InfoCard label="Valor pretendido" value={moneyBR(detalhe.valor_credito_pretendido)} />
-                      <InfoCard label="Status" value={labelStatus(detalhe.status)} />
-                    </div>
-                    {detalhe.observacoes_iniciais && (
-                      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                        <strong>Observações:</strong> {detalhe.observacoes_iniciais}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <h4 className="text-base font-bold text-slate-900">
-                      Dados bancários e relacionamento
-                    </h4>
-                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <InfoCard label="Agência" value={detalhe.agencia} />
-                      <InfoCard label="Conta" value={detalhe.conta} />
-                      <InfoCard label="Gerente do banco" value={detalhe.gerente_banco} />
-                      <InfoCard label="Contato do banco" value={detalhe.contato_banco} />
-                      <InfoCard label="Abertura de conta" value={formatDateBR(detalhe.data_abertura_conta)} />
-                      <InfoCard label="E-mail" value={detalhe.email_cliente} />
-                    </div>
-                  </div>
-                </section>
-
-                {/* Histórico semanal */}
-                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                {/* ── Bloco 3: Histórico semanal em tabela ── */}
+                <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                     <div>
-                      <h4 className="text-base font-bold text-slate-900">
-                        Histórico semanal
-                      </h4>
-                      <p className="text-xs text-slate-500">
-                        Cada semana fica organizada em blocos: entradas, saídas, rating, conformidade e análise.
-                      </p>
+                      <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Histórico semanal</h4>
+                      <p className="text-xs text-slate-400">Evolução semana a semana — entradas, saídas, saldos e conformidade</p>
                     </div>
-                    <span className="text-xs font-medium text-slate-500">
+                    <span className="text-xs font-medium text-slate-400">
                       {Array.isArray(detalhe.atualizacoes) ? detalhe.atualizacoes.length : 0} semana(s)
                     </span>
                   </div>
 
-                  <div className="space-y-4">
-                    {Array.isArray(detalhe.atualizacoes) &&
-                    detalhe.atualizacoes.length > 0 ? (
-                      detalhe.atualizacoes.map((item: any) => {
-                        const entradas =
-                          Number(item.total_entradas || 0) ||
-                          Number(item.entrada_maquininha || 0) +
-                            Number(item.entrada_pix || 0) +
-                            Number(item.entrada_boleto || 0) +
-                            Number(item.entrada_ted || 0) +
-                            Number(item.entrada_dinheiro || 0) +
-                            Number(item.outras_entradas || 0);
-                        const saldo = Number(item.saldo_semanal || 0);
+                  {Array.isArray(detalhe.atualizacoes) && detalhe.atualizacoes.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[900px] text-xs">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-slate-50">
+                            <th className="px-3 py-2.5 text-left font-semibold text-slate-500" rowSpan={2}>Semana</th>
+                            <th className="px-3 py-2.5 text-left font-semibold text-slate-500" rowSpan={2}>Período</th>
+                            <th className="border-l border-slate-200 px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-emerald-700" colSpan={7}>Entradas</th>
+                            <th className="border-l border-slate-200 px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-red-600" colSpan={5}>Saídas e Saldos</th>
+                            <th className="border-l border-slate-200 px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-blue-700" colSpan={8}>Rating e Conformidade</th>
+                            <th className="border-l border-slate-200 px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500" rowSpan={2}>Status</th>
+                          </tr>
+                          <tr className="border-b-2 border-slate-300 bg-slate-50">
+                            <th className="border-l border-slate-200 px-3 py-2 text-right font-medium text-slate-500">Maquininha</th>
+                            <th className="px-3 py-2 text-right font-medium text-slate-500">Pix</th>
+                            <th className="px-3 py-2 text-right font-medium text-slate-500">Boleto</th>
+                            <th className="px-3 py-2 text-right font-medium text-slate-500">TED</th>
+                            <th className="px-3 py-2 text-right font-medium text-slate-500">Dinheiro</th>
+                            <th className="px-3 py-2 text-right font-medium text-slate-500">Outras</th>
+                            <th className="px-3 py-2 text-right font-bold text-emerald-700">Total</th>
+                            <th className="border-l border-slate-200 px-3 py-2 text-right font-medium text-slate-500">Saídas</th>
+                            <th className="px-3 py-2 text-right font-medium text-slate-500">Saldo sem.</th>
+                            <th className="px-3 py-2 text-right font-medium text-slate-500">Saldo médio</th>
+                            <th className="px-3 py-2 text-right font-medium text-slate-500">Saldo final</th>
+                            <th className="px-3 py-2 text-right font-medium text-slate-500">Transações</th>
+                            <th className="border-l border-slate-200 px-3 py-2 text-center font-medium text-slate-500">Bacen</th>
+                            <th className="px-3 py-2 text-center font-medium text-slate-500">Interno</th>
+                            <th className="px-3 py-2 text-center font-medium text-slate-500">SCR</th>
+                            <th className="px-3 py-2 text-center font-medium text-slate-500">Cenprot</th>
+                            <th className="px-3 py-2 text-center font-medium text-slate-500">Serasa</th>
+                            <th className="px-3 py-2 text-center font-medium text-slate-500">CND</th>
+                            <th className="px-3 py-2 text-center font-medium text-slate-500">PLD/AML</th>
+                            <th className="px-3 py-2 text-center font-medium text-slate-500">COAF</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {detalhe.atualizacoes.map((item: any, idx: number) => {
+                            const entradas =
+                              Number(item.total_entradas || 0) ||
+                              Number(item.entrada_maquininha || 0) +
+                              Number(item.entrada_pix || 0) +
+                              Number(item.entrada_boleto || 0) +
+                              Number(item.entrada_ted || 0) +
+                              Number(item.entrada_dinheiro || 0) +
+                              Number(item.outras_entradas || 0);
+                            const saldo = Number(item.saldo_semanal || 0);
+                            const isEven = idx % 2 === 0;
+                            return (
+                              <tr key={item.id || item.numero_semana} className={`border-b border-slate-100 transition hover:bg-blue-50/40 ${isEven ? "bg-white" : "bg-slate-50/50"}`}>
+                                <td className="px-3 py-2.5 font-bold text-slate-700">S{item.numero_semana}</td>
+                                <td className="whitespace-nowrap px-3 py-2.5 text-slate-500">
+                                  {formatDateBR(item.data_referencia_inicio)}<br/>
+                                  <span className="text-[10px]">a {formatDateBR(item.data_referencia_fim)}</span>
+                                </td>
+                                <td className="border-l border-slate-100 px-3 py-2.5 text-right text-slate-700">{moneyBR(item.entrada_maquininha)}</td>
+                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.entrada_pix)}</td>
+                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.entrada_boleto)}</td>
+                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.entrada_ted)}</td>
+                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.entrada_dinheiro)}</td>
+                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.outras_entradas)}</td>
+                                <td className="px-3 py-2.5 text-right font-bold text-emerald-700">{moneyBR(entradas)}</td>
+                                <td className="border-l border-slate-100 px-3 py-2.5 text-right text-red-600">{moneyBR(item.total_saidas)}</td>
+                                <td className={`px-3 py-2.5 text-right font-bold ${saldo < 0 ? "text-red-600" : "text-emerald-700"}`}>{moneyBR(item.saldo_semanal)}</td>
+                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.saldo_medio)}</td>
+                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.saldo_final)}</td>
+                                <td className="px-3 py-2.5 text-right text-slate-600">{item.quantidade_transacoes || 0}</td>
+                                <td className="border-l border-slate-100 px-3 py-2.5 text-center font-bold text-slate-800">{item.rating_bacen || "-"}</td>
+                                <td className="px-3 py-2.5 text-center font-bold text-blue-700">{item.rating_interno || "-"}</td>
+                                <td className="px-3 py-2.5 text-center">{item.scr_status || item.restricao_scr || "-"}</td>
+                                <td className="px-3 py-2.5 text-center">{item.cenprot_status || item.restricao_cenprot || "-"}</td>
+                                <td className="px-3 py-2.5 text-center">{item.serasa_status || item.restricao_serasa || "-"}</td>
+                                <td className="px-3 py-2.5 text-center">{item.cnd_status || item.cnd_regular || "-"}</td>
+                                <td className="px-3 py-2.5 text-center">{item.pld_aml_status || item.pld_aml || "-"}</td>
+                                <td className="px-3 py-2.5 text-center">{item.coaf_status || item.operacao_suspeita_coaf || "-"}</td>
+                                <td className="border-l border-slate-100 px-3 py-2.5">
+                                  <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusBadge(item.status_semana || item.status)}`}>
+                                    {labelStatus(item.status_semana || item.status)}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500 m-4">
+                      Nenhuma atualização semanal registrada.
+                    </div>
+                  )}
+                </section>
 
-                        return (
-                          <article
-                            key={item.id || item.numero_semana}
-                            className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                          >
-                            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                              <div>
-                                <h5 className="text-sm font-bold text-slate-900">
-                                  Semana {item.numero_semana}
-                                </h5>
-                                <p className="text-xs text-slate-500">
-                                  {formatDateBR(item.data_referencia_inicio)} a{" "}
-                                  {formatDateBR(item.data_referencia_fim)}
-                                </p>
-                              </div>
-                              <span
-                                className={`w-fit rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(item.status_semana || item.status)}`}
-                              >
-                                {labelStatus(item.status_semana || item.status)}
-                              </span>
-                            </div>
+                {/* ── Bloco 4: Análise, orientação e observações (acordeão) ── */}
+                {Array.isArray(detalhe.atualizacoes) && detalhe.atualizacoes.some((i: any) => i.analise_semana || i.orientacao_cliente || i.proxima_acao) && (
+                  <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="border-b border-slate-100 px-4 py-3">
+                      <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Análises e orientações por semana</h4>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {detalhe.atualizacoes.filter((i: any) => i.analise_semana || i.orientacao_cliente || i.proxima_acao).map((item: any) => (
+                        <div key={`analise-${item.id || item.numero_semana}`} className="px-4 py-3">
+                          <div className="mb-2 flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-700">Semana {item.numero_semana}</span>
+                            <span className="text-[10px] text-slate-400">{formatDateBR(item.data_referencia_inicio)} a {formatDateBR(item.data_referencia_fim)}</span>
+                          </div>
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 text-xs text-slate-700">
+                            {item.analise_semana && (
+                              <div><span className="font-semibold text-slate-500">Análise: </span>{item.analise_semana}</div>
+                            )}
+                            {item.orientacao_cliente && (
+                              <div><span className="font-semibold text-slate-500">Orientação: </span>{item.orientacao_cliente}</div>
+                            )}
+                            {item.proxima_acao && (
+                              <div><span className="font-semibold text-slate-500">Próxima ação: </span>{item.proxima_acao}</div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
 
-                            <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
-                              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                                <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-                                  Entradas
-                                </h6>
-                                <div className="space-y-1 text-xs text-slate-700">
-                                  <div className="flex justify-between gap-3"><span>Maquininha</span><strong>{moneyBR(item.entrada_maquininha)}</strong></div>
-                                  <div className="flex justify-between gap-3"><span>Pix</span><strong>{moneyBR(item.entrada_pix)}</strong></div>
-                                  <div className="flex justify-between gap-3"><span>Boleto</span><strong>{moneyBR(item.entrada_boleto)}</strong></div>
-                                  <div className="flex justify-between gap-3"><span>TED</span><strong>{moneyBR(item.entrada_ted)}</strong></div>
-                                  <div className="flex justify-between gap-3"><span>Dinheiro</span><strong>{moneyBR(item.entrada_dinheiro)}</strong></div>
-                                  <div className="flex justify-between gap-3"><span>Outras</span><strong>{moneyBR(item.outras_entradas)}</strong></div>
-                                  <div className="mt-2 flex justify-between border-t pt-2 text-sm"><span>Total</span><strong>{moneyBR(entradas)}</strong></div>
-                                </div>
-                              </div>
-
-                              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                                <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-                                  Saídas e saldos
-                                </h6>
-                                <div className="space-y-1 text-xs text-slate-700">
-                                  <div className="flex justify-between gap-3"><span>Saídas</span><strong>{moneyBR(item.total_saidas)}</strong></div>
-                                  <div className="flex justify-between gap-3"><span>Saldo semanal</span><strong className={saldo < 0 ? "text-red-600" : "text-emerald-700"}>{moneyBR(item.saldo_semanal)}</strong></div>
-                                  <div className="flex justify-between gap-3"><span>Saldo médio</span><strong>{moneyBR(item.saldo_medio)}</strong></div>
-                                  <div className="flex justify-between gap-3"><span>Saldo final</span><strong>{moneyBR(item.saldo_final)}</strong></div>
-                                  <div className="flex justify-between gap-3"><span>Transações</span><strong>{item.quantidade_transacoes || 0}</strong></div>
-                                </div>
-                              </div>
-
-                              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                                <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-                                  Rating e conformidade
-                                </h6>
-                                <div className="space-y-1 text-xs text-slate-700">
-                                  <div className="flex justify-between gap-3"><span>Bacen</span><strong>{item.rating_bacen || "-"}</strong></div>
-                                  <div className="flex justify-between gap-3"><span>Interno</span><strong>{item.rating_interno || "-"}</strong></div>
-                                  <div className="flex justify-between gap-3"><span>SCR</span><strong>{item.scr_status || item.restricao_scr || "-"}</strong></div>
-                                  <div className="flex justify-between gap-3"><span>Cenprot</span><strong>{item.cenprot_status || item.restricao_cenprot || "-"}</strong></div>
-                                  <div className="flex justify-between gap-3"><span>Serasa</span><strong>{item.serasa_status || item.restricao_serasa || "-"}</strong></div>
-                                  <div className="flex justify-between gap-3"><span>CND</span><strong>{item.cnd_status || item.cnd_regular || "-"}</strong></div>
-                                  <div className="flex justify-between gap-3"><span>PLD/AML</span><strong>{item.pld_aml_status || item.pld_aml || "-"}</strong></div>
-                                  <div className="flex justify-between gap-3"><span>COAF</span><strong>{item.coaf_status || item.operacao_suspeita_coaf || "-"}</strong></div>
-                                </div>
-                              </div>
-
-                              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                                <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-                                  Análise e orientação
-                                </h6>
-                                <div className="space-y-2 text-xs leading-5 text-slate-700">
-                                  <p><strong>Análise:</strong> {item.analise_semana || "-"}</p>
-                                  <p><strong>Orientação:</strong> {item.orientacao_cliente || "-"}</p>
-                                  <p><strong>Próxima ação:</strong> {item.proxima_acao || "-"}</p>
-                                </div>
-                              </div>
-                            </div>
-                          </article>
-                        );
-                      })
-                    ) : (
-                      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                        Nenhuma atualização semanal registrada.
+                {/* ── Bloco 5: Objetivo, dados bancários e observações ── */}
+                <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Objetivo e estratégia de crédito</h4>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-0">
+                      {[
+                        { label: "Objetivo do crédito", value: detalhe.objetivo_credito },
+                        { label: "Linha pretendida", value: detalhe.linha_credito_pretendida },
+                        { label: "Valor pretendido", value: moneyBR(detalhe.valor_credito_pretendido) },
+                        { label: "Status", value: labelStatus(detalhe.status) },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="border-b border-slate-100 py-2">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+                          <div className="mt-0.5 text-sm text-slate-700">{value || "-"}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {detalhe.observacoes_iniciais && (
+                      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                        <span className="font-semibold">Observações: </span>{detalhe.observacoes_iniciais}
                       </div>
                     )}
                   </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Dados bancários e relacionamento</h4>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-0">
+                      {[
+                        { label: "Agência", value: detalhe.agencia },
+                        { label: "Conta", value: detalhe.conta },
+                        { label: "Gerente do banco", value: detalhe.gerente_banco },
+                        { label: "Contato do banco", value: detalhe.contato_banco },
+                        { label: "Abertura de conta", value: formatDateBR(detalhe.data_abertura_conta) },
+                        { label: "E-mail", value: detalhe.email_cliente },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="border-b border-slate-100 py-2">
+                          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+                          <div className="mt-0.5 text-sm text-slate-700">{value || "-"}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </section>
+
+              </div>
+            </div>
+          </div>
+        )}
+
               </div>
             </div>
           </div>
