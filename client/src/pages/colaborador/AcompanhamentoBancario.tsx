@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import ColaboradorLayout from "./Layout";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -39,11 +39,13 @@ type AtualizacaoForm = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Formata data ISO (yyyy-mm-dd ou ISO full) para dd/mm/aaaa usando UTC para não mudar o dia */
+/** Formata data ISO para dd/mm/aaaa usando UTC para não mudar o dia */
 function formatDateBR(value?: string | null): string {
   if (!value) return "-";
   try {
-    const d = new Date(value.length === 10 ? value + "T00:00:00Z" : value);
+    const s = String(value).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return value;
+    const d = new Date(s + "T00:00:00Z");
     if (isNaN(d.getTime())) return "-";
     return d.toLocaleDateString("pt-BR", { timeZone: "UTC" });
   } catch {
@@ -79,6 +81,8 @@ function podeAcessarAcompanhamentoBancario(user: any): boolean {
     "super_admin",
     "superadmin",
     "gestor_credito",
+    "gestor de credito",
+    "gestor_de_credito",
   ]);
   return (
     permitidos.has(normalizePermValue(user?.cargo)) ||
@@ -102,7 +106,10 @@ function hojeISO(): string {
  * Se a base já for quarta, avança para a próxima quarta.
  */
 function proximaQuartaFeira(base: string | Date): string {
-  const d = typeof base === "string" ? new Date(base + (base.length === 10 ? "T00:00:00Z" : "")) : new Date(base);
+  const d =
+    typeof base === "string"
+      ? new Date(base + (base.length === 10 ? "T00:00:00Z" : ""))
+      : new Date(base);
   d.setUTCHours(12, 0, 0, 0);
   const dia = d.getUTCDay(); // 0=dom, 3=qua
   const diff = ((3 - dia + 7) % 7) || 7;
@@ -120,13 +127,18 @@ function addDays(iso: string, n: number): string {
 /** Calcula os campos automáticos da semana com base no acompanhamento */
 function calcularCamposSemana(row: Acompanhamento): Pick<
   AtualizacaoForm,
-  "numero_semana" | "data_referencia_inicio" | "data_referencia_fim" | "data_atualizacao" | "proxima_atualizacao_apos_salvar"
+  | "numero_semana"
+  | "data_referencia_inicio"
+  | "data_referencia_fim"
+  | "data_atualizacao"
+  | "proxima_atualizacao_apos_salvar"
 > {
-  const atualizacoes: any[] = Array.isArray(row.atualizacoes) ? row.atualizacoes : [];
+  const atualizacoes: any[] = Array.isArray(row.atualizacoes)
+    ? row.atualizacoes
+    : [];
   const dataInicio = String(row.data_inicio || hojeISO()).slice(0, 10);
 
   if (atualizacoes.length === 0) {
-    // Semana 1
     const fimPeriodo = proximaQuartaFeira(dataInicio);
     const proxima = proximaQuartaFeira(fimPeriodo);
     return {
@@ -138,8 +150,9 @@ function calcularCamposSemana(row: Acompanhamento): Pick<
     };
   }
 
-  // Semana N+1
-  const ordenadas = [...atualizacoes].sort((a, b) => Number(a.numero_semana) - Number(b.numero_semana));
+  const ordenadas = [...atualizacoes].sort(
+    (a, b) => Number(a.numero_semana) - Number(b.numero_semana)
+  );
   const ultima = ordenadas[ordenadas.length - 1];
   const ultimoFim = String(ultima.data_referencia_fim || "").slice(0, 10);
   const novoInicio = ultimoFim ? addDays(ultimoFim, 1) : dataInicio;
@@ -156,8 +169,16 @@ function calcularCamposSemana(row: Acompanhamento): Pick<
 }
 
 /** Calcula o status da semana */
-function calcularStatusSemana(form: AtualizacaoForm, saldoSemanal: number): string {
-  if (form.restricao_nova || form.ocorrencia_negativa || form.devolucao_ou_estorno) return "atencao";
+function calcularStatusSemana(
+  form: AtualizacaoForm,
+  saldoSemanal: number
+): string {
+  if (
+    form.restricao_nova ||
+    form.ocorrencia_negativa ||
+    form.devolucao_ou_estorno
+  )
+    return "atencao";
   if (saldoSemanal > 0) return "positiva";
   if (saldoSemanal < 0) return "negativa";
   return "neutra";
@@ -166,9 +187,11 @@ function calcularStatusSemana(form: AtualizacaoForm, saldoSemanal: number): stri
 /** Recomendação baseada no histórico */
 function calcularRecomendacao(row: Acompanhamento): string {
   if (row.recomendacao) return row.recomendacao;
-  if (row.status_pendente) return "Dados semanais pendentes.";
+  if (row.status_pendente || row.atualizacao_pendente)
+    return "Dados semanais pendentes.";
   const status = String(row.status_semana || "").toLowerCase();
-  if (status === "negativa") return "Ponto de atenção: reforçar movimentação e acompanhar saídas.";
+  if (status === "negativa")
+    return "Ponto de atenção: reforçar movimentação e acompanhar saídas.";
   if (status === "positiva") return "Evolução favorável.";
   if (status === "atencao") return "Revisar restrições.";
   if (row.status === "prorrogado") return "Acompanhamento prorrogado.";
@@ -178,15 +201,20 @@ function calcularRecomendacao(row: Acompanhamento): string {
 /** Monta URL do WhatsApp com mensagem completa incluindo semana e período */
 function whatsappUrl(row: Acompanhamento): string {
   if (row.whatsapp_lembrete_url) return row.whatsapp_lembrete_url;
-  const rawPhone = String(row.whatsapp_cliente || row.telefone_cliente || "").replace(/\D/g, "");
+  const rawPhone = String(
+    row.whatsapp_cliente || row.telefone_cliente || ""
+  ).replace(/\D/g, "");
   if (!rawPhone) return "";
   const phone = rawPhone.startsWith("55") ? rawPhone : `55${rawPhone}`;
 
-  // Determina semana e período para a mensagem
-  const atualizacoes: any[] = Array.isArray(row.atualizacoes) ? row.atualizacoes : [];
-  const proxSemana = atualizacoes.length > 0
-    ? Math.max(...atualizacoes.map((a: any) => Number(a.numero_semana || 0))) + 1
-    : 1;
+  const atualizacoes: any[] = Array.isArray(row.atualizacoes)
+    ? row.atualizacoes
+    : [];
+  const proxSemana =
+    atualizacoes.length > 0
+      ? Math.max(...atualizacoes.map((a: any) => Number(a.numero_semana || 0))) +
+        1
+      : 1;
   const campos = calcularCamposSemana(row);
   const dataInicio = formatDateBR(campos.data_referencia_inicio);
   const dataFim = formatDateBR(campos.data_referencia_fim);
@@ -218,7 +246,9 @@ function statusBadge(status?: string | null): string {
 function labelStatus(status?: string | null): string {
   const value = String(status || "").trim();
   if (!value) return "Pendente";
-  return value.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
 /** Normaliza rows da API */
@@ -253,6 +283,137 @@ function authHeaders(extra?: HeadersInit): HeadersInit {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(extra || {}),
   };
+}
+
+/** Exporta acompanhamento como CSV */
+function exportarCSV(row: Acompanhamento) {
+  const atualizacoes: any[] = Array.isArray(row.atualizacoes)
+    ? row.atualizacoes
+    : [];
+
+  const nomeArquivo = `acompanhamento-bancario-${String(row.nome_empresa || "empresa")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "-")}-${String(row.banco_observado || "banco")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "-")}.csv`;
+
+  const linhas: string[][] = [];
+
+  // Cabeçalho da empresa
+  linhas.push(["ACOMPANHAMENTO BANCÁRIO - DESTRAVA CRÉDITO"]);
+  linhas.push([]);
+  linhas.push(["Empresa", row.nome_empresa || ""]);
+  linhas.push(["CNPJ", row.cnpj || ""]);
+  linhas.push(["Banco", row.banco_observado || ""]);
+  linhas.push(["Agência", row.agencia || ""]);
+  linhas.push(["Conta", row.conta || ""]);
+  linhas.push(["Gerente do banco", row.gerente_banco || ""]);
+  linhas.push(["Contato do banco", row.contato_banco || ""]);
+  linhas.push([
+    "Início do relacionamento",
+    formatDateBR(row.data_abertura_conta || row.data_inicio),
+  ]);
+  linhas.push(["Início do acompanhamento", formatDateBR(row.data_inicio)]);
+  linhas.push(["Fim previsto", formatDateBR(row.data_fim_prevista)]);
+  linhas.push(["Status", row.status || ""]);
+  linhas.push([]);
+
+  // Rating
+  linhas.push(["RATING"]);
+  linhas.push(["Rating Bacen", row.rating_bacen_atual || row.rating_bacen_inicial || ""]);
+  linhas.push(["Rating Interno Inicial", row.rating_interno_inicial || ""]);
+  linhas.push(["Rating Interno Atual", row.rating_interno_atual || ""]);
+  linhas.push([]);
+
+  // Dados financeiros
+  linhas.push(["DADOS FINANCEIROS"]);
+  linhas.push(["Faturamento anual", moneyBR(row.faturamento_anual)]);
+  linhas.push(["Média mensal", moneyBR(row.media_mensal)]);
+  linhas.push(["Margem ±30%", moneyBR(row.margem_seguranca_30)]);
+  linhas.push(["Objetivo do crédito", row.objetivo_credito || ""]);
+  linhas.push(["Valor pretendido", moneyBR(row.valor_credito_pretendido)]);
+  linhas.push(["Linha pretendida", row.linha_credito_pretendida || ""]);
+  linhas.push([]);
+
+  // Histórico semanal
+  linhas.push(["HISTÓRICO SEMANAL"]);
+  linhas.push([
+    "Semana",
+    "Período Início",
+    "Período Fim",
+    "Entrada Máquina",
+    "Entrada PIX",
+    "Entrada Boleto",
+    "Entrada TED",
+    "Entrada Dinheiro",
+    "Outras Entradas",
+    "Total Entradas",
+    "Saídas",
+    "Saldo Semanal",
+    "Saldo Médio",
+    "Saldo Final",
+    "Rating Bacen",
+    "Rating Interno",
+    "SCR",
+    "Cenprot",
+    "Serasa",
+    "CND",
+    "PLD/AML",
+    "COAF",
+    "Status",
+    "Análise",
+    "Orientação",
+    "Próxima Ação",
+  ]);
+
+  for (const a of atualizacoes) {
+    linhas.push([
+      String(a.numero_semana || ""),
+      formatDateBR(a.data_referencia_inicio),
+      formatDateBR(a.data_referencia_fim),
+      moneyBR(a.entrada_maquininha),
+      moneyBR(a.entrada_pix),
+      moneyBR(a.entrada_boleto),
+      moneyBR(a.entrada_ted),
+      moneyBR(a.entrada_dinheiro),
+      moneyBR(a.outras_entradas),
+      moneyBR(a.total_entradas),
+      moneyBR(a.total_saidas),
+      moneyBR(a.saldo_semanal),
+      moneyBR(a.saldo_medio),
+      moneyBR(a.saldo_final),
+      a.rating_bacen || "",
+      a.rating_interno || "",
+      a.scr_status || a.restricao_scr || "",
+      a.cenprot_status || a.restricao_cenprot || "",
+      a.serasa_status || a.restricao_serasa || "",
+      a.cnd_status || a.cnd_regular || "",
+      a.pld_aml_status || a.pld_aml || "",
+      a.coaf_status || a.operacao_suspeita_coaf || "",
+      a.status_semana || a.status || "",
+      a.analise_semana || "",
+      a.orientacao_cliente || "",
+      a.proxima_acao || "",
+    ]);
+  }
+
+  const csvContent =
+    "\uFEFF" +
+    linhas
+      .map((linha) =>
+        linha
+          .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
+          .join(";")
+      )
+      .join("\n");
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = nomeArquivo;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 // ─── Estado inicial do formulário de atualização ──────────────────────────────
@@ -291,6 +452,22 @@ function updFormInicial(): AtualizacaoForm {
   };
 }
 
+// ─── Bancos sugeridos ─────────────────────────────────────────────────────────
+const BANCOS_SUGERIDOS = [
+  "SICOOB",
+  "Caixa",
+  "Banco do Brasil",
+  "Bradesco",
+  "Itaú",
+  "Santander",
+  "Sicredi",
+  "Cresol",
+  "Inter",
+  "Cora",
+  "Stone",
+  "Outro",
+];
+
 // ─── Campos do formulário Novo Acompanhamento ─────────────────────────────────
 const NOVO_FIELDS = [
   // Dados da empresa
@@ -300,24 +477,71 @@ const NOVO_FIELDS = [
   { key: "whatsapp_cliente", label: "WhatsApp", group: "empresa" },
   { key: "email_cliente", label: "E-mail", group: "empresa" },
   // Dados bancários
-  { key: "banco_observado", label: "Banco observado", required: true, group: "banco" },
+  {
+    key: "banco_observado",
+    label: "Banco observado",
+    required: true,
+    group: "banco",
+    type: "banco",
+  },
   { key: "agencia", label: "Agência", group: "banco" },
   { key: "conta", label: "Conta", group: "banco" },
   { key: "gerente_banco", label: "Gerente do banco", group: "banco" },
   { key: "contato_banco", label: "Contato do banco", group: "banco" },
-  { key: "data_abertura_conta", label: "Data de abertura/relacionamento", type: "date", group: "banco" },
+  {
+    key: "data_abertura_conta",
+    label: "Data de abertura/relacionamento",
+    type: "date",
+    group: "banco",
+  },
+  {
+    key: "data_inicio",
+    label: "Início do acompanhamento",
+    type: "date",
+    group: "banco",
+    required: true,
+  },
   // Objetivo
   { key: "objetivo_credito", label: "Objetivo do crédito", group: "objetivo" },
-  { key: "valor_credito_pretendido", label: "Valor pretendido", type: "number", group: "objetivo" },
+  {
+    key: "valor_credito_pretendido",
+    label: "Valor pretendido",
+    type: "number",
+    group: "objetivo",
+  },
   { key: "linha_credito_pretendida", label: "Linha pretendida", group: "objetivo" },
   // Rating/faturamento
   { key: "rating_bacen_inicial", label: "Rating Bacen inicial", group: "rating" },
-  { key: "rating_interno_inicial", label: "Rating interno inicial", group: "rating" },
-  { key: "faturamento_anual", label: "Faturamento anual", type: "number", group: "rating" },
-  { key: "media_mensal", label: "Média mensal", type: "number", group: "rating" },
-  { key: "margem_seguranca_30", label: "Margem de segurança 30%", type: "number", group: "rating" },
+  {
+    key: "rating_interno_inicial",
+    label: "Rating interno inicial",
+    group: "rating",
+  },
+  {
+    key: "faturamento_anual",
+    label: "Faturamento anual",
+    type: "number",
+    group: "rating",
+  },
+  {
+    key: "media_mensal",
+    label: "Média mensal",
+    type: "number",
+    group: "rating",
+  },
+  {
+    key: "margem_seguranca_30",
+    label: "Margem de segurança 30%",
+    type: "number",
+    group: "rating",
+  },
   // Gestão
-  { key: "observacoes_iniciais", label: "Observações iniciais", textarea: true, group: "gestao" },
+  {
+    key: "observacoes_iniciais",
+    label: "Observações iniciais",
+    textarea: true,
+    group: "gestao",
+  },
 ];
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -337,6 +561,7 @@ export default function AcompanhamentoBancario() {
   const [novoOpen, setNovoOpen] = useState(false);
   const [updOpen, setUpdOpen] = useState<Acompanhamento | null>(null);
   const [detalhe, setDetalhe] = useState<Acompanhamento | null>(null);
+  const [imprimirOpen, setImprimirOpen] = useState<Acompanhamento | null>(null);
 
   const [novo, setNovo] = useState<Acompanhamento>({
     nome_empresa: "",
@@ -345,6 +570,8 @@ export default function AcompanhamentoBancario() {
   });
 
   const [upd, setUpd] = useState<AtualizacaoForm>(updFormInicial());
+
+  const printRef = useRef<HTMLDivElement>(null);
 
   // ─── Cálculos automáticos ────────────────────────────────────────────────────
   const totalEntradas =
@@ -368,10 +595,14 @@ export default function AcompanhamentoBancario() {
       if (statusFiltro && statusFiltro !== "todos") q.set("status", statusFiltro);
       if (pendentes) q.set("pendentes", "true");
 
-      const response = await fetch(`/api/acompanhamentos-bancarios?${q.toString()}`, {
-        headers: authHeaders(),
-      });
-      if (!response.ok) { setRows([]); return; }
+      const response = await fetch(
+        `/api/acompanhamentos-bancarios?${q.toString()}`,
+        { headers: authHeaders() }
+      );
+      if (!response.ok) {
+        setRows([]);
+        return;
+      }
       const payload = await response.json();
       setRows(normalizeRows(payload));
     } catch (error) {
@@ -392,30 +623,39 @@ export default function AcompanhamentoBancario() {
     return rows.filter((row) => {
       const matchesBanco =
         !banco.trim() ||
-        String(row.banco_observado || "").toLowerCase().includes(banco.trim().toLowerCase());
+        String(row.banco_observado || "")
+          .toLowerCase()
+          .includes(banco.trim().toLowerCase());
       return matchesBanco;
     });
   }, [rows, banco]);
 
   // ─── Resumo ──────────────────────────────────────────────────────────────────
-  const resumo = useMemo(() => ({
-    acompanhamento: filtered.filter((r) => r.status === "em_acompanhamento").length,
-    pendentes: filtered.filter((r) => r.status_pendente || r.atualizacao_pendente).length,
-    positivas: filtered.filter((r) => r.status_semana === "positiva").length,
-    negativas: filtered.filter((r) => r.status_semana === "negativa").length,
-    prorrogados: filtered.filter((r) => r.status === "prorrogado").length,
-    prontos: filtered.filter((r) => {
-      const rec = String(r.recomendacao || "").toLowerCase();
-      return rec.includes("pronto") || rec.includes("nova análise");
-    }).length,
-  }), [filtered]);
+  const resumo = useMemo(
+    () => ({
+      acompanhamento: filtered.filter((r) => r.status === "em_acompanhamento")
+        .length,
+      pendentes: filtered.filter(
+        (r) => r.status_pendente || r.atualizacao_pendente
+      ).length,
+      positivas: filtered.filter((r) => r.status_semana === "positiva").length,
+      negativas: filtered.filter((r) => r.status_semana === "negativa").length,
+      prorrogados: filtered.filter((r) => r.status === "prorrogado").length,
+      prontos: filtered.filter((r) => {
+        const rec = String(r.recomendacao || "").toLowerCase();
+        return rec.includes("pronto") || rec.includes("nova análise");
+      }).length,
+    }),
+    [filtered]
+  );
 
   // ─── Abrir modal de atualização ───────────────────────────────────────────────
   const abrirAtualizacao = async (row: Acompanhamento) => {
-    // Busca detalhe para ter as atualizações anteriores
     let rowComAtualizacoes = row;
     try {
-      const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}`, { headers: authHeaders() });
+      const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}`, {
+        headers: authHeaders(),
+      });
       if (resp.ok) rowComAtualizacoes = await resp.json();
     } catch {
       // usa row sem atualizações
@@ -463,11 +703,14 @@ export default function AcompanhamentoBancario() {
         saldo_semanal: saldoSemanal,
         status_semana: statusSemanaCalculado,
       };
-      const response = await fetch(`/api/acompanhamentos-bancarios/${updOpen.id}/atualizacoes`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify(payload),
-      });
+      const response = await fetch(
+        `/api/acompanhamentos-bancarios/${updOpen.id}/atualizacoes`,
+        {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify(payload),
+        }
+      );
       if (!response.ok) {
         const errorText = await response.text().catch(() => "");
         alert(`Erro ao salvar atualização. ${errorText}`);
@@ -482,8 +725,13 @@ export default function AcompanhamentoBancario() {
 
   // ─── Carregar detalhe ─────────────────────────────────────────────────────────
   const carregarDetalhe = async (id: string) => {
-    const response = await fetch(`/api/acompanhamentos-bancarios/${id}`, { headers: authHeaders() });
-    if (!response.ok) { alert("Não foi possível carregar os detalhes."); return; }
+    const response = await fetch(`/api/acompanhamentos-bancarios/${id}`, {
+      headers: authHeaders(),
+    });
+    if (!response.ok) {
+      alert("Não foi possível carregar os detalhes.");
+      return;
+    }
     setDetalhe(await response.json());
   };
 
@@ -500,7 +748,8 @@ export default function AcompanhamentoBancario() {
 
   // ─── Encerrar ─────────────────────────────────────────────────────────────────
   const encerrar = async (id: string) => {
-    const observacoes_finais = prompt("Observações finais do encerramento:") || "";
+    const observacoes_finais =
+      prompt("Observações finais do encerramento:") || "";
     await fetch(`/api/acompanhamentos-bancarios/${id}/encerrar`, {
       method: "POST",
       headers: authHeaders(),
@@ -509,13 +758,55 @@ export default function AcompanhamentoBancario() {
     fetchData();
   };
 
+  // ─── Adicionar outro banco ────────────────────────────────────────────────────
+  const adicionarOutroBanco = (row: Acompanhamento) => {
+    setNovo({
+      nome_empresa: row.nome_empresa || "",
+      cnpj: row.cnpj || "",
+      telefone_cliente: row.telefone_cliente || "",
+      whatsapp_cliente: row.whatsapp_cliente || "",
+      email_cliente: row.email_cliente || "",
+      banco_observado: "",
+      agencia: "",
+      conta: "",
+      gerente_banco: "",
+      contato_banco: "",
+      data_abertura_conta: "",
+      data_inicio: hojeISO(),
+      objetivo_credito: "",
+      observacoes_iniciais: "",
+    });
+    setDetalhe(null);
+    setNovoOpen(true);
+  };
+
+  // ─── Imprimir ─────────────────────────────────────────────────────────────────
+  const abrirImpressao = async (row: Acompanhamento) => {
+    let rowCompleto = row;
+    try {
+      const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}`, {
+        headers: authHeaders(),
+      });
+      if (resp.ok) rowCompleto = await resp.json();
+    } catch {
+      // usa row sem atualizações
+    }
+    setImprimirOpen(rowCompleto);
+  };
+
+  const handleImprimir = () => {
+    window.print();
+  };
+
   // ─── Acesso negado ────────────────────────────────────────────────────────────
   if (!canAccess) {
     return (
       <ColaboradorLayout title="Acompanhamento Bancário">
         <div className="p-6">
           <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-            <h2 className="text-lg font-semibold text-red-700">Acesso restrito</h2>
+            <h2 className="text-lg font-semibold text-red-700">
+              Acesso restrito
+            </h2>
             <p className="mt-1 text-sm text-red-600">
               Este módulo é exclusivo para Gestor de Crédito ou superior.
             </p>
@@ -535,13 +826,16 @@ export default function AcompanhamentoBancario() {
           <div>
             <h1 className="text-2xl font-bold">Acompanhamento Bancário</h1>
             <p className="mt-1 max-w-3xl text-sm text-gray-600">
-              Monitoramento semanal de empresas em relacionamento bancário para evolução de rating,
-              movimentação e preparação para crédito.
+              Monitoramento semanal de empresas em relacionamento bancário para
+              evolução de rating, movimentação e preparação para crédito.
             </p>
           </div>
           <button
             className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-            onClick={() => setNovoOpen(true)}
+            onClick={() => {
+              setNovo({ nome_empresa: "", banco_observado: "", data_inicio: hojeISO() });
+              setNovoOpen(true);
+            }}
           >
             Novo Acompanhamento
           </button>
@@ -555,21 +849,26 @@ export default function AcompanhamentoBancario() {
         )}
         {resumo.pendentes > 0 && (
           <div className="rounded border border-orange-200 bg-orange-50 p-3 text-sm font-medium text-orange-800">
-            Existem acompanhamentos pendentes de atualização.
+            Existem {resumo.pendentes} acompanhamento(s) pendente(s) de atualização.
           </div>
         )}
 
         {/* Cards resumo */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-          {([
-            ["Em acompanhamento", resumo.acompanhamento],
-            ["Atualizações pendentes", resumo.pendentes],
-            ["Semanas positivas", resumo.positivas],
-            ["Semanas negativas", resumo.negativas],
-            ["Prontos para análise", resumo.prontos],
-            ["Prorrogados", resumo.prorrogados],
-          ] as [string, number][]).map(([label, value]) => (
-            <div key={label} className="rounded-lg border border-gray-200 bg-white p-3">
+          {(
+            [
+              ["Em acompanhamento", resumo.acompanhamento],
+              ["Atualizações pendentes", resumo.pendentes],
+              ["Semanas positivas", resumo.positivas],
+              ["Semanas negativas", resumo.negativas],
+              ["Prontos para análise", resumo.prontos],
+              ["Prorrogados", resumo.prorrogados],
+            ] as [string, number][]
+          ).map(([label, value]) => (
+            <div
+              key={label}
+              className="rounded-lg border border-gray-200 bg-white p-3"
+            >
               <div className="text-xs text-gray-500">{label}</div>
               <div className="mt-1 text-2xl font-bold">{value}</div>
             </div>
@@ -610,7 +909,10 @@ export default function AcompanhamentoBancario() {
               />
               Apenas pendentes
             </label>
-            <button className="rounded border border-gray-300 px-3 py-2 text-sm" onClick={fetchData}>
+            <button
+              className="rounded border border-gray-300 px-3 py-2 text-sm"
+              onClick={fetchData}
+            >
               Aplicar filtros
             </button>
           </div>
@@ -618,7 +920,7 @@ export default function AcompanhamentoBancario() {
 
         {/* Tabela */}
         <div className="overflow-auto rounded-lg border border-gray-200 bg-white">
-          <table className="w-full min-w-[1100px] text-sm">
+          <table className="w-full min-w-[1300px] text-sm">
             <thead>
               <tr className="bg-gray-50 text-left text-xs uppercase text-gray-500">
                 <th className="p-3">Empresa</th>
@@ -629,23 +931,28 @@ export default function AcompanhamentoBancario() {
                 <th>Próxima atualização</th>
                 <th>Saldo última semana</th>
                 <th>Status semana</th>
-                <th>Recomendação</th>
+                <th>Responsável</th>
                 <th>Ações</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td className="p-4 text-gray-500" colSpan={10}>Carregando acompanhamentos...</td>
+                  <td className="p-4 text-gray-500" colSpan={10}>
+                    Carregando acompanhamentos...
+                  </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td className="p-4 text-gray-500" colSpan={10}>Nenhum acompanhamento cadastrado.</td>
+                  <td className="p-4 text-gray-500" colSpan={10}>
+                    Nenhum acompanhamento cadastrado.
+                  </td>
                 </tr>
               ) : (
                 filtered.map((row) => {
                   const whats = whatsappUrl(row);
-                  const pendente = row.status_pendente || row.atualizacao_pendente;
+                  const pendente =
+                    row.status_pendente || row.atualizacao_pendente;
                   return (
                     <tr key={row.id} className="border-t border-gray-100">
                       <td className="p-3 font-medium">
@@ -658,18 +965,28 @@ export default function AcompanhamentoBancario() {
                       </td>
                       <td>{row.cnpj || "-"}</td>
                       <td>{row.banco_observado || "-"}</td>
-                      <td>{row.rating_interno_atual || row.rating_bacen_atual || "-"}</td>
-                      <td>{formatDateBR(row.ultima_atualizacao_em || row.ultimo_update_em)}</td>
-                      <td>{formatDateBR(row.proxima_atualizacao)}</td>
-                      <td>{moneyBR(row.saldo_semanal || row.saldo_ultima_semana)}</td>
                       <td>
-                        <span className={`rounded-full border px-2 py-1 text-xs ${statusBadge(row.status_semana)}`}>
+                        {row.rating_interno_atual || row.rating_bacen_atual || "-"}
+                      </td>
+                      <td>
+                        {formatDateBR(
+                          row.ultima_atualizacao_em || row.ultimo_update_em
+                        )}
+                      </td>
+                      <td>{formatDateBR(row.proxima_atualizacao)}</td>
+                      <td>
+                        {moneyBR(row.saldo_semanal || row.saldo_ultima_semana)}
+                      </td>
+                      <td>
+                        <span
+                          className={`rounded-full border px-2 py-1 text-xs ${statusBadge(row.status_semana)}`}
+                        >
                           {labelStatus(row.status_semana)}
                         </span>
                       </td>
-                      <td className="max-w-[180px] text-xs text-gray-600">{calcularRecomendacao(row)}</td>
+                      <td>{row.responsavel_nome || "-"}</td>
                       <td>
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex flex-wrap gap-1 py-1">
                           <button
                             className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
                             onClick={() => carregarDetalhe(row.id)}
@@ -704,6 +1021,30 @@ export default function AcompanhamentoBancario() {
                           >
                             Encerrar
                           </button>
+                          <button
+                            className="rounded border border-purple-200 bg-purple-50 px-2 py-1 text-xs text-purple-700 hover:bg-purple-100"
+                            onClick={() => abrirImpressao(row)}
+                          >
+                            Imprimir
+                          </button>
+                          <button
+                            className="rounded border border-teal-200 bg-teal-50 px-2 py-1 text-xs text-teal-700 hover:bg-teal-100"
+                            onClick={async () => {
+                              let rowCompleto = row;
+                              try {
+                                const resp = await fetch(
+                                  `/api/acompanhamentos-bancarios/${row.id}`,
+                                  { headers: authHeaders() }
+                                );
+                                if (resp.ok) rowCompleto = await resp.json();
+                              } catch {
+                                // usa row sem atualizações
+                              }
+                              exportarCSV(rowCompleto);
+                            }}
+                          >
+                            Exportar
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -714,85 +1055,129 @@ export default function AcompanhamentoBancario() {
           </table>
         </div>
 
-        {/* Modal — Novo Acompanhamento */}
+        {/* ── Modal — Novo Acompanhamento ──────────────────────────────────── */}
         {novoOpen && (
-          <div className="fixed inset-0 z-50 overflow-auto bg-black/40 p-6">
+          <div className="fixed inset-0 z-50 overflow-auto bg-black/40 p-4">
             <div className="mx-auto max-w-5xl rounded-lg bg-white p-5 shadow-xl">
               <div className="mb-4 flex items-start justify-between">
                 <div>
                   <h3 className="text-lg font-bold">Novo Acompanhamento</h3>
                   <p className="text-sm text-gray-600">
-                    Cadastre a empresa, o banco observado e os dados iniciais para acompanhamento de 30 dias.
+                    Cadastre a empresa, o banco observado e os dados iniciais
+                    para acompanhamento de 30 dias.
                   </p>
                 </div>
-                <button className="rounded border px-3 py-1 text-sm" onClick={() => setNovoOpen(false)}>
+                <button
+                  className="rounded border px-3 py-1 text-sm"
+                  onClick={() => setNovoOpen(false)}
+                >
                   Fechar
                 </button>
               </div>
 
               {/* Dados da empresa */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">Dados da empresa</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                Dados da empresa
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                {NOVO_FIELDS.filter((f) => f.group === "empresa").map((field) => (
-                  <FieldInput
-                    key={field.key}
-                    field={field}
-                    value={novo[field.key]}
-                    onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))}
-                  />
-                ))}
+                {NOVO_FIELDS.filter((f) => f.group === "empresa").map(
+                  (field) => (
+                    <FieldInput
+                      key={field.key}
+                      field={field}
+                      value={novo[field.key]}
+                      onChange={(v) =>
+                        setNovo((p) => ({ ...p, [field.key]: v }))
+                      }
+                    />
+                  )
+                )}
               </div>
 
               {/* Dados bancários */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">Dados bancários</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                Dados bancários
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                {NOVO_FIELDS.filter((f) => f.group === "banco").map((field) => (
-                  <FieldInput
-                    key={field.key}
-                    field={field}
-                    value={novo[field.key]}
-                    onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))}
-                  />
-                ))}
+                {NOVO_FIELDS.filter((f) => f.group === "banco").map((field) =>
+                  field.type === "banco" ? (
+                    <BancoField
+                      key={field.key}
+                      label={field.label}
+                      required={field.required}
+                      value={novo[field.key] || ""}
+                      onChange={(v) =>
+                        setNovo((p) => ({ ...p, [field.key]: v }))
+                      }
+                    />
+                  ) : (
+                    <FieldInput
+                      key={field.key}
+                      field={field}
+                      value={novo[field.key]}
+                      onChange={(v) =>
+                        setNovo((p) => ({ ...p, [field.key]: v }))
+                      }
+                    />
+                  )
+                )}
               </div>
 
               {/* Objetivo */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">Objetivo</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                Objetivo
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                {NOVO_FIELDS.filter((f) => f.group === "objetivo").map((field) => (
-                  <FieldInput
-                    key={field.key}
-                    field={field}
-                    value={novo[field.key]}
-                    onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))}
-                  />
-                ))}
+                {NOVO_FIELDS.filter((f) => f.group === "objetivo").map(
+                  (field) => (
+                    <FieldInput
+                      key={field.key}
+                      field={field}
+                      value={novo[field.key]}
+                      onChange={(v) =>
+                        setNovo((p) => ({ ...p, [field.key]: v }))
+                      }
+                    />
+                  )
+                )}
               </div>
 
               {/* Rating/faturamento */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">Rating e faturamento</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                Rating e faturamento
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                {NOVO_FIELDS.filter((f) => f.group === "rating").map((field) => (
-                  <FieldInput
-                    key={field.key}
-                    field={field}
-                    value={novo[field.key]}
-                    onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))}
-                  />
-                ))}
+                {NOVO_FIELDS.filter((f) => f.group === "rating").map(
+                  (field) => (
+                    <FieldInput
+                      key={field.key}
+                      field={field}
+                      value={novo[field.key]}
+                      onChange={(v) =>
+                        setNovo((p) => ({ ...p, [field.key]: v }))
+                      }
+                    />
+                  )
+                )}
               </div>
 
               {/* Gestão */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">Gestão</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                Gestão
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                {NOVO_FIELDS.filter((f) => f.group === "gestao").map((field) => (
-                  <FieldInput
-                    key={field.key}
-                    field={field}
-                    value={novo[field.key]}
-                    onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))}
-                  />
-                ))}
+                {NOVO_FIELDS.filter((f) => f.group === "gestao").map(
+                  (field) => (
+                    <FieldInput
+                      key={field.key}
+                      field={field}
+                      value={novo[field.key]}
+                      onChange={(v) =>
+                        setNovo((p) => ({ ...p, [field.key]: v }))
+                      }
+                    />
+                  )
+                )}
               </div>
 
               <div className="mt-4 flex gap-2">
@@ -803,7 +1188,10 @@ export default function AcompanhamentoBancario() {
                 >
                   {saving ? "Salvando..." : "Salvar acompanhamento"}
                 </button>
-                <button className="rounded border px-4 py-2 text-sm" onClick={() => setNovoOpen(false)}>
+                <button
+                  className="rounded border px-4 py-2 text-sm"
+                  onClick={() => setNovoOpen(false)}
+                >
                   Cancelar
                 </button>
               </div>
@@ -811,9 +1199,9 @@ export default function AcompanhamentoBancario() {
           </div>
         )}
 
-        {/* Modal — Atualização Semanal */}
+        {/* ── Modal — Atualização Semanal ──────────────────────────────────── */}
         {updOpen && (
-          <div className="fixed inset-0 z-50 overflow-auto bg-black/40 p-6">
+          <div className="fixed inset-0 z-50 overflow-auto bg-black/40 p-4">
             <div className="mx-auto max-w-5xl rounded-lg bg-white p-5 shadow-xl">
               <div className="mb-2 flex items-start justify-between">
                 <div>
@@ -822,7 +1210,10 @@ export default function AcompanhamentoBancario() {
                     {updOpen.nome_empresa} — {updOpen.banco_observado}
                   </p>
                 </div>
-                <button className="rounded border px-3 py-1 text-sm" onClick={() => setUpdOpen(null)}>
+                <button
+                  className="rounded border px-3 py-1 text-sm"
+                  onClick={() => setUpdOpen(null)}
+                >
                   Fechar
                 </button>
               </div>
@@ -831,27 +1222,57 @@ export default function AcompanhamentoBancario() {
               <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-800">
                 <strong>Semana {upd.numero_semana}</strong>
                 {" | "}
-                Período: {formatDateBR(upd.data_referencia_inicio)} a {formatDateBR(upd.data_referencia_fim)}
+                Período: {formatDateBR(upd.data_referencia_inicio)} a{" "}
+                {formatDateBR(upd.data_referencia_fim)}
                 {" | "}
                 Atualização prevista: {formatDateBR(upd.data_atualizacao)}
                 {" | "}
-                Próxima atualização: {formatDateBR(upd.proxima_atualizacao_apos_salvar)}
+                Próxima atualização:{" "}
+                {formatDateBR(upd.proxima_atualizacao_apos_salvar)}
               </div>
 
               {/* Bloco A — Período da semana (readonly) */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">A — Período da semana</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                A — Período da semana
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <ReadonlyField label="Número da semana" value={String(upd.numero_semana)} />
-                <ReadonlyField label="Início do período" value={formatDateBR(upd.data_referencia_inicio)} />
-                <ReadonlyField label="Fim do período" value={formatDateBR(upd.data_referencia_fim)} />
-                <ReadonlyField label="Data da atualização" value={formatDateBR(upd.data_atualizacao)} />
-                <ReadonlyField label="Próxima atualização após salvar" value={formatDateBR(upd.proxima_atualizacao_apos_salvar)} />
+                <ReadonlyField
+                  label="Número da semana"
+                  value={String(upd.numero_semana)}
+                />
+                <ReadonlyField
+                  label="Início do período"
+                  value={formatDateBR(upd.data_referencia_inicio)}
+                />
+                <ReadonlyField
+                  label="Fim do período"
+                  value={formatDateBR(upd.data_referencia_fim)}
+                />
+                <ReadonlyField
+                  label="Data da atualização"
+                  value={formatDateBR(upd.data_atualizacao)}
+                />
+                <ReadonlyField
+                  label="Próxima atualização após salvar"
+                  value={formatDateBR(upd.proxima_atualizacao_apos_salvar)}
+                />
               </div>
 
               {/* Bloco B — Entradas */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">B — Entradas da semana</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                B — Entradas da semana
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                {(["entrada_maquininha", "entrada_pix", "entrada_boleto", "entrada_ted", "entrada_dinheiro", "outras_entradas"] as const).map((key) => (
+                {(
+                  [
+                    "entrada_maquininha",
+                    "entrada_pix",
+                    "entrada_boleto",
+                    "entrada_ted",
+                    "entrada_dinheiro",
+                    "outras_entradas",
+                  ] as const
+                ).map((key) => (
                   <NumberField
                     key={key}
                     label={labelEntrada(key)}
@@ -859,11 +1280,17 @@ export default function AcompanhamentoBancario() {
                     onChange={(v) => setUpd((p) => ({ ...p, [key]: v }))}
                   />
                 ))}
-                <ReadonlyField label="Total de entradas" value={moneyBR(totalEntradas)} highlight />
+                <ReadonlyField
+                  label="Total de entradas"
+                  value={moneyBR(totalEntradas)}
+                  highlight
+                />
               </div>
 
               {/* Bloco C — Saídas e saldos */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">C — Saídas e saldos</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                C — Saídas e saldos
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                 <NumberField
                   label="Total de saídas"
@@ -883,27 +1310,69 @@ export default function AcompanhamentoBancario() {
                 <NumberField
                   label="Quantidade de transações"
                   value={upd.quantidade_transacoes}
-                  onChange={(v) => setUpd((p) => ({ ...p, quantidade_transacoes: v }))}
+                  onChange={(v) =>
+                    setUpd((p) => ({ ...p, quantidade_transacoes: v }))
+                  }
                   integer
                 />
-                <ReadonlyField label="Saldo semanal calculado" value={moneyBR(saldoSemanal)} highlight />
+                <ReadonlyField
+                  label="Saldo semanal calculado"
+                  value={moneyBR(saldoSemanal)}
+                  highlight
+                />
               </div>
 
               {/* Bloco D — Rating e conformidade */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">D — Rating e conformidade</h4>
-              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <TextFieldSimple label="Rating Bacen" value={upd.rating_bacen} onChange={(v) => setUpd((p) => ({ ...p, rating_bacen: v }))} />
-                <TextFieldSimple label="Rating interno" value={upd.rating_interno} onChange={(v) => setUpd((p) => ({ ...p, rating_interno: v }))} />
-                <TextFieldSimple label="SCR" value={upd.scr_status} onChange={(v) => setUpd((p) => ({ ...p, scr_status: v }))} />
-                <TextFieldSimple label="Cenprot" value={upd.cenprot_status} onChange={(v) => setUpd((p) => ({ ...p, cenprot_status: v }))} />
-                <TextFieldSimple label="Serasa" value={upd.serasa_status} onChange={(v) => setUpd((p) => ({ ...p, serasa_status: v }))} />
-                <TextFieldSimple label="CND" value={upd.cnd_status} onChange={(v) => setUpd((p) => ({ ...p, cnd_status: v }))} />
-                <TextFieldSimple label="PLD/AML" value={upd.pld_aml_status} onChange={(v) => setUpd((p) => ({ ...p, pld_aml_status: v }))} />
-                <TextFieldSimple label="COAF" value={upd.coaf_status} onChange={(v) => setUpd((p) => ({ ...p, coaf_status: v }))} />
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                D — Rating e conformidade
+              </h4>
+              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
+                <TextFieldSimple
+                  label="Rating Bacen"
+                  value={upd.rating_bacen}
+                  onChange={(v) => setUpd((p) => ({ ...p, rating_bacen: v }))}
+                />
+                <TextFieldSimple
+                  label="Rating interno"
+                  value={upd.rating_interno}
+                  onChange={(v) => setUpd((p) => ({ ...p, rating_interno: v }))}
+                />
+                <TextFieldSimple
+                  label="SCR"
+                  value={upd.scr_status}
+                  onChange={(v) => setUpd((p) => ({ ...p, scr_status: v }))}
+                />
+                <TextFieldSimple
+                  label="Cenprot"
+                  value={upd.cenprot_status}
+                  onChange={(v) => setUpd((p) => ({ ...p, cenprot_status: v }))}
+                />
+                <TextFieldSimple
+                  label="Serasa"
+                  value={upd.serasa_status}
+                  onChange={(v) => setUpd((p) => ({ ...p, serasa_status: v }))}
+                />
+                <TextFieldSimple
+                  label="CND"
+                  value={upd.cnd_status}
+                  onChange={(v) => setUpd((p) => ({ ...p, cnd_status: v }))}
+                />
+                <TextFieldSimple
+                  label="PLD/AML"
+                  value={upd.pld_aml_status}
+                  onChange={(v) => setUpd((p) => ({ ...p, pld_aml_status: v }))}
+                />
+                <TextFieldSimple
+                  label="COAF"
+                  value={upd.coaf_status}
+                  onChange={(v) => setUpd((p) => ({ ...p, coaf_status: v }))}
+                />
               </div>
 
               {/* Bloco E — Ocorrências */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">E — Ocorrências</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                E — Ocorrências
+              </h4>
               <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
                 {(
                   [
@@ -913,11 +1382,16 @@ export default function AcompanhamentoBancario() {
                     ["ocorrencia_negativa", "Ocorrência negativa?"],
                   ] as [keyof AtualizacaoForm, string][]
                 ).map(([key, label]) => (
-                  <label key={key} className="flex items-center gap-2 rounded border border-gray-200 p-2 text-sm">
+                  <label
+                    key={key}
+                    className="flex items-center gap-2 rounded border border-gray-200 p-2 text-sm"
+                  >
                     <input
                       type="checkbox"
                       checked={Boolean(upd[key])}
-                      onChange={(e) => setUpd((p) => ({ ...p, [key]: e.target.checked }))}
+                      onChange={(e) =>
+                        setUpd((p) => ({ ...p, [key]: e.target.checked }))
+                      }
                     />
                     {label}
                   </label>
@@ -925,11 +1399,29 @@ export default function AcompanhamentoBancario() {
               </div>
 
               {/* Bloco F — Análise */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">F — Análise</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                F — Análise
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <TextareaField label="Análise da semana" value={upd.analise_semana} onChange={(v) => setUpd((p) => ({ ...p, analise_semana: v }))} />
-                <TextareaField label="Orientação ao cliente" value={upd.orientacao_cliente} onChange={(v) => setUpd((p) => ({ ...p, orientacao_cliente: v }))} />
-                <TextareaField label="Próxima ação" value={upd.proxima_acao} onChange={(v) => setUpd((p) => ({ ...p, proxima_acao: v }))} />
+                <TextareaField
+                  label="Análise da semana"
+                  value={upd.analise_semana}
+                  onChange={(v) =>
+                    setUpd((p) => ({ ...p, analise_semana: v }))
+                  }
+                />
+                <TextareaField
+                  label="Orientação ao cliente"
+                  value={upd.orientacao_cliente}
+                  onChange={(v) =>
+                    setUpd((p) => ({ ...p, orientacao_cliente: v }))
+                  }
+                />
+                <TextareaField
+                  label="Próxima ação"
+                  value={upd.proxima_acao}
+                  onChange={(v) => setUpd((p) => ({ ...p, proxima_acao: v }))}
+                />
               </div>
 
               {/* Resumo calculado */}
@@ -939,7 +1431,9 @@ export default function AcompanhamentoBancario() {
                 <strong>Saldo semanal:</strong> {moneyBR(saldoSemanal)}
                 {" | "}
                 <strong>Status estimado:</strong>{" "}
-                <span className={`rounded px-2 py-0.5 text-xs font-medium ${statusBadge(statusSemanaCalculado)}`}>
+                <span
+                  className={`rounded px-2 py-0.5 text-xs font-medium ${statusBadge(statusSemanaCalculado)}`}
+                >
                   {labelStatus(statusSemanaCalculado)}
                 </span>
               </div>
@@ -950,9 +1444,12 @@ export default function AcompanhamentoBancario() {
                   disabled={saving}
                   onClick={salvarAtualizacao}
                 >
-                  {saving ? "Salvando..." : "Salvar atualização"}
+                  {saving ? "Salvando..." : "Salvar atualização semanal"}
                 </button>
-                <button className="rounded border px-4 py-2 text-sm" onClick={() => setUpdOpen(null)}>
+                <button
+                  className="rounded border px-4 py-2 text-sm"
+                  onClick={() => setUpdOpen(null)}
+                >
                   Cancelar
                 </button>
               </div>
@@ -960,83 +1457,601 @@ export default function AcompanhamentoBancario() {
           </div>
         )}
 
-        {/* Modal — Detalhes */}
+        {/* ── Modal — Detalhes ─────────────────────────────────────────────── */}
         {detalhe && (
-          <div className="fixed inset-0 z-50 overflow-auto bg-black/40 p-6">
-            <div className="mx-auto max-w-5xl rounded-lg bg-white p-5 shadow-xl">
+          <div className="fixed inset-0 z-50 overflow-auto bg-black/40 p-4">
+            <div className="mx-auto max-w-6xl rounded-lg bg-white p-5 shadow-xl">
               <div className="mb-4 flex items-start justify-between">
                 <div>
-                  <h3 className="text-lg font-bold">Detalhes do Acompanhamento</h3>
+                  <h3 className="text-lg font-bold">
+                    Detalhes do Acompanhamento
+                  </h3>
                   <p className="text-sm text-gray-600">
                     {detalhe.nome_empresa} — {detalhe.banco_observado}
                   </p>
                 </div>
-                <button className="rounded border px-3 py-1 text-sm" onClick={() => setDetalhe(null)}>
-                  Fechar
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    className="rounded border border-teal-300 bg-teal-50 px-3 py-1 text-sm text-teal-700 hover:bg-teal-100"
+                    onClick={() => exportarCSV(detalhe)}
+                  >
+                    Exportar CSV
+                  </button>
+                  <button
+                    className="rounded border border-purple-300 bg-purple-50 px-3 py-1 text-sm text-purple-700 hover:bg-purple-100"
+                    onClick={() => {
+                      setImprimirOpen(detalhe);
+                      setDetalhe(null);
+                    }}
+                  >
+                    Imprimir
+                  </button>
+                  <button
+                    className="rounded border border-blue-300 bg-blue-50 px-3 py-1 text-sm text-blue-700 hover:bg-blue-100"
+                    onClick={() => adicionarOutroBanco(detalhe)}
+                  >
+                    + Outro banco
+                  </button>
+                  <button
+                    className="rounded border px-3 py-1 text-sm"
+                    onClick={() => setDetalhe(null)}
+                  >
+                    Fechar
+                  </button>
+                </div>
               </div>
 
-              {/* Dados gerais */}
-              <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
+              {/* Dados da empresa */}
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                Dados da empresa
+              </h4>
+              <div className="mb-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-4">
                 <InfoCard label="Empresa" value={detalhe.nome_empresa} />
                 <InfoCard label="CNPJ" value={detalhe.cnpj} />
                 <InfoCard label="Banco observado" value={detalhe.banco_observado} />
-                <InfoCard label="Objetivo do crédito" value={detalhe.objetivo_credito} />
-                <InfoCard
-                  label="Rating inicial / atual"
-                  value={`${detalhe.rating_interno_inicial || detalhe.rating_bacen_inicial || "-"} / ${detalhe.rating_interno_atual || detalhe.rating_bacen_atual || "-"}`}
-                />
-                <InfoCard label="Faturamento anual" value={moneyBR(detalhe.faturamento_anual)} />
-                <InfoCard label="Média mensal" value={moneyBR(detalhe.media_mensal)} />
-                <InfoCard label="Margem de segurança 30%" value={moneyBR(detalhe.margem_seguranca_30)} />
-                <InfoCard label="Recomendação" value={calcularRecomendacao(detalhe)} />
+                <InfoCard label="Agência" value={detalhe.agencia} />
+                <InfoCard label="Conta" value={detalhe.conta} />
+                <InfoCard label="Gerente do banco" value={detalhe.gerente_banco} />
+                <InfoCard label="Contato do banco" value={detalhe.contato_banco} />
+                <InfoCard label="E-mail" value={detalhe.email_cliente} />
               </div>
 
-              {/* Histórico semanal */}
-              <h4 className="mt-5 font-semibold">Histórico semanal</h4>
-              <div className="mt-2 max-h-80 overflow-auto rounded border">
-                <table className="w-full text-sm">
+              {/* Dados do relacionamento */}
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                Dados do relacionamento
+              </h4>
+              <div className="mb-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-4">
+                <InfoCard
+                  label="Início do relacionamento"
+                  value={formatDateBR(detalhe.data_abertura_conta)}
+                />
+                <InfoCard
+                  label="Abertura de conta"
+                  value={formatDateBR(detalhe.data_abertura_conta)}
+                />
+                <InfoCard
+                  label="Início do acompanhamento"
+                  value={formatDateBR(detalhe.data_inicio)}
+                />
+                <InfoCard
+                  label="Fim previsto"
+                  value={formatDateBR(detalhe.data_fim_prevista)}
+                />
+                <InfoCard
+                  label="Próxima atualização"
+                  value={formatDateBR(detalhe.proxima_atualizacao)}
+                />
+                <InfoCard
+                  label="Status"
+                  value={labelStatus(detalhe.status)}
+                />
+                <InfoCard
+                  label="Prorrogado"
+                  value={detalhe.prorrogado ? "Sim" : "Não"}
+                />
+                <InfoCard
+                  label="Responsável"
+                  value={detalhe.responsavel_nome}
+                />
+              </div>
+
+              {/* Dados de rating */}
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                Dados de rating
+              </h4>
+              <div className="mb-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-4">
+                <InfoCard
+                  label="Rating Bacen atual"
+                  value={detalhe.rating_bacen_atual}
+                />
+                <InfoCard
+                  label="Rating interno inicial"
+                  value={detalhe.rating_interno_inicial}
+                />
+                <InfoCard
+                  label="Rating interno atual"
+                  value={detalhe.rating_interno_atual}
+                />
+                <InfoCard
+                  label="Rating Bacen inicial"
+                  value={detalhe.rating_bacen_inicial}
+                />
+              </div>
+
+              {/* Dados financeiros */}
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                Dados financeiros
+              </h4>
+              <div className="mb-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-4">
+                <InfoCard
+                  label="Faturamento anual"
+                  value={moneyBR(detalhe.faturamento_anual)}
+                />
+                <InfoCard
+                  label="Média mensal"
+                  value={moneyBR(detalhe.media_mensal)}
+                />
+                <InfoCard
+                  label="Margem ±30%"
+                  value={moneyBR(detalhe.margem_seguranca_30)}
+                />
+                <InfoCard
+                  label="Objetivo do crédito"
+                  value={detalhe.objetivo_credito}
+                />
+                <InfoCard
+                  label="Valor pretendido"
+                  value={moneyBR(detalhe.valor_credito_pretendido)}
+                />
+                <InfoCard
+                  label="Linha pretendida"
+                  value={detalhe.linha_credito_pretendida}
+                />
+              </div>
+
+              {/* Histórico semanal completo */}
+              <h4 className="mb-2 mt-4 text-sm font-semibold text-gray-700">
+                Histórico semanal completo
+              </h4>
+              <div className="overflow-auto rounded border">
+                <table className="w-full min-w-[1400px] text-xs">
                   <thead>
-                    <tr className="bg-gray-50 text-left">
-                      <th className="p-2">Semana</th>
-                      <th>Período</th>
-                      <th>Entradas</th>
-                      <th>Saídas</th>
-                      <th>Saldo</th>
-                      <th>Rating Bacen</th>
-                      <th>Rating Interno</th>
-                      <th>Status</th>
+                    <tr className="bg-gray-50 text-left text-gray-600">
+                      <th className="p-2 font-semibold">Semana</th>
+                      <th className="p-2 font-semibold">Período</th>
+                      <th className="p-2 font-semibold">Máquina</th>
+                      <th className="p-2 font-semibold">PIX</th>
+                      <th className="p-2 font-semibold">Boleto</th>
+                      <th className="p-2 font-semibold">TED</th>
+                      <th className="p-2 font-semibold">Dinheiro</th>
+                      <th className="p-2 font-semibold">Outras</th>
+                      <th className="p-2 font-semibold">Total Entradas</th>
+                      <th className="p-2 font-semibold">Saídas</th>
+                      <th className="p-2 font-semibold">Saldo Semanal</th>
+                      <th className="p-2 font-semibold">Saldo Médio</th>
+                      <th className="p-2 font-semibold">Saldo Final</th>
+                      <th className="p-2 font-semibold">Rating Bacen</th>
+                      <th className="p-2 font-semibold">Rating Interno</th>
+                      <th className="p-2 font-semibold">SCR</th>
+                      <th className="p-2 font-semibold">Cenprot</th>
+                      <th className="p-2 font-semibold">Serasa</th>
+                      <th className="p-2 font-semibold">CND</th>
+                      <th className="p-2 font-semibold">PLD/AML</th>
+                      <th className="p-2 font-semibold">COAF</th>
+                      <th className="p-2 font-semibold">Status</th>
+                      <th className="p-2 font-semibold">Análise</th>
+                      <th className="p-2 font-semibold">Orientação</th>
+                      <th className="p-2 font-semibold">Próxima ação</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {Array.isArray(detalhe.atualizacoes) && detalhe.atualizacoes.length > 0 ? (
+                    {Array.isArray(detalhe.atualizacoes) &&
+                    detalhe.atualizacoes.length > 0 ? (
                       detalhe.atualizacoes.map((item: any) => (
                         <tr key={item.id} className="border-t">
-                          <td className="p-2">{item.numero_semana}</td>
-                          <td className="whitespace-nowrap">
-                            {formatDateBR(item.data_referencia_inicio)} a {formatDateBR(item.data_referencia_fim)}
+                          <td className="p-2 font-medium">
+                            Semana {item.numero_semana}
                           </td>
-                          <td>{moneyBR(item.total_entradas)}</td>
-                          <td>{moneyBR(item.total_saidas)}</td>
-                          <td>{moneyBR(item.saldo_semanal)}</td>
-                          <td>{item.rating_bacen || "-"}</td>
-                          <td>{item.rating_interno || "-"}</td>
-                          <td>
-                            <span className={`rounded-full border px-2 py-0.5 text-xs ${statusBadge(item.status_semana || item.status)}`}>
+                          <td className="whitespace-nowrap p-2">
+                            {formatDateBR(item.data_referencia_inicio)} a{" "}
+                            {formatDateBR(item.data_referencia_fim)}
+                          </td>
+                          <td className="p-2">
+                            {moneyBR(item.entrada_maquininha)}
+                          </td>
+                          <td className="p-2">{moneyBR(item.entrada_pix)}</td>
+                          <td className="p-2">
+                            {moneyBR(item.entrada_boleto)}
+                          </td>
+                          <td className="p-2">{moneyBR(item.entrada_ted)}</td>
+                          <td className="p-2">
+                            {moneyBR(item.entrada_dinheiro)}
+                          </td>
+                          <td className="p-2">
+                            {moneyBR(item.outras_entradas)}
+                          </td>
+                          <td className="p-2 font-semibold">
+                            {moneyBR(item.total_entradas)}
+                          </td>
+                          <td className="p-2">{moneyBR(item.total_saidas)}</td>
+                          <td className="p-2 font-semibold">
+                            {moneyBR(item.saldo_semanal)}
+                          </td>
+                          <td className="p-2">{moneyBR(item.saldo_medio)}</td>
+                          <td className="p-2">{moneyBR(item.saldo_final)}</td>
+                          <td className="p-2">{item.rating_bacen || "-"}</td>
+                          <td className="p-2">{item.rating_interno || "-"}</td>
+                          <td className="p-2">
+                            {item.scr_status ||
+                              item.restricao_scr ||
+                              "-"}
+                          </td>
+                          <td className="p-2">
+                            {item.cenprot_status ||
+                              item.restricao_cenprot ||
+                              "-"}
+                          </td>
+                          <td className="p-2">
+                            {item.serasa_status ||
+                              item.restricao_serasa ||
+                              "-"}
+                          </td>
+                          <td className="p-2">
+                            {item.cnd_status || item.cnd_regular || "-"}
+                          </td>
+                          <td className="p-2">
+                            {item.pld_aml_status || item.pld_aml || "-"}
+                          </td>
+                          <td className="p-2">
+                            {item.coaf_status ||
+                              item.operacao_suspeita_coaf ||
+                              "-"}
+                          </td>
+                          <td className="p-2">
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-xs ${statusBadge(item.status_semana || item.status)}`}
+                            >
                               {labelStatus(item.status_semana || item.status)}
                             </span>
+                          </td>
+                          <td className="max-w-[120px] p-2 text-xs text-gray-600">
+                            {item.analise_semana || "-"}
+                          </td>
+                          <td className="max-w-[120px] p-2 text-xs text-gray-600">
+                            {item.orientacao_cliente || "-"}
+                          </td>
+                          <td className="max-w-[120px] p-2 text-xs text-gray-600">
+                            {item.proxima_acao || "-"}
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td className="p-3 text-gray-500" colSpan={8}>
+                        <td className="p-3 text-gray-500" colSpan={25}>
                           Nenhuma atualização semanal registrada.
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Recomendação */}
+              <div className="mt-4 rounded border border-blue-100 bg-blue-50 p-3 text-sm">
+                <strong>Recomendação operacional:</strong>{" "}
+                {calcularRecomendacao(detalhe)}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Modal — Impressão ────────────────────────────────────────────── */}
+        {imprimirOpen && (
+          <div className="fixed inset-0 z-50 overflow-auto bg-white p-0">
+            {/* Barra de ações — oculta na impressão */}
+            <div className="flex items-center gap-3 border-b bg-gray-50 p-4 print:hidden">
+              <button
+                className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                onClick={handleImprimir}
+              >
+                Imprimir / Salvar PDF
+              </button>
+              <button
+                className="rounded border px-4 py-2 text-sm"
+                onClick={() => setImprimirOpen(null)}
+              >
+                Fechar
+              </button>
+            </div>
+
+            {/* Conteúdo imprimível */}
+            <div
+              ref={printRef}
+              className="mx-auto max-w-5xl p-8 text-sm"
+              style={{ fontFamily: "Arial, sans-serif" }}
+            >
+              <div className="mb-6 border-b-2 border-gray-800 pb-4">
+                <h1 className="text-2xl font-bold">
+                  Acompanhamento Bancário — Destrava Crédito
+                </h1>
+                <h2 className="mt-1 text-xl font-semibold">
+                  {imprimirOpen.nome_empresa} — {imprimirOpen.banco_observado}
+                </h2>
+                <p className="mt-1 text-gray-600">
+                  CNPJ: {imprimirOpen.cnpj || "-"} | Gerado em:{" "}
+                  {new Date().toLocaleDateString("pt-BR")}
+                </p>
+              </div>
+
+              {/* Rating */}
+              <div className="mb-4 grid grid-cols-3 gap-4">
+                <div>
+                  <strong>Rating Bacen:</strong>{" "}
+                  {imprimirOpen.rating_bacen_atual ||
+                    imprimirOpen.rating_bacen_inicial ||
+                    "-"}
+                </div>
+                <div>
+                  <strong>Rating Interno Inicial:</strong>{" "}
+                  {imprimirOpen.rating_interno_inicial || "-"}
+                </div>
+                <div>
+                  <strong>Rating Interno Atual:</strong>{" "}
+                  {imprimirOpen.rating_interno_atual || "-"}
+                </div>
+              </div>
+
+              {/* Dados financeiros */}
+              <div className="mb-4 grid grid-cols-3 gap-4">
+                <div>
+                  <strong>Faturamento anual:</strong>{" "}
+                  {moneyBR(imprimirOpen.faturamento_anual)}
+                </div>
+                <div>
+                  <strong>Média mensal:</strong>{" "}
+                  {moneyBR(imprimirOpen.media_mensal)}
+                </div>
+                <div>
+                  <strong>Margem ±30%:</strong>{" "}
+                  {moneyBR(imprimirOpen.margem_seguranca_30)}
+                </div>
+              </div>
+
+              {/* Relacionamento */}
+              <div className="mb-4 grid grid-cols-3 gap-4">
+                <div>
+                  <strong>Início do acompanhamento:</strong>{" "}
+                  {formatDateBR(imprimirOpen.data_inicio)}
+                </div>
+                <div>
+                  <strong>Fim previsto:</strong>{" "}
+                  {formatDateBR(imprimirOpen.data_fim_prevista)}
+                </div>
+                <div>
+                  <strong>Status:</strong>{" "}
+                  {labelStatus(imprimirOpen.status)}
+                </div>
+              </div>
+
+              {/* Histórico semanal */}
+              <h3 className="mb-2 mt-6 text-base font-bold">
+                Histórico Semanal
+              </h3>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: "11px",
+                }}
+              >
+                <thead>
+                  <tr style={{ background: "#f3f4f6" }}>
+                    {[
+                      "Semana",
+                      "Período",
+                      "Máquina",
+                      "PIX",
+                      "Boleto",
+                      "TED",
+                      "Dinheiro",
+                      "Outras",
+                      "Total Entradas",
+                      "Saídas",
+                      "Saldo Semanal",
+                      "Rating B.",
+                      "Rating I.",
+                      "SCR",
+                      "CND",
+                      "Status",
+                    ].map((h) => (
+                      <th
+                        key={h}
+                        style={{
+                          border: "1px solid #d1d5db",
+                          padding: "4px 6px",
+                          textAlign: "left",
+                        }}
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.isArray(imprimirOpen.atualizacoes) &&
+                  imprimirOpen.atualizacoes.length > 0 ? (
+                    imprimirOpen.atualizacoes.map((item: any) => (
+                      <tr key={item.id}>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {item.numero_semana}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {formatDateBR(item.data_referencia_inicio)} a{" "}
+                          {formatDateBR(item.data_referencia_fim)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {moneyBR(item.entrada_maquininha)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {moneyBR(item.entrada_pix)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {moneyBR(item.entrada_boleto)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {moneyBR(item.entrada_ted)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {moneyBR(item.entrada_dinheiro)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {moneyBR(item.outras_entradas)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {moneyBR(item.total_entradas)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {moneyBR(item.total_saidas)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {moneyBR(item.saldo_semanal)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {item.rating_bacen || "-"}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {item.rating_interno || "-"}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {item.scr_status || item.restricao_scr || "-"}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {item.cnd_status || item.cnd_regular || "-"}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {item.status_semana || item.status || "-"}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={16} style={{ padding: "8px" }}>
+                        Nenhuma atualização registrada.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+
+              {/* Recomendação */}
+              <div
+                style={{
+                  marginTop: "24px",
+                  padding: "12px",
+                  border: "1px solid #bfdbfe",
+                  background: "#eff6ff",
+                  borderRadius: "6px",
+                }}
+              >
+                <strong>Recomendação operacional:</strong>{" "}
+                {calcularRecomendacao(imprimirOpen)}
+              </div>
+
+              <div
+                style={{
+                  marginTop: "32px",
+                  borderTop: "1px solid #e5e7eb",
+                  paddingTop: "8px",
+                  color: "#9ca3af",
+                  fontSize: "10px",
+                }}
+              >
+                Destrava Crédito — Documento gerado em{" "}
+                {new Date().toLocaleDateString("pt-BR")} às{" "}
+                {new Date().toLocaleTimeString("pt-BR")}
               </div>
             </div>
           </div>
@@ -1060,12 +2075,52 @@ function labelEntrada(key: string): string {
   return map[key] || key;
 }
 
+function BancoField({
+  label,
+  required,
+  value,
+  onChange,
+}: {
+  label: string;
+  required?: boolean;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <label>
+      <span className="mb-1 block text-xs font-medium text-gray-600">
+        {label}
+        {required ? " *" : ""}
+      </span>
+      <input
+        className="w-full rounded border border-gray-300 p-2 text-sm"
+        list="bancos-sugeridos"
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Digite ou selecione o banco"
+      />
+      <datalist id="bancos-sugeridos">
+        {BANCOS_SUGERIDOS.map((b) => (
+          <option key={b} value={b} />
+        ))}
+      </datalist>
+    </label>
+  );
+}
+
 function FieldInput({
   field,
   value,
   onChange,
 }: {
-  field: { key: string; label: string; type?: string; textarea?: boolean; required?: boolean };
+  field: {
+    key: string;
+    label: string;
+    type?: string;
+    textarea?: boolean;
+    required?: boolean;
+  };
   value: any;
   onChange: (value: any) => void;
 }) {
@@ -1073,7 +2128,8 @@ function FieldInput({
     return (
       <label className="md:col-span-3">
         <span className="mb-1 block text-xs font-medium text-gray-600">
-          {field.label}{field.required ? " *" : ""}
+          {field.label}
+          {field.required ? " *" : ""}
         </span>
         <textarea
           className="min-h-20 w-full rounded border border-gray-300 p-2 text-sm"
@@ -1086,7 +2142,8 @@ function FieldInput({
   return (
     <label>
       <span className="mb-1 block text-xs font-medium text-gray-600">
-        {field.label}{field.required ? " *" : ""}
+        {field.label}
+        {field.required ? " *" : ""}
       </span>
       <input
         className="w-full rounded border border-gray-300 p-2 text-sm"
@@ -1099,11 +2156,27 @@ function FieldInput({
   );
 }
 
-function ReadonlyField({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+function ReadonlyField({
+  label,
+  value,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
   return (
     <div>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
-      <div className={`w-full rounded border p-2 text-sm ${highlight ? "border-blue-200 bg-blue-50 font-semibold text-blue-800" : "border-gray-200 bg-gray-50 text-gray-700"}`}>
+      <span className="mb-1 block text-xs font-medium text-gray-600">
+        {label}
+      </span>
+      <div
+        className={`w-full rounded border p-2 text-sm ${
+          highlight
+            ? "border-blue-200 bg-blue-50 font-semibold text-blue-800"
+            : "border-gray-200 bg-gray-50 text-gray-700"
+        }`}
+      >
         {value}
       </div>
     </div>
@@ -1123,13 +2196,21 @@ function NumberField({
 }) {
   return (
     <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-gray-600">
+        {label}
+      </span>
       <input
         className="w-full rounded border border-gray-300 p-2 text-sm"
         type="number"
         step={integer ? "1" : "0.01"}
         value={value || 0}
-        onChange={(e) => onChange(integer ? parseInt(e.target.value || "0", 10) : parseFloat(e.target.value || "0"))}
+        onChange={(e) =>
+          onChange(
+            integer
+              ? parseInt(e.target.value || "0", 10)
+              : parseFloat(e.target.value || "0")
+          )
+        }
       />
     </label>
   );
@@ -1146,7 +2227,9 @@ function TextFieldSimple({
 }) {
   return (
     <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-gray-600">
+        {label}
+      </span>
       <input
         className="w-full rounded border border-gray-300 p-2 text-sm"
         type="text"
@@ -1168,7 +2251,9 @@ function TextareaField({
 }) {
   return (
     <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-gray-600">
+        {label}
+      </span>
       <textarea
         className="min-h-20 w-full rounded border border-gray-300 p-2 text-sm"
         value={value || ""}
@@ -1178,7 +2263,13 @@ function TextareaField({
   );
 }
 
-function InfoCard({ label, value }: { label: string; value?: string | null }) {
+function InfoCard({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | null;
+}) {
   return (
     <div className="rounded border p-3">
       <div className="text-xs text-gray-500">{label}</div>
