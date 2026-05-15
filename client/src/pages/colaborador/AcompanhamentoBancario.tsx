@@ -265,10 +265,97 @@ function authHeaders(extra?: HeadersInit): HeadersInit {
   };
 }
 
-function exportarCSV(row: Acompanhamento) {
-  const atualizacoes: any[] = Array.isArray(row.atualizacoes)
-    ? row.atualizacoes
-    : [];
+
+const PRESTADORAS_RELATORIO = {
+  destrava: {
+    key: "destrava",
+    nome: "Destrava Crédito",
+    marca: "DESTRAVA",
+    documento: "Destrava Crédito",
+    corPrimaria: "#0B3B82",
+    corSecundaria: "#EAF1FB",
+    slogan: "Assessoria de crédito empresarial",
+  },
+  permupay: {
+    key: "permupay",
+    nome: "PermuPay",
+    marca: "PERMUPAY",
+    documento: "PermuPay",
+    corPrimaria: "#111827",
+    corSecundaria: "#F3F4F6",
+    slogan: "Soluções financeiras e relacionamento bancário",
+  },
+} as const;
+
+type PrestadoraKey = keyof typeof PRESTADORAS_RELATORIO;
+
+function prestadoraMeta(key?: string | null) {
+  return PRESTADORAS_RELATORIO[(key as PrestadoraKey) || "destrava"] || PRESTADORAS_RELATORIO.destrava;
+}
+
+function totalEntradasSemana(item: any): number {
+  return (
+    Number(item?.total_entradas || 0) ||
+    Number(item?.entrada_maquininha || 0) +
+      Number(item?.entrada_pix || 0) +
+      Number(item?.entrada_boleto || 0) +
+      Number(item?.entrada_ted || 0) +
+      Number(item?.entrada_dinheiro || 0) +
+      Number(item?.outras_entradas || 0)
+  );
+}
+
+function atualizacoesOrdenadas(row: Acompanhamento): any[] {
+  return (Array.isArray(row?.atualizacoes) ? row.atualizacoes : [])
+    .filter(Boolean)
+    .sort((a: any, b: any) => Number(a.numero_semana || 0) - Number(b.numero_semana || 0));
+}
+
+function getSemanaAtual(row: Acompanhamento): any | null {
+  const atualizacoes = atualizacoesOrdenadas(row);
+  return atualizacoes.length ? atualizacoes[atualizacoes.length - 1] : null;
+}
+
+function calcularEvolucaoAcompanhamento(row: Acompanhamento) {
+  const atualizacoes = atualizacoesOrdenadas(row);
+  if (atualizacoes.length === 0) {
+    return {
+      primeira: null,
+      atual: null,
+      variacaoEntradas: 0,
+      variacaoSaldo: 0,
+      leitura: "Nenhuma semana registrada ainda.",
+      tendencia: "neutra",
+    };
+  }
+
+  const primeira = atualizacoes[0];
+  const atual = atualizacoes[atualizacoes.length - 1];
+  const entradasPrimeira = totalEntradasSemana(primeira);
+  const entradasAtual = totalEntradasSemana(atual);
+  const saldoPrimeiro = Number(primeira.saldo_semanal || 0);
+  const saldoAtual = Number(atual.saldo_semanal || 0);
+  const variacaoEntradas = entradasAtual - entradasPrimeira;
+  const variacaoSaldo = saldoAtual - saldoPrimeiro;
+
+  let leitura = "Acompanhamento estável. Manter rotina semanal e observar rating.";
+  let tendencia = "neutra";
+  if (variacaoEntradas > 0 && variacaoSaldo >= 0) {
+    leitura = "Evolução favorável: entradas e saldo mostram melhora frente ao início.";
+    tendencia = "positiva";
+  } else if (variacaoEntradas < 0 || variacaoSaldo < 0) {
+    leitura = "Ponto de atenção: a semana atual mostra piora em relação ao início.";
+    tendencia = "negativa";
+  }
+
+  return { primeira, atual, variacaoEntradas, variacaoSaldo, leitura, tendencia };
+}
+
+function exportarCSV(row: Acompanhamento, prestadoraKey: PrestadoraKey = "destrava") {
+  const prestadora = prestadoraMeta(prestadoraKey);
+  const atualizacoes = atualizacoesOrdenadas(row);
+  const semanaAtual = getSemanaAtual(row);
+  const evolucao = calcularEvolucaoAcompanhamento(row);
 
   const safe = (value: unknown) =>
     String(value ?? "")
@@ -285,10 +372,7 @@ function exportarCSV(row: Acompanhamento) {
       .replace(/[^A-Z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
 
-  const saldoUltimaSemana =
-    atualizacoes.length > 0
-      ? atualizacoes[atualizacoes.length - 1]?.saldo_semanal
-      : row.saldo_semanal;
+  const saldoUltimaSemana = semanaAtual?.saldo_semanal ?? row.saldo_semanal;
 
   const statusClass = (value: unknown) => {
     const normalized = String(value || "").toLowerCase();
@@ -300,17 +384,11 @@ function exportarCSV(row: Acompanhamento) {
 
   const semanaRows = atualizacoes
     .map((item) => {
-      const totalEntradas =
-        Number(item.total_entradas || 0) ||
-        Number(item.entrada_maquininha || 0) +
-          Number(item.entrada_pix || 0) +
-          Number(item.entrada_boleto || 0) +
-          Number(item.entrada_ted || 0) +
-          Number(item.entrada_dinheiro || 0) +
-          Number(item.outras_entradas || 0);
+      const totalEntradas = totalEntradasSemana(item);
+      const isAtual = Number(item.numero_semana) === Number(semanaAtual?.numero_semana);
       return `
-        <tr>
-          <td>Semana ${safe(item.numero_semana)}</td>
+        <tr class="${isAtual ? "current-row" : ""}">
+          <td>Semana ${safe(item.numero_semana)}${isAtual ? " — Atual" : ""}</td>
           <td>${safe(formatDateBR(item.data_referencia_inicio))} a ${safe(formatDateBR(item.data_referencia_fim))}</td>
           <td class="money">${safe(moneyBR(item.entrada_maquininha))}</td>
           <td class="money">${safe(moneyBR(item.entrada_pix))}</td>
@@ -321,6 +399,9 @@ function exportarCSV(row: Acompanhamento) {
           <td class="money strong">${safe(moneyBR(totalEntradas))}</td>
           <td class="money">${safe(moneyBR(item.total_saidas))}</td>
           <td class="money ${Number(item.saldo_semanal || 0) < 0 ? "negative" : "positive"}">${safe(moneyBR(item.saldo_semanal))}</td>
+          <td class="money">${safe(moneyBR(item.saldo_medio))}</td>
+          <td class="money">${safe(moneyBR(item.saldo_final))}</td>
+          <td>${safe(item.quantidade_transacoes || 0)}</td>
           <td>${safe(item.rating_bacen || "-")}</td>
           <td>${safe(item.rating_interno || "-")}</td>
           <td>${safe(item.scr_status || item.restricao_scr || "-")}</td>
@@ -337,26 +418,31 @@ function exportarCSV(row: Acompanhamento) {
     })
     .join("");
 
+  const assinaturaResponsavel = row.responsavel_nome || "Responsável pelo acompanhamento";
   const html = `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <style>
-    body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; }
-    .brand { background: #0B3B82; color: white; padding: 18px 22px; border-radius: 12px; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; background: #ffffff; }
+    .brand { background: ${prestadora.corPrimaria}; color: white; padding: 20px 24px; border-radius: 14px; }
+    .brand-row { display: flex; align-items: center; gap: 14px; }
+    .logo { width: 132px; height: 46px; border: 2px solid rgba(255,255,255,.72); border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; letter-spacing: .08em; }
     .brand h1 { margin: 0; font-size: 22px; }
     .brand p { margin: 4px 0 0; font-size: 12px; opacity: .92; }
     .section { margin-top: 18px; }
-    .section-title { color: #0B3B82; font-weight: 700; font-size: 14px; margin-bottom: 8px; }
+    .section-title { color: ${prestadora.corPrimaria}; font-weight: 800; font-size: 14px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .04em; }
     .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
     .card { border: 1px solid #dbe4f0; border-radius: 10px; padding: 10px; background: #f8fafc; min-height: 58px; }
+    .featured { border: 2px solid ${prestadora.corPrimaria}; background: ${prestadora.corSecundaria}; }
     .label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
     .value { font-size: 14px; font-weight: 700; margin-top: 4px; }
     .value.negative, .negative { color: #dc2626; font-weight: 700; }
     .value.positive, .positive { color: #15803d; font-weight: 700; }
     table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 11px; }
-    th { background: #eaf1fb; color: #0B3B82; border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
+    th { background: ${prestadora.corSecundaria}; color: ${prestadora.corPrimaria}; border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
     td { border: 1px solid #e2e8f0; padding: 7px; vertical-align: top; }
+    tr.current-row td { background: #fff7ed; border-top: 2px solid #f59e0b; border-bottom: 2px solid #f59e0b; }
     .money { text-align: right; white-space: nowrap; }
     .strong { font-weight: 700; }
     .badge { border-radius: 999px; padding: 3px 8px; font-size: 10px; font-weight: 700; }
@@ -364,14 +450,37 @@ function exportarCSV(row: Acompanhamento) {
     .badge.positivo { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
     .badge.atencao { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
     .badge.neutro { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
-    .note { border-left: 4px solid #0B3B82; background: #eff6ff; padding: 12px; border-radius: 8px; }
+    .note { border-left: 4px solid ${prestadora.corPrimaria}; background: #eff6ff; padding: 12px; border-radius: 8px; }
+    .signature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; margin-top: 28px; }
+    .signature { border-top: 1px solid #334155; padding-top: 8px; font-size: 12px; text-align: center; }
   </style>
 </head>
 <body>
   <div class="brand">
-    <h1>Acompanhamento Bancário — Destrava Crédito</h1>
-    <p>${safe(row.nome_empresa)} — ${safe(row.banco_observado)} | Gerado em ${safe(new Date().toLocaleDateString("pt-BR"))}</p>
+    <div class="brand-row">
+      <div class="logo">${safe(prestadora.marca)}</div>
+      <div>
+        <h1>Relatório de Acompanhamento Bancário</h1>
+        <p>${safe(prestadora.nome)} — ${safe(prestadora.slogan)}</p>
+        <p>${safe(row.nome_empresa)} — ${safe(row.banco_observado)} | Gerado em ${safe(new Date().toLocaleDateString("pt-BR"))}</p>
+      </div>
+    </div>
   </div>
+
+  <div class="section">
+    <div class="section-title">Semana atual em evidência</div>
+    <div class="grid">
+      <div class="card featured"><div class="label">Semana atual</div><div class="value">Semana ${safe(semanaAtual?.numero_semana || "-")}</div></div>
+      <div class="card featured"><div class="label">Período</div><div class="value">${safe(formatDateBR(semanaAtual?.data_referencia_inicio))} a ${safe(formatDateBR(semanaAtual?.data_referencia_fim))}</div></div>
+      <div class="card featured"><div class="label">Total de entradas</div><div class="value">${safe(moneyBR(totalEntradasSemana(semanaAtual)))}</div></div>
+      <div class="card featured"><div class="label">Saldo semanal</div><div class="value ${Number(semanaAtual?.saldo_semanal || 0) < 0 ? "negative" : "positive"}">${safe(moneyBR(semanaAtual?.saldo_semanal))}</div></div>
+      <div class="card"><div class="label">Rating Bacen</div><div class="value">${safe(semanaAtual?.rating_bacen || row.rating_bacen_atual || "-")}</div></div>
+      <div class="card"><div class="label">Rating interno</div><div class="value">${safe(semanaAtual?.rating_interno || row.rating_interno_atual || "-")}</div></div>
+      <div class="card"><div class="label">Status</div><div class="value">${safe(labelStatus(semanaAtual?.status_semana || semanaAtual?.status || row.status_semana))}</div></div>
+      <div class="card"><div class="label">Atualização</div><div class="value">${safe(formatDateBR(semanaAtual?.data_atualizacao || semanaAtual?.data_referencia_fim))}</div></div>
+    </div>
+  </div>
+
   <div class="section">
     <div class="section-title">Resumo executivo</div>
     <div class="grid">
@@ -385,6 +494,16 @@ function exportarCSV(row: Acompanhamento) {
       <div class="card"><div class="label">Saldo última semana</div><div class="value ${Number(saldoUltimaSemana || 0) < 0 ? "negative" : "positive"}">${safe(moneyBR(saldoUltimaSemana))}</div></div>
     </div>
   </div>
+
+  <div class="section">
+    <div class="section-title">Evolução do acompanhamento</div>
+    <div class="grid">
+      <div class="card"><div class="label">Variação de entradas</div><div class="value ${evolucao.variacaoEntradas < 0 ? "negative" : "positive"}">${safe(moneyBR(evolucao.variacaoEntradas))}</div></div>
+      <div class="card"><div class="label">Variação de saldo</div><div class="value ${evolucao.variacaoSaldo < 0 ? "negative" : "positive"}">${safe(moneyBR(evolucao.variacaoSaldo))}</div></div>
+      <div class="card" style="grid-column: span 2;"><div class="label">Leitura operacional</div><div class="value">${safe(evolucao.leitura)}</div></div>
+    </div>
+  </div>
+
   <div class="section">
     <div class="section-title">Indicadores financeiros</div>
     <div class="grid">
@@ -405,15 +524,30 @@ function exportarCSV(row: Acompanhamento) {
       <thead>
         <tr>
           <th>Semana</th><th>Período</th><th>Máquina</th><th>PIX</th><th>Boleto</th><th>TED</th><th>Dinheiro</th><th>Outras</th>
-          <th>Total entradas</th><th>Saídas</th><th>Saldo</th><th>Rating Bacen</th><th>Rating interno</th>
+          <th>Total entradas</th><th>Saídas</th><th>Saldo</th><th>Saldo médio</th><th>Saldo final</th><th>Transações</th><th>Rating Bacen</th><th>Rating interno</th>
           <th>SCR</th><th>Cenprot</th><th>Serasa</th><th>CND</th><th>PLD/AML</th><th>COAF</th><th>Status</th>
           <th>Análise</th><th>Orientação</th><th>Próxima ação</th>
         </tr>
       </thead>
       <tbody>
-        ${semanaRows || `<tr><td colspan="23">Nenhuma atualização semanal registrada.</td></tr>`}
+        ${semanaRows || `<tr><td colspan="26">Nenhuma atualização semanal registrada.</td></tr>`}
       </tbody>
     </table>
+  </div>
+
+  <div class="section note">
+    Declaro, para fins de registro operacional, que este relatório representa o acompanhamento bancário semanal prestado pela ${safe(prestadora.nome)} à empresa ${safe(row.nome_empresa || "-")}, com base nas informações fornecidas e registradas no sistema.
+  </div>
+
+  <div class="signature-grid">
+    <div class="signature">
+      ${safe(assinaturaResponsavel)}<br />
+      Responsável ${safe(prestadora.nome)}
+    </div>
+    <div class="signature">
+      Responsável legal da empresa contratante<br />
+      ${safe(row.nome_empresa || "-")} — CNPJ ${safe(row.cnpj || "-")}
+    </div>
   </div>
 </body>
 </html>`;
@@ -422,7 +556,7 @@ function exportarCSV(row: Acompanhamento) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `acompanhamento-bancario-${slug(row.nome_empresa)}-${slug(row.banco_observado)}.xls`;
+  link.download = `relatorio-acompanhamento-${slug(prestadora.nome)}-${slug(row.nome_empresa)}-${slug(row.banco_observado)}.xls`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -524,6 +658,7 @@ export default function AcompanhamentoBancario() {
   const [updOpen, setUpdOpen] = useState<Acompanhamento | null>(null);
   const [detalhe, setDetalhe] = useState<Acompanhamento | null>(null);
   const [imprimirOpen, setImprimirOpen] = useState<Acompanhamento | null>(null);
+  const [prestadoraRelatorio, setPrestadoraRelatorio] = useState<PrestadoraKey>("destrava");
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [editandoSemanaNumero, setEditandoSemanaNumero] = useState<number | null>(null);
 
@@ -920,7 +1055,7 @@ export default function AcompanhamentoBancario() {
               const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}`, { headers: authHeaders() });
               if (resp.ok) rowCompleto = await resp.json();
             } catch { /* usa row sem atualizações */ }
-            exportarCSV(rowCompleto);
+            exportarCSV(rowCompleto, prestadoraRelatorio);
           }}
         >Exportar XLS</button>
         <button
@@ -1491,13 +1626,24 @@ export default function AcompanhamentoBancario() {
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    <label className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600">
+                      Prestadora
+                      <select
+                        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                        value={prestadoraRelatorio}
+                        onChange={(e) => setPrestadoraRelatorio(e.target.value as PrestadoraKey)}
+                      >
+                        <option value="destrava">Destrava</option>
+                        <option value="permupay">PermuPay</option>
+                      </select>
+                    </label>
                     <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(detalhe.status_semana || detalhe.status)}`}>
                       {labelStatus(detalhe.status_semana || detalhe.status)}
                     </span>
                     <button className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100" onClick={() => abrirEditarAcompanhamento(detalhe)}>Editar acompanhamento</button>
                     <button className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100" onClick={() => abrirAtualizacao(detalhe)}>Atualizar semana</button>
                     <button className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100" onClick={() => adicionarOutroBanco(detalhe)}>+ Outro banco</button>
-                    <button className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100" onClick={() => exportarCSV(detalhe)}>Exportar XLS</button>
+                    <button className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100" onClick={() => exportarCSV(detalhe, prestadoraRelatorio)}>Exportar XLS</button>
                     <button className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-100" onClick={() => { setImprimirOpen(detalhe); setDetalhe(null); }}>Imprimir</button>
                     <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50" onClick={() => setDetalhe(null)}>Fechar</button>
                   </div>
@@ -1554,6 +1700,52 @@ export default function AcompanhamentoBancario() {
                     </div>
                   </div>
                 </section>
+
+                {(() => {
+                  const semanaAtual = getSemanaAtual(detalhe);
+                  const evolucao = calcularEvolucaoAcompanhamento(detalhe);
+                  const entradasAtual = totalEntradasSemana(semanaAtual);
+                  const saldoAtual = Number(semanaAtual?.saldo_semanal || 0);
+                  return (
+                    <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                      <div className="rounded-2xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-white p-4 shadow-sm xl:col-span-2">
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <h4 className="text-sm font-bold uppercase tracking-wide text-amber-700">Semana atual em evidência</h4>
+                            <p className="text-xs text-amber-700/80">Última semana preenchida e referência principal do acompanhamento.</p>
+                          </div>
+                          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(semanaAtual?.status_semana || semanaAtual?.status)}`}>
+                            {labelStatus(semanaAtual?.status_semana || semanaAtual?.status)}
+                          </span>
+                        </div>
+                        {semanaAtual ? (
+                          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                            <InfoCard label="Semana" value={`Semana ${semanaAtual.numero_semana || "-"}`} />
+                            <InfoCard label="Período" value={`${formatDateBR(semanaAtual.data_referencia_inicio)} a ${formatDateBR(semanaAtual.data_referencia_fim)}`} />
+                            <InfoCard label="Entradas" value={moneyBR(entradasAtual)} positive />
+                            <InfoCard label="Saídas" value={moneyBR(semanaAtual.total_saidas)} negative />
+                            <InfoCard label="Saldo semanal" value={moneyBR(saldoAtual)} negative={saldoAtual < 0} positive={saldoAtual > 0} />
+                            <InfoCard label="Rating Bacen" value={semanaAtual.rating_bacen || detalhe.rating_bacen_atual || "-"} />
+                            <InfoCard label="Rating interno" value={semanaAtual.rating_interno || detalhe.rating_interno_atual || "-"} />
+                            <InfoCard label="Atualização" value={formatDateBR(semanaAtual.data_atualizacao || semanaAtual.data_referencia_fim)} />
+                          </div>
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-amber-300 bg-white/70 p-4 text-sm text-amber-800">
+                            Nenhuma semana preenchida ainda. Clique em <strong>Atualizar semana</strong> para registrar a primeira atualização.
+                          </div>
+                        )}
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Evolução</h4>
+                        <p className="mt-2 text-sm leading-6 text-slate-700">{evolucao.leitura}</p>
+                        <div className="mt-4 grid grid-cols-1 gap-3">
+                          <InfoCard label="Variação de entradas" value={moneyBR(evolucao.variacaoEntradas)} negative={evolucao.variacaoEntradas < 0} positive={evolucao.variacaoEntradas > 0} />
+                          <InfoCard label="Variação de saldo" value={moneyBR(evolucao.variacaoSaldo)} negative={evolucao.variacaoSaldo < 0} positive={evolucao.variacaoSaldo > 0} />
+                        </div>
+                      </div>
+                    </section>
+                  );
+                })()}
 
                 <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
@@ -1613,10 +1805,14 @@ export default function AcompanhamentoBancario() {
                               Number(item.outras_entradas || 0);
                             const saldo = Number(item.saldo_semanal || 0);
                             const isEven = idx % 2 === 0;
+                            const isAtual = Number(item.numero_semana) === Number(getSemanaAtual(detalhe)?.numero_semana);
                             return (
-                              <tr key={item.id || item.numero_semana} className={`border-b border-slate-100 transition hover:bg-blue-50/40 ${isEven ? "bg-white" : "bg-slate-50/50"}`}>
+                              <tr key={item.id || item.numero_semana} className={`border-b border-slate-100 transition hover:bg-blue-50/40 ${isAtual ? "bg-amber-50/80 ring-1 ring-amber-200" : isEven ? "bg-white" : "bg-slate-50/50"}`}>
                                 <td className="px-3 py-2.5 font-bold text-slate-700">
-                                  <div>S{item.numero_semana}</div>
+                                  <div className="flex items-center gap-1">
+                                    <span>S{item.numero_semana}</span>
+                                    {isAtual && <span className="rounded-full bg-amber-200 px-1.5 py-0.5 text-[9px] font-bold text-amber-900">Atual</span>}
+                                  </div>
                                   <button
                                     className="mt-1 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-800 shadow-sm hover:bg-amber-100"
                                     onClick={() => abrirEditarSemana(detalhe, item)}
@@ -1751,7 +1947,18 @@ export default function AcompanhamentoBancario() {
         {/* ── Modal — Impressão ────────────────────────────────────────────── */}
         {imprimirOpen && (
           <div className="fixed inset-0 z-50 overflow-auto bg-white p-0">
-            <div className="flex items-center gap-3 border-b bg-gray-50 p-4 print:hidden">
+            <div className="flex flex-wrap items-center gap-3 border-b bg-gray-50 p-4 print:hidden">
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                Prestadora
+                <select
+                  className="rounded border border-gray-300 bg-white px-3 py-2 text-sm"
+                  value={prestadoraRelatorio}
+                  onChange={(e) => setPrestadoraRelatorio(e.target.value as PrestadoraKey)}
+                >
+                  <option value="destrava">Destrava Crédito</option>
+                  <option value="permupay">PermuPay</option>
+                </select>
+              </label>
               <button className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700" onClick={handleImprimir}>
                 Imprimir / Salvar PDF
               </button>
@@ -1759,11 +1966,40 @@ export default function AcompanhamentoBancario() {
             </div>
 
             <div ref={printRef} className="mx-auto max-w-5xl p-8 text-sm" style={{ fontFamily: "Arial, sans-serif" }}>
-              <div className="mb-6 border-b-2 border-gray-800 pb-4">
-                <h1 className="text-2xl font-bold">Acompanhamento Bancário — Destrava Crédito</h1>
-                <h2 className="mt-1 text-xl font-semibold">{imprimirOpen.nome_empresa} — {imprimirOpen.banco_observado}</h2>
-                <p className="mt-1 text-gray-600">CNPJ: {imprimirOpen.cnpj || "-"} | Gerado em: {new Date().toLocaleDateString("pt-BR")}</p>
+              <div className="mb-6 rounded-xl border-b-4 p-5 text-white" style={{ backgroundColor: prestadoraMeta(prestadoraRelatorio).corPrimaria, borderColor: prestadoraMeta(prestadoraRelatorio).corPrimaria }}>
+                <div className="flex items-center gap-4">
+                  <div className="flex h-14 w-36 items-center justify-center rounded-xl border-2 border-white/70 text-lg font-extrabold tracking-widest">
+                    {prestadoraMeta(prestadoraRelatorio).marca}
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold">Relatório de Acompanhamento Bancário</h1>
+                    <p className="mt-1 text-sm opacity-90">{prestadoraMeta(prestadoraRelatorio).nome} — {prestadoraMeta(prestadoraRelatorio).slogan}</p>
+                    <h2 className="mt-2 text-xl font-semibold">{imprimirOpen.nome_empresa} — {imprimirOpen.banco_observado}</h2>
+                    <p className="mt-1 text-sm opacity-90">CNPJ: {imprimirOpen.cnpj || "-"} | Gerado em: {new Date().toLocaleDateString("pt-BR")}</p>
+                  </div>
+                </div>
               </div>
+
+              {(() => {
+                const semanaAtual = getSemanaAtual(imprimirOpen);
+                const evolucao = calcularEvolucaoAcompanhamento(imprimirOpen);
+                const saldoAtual = Number(semanaAtual?.saldo_semanal || 0);
+                return (
+                  <div className="mb-5 rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
+                    <h3 className="mb-3 text-base font-bold text-amber-800">Semana atual em evidência</h3>
+                    <div className="grid grid-cols-4 gap-3 text-xs">
+                      <div><strong>Semana:</strong><br />{semanaAtual ? `Semana ${semanaAtual.numero_semana}` : "-"}</div>
+                      <div><strong>Período:</strong><br />{formatDateBR(semanaAtual?.data_referencia_inicio)} a {formatDateBR(semanaAtual?.data_referencia_fim)}</div>
+                      <div><strong>Entradas:</strong><br />{moneyBR(totalEntradasSemana(semanaAtual))}</div>
+                      <div><strong>Saldo:</strong><br /><span className={saldoAtual < 0 ? "text-red-600 font-bold" : "text-emerald-700 font-bold"}>{moneyBR(saldoAtual)}</span></div>
+                      <div><strong>Rating Bacen:</strong><br />{semanaAtual?.rating_bacen || imprimirOpen.rating_bacen_atual || "-"}</div>
+                      <div><strong>Rating Interno:</strong><br />{semanaAtual?.rating_interno || imprimirOpen.rating_interno_atual || "-"}</div>
+                      <div><strong>Status:</strong><br />{labelStatus(semanaAtual?.status_semana || semanaAtual?.status || imprimirOpen.status_semana)}</div>
+                      <div><strong>Evolução:</strong><br />{evolucao.leitura}</div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="mb-4 grid grid-cols-3 gap-4">
                 <div><strong>Rating Bacen:</strong> {imprimirOpen.rating_bacen_atual || imprimirOpen.rating_bacen_inicial || "-"}</div>
@@ -1828,8 +2064,23 @@ export default function AcompanhamentoBancario() {
                 <strong>Recomendação operacional:</strong> {calcularRecomendacao(imprimirOpen)}
               </div>
 
+              <div style={{ marginTop: "26px", padding: "12px", border: "1px solid #d1d5db", background: "#f9fafb", borderRadius: "8px" }}>
+                <strong>Declaração de prestação de serviço:</strong> Este relatório registra o acompanhamento bancário semanal prestado pela {prestadoraMeta(prestadoraRelatorio).nome} à empresa {imprimirOpen.nome_empresa || "-"}, com base nos dados fornecidos e atualizados no sistema.
+              </div>
+
+              <div className="mt-12 grid grid-cols-2 gap-10">
+                <div className="border-t border-gray-800 pt-2 text-center text-xs">
+                  {imprimirOpen.responsavel_nome || "Responsável pelo acompanhamento"}<br />
+                  Responsável {prestadoraMeta(prestadoraRelatorio).nome}
+                </div>
+                <div className="border-t border-gray-800 pt-2 text-center text-xs">
+                  Responsável legal da empresa contratante<br />
+                  {imprimirOpen.nome_empresa || "-"} — CNPJ {imprimirOpen.cnpj || "-"}
+                </div>
+              </div>
+
               <div style={{ marginTop: "32px", borderTop: "1px solid #e5e7eb", paddingTop: "8px", color: "#9ca3af", fontSize: "10px" }}>
-                Destrava Crédito — Documento gerado em {new Date().toLocaleDateString("pt-BR")} às {new Date().toLocaleTimeString("pt-BR")}
+                {prestadoraMeta(prestadoraRelatorio).nome} — Documento gerado em {new Date().toLocaleDateString("pt-BR")} às {new Date().toLocaleTimeString("pt-BR")}
               </div>
             </div>
           </div>
@@ -1865,6 +2116,27 @@ function labelRating(key: string): string {
     coaf_status: "COAF",
   };
   return map[key] || key;
+}
+
+
+function InfoCard({ label, value, positive, negative }: {
+  label: string;
+  value: any;
+  positive?: boolean;
+  negative?: boolean;
+}) {
+  return (
+    <div className={`rounded-xl border p-3 ${
+      negative
+        ? "border-red-100 bg-red-50 text-red-700"
+        : positive
+        ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+        : "border-slate-100 bg-white text-slate-800"
+    }`}>
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="mt-1 text-sm font-bold leading-snug">{value || "-"}</div>
+    </div>
+  );
 }
 
 // ─── Componentes auxiliares ───────────────────────────────────────────────────
