@@ -1046,17 +1046,359 @@ export default function AcompanhamentoBancario() {
     setImprimirOpen(rowCompleto);
   };
 
+  const htmlEscape = (value: any) =>
+    String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+  const gerarHtmlRelatorioA4 = (acomp: Acompanhamento, prestadora: PrestadoraKey) => {
+    const meta = prestadoraMeta(prestadora);
+    const semanaAtual = getSemanaAtual(acomp);
+    const evolucao = calcularEvolucaoAcompanhamento(acomp);
+    const atualizacoes = Array.isArray(acomp.atualizacoes) ? acomp.atualizacoes : [];
+    const saldoAtual = Number(semanaAtual?.saldo_semanal || 0);
+    const logoBlock = meta.logoUrl
+      ? `<img src="${htmlEscape(meta.logoUrl)}" alt="${htmlEscape(meta.logoAlt)}" />`
+      : `<strong>${htmlEscape(meta.marca)}</strong>`;
+
+    const rows = atualizacoes.length
+      ? atualizacoes.map((item: any) => {
+          const saldo = Number(item.saldo_semanal || 0);
+          return `
+            <tr>
+              <td class="center">${htmlEscape(item.numero_semana || "-")}</td>
+              <td>${htmlEscape(formatDateBR(item.data_referencia_inicio))}<br/>a ${htmlEscape(formatDateBR(item.data_referencia_fim))}</td>
+              <td>${htmlEscape(moneyBR(item.entrada_maquininha))}</td>
+              <td>${htmlEscape(moneyBR(item.entrada_pix))}</td>
+              <td>${htmlEscape(moneyBR(item.entrada_boleto))}</td>
+              <td>${htmlEscape(moneyBR(item.entrada_ted))}</td>
+              <td>${htmlEscape(moneyBR(item.entrada_dinheiro))}</td>
+              <td>${htmlEscape(moneyBR(item.outras_entradas))}</td>
+              <td class="strong green">${htmlEscape(moneyBR(item.total_entradas || totalEntradasSemana(item)))}</td>
+              <td class="red">${htmlEscape(moneyBR(item.total_saidas))}</td>
+              <td class="${saldo < 0 ? "red" : "green"} strong">${htmlEscape(moneyBR(saldo))}</td>
+              <td>${htmlEscape(item.rating_bacen || "-")}</td>
+              <td>${htmlEscape(item.rating_interno || "-")}</td>
+              <td>${htmlEscape(labelStatus(item.status_semana || item.status || "-"))}</td>
+            </tr>
+          `;
+        }).join("")
+      : `<tr><td colspan="14">Nenhuma atualização registrada.</td></tr>`;
+
+    const analises = atualizacoes.length
+      ? atualizacoes.map((item: any) => `
+        <div class="analysis-row">
+          <strong>Semana ${htmlEscape(item.numero_semana || "-")}</strong>
+          <span><b>Análise:</b> ${htmlEscape(item.analise_semana || "-")}</span>
+          <span><b>Orientação:</b> ${htmlEscape(item.orientacao_cliente || "-")}</span>
+          <span><b>Próxima ação:</b> ${htmlEscape(item.proxima_acao || "-")}</span>
+        </div>
+      `).join("")
+      : `<div class="analysis-row">Nenhuma análise semanal registrada.</div>`;
+
+    return `<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>${htmlEscape(nomeArquivoRelatorio(acomp, prestadora, "pdf").replace(/\.pdf$/i, ""))}</title>
+<style>
+  @page { size: A4 landscape; margin: 8mm; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #0f172a;
+    font-family: Arial, Helvetica, sans-serif;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body { width: 281mm; }
+  .page {
+    width: 281mm;
+    min-height: 194mm;
+    margin: 0 auto;
+    padding: 0;
+    background: #fff;
+  }
+  .header {
+    display: grid;
+    grid-template-columns: 44mm 1fr;
+    align-items: center;
+    gap: 8mm;
+    padding: 7mm;
+    border-radius: 5mm;
+    background: ${htmlEscape(meta.corPrimaria)};
+    color: #fff;
+    page-break-inside: avoid;
+  }
+  .logo {
+    height: 22mm;
+    border-radius: 4mm;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3mm;
+  }
+  .logo img { max-width: 35mm; max-height: 16mm; object-fit: contain; }
+  .logo strong { color: ${htmlEscape(meta.corPrimaria)}; font-size: 17pt; letter-spacing: .12em; }
+  h1 { margin: 0; font-size: 20pt; line-height: 1.1; }
+  .subtitle { margin: 1.5mm 0 0; font-size: 8.5pt; opacity: .9; }
+  h2 { margin: 3mm 0 0; font-size: 13pt; line-height: 1.15; }
+  .meta { margin-top: 1.5mm; font-size: 8pt; opacity: .9; }
+  .current {
+    margin-top: 5mm;
+    padding: 5mm;
+    border: 1.2pt solid #f6d766;
+    border-radius: 4mm;
+    background: #fff9df;
+    page-break-inside: avoid;
+  }
+  .section-title {
+    margin: 0 0 3mm;
+    font-size: 12pt;
+    color: #92400e;
+  }
+  .grid-6 {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 3mm;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 3mm;
+  }
+  .item { font-size: 8.5pt; line-height: 1.25; }
+  .item b { display: block; font-size: 7.2pt; text-transform: uppercase; color: #64748b; margin-bottom: .8mm; }
+  .kpis {
+    margin-top: 5mm;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 3mm;
+    page-break-inside: avoid;
+  }
+  .kpi {
+    border: 1px solid #dbe4ef;
+    border-radius: 3mm;
+    padding: 3mm;
+    min-height: 16mm;
+    background: #f8fafc;
+    font-size: 8.2pt;
+  }
+  .kpi b { display:block; color:#64748b; font-size: 6.8pt; text-transform: uppercase; margin-bottom: 1mm; }
+  .kpi strong { font-size: 9.6pt; }
+  h3 {
+    margin: 5mm 0 2.5mm;
+    font-size: 12pt;
+    color: #0f172a;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 6.8pt;
+    page-break-inside: auto;
+  }
+  th, td {
+    border: 1px solid #cbd5e1;
+    padding: 1.35mm 1mm;
+    text-align: left;
+    vertical-align: middle;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+  th {
+    background: #eef3f8;
+    color: #334155;
+    font-weight: 700;
+  }
+  tr { page-break-inside: avoid; }
+  .center { text-align: center; }
+  .strong { font-weight: 700; }
+  .green { color: #047857; }
+  .red { color: #dc2626; }
+  .note {
+    margin-top: 4mm;
+    padding: 3.2mm;
+    border: 1px solid #bfdbfe;
+    border-radius: 3mm;
+    background: #eff6ff;
+    font-size: 8.5pt;
+    page-break-inside: avoid;
+  }
+  .declaration {
+    margin-top: 4mm;
+    padding: 3.2mm;
+    border: 1px solid #d1d5db;
+    border-radius: 3mm;
+    background: #f9fafb;
+    font-size: 8.2pt;
+    line-height: 1.35;
+    page-break-inside: avoid;
+  }
+  .analysis {
+    margin-top: 4mm;
+    display: grid;
+    gap: 2mm;
+    page-break-inside: avoid;
+  }
+  .analysis-row {
+    border: 1px solid #e2e8f0;
+    border-radius: 2.5mm;
+    padding: 2.5mm;
+    display: grid;
+    grid-template-columns: 20mm 1fr 1fr 1fr;
+    gap: 3mm;
+    font-size: 7.6pt;
+    background: #fff;
+  }
+  .signatures {
+    margin-top: 10mm;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25mm;
+    page-break-inside: avoid;
+  }
+  .signature {
+    border-top: 1px solid #111827;
+    padding-top: 2mm;
+    text-align: center;
+    font-size: 8pt;
+  }
+  .footer {
+    margin-top: 5mm;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 2mm;
+    color: #64748b;
+    font-size: 7.2pt;
+  }
+  @media print {
+    html, body { width: 281mm !important; height: auto !important; overflow: visible !important; }
+    .page { width: 281mm !important; max-width: 281mm !important; margin: 0 !important; }
+  }
+</style>
+</head>
+<body>
+  <main class="page">
+    <header class="header">
+      <div class="logo">${logoBlock}</div>
+      <div>
+        <h1>Relatório de Acompanhamento Bancário</h1>
+        <p class="subtitle">${htmlEscape(meta.nome)} — ${htmlEscape(meta.slogan)}</p>
+        <h2>${htmlEscape(acomp.nome_empresa || "-")} — ${htmlEscape(acomp.banco_observado || "-")}</h2>
+        <p class="meta">CNPJ: ${htmlEscape(acomp.cnpj || "-")} | Gerado em: ${htmlEscape(new Date().toLocaleDateString("pt-BR"))}</p>
+      </div>
+    </header>
+
+    <section class="current">
+      <h3 class="section-title">Semana atual em evidência</h3>
+      <div class="grid-6">
+        <div class="item"><b>Semana</b>${semanaAtual ? `Semana ${htmlEscape(semanaAtual.numero_semana)}` : "-"}</div>
+        <div class="item"><b>Período</b>${htmlEscape(formatDateBR(semanaAtual?.data_referencia_inicio))} a ${htmlEscape(formatDateBR(semanaAtual?.data_referencia_fim))}</div>
+        <div class="item"><b>Entradas</b>${htmlEscape(moneyBR(totalEntradasSemana(semanaAtual)))}</div>
+        <div class="item"><b>Saldo</b><span class="${saldoAtual < 0 ? "red" : "green"} strong">${htmlEscape(moneyBR(saldoAtual))}</span></div>
+        <div class="item"><b>Rating interno</b>${htmlEscape(semanaAtual?.rating_interno || acomp.rating_interno_atual || "-")}</div>
+        <div class="item"><b>Status</b>${htmlEscape(labelStatus(semanaAtual?.status_semana || semanaAtual?.status || acomp.status_semana))}</div>
+      </div>
+    </section>
+
+    <section class="kpis">
+      <div class="kpi"><b>Rating Bacen</b><strong>${htmlEscape(acomp.rating_bacen_atual || acomp.rating_bacen_inicial || "-")}</strong></div>
+      <div class="kpi"><b>Rating Inicial</b><strong>${htmlEscape(acomp.rating_interno_inicial || "-")}</strong></div>
+      <div class="kpi"><b>Rating Atual</b><strong>${htmlEscape(acomp.rating_interno_atual || "-")}</strong></div>
+      <div class="kpi"><b>Faturamento anual</b><strong>${htmlEscape(moneyBR(acomp.faturamento_anual))}</strong></div>
+      <div class="kpi"><b>Média mensal</b><strong>${htmlEscape(moneyBR(acomp.media_mensal))}</strong></div>
+      <div class="kpi"><b>Margem ±30%</b><strong>${htmlEscape(moneyBR(acomp.margem_seguranca_30))}</strong></div>
+    </section>
+
+    <section class="kpis">
+      <div class="kpi"><b>Início</b><strong>${htmlEscape(formatDateBR(acomp.data_inicio))}</strong></div>
+      <div class="kpi"><b>Fim previsto</b><strong>${htmlEscape(formatDateBR(acomp.data_fim_prevista))}</strong></div>
+      <div class="kpi"><b>Próxima atualização</b><strong>${htmlEscape(formatDateBR(acomp.proxima_atualizacao))}</strong></div>
+      <div class="kpi"><b>Status</b><strong>${htmlEscape(labelStatus(acomp.status))}</strong></div>
+      <div class="kpi"><b>Responsável</b><strong>${htmlEscape(acomp.responsavel_nome || "-")}</strong></div>
+      <div class="kpi"><b>Evolução</b><strong>${htmlEscape(evolucao.leitura)}</strong></div>
+    </section>
+
+    <h3>Histórico Semanal</h3>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 7mm;">Sem.</th>
+          <th style="width: 21mm;">Período</th>
+          <th>Máquina</th>
+          <th>PIX</th>
+          <th>Boleto</th>
+          <th>TED</th>
+          <th>Dinheiro</th>
+          <th>Outras</th>
+          <th>Total</th>
+          <th>Saídas</th>
+          <th>Saldo</th>
+          <th style="width: 10mm;">Bacen</th>
+          <th style="width: 10mm;">Interno</th>
+          <th style="width: 15mm;">Status</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+
+    <div class="note"><b>Recomendação operacional:</b> ${htmlEscape(calcularRecomendacao(acomp))}</div>
+
+    <section class="analysis">
+      ${analises}
+    </section>
+
+    <div class="declaration">
+      <b>Declaração de prestação de serviço:</b> Este relatório registra o acompanhamento bancário semanal prestado pela ${htmlEscape(meta.nome)} à empresa ${htmlEscape(acomp.nome_empresa || "-")}, com base nos dados fornecidos e atualizados no sistema.
+    </div>
+
+    <section class="signatures">
+      <div class="signature">
+        ${htmlEscape(acomp.responsavel_nome || "Responsável pelo acompanhamento")}<br/>
+        Responsável ${htmlEscape(meta.nome)}
+      </div>
+      <div class="signature">
+        Responsável legal da empresa contratante<br/>
+        ${htmlEscape(acomp.nome_empresa || "-")} — CNPJ ${htmlEscape(acomp.cnpj || "-")}
+      </div>
+    </section>
+
+    <footer class="footer">
+      ${htmlEscape(meta.nome)} — Documento gerado em ${htmlEscape(new Date().toLocaleDateString("pt-BR"))} às ${htmlEscape(new Date().toLocaleTimeString("pt-BR"))}
+    </footer>
+  </main>
+</body>
+</html>`;
+  };
+
   const handleImprimir = () => {
-    const originalTitle = document.title;
-    if (imprimirOpen) {
-      document.title = nomeArquivoRelatorio(imprimirOpen, prestadoraRelatorio, "pdf").replace(/\.pdf$/i, "");
+    if (!imprimirOpen) return;
+
+    const fileTitle = nomeArquivoRelatorio(imprimirOpen, prestadoraRelatorio, "pdf").replace(/\.pdf$/i, "");
+    const popup = window.open("", "_blank", "noopener,noreferrer,width=1200,height=800");
+
+    if (!popup) {
+      alert("O navegador bloqueou a janela de impressão. Permita pop-ups para este site e tente novamente.");
+      return;
     }
-    window.setTimeout(() => {
-      window.print();
-      window.setTimeout(() => {
-        document.title = originalTitle;
-      }, 800);
-    }, 80);
+
+    popup.document.open();
+    popup.document.write(gerarHtmlRelatorioA4(imprimirOpen, prestadoraRelatorio));
+    popup.document.close();
+
+    popup.onload = () => {
+      popup.document.title = fileTitle;
+      popup.focus();
+      setTimeout(() => {
+        popup.print();
+      }, 350);
+    };
   };
 
   const renderActionButtons = (row: Acompanhamento) => {
