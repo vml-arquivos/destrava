@@ -7626,6 +7626,135 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
+  app.delete("/api/acompanhamentos-bancarios/:id/atualizacoes/:numeroSemana", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+    const client = await pool.connect();
+    try {
+      const numeroSemana = Number(req.params.numeroSemana || 0);
+      if (!numeroSemana) {
+        res.status(400).json({ error: "Número da semana inválido." });
+        return;
+      }
+
+      await client.query("BEGIN");
+
+      const deleted = await client.query(
+        `DELETE FROM acompanhamento_bancario_atualizacoes
+          WHERE acompanhamento_id = $1
+            AND numero_semana = $2
+          RETURNING *`,
+        [req.params.id, numeroSemana]
+      );
+
+      if (!deleted.rows.length) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ error: "Atualização semanal não encontrada." });
+        return;
+      }
+
+      const ultima = await client.query(
+        `SELECT *
+           FROM acompanhamento_bancario_atualizacoes
+          WHERE acompanhamento_id = $1
+          ORDER BY numero_semana DESC, created_at DESC
+          LIMIT 1`,
+        [req.params.id]
+      );
+
+      if (ultima.rows.length) {
+        const u = ultima.rows[0];
+        const baseAtualizacao = u.data_atualizacao || u.data_referencia_fim || new Date().toISOString().slice(0, 10);
+        await client.query(
+          `UPDATE acompanhamentos_bancarios
+              SET rating_bacen_atual = COALESCE($2, rating_bacen_atual),
+                  rating_interno_atual = COALESCE($3, rating_interno_atual),
+                  ultimo_update_em = $4,
+                  proxima_atualizacao = $5,
+                  updated_at = NOW()
+            WHERE id = $1`,
+          [
+            req.params.id,
+            u.rating_bacen || null,
+            u.rating_interno || null,
+            u.data_atualizacao || null,
+            proximaQuartaFeira(new Date(String(baseAtualizacao) + "T00:00:00Z")),
+          ]
+        );
+      } else {
+        const acompanhamento = await client.query(
+          `SELECT data_inicio FROM acompanhamentos_bancarios WHERE id = $1 LIMIT 1`,
+          [req.params.id]
+        );
+        const dataInicio = acompanhamento.rows[0]?.data_inicio || new Date().toISOString().slice(0, 10);
+        await client.query(
+          `UPDATE acompanhamentos_bancarios
+              SET ultimo_update_em = NULL,
+                  proxima_atualizacao = $2,
+                  updated_at = NOW()
+            WHERE id = $1`,
+          [req.params.id, proximaQuartaFeira(new Date(String(dataInicio) + "T00:00:00Z"))]
+        );
+      }
+
+      await client.query("COMMIT");
+      res.json({ success: true, deleted: deleted.rows[0] });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      console.error("[DELETE /api/acompanhamentos-bancarios/:id/atualizacoes/:numeroSemana]", err);
+      res.status(500).json({ error: "Erro ao apagar atualização semanal." });
+    } finally {
+      client.release();
+    }
+  });
+
+  app.delete("/api/acompanhamentos-bancarios/:id", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const acompanhamento = await client.query(
+        `SELECT id, nome_empresa, banco_observado
+           FROM acompanhamentos_bancarios
+          WHERE id = $1
+          LIMIT 1`,
+        [req.params.id]
+      );
+
+      if (!acompanhamento.rows.length) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ error: "Acompanhamento não encontrado." });
+        return;
+      }
+
+      await client.query(
+        `DELETE FROM acompanhamento_bancario_atualizacoes
+          WHERE acompanhamento_id = $1`,
+        [req.params.id]
+      );
+
+      await client.query(
+        `DELETE FROM acompanhamento_bancario_alertas
+          WHERE acompanhamento_id = $1`,
+        [req.params.id]
+      ).catch(() => null);
+
+      const deleted = await client.query(
+        `DELETE FROM acompanhamentos_bancarios
+          WHERE id = $1
+          RETURNING *`,
+        [req.params.id]
+      );
+
+      await client.query("COMMIT");
+      res.json({ success: true, deleted: deleted.rows[0] });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      console.error("[DELETE /api/acompanhamentos-bancarios/:id]", err);
+      res.status(500).json({ error: "Erro ao apagar acompanhamento bancário." });
+    } finally {
+      client.release();
+    }
+  });
+
   app.post("/api/acompanhamentos-bancarios/:id/prorrogar", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
       const { rows: atuais } = await pool.query(
