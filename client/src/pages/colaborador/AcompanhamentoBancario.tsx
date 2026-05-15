@@ -460,6 +460,16 @@ const NOVO_FIELDS = [
   { key: "observacoes_iniciais", label: "Observações iniciais", textarea: true, group: "gestao" },
 ];
 
+
+const EDIT_FIELDS = [
+  { key: "status", label: "Status", group: "controle" },
+  { key: "data_fim_prevista", label: "Fim previsto", type: "date", group: "controle" },
+  { key: "proxima_atualizacao", label: "Próxima atualização", type: "date", group: "controle" },
+  { key: "rating_bacen_atual", label: "Rating Bacen atual", group: "controle" },
+  { key: "rating_interno_atual", label: "Rating interno atual", group: "controle" },
+  { key: "observacoes_finais", label: "Observações finais", textarea: true, group: "controle" },
+];
+
 // ─── Estado inicial do formulário de atualização ──────────────────────────────
 function updFormInicial(): AtualizacaoForm {
   return {
@@ -514,6 +524,8 @@ export default function AcompanhamentoBancario() {
   const [updOpen, setUpdOpen] = useState<Acompanhamento | null>(null);
   const [detalhe, setDetalhe] = useState<Acompanhamento | null>(null);
   const [imprimirOpen, setImprimirOpen] = useState<Acompanhamento | null>(null);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [editandoSemanaNumero, setEditandoSemanaNumero] = useState<number | null>(null);
 
   const [novo, setNovo] = useState<Acompanhamento>({
     nome_empresa: "",
@@ -595,6 +607,114 @@ export default function AcompanhamentoBancario() {
     [filtered]
   );
 
+
+  const limparNovo = () => {
+    setNovo({ nome_empresa: "", banco_observado: "", data_inicio: hojeISO() });
+    setEditandoId(null);
+    setNovoOpen(false);
+  };
+
+  const abrirEditarAcompanhamento = async (row: Acompanhamento) => {
+    let rowCompleto = row;
+    try {
+      const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}`, {
+        headers: authHeaders(),
+      });
+      if (resp.ok) rowCompleto = await resp.json();
+    } catch {
+      /* usa row original */
+    }
+
+    setNovo({
+      id: rowCompleto.id,
+      nome_empresa: rowCompleto.nome_empresa || "",
+      cnpj: rowCompleto.cnpj || "",
+      telefone_cliente: rowCompleto.telefone_cliente || "",
+      whatsapp_cliente: rowCompleto.whatsapp_cliente || "",
+      email_cliente: rowCompleto.email_cliente || "",
+      banco_observado: rowCompleto.banco_observado || "",
+      agencia: rowCompleto.agencia || "",
+      conta: rowCompleto.conta || "",
+      gerente_banco: rowCompleto.gerente_banco || "",
+      contato_banco: rowCompleto.contato_banco || "",
+      data_abertura_conta: String(rowCompleto.data_abertura_conta || "").slice(0, 10),
+      data_inicio: String(rowCompleto.data_inicio || hojeISO()).slice(0, 10),
+      data_fim_prevista: String(rowCompleto.data_fim_prevista || "").slice(0, 10),
+      proxima_atualizacao: String(rowCompleto.proxima_atualizacao || "").slice(0, 10),
+      objetivo_credito: rowCompleto.objetivo_credito || "",
+      valor_credito_pretendido: rowCompleto.valor_credito_pretendido ?? "",
+      linha_credito_pretendida: rowCompleto.linha_credito_pretendida || "",
+      rating_bacen_inicial: rowCompleto.rating_bacen_inicial || "",
+      rating_bacen_atual: rowCompleto.rating_bacen_atual || "",
+      rating_interno_inicial: rowCompleto.rating_interno_inicial || "",
+      rating_interno_atual: rowCompleto.rating_interno_atual || "",
+      faturamento_anual: rowCompleto.faturamento_anual ?? "",
+      media_mensal: rowCompleto.media_mensal ?? "",
+      margem_seguranca_30: rowCompleto.margem_seguranca_30 ?? "",
+      status: rowCompleto.status || "em_acompanhamento",
+      observacoes_iniciais: rowCompleto.observacoes_iniciais || "",
+      observacoes_finais: rowCompleto.observacoes_finais || "",
+    });
+
+    setEditandoId(rowCompleto.id);
+    setDetalhe(null);
+    setUpdOpen(null);
+    setNovoOpen(true);
+  };
+
+  const abrirEditarSemana = async (row: Acompanhamento, semana: any) => {
+    let rowCompleto = row;
+    try {
+      const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}`, {
+        headers: authHeaders(),
+      });
+      if (resp.ok) rowCompleto = await resp.json();
+    } catch {
+      /* usa row original */
+    }
+
+    const numeroSemana = Number(semana.numero_semana || 1);
+    const dataFim = String(semana.data_referencia_fim || semana.data_atualizacao || rowCompleto.proxima_atualizacao || hojeISO()).slice(0, 10);
+    const proxima = semana.proxima_atualizacao_apos_salvar || proximaQuartaFeira(dataFim);
+
+    setUpdOpen(rowCompleto);
+    setEditandoSemanaNumero(numeroSemana);
+    setUpd({
+      ...updFormInicial(),
+      numero_semana: numeroSemana,
+      data_referencia_inicio: String(semana.data_referencia_inicio || "").slice(0, 10),
+      data_referencia_fim: String(semana.data_referencia_fim || "").slice(0, 10),
+      data_atualizacao: String(semana.data_atualizacao || semana.data_referencia_fim || "").slice(0, 10),
+      proxima_atualizacao_apos_salvar: String(proxima || "").slice(0, 10),
+      entrada_maquininha: Number(semana.entrada_maquininha || 0),
+      entrada_pix: Number(semana.entrada_pix || 0),
+      entrada_boleto: Number(semana.entrada_boleto || 0),
+      entrada_ted: Number(semana.entrada_ted || 0),
+      entrada_dinheiro: Number(semana.entrada_dinheiro || 0),
+      outras_entradas: Number(semana.outras_entradas || 0),
+      total_saidas: Number(semana.total_saidas || 0),
+      saldo_medio: Number(semana.saldo_medio || 0),
+      saldo_final: Number(semana.saldo_final || 0),
+      quantidade_transacoes: Number(semana.quantidade_transacoes || 0),
+      rating_bacen: semana.rating_bacen || "",
+      rating_interno: semana.rating_interno || "",
+      scr_status: semana.scr_status || semana.restricao_scr || "",
+      cenprot_status: semana.cenprot_status || semana.restricao_cenprot || "",
+      serasa_status: semana.serasa_status || semana.restricao_serasa || "",
+      cnd_status: semana.cnd_status || semana.cnd_regular || "",
+      pld_aml_status: semana.pld_aml_status || semana.pld_aml || "",
+      coaf_status: semana.coaf_status || semana.operacao_suspeita_coaf || "",
+      possui_restricao: Boolean(semana.possui_restricao),
+      restricao_nova: Boolean(semana.restricao_nova),
+      devolucao_ou_estorno: Boolean(semana.devolucao_ou_estorno),
+      ocorrencia_negativa: Boolean(semana.ocorrencia_negativa),
+      analise_semana: semana.analise_semana || "",
+      orientacao_cliente: semana.orientacao_cliente || "",
+      proxima_acao: semana.proxima_acao || "",
+    });
+    setDetalhe(null);
+  };
+
   // ─── Abrir modal de atualização ───────────────────────────────────────────────
   const abrirAtualizacao = async (row: Acompanhamento) => {
     let rowComAtualizacoes = row;
@@ -606,6 +726,7 @@ export default function AcompanhamentoBancario() {
     } catch { /* usa row sem atualizações */ }
 
     const campos = calcularCamposSemana(rowComAtualizacoes);
+    setEditandoSemanaNumero(null);
     setUpdOpen(rowComAtualizacoes);
     setUpd({ ...updFormInicial(), ...campos });
   };
@@ -618,17 +739,22 @@ export default function AcompanhamentoBancario() {
     }
     setSaving(true);
     try {
-      const response = await fetch("/api/acompanhamentos-bancarios", {
-        method: "POST",
+      const url = editandoId
+        ? `/api/acompanhamentos-bancarios/${editandoId}`
+        : "/api/acompanhamentos-bancarios";
+
+      const response = await fetch(url, {
+        method: editandoId ? "PATCH" : "POST",
         headers: authHeaders(),
         body: JSON.stringify(novo),
       });
       if (!response.ok) {
         const errorText = await response.text().catch(() => "");
-        alert(`Erro ao salvar acompanhamento. ${errorText}`);
+        alert(`Erro ao ${editandoId ? "atualizar" : "salvar"} acompanhamento. ${errorText}`);
         return;
       }
       setNovoOpen(false);
+      setEditandoId(null);
       setNovo({ nome_empresa: "", banco_observado: "", data_inicio: hojeISO() });
       fetchData();
     } finally {
@@ -661,6 +787,7 @@ export default function AcompanhamentoBancario() {
         return;
       }
       setUpdOpen(null);
+      setEditandoSemanaNumero(null);
       fetchData();
     } finally {
       setSaving(false);
@@ -716,6 +843,7 @@ export default function AcompanhamentoBancario() {
       objetivo_credito: "",
       observacoes_iniciais: "",
     });
+    setEditandoId(null);
     setDetalhe(null);
     setUpdOpen(null);
     setNovoOpen(true);
@@ -743,6 +871,10 @@ export default function AcompanhamentoBancario() {
           className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50"
           onClick={() => carregarDetalhe(row.id)}
         >Detalhes</button>
+        <button
+          className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+          onClick={() => abrirEditarAcompanhamento(row)}
+        >Editar</button>
         <button
           className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
           onClick={() => abrirAtualizacao(row)}
@@ -820,6 +952,7 @@ export default function AcompanhamentoBancario() {
           <button
             className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
             onClick={() => {
+              setEditandoId(null);
               setNovo({ nome_empresa: "", banco_observado: "", data_inicio: hojeISO() });
               setNovoOpen(true);
             }}
@@ -1043,12 +1176,14 @@ export default function AcompanhamentoBancario() {
             <div className="mx-auto max-w-5xl rounded-lg bg-white p-5 shadow-xl">
               <div className="mb-4 flex items-start justify-between">
                 <div>
-                  <h3 className="text-lg font-bold">Novo Acompanhamento</h3>
+                  <h3 className="text-lg font-bold">{editandoId ? "Editar Acompanhamento" : "Novo Acompanhamento"}</h3>
                   <p className="text-sm text-gray-600">
-                    Cadastre a empresa, o banco observado e os dados iniciais para acompanhamento de 30 dias.
+                    {editandoId
+                      ? "Corrija os dados do acompanhamento já cadastrado sem alterar o visual da tela."
+                      : "Cadastre a empresa, o banco observado e os dados iniciais para acompanhamento de 30 dias."}
                   </p>
                 </div>
-                <button className="rounded border px-3 py-1 text-sm" onClick={() => setNovoOpen(false)}>Fechar</button>
+                <button className="rounded border px-3 py-1 text-sm" onClick={limparNovo}>Fechar</button>
               </div>
 
               <h4 className="mb-2 text-sm font-semibold text-gray-700">Dados da empresa</h4>
@@ -1090,11 +1225,22 @@ export default function AcompanhamentoBancario() {
                 ))}
               </div>
 
+              {editandoId && (
+                <>
+                  <h4 className="mb-2 text-sm font-semibold text-gray-700">Controle do acompanhamento</h4>
+                  <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                    {EDIT_FIELDS.map((field) => (
+                      <FieldInput key={field.key} field={field} value={novo[field.key]} onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))} />
+                    ))}
+                  </div>
+                </>
+              )}
+
               <div className="mt-4 flex gap-2">
                 <button className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={saving} onClick={salvarNovo}>
-                  {saving ? "Salvando..." : "Salvar acompanhamento"}
+                  {saving ? "Salvando..." : editandoId ? "Salvar alterações" : "Salvar acompanhamento"}
                 </button>
-                <button className="rounded border px-4 py-2 text-sm" onClick={() => setNovoOpen(false)}>Cancelar</button>
+                <button className="rounded border px-4 py-2 text-sm" onClick={limparNovo}>Cancelar</button>
               </div>
             </div>
           </div>
@@ -1106,7 +1252,7 @@ export default function AcompanhamentoBancario() {
             <div className="mx-auto max-w-5xl rounded-lg bg-white p-5 shadow-xl">
               <div className="mb-2 flex items-start justify-between">
                 <div>
-                  <h3 className="text-lg font-bold">Atualização Semanal</h3>
+                  <h3 className="text-lg font-bold">{editandoSemanaNumero ? `Editar Semana ${editandoSemanaNumero}` : "Atualização Semanal"}</h3>
                   <p className="text-sm font-medium text-gray-700">
                     {updOpen.nome_empresa} — {updOpen.banco_observado}
                   </p>
@@ -1116,7 +1262,7 @@ export default function AcompanhamentoBancario() {
                     className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
                     onClick={() => adicionarOutroBanco(updOpen)}
                   >+ Outro banco</button>
-                  <button className="rounded border px-3 py-1 text-sm" onClick={() => setUpdOpen(null)}>Fechar</button>
+                  <button className="rounded border px-3 py-1 text-sm" onClick={() => { setUpdOpen(null); setEditandoSemanaNumero(null); }}>Fechar</button>
                 </div>
               </div>
 
@@ -1261,13 +1407,13 @@ export default function AcompanhamentoBancario() {
                   disabled={saving}
                   onClick={salvarAtualizacao}
                 >
-                  {saving ? "Salvando..." : "Salvar atualização semanal"}
+                  {saving ? "Salvando..." : editandoSemanaNumero ? "Salvar correção da semana" : "Salvar atualização semanal"}
                 </button>
                 <button
                   className="rounded border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700"
                   onClick={() => adicionarOutroBanco(updOpen)}
                 >+ Outro banco</button>
-                <button className="rounded border px-4 py-2 text-sm" onClick={() => setUpdOpen(null)}>Cancelar</button>
+                <button className="rounded border px-4 py-2 text-sm" onClick={() => { setUpdOpen(null); setEditandoSemanaNumero(null); }}>Cancelar</button>
               </div>
             </div>
           </div>
@@ -1290,6 +1436,7 @@ export default function AcompanhamentoBancario() {
                     <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(detalhe.status_semana || detalhe.status)}`}>
                       {labelStatus(detalhe.status_semana || detalhe.status)}
                     </span>
+                    <button className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100" onClick={() => abrirEditarAcompanhamento(detalhe)}>Editar acompanhamento</button>
                     <button className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100" onClick={() => abrirAtualizacao(detalhe)}>Atualizar semana</button>
                     <button className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100" onClick={() => adicionarOutroBanco(detalhe)}>+ Outro banco</button>
                     <button className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100" onClick={() => exportarCSV(detalhe)}>Exportar XLS</button>
@@ -1410,7 +1557,15 @@ export default function AcompanhamentoBancario() {
                             const isEven = idx % 2 === 0;
                             return (
                               <tr key={item.id || item.numero_semana} className={`border-b border-slate-100 transition hover:bg-blue-50/40 ${isEven ? "bg-white" : "bg-slate-50/50"}`}>
-                                <td className="px-3 py-2.5 font-bold text-slate-700">S{item.numero_semana}</td>
+                                <td className="px-3 py-2.5 font-bold text-slate-700">
+                                  <div>S{item.numero_semana}</div>
+                                  <button
+                                    className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700 hover:bg-amber-100"
+                                    onClick={() => abrirEditarSemana(detalhe, item)}
+                                  >
+                                    Editar
+                                  </button>
+                                </td>
                                 <td className="whitespace-nowrap px-3 py-2.5 text-slate-500">
                                   {formatDateBR(item.data_referencia_inicio)}<br/>
                                   <span className="text-[10px]">a {formatDateBR(item.data_referencia_fim)}</span>
@@ -1461,9 +1616,15 @@ export default function AcompanhamentoBancario() {
                     <div className="divide-y divide-slate-100">
                       {detalhe.atualizacoes.filter((i: any) => i.analise_semana || i.orientacao_cliente || i.proxima_acao).map((item: any) => (
                         <div key={`analise-${item.id || item.numero_semana}`} className="px-4 py-3">
-                          <div className="mb-2 flex items-center gap-2">
+                          <div className="mb-2 flex flex-wrap items-center gap-2">
                             <span className="text-xs font-bold text-slate-700">Semana {item.numero_semana}</span>
                             <span className="text-[10px] text-slate-400">{formatDateBR(item.data_referencia_inicio)} a {formatDateBR(item.data_referencia_fim)}</span>
+                            <button
+                              className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700 hover:bg-amber-100"
+                              onClick={() => abrirEditarSemana(detalhe, item)}
+                            >
+                              Editar semana
+                            </button>
                           </div>
                           <div className="grid grid-cols-1 gap-3 text-xs text-slate-700 sm:grid-cols-3">
                             {item.analise_semana && <div><span className="font-semibold text-slate-500">Análise: </span>{item.analise_semana}</div>}
