@@ -7169,15 +7169,28 @@ ${(temTest1 || temTest2) ? `
       const hoje = new Date().toISOString().slice(0, 10);
 
       const enriquecidos = rows.map((row: any) => {
-        const msg = `Olá! Aqui é a equipe da Destrava Crédito. Estamos aguardando os dados semanais da empresa ${row.nome_empresa} para atualizar o acompanhamento bancário e evolução de rating. Pode nos enviar as movimentações da semana: Pix, maquininha, boletos, TED, dinheiro, saídas e saldo?`;
-
+        // Calcula semana e período para a mensagem de WhatsApp
+        const totalAtualizacoes = Number(row.total_atualizacoes || 0);
+        const proxSemanaNum = totalAtualizacoes + 1;
+        let fimPeriodoStr = '-';
+        let inicioPeriodoStr = '-';
+        if (row.proxima_atualizacao) {
+          const dFim = new Date(String(row.proxima_atualizacao) + 'T00:00:00Z');
+          fimPeriodoStr = dFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+          const dIni = new Date(String(row.proxima_atualizacao) + 'T00:00:00Z');
+          dIni.setUTCDate(dIni.getUTCDate() - 6);
+          inicioPeriodoStr = dIni.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+        }
+        const msg = `Olá! Aqui é a equipe da Destrava Crédito. Hoje é dia de atualizar o acompanhamento bancário da empresa ${row.nome_empresa} no banco ${row.banco_observado || ''}. Pode nos enviar os dados da semana ${proxSemanaNum}, período de ${inicioPeriodoStr} a ${fimPeriodoStr}: entradas por Pix, maquininha, boletos, TED, dinheiro, total de saídas, saldo e informações de rating?`;
+        const isPendente = Boolean(
+          row.proxima_atualizacao &&
+          row.proxima_atualizacao <= hoje &&
+          ["em_acompanhamento", "atualizacao_pendente", "prorrogado"].includes(row.status)
+        );
         return {
           ...row,
-          atualizacao_pendente: Boolean(
-            row.proxima_atualizacao &&
-            row.proxima_atualizacao <= hoje &&
-            ["em_acompanhamento", "atualizacao_pendente", "prorrogado"].includes(row.status)
-          ),
+          status_pendente: isPendente,
+          atualizacao_pendente: isPendente,
           whatsapp_lembrete_url: montarWhatsappAcompanhamento(row.whatsapp_cliente || row.telefone_cliente, msg),
         };
       });
@@ -7513,6 +7526,39 @@ ${(temTest1 || temTest2) ? `
           $6,$7,$8,$9,$10,$11,$12,$13,$14,
           $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34
         )
+        ON CONFLICT (acompanhamento_id, numero_semana) DO UPDATE SET
+          data_referencia_inicio = EXCLUDED.data_referencia_inicio,
+          data_referencia_fim = EXCLUDED.data_referencia_fim,
+          data_atualizacao = EXCLUDED.data_atualizacao,
+          entrada_maquininha = EXCLUDED.entrada_maquininha,
+          entrada_pix = EXCLUDED.entrada_pix,
+          entrada_boleto = EXCLUDED.entrada_boleto,
+          entrada_ted = EXCLUDED.entrada_ted,
+          entrada_dinheiro = EXCLUDED.entrada_dinheiro,
+          outras_entradas = EXCLUDED.outras_entradas,
+          total_entradas = EXCLUDED.total_entradas,
+          total_saidas = EXCLUDED.total_saidas,
+          saldo_semanal = EXCLUDED.saldo_semanal,
+          saldo_medio = EXCLUDED.saldo_medio,
+          saldo_final = EXCLUDED.saldo_final,
+          quantidade_transacoes = EXCLUDED.quantidade_transacoes,
+          rating_bacen = EXCLUDED.rating_bacen,
+          rating_interno = EXCLUDED.rating_interno,
+          possui_restricao = EXCLUDED.possui_restricao,
+          restricao_nova = EXCLUDED.restricao_nova,
+          scr_status = EXCLUDED.scr_status,
+          cenprot_status = EXCLUDED.cenprot_status,
+          serasa_status = EXCLUDED.serasa_status,
+          cnd_status = EXCLUDED.cnd_status,
+          pld_aml_status = EXCLUDED.pld_aml_status,
+          coaf_status = EXCLUDED.coaf_status,
+          devolucao_ou_estorno = EXCLUDED.devolucao_ou_estorno,
+          ocorrencia_negativa = EXCLUDED.ocorrencia_negativa,
+          status_semana = EXCLUDED.status_semana,
+          analise_semana = EXCLUDED.analise_semana,
+          orientacao_cliente = EXCLUDED.orientacao_cliente,
+          proxima_acao = EXCLUDED.proxima_acao,
+          updated_at = NOW()
         RETURNING *`,
         [
           req.params.id,
@@ -7552,7 +7598,11 @@ ${(temTest1 || temTest2) ? `
         ]
       );
 
-      const prox = proximaQuartaFeira(new Date());
+      // Calcula próxima atualização a partir da data de atualização enviada (ou hoje)
+      const baseDataAtualizacao = b.data_atualizacao
+        ? new Date(String(b.data_atualizacao) + 'T00:00:00Z')
+        : new Date();
+      const prox = proximaQuartaFeira(baseDataAtualizacao);
       await pool.query(
         `UPDATE acompanhamentos_bancarios
             SET rating_bacen_atual = COALESCE($2, rating_bacen_atual),
