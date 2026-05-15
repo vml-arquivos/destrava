@@ -1584,289 +1584,231 @@ export default function AcompanhamentoBancario() {
 
         {/* ── Modal — Detalhes ─────────────────────────────────────────────── */}
         {detalhe && (
-          <div className="fixed inset-0 z-50 overflow-auto bg-black/40 p-4">
-            <div className="mx-auto max-w-6xl rounded-lg bg-white p-5 shadow-xl">
-              <div className="mb-4 flex items-start justify-between">
-                <div>
-                  <h3 className="text-lg font-bold">
-                    Detalhes do Acompanhamento
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {detalhe.nome_empresa} — {detalhe.banco_observado}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    className="rounded border border-teal-300 bg-teal-50 px-3 py-1 text-sm text-teal-700 hover:bg-teal-100"
-                    onClick={() => exportarCSV(detalhe)}
-                  >
-                    Exportar CSV
-                  </button>
-                  <button
-                    className="rounded border border-purple-300 bg-purple-50 px-3 py-1 text-sm text-purple-700 hover:bg-purple-100"
-                    onClick={() => {
-                      setImprimirOpen(detalhe);
-                      setDetalhe(null);
-                    }}
-                  >
-                    Imprimir
-                  </button>
-                  <button
-                    className="rounded border border-blue-300 bg-blue-50 px-3 py-1 text-sm text-blue-700 hover:bg-blue-100"
-                    onClick={() => adicionarOutroBanco(detalhe)}
-                  >
-                    + Outro banco
-                  </button>
-                  <button
-                    className="rounded border px-3 py-1 text-sm"
-                    onClick={() => setDetalhe(null)}
-                  >
-                    Fechar
-                  </button>
-                </div>
-              </div>
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-2 md:p-4">
+            {(() => {
+              const atualizacoes = Array.isArray(detalhe.atualizacoes)
+                ? detalhe.atualizacoes
+                : [];
+              const ultimaSemana =
+                atualizacoes.length > 0
+                  ? atualizacoes[atualizacoes.length - 1]
+                  : null;
+              const saldoUltima = Number(ultimaSemana?.saldo_semanal || 0);
+              const statusUltima =
+                ultimaSemana?.status_semana || ultimaSemana?.status || detalhe.status;
 
-              {/* Dados da empresa */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                Dados da empresa
-              </h4>
-              <div className="mb-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-4">
-                <InfoCard label="Empresa" value={detalhe.nome_empresa} />
-                <InfoCard label="CNPJ" value={detalhe.cnpj} />
-                <InfoCard label="Banco observado" value={detalhe.banco_observado} />
-                <InfoCard label="Agência" value={detalhe.agencia} />
-                <InfoCard label="Conta" value={detalhe.conta} />
-                <InfoCard label="Gerente do banco" value={detalhe.gerente_banco} />
-                <InfoCard label="Contato do banco" value={detalhe.contato_banco} />
-                <InfoCard label="E-mail" value={detalhe.email_cliente} />
-              </div>
+              return (
+                <div className="mx-auto flex max-h-[calc(100vh-1rem)] w-full max-w-[1320px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl md:max-h-[calc(100vh-2rem)]">
+                  {/* Cabeçalho fixo */}
+                  <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-4 backdrop-blur md:px-6">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                          Relatório operacional
+                        </p>
+                        <h3 className="mt-1 text-xl font-bold leading-tight text-slate-950 md:text-2xl">
+                          Detalhes do Acompanhamento
+                        </h3>
+                        <p className="mt-1 break-words text-sm text-slate-600">
+                          {detalhe.nome_empresa} — {detalhe.banco_observado}
+                        </p>
+                      </div>
 
-              {/* Dados do relacionamento */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                Dados do relacionamento
-              </h4>
-              <div className="mb-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-4">
-                <InfoCard
-                  label="Início do relacionamento"
-                  value={formatDateBR(detalhe.data_abertura_conta)}
-                />
-                <InfoCard
-                  label="Abertura de conta"
-                  value={formatDateBR(detalhe.data_abertura_conta)}
-                />
-                <InfoCard
-                  label="Início do acompanhamento"
-                  value={formatDateBR(detalhe.data_inicio)}
-                />
-                <InfoCard
-                  label="Fim previsto"
-                  value={formatDateBR(detalhe.data_fim_prevista)}
-                />
-                <InfoCard
-                  label="Próxima atualização"
-                  value={formatDateBR(detalhe.proxima_atualizacao)}
-                />
-                <InfoCard
-                  label="Status"
-                  value={labelStatus(detalhe.status)}
-                />
-                <InfoCard
-                  label="Prorrogado"
-                  value={detalhe.prorrogado ? "Sim" : "Não"}
-                />
-                <InfoCard
-                  label="Responsável"
-                  value={detalhe.responsavel_nome}
-                />
-              </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                          onClick={() => abrirAtualizacao(detalhe)}
+                        >
+                          Atualizar semana
+                        </button>
+                        <button
+                          className="rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100"
+                          onClick={() => exportarCSV(detalhe)}
+                        >
+                          Exportar CSV
+                        </button>
+                        <button
+                          className="rounded-lg border border-purple-300 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-100"
+                          onClick={() => {
+                            setImprimirOpen(detalhe);
+                            setDetalhe(null);
+                          }}
+                        >
+                          Imprimir
+                        </button>
+                        <button
+                          className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-50"
+                          onClick={() => adicionarOutroBanco(detalhe)}
+                        >
+                          + Outro banco
+                        </button>
+                        <button
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                          onClick={() => setDetalhe(null)}
+                        >
+                          Fechar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
 
-              {/* Dados de rating */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                Dados de rating
-              </h4>
-              <div className="mb-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-4">
-                <InfoCard
-                  label="Rating Bacen atual"
-                  value={detalhe.rating_bacen_atual}
-                />
-                <InfoCard
-                  label="Rating interno inicial"
-                  value={detalhe.rating_interno_inicial}
-                />
-                <InfoCard
-                  label="Rating interno atual"
-                  value={detalhe.rating_interno_atual}
-                />
-                <InfoCard
-                  label="Rating Bacen inicial"
-                  value={detalhe.rating_bacen_inicial}
-                />
-              </div>
+                  {/* Conteúdo rolável */}
+                  <div className="space-y-5 overflow-y-auto bg-slate-50 px-4 py-5 md:px-6">
+                    {/* Resumo executivo */}
+                    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <SectionHeading
+                        title="Resumo executivo"
+                        description="Informações essenciais para leitura rápida do acompanhamento."
+                      />
+                      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <MetricCard label="Empresa" value={detalhe.nome_empresa} />
+                        <MetricCard label="CNPJ" value={detalhe.cnpj} />
+                        <MetricCard label="Banco observado" value={detalhe.banco_observado} />
+                        <MetricCard label="Responsável" value={detalhe.responsavel_nome || "Admin"} />
+                        <MetricCard label="Status" value={labelStatus(detalhe.status)} />
+                        <MetricCard label="Início" value={formatDateBR(detalhe.data_inicio)} />
+                        <MetricCard label="Fim previsto" value={formatDateBR(detalhe.data_fim_prevista)} />
+                        <MetricCard
+                          label="Próxima atualização"
+                          value={formatDateBR(detalhe.proxima_atualizacao)}
+                          tone={
+                            detalhe.proxima_atualizacao && detalhe.proxima_atualizacao <= hojeISO()
+                              ? "warning"
+                              : "default"
+                          }
+                        />
+                      </div>
+                    </section>
 
-              {/* Dados financeiros */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                Dados financeiros
-              </h4>
-              <div className="mb-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-4">
-                <InfoCard
-                  label="Faturamento anual"
-                  value={moneyBR(detalhe.faturamento_anual)}
-                />
-                <InfoCard
-                  label="Média mensal"
-                  value={moneyBR(detalhe.media_mensal)}
-                />
-                <InfoCard
-                  label="Margem ±30%"
-                  value={moneyBR(detalhe.margem_seguranca_30)}
-                />
-                <InfoCard
-                  label="Objetivo do crédito"
-                  value={detalhe.objetivo_credito}
-                />
-                <InfoCard
-                  label="Valor pretendido"
-                  value={moneyBR(detalhe.valor_credito_pretendido)}
-                />
-                <InfoCard
-                  label="Linha pretendida"
-                  value={detalhe.linha_credito_pretendida}
-                />
-              </div>
+                    {/* Indicadores */}
+                    <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <SectionHeading
+                          title="Indicadores financeiros e rating"
+                          description="Números principais para entender a evolução de crédito."
+                        />
+                        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                          <MetricCard
+                            label="Rating Bacen"
+                            value={detalhe.rating_bacen_atual || detalhe.rating_bacen_inicial}
+                          />
+                          <MetricCard
+                            label="Rating interno"
+                            value={`${detalhe.rating_interno_inicial || "-"} / ${detalhe.rating_interno_atual || "-"}`}
+                          />
+                          <MetricCard
+                            label="Saldo última semana"
+                            value={moneyBR(saldoUltima)}
+                            tone={saldoUltima < 0 ? "danger" : saldoUltima > 0 ? "success" : "default"}
+                          />
+                          <MetricCard
+                            label="Faturamento anual"
+                            value={moneyBR(detalhe.faturamento_anual)}
+                          />
+                          <MetricCard
+                            label="Média mensal"
+                            value={moneyBR(detalhe.media_mensal)}
+                          />
+                          <MetricCard
+                            label="Margem ±30%"
+                            value={moneyBR(detalhe.margem_seguranca_30)}
+                          />
+                        </div>
+                      </div>
 
-              {/* Histórico semanal completo */}
-              <h4 className="mb-2 mt-4 text-sm font-semibold text-gray-700">
-                Histórico semanal completo
-              </h4>
-              <div className="overflow-auto rounded border">
-                <table className="w-full min-w-[1400px] text-xs">
-                  <thead>
-                    <tr className="bg-gray-50 text-left text-gray-600">
-                      <th className="p-2 font-semibold">Semana</th>
-                      <th className="p-2 font-semibold">Período</th>
-                      <th className="p-2 font-semibold">Máquina</th>
-                      <th className="p-2 font-semibold">PIX</th>
-                      <th className="p-2 font-semibold">Boleto</th>
-                      <th className="p-2 font-semibold">TED</th>
-                      <th className="p-2 font-semibold">Dinheiro</th>
-                      <th className="p-2 font-semibold">Outras</th>
-                      <th className="p-2 font-semibold">Total Entradas</th>
-                      <th className="p-2 font-semibold">Saídas</th>
-                      <th className="p-2 font-semibold">Saldo Semanal</th>
-                      <th className="p-2 font-semibold">Saldo Médio</th>
-                      <th className="p-2 font-semibold">Saldo Final</th>
-                      <th className="p-2 font-semibold">Rating Bacen</th>
-                      <th className="p-2 font-semibold">Rating Interno</th>
-                      <th className="p-2 font-semibold">SCR</th>
-                      <th className="p-2 font-semibold">Cenprot</th>
-                      <th className="p-2 font-semibold">Serasa</th>
-                      <th className="p-2 font-semibold">CND</th>
-                      <th className="p-2 font-semibold">PLD/AML</th>
-                      <th className="p-2 font-semibold">COAF</th>
-                      <th className="p-2 font-semibold">Status</th>
-                      <th className="p-2 font-semibold">Análise</th>
-                      <th className="p-2 font-semibold">Orientação</th>
-                      <th className="p-2 font-semibold">Próxima ação</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Array.isArray(detalhe.atualizacoes) &&
-                    detalhe.atualizacoes.length > 0 ? (
-                      detalhe.atualizacoes.map((item: any) => (
-                        <tr key={item.id} className="border-t">
-                          <td className="p-2 font-medium">
-                            Semana {item.numero_semana}
-                          </td>
-                          <td className="whitespace-nowrap p-2">
-                            {formatDateBR(item.data_referencia_inicio)} a{" "}
-                            {formatDateBR(item.data_referencia_fim)}
-                          </td>
-                          <td className="p-2">
-                            {moneyBR(item.entrada_maquininha)}
-                          </td>
-                          <td className="p-2">{moneyBR(item.entrada_pix)}</td>
-                          <td className="p-2">
-                            {moneyBR(item.entrada_boleto)}
-                          </td>
-                          <td className="p-2">{moneyBR(item.entrada_ted)}</td>
-                          <td className="p-2">
-                            {moneyBR(item.entrada_dinheiro)}
-                          </td>
-                          <td className="p-2">
-                            {moneyBR(item.outras_entradas)}
-                          </td>
-                          <td className="p-2 font-semibold">
-                            {moneyBR(item.total_entradas)}
-                          </td>
-                          <td className="p-2">{moneyBR(item.total_saidas)}</td>
-                          <td className="p-2 font-semibold">
-                            {moneyBR(item.saldo_semanal)}
-                          </td>
-                          <td className="p-2">{moneyBR(item.saldo_medio)}</td>
-                          <td className="p-2">{moneyBR(item.saldo_final)}</td>
-                          <td className="p-2">{item.rating_bacen || "-"}</td>
-                          <td className="p-2">{item.rating_interno || "-"}</td>
-                          <td className="p-2">
-                            {item.scr_status ||
-                              item.restricao_scr ||
-                              "-"}
-                          </td>
-                          <td className="p-2">
-                            {item.cenprot_status ||
-                              item.restricao_cenprot ||
-                              "-"}
-                          </td>
-                          <td className="p-2">
-                            {item.serasa_status ||
-                              item.restricao_serasa ||
-                              "-"}
-                          </td>
-                          <td className="p-2">
-                            {item.cnd_status || item.cnd_regular || "-"}
-                          </td>
-                          <td className="p-2">
-                            {item.pld_aml_status || item.pld_aml || "-"}
-                          </td>
-                          <td className="p-2">
-                            {item.coaf_status ||
-                              item.operacao_suspeita_coaf ||
-                              "-"}
-                          </td>
-                          <td className="p-2">
+                      <div className="rounded-2xl border border-blue-100 bg-blue-50/80 p-4 shadow-sm">
+                        <SectionHeading
+                          title="Recomendação operacional"
+                          description="Próxima leitura consultiva para o time."
+                        />
+                        <div className="mt-4 rounded-xl bg-white p-4 text-sm leading-relaxed text-slate-700">
+                          <p className="font-semibold text-slate-950">
+                            {calcularRecomendacao(detalhe)}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
                             <span
-                              className={`rounded-full border px-2 py-0.5 text-xs ${statusBadge(item.status_semana || item.status)}`}
+                              className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(statusUltima)}`}
                             >
-                              {labelStatus(item.status_semana || item.status)}
+                              {labelStatus(statusUltima)}
                             </span>
-                          </td>
-                          <td className="max-w-[120px] p-2 text-xs text-gray-600">
-                            {item.analise_semana || "-"}
-                          </td>
-                          <td className="max-w-[120px] p-2 text-xs text-gray-600">
-                            {item.orientacao_cliente || "-"}
-                          </td>
-                          <td className="max-w-[120px] p-2 text-xs text-gray-600">
-                            {item.proxima_acao || "-"}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td className="p-3 text-gray-500" colSpan={25}>
-                          Nenhuma atualização semanal registrada.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                            {detalhe.proxima_atualizacao && detalhe.proxima_atualizacao <= hojeISO() && (
+                              <span className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700">
+                                Atualização pendente
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </section>
 
-              {/* Recomendação */}
-              <div className="mt-4 rounded border border-blue-100 bg-blue-50 p-3 text-sm">
-                <strong>Recomendação operacional:</strong>{" "}
-                {calcularRecomendacao(detalhe)}
-              </div>
-            </div>
+                    {/* Objetivo e dados bancários */}
+                    <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <SectionHeading title="Objetivo e estratégia de crédito" />
+                        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <MetricCard
+                            label="Objetivo do crédito"
+                            value={detalhe.objetivo_credito}
+                            large
+                          />
+                          <MetricCard
+                            label="Linha pretendida"
+                            value={detalhe.linha_credito_pretendida}
+                          />
+                          <MetricCard
+                            label="Valor pretendido"
+                            value={moneyBR(detalhe.valor_credito_pretendido)}
+                          />
+                          <MetricCard
+                            label="Observações iniciais"
+                            value={detalhe.observacoes_iniciais}
+                            large
+                          />
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <SectionHeading title="Dados bancários e relacionamento" />
+                        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <MetricCard label="Agência" value={detalhe.agencia} />
+                          <MetricCard label="Conta" value={detalhe.conta} />
+                          <MetricCard label="Gerente do banco" value={detalhe.gerente_banco} />
+                          <MetricCard label="Contato do banco" value={detalhe.contato_banco} />
+                          <MetricCard
+                            label="Abertura de conta"
+                            value={formatDateBR(detalhe.data_abertura_conta)}
+                          />
+                          <MetricCard
+                            label="Prorrogado"
+                            value={detalhe.prorrogado ? "Sim" : "Não"}
+                          />
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* Histórico semanal resumido em cards */}
+                    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <SectionHeading
+                        title="Histórico semanal"
+                        description="Cada semana foi organizada em cartão para evitar tabela larga e facilitar leitura."
+                      />
+
+                      {atualizacoes.length > 0 ? (
+                        <div className="mt-4 space-y-4">
+                          {atualizacoes.map((item: any) => (
+                            <WeeklyUpdateCard key={item.id || item.numero_semana} item={item} />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+                          Nenhuma atualização semanal registrada.
+                        </div>
+                      )}
+                    </section>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -2396,9 +2338,188 @@ function InfoCard({
   value?: string | null;
 }) {
   return (
-    <div className="rounded border p-3">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="mt-1 font-semibold">{value || "-"}</div>
+    <div className="rounded-xl border border-slate-200 bg-white p-3">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+        {label}
+      </div>
+      <div className="mt-1 break-words text-sm font-semibold text-slate-900">
+        {value || "-"}
+      </div>
     </div>
+  );
+}
+
+function SectionHeading({
+  title,
+  description,
+}: {
+  title: string;
+  description?: string;
+}) {
+  return (
+    <div>
+      <h4 className="text-sm font-bold uppercase tracking-wide text-slate-800">
+        {title}
+      </h4>
+      {description && (
+        <p className="mt-1 text-xs leading-relaxed text-slate-500">{description}</p>
+      )}
+    </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  tone = "default",
+  large,
+}: {
+  label: string;
+  value?: string | number | null;
+  tone?: "default" | "success" | "danger" | "warning";
+  large?: boolean;
+}) {
+  const toneClass =
+    tone === "success"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+      : tone === "danger"
+        ? "border-red-200 bg-red-50 text-red-900"
+        : tone === "warning"
+          ? "border-orange-200 bg-orange-50 text-orange-900"
+          : "border-slate-200 bg-white text-slate-900";
+
+  return (
+    <div
+      className={`rounded-xl border p-3 ${toneClass} ${large ? "sm:col-span-2" : ""}`}
+    >
+      <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+        {label}
+      </div>
+      <div className="mt-1 break-words text-sm font-semibold leading-snug">
+        {value || "-"}
+      </div>
+    </div>
+  );
+}
+
+function MiniMetric({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value?: string | number | null;
+  tone?: "default" | "success" | "danger" | "warning";
+}) {
+  const toneClass =
+    tone === "success"
+      ? "bg-emerald-50 text-emerald-900"
+      : tone === "danger"
+        ? "bg-red-50 text-red-900"
+        : tone === "warning"
+          ? "bg-orange-50 text-orange-900"
+          : "bg-slate-50 text-slate-900";
+
+  return (
+    <div className={`rounded-lg px-3 py-2 ${toneClass}`}>
+      <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+        {label}
+      </div>
+      <div className="mt-1 break-words text-sm font-semibold">{value || "-"}</div>
+    </div>
+  );
+}
+
+function WeeklyUpdateCard({ item }: { item: any }) {
+  const saldo = Number(item.saldo_semanal || 0);
+  const status = item.status_semana || item.status;
+
+  return (
+    <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h5 className="text-base font-bold text-slate-950">
+            Semana {item.numero_semana}
+          </h5>
+          <p className="mt-1 text-sm text-slate-600">
+            {formatDateBR(item.data_referencia_inicio)} a{" "}
+            {formatDateBR(item.data_referencia_fim)}
+          </p>
+        </div>
+        <span
+          className={`w-fit rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(status)}`}
+        >
+          {labelStatus(status)}
+        </span>
+      </div>
+
+      <div className="grid gap-4 p-4 xl:grid-cols-[1.2fr_0.9fr_0.9fr]">
+        <div>
+          <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">
+            Entradas da semana
+          </h6>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <MiniMetric label="Maquininha" value={moneyBR(item.entrada_maquininha)} />
+            <MiniMetric label="PIX" value={moneyBR(item.entrada_pix)} />
+            <MiniMetric label="Boleto" value={moneyBR(item.entrada_boleto)} />
+            <MiniMetric label="TED" value={moneyBR(item.entrada_ted)} />
+            <MiniMetric label="Dinheiro" value={moneyBR(item.entrada_dinheiro)} />
+            <MiniMetric label="Outras" value={moneyBR(item.outras_entradas)} />
+            <div className="col-span-2 sm:col-span-3">
+              <MiniMetric label="Total de entradas" value={moneyBR(item.total_entradas)} />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">
+            Saídas e saldos
+          </h6>
+          <div className="grid grid-cols-2 gap-2">
+            <MiniMetric label="Saídas" value={moneyBR(item.total_saidas)} />
+            <MiniMetric
+              label="Saldo semanal"
+              value={moneyBR(item.saldo_semanal)}
+              tone={saldo < 0 ? "danger" : saldo > 0 ? "success" : "default"}
+            />
+            <MiniMetric label="Saldo médio" value={moneyBR(item.saldo_medio)} />
+            <MiniMetric label="Saldo final" value={moneyBR(item.saldo_final)} />
+          </div>
+        </div>
+
+        <div>
+          <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">
+            Rating e conformidade
+          </h6>
+          <div className="grid grid-cols-2 gap-2">
+            <MiniMetric label="Bacen" value={item.rating_bacen || "-"} />
+            <MiniMetric label="Interno" value={item.rating_interno || "-"} />
+            <MiniMetric label="SCR" value={item.scr_status || item.restricao_scr || "-"} />
+            <MiniMetric
+              label="Cenprot"
+              value={item.cenprot_status || item.restricao_cenprot || "-"}
+            />
+            <MiniMetric
+              label="Serasa"
+              value={item.serasa_status || item.restricao_serasa || "-"}
+            />
+            <MiniMetric label="CND" value={item.cnd_status || item.cnd_regular || "-"} />
+            <MiniMetric label="PLD/AML" value={item.pld_aml_status || item.pld_aml || "-"} />
+            <MiniMetric
+              label="COAF"
+              value={item.coaf_status || item.operacao_suspeita_coaf || "-"}
+            />
+          </div>
+        </div>
+      </div>
+
+      {(item.analise_semana || item.orientacao_cliente || item.proxima_acao) && (
+        <div className="grid gap-3 border-t border-slate-100 bg-slate-50 p-4 md:grid-cols-3">
+          <MiniMetric label="Análise da semana" value={item.analise_semana || "-"} />
+          <MiniMetric label="Orientação ao cliente" value={item.orientacao_cliente || "-"} />
+          <MiniMetric label="Próxima ação" value={item.proxima_acao || "-"} />
+        </div>
+      )}
+    </article>
   );
 }
