@@ -291,165 +291,178 @@ function exportarCSV(row: Acompanhamento) {
     ? row.atualizacoes
     : [];
 
-  const nomeArquivo = `acompanhamento-bancario-${String(row.nome_empresa || "empresa")
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "-")}-${String(row.banco_observado || "banco")
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "-")}.csv`;
+  const safe = (value: unknown) =>
+    String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
 
-  const linhas: string[][] = [];
+  const slug = (value: unknown) =>
+    String(value || "arquivo")
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
 
-  // Cabeçalho da empresa
-  linhas.push(["ACOMPANHAMENTO BANCÁRIO - DESTRAVA CRÉDITO"]);
-  linhas.push([]);
-  linhas.push(["Empresa", row.nome_empresa || ""]);
-  linhas.push(["CNPJ", row.cnpj || ""]);
-  linhas.push(["Banco", row.banco_observado || ""]);
-  linhas.push(["Agência", row.agencia || ""]);
-  linhas.push(["Conta", row.conta || ""]);
-  linhas.push(["Gerente do banco", row.gerente_banco || ""]);
-  linhas.push(["Contato do banco", row.contato_banco || ""]);
-  linhas.push([
-    "Início do relacionamento",
-    formatDateBR(row.data_abertura_conta || row.data_inicio),
-  ]);
-  linhas.push(["Início do acompanhamento", formatDateBR(row.data_inicio)]);
-  linhas.push(["Fim previsto", formatDateBR(row.data_fim_prevista)]);
-  linhas.push(["Status", row.status || ""]);
-  linhas.push([]);
+  const saldoUltimaSemana =
+    atualizacoes.length > 0
+      ? atualizacoes[atualizacoes.length - 1]?.saldo_semanal
+      : row.saldo_semanal;
 
-  // Rating
-  linhas.push(["RATING"]);
-  linhas.push(["Rating Bacen", row.rating_bacen_atual || row.rating_bacen_inicial || ""]);
-  linhas.push(["Rating Interno Inicial", row.rating_interno_inicial || ""]);
-  linhas.push(["Rating Interno Atual", row.rating_interno_atual || ""]);
-  linhas.push([]);
+  const statusUltimaSemana =
+    atualizacoes.length > 0
+      ? atualizacoes[atualizacoes.length - 1]?.status_semana ||
+        atualizacoes[atualizacoes.length - 1]?.status
+      : row.status_semana || row.status;
 
-  // Dados financeiros
-  linhas.push(["DADOS FINANCEIROS"]);
-  linhas.push(["Faturamento anual", moneyBR(row.faturamento_anual)]);
-  linhas.push(["Média mensal", moneyBR(row.media_mensal)]);
-  linhas.push(["Margem ±30%", moneyBR(row.margem_seguranca_30)]);
-  linhas.push(["Objetivo do crédito", row.objetivo_credito || ""]);
-  linhas.push(["Valor pretendido", moneyBR(row.valor_credito_pretendido)]);
-  linhas.push(["Linha pretendida", row.linha_credito_pretendida || ""]);
-  linhas.push([]);
+  const statusClass = (value: unknown) => {
+    const normalized = String(value || "").toLowerCase();
+    if (normalized.includes("neg")) return "negativo";
+    if (normalized.includes("aten")) return "atencao";
+    if (normalized.includes("pos")) return "positivo";
+    return "neutro";
+  };
 
-  // Histórico semanal
-  linhas.push(["HISTÓRICO SEMANAL"]);
-  linhas.push([
-    "Semana",
-    "Período Início",
-    "Período Fim",
-    "Entrada Máquina",
-    "Entrada PIX",
-    "Entrada Boleto",
-    "Entrada TED",
-    "Entrada Dinheiro",
-    "Outras Entradas",
-    "Total Entradas",
-    "Saídas",
-    "Saldo Semanal",
-    "Saldo Médio",
-    "Saldo Final",
-    "Rating Bacen",
-    "Rating Interno",
-    "SCR",
-    "Cenprot",
-    "Serasa",
-    "CND",
-    "PLD/AML",
-    "COAF",
-    "Status",
-    "Análise",
-    "Orientação",
-    "Próxima Ação",
-  ]);
+  const semanaRows = atualizacoes
+    .map((item) => {
+      const totalEntradas =
+        Number(item.total_entradas || 0) ||
+        Number(item.entrada_maquininha || 0) +
+          Number(item.entrada_pix || 0) +
+          Number(item.entrada_boleto || 0) +
+          Number(item.entrada_ted || 0) +
+          Number(item.entrada_dinheiro || 0) +
+          Number(item.outras_entradas || 0);
+      return `
+        <tr>
+          <td>Semana ${safe(item.numero_semana)}</td>
+          <td>${safe(formatDateBR(item.data_referencia_inicio))} a ${safe(formatDateBR(item.data_referencia_fim))}</td>
+          <td class="money">${safe(moneyBR(item.entrada_maquininha))}</td>
+          <td class="money">${safe(moneyBR(item.entrada_pix))}</td>
+          <td class="money">${safe(moneyBR(item.entrada_boleto))}</td>
+          <td class="money">${safe(moneyBR(item.entrada_ted))}</td>
+          <td class="money">${safe(moneyBR(item.entrada_dinheiro))}</td>
+          <td class="money">${safe(moneyBR(item.outras_entradas))}</td>
+          <td class="money strong">${safe(moneyBR(totalEntradas))}</td>
+          <td class="money">${safe(moneyBR(item.total_saidas))}</td>
+          <td class="money ${Number(item.saldo_semanal || 0) < 0 ? "negative" : "positive"}">${safe(moneyBR(item.saldo_semanal))}</td>
+          <td>${safe(item.rating_bacen || "-")}</td>
+          <td>${safe(item.rating_interno || "-")}</td>
+          <td>${safe(item.scr_status || item.restricao_scr || "-")}</td>
+          <td>${safe(item.cenprot_status || item.restricao_cenprot || "-")}</td>
+          <td>${safe(item.serasa_status || item.restricao_serasa || "-")}</td>
+          <td>${safe(item.cnd_status || item.cnd_regular || "-")}</td>
+          <td>${safe(item.pld_aml_status || item.pld_aml || "-")}</td>
+          <td>${safe(item.coaf_status || item.operacao_suspeita_coaf || "-")}</td>
+          <td><span class="badge ${statusClass(item.status_semana || item.status)}">${safe(labelStatus(item.status_semana || item.status))}</span></td>
+          <td>${safe(item.analise_semana || "-")}</td>
+          <td>${safe(item.orientacao_cliente || "-")}</td>
+          <td>${safe(item.proxima_acao || "-")}</td>
+        </tr>`;
+    })
+    .join("");
 
-  for (const a of atualizacoes) {
-    linhas.push([
-      String(a.numero_semana || ""),
-      formatDateBR(a.data_referencia_inicio),
-      formatDateBR(a.data_referencia_fim),
-      moneyBR(a.entrada_maquininha),
-      moneyBR(a.entrada_pix),
-      moneyBR(a.entrada_boleto),
-      moneyBR(a.entrada_ted),
-      moneyBR(a.entrada_dinheiro),
-      moneyBR(a.outras_entradas),
-      moneyBR(a.total_entradas),
-      moneyBR(a.total_saidas),
-      moneyBR(a.saldo_semanal),
-      moneyBR(a.saldo_medio),
-      moneyBR(a.saldo_final),
-      a.rating_bacen || "",
-      a.rating_interno || "",
-      a.scr_status || a.restricao_scr || "",
-      a.cenprot_status || a.restricao_cenprot || "",
-      a.serasa_status || a.restricao_serasa || "",
-      a.cnd_status || a.cnd_regular || "",
-      a.pld_aml_status || a.pld_aml || "",
-      a.coaf_status || a.operacao_suspeita_coaf || "",
-      a.status_semana || a.status || "",
-      a.analise_semana || "",
-      a.orientacao_cliente || "",
-      a.proxima_acao || "",
-    ]);
-  }
+  const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; }
+    .brand { background: #0B3B82; color: white; padding: 18px 22px; border-radius: 12px; }
+    .brand h1 { margin: 0; font-size: 22px; }
+    .brand p { margin: 4px 0 0; font-size: 12px; opacity: .92; }
+    .section { margin-top: 18px; }
+    .section-title { color: #0B3B82; font-weight: 700; font-size: 14px; margin-bottom: 8px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .card { border: 1px solid #dbe4f0; border-radius: 10px; padding: 10px; background: #f8fafc; min-height: 58px; }
+    .label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
+    .value { font-size: 14px; font-weight: 700; margin-top: 4px; }
+    .value.negative, .negative { color: #dc2626; font-weight: 700; }
+    .value.positive, .positive { color: #15803d; font-weight: 700; }
+    table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 11px; }
+    th { background: #eaf1fb; color: #0B3B82; border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
+    td { border: 1px solid #e2e8f0; padding: 7px; vertical-align: top; }
+    .money { text-align: right; white-space: nowrap; }
+    .strong { font-weight: 700; }
+    .badge { border-radius: 999px; padding: 3px 8px; font-size: 10px; font-weight: 700; }
+    .badge.negativo { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+    .badge.positivo { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .badge.atencao { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .badge.neutro { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+    .note { border-left: 4px solid #0B3B82; background: #eff6ff; padding: 12px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="brand">
+    <h1>Acompanhamento Bancário — Destrava Crédito</h1>
+    <p>${safe(row.nome_empresa)} — ${safe(row.banco_observado)} | Gerado em ${safe(new Date().toLocaleDateString("pt-BR"))}</p>
+  </div>
 
-  const csvContent =
-    "\uFEFF" +
-    linhas
-      .map((linha) =>
-        linha
-          .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
-          .join(";")
-      )
-      .join("\n");
+  <div class="section">
+    <div class="section-title">Resumo executivo</div>
+    <div class="grid">
+      <div class="card"><div class="label">Empresa</div><div class="value">${safe(row.nome_empresa || "-")}</div></div>
+      <div class="card"><div class="label">CNPJ</div><div class="value">${safe(row.cnpj || "-")}</div></div>
+      <div class="card"><div class="label">Banco</div><div class="value">${safe(row.banco_observado || "-")}</div></div>
+      <div class="card"><div class="label">Responsável</div><div class="value">${safe(row.responsavel_nome || "-")}</div></div>
+      <div class="card"><div class="label">Status</div><div class="value">${safe(labelStatus(row.status))}</div></div>
+      <div class="card"><div class="label">Próxima atualização</div><div class="value">${safe(formatDateBR(row.proxima_atualizacao))}</div></div>
+      <div class="card"><div class="label">Rating atual</div><div class="value">${safe(row.rating_interno_atual || row.rating_bacen_atual || "-")}</div></div>
+      <div class="card"><div class="label">Saldo última semana</div><div class="value ${Number(saldoUltimaSemana || 0) < 0 ? "negative" : "positive"}">${safe(moneyBR(saldoUltimaSemana))}</div></div>
+    </div>
+  </div>
 
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  <div class="section">
+    <div class="section-title">Indicadores financeiros</div>
+    <div class="grid">
+      <div class="card"><div class="label">Faturamento anual</div><div class="value">${safe(moneyBR(row.faturamento_anual))}</div></div>
+      <div class="card"><div class="label">Média mensal</div><div class="value">${safe(moneyBR(row.media_mensal))}</div></div>
+      <div class="card"><div class="label">Margem ±30%</div><div class="value">${safe(moneyBR(row.margem_seguranca_30))}</div></div>
+      <div class="card"><div class="label">Valor pretendido</div><div class="value">${safe(moneyBR(row.valor_credito_pretendido))}</div></div>
+    </div>
+  </div>
+
+  <div class="section note">
+    <strong>Objetivo do crédito:</strong> ${safe(row.objetivo_credito || "-")}<br />
+    <strong>Linha pretendida:</strong> ${safe(row.linha_credito_pretendida || "-")}<br />
+    <strong>Recomendação operacional:</strong> ${safe(calcularRecomendacao(row))}
+  </div>
+
+  <div class="section">
+    <div class="section-title">Histórico semanal completo</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Semana</th><th>Período</th><th>Máquina</th><th>PIX</th><th>Boleto</th><th>TED</th><th>Dinheiro</th><th>Outras</th>
+          <th>Total entradas</th><th>Saídas</th><th>Saldo</th><th>Rating Bacen</th><th>Rating interno</th>
+          <th>SCR</th><th>Cenprot</th><th>Serasa</th><th>CND</th><th>PLD/AML</th><th>COAF</th><th>Status</th>
+          <th>Análise</th><th>Orientação</th><th>Próxima ação</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${
+          semanaRows ||
+          `<tr><td colspan="23">Nenhuma atualização semanal registrada.</td></tr>`
+        }
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>`;
+
+  const blob = new Blob([html], {
+    type: "application/vnd.ms-excel;charset=utf-8",
+  });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = nomeArquivo;
+  link.download = `acompanhamento-bancario-${slug(row.nome_empresa)}-${slug(row.banco_observado)}.xls`;
+  document.body.appendChild(link);
   link.click();
+  link.remove();
   URL.revokeObjectURL(url);
-}
-
-// ─── Estado inicial do formulário de atualização ──────────────────────────────
-function updFormInicial(): AtualizacaoForm {
-  return {
-    numero_semana: 1,
-    data_referencia_inicio: "",
-    data_referencia_fim: "",
-    data_atualizacao: "",
-    proxima_atualizacao_apos_salvar: "",
-    entrada_maquininha: 0,
-    entrada_pix: 0,
-    entrada_boleto: 0,
-    entrada_ted: 0,
-    entrada_dinheiro: 0,
-    outras_entradas: 0,
-    total_saidas: 0,
-    saldo_medio: 0,
-    saldo_final: 0,
-    quantidade_transacoes: 0,
-    rating_bacen: "",
-    rating_interno: "",
-    scr_status: "",
-    cenprot_status: "",
-    serasa_status: "",
-    cnd_status: "",
-    pld_aml_status: "",
-    coaf_status: "",
-    possui_restricao: false,
-    restricao_nova: false,
-    devolucao_ou_estorno: false,
-    ocorrencia_negativa: false,
-    analise_semana: "",
-    orientacao_cliente: "",
-    proxima_acao: "",
-  };
 }
 
 // ─── Bancos sugeridos ─────────────────────────────────────────────────────────
@@ -777,6 +790,7 @@ export default function AcompanhamentoBancario() {
       observacoes_iniciais: "",
     });
     setDetalhe(null);
+    setUpdOpen(null);
     setNovoOpen(true);
   };
 
@@ -815,6 +829,13 @@ export default function AcompanhamentoBancario() {
         >
           Atualizar
         </button>
+        <button
+          className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
+          onClick={() => adicionarOutroBanco(row)}
+          title="Criar acompanhamento separado para outro banco da mesma empresa"
+        >
+          + Outro banco
+        </button>
         {whats && (
           <a
             className="rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 transition hover:bg-green-100"
@@ -846,7 +867,7 @@ export default function AcompanhamentoBancario() {
             exportarCSV(rowCompleto);
           }}
         >
-          Exportar
+          Exportar XLS
         </button>
         <button
           className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50"
@@ -1335,12 +1356,20 @@ export default function AcompanhamentoBancario() {
                     {updOpen.nome_empresa} — {updOpen.banco_observado}
                   </p>
                 </div>
-                <button
-                  className="rounded border px-3 py-1 text-sm"
-                  onClick={() => setUpdOpen(null)}
-                >
-                  Fechar
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
+                    onClick={() => adicionarOutroBanco(updOpen)}
+                  >
+                    + Outro banco
+                  </button>
+                  <button
+                    className="rounded border px-3 py-1 text-sm"
+                    onClick={() => setUpdOpen(null)}
+                  >
+                    Fechar
+                  </button>
+                </div>
               </div>
 
               {/* Contexto da semana */}
@@ -1572,6 +1601,12 @@ export default function AcompanhamentoBancario() {
                   {saving ? "Salvando..." : "Salvar atualização semanal"}
                 </button>
                 <button
+                  className="rounded border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700"
+                  onClick={() => adicionarOutroBanco(updOpen)}
+                >
+                  + Outro banco
+                </button>
+                <button
                   className="rounded border px-4 py-2 text-sm"
                   onClick={() => setUpdOpen(null)}
                 >
@@ -1584,231 +1619,287 @@ export default function AcompanhamentoBancario() {
 
         {/* ── Modal — Detalhes ─────────────────────────────────────────────── */}
         {detalhe && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-2 md:p-4">
-            {(() => {
-              const atualizacoes = Array.isArray(detalhe.atualizacoes)
-                ? detalhe.atualizacoes
-                : [];
-              const ultimaSemana =
-                atualizacoes.length > 0
-                  ? atualizacoes[atualizacoes.length - 1]
-                  : null;
-              const saldoUltima = Number(ultimaSemana?.saldo_semanal || 0);
-              const statusUltima =
-                ultimaSemana?.status_semana || ultimaSemana?.status || detalhe.status;
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/45 p-3 sm:p-5">
+            <div className="mx-auto flex min-h-[calc(100vh-40px)] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-4 backdrop-blur sm:px-6">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
+                      Relatório operacional
+                    </p>
+                    <h3 className="mt-1 text-xl font-bold text-slate-950">
+                      Detalhes do Acompanhamento
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {detalhe.nome_empresa} — {detalhe.banco_observado}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                      onClick={() => abrirAtualizacao(detalhe)}
+                    >
+                      Atualizar semana
+                    </button>
+                    <button
+                      className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
+                      onClick={() => adicionarOutroBanco(detalhe)}
+                    >
+                      + Outro banco
+                    </button>
+                    <button
+                      className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100"
+                      onClick={() => exportarCSV(detalhe)}
+                    >
+                      Exportar XLS
+                    </button>
+                    <button
+                      className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-100"
+                      onClick={() => {
+                        setImprimirOpen(detalhe);
+                        setDetalhe(null);
+                      }}
+                    >
+                      Imprimir
+                    </button>
+                    <button
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      onClick={() => setDetalhe(null)}
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                </div>
+              </div>
 
-              return (
-                <div className="mx-auto flex max-h-[calc(100vh-1rem)] w-full max-w-[1320px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl md:max-h-[calc(100vh-2rem)]">
-                  {/* Cabeçalho fixo */}
-                  <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-4 backdrop-blur md:px-6">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-                          Relatório operacional
-                        </p>
-                        <h3 className="mt-1 text-xl font-bold leading-tight text-slate-950 md:text-2xl">
-                          Detalhes do Acompanhamento
-                        </h3>
-                        <p className="mt-1 break-words text-sm text-slate-600">
-                          {detalhe.nome_empresa} — {detalhe.banco_observado}
-                        </p>
-                      </div>
+              <div className="space-y-5 overflow-y-auto bg-slate-50 px-4 py-5 sm:px-6">
+                {/* Resumo executivo */}
+                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h4 className="text-base font-bold text-slate-900">
+                        Resumo executivo
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Visão rápida do acompanhamento, próximo vencimento e situação atual.
+                      </p>
+                    </div>
+                    <span
+                      className={`w-fit rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(detalhe.status_semana || detalhe.status)}`}
+                    >
+                      {labelStatus(detalhe.status_semana || detalhe.status)}
+                    </span>
+                  </div>
 
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
-                          onClick={() => abrirAtualizacao(detalhe)}
-                        >
-                          Atualizar semana
-                        </button>
-                        <button
-                          className="rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100"
-                          onClick={() => exportarCSV(detalhe)}
-                        >
-                          Exportar CSV
-                        </button>
-                        <button
-                          className="rounded-lg border border-purple-300 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-100"
-                          onClick={() => {
-                            setImprimirOpen(detalhe);
-                            setDetalhe(null);
-                          }}
-                        >
-                          Imprimir
-                        </button>
-                        <button
-                          className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-50"
-                          onClick={() => adicionarOutroBanco(detalhe)}
-                        >
-                          + Outro banco
-                        </button>
-                        <button
-                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                          onClick={() => setDetalhe(null)}
-                        >
-                          Fechar
-                        </button>
-                      </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <InfoCard label="Empresa" value={detalhe.nome_empresa} />
+                    <InfoCard label="CNPJ" value={detalhe.cnpj} />
+                    <InfoCard label="Banco observado" value={detalhe.banco_observado} />
+                    <InfoCard label="Responsável" value={detalhe.responsavel_nome || "Admin"} />
+                    <InfoCard label="Início do acompanhamento" value={formatDateBR(detalhe.data_inicio)} />
+                    <InfoCard label="Fim previsto" value={formatDateBR(detalhe.data_fim_prevista)} />
+                    <InfoCard label="Próxima atualização" value={formatDateBR(detalhe.proxima_atualizacao)} />
+                    <InfoCard label="Prorrogado" value={detalhe.prorrogado ? "Sim" : "Não"} />
+                  </div>
+                </section>
+
+                {/* Indicadores */}
+                <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
+                    <h4 className="text-base font-bold text-slate-900">
+                      Indicadores financeiros e rating
+                    </h4>
+                    <p className="mb-3 text-xs text-slate-500">
+                      Números centrais para análise de evolução e capacidade.
+                    </p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      <InfoCard label="Rating Bacen atual" value={detalhe.rating_bacen_atual || detalhe.rating_bacen_inicial} />
+                      <InfoCard label="Rating interno inicial" value={detalhe.rating_interno_inicial} />
+                      <InfoCard label="Rating interno atual" value={detalhe.rating_interno_atual} />
+                      <InfoCard label="Faturamento anual" value={moneyBR(detalhe.faturamento_anual)} />
+                      <InfoCard label="Média mensal" value={moneyBR(detalhe.media_mensal)} />
+                      <InfoCard label="Margem ±30%" value={moneyBR(detalhe.margem_seguranca_30)} />
                     </div>
                   </div>
 
-                  {/* Conteúdo rolável */}
-                  <div className="space-y-5 overflow-y-auto bg-slate-50 px-4 py-5 md:px-6">
-                    {/* Resumo executivo */}
-                    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <SectionHeading
-                        title="Resumo executivo"
-                        description="Informações essenciais para leitura rápida do acompanhamento."
-                      />
-                      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                        <MetricCard label="Empresa" value={detalhe.nome_empresa} />
-                        <MetricCard label="CNPJ" value={detalhe.cnpj} />
-                        <MetricCard label="Banco observado" value={detalhe.banco_observado} />
-                        <MetricCard label="Responsável" value={detalhe.responsavel_nome || "Admin"} />
-                        <MetricCard label="Status" value={labelStatus(detalhe.status)} />
-                        <MetricCard label="Início" value={formatDateBR(detalhe.data_inicio)} />
-                        <MetricCard label="Fim previsto" value={formatDateBR(detalhe.data_fim_prevista)} />
-                        <MetricCard
-                          label="Próxima atualização"
-                          value={formatDateBR(detalhe.proxima_atualizacao)}
-                          tone={
-                            detalhe.proxima_atualizacao && detalhe.proxima_atualizacao <= hojeISO()
-                              ? "warning"
-                              : "default"
-                          }
-                        />
+                  <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 shadow-sm">
+                    <h4 className="text-base font-bold text-blue-950">
+                      Recomendação operacional
+                    </h4>
+                    <p className="mt-2 text-sm leading-6 text-blue-900">
+                      {calcularRecomendacao(detalhe)}
+                    </p>
+                    <div className="mt-4 rounded-xl border border-blue-200 bg-white/70 p-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                        Saldo última semana
                       </div>
-                    </section>
-
-                    {/* Indicadores */}
-                    <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <SectionHeading
-                          title="Indicadores financeiros e rating"
-                          description="Números principais para entender a evolução de crédito."
-                        />
-                        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                          <MetricCard
-                            label="Rating Bacen"
-                            value={detalhe.rating_bacen_atual || detalhe.rating_bacen_inicial}
-                          />
-                          <MetricCard
-                            label="Rating interno"
-                            value={`${detalhe.rating_interno_inicial || "-"} / ${detalhe.rating_interno_atual || "-"}`}
-                          />
-                          <MetricCard
-                            label="Saldo última semana"
-                            value={moneyBR(saldoUltima)}
-                            tone={saldoUltima < 0 ? "danger" : saldoUltima > 0 ? "success" : "default"}
-                          />
-                          <MetricCard
-                            label="Faturamento anual"
-                            value={moneyBR(detalhe.faturamento_anual)}
-                          />
-                          <MetricCard
-                            label="Média mensal"
-                            value={moneyBR(detalhe.media_mensal)}
-                          />
-                          <MetricCard
-                            label="Margem ±30%"
-                            value={moneyBR(detalhe.margem_seguranca_30)}
-                          />
-                        </div>
+                      <div
+                        className={`mt-1 text-lg font-bold ${
+                          Number(detalhe.saldo_semanal || 0) < 0
+                            ? "text-red-600"
+                            : "text-emerald-700"
+                        }`}
+                      >
+                        {moneyBR(detalhe.saldo_semanal)}
                       </div>
-
-                      <div className="rounded-2xl border border-blue-100 bg-blue-50/80 p-4 shadow-sm">
-                        <SectionHeading
-                          title="Recomendação operacional"
-                          description="Próxima leitura consultiva para o time."
-                        />
-                        <div className="mt-4 rounded-xl bg-white p-4 text-sm leading-relaxed text-slate-700">
-                          <p className="font-semibold text-slate-950">
-                            {calcularRecomendacao(detalhe)}
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <span
-                              className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(statusUltima)}`}
-                            >
-                              {labelStatus(statusUltima)}
-                            </span>
-                            {detalhe.proxima_atualizacao && detalhe.proxima_atualizacao <= hojeISO() && (
-                              <span className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700">
-                                Atualização pendente
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </section>
-
-                    {/* Objetivo e dados bancários */}
-                    <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <SectionHeading title="Objetivo e estratégia de crédito" />
-                        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          <MetricCard
-                            label="Objetivo do crédito"
-                            value={detalhe.objetivo_credito}
-                            large
-                          />
-                          <MetricCard
-                            label="Linha pretendida"
-                            value={detalhe.linha_credito_pretendida}
-                          />
-                          <MetricCard
-                            label="Valor pretendido"
-                            value={moneyBR(detalhe.valor_credito_pretendido)}
-                          />
-                          <MetricCard
-                            label="Observações iniciais"
-                            value={detalhe.observacoes_iniciais}
-                            large
-                          />
-                        </div>
-                      </div>
-
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <SectionHeading title="Dados bancários e relacionamento" />
-                        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          <MetricCard label="Agência" value={detalhe.agencia} />
-                          <MetricCard label="Conta" value={detalhe.conta} />
-                          <MetricCard label="Gerente do banco" value={detalhe.gerente_banco} />
-                          <MetricCard label="Contato do banco" value={detalhe.contato_banco} />
-                          <MetricCard
-                            label="Abertura de conta"
-                            value={formatDateBR(detalhe.data_abertura_conta)}
-                          />
-                          <MetricCard
-                            label="Prorrogado"
-                            value={detalhe.prorrogado ? "Sim" : "Não"}
-                          />
-                        </div>
-                      </div>
-                    </section>
-
-                    {/* Histórico semanal resumido em cards */}
-                    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <SectionHeading
-                        title="Histórico semanal"
-                        description="Cada semana foi organizada em cartão para evitar tabela larga e facilitar leitura."
-                      />
-
-                      {atualizacoes.length > 0 ? (
-                        <div className="mt-4 space-y-4">
-                          {atualizacoes.map((item: any) => (
-                            <WeeklyUpdateCard key={item.id || item.numero_semana} item={item} />
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                          Nenhuma atualização semanal registrada.
-                        </div>
-                      )}
-                    </section>
+                    </div>
                   </div>
-                </div>
-              );
-            })()}
+                </section>
+
+                {/* Objetivo e dados bancários */}
+                <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <h4 className="text-base font-bold text-slate-900">
+                      Objetivo e estratégia de crédito
+                    </h4>
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <InfoCard label="Objetivo do crédito" value={detalhe.objetivo_credito} />
+                      <InfoCard label="Linha pretendida" value={detalhe.linha_credito_pretendida} />
+                      <InfoCard label="Valor pretendido" value={moneyBR(detalhe.valor_credito_pretendido)} />
+                      <InfoCard label="Status" value={labelStatus(detalhe.status)} />
+                    </div>
+                    {detalhe.observacoes_iniciais && (
+                      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                        <strong>Observações:</strong> {detalhe.observacoes_iniciais}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <h4 className="text-base font-bold text-slate-900">
+                      Dados bancários e relacionamento
+                    </h4>
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <InfoCard label="Agência" value={detalhe.agencia} />
+                      <InfoCard label="Conta" value={detalhe.conta} />
+                      <InfoCard label="Gerente do banco" value={detalhe.gerente_banco} />
+                      <InfoCard label="Contato do banco" value={detalhe.contato_banco} />
+                      <InfoCard label="Abertura de conta" value={formatDateBR(detalhe.data_abertura_conta)} />
+                      <InfoCard label="E-mail" value={detalhe.email_cliente} />
+                    </div>
+                  </div>
+                </section>
+
+                {/* Histórico semanal */}
+                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h4 className="text-base font-bold text-slate-900">
+                        Histórico semanal
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Cada semana fica organizada em blocos: entradas, saídas, rating, conformidade e análise.
+                      </p>
+                    </div>
+                    <span className="text-xs font-medium text-slate-500">
+                      {Array.isArray(detalhe.atualizacoes) ? detalhe.atualizacoes.length : 0} semana(s)
+                    </span>
+                  </div>
+
+                  <div className="space-y-4">
+                    {Array.isArray(detalhe.atualizacoes) &&
+                    detalhe.atualizacoes.length > 0 ? (
+                      detalhe.atualizacoes.map((item: any) => {
+                        const entradas =
+                          Number(item.total_entradas || 0) ||
+                          Number(item.entrada_maquininha || 0) +
+                            Number(item.entrada_pix || 0) +
+                            Number(item.entrada_boleto || 0) +
+                            Number(item.entrada_ted || 0) +
+                            Number(item.entrada_dinheiro || 0) +
+                            Number(item.outras_entradas || 0);
+                        const saldo = Number(item.saldo_semanal || 0);
+
+                        return (
+                          <article
+                            key={item.id || item.numero_semana}
+                            className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                          >
+                            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <h5 className="text-sm font-bold text-slate-900">
+                                  Semana {item.numero_semana}
+                                </h5>
+                                <p className="text-xs text-slate-500">
+                                  {formatDateBR(item.data_referencia_inicio)} a{" "}
+                                  {formatDateBR(item.data_referencia_fim)}
+                                </p>
+                              </div>
+                              <span
+                                className={`w-fit rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(item.status_semana || item.status)}`}
+                              >
+                                {labelStatus(item.status_semana || item.status)}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+                              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                                <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                                  Entradas
+                                </h6>
+                                <div className="space-y-1 text-xs text-slate-700">
+                                  <div className="flex justify-between gap-3"><span>Maquininha</span><strong>{moneyBR(item.entrada_maquininha)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Pix</span><strong>{moneyBR(item.entrada_pix)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Boleto</span><strong>{moneyBR(item.entrada_boleto)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>TED</span><strong>{moneyBR(item.entrada_ted)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Dinheiro</span><strong>{moneyBR(item.entrada_dinheiro)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Outras</span><strong>{moneyBR(item.outras_entradas)}</strong></div>
+                                  <div className="mt-2 flex justify-between border-t pt-2 text-sm"><span>Total</span><strong>{moneyBR(entradas)}</strong></div>
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                                <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                                  Saídas e saldos
+                                </h6>
+                                <div className="space-y-1 text-xs text-slate-700">
+                                  <div className="flex justify-between gap-3"><span>Saídas</span><strong>{moneyBR(item.total_saidas)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Saldo semanal</span><strong className={saldo < 0 ? "text-red-600" : "text-emerald-700"}>{moneyBR(item.saldo_semanal)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Saldo médio</span><strong>{moneyBR(item.saldo_medio)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Saldo final</span><strong>{moneyBR(item.saldo_final)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Transações</span><strong>{item.quantidade_transacoes || 0}</strong></div>
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                                <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                                  Rating e conformidade
+                                </h6>
+                                <div className="space-y-1 text-xs text-slate-700">
+                                  <div className="flex justify-between gap-3"><span>Bacen</span><strong>{item.rating_bacen || "-"}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Interno</span><strong>{item.rating_interno || "-"}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>SCR</span><strong>{item.scr_status || item.restricao_scr || "-"}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Cenprot</span><strong>{item.cenprot_status || item.restricao_cenprot || "-"}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Serasa</span><strong>{item.serasa_status || item.restricao_serasa || "-"}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>CND</span><strong>{item.cnd_status || item.cnd_regular || "-"}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>PLD/AML</span><strong>{item.pld_aml_status || item.pld_aml || "-"}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>COAF</span><strong>{item.coaf_status || item.operacao_suspeita_coaf || "-"}</strong></div>
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                                <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                                  Análise e orientação
+                                </h6>
+                                <div className="space-y-2 text-xs leading-5 text-slate-700">
+                                  <p><strong>Análise:</strong> {item.analise_semana || "-"}</p>
+                                  <p><strong>Orientação:</strong> {item.orientacao_cliente || "-"}</p>
+                                  <p><strong>Próxima ação:</strong> {item.proxima_acao || "-"}</p>
+                                </div>
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+                        Nenhuma atualização semanal registrada.
+                      </div>
+                    )}
+                  </div>
+                </section>
+              </div>
+            </div>
           </div>
         )}
 
@@ -2338,188 +2429,9 @@ function InfoCard({
   value?: string | null;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3">
-      <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-        {label}
-      </div>
-      <div className="mt-1 break-words text-sm font-semibold text-slate-900">
-        {value || "-"}
-      </div>
+    <div className="rounded border p-3">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="mt-1 font-semibold">{value || "-"}</div>
     </div>
-  );
-}
-
-function SectionHeading({
-  title,
-  description,
-}: {
-  title: string;
-  description?: string;
-}) {
-  return (
-    <div>
-      <h4 className="text-sm font-bold uppercase tracking-wide text-slate-800">
-        {title}
-      </h4>
-      {description && (
-        <p className="mt-1 text-xs leading-relaxed text-slate-500">{description}</p>
-      )}
-    </div>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-  tone = "default",
-  large,
-}: {
-  label: string;
-  value?: string | number | null;
-  tone?: "default" | "success" | "danger" | "warning";
-  large?: boolean;
-}) {
-  const toneClass =
-    tone === "success"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-      : tone === "danger"
-        ? "border-red-200 bg-red-50 text-red-900"
-        : tone === "warning"
-          ? "border-orange-200 bg-orange-50 text-orange-900"
-          : "border-slate-200 bg-white text-slate-900";
-
-  return (
-    <div
-      className={`rounded-xl border p-3 ${toneClass} ${large ? "sm:col-span-2" : ""}`}
-    >
-      <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-        {label}
-      </div>
-      <div className="mt-1 break-words text-sm font-semibold leading-snug">
-        {value || "-"}
-      </div>
-    </div>
-  );
-}
-
-function MiniMetric({
-  label,
-  value,
-  tone = "default",
-}: {
-  label: string;
-  value?: string | number | null;
-  tone?: "default" | "success" | "danger" | "warning";
-}) {
-  const toneClass =
-    tone === "success"
-      ? "bg-emerald-50 text-emerald-900"
-      : tone === "danger"
-        ? "bg-red-50 text-red-900"
-        : tone === "warning"
-          ? "bg-orange-50 text-orange-900"
-          : "bg-slate-50 text-slate-900";
-
-  return (
-    <div className={`rounded-lg px-3 py-2 ${toneClass}`}>
-      <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
-        {label}
-      </div>
-      <div className="mt-1 break-words text-sm font-semibold">{value || "-"}</div>
-    </div>
-  );
-}
-
-function WeeklyUpdateCard({ item }: { item: any }) {
-  const saldo = Number(item.saldo_semanal || 0);
-  const status = item.status_semana || item.status;
-
-  return (
-    <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h5 className="text-base font-bold text-slate-950">
-            Semana {item.numero_semana}
-          </h5>
-          <p className="mt-1 text-sm text-slate-600">
-            {formatDateBR(item.data_referencia_inicio)} a{" "}
-            {formatDateBR(item.data_referencia_fim)}
-          </p>
-        </div>
-        <span
-          className={`w-fit rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(status)}`}
-        >
-          {labelStatus(status)}
-        </span>
-      </div>
-
-      <div className="grid gap-4 p-4 xl:grid-cols-[1.2fr_0.9fr_0.9fr]">
-        <div>
-          <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">
-            Entradas da semana
-          </h6>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            <MiniMetric label="Maquininha" value={moneyBR(item.entrada_maquininha)} />
-            <MiniMetric label="PIX" value={moneyBR(item.entrada_pix)} />
-            <MiniMetric label="Boleto" value={moneyBR(item.entrada_boleto)} />
-            <MiniMetric label="TED" value={moneyBR(item.entrada_ted)} />
-            <MiniMetric label="Dinheiro" value={moneyBR(item.entrada_dinheiro)} />
-            <MiniMetric label="Outras" value={moneyBR(item.outras_entradas)} />
-            <div className="col-span-2 sm:col-span-3">
-              <MiniMetric label="Total de entradas" value={moneyBR(item.total_entradas)} />
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">
-            Saídas e saldos
-          </h6>
-          <div className="grid grid-cols-2 gap-2">
-            <MiniMetric label="Saídas" value={moneyBR(item.total_saidas)} />
-            <MiniMetric
-              label="Saldo semanal"
-              value={moneyBR(item.saldo_semanal)}
-              tone={saldo < 0 ? "danger" : saldo > 0 ? "success" : "default"}
-            />
-            <MiniMetric label="Saldo médio" value={moneyBR(item.saldo_medio)} />
-            <MiniMetric label="Saldo final" value={moneyBR(item.saldo_final)} />
-          </div>
-        </div>
-
-        <div>
-          <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">
-            Rating e conformidade
-          </h6>
-          <div className="grid grid-cols-2 gap-2">
-            <MiniMetric label="Bacen" value={item.rating_bacen || "-"} />
-            <MiniMetric label="Interno" value={item.rating_interno || "-"} />
-            <MiniMetric label="SCR" value={item.scr_status || item.restricao_scr || "-"} />
-            <MiniMetric
-              label="Cenprot"
-              value={item.cenprot_status || item.restricao_cenprot || "-"}
-            />
-            <MiniMetric
-              label="Serasa"
-              value={item.serasa_status || item.restricao_serasa || "-"}
-            />
-            <MiniMetric label="CND" value={item.cnd_status || item.cnd_regular || "-"} />
-            <MiniMetric label="PLD/AML" value={item.pld_aml_status || item.pld_aml || "-"} />
-            <MiniMetric
-              label="COAF"
-              value={item.coaf_status || item.operacao_suspeita_coaf || "-"}
-            />
-          </div>
-        </div>
-      </div>
-
-      {(item.analise_semana || item.orientacao_cliente || item.proxima_acao) && (
-        <div className="grid gap-3 border-t border-slate-100 bg-slate-50 p-4 md:grid-cols-3">
-          <MiniMetric label="Análise da semana" value={item.analise_semana || "-"} />
-          <MiniMetric label="Orientação ao cliente" value={item.orientacao_cliente || "-"} />
-          <MiniMetric label="Próxima ação" value={item.proxima_acao || "-"} />
-        </div>
-      )}
-    </article>
   );
 }
