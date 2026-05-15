@@ -1921,11 +1921,6 @@ export default function AcompanhamentoBancario() {
           </div>
         )}
 
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* ── Modal — Impressão ────────────────────────────────────────────── */}
         {imprimirOpen && (
           <div className="fixed inset-0 z-50 overflow-auto bg-white p-0">
