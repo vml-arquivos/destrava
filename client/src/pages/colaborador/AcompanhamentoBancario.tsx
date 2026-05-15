@@ -113,6 +113,23 @@ function addDays(iso: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+function parseDateLocal(value?: string | null): Date | null {
+  if (!value) return null;
+  const raw = String(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const [year, month, day] = raw.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function todayLocal(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 function calcularCamposSemana(row: Acompanhamento): Pick<
   AtualizacaoForm,
   | "numero_semana"
@@ -345,7 +362,29 @@ function atualizacoesOrdenadas(row: Acompanhamento): any[] {
 
 function getSemanaAtual(row: Acompanhamento): any | null {
   const atualizacoes = atualizacoesOrdenadas(row);
-  return atualizacoes.length ? atualizacoes[atualizacoes.length - 1] : null;
+  if (!atualizacoes.length) return null;
+
+  const hoje = todayLocal();
+
+  // Regra operacional: a semana em evidência é a última semana consolidada.
+  // Semana futura ou ainda em andamento não deve ser tratada como atual,
+  // para não distorcer saldo, status, diagnóstico e PDF.
+  const semanasConsolidadas = atualizacoes.filter((semana) => {
+    const inicio = parseDateLocal(semana?.data_referencia_inicio);
+    const fim = parseDateLocal(semana?.data_referencia_fim);
+
+    if (!inicio || !fim) return false;
+    if (fim < inicio) return false;
+    if (inicio > hoje) return false;
+
+    return fim <= hoje;
+  });
+
+  if (semanasConsolidadas.length) {
+    return semanasConsolidadas[semanasConsolidadas.length - 1];
+  }
+
+  return null;
 }
 
 function calcularEvolucaoAcompanhamento(row: Acompanhamento) {
@@ -494,7 +533,7 @@ function exportarCSV(row: Acompanhamento, prestadoraKey: PrestadoraKey = "destra
     <div class="brand-row">
       <div class="brand-logo-box">${logoRelatorioHtml(prestadoraKey)}</div>
       <div>
-        <h1>Relatório de Acompanhamento Bancário</h1>
+        <h1>Relatório Técnico de Acompanhamento Financeiro Semanal</h1>
         <p>${safe(prestadora.nome)} — ${safe(prestadora.slogan)}</p>
         <p>${safe(row.nome_empresa)} — ${safe(row.banco_observado)} | Gerado em ${safe(new Date().toLocaleDateString("pt-BR"))}</p>
       </div>
@@ -502,7 +541,7 @@ function exportarCSV(row: Acompanhamento, prestadoraKey: PrestadoraKey = "destra
   </div>
 
   <div class="section">
-    <div class="section-title">Semana atual em evidência</div>
+    <div class="section-title">Semana consolidada em evidência</div>
     <div class="grid">
       <div class="card featured"><div class="label">Semana atual</div><div class="value">Semana ${safe(semanaAtual?.numero_semana || "-")}</div></div>
       <div class="card featured"><div class="label">Período</div><div class="value">${safe(formatDateBR(semanaAtual?.data_referencia_inicio))} a ${safe(formatDateBR(semanaAtual?.data_referencia_fim))}</div></div>
@@ -704,7 +743,7 @@ export default function AcompanhamentoBancario() {
 
   const [upd, setUpd] = useState<AtualizacaoForm>(updFormInicial());
 
-  const printRef = useRef<HTMLDivElement>(null);
+  const printFrameRef = useRef<HTMLIFrameElement>(null);
 
   // ─── Cálculos automáticos ────────────────────────────────────────────────────
   const totalEntradas =
@@ -973,6 +1012,56 @@ export default function AcompanhamentoBancario() {
         if (detalheResp.ok) setDetalhe(await detalheResp.json());
       } catch {
         /* detalhe é reaberto apenas se a API responder */
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ─── Apagar semana lançada ───────────────────────────────────────────────────
+  const apagarSemana = async (row: Acompanhamento, semana: any) => {
+    if (!row?.id || !semana) return;
+
+    const semanaRef = semana.numero_semana || semana.id;
+
+    if (!semanaRef) {
+      alert("Não foi possível identificar a semana para apagar.");
+      return;
+    }
+
+    const ok = confirm(
+      "Tem certeza que deseja apagar esta semana? Essa ação removerá os lançamentos da semana e recalculará todo o acompanhamento."
+    );
+
+    if (!ok) return;
+
+    setSaving(true);
+
+    try {
+      const response = await fetch(
+        `/api/acompanhamentos-bancarios/${row.id}/atualizacoes/${semanaRef}`,
+        {
+          method: "DELETE",
+          headers: authHeaders(),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        alert(`Erro ao apagar semana. ${errorText}`);
+        return;
+      }
+
+      await fetchData();
+
+      const detalheResp = await fetch(`/api/acompanhamentos-bancarios/${row.id}`, {
+        headers: authHeaders(),
+      });
+
+      if (detalheResp.ok) {
+        const atualizado = await detalheResp.json();
+        setDetalhe(atualizado);
+        setImprimirOpen((prev) => (prev?.id === atualizado.id ? atualizado : prev));
       }
     } finally {
       setSaving(false);
@@ -1288,7 +1377,7 @@ export default function AcompanhamentoBancario() {
     <header class="header">
       <div class="logo">${logoBlock}</div>
       <div>
-        <h1>Relatório de Acompanhamento Bancário</h1>
+        <h1>Relatório Técnico de Acompanhamento Financeiro Semanal</h1>
         <p class="subtitle">${htmlEscape(meta.nome)} — ${htmlEscape(meta.slogan)}</p>
         <h2>${htmlEscape(acomp.nome_empresa || "-")} — ${htmlEscape(acomp.banco_observado || "-")}</h2>
         <p class="meta">CNPJ: ${htmlEscape(acomp.cnpj || "-")} | Gerado em: ${htmlEscape(new Date().toLocaleDateString("pt-BR"))}</p>
@@ -1296,7 +1385,7 @@ export default function AcompanhamentoBancario() {
     </header>
 
     <section class="current">
-      <h3 class="section-title">Semana atual em evidência</h3>
+      <h3 class="section-title">Semana consolidada em evidência</h3>
       <div class="grid-6">
         <div class="item"><b>Semana</b>${semanaAtual ? `Semana ${htmlEscape(semanaAtual.numero_semana)}` : "-"}</div>
         <div class="item"><b>Período</b>${htmlEscape(formatDateBR(semanaAtual?.data_referencia_inicio))} a ${htmlEscape(formatDateBR(semanaAtual?.data_referencia_fim))}</div>
@@ -1380,25 +1469,21 @@ export default function AcompanhamentoBancario() {
   const handleImprimir = () => {
     if (!imprimirOpen) return;
 
-    const fileTitle = nomeArquivoRelatorio(imprimirOpen, prestadoraRelatorio, "pdf").replace(/\.pdf$/i, "");
-    const popup = window.open("", "_blank", "noopener,noreferrer,width=1200,height=800");
+    const frame = printFrameRef.current;
+    const win = frame?.contentWindow;
 
-    if (!popup) {
-      alert("O navegador bloqueou a janela de impressão. Permita pop-ups para este site e tente novamente.");
+    if (!win) {
+      alert("Não foi possível carregar o relatório para impressão. Feche e abra o relatório novamente.");
       return;
     }
 
-    popup.document.open();
-    popup.document.write(gerarHtmlRelatorioA4(imprimirOpen, prestadoraRelatorio));
-    popup.document.close();
-
-    popup.onload = () => {
-      popup.document.title = fileTitle;
-      popup.focus();
-      setTimeout(() => {
-        popup.print();
-      }, 350);
-    };
+    try {
+      win.document.title = nomeArquivoRelatorio(imprimirOpen, prestadoraRelatorio, "pdf").replace(/\.pdf$/i, "");
+      win.focus();
+      win.print();
+    } catch {
+      alert("Não foi possível iniciar a impressão. Atualize a página e tente novamente.");
+    }
   };
 
   const renderActionButtons = (row: Acompanhamento) => {
@@ -2098,8 +2183,8 @@ export default function AcompanhamentoBancario() {
                       <div className="rounded-2xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-white p-4 shadow-sm xl:col-span-2">
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                           <div>
-                            <h4 className="text-sm font-bold uppercase tracking-wide text-amber-700">Semana atual em evidência</h4>
-                            <p className="text-xs text-amber-700/80">Última semana preenchida e referência principal do acompanhamento.</p>
+                            <h4 className="text-sm font-bold uppercase tracking-wide text-amber-700">Semana consolidada em evidência</h4>
+                            <p className="text-xs text-amber-700/80">Última semana consolidada pela data de fechamento do período.</p>
                           </div>
                           <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(semanaAtual?.status_semana || semanaAtual?.status)}`}>
                             {labelStatus(semanaAtual?.status_semana || semanaAtual?.status)}
@@ -2207,6 +2292,14 @@ export default function AcompanhamentoBancario() {
                                   >
                                     Editar valores
                                   </button>
+                                  <button
+                                    className="mt-1 rounded-md border border-red-300 bg-red-50 px-2.5 py-1 text-[10px] font-bold text-red-700 shadow-sm hover:bg-red-100 disabled:opacity-60"
+                                    onClick={() => apagarSemana(detalhe, item)}
+                                    title="Apagar esta semana e recalcular o acompanhamento"
+                                    disabled={saving}
+                                  >
+                                    Apagar semana
+                                  </button>
                                 </td>
                                 <td className="whitespace-nowrap px-3 py-2.5 text-slate-500">
                                   {formatDateBR(item.data_referencia_inicio)}<br/>
@@ -2241,6 +2334,13 @@ export default function AcompanhamentoBancario() {
                                     onClick={() => abrirEditarSemana(detalhe, item)}
                                   >
                                     Corrigir semana
+                                  </button>
+                                  <button
+                                    className="mt-2 block whitespace-nowrap rounded-md border border-red-300 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700 hover:bg-red-100 disabled:opacity-60"
+                                    onClick={() => apagarSemana(detalhe, item)}
+                                    disabled={saving}
+                                  >
+                                    Apagar semana
                                   </button>
                                 </td>
                               </tr>
@@ -2333,187 +2433,8 @@ export default function AcompanhamentoBancario() {
 
         {/* ── Modal — Impressão ────────────────────────────────────────────── */}
         {imprimirOpen && (
-          <div className="print-root fixed inset-0 z-50 overflow-auto bg-white p-0">
-            <style>{`
-              @media print {
-                @page { size: A4 landscape; margin: 8mm; }
-
-                html,
-                body,
-                #root {
-                  width: 100% !important;
-                  min-width: 0 !important;
-                  height: auto !important;
-                  min-height: 0 !important;
-                  margin: 0 !important;
-                  padding: 0 !important;
-                  overflow: visible !important;
-                  background: #ffffff !important;
-                  -webkit-print-color-adjust: exact !important;
-                  print-color-adjust: exact !important;
-                }
-
-                body * {
-                  visibility: hidden !important;
-                }
-
-                .print-toolbar,
-                .print-toolbar * {
-                  display: none !important;
-                  visibility: hidden !important;
-                }
-
-                .print-root {
-                  position: static !important;
-                  inset: auto !important;
-                  width: 100% !important;
-                  height: auto !important;
-                  min-height: 0 !important;
-                  margin: 0 !important;
-                  padding: 0 !important;
-                  overflow: visible !important;
-                  background: #ffffff !important;
-                }
-
-                .print-document,
-                .print-document * {
-                  visibility: visible !important;
-                }
-
-                .print-document {
-                  position: static !important;
-                  display: block !important;
-                  width: calc(297mm - 16mm) !important;
-                  max-width: none !important;
-                  min-width: 0 !important;
-                  margin: 0 auto !important;
-                  padding: 0 !important;
-                  overflow: visible !important;
-                  color: #0f172a !important;
-                  font-size: 9px !important;
-                  line-height: 1.25 !important;
-                  background: #ffffff !important;
-                }
-
-                .print-card {
-                  break-inside: avoid !important;
-                  page-break-inside: avoid !important;
-                }
-
-                .print-main-header {
-                  margin-bottom: 4mm !important;
-                  padding: 4mm !important;
-                  border-radius: 4mm !important;
-                }
-
-                .print-main-header h1 {
-                  font-size: 17px !important;
-                  line-height: 1.15 !important;
-                  margin: 0 !important;
-                }
-
-                .print-main-header h2 {
-                  font-size: 14px !important;
-                  line-height: 1.15 !important;
-                  margin-top: 2mm !important;
-                }
-
-                .print-main-header p {
-                  font-size: 9px !important;
-                  line-height: 1.2 !important;
-                }
-
-                .print-logo-box {
-                  width: 38mm !important;
-                  height: 16mm !important;
-                  border-radius: 3mm !important;
-                }
-
-                .print-logo-box img {
-                  max-width: 34mm !important;
-                  max-height: 12mm !important;
-                }
-
-                .print-current-week {
-                  margin-bottom: 4mm !important;
-                  padding: 3.5mm !important;
-                  border-radius: 4mm !important;
-                  break-inside: avoid !important;
-                }
-
-                .print-current-week h3 {
-                  font-size: 12px !important;
-                  margin-bottom: 2mm !important;
-                }
-
-                .print-grid-compact {
-                  display: grid !important;
-                  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-                  gap: 2mm 4mm !important;
-                }
-
-                .print-kpis {
-                  display: grid !important;
-                  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-                  gap: 2mm 5mm !important;
-                  margin-bottom: 3mm !important;
-                  break-inside: avoid !important;
-                }
-
-                .print-weekly-table {
-                  width: 100% !important;
-                  table-layout: fixed !important;
-                  border-collapse: collapse !important;
-                  font-size: 7.3px !important;
-                  line-height: 1.12 !important;
-                  margin-top: 2mm !important;
-                  page-break-inside: auto !important;
-                }
-
-                .print-weekly-table th,
-                .print-weekly-table td {
-                  padding: 1.5mm 1mm !important;
-                  border: 1px solid #cbd5e1 !important;
-                  white-space: normal !important;
-                  overflow-wrap: anywhere !important;
-                  word-break: normal !important;
-                  vertical-align: middle !important;
-                }
-
-                .print-weekly-table th {
-                  background: #eef2f7 !important;
-                  color: #334155 !important;
-                  font-weight: 700 !important;
-                }
-
-                .print-weekly-table tr {
-                  break-inside: avoid !important;
-                  page-break-inside: avoid !important;
-                }
-
-                .print-signatures {
-                  margin-top: 10mm !important;
-                  display: grid !important;
-                  grid-template-columns: 1fr 1fr !important;
-                  gap: 16mm !important;
-                  break-inside: avoid !important;
-                }
-
-                .print-note {
-                  margin-top: 4mm !important;
-                  padding: 3mm !important;
-                  break-inside: avoid !important;
-                }
-
-                .print-footer {
-                  margin-top: 5mm !important;
-                  padding-top: 2mm !important;
-                  font-size: 7px !important;
-                  break-inside: avoid !important;
-                }
-              }
-            `}</style>
-            <div className="print-toolbar flex flex-wrap items-center gap-3 border-b bg-gray-50 p-4">
+          <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white">
+            <div className="flex flex-wrap items-center gap-3 border-b bg-gray-50 p-4 print:hidden">
               <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                 Prestadora
                 <select
@@ -2525,149 +2446,39 @@ export default function AcompanhamentoBancario() {
                   <option value="permupay">PermuPay</option>
                 </select>
               </label>
-              <button className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700" onClick={handleImprimir}>
+
+              <button
+                className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                onClick={handleImprimir}
+              >
                 Imprimir / Salvar PDF
               </button>
+
               <button
                 className="rounded border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-100"
                 onClick={() => exportarCSV(imprimirOpen, prestadoraRelatorio)}
               >
                 Exportar XLS personalizado
               </button>
-              <span className="text-xs text-slate-500">
+
+              <span className="min-w-0 flex-1 break-words text-xs text-slate-500">
                 Arquivo: {nomeArquivoRelatorio(imprimirOpen, prestadoraRelatorio, "pdf")}
               </span>
-              <button className="rounded border px-4 py-2 text-sm" onClick={() => setImprimirOpen(null)}>Fechar</button>
+
+              <button
+                className="rounded border px-4 py-2 text-sm"
+                onClick={() => setImprimirOpen(null)}
+              >
+                Fechar
+              </button>
             </div>
 
-            <div ref={printRef} className="print-document mx-auto w-full max-w-7xl p-6 text-sm" style={{ fontFamily: "Arial, sans-serif" }}>
-              <div className="print-main-header mb-6 rounded-xl border-b-4 p-5 text-white" style={{ backgroundColor: prestadoraMeta(prestadoraRelatorio).corPrimaria, borderColor: prestadoraMeta(prestadoraRelatorio).corPrimaria }}>
-                <div className="flex items-center gap-4">
-                  <div className="print-logo-box flex h-16 w-40 shrink-0 items-center justify-center rounded-xl border-2 border-white/70 bg-white p-2 shadow-sm">
-                    {prestadoraMeta(prestadoraRelatorio).logoUrl ? (
-                      <img
-                        src={prestadoraMeta(prestadoraRelatorio).logoUrl}
-                        alt={prestadoraMeta(prestadoraRelatorio).logoAlt}
-                        className="max-h-12 max-w-[140px] object-contain"
-                      />
-                    ) : (
-                      <span className="text-lg font-extrabold tracking-widest" style={{ color: prestadoraMeta(prestadoraRelatorio).corPrimaria }}>
-                        {prestadoraMeta(prestadoraRelatorio).marca}
-                      </span>
-                    )}
-                  </div>
-                  <div>
-                    <h1 className="text-2xl font-bold">Relatório de Acompanhamento Bancário</h1>
-                    <p className="mt-1 text-sm opacity-90">{prestadoraMeta(prestadoraRelatorio).nome} — {prestadoraMeta(prestadoraRelatorio).slogan}</p>
-                    <h2 className="mt-2 text-xl font-semibold">{imprimirOpen.nome_empresa} — {imprimirOpen.banco_observado}</h2>
-                    <p className="mt-1 text-sm opacity-90">CNPJ: {imprimirOpen.cnpj || "-"} | Gerado em: {new Date().toLocaleDateString("pt-BR")}</p>
-                  </div>
-                </div>
-              </div>
-
-              {(() => {
-                const semanaAtual = getSemanaAtual(imprimirOpen);
-                const evolucao = calcularEvolucaoAcompanhamento(imprimirOpen);
-                const saldoAtual = Number(semanaAtual?.saldo_semanal || 0);
-                return (
-                  <div className="print-current-week mb-5 rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
-                    <h3 className="mb-3 text-base font-bold text-amber-800">Semana atual em evidência</h3>
-                    <div className="print-grid-compact grid grid-cols-4 gap-3 text-xs">
-                      <div><strong>Semana:</strong><br />{semanaAtual ? `Semana ${semanaAtual.numero_semana}` : "-"}</div>
-                      <div><strong>Período:</strong><br />{formatDateBR(semanaAtual?.data_referencia_inicio)} a {formatDateBR(semanaAtual?.data_referencia_fim)}</div>
-                      <div><strong>Entradas:</strong><br />{moneyBR(totalEntradasSemana(semanaAtual))}</div>
-                      <div><strong>Saldo:</strong><br /><span className={saldoAtual < 0 ? "text-red-600 font-bold" : "text-emerald-700 font-bold"}>{moneyBR(saldoAtual)}</span></div>
-                      <div><strong>Rating Bacen:</strong><br />{semanaAtual?.rating_bacen || imprimirOpen.rating_bacen_atual || "-"}</div>
-                      <div><strong>Rating Interno:</strong><br />{semanaAtual?.rating_interno || imprimirOpen.rating_interno_atual || "-"}</div>
-                      <div><strong>Status:</strong><br />{labelStatus(semanaAtual?.status_semana || semanaAtual?.status || imprimirOpen.status_semana)}</div>
-                      <div><strong>Evolução:</strong><br />{evolucao.leitura}</div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div className="print-kpis mb-4 grid grid-cols-3 gap-4">
-                <div><strong>Rating Bacen:</strong> {imprimirOpen.rating_bacen_atual || imprimirOpen.rating_bacen_inicial || "-"}</div>
-                <div><strong>Rating Interno Inicial:</strong> {imprimirOpen.rating_interno_inicial || "-"}</div>
-                <div><strong>Rating Interno Atual:</strong> {imprimirOpen.rating_interno_atual || "-"}</div>
-              </div>
-
-              <div className="print-kpis mb-4 grid grid-cols-3 gap-4">
-                <div><strong>Faturamento anual:</strong> {moneyBR(imprimirOpen.faturamento_anual)}</div>
-                <div><strong>Média mensal:</strong> {moneyBR(imprimirOpen.media_mensal)}</div>
-                <div><strong>Margem ±30%:</strong> {moneyBR(imprimirOpen.margem_seguranca_30)}</div>
-              </div>
-
-              <div className="print-kpis mb-4 grid grid-cols-3 gap-4">
-                <div><strong>Início do acompanhamento:</strong> {formatDateBR(imprimirOpen.data_inicio)}</div>
-                <div><strong>Fim previsto:</strong> {formatDateBR(imprimirOpen.data_fim_prevista)}</div>
-                <div><strong>Status:</strong> {labelStatus(imprimirOpen.status)}</div>
-              </div>
-
-              <h3 className="mb-2 mt-6 text-base font-bold">Histórico Semanal</h3>
-              <table className="print-weekly-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "9px", tableLayout: "fixed" }}>
-                <thead>
-                  <tr style={{ background: "#f3f4f6" }}>
-                    {["Semana","Período","Máquina","PIX","Boleto","TED","Dinheiro","Outras","Total Entradas","Saídas","Saldo Semanal","Rating B.","Rating I.","SCR","CND","Status"].map((h) => (
-                      <th key={h} style={{ border: "1px solid #d1d5db", padding: "4px 4px", textAlign: "left", wordBreak: "normal", overflowWrap: "anywhere" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {Array.isArray(imprimirOpen.atualizacoes) && imprimirOpen.atualizacoes.length > 0 ? (
-                    imprimirOpen.atualizacoes.map((item: any) => (
-                      <tr key={item.id}>
-                        {[
-                          item.numero_semana,
-                          `${formatDateBR(item.data_referencia_inicio)} a ${formatDateBR(item.data_referencia_fim)}`,
-                          moneyBR(item.entrada_maquininha),
-                          moneyBR(item.entrada_pix),
-                          moneyBR(item.entrada_boleto),
-                          moneyBR(item.entrada_ted),
-                          moneyBR(item.entrada_dinheiro),
-                          moneyBR(item.outras_entradas),
-                          moneyBR(item.total_entradas),
-                          moneyBR(item.total_saidas),
-                          moneyBR(item.saldo_semanal),
-                          item.rating_bacen || "-",
-                          item.rating_interno || "-",
-                          item.scr_status || item.restricao_scr || "-",
-                          item.cnd_status || item.cnd_regular || "-",
-                          item.status_semana || item.status || "-",
-                        ].map((cell, i) => (
-                          <td key={i} style={{ border: "1px solid #d1d5db", padding: "4px 4px", wordBreak: "normal", overflowWrap: "anywhere" }}>{cell}</td>
-                        ))}
-                      </tr>
-                    ))
-                  ) : (
-                    <tr><td colSpan={16} style={{ padding: "8px" }}>Nenhuma atualização registrada.</td></tr>
-                  )}
-                </tbody>
-              </table>
-
-              <div className="print-note" style={{ marginTop: "24px", padding: "12px", border: "1px solid #bfdbfe", background: "#eff6ff", borderRadius: "6px" }}>
-                <strong>Recomendação operacional:</strong> {calcularRecomendacao(imprimirOpen)}
-              </div>
-
-              <div className="print-note" style={{ marginTop: "26px", padding: "12px", border: "1px solid #d1d5db", background: "#f9fafb", borderRadius: "8px" }}>
-                <strong>Declaração de prestação de serviço:</strong> Este relatório registra o acompanhamento bancário semanal prestado pela {prestadoraMeta(prestadoraRelatorio).nome} à empresa {imprimirOpen.nome_empresa || "-"}, com base nos dados fornecidos e atualizados no sistema.
-              </div>
-
-              <div className="print-signatures mt-12 grid grid-cols-2 gap-10">
-                <div className="border-t border-gray-800 pt-2 text-center text-xs">
-                  {imprimirOpen.responsavel_nome || "Responsável pelo acompanhamento"}<br />
-                  Responsável {prestadoraMeta(prestadoraRelatorio).nome}
-                </div>
-                <div className="border-t border-gray-800 pt-2 text-center text-xs">
-                  Responsável legal da empresa contratante<br />
-                  {imprimirOpen.nome_empresa || "-"} — CNPJ {imprimirOpen.cnpj || "-"}
-                </div>
-              </div>
-
-              <div className="print-footer" style={{ marginTop: "32px", borderTop: "1px solid #e5e7eb", paddingTop: "8px", color: "#9ca3af", fontSize: "10px" }}>
-                {prestadoraMeta(prestadoraRelatorio).nome} — Documento gerado em {new Date().toLocaleDateString("pt-BR")} às {new Date().toLocaleTimeString("pt-BR")}
-              </div>
-            </div>
+            <iframe
+              ref={printFrameRef}
+              title="Preview do relatório técnico de acompanhamento financeiro semanal"
+              srcDoc={gerarHtmlRelatorioA4(imprimirOpen, prestadoraRelatorio)}
+              className="h-full w-full flex-1 border-0 bg-white"
+            />
           </div>
         )}
       </div>
