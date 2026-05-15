@@ -39,6 +39,7 @@ type AtualizacaoForm = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Formata data ISO para dd/mm/aaaa usando UTC para não mudar o dia */
 function formatDateBR(value?: string | null): string {
   if (!value) return "-";
   try {
@@ -52,12 +53,14 @@ function formatDateBR(value?: string | null): string {
   }
 }
 
+/** Formata número como moeda BRL */
 function moneyBR(value?: unknown): string {
   const n = Number(value ?? 0);
   if (isNaN(n)) return "R$ 0,00";
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+/** Normaliza string para comparação de permissão */
 function normalizePermValue(value?: string | null): string {
   return String(value || "")
     .trim()
@@ -68,6 +71,7 @@ function normalizePermValue(value?: string | null): string {
     .replace(/-/g, "_");
 }
 
+/** Verifica se o usuário pode acessar o módulo */
 function podeAcessarAcompanhamentoBancario(user: any): boolean {
   if (!user) return false;
   if (user?.acesso_acompanhamento_bancario === true) return true;
@@ -87,32 +91,40 @@ function podeAcessarAcompanhamentoBancario(user: any): boolean {
   );
 }
 
+/** Retorna true se hoje for quarta-feira */
 function hojeEhQuarta(): boolean {
   return new Date().getDay() === 3;
 }
 
+/** Data de hoje em ISO yyyy-mm-dd */
 function hojeISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * Retorna a próxima quarta-feira a partir de uma data base (ISO string ou Date).
+ * Se a base já for quarta, avança para a próxima quarta.
+ */
 function proximaQuartaFeira(base: string | Date): string {
   const d =
     typeof base === "string"
       ? new Date(base + (base.length === 10 ? "T00:00:00Z" : ""))
       : new Date(base);
   d.setUTCHours(12, 0, 0, 0);
-  const dia = d.getUTCDay();
+  const dia = d.getUTCDay(); // 0=dom, 3=qua
   const diff = ((3 - dia + 7) % 7) || 7;
   d.setUTCDate(d.getUTCDate() + diff);
   return d.toISOString().slice(0, 10);
 }
 
+/** Adiciona N dias a uma data ISO */
 function addDays(iso: string, n: number): string {
   const d = new Date(iso + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
 
+/** Calcula os campos automáticos da semana com base no acompanhamento */
 function calcularCamposSemana(row: Acompanhamento): Pick<
   AtualizacaoForm,
   | "numero_semana"
@@ -156,6 +168,7 @@ function calcularCamposSemana(row: Acompanhamento): Pick<
   };
 }
 
+/** Calcula o status da semana */
 function calcularStatusSemana(
   form: AtualizacaoForm,
   saldoSemanal: number
@@ -171,6 +184,7 @@ function calcularStatusSemana(
   return "neutra";
 }
 
+/** Recomendação baseada no histórico */
 function calcularRecomendacao(row: Acompanhamento): string {
   if (row.recomendacao) return row.recomendacao;
   if (row.status_pendente || row.atualizacao_pendente)
@@ -184,6 +198,7 @@ function calcularRecomendacao(row: Acompanhamento): string {
   return "Continuar acompanhamento.";
 }
 
+/** Monta URL do WhatsApp com mensagem completa incluindo semana e período */
 function whatsappUrl(row: Acompanhamento): string {
   if (row.whatsapp_lembrete_url) return row.whatsapp_lembrete_url;
   const rawPhone = String(
@@ -212,6 +227,7 @@ function whatsappUrl(row: Acompanhamento): string {
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 
+/** Badge de status */
 function statusBadge(status?: string | null): string {
   const value = String(status || "pendente").toLowerCase();
   const classes: Record<string, string> = {
@@ -226,6 +242,7 @@ function statusBadge(status?: string | null): string {
   return classes[value] || "bg-gray-50 text-gray-700 border-gray-200";
 }
 
+/** Label legível de status */
 function labelStatus(status?: string | null): string {
   const value = String(status || "").trim();
   if (!value) return "Pendente";
@@ -234,6 +251,7 @@ function labelStatus(status?: string | null): string {
     .replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
+/** Normaliza rows da API */
 function normalizeRows(payload: any): Acompanhamento[] {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.data)) return payload.data;
@@ -242,6 +260,7 @@ function normalizeRows(payload: any): Acompanhamento[] {
   return [];
 }
 
+/** Obtém token de autenticação */
 function getToken(): string {
   try {
     return (
@@ -256,6 +275,7 @@ function getToken(): string {
   }
 }
 
+/** Headers de autenticação */
 function authHeaders(extra?: HeadersInit): HeadersInit {
   const token = getToken();
   return {
@@ -265,6 +285,7 @@ function authHeaders(extra?: HeadersInit): HeadersInit {
   };
 }
 
+/** Exporta acompanhamento como CSV */
 function exportarCSV(row: Acompanhamento) {
   const atualizacoes: any[] = Array.isArray(row.atualizacoes)
     ? row.atualizacoes
@@ -289,6 +310,12 @@ function exportarCSV(row: Acompanhamento) {
     atualizacoes.length > 0
       ? atualizacoes[atualizacoes.length - 1]?.saldo_semanal
       : row.saldo_semanal;
+
+  const statusUltimaSemana =
+    atualizacoes.length > 0
+      ? atualizacoes[atualizacoes.length - 1]?.status_semana ||
+        atualizacoes[atualizacoes.length - 1]?.status
+      : row.status_semana || row.status;
 
   const statusClass = (value: unknown) => {
     const normalized = String(value || "").toLowerCase();
@@ -372,6 +399,7 @@ function exportarCSV(row: Acompanhamento) {
     <h1>Acompanhamento Bancário — Destrava Crédito</h1>
     <p>${safe(row.nome_empresa)} — ${safe(row.banco_observado)} | Gerado em ${safe(new Date().toLocaleDateString("pt-BR"))}</p>
   </div>
+
   <div class="section">
     <div class="section-title">Resumo executivo</div>
     <div class="grid">
@@ -385,6 +413,7 @@ function exportarCSV(row: Acompanhamento) {
       <div class="card"><div class="label">Saldo última semana</div><div class="value ${Number(saldoUltimaSemana || 0) < 0 ? "negative" : "positive"}">${safe(moneyBR(saldoUltimaSemana))}</div></div>
     </div>
   </div>
+
   <div class="section">
     <div class="section-title">Indicadores financeiros</div>
     <div class="grid">
@@ -394,11 +423,13 @@ function exportarCSV(row: Acompanhamento) {
       <div class="card"><div class="label">Valor pretendido</div><div class="value">${safe(moneyBR(row.valor_credito_pretendido))}</div></div>
     </div>
   </div>
+
   <div class="section note">
     <strong>Objetivo do crédito:</strong> ${safe(row.objetivo_credito || "-")}<br />
     <strong>Linha pretendida:</strong> ${safe(row.linha_credito_pretendida || "-")}<br />
     <strong>Recomendação operacional:</strong> ${safe(calcularRecomendacao(row))}
   </div>
+
   <div class="section">
     <div class="section-title">Histórico semanal completo</div>
     <table>
@@ -411,14 +442,19 @@ function exportarCSV(row: Acompanhamento) {
         </tr>
       </thead>
       <tbody>
-        ${semanaRows || `<tr><td colspan="23">Nenhuma atualização semanal registrada.</td></tr>`}
+        ${
+          semanaRows ||
+          `<tr><td colspan="23">Nenhuma atualização semanal registrada.</td></tr>`
+        }
       </tbody>
     </table>
   </div>
 </body>
 </html>`;
 
-  const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
+  const blob = new Blob([html], {
+    type: "application/vnd.ms-excel;charset=utf-8",
+  });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -431,34 +467,96 @@ function exportarCSV(row: Acompanhamento) {
 
 // ─── Bancos sugeridos ─────────────────────────────────────────────────────────
 const BANCOS_SUGERIDOS = [
-  "SICOOB", "Caixa", "Banco do Brasil", "Bradesco", "Itaú",
-  "Santander", "Sicredi", "Cresol", "Inter", "Cora", "Stone", "Outro",
+  "SICOOB",
+  "Caixa",
+  "Banco do Brasil",
+  "Bradesco",
+  "Itaú",
+  "Santander",
+  "Sicredi",
+  "Cresol",
+  "Inter",
+  "Cora",
+  "Stone",
+  "Outro",
 ];
 
 // ─── Campos do formulário Novo Acompanhamento ─────────────────────────────────
 const NOVO_FIELDS = [
+  // Dados da empresa
   { key: "nome_empresa", label: "Empresa", required: true, group: "empresa" },
   { key: "cnpj", label: "CNPJ", group: "empresa" },
   { key: "telefone_cliente", label: "Telefone", group: "empresa" },
   { key: "whatsapp_cliente", label: "WhatsApp", group: "empresa" },
   { key: "email_cliente", label: "E-mail", group: "empresa" },
-  { key: "banco_observado", label: "Banco observado", required: true, group: "banco", type: "banco" },
+  // Dados bancários
+  {
+    key: "banco_observado",
+    label: "Banco observado",
+    required: true,
+    group: "banco",
+    type: "banco",
+  },
   { key: "agencia", label: "Agência", group: "banco" },
   { key: "conta", label: "Conta", group: "banco" },
   { key: "gerente_banco", label: "Gerente do banco", group: "banco" },
   { key: "contato_banco", label: "Contato do banco", group: "banco" },
-  { key: "data_abertura_conta", label: "Data de abertura/relacionamento", type: "date", group: "banco" },
-  { key: "data_inicio", label: "Início do acompanhamento", type: "date", group: "banco", required: true },
+  {
+    key: "data_abertura_conta",
+    label: "Data de abertura/relacionamento",
+    type: "date",
+    group: "banco",
+  },
+  {
+    key: "data_inicio",
+    label: "Início do acompanhamento",
+    type: "date",
+    group: "banco",
+    required: true,
+  },
+  // Objetivo
   { key: "objetivo_credito", label: "Objetivo do crédito", group: "objetivo" },
-  { key: "valor_credito_pretendido", label: "Valor pretendido", type: "number", group: "objetivo" },
+  {
+    key: "valor_credito_pretendido",
+    label: "Valor pretendido",
+    type: "number",
+    group: "objetivo",
+  },
   { key: "linha_credito_pretendida", label: "Linha pretendida", group: "objetivo" },
+  // Rating/faturamento
   { key: "rating_bacen_inicial", label: "Rating Bacen inicial", group: "rating" },
-  { key: "rating_interno_inicial", label: "Rating interno inicial", group: "rating" },
-  { key: "faturamento_anual", label: "Faturamento anual", type: "number", group: "rating" },
-  { key: "media_mensal", label: "Média mensal", type: "number", group: "rating" },
-  { key: "margem_seguranca_30", label: "Margem de segurança 30%", type: "number", group: "rating" },
-  { key: "observacoes_iniciais", label: "Observações iniciais", textarea: true, group: "gestao" },
+  {
+    key: "rating_interno_inicial",
+    label: "Rating interno inicial",
+    group: "rating",
+  },
+  {
+    key: "faturamento_anual",
+    label: "Faturamento anual",
+    type: "number",
+    group: "rating",
+  },
+  {
+    key: "media_mensal",
+    label: "Média mensal",
+    type: "number",
+    group: "rating",
+  },
+  {
+    key: "margem_seguranca_30",
+    label: "Margem de segurança 30%",
+    type: "number",
+    group: "rating",
+  },
+  // Gestão
+  {
+    key: "observacoes_iniciais",
+    label: "Observações iniciais",
+    textarea: true,
+    group: "gestao",
+  },
 ];
+
 
 // ─── Estado inicial do formulário de atualização ──────────────────────────────
 function updFormInicial(): AtualizacaoForm {
@@ -511,7 +609,9 @@ export default function AcompanhamentoBancario() {
   const [pendentes, setPendentes] = useState(false);
 
   const [novoOpen, setNovoOpen] = useState(false);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
   const [updOpen, setUpdOpen] = useState<Acompanhamento | null>(null);
+  const [modoEdicaoSemana, setModoEdicaoSemana] = useState(false);
   const [detalhe, setDetalhe] = useState<Acompanhamento | null>(null);
   const [imprimirOpen, setImprimirOpen] = useState<Acompanhamento | null>(null);
 
@@ -551,7 +651,10 @@ export default function AcompanhamentoBancario() {
         `/api/acompanhamentos-bancarios?${q.toString()}`,
         { headers: authHeaders() }
       );
-      if (!response.ok) { setRows([]); return; }
+      if (!response.ok) {
+        setRows([]);
+        return;
+      }
       const payload = await response.json();
       setRows(normalizeRows(payload));
     } catch (error) {
@@ -582,8 +685,11 @@ export default function AcompanhamentoBancario() {
   // ─── Resumo ──────────────────────────────────────────────────────────────────
   const resumo = useMemo(
     () => ({
-      acompanhamento: filtered.filter((r) => r.status === "em_acompanhamento").length,
-      pendentes: filtered.filter((r) => r.status_pendente || r.atualizacao_pendente).length,
+      acompanhamento: filtered.filter((r) => r.status === "em_acompanhamento")
+        .length,
+      pendentes: filtered.filter(
+        (r) => r.status_pendente || r.atualizacao_pendente
+      ).length,
       positivas: filtered.filter((r) => r.status_semana === "positiva").length,
       negativas: filtered.filter((r) => r.status_semana === "negativa").length,
       prorrogados: filtered.filter((r) => r.status === "prorrogado").length,
@@ -603,34 +709,124 @@ export default function AcompanhamentoBancario() {
         headers: authHeaders(),
       });
       if (resp.ok) rowComAtualizacoes = await resp.json();
-    } catch { /* usa row sem atualizações */ }
+    } catch {
+      // usa row sem atualizações
+    }
 
     const campos = calcularCamposSemana(rowComAtualizacoes);
+    setModoEdicaoSemana(false);
     setUpdOpen(rowComAtualizacoes);
     setUpd({ ...updFormInicial(), ...campos });
   };
 
-  // ─── Salvar novo acompanhamento ───────────────────────────────────────────────
+  // ─── Salvar / editar acompanhamento ──────────────────────────────────────────
+  const limparFormularioAcompanhamento = () => {
+    setEditandoId(null);
+    setNovo({ nome_empresa: "", banco_observado: "", data_inicio: hojeISO() });
+  };
+
   const salvarNovo = async () => {
     if (!novo.nome_empresa?.trim() || !novo.banco_observado?.trim()) {
       alert("Informe pelo menos empresa e banco observado.");
       return;
     }
+
     setSaving(true);
     try {
-      const response = await fetch("/api/acompanhamentos-bancarios", {
-        method: "POST",
+      const url = editandoId
+        ? `/api/acompanhamentos-bancarios/${editandoId}`
+        : "/api/acompanhamentos-bancarios";
+      const method = editandoId ? "PATCH" : "POST";
+
+      const response = await fetch(url, {
+        method,
         headers: authHeaders(),
         body: JSON.stringify(novo),
       });
+
       if (!response.ok) {
         const errorText = await response.text().catch(() => "");
         alert(`Erro ao salvar acompanhamento. ${errorText}`);
         return;
       }
+
+      const idEditado = editandoId;
       setNovoOpen(false);
-      setNovo({ nome_empresa: "", banco_observado: "", data_inicio: hojeISO() });
-      fetchData();
+      limparFormularioAcompanhamento();
+      await fetchData();
+
+      if (idEditado && detalhe?.id === idEditado) {
+        carregarDetalhe(idEditado);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const editarAcompanhamento = async (row: Acompanhamento) => {
+    let rowCompleto = row;
+    try {
+      const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}`, {
+        headers: authHeaders(),
+      });
+      if (resp.ok) rowCompleto = await resp.json();
+    } catch {
+      // mantém dados da linha caso o detalhe falhe
+    }
+
+    setEditandoId(String(rowCompleto.id));
+    setNovo({
+      empresa_id: rowCompleto.empresa_id || "",
+      lead_id: rowCompleto.lead_id || "",
+      nome_empresa: rowCompleto.nome_empresa || "",
+      cnpj: rowCompleto.cnpj || "",
+      telefone_cliente: rowCompleto.telefone_cliente || "",
+      whatsapp_cliente: rowCompleto.whatsapp_cliente || "",
+      email_cliente: rowCompleto.email_cliente || "",
+      banco_observado: rowCompleto.banco_observado || "",
+      agencia: rowCompleto.agencia || "",
+      conta: rowCompleto.conta || "",
+      gerente_banco: rowCompleto.gerente_banco || "",
+      contato_banco: rowCompleto.contato_banco || "",
+      data_abertura_conta: String(rowCompleto.data_abertura_conta || "").slice(0, 10),
+      data_inicio: String(rowCompleto.data_inicio || hojeISO()).slice(0, 10),
+      objetivo_credito: rowCompleto.objetivo_credito || "",
+      valor_credito_pretendido: rowCompleto.valor_credito_pretendido ?? "",
+      linha_credito_pretendida: rowCompleto.linha_credito_pretendida || "",
+      rating_bacen_inicial: rowCompleto.rating_bacen_inicial || "",
+      rating_interno_inicial: rowCompleto.rating_interno_inicial || "",
+      faturamento_anual: rowCompleto.faturamento_anual ?? "",
+      media_mensal: rowCompleto.media_mensal ?? "",
+      margem_seguranca_30: rowCompleto.margem_seguranca_30 ?? "",
+      observacoes_iniciais: rowCompleto.observacoes_iniciais || "",
+    });
+    setDetalhe(null);
+    setUpdOpen(null);
+    setModoEdicaoSemana(false);
+    setNovoOpen(true);
+  };
+
+  const excluirAcompanhamento = async (row: Acompanhamento) => {
+    const ok = confirm(
+      `Apagar definitivamente o acompanhamento de ${row.nome_empresa || "empresa"} no banco ${row.banco_observado || ""}?\n\nEssa ação remove também o histórico semanal vinculado a este acompanhamento.`
+    );
+    if (!ok) return;
+
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/acompanhamentos-bancarios/${row.id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        alert(`Erro ao apagar acompanhamento. ${errorText}`);
+        return;
+      }
+
+      if (detalhe?.id === row.id) setDetalhe(null);
+      await fetchData();
     } finally {
       setSaving(false);
     }
@@ -660,8 +856,79 @@ export default function AcompanhamentoBancario() {
         alert(`Erro ao salvar atualização. ${errorText}`);
         return;
       }
+      const idAtualizado = updOpen.id;
       setUpdOpen(null);
-      fetchData();
+      setModoEdicaoSemana(false);
+      await fetchData();
+      if (detalhe?.id === idAtualizado) {
+        carregarDetalhe(idAtualizado);
+      }
+
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const editarAtualizacaoSemanal = (row: Acompanhamento, item: any) => {
+    setModoEdicaoSemana(true);
+    setUpdOpen(row);
+    setUpd({
+      ...updFormInicial(),
+      numero_semana: Number(item.numero_semana || 1),
+      data_referencia_inicio: String(item.data_referencia_inicio || "").slice(0, 10),
+      data_referencia_fim: String(item.data_referencia_fim || "").slice(0, 10),
+      data_atualizacao: String(item.data_atualizacao || item.data_referencia_fim || "").slice(0, 10),
+      proxima_atualizacao_apos_salvar: proximaQuartaFeira(String(item.data_atualizacao || item.data_referencia_fim || hojeISO()).slice(0, 10)),
+      entrada_maquininha: Number(item.entrada_maquininha || 0),
+      entrada_pix: Number(item.entrada_pix || 0),
+      entrada_boleto: Number(item.entrada_boleto || 0),
+      entrada_ted: Number(item.entrada_ted || 0),
+      entrada_dinheiro: Number(item.entrada_dinheiro || 0),
+      outras_entradas: Number(item.outras_entradas || 0),
+      total_saidas: Number(item.total_saidas || 0),
+      saldo_medio: Number(item.saldo_medio || 0),
+      saldo_final: Number(item.saldo_final || 0),
+      quantidade_transacoes: Number(item.quantidade_transacoes || 0),
+      rating_bacen: item.rating_bacen || "",
+      rating_interno: item.rating_interno || "",
+      scr_status: item.scr_status || item.restricao_scr || "",
+      cenprot_status: item.cenprot_status || item.restricao_cenprot || "",
+      serasa_status: item.serasa_status || item.restricao_serasa || "",
+      cnd_status: item.cnd_status || item.cnd_regular || "",
+      pld_aml_status: item.pld_aml_status || item.pld_aml || "",
+      coaf_status: item.coaf_status || item.operacao_suspeita_coaf || "",
+      possui_restricao: Boolean(item.possui_restricao),
+      restricao_nova: Boolean(item.restricao_nova),
+      devolucao_ou_estorno: Boolean(item.devolucao_ou_estorno),
+      ocorrencia_negativa: Boolean(item.ocorrencia_negativa),
+      analise_semana: item.analise_semana || "",
+      orientacao_cliente: item.orientacao_cliente || "",
+      proxima_acao: item.proxima_acao || "",
+    });
+  };
+
+  const excluirAtualizacaoSemanal = async (row: Acompanhamento, item: any) => {
+    const numeroSemana = Number(item.numero_semana || 0);
+    if (!numeroSemana) return;
+    const ok = confirm(`Apagar a Semana ${numeroSemana} deste acompanhamento?`);
+    if (!ok) return;
+
+    setSaving(true);
+    try {
+      const response = await fetch(
+        `/api/acompanhamentos-bancarios/${row.id}/atualizacoes/${numeroSemana}`,
+        {
+          method: "DELETE",
+          headers: authHeaders(),
+        }
+      );
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        alert(`Erro ao apagar semana. ${errorText}`);
+        return;
+      }
+      await fetchData();
+      await carregarDetalhe(row.id);
     } finally {
       setSaving(false);
     }
@@ -672,7 +939,10 @@ export default function AcompanhamentoBancario() {
     const response = await fetch(`/api/acompanhamentos-bancarios/${id}`, {
       headers: authHeaders(),
     });
-    if (!response.ok) { alert("Não foi possível carregar os detalhes."); return; }
+    if (!response.ok) {
+      alert("Não foi possível carregar os detalhes.");
+      return;
+    }
     setDetalhe(await response.json());
   };
 
@@ -689,7 +959,8 @@ export default function AcompanhamentoBancario() {
 
   // ─── Encerrar ─────────────────────────────────────────────────────────────────
   const encerrar = async (id: string) => {
-    const observacoes_finais = prompt("Observações finais do encerramento:") || "";
+    const observacoes_finais =
+      prompt("Observações finais do encerramento:") || "";
     await fetch(`/api/acompanhamentos-bancarios/${id}/encerrar`, {
       method: "POST",
       headers: authHeaders(),
@@ -700,6 +971,7 @@ export default function AcompanhamentoBancario() {
 
   // ─── Adicionar outro banco ────────────────────────────────────────────────────
   const adicionarOutroBanco = (row: Acompanhamento) => {
+    setEditandoId(null);
     setNovo({
       nome_empresa: row.nome_empresa || "",
       cnpj: row.cnpj || "",
@@ -729,11 +1001,15 @@ export default function AcompanhamentoBancario() {
         headers: authHeaders(),
       });
       if (resp.ok) rowCompleto = await resp.json();
-    } catch { /* usa row sem atualizações */ }
+    } catch {
+      // usa row sem atualizações
+    }
     setImprimirOpen(rowCompleto);
   };
 
-  const handleImprimir = () => { window.print(); };
+  const handleImprimir = () => {
+    window.print();
+  };
 
   const renderActionButtons = (row: Acompanhamento) => {
     const whats = whatsappUrl(row);
@@ -743,6 +1019,11 @@ export default function AcompanhamentoBancario() {
           className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50"
           onClick={() => carregarDetalhe(row.id)}
         >Detalhes</button>
+        <button
+          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+          onClick={() => editarAcompanhamento(row)}
+          title="Editar dados cadastrais, banco, rating e parâmetros do acompanhamento"
+        >Editar</button>
         <button
           className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
           onClick={() => abrirAtualizacao(row)}
@@ -783,6 +1064,11 @@ export default function AcompanhamentoBancario() {
           className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100"
           onClick={() => encerrar(row.id)}
         >Encerrar</button>
+        <button
+          className="rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50"
+          onClick={() => excluirAcompanhamento(row)}
+          title="Apagar acompanhamento e histórico semanal vinculado"
+        >Apagar</button>
       </div>
     );
   };
@@ -793,7 +1079,9 @@ export default function AcompanhamentoBancario() {
       <ColaboradorLayout title="Acompanhamento Bancário">
         <div className="p-6">
           <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-            <h2 className="text-lg font-semibold text-red-700">Acesso restrito</h2>
+            <h2 className="text-lg font-semibold text-red-700">
+              Acesso restrito
+            </h2>
             <p className="mt-1 text-sm text-red-600">
               Este módulo é exclusivo para Gestor de Crédito ou superior.
             </p>
@@ -820,10 +1108,13 @@ export default function AcompanhamentoBancario() {
           <button
             className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
             onClick={() => {
+              setEditandoId(null);
               setNovo({ nome_empresa: "", banco_observado: "", data_inicio: hojeISO() });
               setNovoOpen(true);
             }}
-          >Novo Acompanhamento</button>
+          >
+            Novo Acompanhamento
+          </button>
         </div>
 
         {/* Alertas */}
@@ -850,7 +1141,10 @@ export default function AcompanhamentoBancario() {
               ["Prorrogados", resumo.prorrogados],
             ] as [string, number][]
           ).map(([label, value]) => (
-            <div key={label} className="rounded-lg border border-gray-200 bg-white p-3">
+            <div
+              key={label}
+              className="rounded-lg border border-gray-200 bg-white p-3"
+            >
               <div className="text-xs text-gray-500">{label}</div>
               <div className="mt-1 text-2xl font-bold">{value}</div>
             </div>
@@ -894,26 +1188,36 @@ export default function AcompanhamentoBancario() {
             <button
               className="rounded border border-gray-300 px-3 py-2 text-sm"
               onClick={fetchData}
-            >Aplicar filtros</button>
+            >
+              Aplicar filtros
+            </button>
           </div>
         </div>
 
-        {/* Tabela */}
+        {/* Tabela / cards operacionais */}
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="border-b border-gray-100 px-4 py-3">
-            <h2 className="text-sm font-semibold text-gray-900">Acompanhamentos cadastrados</h2>
+            <h2 className="text-sm font-semibold text-gray-900">
+              Acompanhamentos cadastrados
+            </h2>
             <p className="mt-1 text-xs text-gray-500">
               As ações ficam abaixo de cada registro para manter a planilha alinhada e legível.
             </p>
           </div>
 
-          {/* Desktop */}
+          {/* Desktop/tablet largo */}
           <div className="hidden lg:block">
             <table className="w-full table-fixed text-sm">
               <colgroup>
-                <col className="w-[22%]" /><col className="w-[13%]" /><col className="w-[10%]" />
-                <col className="w-[8%]" /><col className="w-[12%]" /><col className="w-[12%]" />
-                <col className="w-[12%]" /><col className="w-[7%]" /><col className="w-[8%]" />
+                <col className="w-[22%]" />
+                <col className="w-[13%]" />
+                <col className="w-[10%]" />
+                <col className="w-[8%]" />
+                <col className="w-[12%]" />
+                <col className="w-[12%]" />
+                <col className="w-[12%]" />
+                <col className="w-[7%]" />
+                <col className="w-[8%]" />
               </colgroup>
               <thead>
                 <tr className="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
@@ -930,43 +1234,76 @@ export default function AcompanhamentoBancario() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td className="px-4 py-5 text-gray-500" colSpan={9}>Carregando acompanhamentos...</td></tr>
+                  <tr>
+                    <td className="px-4 py-5 text-gray-500" colSpan={9}>
+                      Carregando acompanhamentos...
+                    </td>
+                  </tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td className="px-4 py-5 text-gray-500" colSpan={9}>Nenhum acompanhamento cadastrado.</td></tr>
+                  <tr>
+                    <td className="px-4 py-5 text-gray-500" colSpan={9}>
+                      Nenhum acompanhamento cadastrado.
+                    </td>
+                  </tr>
                 ) : (
                   filtered.map((row) => {
                     const pendente = row.status_pendente || row.atualizacao_pendente;
                     const saldo = Number(row.saldo_semanal || row.saldo_ultima_semana || 0);
+
                     return (
                       <Fragment key={row.id}>
                         <tr className="border-t border-gray-100 align-middle hover:bg-gray-50/60">
                           <td className="px-4 py-4">
                             <div className="min-w-0">
-                              <div className="break-words font-semibold leading-snug text-gray-900">{row.nome_empresa || "-"}</div>
+                              <div className="break-words font-semibold leading-snug text-gray-900">
+                                {row.nome_empresa || "-"}
+                              </div>
                               {pendente && (
-                                <span className="mt-1 inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-orange-700">Pendente</span>
+                                <span className="mt-1 inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-orange-700">
+                                  Pendente
+                                </span>
                               )}
                             </div>
                           </td>
-                          <td className="px-3 py-4 text-gray-700"><span className="break-words">{row.cnpj || "-"}</span></td>
-                          <td className="px-3 py-4 font-medium text-gray-800">{row.banco_observado || "-"}</td>
-                          <td className="px-3 py-4 text-gray-700">{row.rating_interno_atual || row.rating_bacen_atual || "-"}</td>
-                          <td className="px-3 py-4 text-gray-700">{formatDateBR(row.ultima_atualizacao_em || row.ultimo_update_em)}</td>
-                          <td className="px-3 py-4 text-gray-700">{formatDateBR(row.proxima_atualizacao)}</td>
-                          <td className={`px-3 py-4 text-right font-semibold ${saldo < 0 ? "text-red-600" : saldo > 0 ? "text-green-700" : "text-gray-700"}`}>
+                          <td className="px-3 py-4 text-gray-700">
+                            <span className="break-words">{row.cnpj || "-"}</span>
+                          </td>
+                          <td className="px-3 py-4 font-medium text-gray-800">
+                            {row.banco_observado || "-"}
+                          </td>
+                          <td className="px-3 py-4 text-gray-700">
+                            {row.rating_interno_atual || row.rating_bacen_atual || "-"}
+                          </td>
+                          <td className="px-3 py-4 text-gray-700">
+                            {formatDateBR(row.ultima_atualizacao_em || row.ultimo_update_em)}
+                          </td>
+                          <td className="px-3 py-4 text-gray-700">
+                            {formatDateBR(row.proxima_atualizacao)}
+                          </td>
+                          <td
+                            className={`px-3 py-4 text-right font-semibold ${
+                              saldo < 0 ? "text-red-600" : saldo > 0 ? "text-green-700" : "text-gray-700"
+                            }`}
+                          >
                             {moneyBR(saldo)}
                           </td>
                           <td className="px-3 py-4">
-                            <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${statusBadge(row.status_semana)}`}>
+                            <span
+                              className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${statusBadge(row.status_semana)}`}
+                            >
                               {labelStatus(row.status_semana)}
                             </span>
                           </td>
-                          <td className="px-3 py-4 text-gray-700">{row.responsavel_nome || "-"}</td>
+                          <td className="px-3 py-4 text-gray-700">
+                            {row.responsavel_nome || "-"}
+                          </td>
                         </tr>
                         <tr className="border-t border-gray-100 bg-gray-50/70">
                           <td colSpan={9} className="px-4 py-3">
                             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Ações do acompanhamento</div>
+                              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                                Ações do acompanhamento
+                              </div>
                               {renderActionButtons(row)}
                             </div>
                           </td>
@@ -979,32 +1316,45 @@ export default function AcompanhamentoBancario() {
             </table>
           </div>
 
-          {/* Mobile */}
+          {/* Mobile/tablet estreito */}
           <div className="grid gap-3 p-3 lg:hidden">
             {loading ? (
-              <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500">Carregando acompanhamentos...</div>
+              <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500">
+                Carregando acompanhamentos...
+              </div>
             ) : filtered.length === 0 ? (
-              <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500">Nenhum acompanhamento cadastrado.</div>
+              <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500">
+                Nenhum acompanhamento cadastrado.
+              </div>
             ) : (
               filtered.map((row) => {
                 const pendente = row.status_pendente || row.atualizacao_pendente;
                 const saldo = Number(row.saldo_semanal || row.saldo_ultima_semana || 0);
+
                 return (
                   <article key={row.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h3 className="font-semibold leading-snug text-gray-900">{row.nome_empresa || "-"}</h3>
-                        <p className="mt-1 text-xs text-gray-500">{row.cnpj || "-"} · {row.banco_observado || "-"}</p>
+                        <h3 className="font-semibold leading-snug text-gray-900">
+                          {row.nome_empresa || "-"}
+                        </h3>
+                        <p className="mt-1 text-xs text-gray-500">
+                          {row.cnpj || "-"} · {row.banco_observado || "-"}
+                        </p>
                       </div>
-                      <span className={`shrink-0 rounded-full border px-2 py-1 text-xs font-medium ${statusBadge(row.status_semana)}`}>
+                      <span
+                        className={`shrink-0 rounded-full border px-2 py-1 text-xs font-medium ${statusBadge(row.status_semana)}`}
+                      >
                         {labelStatus(row.status_semana)}
                       </span>
                     </div>
+
                     {pendente && (
                       <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-medium text-orange-700">
                         Atualização pendente
                       </div>
                     )}
+
                     <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
                       <div>
                         <dt className="text-xs text-gray-500">Rating</dt>
@@ -1029,7 +1379,10 @@ export default function AcompanhamentoBancario() {
                         </dd>
                       </div>
                     </dl>
-                    <div className="mt-4 border-t border-gray-100 pt-3">{renderActionButtons(row)}</div>
+
+                    <div className="mt-4 border-t border-gray-100 pt-3">
+                      {renderActionButtons(row)}
+                    </div>
                   </article>
                 );
               })
@@ -1043,58 +1396,138 @@ export default function AcompanhamentoBancario() {
             <div className="mx-auto max-w-5xl rounded-lg bg-white p-5 shadow-xl">
               <div className="mb-4 flex items-start justify-between">
                 <div>
-                  <h3 className="text-lg font-bold">Novo Acompanhamento</h3>
+                  <h3 className="text-lg font-bold">{editandoId ? "Editar Acompanhamento" : "Novo Acompanhamento"}</h3>
                   <p className="text-sm text-gray-600">
-                    Cadastre a empresa, o banco observado e os dados iniciais para acompanhamento de 30 dias.
+                    {editandoId ? "Altere dados cadastrais, banco, rating e parâmetros do acompanhamento salvo." : "Cadastre a empresa, o banco observado e os dados iniciais para acompanhamento de 30 dias."}
                   </p>
                 </div>
-                <button className="rounded border px-3 py-1 text-sm" onClick={() => setNovoOpen(false)}>Fechar</button>
+                <button
+                  className="rounded border px-3 py-1 text-sm"
+                  onClick={() => setNovoOpen(false)}
+                >
+                  Fechar
+                </button>
               </div>
 
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">Dados da empresa</h4>
+              {/* Dados da empresa */}
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                Dados da empresa
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                {NOVO_FIELDS.filter((f) => f.group === "empresa").map((field) => (
-                  <FieldInput key={field.key} field={field} value={novo[field.key]} onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))} />
-                ))}
-              </div>
-
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">Dados bancários</h4>
-              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                {NOVO_FIELDS.filter((f) => f.group === "banco").map((field) =>
-                  field.type === "banco" ? (
-                    <BancoField key={field.key} label={field.label} required={field.required} value={novo[field.key] || ""} onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))} />
-                  ) : (
-                    <FieldInput key={field.key} field={field} value={novo[field.key]} onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))} />
+                {NOVO_FIELDS.filter((f) => f.group === "empresa").map(
+                  (field) => (
+                    <FieldInput
+                      key={field.key}
+                      field={field}
+                      value={novo[field.key]}
+                      onChange={(v) =>
+                        setNovo((p) => ({ ...p, [field.key]: v }))
+                      }
+                    />
                   )
                 )}
               </div>
 
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">Objetivo</h4>
+              {/* Dados bancários */}
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                Dados bancários
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                {NOVO_FIELDS.filter((f) => f.group === "objetivo").map((field) => (
-                  <FieldInput key={field.key} field={field} value={novo[field.key]} onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))} />
-                ))}
+                {NOVO_FIELDS.filter((f) => f.group === "banco").map((field) =>
+                  field.type === "banco" ? (
+                    <BancoField
+                      key={field.key}
+                      label={field.label}
+                      required={field.required}
+                      value={novo[field.key] || ""}
+                      onChange={(v) =>
+                        setNovo((p) => ({ ...p, [field.key]: v }))
+                      }
+                    />
+                  ) : (
+                    <FieldInput
+                      key={field.key}
+                      field={field}
+                      value={novo[field.key]}
+                      onChange={(v) =>
+                        setNovo((p) => ({ ...p, [field.key]: v }))
+                      }
+                    />
+                  )
+                )}
               </div>
 
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">Rating e faturamento</h4>
+              {/* Objetivo */}
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                Objetivo
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                {NOVO_FIELDS.filter((f) => f.group === "rating").map((field) => (
-                  <FieldInput key={field.key} field={field} value={novo[field.key]} onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))} />
-                ))}
+                {NOVO_FIELDS.filter((f) => f.group === "objetivo").map(
+                  (field) => (
+                    <FieldInput
+                      key={field.key}
+                      field={field}
+                      value={novo[field.key]}
+                      onChange={(v) =>
+                        setNovo((p) => ({ ...p, [field.key]: v }))
+                      }
+                    />
+                  )
+                )}
               </div>
 
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">Gestão</h4>
+              {/* Rating/faturamento */}
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                Rating e faturamento
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                {NOVO_FIELDS.filter((f) => f.group === "gestao").map((field) => (
-                  <FieldInput key={field.key} field={field} value={novo[field.key]} onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))} />
-                ))}
+                {NOVO_FIELDS.filter((f) => f.group === "rating").map(
+                  (field) => (
+                    <FieldInput
+                      key={field.key}
+                      field={field}
+                      value={novo[field.key]}
+                      onChange={(v) =>
+                        setNovo((p) => ({ ...p, [field.key]: v }))
+                      }
+                    />
+                  )
+                )}
+              </div>
+
+              {/* Gestão */}
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                Gestão
+              </h4>
+              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                {NOVO_FIELDS.filter((f) => f.group === "gestao").map(
+                  (field) => (
+                    <FieldInput
+                      key={field.key}
+                      field={field}
+                      value={novo[field.key]}
+                      onChange={(v) =>
+                        setNovo((p) => ({ ...p, [field.key]: v }))
+                      }
+                    />
+                  )
+                )}
               </div>
 
               <div className="mt-4 flex gap-2">
-                <button className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={saving} onClick={salvarNovo}>
-                  {saving ? "Salvando..." : "Salvar acompanhamento"}
+                <button
+                  className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  disabled={saving}
+                  onClick={salvarNovo}
+                >
+                  {saving ? "Salvando..." : editandoId ? "Salvar alterações" : "Salvar acompanhamento"}
                 </button>
-                <button className="rounded border px-4 py-2 text-sm" onClick={() => setNovoOpen(false)}>Cancelar</button>
+                <button
+                  className="rounded border px-4 py-2 text-sm"
+                  onClick={() => setNovoOpen(false)}
+                >
+                  Cancelar
+                </button>
               </div>
             </div>
           </div>
@@ -1106,7 +1539,7 @@ export default function AcompanhamentoBancario() {
             <div className="mx-auto max-w-5xl rounded-lg bg-white p-5 shadow-xl">
               <div className="mb-2 flex items-start justify-between">
                 <div>
-                  <h3 className="text-lg font-bold">Atualização Semanal</h3>
+                  <h3 className="text-lg font-bold">{modoEdicaoSemana ? "Editar Semana Salva" : "Atualização Semanal"}</h3>
                   <p className="text-sm font-medium text-gray-700">
                     {updOpen.nome_empresa} — {updOpen.banco_observado}
                   </p>
@@ -1115,41 +1548,80 @@ export default function AcompanhamentoBancario() {
                   <button
                     className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
                     onClick={() => adicionarOutroBanco(updOpen)}
-                  >+ Outro banco</button>
-                  <button className="rounded border px-3 py-1 text-sm" onClick={() => setUpdOpen(null)}>Fechar</button>
+                  >
+                    + Outro banco
+                  </button>
+                  <button
+                    className="rounded border px-3 py-1 text-sm"
+                    onClick={() => setUpdOpen(null)}
+                  >
+                    Fechar
+                  </button>
                 </div>
               </div>
 
-              {/* Banner de contexto */}
+              {/* Contexto da semana */}
               <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-800">
                 <strong>Semana {upd.numero_semana}</strong>
-                {" | "}Período: {formatDateBR(upd.data_referencia_inicio)} a {formatDateBR(upd.data_referencia_fim)}
-                {" | "}Atualização prevista: {formatDateBR(upd.data_atualizacao)}
-                {" | "}Próxima: {formatDateBR(upd.proxima_atualizacao_apos_salvar)}
+                {" | "}
+                Período: {formatDateBR(upd.data_referencia_inicio)} a{" "}
+                {formatDateBR(upd.data_referencia_fim)}
+                {" | "}
+                Atualização prevista: {formatDateBR(upd.data_atualizacao)}
+                {" | "}
+                Próxima atualização:{" "}
+                {formatDateBR(upd.proxima_atualizacao_apos_salvar)}
               </div>
 
-              {/* Bloco A — Período (readonly) */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">A — Período da semana</h4>
+              {/* Bloco A — Período da semana (readonly) */}
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                A — Período da semana
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <ReadonlyField label="Número da semana" value={String(upd.numero_semana)} />
-                <ReadonlyField label="Início do período" value={formatDateBR(upd.data_referencia_inicio)} />
-                <ReadonlyField label="Fim do período" value={formatDateBR(upd.data_referencia_fim)} />
-                <ReadonlyField label="Data da atualização" value={formatDateBR(upd.data_atualizacao)} />
-                <ReadonlyField label="Próxima atualização após salvar" value={formatDateBR(upd.proxima_atualizacao_apos_salvar)} />
+                <ReadonlyField
+                  label="Número da semana"
+                  value={String(upd.numero_semana)}
+                />
+                <ReadonlyField
+                  label="Início do período"
+                  value={formatDateBR(upd.data_referencia_inicio)}
+                />
+                <ReadonlyField
+                  label="Fim do período"
+                  value={formatDateBR(upd.data_referencia_fim)}
+                />
+                <ReadonlyField
+                  label="Data da atualização"
+                  value={formatDateBR(upd.data_atualizacao)}
+                />
+                <ReadonlyField
+                  label="Próxima atualização após salvar"
+                  value={formatDateBR(upd.proxima_atualizacao_apos_salvar)}
+                />
               </div>
 
               {/* Bloco B — Entradas */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">B — Entradas da semana</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                B — Entradas da semana
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                {(["entrada_maquininha", "entrada_pix", "entrada_boleto", "entrada_ted", "entrada_dinheiro", "outras_entradas"] as const).map((key) => (
-                  <CurrencyField
+                {(
+                  [
+                    "entrada_maquininha",
+                    "entrada_pix",
+                    "entrada_boleto",
+                    "entrada_ted",
+                    "entrada_dinheiro",
+                    "outras_entradas",
+                  ] as const
+                ).map((key) => (
+                  <NumberField
                     key={key}
                     label={labelEntrada(key)}
                     value={upd[key]}
                     onChange={(v) => setUpd((p) => ({ ...p, [key]: v }))}
                   />
                 ))}
-                {/* Total de entradas calculado automaticamente */}
                 <ReadonlyField
                   label="Total de entradas"
                   value={moneyBR(totalEntradas)}
@@ -1158,19 +1630,21 @@ export default function AcompanhamentoBancario() {
               </div>
 
               {/* Bloco C — Saídas e saldos */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">C — Saídas e saldos</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                C — Saídas e saldos
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <CurrencyField
+                <NumberField
                   label="Total de saídas"
                   value={upd.total_saidas}
                   onChange={(v) => setUpd((p) => ({ ...p, total_saidas: v }))}
                 />
-                <CurrencyField
+                <NumberField
                   label="Saldo médio"
                   value={upd.saldo_medio}
                   onChange={(v) => setUpd((p) => ({ ...p, saldo_medio: v }))}
                 />
-                <CurrencyField
+                <NumberField
                   label="Saldo final"
                   value={upd.saldo_final}
                   onChange={(v) => setUpd((p) => ({ ...p, saldo_final: v }))}
@@ -1178,33 +1652,69 @@ export default function AcompanhamentoBancario() {
                 <NumberField
                   label="Quantidade de transações"
                   value={upd.quantidade_transacoes}
-                  onChange={(v) => setUpd((p) => ({ ...p, quantidade_transacoes: v }))}
+                  onChange={(v) =>
+                    setUpd((p) => ({ ...p, quantidade_transacoes: v }))
+                  }
                   integer
                 />
-                {/* Saldo semanal calculado automaticamente (entradas - saídas) */}
                 <ReadonlyField
-                  label="Saldo semanal calculado (entradas − saídas)"
+                  label="Saldo semanal calculado"
                   value={moneyBR(saldoSemanal)}
                   highlight
-                  negative={saldoSemanal < 0}
                 />
               </div>
 
               {/* Bloco D — Rating e conformidade */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">D — Rating e conformidade</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                D — Rating e conformidade
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
-                {(["rating_bacen", "rating_interno", "scr_status", "cenprot_status", "serasa_status", "cnd_status", "pld_aml_status", "coaf_status"] as const).map((key) => (
-                  <TextFieldSimple
-                    key={key}
-                    label={labelRating(key)}
-                    value={upd[key]}
-                    onChange={(v) => setUpd((p) => ({ ...p, [key]: v }))}
-                  />
-                ))}
+                <TextFieldSimple
+                  label="Rating Bacen"
+                  value={upd.rating_bacen}
+                  onChange={(v) => setUpd((p) => ({ ...p, rating_bacen: v }))}
+                />
+                <TextFieldSimple
+                  label="Rating interno"
+                  value={upd.rating_interno}
+                  onChange={(v) => setUpd((p) => ({ ...p, rating_interno: v }))}
+                />
+                <TextFieldSimple
+                  label="SCR"
+                  value={upd.scr_status}
+                  onChange={(v) => setUpd((p) => ({ ...p, scr_status: v }))}
+                />
+                <TextFieldSimple
+                  label="Cenprot"
+                  value={upd.cenprot_status}
+                  onChange={(v) => setUpd((p) => ({ ...p, cenprot_status: v }))}
+                />
+                <TextFieldSimple
+                  label="Serasa"
+                  value={upd.serasa_status}
+                  onChange={(v) => setUpd((p) => ({ ...p, serasa_status: v }))}
+                />
+                <TextFieldSimple
+                  label="CND"
+                  value={upd.cnd_status}
+                  onChange={(v) => setUpd((p) => ({ ...p, cnd_status: v }))}
+                />
+                <TextFieldSimple
+                  label="PLD/AML"
+                  value={upd.pld_aml_status}
+                  onChange={(v) => setUpd((p) => ({ ...p, pld_aml_status: v }))}
+                />
+                <TextFieldSimple
+                  label="COAF"
+                  value={upd.coaf_status}
+                  onChange={(v) => setUpd((p) => ({ ...p, coaf_status: v }))}
+                />
               </div>
 
               {/* Bloco E — Ocorrências */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">E — Ocorrências</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                E — Ocorrências
+              </h4>
               <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
                 {(
                   [
@@ -1214,11 +1724,16 @@ export default function AcompanhamentoBancario() {
                     ["ocorrencia_negativa", "Ocorrência negativa?"],
                   ] as [keyof AtualizacaoForm, string][]
                 ).map(([key, label]) => (
-                  <label key={key} className="flex items-center gap-2 rounded border border-gray-200 p-2 text-sm">
+                  <label
+                    key={key}
+                    className="flex items-center gap-2 rounded border border-gray-200 p-2 text-sm"
+                  >
                     <input
                       type="checkbox"
                       checked={Boolean(upd[key])}
-                      onChange={(e) => setUpd((p) => ({ ...p, [key]: e.target.checked }))}
+                      onChange={(e) =>
+                        setUpd((p) => ({ ...p, [key]: e.target.checked }))
+                      }
                     />
                     {label}
                   </label>
@@ -1226,33 +1741,43 @@ export default function AcompanhamentoBancario() {
               </div>
 
               {/* Bloco F — Análise */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">F — Análise</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                F — Análise
+              </h4>
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <TextareaField label="Análise da semana" value={upd.analise_semana} onChange={(v) => setUpd((p) => ({ ...p, analise_semana: v }))} />
-                <TextareaField label="Orientação ao cliente" value={upd.orientacao_cliente} onChange={(v) => setUpd((p) => ({ ...p, orientacao_cliente: v }))} />
-                <TextareaField label="Próxima ação" value={upd.proxima_acao} onChange={(v) => setUpd((p) => ({ ...p, proxima_acao: v }))} />
+                <TextareaField
+                  label="Análise da semana"
+                  value={upd.analise_semana}
+                  onChange={(v) =>
+                    setUpd((p) => ({ ...p, analise_semana: v }))
+                  }
+                />
+                <TextareaField
+                  label="Orientação ao cliente"
+                  value={upd.orientacao_cliente}
+                  onChange={(v) =>
+                    setUpd((p) => ({ ...p, orientacao_cliente: v }))
+                  }
+                />
+                <TextareaField
+                  label="Próxima ação"
+                  value={upd.proxima_acao}
+                  onChange={(v) => setUpd((p) => ({ ...p, proxima_acao: v }))}
+                />
               </div>
 
-              {/* Painel de resumo calculado */}
-              <div className="mt-2 grid grid-cols-3 gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
-                <div className="text-center">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Total de entradas</div>
-                  <div className="mt-1 text-lg font-bold text-emerald-700">{moneyBR(totalEntradas)}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Saldo semanal</div>
-                  <div className={`mt-1 text-lg font-bold ${saldoSemanal < 0 ? "text-red-600" : "text-emerald-700"}`}>
-                    {moneyBR(saldoSemanal)}
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Status estimado</div>
-                  <div className="mt-1">
-                    <span className={`rounded-full border px-3 py-1 text-sm font-semibold ${statusBadge(statusSemanaCalculado)}`}>
-                      {labelStatus(statusSemanaCalculado)}
-                    </span>
-                  </div>
-                </div>
+              {/* Resumo calculado */}
+              <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
+                <strong>Total de entradas:</strong> {moneyBR(totalEntradas)}
+                {" | "}
+                <strong>Saldo semanal:</strong> {moneyBR(saldoSemanal)}
+                {" | "}
+                <strong>Status estimado:</strong>{" "}
+                <span
+                  className={`rounded px-2 py-0.5 text-xs font-medium ${statusBadge(statusSemanaCalculado)}`}
+                >
+                  {labelStatus(statusSemanaCalculado)}
+                </span>
               </div>
 
               <div className="mt-4 flex gap-2">
@@ -1261,13 +1786,20 @@ export default function AcompanhamentoBancario() {
                   disabled={saving}
                   onClick={salvarAtualizacao}
                 >
-                  {saving ? "Salvando..." : "Salvar atualização semanal"}
+                  {saving ? "Salvando..." : modoEdicaoSemana ? "Salvar edição da semana" : "Salvar atualização semanal"}
                 </button>
                 <button
                   className="rounded border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700"
                   onClick={() => adicionarOutroBanco(updOpen)}
-                >+ Outro banco</button>
-                <button className="rounded border px-4 py-2 text-sm" onClick={() => setUpdOpen(null)}>Cancelar</button>
+                >
+                  + Outro banco
+                </button>
+                <button
+                  className="rounded border px-4 py-2 text-sm"
+                  onClick={() => setUpdOpen(null)}
+                >
+                  Cancelar
+                </button>
               </div>
             </div>
           </div>
@@ -1275,246 +1807,296 @@ export default function AcompanhamentoBancario() {
 
         {/* ── Modal — Detalhes ─────────────────────────────────────────────── */}
         {detalhe && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 p-3 sm:p-5">
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/45 p-3 sm:p-5">
             <div className="mx-auto flex min-h-[calc(100vh-40px)] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
               <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-4 backdrop-blur sm:px-6">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">Relatório operacional</p>
-                    <h3 className="mt-0.5 text-xl font-bold text-slate-950">Detalhes do Acompanhamento</h3>
-                    <p className="mt-0.5 text-sm text-slate-500">
-                      {detalhe.nome_empresa} — CNPJ {detalhe.cnpj || "-"} — {detalhe.banco_observado}
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
+                      Relatório operacional
+                    </p>
+                    <h3 className="mt-1 text-xl font-bold text-slate-950">
+                      Detalhes do Acompanhamento
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {detalhe.nome_empresa} — {detalhe.banco_observado}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(detalhe.status_semana || detalhe.status)}`}>
-                      {labelStatus(detalhe.status_semana || detalhe.status)}
-                    </span>
-                    <button className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100" onClick={() => abrirAtualizacao(detalhe)}>Atualizar semana</button>
-                    <button className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100" onClick={() => adicionarOutroBanco(detalhe)}>+ Outro banco</button>
-                    <button className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100" onClick={() => exportarCSV(detalhe)}>Exportar XLS</button>
-                    <button className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-100" onClick={() => { setImprimirOpen(detalhe); setDetalhe(null); }}>Imprimir</button>
-                    <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50" onClick={() => setDetalhe(null)}>Fechar</button>
+                    <button
+                      className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                      onClick={() => abrirAtualizacao(detalhe)}
+                    >
+                      Atualizar semana
+                    </button>
+                    <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50" onClick={() => editarAcompanhamento(detalhe)}>Editar acompanhamento</button>
+                    <button
+                      className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
+                      onClick={() => adicionarOutroBanco(detalhe)}
+                    >
+                      + Outro banco
+                    </button>
+                    <button
+                      className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100"
+                      onClick={() => exportarCSV(detalhe)}
+                    >
+                      Exportar XLS
+                    </button>
+                    <button
+                      className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-100"
+                      onClick={() => {
+                        setImprimirOpen(detalhe);
+                        setDetalhe(null);
+                      }}
+                    >
+                      Imprimir
+                    </button>
+                    <button
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      onClick={() => setDetalhe(null)}
+                    >
+                      Fechar
+                    </button>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-5 overflow-y-auto bg-slate-50 px-4 py-5 sm:px-6">
+                {/* Resumo executivo */}
                 <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Resumo geral</h4>
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-0 sm:grid-cols-3 lg:grid-cols-6">
-                    {[
-                      { label: "Banco observado", value: detalhe.banco_observado },
-                      { label: "Responsável", value: detalhe.responsavel_nome || "Admin" },
-                      { label: "Início", value: formatDateBR(detalhe.data_inicio) },
-                      { label: "Fim previsto", value: formatDateBR(detalhe.data_fim_prevista) },
-                      { label: "Próxima atualização", value: formatDateBR(detalhe.proxima_atualizacao) },
-                      { label: "Prorrogado", value: detalhe.prorrogado ? "Sim" : "Não" },
-                    ].map(({ label, value }) => (
-                      <div key={label} className="border-b border-slate-100 py-2">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-                        <div className="mt-0.5 text-sm font-semibold text-slate-800">{value || "-"}</div>
-                      </div>
-                    ))}
+                  <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h4 className="text-base font-bold text-slate-900">
+                        Resumo executivo
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Visão rápida do acompanhamento, próximo vencimento e situação atual.
+                      </p>
+                    </div>
+                    <span
+                      className={`w-fit rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(detalhe.status_semana || detalhe.status)}`}
+                    >
+                      {labelStatus(detalhe.status_semana || detalhe.status)}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <InfoCard label="Empresa" value={detalhe.nome_empresa} />
+                    <InfoCard label="CNPJ" value={detalhe.cnpj} />
+                    <InfoCard label="Banco observado" value={detalhe.banco_observado} />
+                    <InfoCard label="Responsável" value={detalhe.responsavel_nome || "Admin"} />
+                    <InfoCard label="Início do acompanhamento" value={formatDateBR(detalhe.data_inicio)} />
+                    <InfoCard label="Fim previsto" value={formatDateBR(detalhe.data_fim_prevista)} />
+                    <InfoCard label="Próxima atualização" value={formatDateBR(detalhe.proxima_atualizacao)} />
+                    <InfoCard label="Prorrogado" value={detalhe.prorrogado ? "Sim" : "Não"} />
                   </div>
                 </section>
 
+                {/* Indicadores */}
                 <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
-                    <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Indicadores financeiros e rating</h4>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-0 sm:grid-cols-3">
-                      {[
-                        { label: "Rating Bacen atual", value: detalhe.rating_bacen_atual || detalhe.rating_bacen_inicial },
-                        { label: "Rating interno inicial", value: detalhe.rating_interno_inicial },
-                        { label: "Rating interno atual", value: detalhe.rating_interno_atual },
-                        { label: "Faturamento anual", value: moneyBR(detalhe.faturamento_anual) },
-                        { label: "Média mensal", value: moneyBR(detalhe.media_mensal) },
-                        { label: "Margem ±30%", value: moneyBR(detalhe.margem_seguranca_30) },
-                      ].map(({ label, value }) => (
-                        <div key={label} className="border-b border-slate-100 py-2">
-                          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-                          <div className="mt-0.5 text-sm font-semibold text-slate-800">{value || "-"}</div>
-                        </div>
-                      ))}
+                    <h4 className="text-base font-bold text-slate-900">
+                      Indicadores financeiros e rating
+                    </h4>
+                    <p className="mb-3 text-xs text-slate-500">
+                      Números centrais para análise de evolução e capacidade.
+                    </p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      <InfoCard label="Rating Bacen atual" value={detalhe.rating_bacen_atual || detalhe.rating_bacen_inicial} />
+                      <InfoCard label="Rating interno inicial" value={detalhe.rating_interno_inicial} />
+                      <InfoCard label="Rating interno atual" value={detalhe.rating_interno_atual} />
+                      <InfoCard label="Faturamento anual" value={moneyBR(detalhe.faturamento_anual)} />
+                      <InfoCard label="Média mensal" value={moneyBR(detalhe.media_mensal)} />
+                      <InfoCard label="Margem ±30%" value={moneyBR(detalhe.margem_seguranca_30)} />
                     </div>
                   </div>
+
                   <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 shadow-sm">
-                    <h4 className="text-sm font-bold uppercase tracking-wide text-blue-700">Recomendação operacional</h4>
-                    <p className="mt-2 text-sm leading-6 text-blue-900">{calcularRecomendacao(detalhe)}</p>
+                    <h4 className="text-base font-bold text-blue-950">
+                      Recomendação operacional
+                    </h4>
+                    <p className="mt-2 text-sm leading-6 text-blue-900">
+                      {calcularRecomendacao(detalhe)}
+                    </p>
                     <div className="mt-4 rounded-xl border border-blue-200 bg-white/70 p-3">
-                      <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">Saldo última semana</div>
-                      <div className={`mt-1 text-lg font-bold ${Number(detalhe.saldo_semanal || 0) < 0 ? "text-red-600" : "text-emerald-700"}`}>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                        Saldo última semana
+                      </div>
+                      <div
+                        className={`mt-1 text-lg font-bold ${
+                          Number(detalhe.saldo_semanal || 0) < 0
+                            ? "text-red-600"
+                            : "text-emerald-700"
+                        }`}
+                      >
                         {moneyBR(detalhe.saldo_semanal)}
                       </div>
                     </div>
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-                    <div>
-                      <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Histórico semanal</h4>
-                      <p className="text-xs text-slate-400">Evolução semana a semana — entradas, saídas, saldos e conformidade</p>
+                {/* Objetivo e dados bancários */}
+                <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <h4 className="text-base font-bold text-slate-900">
+                      Objetivo e estratégia de crédito
+                    </h4>
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <InfoCard label="Objetivo do crédito" value={detalhe.objetivo_credito} />
+                      <InfoCard label="Linha pretendida" value={detalhe.linha_credito_pretendida} />
+                      <InfoCard label="Valor pretendido" value={moneyBR(detalhe.valor_credito_pretendido)} />
+                      <InfoCard label="Status" value={labelStatus(detalhe.status)} />
                     </div>
-                    <span className="text-xs font-medium text-slate-400">
+                    {detalhe.observacoes_iniciais && (
+                      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                        <strong>Observações:</strong> {detalhe.observacoes_iniciais}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <h4 className="text-base font-bold text-slate-900">
+                      Dados bancários e relacionamento
+                    </h4>
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <InfoCard label="Agência" value={detalhe.agencia} />
+                      <InfoCard label="Conta" value={detalhe.conta} />
+                      <InfoCard label="Gerente do banco" value={detalhe.gerente_banco} />
+                      <InfoCard label="Contato do banco" value={detalhe.contato_banco} />
+                      <InfoCard label="Abertura de conta" value={formatDateBR(detalhe.data_abertura_conta)} />
+                      <InfoCard label="E-mail" value={detalhe.email_cliente} />
+                    </div>
+                  </div>
+                </section>
+
+                {/* Histórico semanal */}
+                <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h4 className="text-base font-bold text-slate-900">
+                        Histórico semanal
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Cada semana fica organizada em blocos: entradas, saídas, rating, conformidade e análise.
+                      </p>
+                    </div>
+                    <span className="text-xs font-medium text-slate-500">
                       {Array.isArray(detalhe.atualizacoes) ? detalhe.atualizacoes.length : 0} semana(s)
                     </span>
                   </div>
 
-                  {Array.isArray(detalhe.atualizacoes) && detalhe.atualizacoes.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[900px] text-xs">
-                        <thead>
-                          <tr className="border-b border-slate-200 bg-slate-50">
-                            <th className="px-3 py-2.5 text-left font-semibold text-slate-500" rowSpan={2}>Semana</th>
-                            <th className="px-3 py-2.5 text-left font-semibold text-slate-500" rowSpan={2}>Período</th>
-                            <th className="border-l border-slate-200 px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-emerald-700" colSpan={7}>Entradas</th>
-                            <th className="border-l border-slate-200 px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-red-600" colSpan={5}>Saídas e Saldos</th>
-                            <th className="border-l border-slate-200 px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-blue-700" colSpan={8}>Rating e Conformidade</th>
-                            <th className="border-l border-slate-200 px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500" rowSpan={2}>Status</th>
-                          </tr>
-                          <tr className="border-b-2 border-slate-300 bg-slate-50">
-                            <th className="border-l border-slate-200 px-3 py-2 text-right font-medium text-slate-500">Maquininha</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">Pix</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">Boleto</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">TED</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">Dinheiro</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">Outras</th>
-                            <th className="px-3 py-2 text-right font-bold text-emerald-700">Total</th>
-                            <th className="border-l border-slate-200 px-3 py-2 text-right font-medium text-slate-500">Saídas</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">Saldo sem.</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">Saldo médio</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">Saldo final</th>
-                            <th className="px-3 py-2 text-right font-medium text-slate-500">Transações</th>
-                            <th className="border-l border-slate-200 px-3 py-2 text-center font-medium text-slate-500">Bacen</th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-500">Interno</th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-500">SCR</th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-500">Cenprot</th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-500">Serasa</th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-500">CND</th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-500">PLD/AML</th>
-                            <th className="px-3 py-2 text-center font-medium text-slate-500">COAF</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {detalhe.atualizacoes.map((item: any, idx: number) => {
-                            const entradas =
-                              Number(item.total_entradas || 0) ||
-                              Number(item.entrada_maquininha || 0) +
-                              Number(item.entrada_pix || 0) +
-                              Number(item.entrada_boleto || 0) +
-                              Number(item.entrada_ted || 0) +
-                              Number(item.entrada_dinheiro || 0) +
-                              Number(item.outras_entradas || 0);
-                            const saldo = Number(item.saldo_semanal || 0);
-                            const isEven = idx % 2 === 0;
-                            return (
-                              <tr key={item.id || item.numero_semana} className={`border-b border-slate-100 transition hover:bg-blue-50/40 ${isEven ? "bg-white" : "bg-slate-50/50"}`}>
-                                <td className="px-3 py-2.5 font-bold text-slate-700">S{item.numero_semana}</td>
-                                <td className="whitespace-nowrap px-3 py-2.5 text-slate-500">
-                                  {formatDateBR(item.data_referencia_inicio)}<br/>
-                                  <span className="text-[10px]">a {formatDateBR(item.data_referencia_fim)}</span>
-                                </td>
-                                <td className="border-l border-slate-100 px-3 py-2.5 text-right text-slate-700">{moneyBR(item.entrada_maquininha)}</td>
-                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.entrada_pix)}</td>
-                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.entrada_boleto)}</td>
-                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.entrada_ted)}</td>
-                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.entrada_dinheiro)}</td>
-                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.outras_entradas)}</td>
-                                <td className="px-3 py-2.5 text-right font-bold text-emerald-700">{moneyBR(entradas)}</td>
-                                <td className="border-l border-slate-100 px-3 py-2.5 text-right text-red-600">{moneyBR(item.total_saidas)}</td>
-                                <td className={`px-3 py-2.5 text-right font-bold ${saldo < 0 ? "text-red-600" : "text-emerald-700"}`}>{moneyBR(item.saldo_semanal)}</td>
-                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.saldo_medio)}</td>
-                                <td className="px-3 py-2.5 text-right text-slate-700">{moneyBR(item.saldo_final)}</td>
-                                <td className="px-3 py-2.5 text-right text-slate-600">{item.quantidade_transacoes || 0}</td>
-                                <td className="border-l border-slate-100 px-3 py-2.5 text-center font-bold text-slate-800">{item.rating_bacen || "-"}</td>
-                                <td className="px-3 py-2.5 text-center font-bold text-blue-700">{item.rating_interno || "-"}</td>
-                                <td className="px-3 py-2.5 text-center">{item.scr_status || item.restricao_scr || "-"}</td>
-                                <td className="px-3 py-2.5 text-center">{item.cenprot_status || item.restricao_cenprot || "-"}</td>
-                                <td className="px-3 py-2.5 text-center">{item.serasa_status || item.restricao_serasa || "-"}</td>
-                                <td className="px-3 py-2.5 text-center">{item.cnd_status || item.cnd_regular || "-"}</td>
-                                <td className="px-3 py-2.5 text-center">{item.pld_aml_status || item.pld_aml || "-"}</td>
-                                <td className="px-3 py-2.5 text-center">{item.coaf_status || item.operacao_suspeita_coaf || "-"}</td>
-                                <td className="border-l border-slate-100 px-3 py-2.5">
-                                  <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusBadge(item.status_semana || item.status)}`}>
-                                    {labelStatus(item.status_semana || item.status)}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="m-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                      Nenhuma atualização semanal registrada.
-                    </div>
-                  )}
-                </section>
+                  <div className="space-y-4">
+                    {Array.isArray(detalhe.atualizacoes) &&
+                    detalhe.atualizacoes.length > 0 ? (
+                      detalhe.atualizacoes.map((item: any) => {
+                        const entradas =
+                          Number(item.total_entradas || 0) ||
+                          Number(item.entrada_maquininha || 0) +
+                            Number(item.entrada_pix || 0) +
+                            Number(item.entrada_boleto || 0) +
+                            Number(item.entrada_ted || 0) +
+                            Number(item.entrada_dinheiro || 0) +
+                            Number(item.outras_entradas || 0);
+                        const saldo = Number(item.saldo_semanal || 0);
 
-                {Array.isArray(detalhe.atualizacoes) && detalhe.atualizacoes.some((i: any) => i.analise_semana || i.orientacao_cliente || i.proxima_acao) && (
-                  <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    <div className="border-b border-slate-100 px-4 py-3">
-                      <h4 className="text-sm font-bold uppercase tracking-wide text-slate-500">Análises e orientações por semana</h4>
-                    </div>
-                    <div className="divide-y divide-slate-100">
-                      {detalhe.atualizacoes.filter((i: any) => i.analise_semana || i.orientacao_cliente || i.proxima_acao).map((item: any) => (
-                        <div key={`analise-${item.id || item.numero_semana}`} className="px-4 py-3">
-                          <div className="mb-2 flex items-center gap-2">
-                            <span className="text-xs font-bold text-slate-700">Semana {item.numero_semana}</span>
-                            <span className="text-[10px] text-slate-400">{formatDateBR(item.data_referencia_inicio)} a {formatDateBR(item.data_referencia_fim)}</span>
-                          </div>
-                          <div className="grid grid-cols-1 gap-3 text-xs text-slate-700 sm:grid-cols-3">
-                            {item.analise_semana && <div><span className="font-semibold text-slate-500">Análise: </span>{item.analise_semana}</div>}
-                            {item.orientacao_cliente && <div><span className="font-semibold text-slate-500">Orientação: </span>{item.orientacao_cliente}</div>}
-                            {item.proxima_acao && <div><span className="font-semibold text-slate-500">Próxima ação: </span>{item.proxima_acao}</div>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                )}
+                        return (
+                          <article
+                            key={item.id || item.numero_semana}
+                            className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                          >
+                            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <h5 className="text-sm font-bold text-slate-900">
+                                  Semana {item.numero_semana}
+                                </h5>
+                                <p className="text-xs text-slate-500">
+                                  {formatDateBR(item.data_referencia_inicio)} a{" "}
+                                  {formatDateBR(item.data_referencia_fim)}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span
+                                  className={`w-fit rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(item.status_semana || item.status)}`}
+                                >
+                                  {labelStatus(item.status_semana || item.status)}
+                                </span>
+                                <button
+                                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                  onClick={() => editarAtualizacaoSemanal(detalhe, item)}
+                                  title="Editar dados já salvos desta semana"
+                                >Editar semana</button>
+                                <button
+                                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                                  onClick={() => excluirAtualizacaoSemanal(detalhe, item)}
+                                  title="Apagar esta semana do histórico"
+                                >Apagar semana</button>
+                              </div>
+                            </div>
 
-                <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Objetivo e estratégia de crédito</h4>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-0">
-                      {[
-                        { label: "Objetivo do crédito", value: detalhe.objetivo_credito },
-                        { label: "Linha pretendida", value: detalhe.linha_credito_pretendida },
-                        { label: "Valor pretendido", value: moneyBR(detalhe.valor_credito_pretendido) },
-                        { label: "Status", value: labelStatus(detalhe.status) },
-                      ].map(({ label, value }) => (
-                        <div key={label} className="border-b border-slate-100 py-2">
-                          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-                          <div className="mt-0.5 text-sm text-slate-700">{value || "-"}</div>
-                        </div>
-                      ))}
-                    </div>
-                    {detalhe.observacoes_iniciais && (
-                      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-                        <span className="font-semibold">Observações: </span>{detalhe.observacoes_iniciais}
+                            <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+                              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                                <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                                  Entradas
+                                </h6>
+                                <div className="space-y-1 text-xs text-slate-700">
+                                  <div className="flex justify-between gap-3"><span>Maquininha</span><strong>{moneyBR(item.entrada_maquininha)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Pix</span><strong>{moneyBR(item.entrada_pix)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Boleto</span><strong>{moneyBR(item.entrada_boleto)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>TED</span><strong>{moneyBR(item.entrada_ted)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Dinheiro</span><strong>{moneyBR(item.entrada_dinheiro)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Outras</span><strong>{moneyBR(item.outras_entradas)}</strong></div>
+                                  <div className="mt-2 flex justify-between border-t pt-2 text-sm"><span>Total</span><strong>{moneyBR(entradas)}</strong></div>
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                                <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                                  Saídas e saldos
+                                </h6>
+                                <div className="space-y-1 text-xs text-slate-700">
+                                  <div className="flex justify-between gap-3"><span>Saídas</span><strong>{moneyBR(item.total_saidas)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Saldo semanal</span><strong className={saldo < 0 ? "text-red-600" : "text-emerald-700"}>{moneyBR(item.saldo_semanal)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Saldo médio</span><strong>{moneyBR(item.saldo_medio)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Saldo final</span><strong>{moneyBR(item.saldo_final)}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Transações</span><strong>{item.quantidade_transacoes || 0}</strong></div>
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                                <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                                  Rating e conformidade
+                                </h6>
+                                <div className="space-y-1 text-xs text-slate-700">
+                                  <div className="flex justify-between gap-3"><span>Bacen</span><strong>{item.rating_bacen || "-"}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Interno</span><strong>{item.rating_interno || "-"}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>SCR</span><strong>{item.scr_status || item.restricao_scr || "-"}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Cenprot</span><strong>{item.cenprot_status || item.restricao_cenprot || "-"}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>Serasa</span><strong>{item.serasa_status || item.restricao_serasa || "-"}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>CND</span><strong>{item.cnd_status || item.cnd_regular || "-"}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>PLD/AML</span><strong>{item.pld_aml_status || item.pld_aml || "-"}</strong></div>
+                                  <div className="flex justify-between gap-3"><span>COAF</span><strong>{item.coaf_status || item.operacao_suspeita_coaf || "-"}</strong></div>
+                                </div>
+                              </div>
+
+                              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                                <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                                  Análise e orientação
+                                </h6>
+                                <div className="space-y-2 text-xs leading-5 text-slate-700">
+                                  <p><strong>Análise:</strong> {item.analise_semana || "-"}</p>
+                                  <p><strong>Orientação:</strong> {item.orientacao_cliente || "-"}</p>
+                                  <p><strong>Próxima ação:</strong> {item.proxima_acao || "-"}</p>
+                                </div>
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+                        Nenhuma atualização semanal registrada.
                       </div>
                     )}
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Dados bancários e relacionamento</h4>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-0">
-                      {[
-                        { label: "Agência", value: detalhe.agencia },
-                        { label: "Conta", value: detalhe.conta },
-                        { label: "Gerente do banco", value: detalhe.gerente_banco },
-                        { label: "Contato do banco", value: detalhe.contato_banco },
-                        { label: "Abertura de conta", value: formatDateBR(detalhe.data_abertura_conta) },
-                        { label: "E-mail", value: detalhe.email_cliente },
-                      ].map(({ label, value }) => (
-                        <div key={label} className="border-b border-slate-100 py-2">
-                          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-                          <div className="mt-0.5 text-sm text-slate-700">{value || "-"}</div>
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 </section>
               </div>
@@ -1525,85 +2107,310 @@ export default function AcompanhamentoBancario() {
         {/* ── Modal — Impressão ────────────────────────────────────────────── */}
         {imprimirOpen && (
           <div className="fixed inset-0 z-50 overflow-auto bg-white p-0">
+            {/* Barra de ações — oculta na impressão */}
             <div className="flex items-center gap-3 border-b bg-gray-50 p-4 print:hidden">
-              <button className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700" onClick={handleImprimir}>
+              <button
+                className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                onClick={handleImprimir}
+              >
                 Imprimir / Salvar PDF
               </button>
-              <button className="rounded border px-4 py-2 text-sm" onClick={() => setImprimirOpen(null)}>Fechar</button>
+              <button
+                className="rounded border px-4 py-2 text-sm"
+                onClick={() => setImprimirOpen(null)}
+              >
+                Fechar
+              </button>
             </div>
 
-            <div ref={printRef} className="mx-auto max-w-5xl p-8 text-sm" style={{ fontFamily: "Arial, sans-serif" }}>
+            {/* Conteúdo imprimível */}
+            <div
+              ref={printRef}
+              className="mx-auto max-w-5xl p-8 text-sm"
+              style={{ fontFamily: "Arial, sans-serif" }}
+            >
               <div className="mb-6 border-b-2 border-gray-800 pb-4">
-                <h1 className="text-2xl font-bold">Acompanhamento Bancário — Destrava Crédito</h1>
-                <h2 className="mt-1 text-xl font-semibold">{imprimirOpen.nome_empresa} — {imprimirOpen.banco_observado}</h2>
-                <p className="mt-1 text-gray-600">CNPJ: {imprimirOpen.cnpj || "-"} | Gerado em: {new Date().toLocaleDateString("pt-BR")}</p>
+                <h1 className="text-2xl font-bold">
+                  Acompanhamento Bancário — Destrava Crédito
+                </h1>
+                <h2 className="mt-1 text-xl font-semibold">
+                  {imprimirOpen.nome_empresa} — {imprimirOpen.banco_observado}
+                </h2>
+                <p className="mt-1 text-gray-600">
+                  CNPJ: {imprimirOpen.cnpj || "-"} | Gerado em:{" "}
+                  {new Date().toLocaleDateString("pt-BR")}
+                </p>
               </div>
 
+              {/* Rating */}
               <div className="mb-4 grid grid-cols-3 gap-4">
-                <div><strong>Rating Bacen:</strong> {imprimirOpen.rating_bacen_atual || imprimirOpen.rating_bacen_inicial || "-"}</div>
-                <div><strong>Rating Interno Inicial:</strong> {imprimirOpen.rating_interno_inicial || "-"}</div>
-                <div><strong>Rating Interno Atual:</strong> {imprimirOpen.rating_interno_atual || "-"}</div>
+                <div>
+                  <strong>Rating Bacen:</strong>{" "}
+                  {imprimirOpen.rating_bacen_atual ||
+                    imprimirOpen.rating_bacen_inicial ||
+                    "-"}
+                </div>
+                <div>
+                  <strong>Rating Interno Inicial:</strong>{" "}
+                  {imprimirOpen.rating_interno_inicial || "-"}
+                </div>
+                <div>
+                  <strong>Rating Interno Atual:</strong>{" "}
+                  {imprimirOpen.rating_interno_atual || "-"}
+                </div>
               </div>
 
+              {/* Dados financeiros */}
               <div className="mb-4 grid grid-cols-3 gap-4">
-                <div><strong>Faturamento anual:</strong> {moneyBR(imprimirOpen.faturamento_anual)}</div>
-                <div><strong>Média mensal:</strong> {moneyBR(imprimirOpen.media_mensal)}</div>
-                <div><strong>Margem ±30%:</strong> {moneyBR(imprimirOpen.margem_seguranca_30)}</div>
+                <div>
+                  <strong>Faturamento anual:</strong>{" "}
+                  {moneyBR(imprimirOpen.faturamento_anual)}
+                </div>
+                <div>
+                  <strong>Média mensal:</strong>{" "}
+                  {moneyBR(imprimirOpen.media_mensal)}
+                </div>
+                <div>
+                  <strong>Margem ±30%:</strong>{" "}
+                  {moneyBR(imprimirOpen.margem_seguranca_30)}
+                </div>
               </div>
 
+              {/* Relacionamento */}
               <div className="mb-4 grid grid-cols-3 gap-4">
-                <div><strong>Início do acompanhamento:</strong> {formatDateBR(imprimirOpen.data_inicio)}</div>
-                <div><strong>Fim previsto:</strong> {formatDateBR(imprimirOpen.data_fim_prevista)}</div>
-                <div><strong>Status:</strong> {labelStatus(imprimirOpen.status)}</div>
+                <div>
+                  <strong>Início do acompanhamento:</strong>{" "}
+                  {formatDateBR(imprimirOpen.data_inicio)}
+                </div>
+                <div>
+                  <strong>Fim previsto:</strong>{" "}
+                  {formatDateBR(imprimirOpen.data_fim_prevista)}
+                </div>
+                <div>
+                  <strong>Status:</strong>{" "}
+                  {labelStatus(imprimirOpen.status)}
+                </div>
               </div>
 
-              <h3 className="mb-2 mt-6 text-base font-bold">Histórico Semanal</h3>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+              {/* Histórico semanal */}
+              <h3 className="mb-2 mt-6 text-base font-bold">
+                Histórico Semanal
+              </h3>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: "11px",
+                }}
+              >
                 <thead>
                   <tr style={{ background: "#f3f4f6" }}>
-                    {["Semana","Período","Máquina","PIX","Boleto","TED","Dinheiro","Outras","Total Entradas","Saídas","Saldo Semanal","Rating B.","Rating I.","SCR","CND","Status"].map((h) => (
-                      <th key={h} style={{ border: "1px solid #d1d5db", padding: "4px 6px", textAlign: "left" }}>{h}</th>
+                    {[
+                      "Semana",
+                      "Período",
+                      "Máquina",
+                      "PIX",
+                      "Boleto",
+                      "TED",
+                      "Dinheiro",
+                      "Outras",
+                      "Total Entradas",
+                      "Saídas",
+                      "Saldo Semanal",
+                      "Rating B.",
+                      "Rating I.",
+                      "SCR",
+                      "CND",
+                      "Status",
+                    ].map((h) => (
+                      <th
+                        key={h}
+                        style={{
+                          border: "1px solid #d1d5db",
+                          padding: "4px 6px",
+                          textAlign: "left",
+                        }}
+                      >
+                        {h}
+                      </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {Array.isArray(imprimirOpen.atualizacoes) && imprimirOpen.atualizacoes.length > 0 ? (
+                  {Array.isArray(imprimirOpen.atualizacoes) &&
+                  imprimirOpen.atualizacoes.length > 0 ? (
                     imprimirOpen.atualizacoes.map((item: any) => (
                       <tr key={item.id}>
-                        {[
-                          item.numero_semana,
-                          `${formatDateBR(item.data_referencia_inicio)} a ${formatDateBR(item.data_referencia_fim)}`,
-                          moneyBR(item.entrada_maquininha),
-                          moneyBR(item.entrada_pix),
-                          moneyBR(item.entrada_boleto),
-                          moneyBR(item.entrada_ted),
-                          moneyBR(item.entrada_dinheiro),
-                          moneyBR(item.outras_entradas),
-                          moneyBR(item.total_entradas),
-                          moneyBR(item.total_saidas),
-                          moneyBR(item.saldo_semanal),
-                          item.rating_bacen || "-",
-                          item.rating_interno || "-",
-                          item.scr_status || item.restricao_scr || "-",
-                          item.cnd_status || item.cnd_regular || "-",
-                          item.status_semana || item.status || "-",
-                        ].map((cell, i) => (
-                          <td key={i} style={{ border: "1px solid #d1d5db", padding: "4px 6px" }}>{cell}</td>
-                        ))}
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {item.numero_semana}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {formatDateBR(item.data_referencia_inicio)} a{" "}
+                          {formatDateBR(item.data_referencia_fim)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {moneyBR(item.entrada_maquininha)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {moneyBR(item.entrada_pix)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {moneyBR(item.entrada_boleto)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {moneyBR(item.entrada_ted)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {moneyBR(item.entrada_dinheiro)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {moneyBR(item.outras_entradas)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {moneyBR(item.total_entradas)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {moneyBR(item.total_saidas)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {moneyBR(item.saldo_semanal)}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {item.rating_bacen || "-"}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {item.rating_interno || "-"}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {item.scr_status || item.restricao_scr || "-"}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {item.cnd_status || item.cnd_regular || "-"}
+                        </td>
+                        <td
+                          style={{
+                            border: "1px solid #d1d5db",
+                            padding: "4px 6px",
+                          }}
+                        >
+                          {item.status_semana || item.status || "-"}
+                        </td>
                       </tr>
                     ))
                   ) : (
-                    <tr><td colSpan={16} style={{ padding: "8px" }}>Nenhuma atualização registrada.</td></tr>
+                    <tr>
+                      <td colSpan={16} style={{ padding: "8px" }}>
+                        Nenhuma atualização registrada.
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
 
-              <div style={{ marginTop: "24px", padding: "12px", border: "1px solid #bfdbfe", background: "#eff6ff", borderRadius: "6px" }}>
-                <strong>Recomendação operacional:</strong> {calcularRecomendacao(imprimirOpen)}
+              {/* Recomendação */}
+              <div
+                style={{
+                  marginTop: "24px",
+                  padding: "12px",
+                  border: "1px solid #bfdbfe",
+                  background: "#eff6ff",
+                  borderRadius: "6px",
+                }}
+              >
+                <strong>Recomendação operacional:</strong>{" "}
+                {calcularRecomendacao(imprimirOpen)}
               </div>
 
-              <div style={{ marginTop: "32px", borderTop: "1px solid #e5e7eb", paddingTop: "8px", color: "#9ca3af", fontSize: "10px" }}>
-                Destrava Crédito — Documento gerado em {new Date().toLocaleDateString("pt-BR")} às {new Date().toLocaleTimeString("pt-BR")}
+              <div
+                style={{
+                  marginTop: "32px",
+                  borderTop: "1px solid #e5e7eb",
+                  paddingTop: "8px",
+                  color: "#9ca3af",
+                  fontSize: "10px",
+                }}
+              >
+                Destrava Crédito — Documento gerado em{" "}
+                {new Date().toLocaleDateString("pt-BR")} às{" "}
+                {new Date().toLocaleTimeString("pt-BR")}
               </div>
             </div>
           </div>
@@ -1613,7 +2420,7 @@ export default function AcompanhamentoBancario() {
   );
 }
 
-// ─── Helpers de label ─────────────────────────────────────────────────────────
+// ─── Componentes auxiliares ───────────────────────────────────────────────────
 
 function labelEntrada(key: string): string {
   const map: Record<string, string> = {
@@ -1627,28 +2434,23 @@ function labelEntrada(key: string): string {
   return map[key] || key;
 }
 
-function labelRating(key: string): string {
-  const map: Record<string, string> = {
-    rating_bacen: "Rating Bacen",
-    rating_interno: "Rating interno",
-    scr_status: "SCR",
-    cenprot_status: "Cenprot",
-    serasa_status: "Serasa",
-    cnd_status: "CND",
-    pld_aml_status: "PLD/AML",
-    coaf_status: "COAF",
-  };
-  return map[key] || key;
-}
-
-// ─── Componentes auxiliares ───────────────────────────────────────────────────
-
-function BancoField({ label, required, value, onChange }: {
-  label: string; required?: boolean; value: string; onChange: (v: string) => void;
+function BancoField({
+  label,
+  required,
+  value,
+  onChange,
+}: {
+  label: string;
+  required?: boolean;
+  value: string;
+  onChange: (v: string) => void;
 }) {
   return (
     <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}{required ? " *" : ""}</span>
+      <span className="mb-1 block text-xs font-medium text-gray-600">
+        {label}
+        {required ? " *" : ""}
+      </span>
       <input
         className="w-full rounded border border-gray-300 p-2 text-sm"
         list="bancos-sugeridos"
@@ -1658,28 +2460,50 @@ function BancoField({ label, required, value, onChange }: {
         placeholder="Digite ou selecione o banco"
       />
       <datalist id="bancos-sugeridos">
-        {BANCOS_SUGERIDOS.map((b) => <option key={b} value={b} />)}
+        {BANCOS_SUGERIDOS.map((b) => (
+          <option key={b} value={b} />
+        ))}
       </datalist>
     </label>
   );
 }
 
-function FieldInput({ field, value, onChange }: {
-  field: { key: string; label: string; type?: string; textarea?: boolean; required?: boolean };
+function FieldInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: {
+    key: string;
+    label: string;
+    type?: string;
+    textarea?: boolean;
+    required?: boolean;
+  };
   value: any;
   onChange: (value: any) => void;
 }) {
   if (field.textarea) {
     return (
       <label className="md:col-span-3">
-        <span className="mb-1 block text-xs font-medium text-gray-600">{field.label}{field.required ? " *" : ""}</span>
-        <textarea className="min-h-20 w-full rounded border border-gray-300 p-2 text-sm" value={value || ""} onChange={(e) => onChange(e.target.value)} />
+        <span className="mb-1 block text-xs font-medium text-gray-600">
+          {field.label}
+          {field.required ? " *" : ""}
+        </span>
+        <textarea
+          className="min-h-20 w-full rounded border border-gray-300 p-2 text-sm"
+          value={value || ""}
+          onChange={(e) => onChange(e.target.value)}
+        />
       </label>
     );
   }
   return (
     <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{field.label}{field.required ? " *" : ""}</span>
+      <span className="mb-1 block text-xs font-medium text-gray-600">
+        {field.label}
+        {field.required ? " *" : ""}
+      </span>
       <input
         className="w-full rounded border border-gray-300 p-2 text-sm"
         type={field.type || "text"}
@@ -1691,156 +2515,124 @@ function FieldInput({ field, value, onChange }: {
   );
 }
 
-function ReadonlyField({ label, value, highlight, negative }: {
-  label: string; value: string; highlight?: boolean; negative?: boolean;
+function ReadonlyField({
+  label,
+  value,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
 }) {
   return (
     <div>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
-      <div className={`w-full rounded border p-2 text-sm font-semibold ${
-        negative
-          ? "border-red-200 bg-red-50 text-red-700"
-          : highlight
-          ? "border-blue-200 bg-blue-50 text-blue-800"
-          : "border-gray-200 bg-gray-50 text-gray-700"
-      }`}>
+      <span className="mb-1 block text-xs font-medium text-gray-600">
+        {label}
+      </span>
+      <div
+        className={`w-full rounded border p-2 text-sm ${
+          highlight
+            ? "border-blue-200 bg-blue-50 font-semibold text-blue-800"
+            : "border-gray-200 bg-gray-50 text-gray-700"
+        }`}
+      >
         {value}
       </div>
     </div>
   );
 }
 
-/**
- * CurrencyField — input com máscara BRL.
- * - Focado: mostra o valor bruto para edição (ex: "190,65")
- * - Desfocado: formata como moeda BRL (ex: "R$ 190,65")
- * - Campo vazio quando value = 0 (não exibe "0" espúrio)
- * - Atualiza o cálculo em tempo real enquanto o usuário digita
- */
-function CurrencyField({ label, value, onChange }: {
-  label: string; value: number; onChange: (v: number) => void;
+function NumberField({
+  label,
+  value,
+  onChange,
+  integer,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  integer?: boolean;
 }) {
-  const [focused, setFocused] = useState(false);
-  const [draft, setDraft] = useState("");
-
-  // Formata número para exibição quando não está em foco
-  const formatted = value
-    ? value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    : "";
-
-  const handleFocus = () => {
-    setFocused(true);
-    // Preenche o rascunho com o valor atual em formato editável
-    setDraft(value ? value.toFixed(2).replace(".", ",") : "");
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value;
-    setDraft(raw);
-    // Parseia em tempo real para atualizar totalEntradas e saldoSemanal
-    // Suporta: "1234,56" | "1234.56" | "1.234,56"
-    const normalized = raw
-      .replace(/[^\d,]/g, "")   // mantém apenas dígitos e vírgula
-      .replace(",", ".");        // converte vírgula decimal → ponto
-    const parsed = parseFloat(normalized);
-    onChange(isNaN(parsed) ? 0 : parsed);
-  };
-
-  const handleBlur = () => {
-    setFocused(false);
-    // Re-parse com fallback para garantir consistência no blur
-    const normalized = draft
-      .replace(/[^\d,]/g, "")
-      .replace(",", ".");
-    const parsed = parseFloat(normalized);
-    onChange(isNaN(parsed) ? 0 : parsed);
-  };
-
   return (
     <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-gray-600">
+        {label}
+      </span>
       <input
-        className="w-full rounded border border-gray-300 p-2 text-right font-mono text-sm tabular-nums"
-        type="text"
-        inputMode="decimal"
-        value={focused ? draft : formatted}
-        placeholder="0,00"
-        onFocus={handleFocus}
-        onChange={handleChange}
-        onBlur={handleBlur}
+        className="w-full rounded border border-gray-300 p-2 text-sm"
+        type="number"
+        step={integer ? "1" : "0.01"}
+        value={value || 0}
+        onChange={(e) =>
+          onChange(
+            integer
+              ? parseInt(e.target.value || "0", 10)
+              : parseFloat(e.target.value || "0")
+          )
+        }
       />
     </label>
   );
 }
 
-/**
- * NumberField — para campos inteiros (ex: quantidade de transações).
- */
-function NumberField({ label, value, onChange, integer }: {
-  label: string; value: number; onChange: (v: number) => void; integer?: boolean;
+function TextFieldSimple({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
 }) {
-  const [focused, setFocused] = useState(false);
-  const [draft, setDraft] = useState("");
-
-  const formatted = value ? value.toLocaleString("pt-BR") : "";
-
-  const handleFocus = () => {
-    setFocused(true);
-    setDraft(value ? String(value) : "");
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value;
-    setDraft(raw);
-    const parsed = integer
-      ? parseInt(raw.replace(/\D/g, "") || "0", 10)
-      : parseFloat(raw.replace(",", ".") || "0");
-    onChange(isNaN(parsed) ? 0 : parsed);
-  };
-
-  const handleBlur = () => {
-    setFocused(false);
-    const parsed = integer
-      ? parseInt(draft.replace(/\D/g, "") || "0", 10)
-      : parseFloat(draft.replace(",", ".") || "0");
-    onChange(isNaN(parsed) ? 0 : parsed);
-  };
-
   return (
     <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-gray-600">
+        {label}
+      </span>
       <input
-        className="w-full rounded border border-gray-300 p-2 text-right font-mono text-sm tabular-nums"
+        className="w-full rounded border border-gray-300 p-2 text-sm"
         type="text"
-        inputMode="numeric"
-        value={focused ? draft : formatted}
-        placeholder="0"
-        onFocus={handleFocus}
-        onChange={handleChange}
-        onBlur={handleBlur}
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
       />
     </label>
   );
 }
 
-function TextFieldSimple({ label, value, onChange }: {
-  label: string; value: string; onChange: (v: string) => void;
+function TextareaField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
 }) {
   return (
     <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
-      <input className="w-full rounded border border-gray-300 p-2 text-sm" type="text" value={value || ""} onChange={(e) => onChange(e.target.value)} />
+      <span className="mb-1 block text-xs font-medium text-gray-600">
+        {label}
+      </span>
+      <textarea
+        className="min-h-20 w-full rounded border border-gray-300 p-2 text-sm"
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
+      />
     </label>
   );
 }
 
-function TextareaField({ label, value, onChange }: {
-  label: string; value: string; onChange: (v: string) => void;
+function InfoCard({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | null;
 }) {
   return (
-    <label>
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
-      <textarea className="min-h-20 w-full rounded border border-gray-300 p-2 text-sm" value={value || ""} onChange={(e) => onChange(e.target.value)} />
-    </label>
+    <div className="rounded border p-3">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="mt-1 font-semibold">{value || "-"}</div>
+    </div>
   );
 }
