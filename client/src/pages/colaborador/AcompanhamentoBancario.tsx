@@ -1,273 +1,74 @@
-import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useEffect, useMemo, useState } from "react";
+import ColaboradorLayout from "./Layout";
 import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  LayoutDashboard,
-  Calculator,
-  FileText,
-  LogOut,
-  Menu,
-  X,
-  ChevronRight,
-  User,
-  Users,
-  Zap,
-  Kanban,
-  Building2,
-  ShieldAlert,
-  ListOrdered,
-  TrendingUp,
-  BookUser,
-  UserCheck,
-  Activity,
-} from "lucide-react";
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: React.ElementType;
-  badge?: string;
-  /** cargos que podem ver este item; undefined = todos */
-  allowedCargos?: string[];
-  /** item exclusivo para perfis com visão ampla de gestão */
-  managementOnly?: boolean;
+type Acompanhamento = any;
+
+const today = new Date();
+const isWednesday = today.getDay() === 3;
+
+function normalizePermValue(value?: string | null) {
+  return String(value || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_").replace(/-/g, "_");
+}
+function permitido(user: any) {
+  if (!user) return false;
+  if (user?.acesso_acompanhamento_bancario === true) return true;
+  const ok = new Set(["admin", "administrador", "super_admin", "superadmin", "gestor_credito"]);
+  return ok.has(normalizePermValue(user?.cargo)) || ok.has(normalizePermValue(user?.perfil));
 }
 
-// Cargos com acesso total (gestão)
-const CARGOS_GESTAO = ['administrador', 'diretor', 'gerente comercial'];
+export default function AcompanhamentoBancario() {
+  const { colaborador } = useAuth();
+  const can = permitido(colaborador);
+  const [rows, setRows] = useState<Acompanhamento[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("todos");
+  const [banco, setBanco] = useState("");
+  const [pendentes, setPendentes] = useState(false);
+  const [novoOpen, setNovoOpen] = useState(false);
+  const [updOpen, setUpdOpen] = useState<any>(null);
+  const [detalhe, setDetalhe] = useState<any>(null);
+  const [novo, setNovo] = useState<any>({ nome_empresa: "", banco_observado: "", data_inicio: new Date().toISOString().slice(0,10) });
+  const [upd, setUpd] = useState<any>({ entrada_maquininha:0,entrada_pix:0,entrada_boleto:0,entrada_ted:0,entrada_dinheiro:0,outras_entradas:0,total_saidas:0 });
 
-const ALL_NAV_ITEMS: NavItem[] = [
-  { href: "/colaborador/dashboard",   label: "Dashboard",          icon: LayoutDashboard },
-  { href: "/colaborador/meu-perfil",  label: "Meu Perfil",         icon: User },
-  { href: "/colaborador/crm",         label: "CRM Geral",          icon: Kanban, managementOnly: true },
-  { href: "/colaborador/meu-crm",     label: "Meu CRM",            icon: User },
-  { href: "/colaborador/fila?scope=meus", label: "Minha Fila",     icon: ListOrdered },
-  { href: "/colaborador/fila?scope=sem_responsavel", label: "Sem Responsável", icon: ShieldAlert, managementOnly: true },
-  { href: "/colaborador/calculadora", label: "Calculadora",     icon: Calculator },
-  { href: "/colaborador/simulacoes",  label: "Simulações",      icon: FileText },
-  { href: "/colaborador/triagem",     label: "Triagem",            icon: ShieldAlert },
-  { href: "/colaborador/fila",        label: "Fila Geral",         icon: ListOrdered, managementOnly: true },
-  { href: "/colaborador/clientes",    label: "Clientes",        icon: Users },
-  { href: "/colaborador/empresas",    label: "Empresas",        icon: Building2 },
-  { href: "/colaborador/acompanhamento-bancario", label: "Acompanhamento", icon: Activity },
-  // Faturamento: todos os colaboradores
-  { href: "/colaborador/previsao-faturamento", label: "Faturamento", icon: TrendingUp },
-  // Gerador de Contratos: todos os colaboradores
-  { href: "/colaborador/contratos",   label: "Contratos",    icon: FileText },
-  // Cadastro de Contadores: somente Administrador e Diretor
-  { href: "/colaborador/contadores",  label: "Contadores",       icon: BookUser, allowedCargos: ['administrador', 'diretor'] },
-  { href: "/colaborador/clientes-pf",  label: "Clientes PF",      icon: UserCheck },
-  // Integrações n8n: somente Administrador
-  {
-    href: "/colaborador/integracoes",
-    label: "Integrações n8n",
-    icon: Zap,
-    allowedCargos: ['administrador'],
-  },
-  // Usuários: somente Administrador, Diretor e Gerente Comercial
-  {
-    href: "/colaborador/usuarios",
-    label: "Usuários",
-    icon: User,
-    allowedCargos: CARGOS_GESTAO,
-  },
-];
-
-interface LayoutProps {
-  children: React.ReactNode;
-  title?: string;
-}
-
-export default function ColaboradorLayout({ children, title }: LayoutProps) {
-  const { colaborador, signOut } = useAuth();
-  const [location] = useLocation();
-  const [menuAberto, setMenuAberto] = useState(false);
-
-  const cargoLower = (colaborador?.cargo || '').toLowerCase();
-  const podeVerTudo = Boolean(colaborador?.pode_ver_todos_leads || colaborador?.permissoes?.podeVerTudo);
-
-  // Filtra itens de navegação conforme cargo e escopo operacional
-  const navItems = ALL_NAV_ITEMS.filter(item => {
-    if (item.managementOnly && !podeVerTudo) return false;
-    if (!item.allowedCargos) return true;
-    return item.allowedCargos.includes(cargoLower);
-  });
-
-  const handleSignOut = async () => {
-    await signOut();
-    window.location.href = "/colaborador/login";
+  const fetchData = async () => {
+    setLoading(true);
+    const q = new URLSearchParams({ busca: search, status, pendentes: String(pendentes) });
+    const r = await fetch(`/api/acompanhamentos-bancarios?${q}`);
+    setRows(r.ok ? await r.json() : []);
+    setLoading(false);
   };
+  useEffect(() => { if (can) fetchData(); }, [can]);
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* ── Sidebar Desktop ── */}
-      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-gray-200 shadow-sm">
-        {/* Logo */}
-        <div className="p-5 border-b border-gray-200">
-          <a href="/" className="flex items-center gap-2">
-            <img src="/destrava-logo.svg" alt="Destrava Crédito" className="h-8" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-          </a>
-          <div className="mt-2">
-            <Badge variant="secondary" className="text-xs">Área do Colaborador</Badge>
-          </div>
-        </div>
+  const filtered = useMemo(() => rows.filter(r => !banco || String(r.banco_observado||"").toLowerCase().includes(banco.toLowerCase())), [rows,banco]);
+  const resumo = useMemo(() => ({
+    acompanhamento: filtered.filter(r => r.status === "em_acompanhamento").length,
+    pendentes: filtered.filter(r => r.status_pendente).length,
+    positivas: filtered.filter(r => r.status_semana === "positiva").length,
+    negativas: filtered.filter(r => r.status_semana === "negativa").length,
+    prorrogados: filtered.filter(r => r.status === "prorrogado").length,
+    prontos: filtered.filter(r => String(r.recomendacao||"").includes("pronto") || r.status_semana === "positiva").length,
+  }), [filtered]);
 
-        {/* Perfil */}
-        <div className="p-4 border-b border-gray-100 bg-gray-50">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-              <User className="h-5 w-5 text-blue-600" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate">
-                {colaborador?.nome || "Colaborador"}
-              </p>
-              <p className="text-xs text-gray-500 truncate">
-                {colaborador?.cargo || ""}
-              </p>
-            </div>
-          </div>
-        </div>
+  const totalEntradas = ["entrada_maquininha","entrada_pix","entrada_boleto","entrada_ted","entrada_dinheiro","outras_entradas"].reduce((a,k)=>a+Number(upd[k]||0),0);
+  const saldoSemanal = totalEntradas - Number(upd.total_saidas||0);
 
-        {/* Navegação */}
-        <nav className="flex-1 p-3 space-y-0.5">
-          {navItems.map((item) => {
-            const isActive = location === item.href || location.startsWith(item.href + "/") || (item.href.includes("?") && location.startsWith(item.href.split("?")[0]));
-            const Icon = item.icon;
-            return (
-              <Link key={item.href} href={item.href}>
-                <a
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                  }`}
-                >
-                  <Icon className="h-4 w-4 flex-shrink-0" />
-                  <span className="flex-1">{item.label}</span>
-                  {item.badge && (
-                    <span className="text-xs bg-yellow-400 text-yellow-900 px-1.5 py-0.5 rounded-full font-bold">
-                      {item.badge}
-                    </span>
-                  )}
-                  {isActive && <ChevronRight className="h-3 w-3 opacity-60" />}
-                </a>
-              </Link>
-            );
-          })}
-        </nav>
+  if (!can) return <ColaboradorLayout title="Acompanhamento Bancário"><div className="p-6 text-red-600"><h2 className="font-bold">Acesso restrito</h2><p>Este módulo é exclusivo para Gestor de Crédito ou superior.</p></div></ColaboradorLayout>;
 
-        {/* Sair */}
-        <div className="p-3 border-t border-gray-200">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start text-gray-500 hover:text-red-600 hover:bg-red-50"
-            onClick={handleSignOut}
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            Sair
-          </Button>
-        </div>
-      </aside>
+  return <ColaboradorLayout title="Acompanhamento Bancário"><div className="p-6 space-y-4">
+    <div className="flex items-start justify-between gap-4"><div><h1 className="text-2xl font-bold">Acompanhamento Bancário</h1><p className="text-sm text-gray-600">Monitoramento semanal de empresas em relacionamento bancário para evolução de rating, movimentação e preparação para crédito.</p></div><button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={()=>setNovoOpen(true)}>Novo Acompanhamento</button></div>
+    {isWednesday && <div className="p-3 rounded bg-amber-50 border border-amber-200 text-amber-800">Hoje é quarta-feira: dia de atualizar os acompanhamentos bancários.</div>}
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 text-sm">{Object.entries({"Em acompanhamento":resumo.acompanhamento,"Atualizações pendentes":resumo.pendentes,"Semanas positivas":resumo.positivas,"Semanas negativas":resumo.negativas,"Prontos para análise de crédito":resumo.prontos,"Prorrogados":resumo.prorrogados}).map(([k,v])=><div key={k} className="border rounded p-2 bg-white"><div className="text-gray-500">{k}</div><div className="font-bold text-xl">{v as number}</div></div>)}</div>
+    <div className="grid grid-cols-1 md:grid-cols-5 gap-2"><input className="border p-2 rounded" placeholder="Buscar empresa/CNPJ" value={search} onChange={e=>setSearch(e.target.value)} /><input className="border p-2 rounded" placeholder="Banco observado" value={banco} onChange={e=>setBanco(e.target.value)} /><select className="border p-2 rounded" value={status} onChange={e=>setStatus(e.target.value)}><option value="todos">Status</option><option value="em_acompanhamento">Em acompanhamento</option><option value="prorrogado">Prorrogado</option><option value="encerrado">Encerrado</option></select><input className="border p-2 rounded" placeholder="Responsável" disabled /><label className="flex items-center gap-2"><input type="checkbox" checked={pendentes} onChange={e=>setPendentes(e.target.checked)} /> Apenas pendentes</label></div>
+    <button className="px-3 py-2 border rounded" onClick={fetchData}>Aplicar filtros</button>
 
-      {/* ── Mobile: Header + Drawer ── */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 px-4 h-14 flex items-center justify-between shadow-sm">
-        <a href="/" className="flex items-center gap-2">
-          <img src="/destrava-logo.svg" alt="Destrava Crédito" className="h-7" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-          <Badge variant="secondary" className="text-xs">Colaborador</Badge>
-        </a>
-        <button
-          onClick={() => setMenuAberto(!menuAberto)}
-          className="p-2 rounded-md hover:bg-gray-100"
-        >
-          {menuAberto ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
-      </div>
+    <div className="overflow-auto border rounded bg-white"><table className="w-full text-sm"><thead><tr className="bg-gray-50 text-left"><th className="p-2">Empresa</th><th>CNPJ</th><th>Banco</th><th>Rating atual</th><th>Última atualização</th><th>Próxima atualização</th><th>Saldo última semana</th><th>Status semana</th><th>Responsável</th><th>Ações</th></tr></thead><tbody>{!loading && filtered.length===0 ? <tr><td className="p-4" colSpan={10}>Nenhum acompanhamento cadastrado.</td></tr> : filtered.map(r=><tr key={r.id} className="border-t"><td className="p-2">{r.nome_empresa}</td><td>{r.cnpj||"-"}</td><td>{r.banco_observado||"-"}</td><td>{r.rating_interno_atual||r.rating_bacen_atual||"-"}</td><td>{r.ultima_atualizacao_em?.slice(0,10)||"-"}</td><td>{r.proxima_atualizacao?.slice(0,10)||"-"}</td><td>{Number(r.saldo_semanal||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</td><td>{r.status_semana||"-"}</td><td>{r.responsavel_nome||"-"}</td><td className="space-x-1"><button onClick={async()=>setDetalhe(await (await fetch(`/api/acompanhamentos-bancarios/${r.id}`)).json())} className="border px-2 rounded">Detalhes</button><button onClick={()=>{setUpdOpen(r);setUpd({});}} className="border px-2 rounded">Atualizar semana</button>{r.whatsapp_lembrete_url && <a className="border px-2 rounded inline-block" href={r.whatsapp_lembrete_url} target="_blank">WhatsApp</a>}<button onClick={async()=>{await fetch(`/api/acompanhamentos-bancarios/${r.id}/prorrogar`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});fetchData();}} className="border px-2 rounded">Prorrogar</button><button onClick={async()=>{await fetch(`/api/acompanhamentos-bancarios/${r.id}/encerrar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'encerrado'})});fetchData();}} className="border px-2 rounded">Encerrar</button></td></tr>)}</tbody></table></div>
 
-      {/* Mobile Drawer */}
-      {menuAberto && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMenuAberto(false)}>
-          <div
-            className="absolute left-0 top-14 bottom-0 w-64 bg-white shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 border-b border-gray-100 bg-gray-50">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center">
-                  <User className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{colaborador?.nome || "Colaborador"}</p>
-                  <p className="text-xs text-gray-500">{colaborador?.cargo || ""}</p>
-                </div>
-              </div>
-            </div>
-            <nav className="p-3 space-y-0.5">
-              {navItems.map((item) => {
-                const isActive = location === item.href || (item.href.includes("?") && location.startsWith(item.href.split("?")[0]));
-                const Icon = item.icon;
-                return (
-                  <Link key={item.href} href={item.href}>
-                    <a
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                        isActive
-                          ? "bg-blue-600 text-white"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                      }`}
-                      onClick={() => setMenuAberto(false)}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {item.label}
-                    </a>
-                  </Link>
-                );
-              })}
-            </nav>
-            <div className="p-3 border-t border-gray-200">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start text-gray-500 hover:text-red-600"
-                onClick={handleSignOut}
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                Sair
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+    {novoOpen && <div className="fixed inset-0 bg-black/40 p-6 overflow-auto"><div className="max-w-4xl mx-auto bg-white p-4 rounded space-y-2"><h3 className="font-bold">Novo Acompanhamento</h3><div className="grid grid-cols-1 md:grid-cols-3 gap-2">{["nome_empresa","cnpj","telefone_cliente","whatsapp_cliente","email_cliente","banco_observado","agencia","conta","gerente_banco","contato_banco","data_abertura_conta","objetivo_credito","valor_credito_pretendido","linha_credito_pretendida","rating_bacen_inicial","rating_interno_inicial","faturamento_anual","media_mensal","margem_seguranca_30","observacoes_iniciais","responsavel_id"].map(k=><input key={k} className="border p-2 rounded" placeholder={k} value={novo[k]||""} onChange={e=>setNovo({...novo,[k]:e.target.value})} />)}</div><div className="flex gap-2"><button className="px-3 py-2 bg-blue-600 text-white rounded" onClick={async()=>{await fetch('/api/acompanhamentos-bancarios',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(novo)});setNovoOpen(false);fetchData();}}>Salvar</button><button className="px-3 py-2 border rounded" onClick={()=>setNovoOpen(false)}>Fechar</button></div></div></div>}
 
-      {/* ── Conteúdo principal ── */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Topbar */}
-        <div className="hidden lg:flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200">
-          <h2 className="text-base font-semibold text-gray-900">{title || "Painel"}</h2>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">
-              <strong className="text-gray-900">{colaborador?.nome?.split(" ")[0] || "Colaborador"}</strong>
-            </span>
-            <Link href="/colaborador/meu-perfil">
-              <a className="inline-flex items-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
-                <User className="h-4 w-4 mr-1" />
-                Perfil
-              </a>
-            </Link>
-            <Button variant="outline" size="sm" onClick={handleSignOut} className="text-gray-500 hover:text-red-600">
-              <LogOut className="h-4 w-4 mr-1" />
-              Sair
-            </Button>
-          </div>
-        </div>
+    {updOpen && <div className="fixed inset-0 bg-black/40 p-6 overflow-auto"><div className="max-w-4xl mx-auto bg-white p-4 rounded space-y-2"><h3 className="font-bold">Atualização Semanal - {updOpen.nome_empresa}</h3><div className="grid grid-cols-1 md:grid-cols-3 gap-2">{["numero_semana","data_referencia_inicio","data_referencia_fim","entrada_maquininha","entrada_pix","entrada_boleto","entrada_ted","entrada_dinheiro","outras_entradas","total_saidas","saldo_medio","saldo_final","quantidade_transacoes","rating_bacen","rating_interno","scr_status","cenprot_status","serasa_status","cnd_status","pld_aml_status","coaf_status","analise_semana","orientacao_cliente","proxima_acao"].map(k=><input key={k} className="border p-2 rounded" placeholder={k} value={upd[k]||""} onChange={e=>setUpd({...upd,[k]:e.target.value})} />)}<label><input type="checkbox" checked={!!upd.possui_restricao} onChange={e=>setUpd({...upd,possui_restricao:e.target.checked})}/> possui_restricao</label><label><input type="checkbox" checked={!!upd.restricao_nova} onChange={e=>setUpd({...upd,restricao_nova:e.target.checked})}/> restricao_nova</label><label><input type="checkbox" checked={!!upd.devolucao_ou_estorno} onChange={e=>setUpd({...upd,devolucao_ou_estorno:e.target.checked})}/> devolucao_ou_estorno</label><label><input type="checkbox" checked={!!upd.ocorrencia_negativa} onChange={e=>setUpd({...upd,ocorrencia_negativa:e.target.checked})}/> ocorrencia_negativa</label></div><div className="text-sm">Total entradas: <b>{totalEntradas.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</b> | Saldo semanal: <b>{saldoSemanal.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</b></div><div className="flex gap-2"><button className="px-3 py-2 bg-blue-600 text-white rounded" onClick={async()=>{await fetch(`/api/acompanhamentos-bancarios/${updOpen.id}/atualizacoes`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(upd)});setUpdOpen(null);fetchData();}}>Salvar atualização</button><button className="px-3 py-2 border rounded" onClick={()=>setUpdOpen(null)}>Fechar</button></div></div></div>}
 
-        {/* Conteúdo */}
-        <div className="flex-1 mt-14 lg:mt-0 overflow-auto">
-          {children}
-        </div>
-      </main>
-    </div>
-  );
+    {detalhe && <div className="fixed inset-0 bg-black/40 p-6 overflow-auto"><div className="max-w-5xl mx-auto bg-white p-4 rounded"><h3 className="font-bold">Detalhes - {detalhe.nome_empresa}</h3><p>Banco observado: {detalhe.banco_observado || '-'}</p><p>Objetivo do crédito: {detalhe.objetivo_credito || '-'}</p><p>Rating inicial/atual: {detalhe.rating_interno_inicial || detalhe.rating_bacen_inicial || '-'} / {detalhe.rating_interno_atual || detalhe.rating_bacen_atual || '-'}</p><p>Faturamento anual/média mensal: {detalhe.faturamento_anual || 0} / {detalhe.media_mensal || 0}</p><h4 className="mt-3 font-semibold">Histórico semanal</h4><div className="max-h-72 overflow-auto border rounded"><table className="w-full text-sm"><thead><tr><th>Semana</th><th>Entradas</th><th>Saídas</th><th>Saldo</th><th>Status</th></tr></thead><tbody>{(detalhe.atualizacoes||[]).map((u:any)=><tr key={u.id}><td>{u.numero_semana}</td><td>{u.total_entradas}</td><td>{u.total_saidas}</td><td>{u.saldo_semanal}</td><td>{u.status}</td></tr>)}</tbody></table></div><button className="mt-3 px-3 py-2 border rounded" onClick={()=>setDetalhe(null)}>Fechar</button></div></div>}
+  </div></ColaboradorLayout>
 }
