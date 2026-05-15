@@ -3,7 +3,7 @@ import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-import { calcularCompensacaoSemanal, calcularQuantidadeSemanasDoMes, calcularReferenciasFaturamento, classificarStatusCompensacao, gerarDiagnosticoCompensacao } from "./funcoes_compensacao";
+import { calcularAcompanhamentoBancarioDinamico, calcularQuantidadeSemanasDoMes } from "./funcoes_compensacao";
 import crypto from "crypto";
 import pkg from "pg";
 import jwt from "jsonwebtoken";
@@ -7519,18 +7519,6 @@ ${(temTest1 || temTest2) ? `
 
       const faturamentoAnual = normalizarNumeroAcompanhamento(acompanhamento.rows[0].faturamento_anual) || 0;
 
-      const refsRaw: any = calcularReferenciasFaturamento(
-        faturamentoAnual,
-        0.3,
-        semanasMes
-      );
-
-      const refs = {
-        mediaMensal: Number(refsRaw?.mediaMensal ?? refsRaw?.media_mensal_referencia ?? (faturamentoAnual / 12)),
-        limiteMensal: Number(refsRaw?.limiteMensal ?? refsRaw?.limite_mensal_referencia ?? ((faturamentoAnual / 12) * 1.3)),
-        mediaSemanal: Number(refsRaw?.mediaSemanal ?? refsRaw?.media_semanal_referencia ?? (((faturamentoAnual / 12) * 1.3) / semanasMes)),
-      };
-
       const compAnteriorQuery = await pool.query(
         `SELECT compensacao_necessaria_proxima
            FROM acompanhamento_bancario_atualizacoes
@@ -7561,32 +7549,30 @@ ${(temTest1 || temTest2) ? `
         [acompanhamentoId, numeroSemana, dataReferencia]
       );
 
-      const acumuladoMensal = Number(acumuladoMensalQuery.rows[0]?.total || 0) + totalEntradas;
-      const acumuladoAnual = Number(acumuladoAnualQuery.rows[0]?.total || 0) + totalEntradas;
+      const acumuladoMensalAnterior = Number(acumuladoMensalQuery.rows[0]?.total || 0);
+      const acumuladoAnualAnterior = Number(acumuladoAnualQuery.rows[0]?.total || 0);
 
-      const compRaw: any = calcularCompensacaoSemanal({
+      const comp = calcularAcompanhamentoBancarioDinamico({
+        faturamentoAnual,
         totalEntradas,
         totalSaidas,
+        numeroSemana,
+        quantidadeSemanasMes: semanasMes,
+        percentualMargem: 30,
         compensacaoSemanaAnterior: compensacaoAnterior,
-        mediaSemanalReferencia: refs.mediaSemanal,
-        acumuladoMensal,
-        limiteMensalReferencia: refs.limiteMensal,
-        acumuladoAnual,
-        faturamentoAnual,
+        acumuladoMensalAnterior,
+        acumuladoAnualAnterior,
+        toleranciaAbaixoRatingPercent: 80,
       });
 
-      const comp = {
-        entradaComCompensacao: Number(compRaw?.entradaComCompensacao ?? compRaw?.entrada_com_compensacao ?? (totalEntradas - compensacaoAnterior)),
-        diferenca: Number(compRaw?.diferenca ?? compRaw?.diferenca_referencia_semanal ?? ((totalEntradas - compensacaoAnterior) - refs.mediaSemanal)),
-        compensacaoProxima: Number(compRaw?.compensacaoProxima ?? compRaw?.compensacao_necessaria_proxima ?? ((totalEntradas - compensacaoAnterior) - refs.mediaSemanal)),
-        percentualSemanal: Number(compRaw?.percentualSemanal ?? compRaw?.percentual_limite_semanal ?? (refs.mediaSemanal > 0 ? ((totalEntradas - compensacaoAnterior) / refs.mediaSemanal) * 100 : 0)),
-        percentualMensal: Number(compRaw?.percentualMensal ?? compRaw?.percentual_limite_mensal ?? (refs.limiteMensal > 0 ? (acumuladoMensal / refs.limiteMensal) * 100 : 0)),
-        percentualAnual: Number(compRaw?.percentualAnual ?? compRaw?.percentual_limite_anual ?? (faturamentoAnual > 0 ? (acumuladoAnual / faturamentoAnual) * 100 : 0)),
-        alertaAderencia: Boolean(compRaw?.alertaAderencia ?? compRaw?.alerta_aderencia ?? false),
+      const refs = {
+        mediaMensal: comp.media_mensal_referencia,
+        limiteMensal: comp.limite_mensal_referencia,
+        mediaSemanal: comp.media_semanal_referencia,
       };
 
-      const diagnostico = gerarDiagnosticoCompensacao(comp.alertaAderencia, comp.diferenca);
-      const statusComp = classificarStatusCompensacao(comp.diferenca, comp.alertaAderencia);
+      const diagnostico = comp.diagnostico_compensacao;
+      const statusComp = comp.status_compensacao;
 
       const statusSemana = statusSemanaAcompanhamento({
         saldo: saldoSemanal,
@@ -7638,10 +7624,14 @@ ${(temTest1 || temTest2) ? `
         "entrada_com_compensacao",
         "diferenca_referencia_semanal",
         "compensacao_necessaria_proxima",
+        "saldo_faltante_mes",
+        "meta_dinamica_proxima_semana",
+        "valor_excedente_mes",
         "percentual_limite_semanal",
         "percentual_limite_mensal",
         "percentual_limite_anual",
         "alerta_aderencia",
+        "alerta_rating",
         "motivo_alerta_aderencia",
         "diagnostico_compensacao",
         "status_compensacao"
@@ -7687,16 +7677,18 @@ ${(temTest1 || temTest2) ? `
         refs.mediaSemanal,
         semanasMes,
         compensacaoAnterior,
-        comp.entradaComCompensacao,
-        comp.diferenca,
-        comp.compensacaoProxima,
-        comp.percentualSemanal,
-        comp.percentualMensal,
-        comp.percentualAnual,
-        comp.alertaAderencia,
-        comp.alertaAderencia
-          ? "Movimentação acima da referência configurada para o período. Recomenda-se revisar os lançamentos e a documentação comprobatória."
-          : null,
+        comp.entrada_com_compensacao,
+        comp.diferenca_referencia_semanal,
+        comp.compensacao_necessaria_proxima,
+        comp.saldo_faltante_mes,
+        comp.meta_dinamica_proxima_semana,
+        comp.valor_excedente_mes,
+        comp.percentual_limite_semanal,
+        comp.percentual_limite_mensal,
+        comp.percentual_limite_anual,
+        comp.alerta_aderencia,
+        comp.alerta_rating,
+        comp.motivo_alerta_aderencia,
         diagnostico,
         statusComp,
       ];
@@ -7742,6 +7734,8 @@ ${(temTest1 || temTest2) ? `
           data_referencia_inicio,
           data_referencia_fim,
           entrada_realizada,
+          saida_realizada,
+          saldo_semanal,
           media_mensal_referencia,
           limite_mensal_referencia,
           media_semanal_referencia,
@@ -7750,36 +7744,73 @@ ${(temTest1 || temTest2) ? `
           entrada_com_compensacao,
           diferenca_referencia_semanal,
           compensacao_necessaria,
+          saldo_faltante_mes,
+          meta_dinamica_proxima_semana,
+          valor_excedente_mes,
           percentual_limite_semanal,
           percentual_limite_mensal,
           percentual_limite_anual,
           alerta_aderencia,
+          alerta_rating,
           motivo_alerta,
+          status_compensacao,
           criado_por
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19
-        )`,
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+          $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+          $21,$22,$23,$24,$25,$26
+        )
+        ON CONFLICT (acompanhamento_id, numero_semana) DO UPDATE SET
+          data_referencia_inicio = EXCLUDED.data_referencia_inicio,
+          data_referencia_fim = EXCLUDED.data_referencia_fim,
+          entrada_realizada = EXCLUDED.entrada_realizada,
+          saida_realizada = EXCLUDED.saida_realizada,
+          saldo_semanal = EXCLUDED.saldo_semanal,
+          media_mensal_referencia = EXCLUDED.media_mensal_referencia,
+          limite_mensal_referencia = EXCLUDED.limite_mensal_referencia,
+          media_semanal_referencia = EXCLUDED.media_semanal_referencia,
+          quantidade_semanas_mes = EXCLUDED.quantidade_semanas_mes,
+          compensacao_anterior = EXCLUDED.compensacao_anterior,
+          entrada_com_compensacao = EXCLUDED.entrada_com_compensacao,
+          diferenca_referencia_semanal = EXCLUDED.diferenca_referencia_semanal,
+          compensacao_necessaria = EXCLUDED.compensacao_necessaria,
+          saldo_faltante_mes = EXCLUDED.saldo_faltante_mes,
+          meta_dinamica_proxima_semana = EXCLUDED.meta_dinamica_proxima_semana,
+          valor_excedente_mes = EXCLUDED.valor_excedente_mes,
+          percentual_limite_semanal = EXCLUDED.percentual_limite_semanal,
+          percentual_limite_mensal = EXCLUDED.percentual_limite_mensal,
+          percentual_limite_anual = EXCLUDED.percentual_limite_anual,
+          alerta_aderencia = EXCLUDED.alerta_aderencia,
+          alerta_rating = EXCLUDED.alerta_rating,
+          motivo_alerta = EXCLUDED.motivo_alerta,
+          status_compensacao = EXCLUDED.status_compensacao,
+          updated_at = NOW()`,
         [
           acompanhamentoId,
           numeroSemana,
           b.data_referencia_inicio || null,
           b.data_referencia_fim || null,
           totalEntradas,
+          totalSaidas,
+          saldoSemanal,
           refs.mediaMensal,
           refs.limiteMensal,
           refs.mediaSemanal,
           semanasMes,
           compensacaoAnterior,
-          comp.entradaComCompensacao,
-          comp.diferenca,
-          comp.compensacaoProxima,
-          comp.percentualSemanal,
-          comp.percentualMensal,
-          comp.percentualAnual,
-          comp.alertaAderencia,
-          comp.alertaAderencia
-            ? "Movimentação acima da referência configurada para o período. Recomenda-se revisar os lançamentos e a documentação comprobatória."
-            : null,
+          comp.entrada_com_compensacao,
+          comp.diferenca_referencia_semanal,
+          comp.compensacao_necessaria_proxima,
+          comp.saldo_faltante_mes,
+          comp.meta_dinamica_proxima_semana,
+          comp.valor_excedente_mes,
+          comp.percentual_limite_semanal,
+          comp.percentual_limite_mensal,
+          comp.percentual_limite_anual,
+          comp.alerta_aderencia,
+          comp.alerta_rating,
+          comp.motivo_alerta_aderencia,
+          statusComp,
           colaborador?.id || null,
         ]
       ).catch(() => null);
@@ -7976,6 +8007,40 @@ ${(temTest1 || temTest2) ? `
       res.status(500).json({ error: "Erro ao apagar acompanhamento bancário." });
     } finally {
       client.release();
+    }
+  });
+
+
+  app.get("/api/acompanhamentos-bancarios/:id/compensacoes", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT *
+           FROM acompanhamento_compensacoes_historico
+          WHERE acompanhamento_id = $1
+          ORDER BY numero_semana ASC, created_at ASC`,
+        [req.params.id]
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error("[GET /api/acompanhamentos-bancarios/:id/compensacoes]", err);
+      res.status(500).json({ error: "Erro ao buscar histórico de compensações." });
+    }
+  });
+
+  app.get("/api/acompanhamentos-bancarios/:id/alertas-aderencia", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT *
+           FROM acompanhamento_compensacoes_historico
+          WHERE acompanhamento_id = $1
+            AND (alerta_aderencia = true OR alerta_rating = true)
+          ORDER BY numero_semana DESC, created_at DESC`,
+        [req.params.id]
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error("[GET /api/acompanhamentos-bancarios/:id/alertas-aderencia]", err);
+      res.status(500).json({ error: "Erro ao buscar alertas de aderência financeira." });
     }
   });
 
