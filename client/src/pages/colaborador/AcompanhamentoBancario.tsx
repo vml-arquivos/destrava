@@ -275,6 +275,8 @@ const PRESTADORAS_RELATORIO = {
     corPrimaria: "#0B3B82",
     corSecundaria: "#EAF1FB",
     slogan: "Assessoria de crédito empresarial",
+    logoUrl: "/destrava-logo-color.svg",
+    logoAlt: "Logo oficial Destrava Crédito",
   },
   permupay: {
     key: "permupay",
@@ -284,6 +286,8 @@ const PRESTADORAS_RELATORIO = {
     corPrimaria: "#111827",
     corSecundaria: "#F3F4F6",
     slogan: "Soluções financeiras e relacionamento bancário",
+    logoUrl: "",
+    logoAlt: "PermuPay",
   },
 } as const;
 
@@ -291,6 +295,34 @@ type PrestadoraKey = keyof typeof PRESTADORAS_RELATORIO;
 
 function prestadoraMeta(key?: string | null) {
   return PRESTADORAS_RELATORIO[(key as PrestadoraKey) || "destrava"] || PRESTADORAS_RELATORIO.destrava;
+}
+
+function slugArquivo(value: unknown): string {
+  return String(value || "arquivo")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function nomeArquivoRelatorio(row: Acompanhamento, prestadoraKey: PrestadoraKey = "destrava", ext = "pdf"): string {
+  const prestadora = prestadoraMeta(prestadoraKey);
+  const empresa = slugArquivo(row?.nome_empresa || "EMPRESA");
+  const banco = slugArquivo(row?.banco_observado || "BANCO");
+  const cnpj = slugArquivo(row?.cnpj || "");
+  const data = hojeISO();
+  const sufixoCnpj = cnpj ? `-${cnpj}` : "";
+  return `relatorio-acompanhamento-bancario-${slugArquivo(prestadora.nome)}-${empresa}-${banco}${sufixoCnpj}-${data}.${ext}`;
+}
+
+function logoRelatorioHtml(prestadoraKey: PrestadoraKey = "destrava"): string {
+  const prestadora = prestadoraMeta(prestadoraKey);
+  if (prestadora.logoUrl) {
+    const base = typeof window !== "undefined" && window.location?.origin ? window.location.origin : "";
+    return `<img class="brand-logo-img" src="${base}${prestadora.logoUrl}" alt="${prestadora.logoAlt}" />`;
+  }
+  return `<div class="brand-logo-text">${prestadora.marca}</div>`;
 }
 
 function totalEntradasSemana(item: any): number {
@@ -426,8 +458,10 @@ function exportarCSV(row: Acompanhamento, prestadoraKey: PrestadoraKey = "destra
   <style>
     body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; background: #ffffff; }
     .brand { background: ${prestadora.corPrimaria}; color: white; padding: 20px 24px; border-radius: 14px; }
-    .brand-row { display: flex; align-items: center; gap: 14px; }
-    .logo { width: 132px; height: 46px; border: 2px solid rgba(255,255,255,.72); border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; letter-spacing: .08em; }
+    .brand-row { display: flex; align-items: center; gap: 16px; }
+    .brand-logo-box { width: 150px; min-width: 150px; height: 58px; border: 2px solid rgba(255,255,255,.72); border-radius: 14px; background: rgba(255,255,255,.96); display: inline-flex; align-items: center; justify-content: center; padding: 8px; }
+    .brand-logo-img { max-width: 132px; max-height: 42px; object-fit: contain; display: block; }
+    .brand-logo-text { color: ${prestadora.corPrimaria}; font-weight: 900; letter-spacing: .08em; font-size: 16px; }
     .brand h1 { margin: 0; font-size: 22px; }
     .brand p { margin: 4px 0 0; font-size: 12px; opacity: .92; }
     .section { margin-top: 18px; }
@@ -458,7 +492,7 @@ function exportarCSV(row: Acompanhamento, prestadoraKey: PrestadoraKey = "destra
 <body>
   <div class="brand">
     <div class="brand-row">
-      <div class="logo">${safe(prestadora.marca)}</div>
+      <div class="brand-logo-box">${logoRelatorioHtml(prestadoraKey)}</div>
       <div>
         <h1>Relatório de Acompanhamento Bancário</h1>
         <p>${safe(prestadora.nome)} — ${safe(prestadora.slogan)}</p>
@@ -556,7 +590,7 @@ function exportarCSV(row: Acompanhamento, prestadoraKey: PrestadoraKey = "destra
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `relatorio-acompanhamento-${slug(prestadora.nome)}-${slug(row.nome_empresa)}-${slug(row.banco_observado)}.xls`;
+  link.download = nomeArquivoRelatorio(row, prestadoraKey, "xls");
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -1012,7 +1046,18 @@ export default function AcompanhamentoBancario() {
     setImprimirOpen(rowCompleto);
   };
 
-  const handleImprimir = () => { window.print(); };
+  const handleImprimir = () => {
+    const originalTitle = document.title;
+    if (imprimirOpen) {
+      document.title = nomeArquivoRelatorio(imprimirOpen, prestadoraRelatorio, "pdf").replace(/\.pdf$/i, "");
+    }
+    window.setTimeout(() => {
+      window.print();
+      window.setTimeout(() => {
+        document.title = originalTitle;
+      }, 800);
+    }, 80);
+  };
 
   const renderActionButtons = (row: Acompanhamento) => {
     const whats = whatsappUrl(row);
@@ -1947,6 +1992,15 @@ export default function AcompanhamentoBancario() {
         {/* ── Modal — Impressão ────────────────────────────────────────────── */}
         {imprimirOpen && (
           <div className="fixed inset-0 z-50 overflow-auto bg-white p-0">
+            <style>{`
+              @media print {
+                @page { size: A4 landscape; margin: 10mm; }
+                body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .print\\:hidden { display: none !important; }
+                table { page-break-inside: auto; }
+                tr { page-break-inside: avoid; page-break-after: auto; }
+              }
+            `}</style>
             <div className="flex flex-wrap items-center gap-3 border-b bg-gray-50 p-4 print:hidden">
               <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                 Prestadora
@@ -1962,14 +2016,33 @@ export default function AcompanhamentoBancario() {
               <button className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700" onClick={handleImprimir}>
                 Imprimir / Salvar PDF
               </button>
+              <button
+                className="rounded border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-100"
+                onClick={() => exportarCSV(imprimirOpen, prestadoraRelatorio)}
+              >
+                Exportar XLS personalizado
+              </button>
+              <span className="text-xs text-slate-500">
+                Arquivo: {nomeArquivoRelatorio(imprimirOpen, prestadoraRelatorio, "pdf")}
+              </span>
               <button className="rounded border px-4 py-2 text-sm" onClick={() => setImprimirOpen(null)}>Fechar</button>
             </div>
 
             <div ref={printRef} className="mx-auto max-w-5xl p-8 text-sm" style={{ fontFamily: "Arial, sans-serif" }}>
               <div className="mb-6 rounded-xl border-b-4 p-5 text-white" style={{ backgroundColor: prestadoraMeta(prestadoraRelatorio).corPrimaria, borderColor: prestadoraMeta(prestadoraRelatorio).corPrimaria }}>
                 <div className="flex items-center gap-4">
-                  <div className="flex h-14 w-36 items-center justify-center rounded-xl border-2 border-white/70 text-lg font-extrabold tracking-widest">
-                    {prestadoraMeta(prestadoraRelatorio).marca}
+                  <div className="flex h-16 w-40 shrink-0 items-center justify-center rounded-xl border-2 border-white/70 bg-white p-2 shadow-sm">
+                    {prestadoraMeta(prestadoraRelatorio).logoUrl ? (
+                      <img
+                        src={prestadoraMeta(prestadoraRelatorio).logoUrl}
+                        alt={prestadoraMeta(prestadoraRelatorio).logoAlt}
+                        className="max-h-12 max-w-[140px] object-contain"
+                      />
+                    ) : (
+                      <span className="text-lg font-extrabold tracking-widest" style={{ color: prestadoraMeta(prestadoraRelatorio).corPrimaria }}>
+                        {prestadoraMeta(prestadoraRelatorio).marca}
+                      </span>
+                    )}
                   </div>
                   <div>
                     <h1 className="text-2xl font-bold">Relatório de Acompanhamento Bancário</h1>
