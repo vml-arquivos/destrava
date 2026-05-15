@@ -1991,17 +1991,187 @@ export default function AcompanhamentoBancario() {
 
         {/* ── Modal — Impressão ────────────────────────────────────────────── */}
         {imprimirOpen && (
-          <div className="fixed inset-0 z-50 overflow-auto bg-white p-0">
+          <div className="print-root fixed inset-0 z-50 overflow-auto bg-white p-0">
             <style>{`
               @media print {
-                @page { size: A4 landscape; margin: 10mm; }
-                body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                .print\\:hidden { display: none !important; }
-                table { page-break-inside: auto; }
-                tr { page-break-inside: avoid; page-break-after: auto; }
+                @page { size: A4 landscape; margin: 8mm; }
+
+                html,
+                body,
+                #root {
+                  width: 100% !important;
+                  min-width: 0 !important;
+                  height: auto !important;
+                  min-height: 0 !important;
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  overflow: visible !important;
+                  background: #ffffff !important;
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
+
+                body * {
+                  visibility: hidden !important;
+                }
+
+                .print-toolbar,
+                .print-toolbar * {
+                  display: none !important;
+                  visibility: hidden !important;
+                }
+
+                .print-root {
+                  position: static !important;
+                  inset: auto !important;
+                  width: 100% !important;
+                  height: auto !important;
+                  min-height: 0 !important;
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  overflow: visible !important;
+                  background: #ffffff !important;
+                }
+
+                .print-document,
+                .print-document * {
+                  visibility: visible !important;
+                }
+
+                .print-document {
+                  position: static !important;
+                  display: block !important;
+                  width: calc(297mm - 16mm) !important;
+                  max-width: none !important;
+                  min-width: 0 !important;
+                  margin: 0 auto !important;
+                  padding: 0 !important;
+                  overflow: visible !important;
+                  color: #0f172a !important;
+                  font-size: 9px !important;
+                  line-height: 1.25 !important;
+                  background: #ffffff !important;
+                }
+
+                .print-card {
+                  break-inside: avoid !important;
+                  page-break-inside: avoid !important;
+                }
+
+                .print-main-header {
+                  margin-bottom: 4mm !important;
+                  padding: 4mm !important;
+                  border-radius: 4mm !important;
+                }
+
+                .print-main-header h1 {
+                  font-size: 17px !important;
+                  line-height: 1.15 !important;
+                  margin: 0 !important;
+                }
+
+                .print-main-header h2 {
+                  font-size: 14px !important;
+                  line-height: 1.15 !important;
+                  margin-top: 2mm !important;
+                }
+
+                .print-main-header p {
+                  font-size: 9px !important;
+                  line-height: 1.2 !important;
+                }
+
+                .print-logo-box {
+                  width: 38mm !important;
+                  height: 16mm !important;
+                  border-radius: 3mm !important;
+                }
+
+                .print-logo-box img {
+                  max-width: 34mm !important;
+                  max-height: 12mm !important;
+                }
+
+                .print-current-week {
+                  margin-bottom: 4mm !important;
+                  padding: 3.5mm !important;
+                  border-radius: 4mm !important;
+                  break-inside: avoid !important;
+                }
+
+                .print-current-week h3 {
+                  font-size: 12px !important;
+                  margin-bottom: 2mm !important;
+                }
+
+                .print-grid-compact {
+                  display: grid !important;
+                  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+                  gap: 2mm 4mm !important;
+                }
+
+                .print-kpis {
+                  display: grid !important;
+                  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+                  gap: 2mm 5mm !important;
+                  margin-bottom: 3mm !important;
+                  break-inside: avoid !important;
+                }
+
+                .print-weekly-table {
+                  width: 100% !important;
+                  table-layout: fixed !important;
+                  border-collapse: collapse !important;
+                  font-size: 7.3px !important;
+                  line-height: 1.12 !important;
+                  margin-top: 2mm !important;
+                  page-break-inside: auto !important;
+                }
+
+                .print-weekly-table th,
+                .print-weekly-table td {
+                  padding: 1.5mm 1mm !important;
+                  border: 1px solid #cbd5e1 !important;
+                  white-space: normal !important;
+                  overflow-wrap: anywhere !important;
+                  word-break: normal !important;
+                  vertical-align: middle !important;
+                }
+
+                .print-weekly-table th {
+                  background: #eef2f7 !important;
+                  color: #334155 !important;
+                  font-weight: 700 !important;
+                }
+
+                .print-weekly-table tr {
+                  break-inside: avoid !important;
+                  page-break-inside: avoid !important;
+                }
+
+                .print-signatures {
+                  margin-top: 10mm !important;
+                  display: grid !important;
+                  grid-template-columns: 1fr 1fr !important;
+                  gap: 16mm !important;
+                  break-inside: avoid !important;
+                }
+
+                .print-note {
+                  margin-top: 4mm !important;
+                  padding: 3mm !important;
+                  break-inside: avoid !important;
+                }
+
+                .print-footer {
+                  margin-top: 5mm !important;
+                  padding-top: 2mm !important;
+                  font-size: 7px !important;
+                  break-inside: avoid !important;
+                }
               }
             `}</style>
-            <div className="flex flex-wrap items-center gap-3 border-b bg-gray-50 p-4 print:hidden">
+            <div className="print-toolbar flex flex-wrap items-center gap-3 border-b bg-gray-50 p-4">
               <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                 Prestadora
                 <select
@@ -2028,10 +2198,10 @@ export default function AcompanhamentoBancario() {
               <button className="rounded border px-4 py-2 text-sm" onClick={() => setImprimirOpen(null)}>Fechar</button>
             </div>
 
-            <div ref={printRef} className="mx-auto max-w-5xl p-8 text-sm" style={{ fontFamily: "Arial, sans-serif" }}>
-              <div className="mb-6 rounded-xl border-b-4 p-5 text-white" style={{ backgroundColor: prestadoraMeta(prestadoraRelatorio).corPrimaria, borderColor: prestadoraMeta(prestadoraRelatorio).corPrimaria }}>
+            <div ref={printRef} className="print-document mx-auto w-full max-w-7xl p-6 text-sm" style={{ fontFamily: "Arial, sans-serif" }}>
+              <div className="print-main-header mb-6 rounded-xl border-b-4 p-5 text-white" style={{ backgroundColor: prestadoraMeta(prestadoraRelatorio).corPrimaria, borderColor: prestadoraMeta(prestadoraRelatorio).corPrimaria }}>
                 <div className="flex items-center gap-4">
-                  <div className="flex h-16 w-40 shrink-0 items-center justify-center rounded-xl border-2 border-white/70 bg-white p-2 shadow-sm">
+                  <div className="print-logo-box flex h-16 w-40 shrink-0 items-center justify-center rounded-xl border-2 border-white/70 bg-white p-2 shadow-sm">
                     {prestadoraMeta(prestadoraRelatorio).logoUrl ? (
                       <img
                         src={prestadoraMeta(prestadoraRelatorio).logoUrl}
@@ -2058,9 +2228,9 @@ export default function AcompanhamentoBancario() {
                 const evolucao = calcularEvolucaoAcompanhamento(imprimirOpen);
                 const saldoAtual = Number(semanaAtual?.saldo_semanal || 0);
                 return (
-                  <div className="mb-5 rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
+                  <div className="print-current-week mb-5 rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
                     <h3 className="mb-3 text-base font-bold text-amber-800">Semana atual em evidência</h3>
-                    <div className="grid grid-cols-4 gap-3 text-xs">
+                    <div className="print-grid-compact grid grid-cols-4 gap-3 text-xs">
                       <div><strong>Semana:</strong><br />{semanaAtual ? `Semana ${semanaAtual.numero_semana}` : "-"}</div>
                       <div><strong>Período:</strong><br />{formatDateBR(semanaAtual?.data_referencia_inicio)} a {formatDateBR(semanaAtual?.data_referencia_fim)}</div>
                       <div><strong>Entradas:</strong><br />{moneyBR(totalEntradasSemana(semanaAtual))}</div>
@@ -2074,30 +2244,30 @@ export default function AcompanhamentoBancario() {
                 );
               })()}
 
-              <div className="mb-4 grid grid-cols-3 gap-4">
+              <div className="print-kpis mb-4 grid grid-cols-3 gap-4">
                 <div><strong>Rating Bacen:</strong> {imprimirOpen.rating_bacen_atual || imprimirOpen.rating_bacen_inicial || "-"}</div>
                 <div><strong>Rating Interno Inicial:</strong> {imprimirOpen.rating_interno_inicial || "-"}</div>
                 <div><strong>Rating Interno Atual:</strong> {imprimirOpen.rating_interno_atual || "-"}</div>
               </div>
 
-              <div className="mb-4 grid grid-cols-3 gap-4">
+              <div className="print-kpis mb-4 grid grid-cols-3 gap-4">
                 <div><strong>Faturamento anual:</strong> {moneyBR(imprimirOpen.faturamento_anual)}</div>
                 <div><strong>Média mensal:</strong> {moneyBR(imprimirOpen.media_mensal)}</div>
                 <div><strong>Margem ±30%:</strong> {moneyBR(imprimirOpen.margem_seguranca_30)}</div>
               </div>
 
-              <div className="mb-4 grid grid-cols-3 gap-4">
+              <div className="print-kpis mb-4 grid grid-cols-3 gap-4">
                 <div><strong>Início do acompanhamento:</strong> {formatDateBR(imprimirOpen.data_inicio)}</div>
                 <div><strong>Fim previsto:</strong> {formatDateBR(imprimirOpen.data_fim_prevista)}</div>
                 <div><strong>Status:</strong> {labelStatus(imprimirOpen.status)}</div>
               </div>
 
               <h3 className="mb-2 mt-6 text-base font-bold">Histórico Semanal</h3>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+              <table className="print-weekly-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "9px", tableLayout: "fixed" }}>
                 <thead>
                   <tr style={{ background: "#f3f4f6" }}>
                     {["Semana","Período","Máquina","PIX","Boleto","TED","Dinheiro","Outras","Total Entradas","Saídas","Saldo Semanal","Rating B.","Rating I.","SCR","CND","Status"].map((h) => (
-                      <th key={h} style={{ border: "1px solid #d1d5db", padding: "4px 6px", textAlign: "left" }}>{h}</th>
+                      <th key={h} style={{ border: "1px solid #d1d5db", padding: "4px 4px", textAlign: "left", wordBreak: "normal", overflowWrap: "anywhere" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -2123,7 +2293,7 @@ export default function AcompanhamentoBancario() {
                           item.cnd_status || item.cnd_regular || "-",
                           item.status_semana || item.status || "-",
                         ].map((cell, i) => (
-                          <td key={i} style={{ border: "1px solid #d1d5db", padding: "4px 6px" }}>{cell}</td>
+                          <td key={i} style={{ border: "1px solid #d1d5db", padding: "4px 4px", wordBreak: "normal", overflowWrap: "anywhere" }}>{cell}</td>
                         ))}
                       </tr>
                     ))
@@ -2133,15 +2303,15 @@ export default function AcompanhamentoBancario() {
                 </tbody>
               </table>
 
-              <div style={{ marginTop: "24px", padding: "12px", border: "1px solid #bfdbfe", background: "#eff6ff", borderRadius: "6px" }}>
+              <div className="print-note" style={{ marginTop: "24px", padding: "12px", border: "1px solid #bfdbfe", background: "#eff6ff", borderRadius: "6px" }}>
                 <strong>Recomendação operacional:</strong> {calcularRecomendacao(imprimirOpen)}
               </div>
 
-              <div style={{ marginTop: "26px", padding: "12px", border: "1px solid #d1d5db", background: "#f9fafb", borderRadius: "8px" }}>
+              <div className="print-note" style={{ marginTop: "26px", padding: "12px", border: "1px solid #d1d5db", background: "#f9fafb", borderRadius: "8px" }}>
                 <strong>Declaração de prestação de serviço:</strong> Este relatório registra o acompanhamento bancário semanal prestado pela {prestadoraMeta(prestadoraRelatorio).nome} à empresa {imprimirOpen.nome_empresa || "-"}, com base nos dados fornecidos e atualizados no sistema.
               </div>
 
-              <div className="mt-12 grid grid-cols-2 gap-10">
+              <div className="print-signatures mt-12 grid grid-cols-2 gap-10">
                 <div className="border-t border-gray-800 pt-2 text-center text-xs">
                   {imprimirOpen.responsavel_nome || "Responsável pelo acompanhamento"}<br />
                   Responsável {prestadoraMeta(prestadoraRelatorio).nome}
@@ -2152,7 +2322,7 @@ export default function AcompanhamentoBancario() {
                 </div>
               </div>
 
-              <div style={{ marginTop: "32px", borderTop: "1px solid #e5e7eb", paddingTop: "8px", color: "#9ca3af", fontSize: "10px" }}>
+              <div className="print-footer" style={{ marginTop: "32px", borderTop: "1px solid #e5e7eb", paddingTop: "8px", color: "#9ca3af", fontSize: "10px" }}>
                 {prestadoraMeta(prestadoraRelatorio).nome} — Documento gerado em {new Date().toLocaleDateString("pt-BR")} às {new Date().toLocaleTimeString("pt-BR")}
               </div>
             </div>
