@@ -2335,13 +2335,6 @@ export default function AcompanhamentoBancario() {
                                   >
                                     Corrigir semana
                                   </button>
-                                  <button
-                                    className="mt-2 block whitespace-nowrap rounded-md border border-red-300 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700 hover:bg-red-100 disabled:opacity-60"
-                                    onClick={() => apagarSemana(detalhe, item)}
-                                    disabled={saving}
-                                  >
-                                    Apagar semana
-                                  </button>
                                 </td>
                               </tr>
                             );
