@@ -1147,6 +1147,7 @@ async function startServer() {
       }
       const result = await pool.query(
         `SELECT id, email, nome, cargo, senha_hash, ativo, chatwoot_agente_id,
+                COALESCE(acesso_acompanhamento_bancario, false) AS acesso_acompanhamento_bancario,
                 COALESCE(perfil, CASE
                   WHEN LOWER(COALESCE(cargo, '')) IN ('administrador', 'admin', 'diretor') THEN 'admin'
                   WHEN LOWER(COALESCE(cargo, '')) IN ('gerente comercial', 'gerente', 'gestor') THEN 'gestor'
@@ -1181,6 +1182,7 @@ async function startServer() {
         pode_atender_leads: user.pode_atender_leads ?? podeAtenderLeadsPorCargo(user.cargo),
         pode_ver_todos_leads: user.pode_ver_todos_leads ?? podeVerTodosLeadsPorPerfilOuCargo(user.perfil, user.cargo),
         chatwoot_agente_id: user.chatwoot_agente_id ?? null,
+        acesso_acompanhamento_bancario: user.acesso_acompanhamento_bancario ?? false,
         ativo: user.ativo,
       };
       const token = jwt.sign(
@@ -1193,6 +1195,7 @@ async function startServer() {
           pode_atender_leads: colaboradorData.pode_atender_leads,
           pode_ver_todos_leads: colaboradorData.pode_ver_todos_leads,
           chatwoot_agente_id: colaboradorData.chatwoot_agente_id,
+          acesso_acompanhamento_bancario: colaboradorData.acesso_acompanhamento_bancario,
         },
         process.env.JWT_SECRET!,
         { expiresIn: "24h" }
@@ -6972,39 +6975,25 @@ ${(temTest1 || temTest2) ? `
   });
 
 
-  // ─── ACOMPANHAMENTO BANCÁRIO API ───────────────────────────────────────────
-  const normalizarNumero = (valor: unknown): number | null => {
-    if (valor === null || valor === undefined || valor === "") return null;
-    const n = Number(String(valor).replace(/\./g, "").replace(",", "."));
-    return Number.isFinite(n) ? n : null;
+  // ─── Acompanhamento Bancário ───────────────────────────────────────────────
+  type AcessoUser = {
+    id?: string;
+    cargo?: string | null;
+    perfil?: string | null;
+    acesso_acompanhamento_bancario?: boolean | null;
   };
 
-  const proximaQuartaFeira = (base = new Date()): string => {
-    const d = new Date(base);
-    d.setHours(12, 0, 0, 0);
-    const dia = d.getDay(); // 0 dom ... 3 qua
-    const diff = (3 - dia + 7) % 7 || 7;
-    d.setDate(d.getDate() + diff);
-    return d.toISOString().slice(0, 10);
-  };
+  function normalizarPermissaoAcompanhamento(value?: string | null): string {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, "_")
+      .replace(/-/g, "_");
+  }
 
-  const montarWhatsapp = (telefone?: string | null, mensagem?: string): string | null => {
-    const digits = String(telefone || "").replace(/\D/g, "");
-    if (!digits) return null;
-    const numero = digits.startsWith("55") ? digits : `55${digits}`;
-    return `https://wa.me/${numero}?text=${encodeURIComponent(mensagem || "")}`;
-  };
-
-
-  const normalizePermValue = (value: unknown): string => String(value || "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, "_")
-    .replace(/-/g, "_");
-
-  const colaboradorPodeAcessarAcompanhamento = (user: any): boolean => {
+  function usuarioPodeAcessarAcompanhamento(user: AcessoUser | null | undefined): boolean {
     if (!user) return false;
     if (user.acesso_acompanhamento_bancario === true) return true;
 
@@ -7014,30 +7003,106 @@ ${(temTest1 || temTest2) ? `
       "super_admin",
       "superadmin",
       "gestor_credito",
+      "diretor",
     ]);
 
-    const cargo = normalizePermValue(user.cargo);
-    const perfil = normalizePermValue(user.perfil);
-    const role = normalizePermValue(user.role); // compatibilidade legada
+    return (
+      permitidos.has(normalizarPermissaoAcompanhamento(user.cargo)) ||
+      permitidos.has(normalizarPermissaoAcompanhamento(user.perfil))
+    );
+  }
 
-    return permitidos.has(cargo) || permitidos.has(perfil) || permitidos.has(role);
-  };
+  async function carregarPermissaoAcompanhamento(colaborador: any): Promise<AcessoUser | null> {
+    if (!colaborador?.id) return colaborador || null;
 
-  const requireAcessoAcompanhamento = (req: Request, res: Response, next: any) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, cargo, perfil, COALESCE(acesso_acompanhamento_bancario, false) AS acesso_acompanhamento_bancario
+           FROM colaboradores
+          WHERE id = $1 AND ativo = true
+          LIMIT 1`,
+        [colaborador.id]
+      );
+
+      return rows[0] || colaborador;
+    } catch (err) {
+      console.error("[ACOMPANHAMENTO PERMISSÃO]", err);
+      return colaborador;
+    }
+  }
+
+  async function requireAcessoAcompanhamento(req: Request, res: Response, next: NextFunction) {
     const colaborador = (req as Request & { colaborador?: any }).colaborador;
-    if (!colaboradorPodeAcessarAcompanhamento(colaborador)) {
-      res.status(403).json({ error: "Acesso restrito a Gestor de Crédito ou superior." });
+    const usuario = await carregarPermissaoAcompanhamento(colaborador);
+
+    if (!usuarioPodeAcessarAcompanhamento(usuario)) {
+      res.status(403).json({
+        error: "Acesso restrito a Gestor de Crédito ou superior.",
+      });
       return;
     }
+
+    (req as any).colaborador = { ...(colaborador || {}), ...(usuario || {}) };
     next();
-  };
+  }
+
+  function normalizarNumeroAcompanhamento(valor: unknown): number | null {
+    if (valor === null || valor === undefined || valor === "") return null;
+
+    const texto = String(valor)
+      .replace(/[R$\s]/g, "")
+      .trim();
+
+    if (!texto) return null;
+
+    const normalizado = texto.includes(",")
+      ? texto.replace(/\./g, "").replace(",", ".")
+      : texto.replace(/,/g, "");
+
+    const n = Number(normalizado);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function proximaQuartaFeira(base = new Date()): string {
+    const d = new Date(base);
+    d.setHours(12, 0, 0, 0);
+    const dia = d.getDay(); // 0 domingo, 3 quarta
+    const diff = (3 - dia + 7) % 7 || 7;
+    d.setDate(d.getDate() + diff);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function montarWhatsappAcompanhamento(telefone?: string | null, mensagem?: string): string | null {
+    const digits = String(telefone || "").replace(/\D/g, "");
+    if (!digits) return null;
+    const numero = digits.startsWith("55") ? digits : `55${digits}`;
+    return `https://wa.me/${numero}?text=${encodeURIComponent(mensagem || "")}`;
+  }
+
+  function statusSemanaAcompanhamento({
+    saldo,
+    restricaoNova,
+    ocorrenciaNegativa,
+    devolucaoOuEstorno,
+  }: {
+    saldo: number;
+    restricaoNova?: boolean;
+    ocorrenciaNegativa?: boolean;
+    devolucaoOuEstorno?: boolean;
+  }): string {
+    if (restricaoNova || ocorrenciaNegativa || devolucaoOuEstorno) return "atencao";
+    if (saldo > 0) return "positiva";
+    if (saldo < 0) return "negativa";
+    return "neutra";
+  }
 
   app.get("/api/acompanhamentos-bancarios", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
-      const colaborador = (req as Request & { colaborador: any }).colaborador;
       const status = String(req.query.status || "todos");
       const busca = String(req.query.busca || "").trim();
       const somentePendentes = String(req.query.pendentes || "false") === "true";
+      const banco = String(req.query.banco || "").trim();
+
       const params: any[] = [];
       const conditions: string[] = [];
 
@@ -7047,117 +7112,171 @@ ${(temTest1 || temTest2) ? `
       }
 
       if (somentePendentes) {
-        conditions.push(`(a.proxima_atualizacao IS NOT NULL AND a.proxima_atualizacao <= CURRENT_DATE)`);
+        conditions.push(`a.proxima_atualizacao IS NOT NULL`);
+        conditions.push(`a.proxima_atualizacao <= CURRENT_DATE`);
         conditions.push(`a.status IN ('em_acompanhamento','atualizacao_pendente','prorrogado')`);
       }
 
       if (busca) {
         params.push(`%${busca}%`);
         const idx = params.length;
-        conditions.push(`(a.nome_empresa ILIKE $${idx} OR a.cnpj ILIKE $${idx} OR a.banco_observado ILIKE $${idx})`);
+        conditions.push(`(a.nome_empresa ILIKE $${idx} OR COALESCE(a.cnpj, '') ILIKE $${idx} OR COALESCE(a.banco_observado, '') ILIKE $${idx})`);
+      }
+
+      if (banco) {
+        params.push(`%${banco}%`);
+        conditions.push(`COALESCE(a.banco_observado, '') ILIKE $${params.length}`);
       }
 
       const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
       const { rows } = await pool.query(
-        `SELECT a.*,
-                c.nome AS responsavel_nome,
-                e.razao_social AS empresa_razao_social,
-                e.nome_fantasia AS empresa_nome_fantasia,
-                e.whatsapp AS empresa_whatsapp,
-                e.telefone AS empresa_telefone,
-                e.email AS empresa_email,
-                COALESCE((
-                  SELECT COUNT(*)::int FROM acompanhamento_bancario_atualizacoes u
-                  WHERE u.acompanhamento_id = a.id
-                ), 0) AS total_atualizacoes,
-                COALESCE((
-                  SELECT SUM(u.total_entradas) FROM acompanhamento_bancario_atualizacoes u
-                  WHERE u.acompanhamento_id = a.id
-                ), 0) AS total_entradas,
-                COALESCE((
-                  SELECT SUM(u.total_saidas) FROM acompanhamento_bancario_atualizacoes u
-                  WHERE u.acompanhamento_id = a.id
-                ), 0) AS total_saidas
-         FROM acompanhamentos_bancarios a
-         LEFT JOIN colaboradores c ON c.id = a.responsavel_id
-         LEFT JOIN empresas e ON e.id = a.empresa_id
-         ${where}
-         ORDER BY
-           CASE WHEN a.proxima_atualizacao IS NOT NULL AND a.proxima_atualizacao <= CURRENT_DATE THEN 0 ELSE 1 END,
-           a.proxima_atualizacao ASC NULLS LAST,
-           a.created_at DESC`,
+        `SELECT
+            a.*,
+            c.nome AS responsavel_nome,
+            ult.data_atualizacao AS ultima_atualizacao_em,
+            ult.total_entradas AS total_entradas_ultima_semana,
+            ult.total_saidas AS total_saidas_ultima_semana,
+            ult.saldo_semanal AS saldo_semanal,
+            ult.status_semana AS status_semana,
+            COALESCE(cont.total_atualizacoes, 0)::int AS total_atualizacoes
+          FROM acompanhamentos_bancarios a
+          LEFT JOIN colaboradores c ON c.id = a.responsavel_id
+          LEFT JOIN LATERAL (
+            SELECT
+              data_atualizacao,
+              total_entradas,
+              total_saidas,
+              saldo_semanal,
+              status_semana
+            FROM acompanhamento_bancario_atualizacoes u
+            WHERE u.acompanhamento_id = a.id
+            ORDER BY u.numero_semana DESC, u.created_at DESC
+            LIMIT 1
+          ) ult ON TRUE
+          LEFT JOIN LATERAL (
+            SELECT COUNT(*) AS total_atualizacoes
+            FROM acompanhamento_bancario_atualizacoes u
+            WHERE u.acompanhamento_id = a.id
+          ) cont ON TRUE
+          ${where}
+          ORDER BY
+            CASE WHEN a.proxima_atualizacao IS NOT NULL AND a.proxima_atualizacao <= CURRENT_DATE THEN 0 ELSE 1 END,
+            a.proxima_atualizacao ASC NULLS LAST,
+            a.created_at DESC`,
         params
       );
 
       const hoje = new Date().toISOString().slice(0, 10);
+
       const enriquecidos = rows.map((row: any) => {
-        const telefone = row.empresa_whatsapp || row.empresa_telefone || null;
-        const msg = `Olá! Aqui é a equipe da Destrava Crédito. Estamos aguardando os dados semanais da empresa ${row.nome_empresa} para atualizar o acompanhamento bancário e evolução de rating. Pode nos enviar as movimentações da semana (PIX, maquininha, boletos, TED, dinheiro, saídas e saldo)?`;
+        // Calcula semana e período para a mensagem de WhatsApp
+        const totalAtualizacoes = Number(row.total_atualizacoes || 0);
+        const proxSemanaNum = totalAtualizacoes + 1;
+        let fimPeriodoStr = '-';
+        let inicioPeriodoStr = '-';
+        if (row.proxima_atualizacao) {
+          const dFim = new Date(String(row.proxima_atualizacao) + 'T00:00:00Z');
+          fimPeriodoStr = dFim.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+          const dIni = new Date(String(row.proxima_atualizacao) + 'T00:00:00Z');
+          dIni.setUTCDate(dIni.getUTCDate() - 6);
+          inicioPeriodoStr = dIni.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+        }
+        const msg = `Olá! Aqui é a equipe da Destrava Crédito. Hoje é dia de atualizar o acompanhamento bancário da empresa ${row.nome_empresa} no banco ${row.banco_observado || ''}. Pode nos enviar os dados da semana ${proxSemanaNum}, período de ${inicioPeriodoStr} a ${fimPeriodoStr}: entradas por Pix, maquininha, boletos, TED, dinheiro, total de saídas, saldo e informações de rating?`;
+        const isPendente = Boolean(
+          row.proxima_atualizacao &&
+          row.proxima_atualizacao <= hoje &&
+          ["em_acompanhamento", "atualizacao_pendente", "prorrogado"].includes(row.status)
+        );
         return {
           ...row,
-          atualizacao_pendente: Boolean(row.proxima_atualizacao && row.proxima_atualizacao <= hoje && ['em_acompanhamento','atualizacao_pendente','prorrogado'].includes(row.status)),
-          status_pendente: Boolean(row.proxima_atualizacao && row.proxima_atualizacao <= hoje && ['em_acompanhamento','atualizacao_pendente','prorrogado'].includes(row.status)),
-          whatsapp_lembrete_url: montarWhatsapp(telefone, msg),
+          status_pendente: isPendente,
+          atualizacao_pendente: isPendente,
+          whatsapp_lembrete_url: montarWhatsappAcompanhamento(row.whatsapp_cliente || row.telefone_cliente, msg),
         };
       });
 
       res.json(enriquecidos);
     } catch (err) {
       console.error("[GET /api/acompanhamentos-bancarios]", err);
-      res.status(500).json({ error: "Erro ao listar acompanhamentos bancários" });
+      res.status(500).json({ error: "Erro ao listar acompanhamentos bancários." });
     }
   });
 
-  app.get("/api/acompanhamentos-bancarios/alertas", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+  app.get("/api/acompanhamentos-bancarios/alertas", auth, requireAcessoAcompanhamento, async (_req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
-        `SELECT a.id, a.nome_empresa, a.cnpj, a.status, a.proxima_atualizacao, a.responsavel_id,
-                c.nome AS responsavel_nome,
-                e.whatsapp AS empresa_whatsapp,
-                e.telefone AS empresa_telefone
-         FROM acompanhamentos_bancarios a
-         LEFT JOIN colaboradores c ON c.id = a.responsavel_id
-         LEFT JOIN empresas e ON e.id = a.empresa_id
-         WHERE a.status IN ('em_acompanhamento','atualizacao_pendente','prorrogado')
-           AND a.proxima_atualizacao IS NOT NULL
-           AND a.proxima_atualizacao <= CURRENT_DATE
-         ORDER BY a.proxima_atualizacao ASC, a.nome_empresa ASC`
+        `SELECT
+            a.id,
+            a.nome_empresa,
+            a.cnpj,
+            a.banco_observado,
+            a.status,
+            a.proxima_atualizacao,
+            a.responsavel_id,
+            a.whatsapp_cliente,
+            a.telefone_cliente,
+            c.nome AS responsavel_nome
+          FROM acompanhamentos_bancarios a
+          LEFT JOIN colaboradores c ON c.id = a.responsavel_id
+          WHERE a.status IN ('em_acompanhamento','atualizacao_pendente','prorrogado')
+            AND a.proxima_atualizacao IS NOT NULL
+            AND a.proxima_atualizacao <= CURRENT_DATE
+          ORDER BY a.proxima_atualizacao ASC, a.nome_empresa ASC`
       );
+
       res.json(rows);
     } catch (err) {
       console.error("[GET /api/acompanhamentos-bancarios/alertas]", err);
-      res.status(500).json({ error: "Erro ao listar alertas de acompanhamento" });
+      res.status(500).json({ error: "Erro ao listar alertas de acompanhamento." });
+    }
+  });
+
+  app.get("/api/acompanhamentos-bancarios/:id/atualizacoes", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT *
+           FROM acompanhamento_bancario_atualizacoes
+          WHERE acompanhamento_id = $1
+          ORDER BY numero_semana DESC, created_at DESC`,
+        [req.params.id]
+      );
+
+      res.json(rows);
+    } catch (err) {
+      console.error("[GET /api/acompanhamentos-bancarios/:id/atualizacoes]", err);
+      res.status(500).json({ error: "Erro ao listar atualizações semanais." });
     }
   });
 
   app.get("/api/acompanhamentos-bancarios/:id", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
-        `SELECT a.*, c.nome AS responsavel_nome,
-                e.razao_social AS empresa_razao_social,
-                e.nome_fantasia AS empresa_nome_fantasia,
-                e.whatsapp AS empresa_whatsapp,
-                e.telefone AS empresa_telefone,
-                e.email AS empresa_email
-         FROM acompanhamentos_bancarios a
-         LEFT JOIN colaboradores c ON c.id = a.responsavel_id
-         LEFT JOIN empresas e ON e.id = a.empresa_id
-         WHERE a.id = $1`,
+        `SELECT a.*, c.nome AS responsavel_nome
+           FROM acompanhamentos_bancarios a
+           LEFT JOIN colaboradores c ON c.id = a.responsavel_id
+          WHERE a.id = $1
+          LIMIT 1`,
         [req.params.id]
       );
-      if (!rows.length) { res.status(404).json({ error: "Acompanhamento não encontrado" }); return; }
+
+      if (!rows.length) {
+        res.status(404).json({ error: "Acompanhamento não encontrado." });
+        return;
+      }
 
       const atualizacoes = await pool.query(
-        `SELECT * FROM acompanhamento_bancario_atualizacoes
-         WHERE acompanhamento_id = $1
-         ORDER BY numero_semana ASC`,
+        `SELECT *
+           FROM acompanhamento_bancario_atualizacoes
+          WHERE acompanhamento_id = $1
+          ORDER BY numero_semana ASC, created_at ASC`,
         [req.params.id]
       );
 
       res.json({ ...rows[0], atualizacoes: atualizacoes.rows });
     } catch (err) {
       console.error("[GET /api/acompanhamentos-bancarios/:id]", err);
-      res.status(500).json({ error: "Erro ao buscar acompanhamento" });
+      res.status(500).json({ error: "Erro ao buscar acompanhamento." });
     }
   });
 
@@ -7178,61 +7297,125 @@ ${(temTest1 || temTest2) ? `
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const {
-        empresa_id, nome_empresa, cnpj, banco_observado, agencia, conta,
-        objetivo_credito, valor_credito_pretendido, linha_credito_pretendida,
-        data_inicio, rating_bacen_inicial, rating_interno_inicial,
-        faturamento_anual, observacoes_iniciais,
-      } = req.body;
+        empresa_id,
+        lead_id,
+        nome_empresa,
+        cnpj,
+        telefone_cliente,
+        whatsapp_cliente,
+        email_cliente,
+        banco_observado,
+        agencia,
+        conta,
+        gerente_banco,
+        contato_banco,
+        data_abertura_conta,
+        objetivo_credito,
+        valor_credito_pretendido,
+        linha_credito_pretendida,
+        data_inicio,
+        data_fim_prevista,
+        responsavel_id,
+        rating_bacen_inicial,
+        rating_interno_inicial,
+        faturamento_anual,
+        media_mensal,
+        margem_seguranca_30,
+        observacoes_iniciais,
+      } = req.body || {};
 
       let empresa: any = null;
       if (empresa_id) {
-        const result = await pool.query("SELECT * FROM empresas WHERE id = $1", [empresa_id]);
+        const result = await pool.query("SELECT * FROM empresas WHERE id = $1 LIMIT 1", [empresa_id]);
         empresa = result.rows[0] || null;
       }
 
-      const nomeFinal = (nome_empresa || empresa?.razao_social || "").trim();
+      const nomeFinal = String(nome_empresa || empresa?.razao_social || empresa?.nome_fantasia || "").trim();
       if (!nomeFinal) {
         res.status(400).json({ error: "Informe a empresa do acompanhamento." });
         return;
       }
 
+      const bancoFinal = String(banco_observado || "").trim();
+      if (!bancoFinal) {
+        res.status(400).json({ error: "Informe o banco observado." });
+        return;
+      }
+
       const inicio = data_inicio || new Date().toISOString().slice(0, 10);
       const dtInicio = new Date(`${inicio}T12:00:00`);
-      const fim = new Date(dtInicio);
-      fim.setDate(fim.getDate() + 30);
+      const fimCalculado = new Date(dtInicio);
+      fimCalculado.setDate(fimCalculado.getDate() + 30);
 
-      const faturamento = normalizarNumero(faturamento_anual ?? empresa?.faturamento_anual);
-      const mediaMensal = faturamento ? faturamento / 12 : null;
-      const margem30 = mediaMensal ? mediaMensal * 1.3 : null;
+      const faturamento = normalizarNumeroAcompanhamento(faturamento_anual ?? empresa?.faturamento_anual) || 0;
+      const mediaInformada = normalizarNumeroAcompanhamento(media_mensal);
+      const media = mediaInformada ?? (faturamento ? faturamento / 12 : 0);
+      const margemInformada = normalizarNumeroAcompanhamento(margem_seguranca_30);
+      const margem30 = margemInformada ?? (media ? media * 1.3 : 0);
+      const responsavelFinal = responsavel_id || colaborador?.id || null;
 
       const { rows } = await pool.query(
         `INSERT INTO acompanhamentos_bancarios (
-          empresa_id, nome_empresa, cnpj, banco_observado, agencia, conta,
-          objetivo_credito, valor_credito_pretendido, linha_credito_pretendida,
-          data_inicio, data_fim_prevista, responsavel_id,
-          rating_bacen_inicial, rating_interno_inicial, rating_bacen_atual, rating_interno_atual,
-          faturamento_anual, media_mensal, margem_30,
-          proxima_atualizacao, observacoes_iniciais
+          empresa_id,
+          lead_id,
+          nome_empresa,
+          cnpj,
+          telefone_cliente,
+          whatsapp_cliente,
+          email_cliente,
+          banco_observado,
+          agencia,
+          conta,
+          gerente_banco,
+          contato_banco,
+          data_abertura_conta,
+          objetivo_credito,
+          valor_credito_pretendido,
+          linha_credito_pretendida,
+          status,
+          etapa,
+          data_inicio,
+          data_fim_prevista,
+          responsavel_id,
+          rating_bacen_inicial,
+          rating_bacen_atual,
+          rating_interno_inicial,
+          rating_interno_atual,
+          faturamento_anual,
+          media_mensal,
+          margem_seguranca_30,
+          proxima_atualizacao,
+          observacoes_iniciais
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$13,$14,$15,$16,$17,$18,$19
-        ) RETURNING *`,
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+          $11,$12,$13,$14,$15,$16,'em_acompanhamento','inicio',
+          $17,$18,$19,$20,$20,$21,$21,$22,$23,$24,$25,$26
+        )
+        RETURNING *`,
         [
           empresa_id || null,
+          lead_id || null,
           nomeFinal,
           cnpj || empresa?.cnpj || null,
-          banco_observado || empresa?.banco_principal || null,
-          agencia || empresa?.agencia || null,
-          conta || empresa?.conta || null,
+          telefone_cliente || empresa?.telefone || null,
+          whatsapp_cliente || empresa?.whatsapp || telefone_cliente || empresa?.telefone || null,
+          email_cliente || empresa?.email || null,
+          bancoFinal,
+          agencia || null,
+          conta || null,
+          gerente_banco || null,
+          contato_banco || null,
+          data_abertura_conta || null,
           objetivo_credito || null,
-          normalizarNumero(valor_credito_pretendido),
+          normalizarNumeroAcompanhamento(valor_credito_pretendido),
           linha_credito_pretendida || null,
           inicio,
-          fim.toISOString().slice(0, 10),
-          colaborador?.id || null,
+          data_fim_prevista || fimCalculado.toISOString().slice(0, 10),
+          responsavelFinal,
           rating_bacen_inicial || null,
           rating_interno_inicial || null,
           faturamento,
-          mediaMensal,
+          media,
           margem30,
           proximaQuartaFeira(dtInicio),
           observacoes_iniciais || null,
@@ -7243,260 +7426,1479 @@ ${(temTest1 || temTest2) ? `
       res.status(201).json(rows[0]);
     } catch (err) {
       console.error("[POST /api/acompanhamentos-bancarios]", err);
-      res.status(500).json({ error: "Erro ao criar acompanhamento bancário" });
+      res.status(500).json({ error: "Erro ao criar acompanhamento bancário." });
     }
   });
 
   app.patch("/api/acompanhamentos-bancarios/:id", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
-      const updates = { ...req.body, updated_at: new Date().toISOString() };
+      const updates = { ...(req.body || {}), updated_at: new Date().toISOString() };
       delete updates.id;
       delete updates.atualizacoes;
+      delete updates.created_at;
+
       const keys = Object.keys(updates);
-      if (!keys.length) { res.json({ success: true }); return; }
+      if (!keys.length) {
+        res.json({ success: true });
+        return;
+      }
+
       const values = Object.values(updates);
       const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+
       const { rows } = await pool.query(
-        `UPDATE acompanhamentos_bancarios SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
+        `UPDATE acompanhamentos_bancarios
+            SET ${set}
+          WHERE id = $${keys.length + 1}
+          RETURNING *`,
         [...values, req.params.id]
       );
-      if (!rows.length) { res.status(404).json({ error: "Acompanhamento não encontrado" }); return; }
+
+      if (!rows.length) {
+        res.status(404).json({ error: "Acompanhamento não encontrado." });
+        return;
+      }
+
       res.json(rows[0]);
     } catch (err) {
       console.error("[PATCH /api/acompanhamentos-bancarios/:id]", err);
-      res.status(500).json({ error: "Erro ao atualizar acompanhamento" });
+      res.status(500).json({ error: "Erro ao atualizar acompanhamento." });
     }
   });
 
-  app.post("/api/acompanhamentos-bancarios/:id/atualizacoes", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+  const salvarAtualizacaoSemanal = async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const a = await pool.query("SELECT * FROM acompanhamentos_bancarios WHERE id = $1", [req.params.id]);
-      if (!a.rows.length) { res.status(404).json({ error: "Acompanhamento não encontrado" }); return; }
+      const b = req.body || {};
+      const acompanhamentoId = req.params.id;
 
-      const count = await pool.query(
-        "SELECT COALESCE(MAX(numero_semana), 0)::int AS ultima FROM acompanhamento_bancario_atualizacoes WHERE acompanhamento_id = $1",
-        [req.params.id]
+      const acompanhamento = await pool.query(
+        `SELECT id, faturamento_anual, media_mensal, margem_seguranca_30, margem_30
+           FROM acompanhamentos_bancarios
+          WHERE id = $1
+          LIMIT 1`,
+        [acompanhamentoId]
       );
-      const numeroSemana = Number(req.body.numero_semana || count.rows[0].ultima + 1);
-      const dataRef = req.body.data_referencia_inicio || req.body.data_atualizacao || new Date().toISOString().slice(0,10);
-      const semanasMes = Number(req.body.quantidade_semanas_mes || calcularQuantidadeSemanasDoMes(dataRef));
-      const fatAnual = Number(a.rows[0].faturamento_anual || 0);
-      const refs = calcularReferenciasFaturamento(fatAnual, 0.3, semanasMes);
-      const prevCompQ = await pool.query("SELECT compensacao_necessaria_proxima FROM acompanhamento_bancario_atualizacoes WHERE acompanhamento_id=$1 AND numero_semana < $2 ORDER BY numero_semana DESC LIMIT 1", [req.params.id, numeroSemana]);
-      const compAnterior = Number(prevCompQ.rows[0]?.compensacao_necessaria_proxima || 0);
-      const entradas = (normalizarNumero(req.body.entrada_maquininha ?? req.body.entrada_maquina) || 0) + (normalizarNumero(req.body.entrada_pix) || 0) + (normalizarNumero(req.body.entrada_boleto) || 0) + (normalizarNumero(req.body.entrada_ted) || 0) + (normalizarNumero(req.body.entrada_dinheiro) || 0) + (normalizarNumero(req.body.outras_entradas) || 0);
-      const saidas = normalizarNumero(req.body.total_saidas) || 0;
-      const acumMesQ = await pool.query("SELECT COALESCE(SUM(total_entradas),0) AS total FROM acompanhamento_bancario_atualizacoes WHERE acompanhamento_id=$1 AND date_trunc('month', COALESCE(data_referencia_inicio,data_atualizacao)) = date_trunc('month', $2::date)", [req.params.id, dataRef]);
-      const acumAnoQ = await pool.query("SELECT COALESCE(SUM(total_entradas),0) AS total FROM acompanhamento_bancario_atualizacoes WHERE acompanhamento_id=$1 AND date_trunc('year', COALESCE(data_referencia_inicio,data_atualizacao)) = date_trunc('year', $2::date)", [req.params.id, dataRef]);
-      const comp = calcularCompensacaoSemanal({ totalEntradas: entradas, totalSaidas: saidas, compensacaoSemanaAnterior: compAnterior, mediaSemanalReferencia: refs.mediaSemanal, acumuladoMensal: Number(acumMesQ.rows[0]?.total || 0) + entradas, limiteMensalReferencia: refs.limiteMensal, acumuladoAnual: Number(acumAnoQ.rows[0]?.total || 0) + entradas, faturamentoAnual: fatAnual });
+
+      if (!acompanhamento.rows.length) {
+        res.status(404).json({ error: "Acompanhamento não encontrado." });
+        return;
+      }
+
+      const entradas = {
+        entrada_maquininha: normalizarNumeroAcompanhamento(b.entrada_maquininha ?? b.entrada_maquina) || 0,
+        entrada_pix: normalizarNumeroAcompanhamento(b.entrada_pix) || 0,
+        entrada_boleto: normalizarNumeroAcompanhamento(b.entrada_boleto) || 0,
+        entrada_ted: normalizarNumeroAcompanhamento(b.entrada_ted) || 0,
+        entrada_dinheiro: normalizarNumeroAcompanhamento(b.entrada_dinheiro) || 0,
+        outras_entradas: normalizarNumeroAcompanhamento(b.outras_entradas) || 0,
+      };
+
+      const totalEntradas =
+        entradas.entrada_maquininha +
+        entradas.entrada_pix +
+        entradas.entrada_boleto +
+        entradas.entrada_ted +
+        entradas.entrada_dinheiro +
+        entradas.outras_entradas;
+
+      const totalSaidas = normalizarNumeroAcompanhamento(b.total_saidas) || 0;
+      const saldoSemanal = totalEntradas - totalSaidas;
+
+      const numeroSemana = Number(b.numero_semana || 1);
+      const dataReferencia = String(
+        b.data_referencia_inicio ||
+        b.data_atualizacao ||
+        new Date().toISOString().slice(0, 10)
+      ).slice(0, 10);
+
+      const semanasMes = Number(
+        b.quantidade_semanas_mes ||
+        calcularQuantidadeSemanasDoMes(dataReferencia)
+      ) || 4;
+
+      const faturamentoAnual = normalizarNumeroAcompanhamento(acompanhamento.rows[0].faturamento_anual) || 0;
+
+      const refsRaw: any = calcularReferenciasFaturamento(
+        faturamentoAnual,
+        0.3,
+        semanasMes
+      );
+
+      const refs = {
+        mediaMensal: Number(refsRaw?.mediaMensal ?? refsRaw?.media_mensal_referencia ?? (faturamentoAnual / 12)),
+        limiteMensal: Number(refsRaw?.limiteMensal ?? refsRaw?.limite_mensal_referencia ?? ((faturamentoAnual / 12) * 1.3)),
+        mediaSemanal: Number(refsRaw?.mediaSemanal ?? refsRaw?.media_semanal_referencia ?? (((faturamentoAnual / 12) * 1.3) / semanasMes)),
+      };
+
+      const compAnteriorQuery = await pool.query(
+        `SELECT compensacao_necessaria_proxima
+           FROM acompanhamento_bancario_atualizacoes
+          WHERE acompanhamento_id = $1
+            AND numero_semana < $2
+          ORDER BY numero_semana DESC, created_at DESC
+          LIMIT 1`,
+        [acompanhamentoId, numeroSemana]
+      );
+
+      const compensacaoAnterior = Number(compAnteriorQuery.rows[0]?.compensacao_necessaria_proxima || 0);
+
+      const acumuladoMensalQuery = await pool.query(
+        `SELECT COALESCE(SUM(total_entradas), 0) AS total
+           FROM acompanhamento_bancario_atualizacoes
+          WHERE acompanhamento_id = $1
+            AND numero_semana <> $2
+            AND date_trunc('month', COALESCE(data_referencia_inicio, data_atualizacao)) = date_trunc('month', $3::date)`,
+        [acompanhamentoId, numeroSemana, dataReferencia]
+      );
+
+      const acumuladoAnualQuery = await pool.query(
+        `SELECT COALESCE(SUM(total_entradas), 0) AS total
+           FROM acompanhamento_bancario_atualizacoes
+          WHERE acompanhamento_id = $1
+            AND numero_semana <> $2
+            AND date_trunc('year', COALESCE(data_referencia_inicio, data_atualizacao)) = date_trunc('year', $3::date)`,
+        [acompanhamentoId, numeroSemana, dataReferencia]
+      );
+
+      const acumuladoMensal = Number(acumuladoMensalQuery.rows[0]?.total || 0) + totalEntradas;
+      const acumuladoAnual = Number(acumuladoAnualQuery.rows[0]?.total || 0) + totalEntradas;
+
+      const compRaw: any = calcularCompensacaoSemanal({
+        totalEntradas,
+        totalSaidas,
+        compensacaoSemanaAnterior: compensacaoAnterior,
+        mediaSemanalReferencia: refs.mediaSemanal,
+        acumuladoMensal,
+        limiteMensalReferencia: refs.limiteMensal,
+        acumuladoAnual,
+        faturamentoAnual,
+      });
+
+      const comp = {
+        entradaComCompensacao: Number(compRaw?.entradaComCompensacao ?? compRaw?.entrada_com_compensacao ?? (totalEntradas - compensacaoAnterior)),
+        diferenca: Number(compRaw?.diferenca ?? compRaw?.diferenca_referencia_semanal ?? ((totalEntradas - compensacaoAnterior) - refs.mediaSemanal)),
+        compensacaoProxima: Number(compRaw?.compensacaoProxima ?? compRaw?.compensacao_necessaria_proxima ?? ((totalEntradas - compensacaoAnterior) - refs.mediaSemanal)),
+        percentualSemanal: Number(compRaw?.percentualSemanal ?? compRaw?.percentual_limite_semanal ?? (refs.mediaSemanal > 0 ? ((totalEntradas - compensacaoAnterior) / refs.mediaSemanal) * 100 : 0)),
+        percentualMensal: Number(compRaw?.percentualMensal ?? compRaw?.percentual_limite_mensal ?? (refs.limiteMensal > 0 ? (acumuladoMensal / refs.limiteMensal) * 100 : 0)),
+        percentualAnual: Number(compRaw?.percentualAnual ?? compRaw?.percentual_limite_anual ?? (faturamentoAnual > 0 ? (acumuladoAnual / faturamentoAnual) * 100 : 0)),
+        alertaAderencia: Boolean(compRaw?.alertaAderencia ?? compRaw?.alerta_aderencia ?? false),
+      };
+
       const diagnostico = gerarDiagnosticoCompensacao(comp.alertaAderencia, comp.diferenca);
       const statusComp = classificarStatusCompensacao(comp.diferenca, comp.alertaAderencia);
 
+      const statusSemana = statusSemanaAcompanhamento({
+        saldo: saldoSemanal,
+        restricaoNova: Boolean(b.restricao_nova),
+        ocorrenciaNegativa: Boolean(b.ocorrencia_negativa),
+        devolucaoOuEstorno: Boolean(b.devolucao_ou_estorno),
+      });
+
+      const columns = [
+        "acompanhamento_id",
+        "numero_semana",
+        "data_referencia_inicio",
+        "data_referencia_fim",
+        "data_atualizacao",
+        "entrada_maquininha",
+        "entrada_pix",
+        "entrada_boleto",
+        "entrada_ted",
+        "entrada_dinheiro",
+        "outras_entradas",
+        "total_entradas",
+        "total_saidas",
+        "saldo_semanal",
+        "saldo_medio",
+        "saldo_final",
+        "quantidade_transacoes",
+        "rating_bacen",
+        "rating_interno",
+        "possui_restricao",
+        "restricao_nova",
+        "scr_status",
+        "cenprot_status",
+        "serasa_status",
+        "cnd_status",
+        "pld_aml_status",
+        "coaf_status",
+        "devolucao_ou_estorno",
+        "ocorrencia_negativa",
+        "status_semana",
+        "analise_semana",
+        "orientacao_cliente",
+        "proxima_acao",
+        "criado_por",
+        "media_mensal_referencia",
+        "limite_mensal_referencia",
+        "media_semanal_referencia",
+        "quantidade_semanas_mes",
+        "compensacao_semana_anterior",
+        "entrada_com_compensacao",
+        "diferenca_referencia_semanal",
+        "compensacao_necessaria_proxima",
+        "percentual_limite_semanal",
+        "percentual_limite_mensal",
+        "percentual_limite_anual",
+        "alerta_aderencia",
+        "motivo_alerta_aderencia",
+        "diagnostico_compensacao",
+        "status_compensacao"
+      ];
+
+      const values = [
+        acompanhamentoId,
+        numeroSemana,
+        b.data_referencia_inicio || null,
+        b.data_referencia_fim || null,
+        b.data_atualizacao || null,
+        entradas.entrada_maquininha,
+        entradas.entrada_pix,
+        entradas.entrada_boleto,
+        entradas.entrada_ted,
+        entradas.entrada_dinheiro,
+        entradas.outras_entradas,
+        totalEntradas,
+        totalSaidas,
+        saldoSemanal,
+        normalizarNumeroAcompanhamento(b.saldo_medio) || 0,
+        normalizarNumeroAcompanhamento(b.saldo_final) || 0,
+        Number(b.quantidade_transacoes || 0),
+        b.rating_bacen || null,
+        b.rating_interno || null,
+        Boolean(b.possui_restricao),
+        Boolean(b.restricao_nova),
+        b.scr_status || null,
+        b.cenprot_status || null,
+        b.serasa_status || null,
+        b.cnd_status || null,
+        b.pld_aml_status || null,
+        b.coaf_status || null,
+        Boolean(b.devolucao_ou_estorno),
+        Boolean(b.ocorrencia_negativa),
+        statusSemana,
+        b.analise_semana || null,
+        b.orientacao_cliente || null,
+        b.proxima_acao || null,
+        colaborador?.id || null,
+        refs.mediaMensal,
+        refs.limiteMensal,
+        refs.mediaSemanal,
+        semanasMes,
+        compensacaoAnterior,
+        comp.entradaComCompensacao,
+        comp.diferenca,
+        comp.compensacaoProxima,
+        comp.percentualSemanal,
+        comp.percentualMensal,
+        comp.percentualAnual,
+        comp.alertaAderencia,
+        comp.alertaAderencia
+          ? "Movimentação acima da referência configurada para o período. Recomenda-se revisar os lançamentos e a documentação comprobatória."
+          : null,
+        diagnostico,
+        statusComp,
+      ];
+
+      const placeholders = values.map((_, index) => `$${index + 1}`).join(",");
+      const updateSet = columns
+        .filter((col) => !["acompanhamento_id", "numero_semana", "criado_por"].includes(col))
+        .map((col) => `${col} = EXCLUDED.${col}`)
+        .join(",\n          ");
+
       const { rows } = await pool.query(
-        `INSERT INTO acompanhamento_bancario_atualizacoes (
-          acompanhamento_id, numero_semana, periodo, data_referencia_inicio, data_referencia_fim, data_atualizacao,
-          entrada_maquina, entrada_pix, entrada_boleto, entrada_ted, entrada_dinheiro, outras_entradas,
-          total_saidas, saldo_medio, saldo_final, quantidade_transacoes,
-          rating_bacen, rating_interno,
-          restricao_scr, restricao_cenprot, restricao_serasa, cnd_regular, pld_aml, operacao_suspeita_coaf,
-          restricao_nova, devolucao_ou_estorno, ocorrencia_negativa,
-          status, analise_semana, orientacao_cliente, proxima_acao, criado_por,
-          media_mensal_referencia, limite_mensal_referencia, media_semanal_referencia, quantidade_semanas_mes,
-          compensacao_semana_anterior, entrada_com_compensacao, diferenca_referencia_semanal, compensacao_necessaria_proxima,
-          percentual_limite_semanal, percentual_limite_mensal, percentual_limite_anual, alerta_aderencia, motivo_alerta_aderencia, diagnostico_compensacao, status_compensacao
-        ) VALUES (
-          $1,$2,$3,$4,$5,COALESCE($6::date,CURRENT_DATE),
-          $7,$8,$9,$10,$11,$12,
-          $13,$14,$15,$16,
-          $17,$18,
-          $19,$20,$21,$22,$23,$24,
-          $25,$26,$27,
-           $28,$29,$30,$31,$32,
-          $33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47
-        )
-        ON CONFLICT (acompanhamento_id, numero_semana)
-        DO UPDATE SET
-          periodo = EXCLUDED.periodo,
-          data_referencia_inicio = EXCLUDED.data_referencia_inicio,
-          data_referencia_fim = EXCLUDED.data_referencia_fim,
-          data_atualizacao = EXCLUDED.data_atualizacao,
-          entrada_maquina = EXCLUDED.entrada_maquina,
-          entrada_pix = EXCLUDED.entrada_pix,
-          entrada_boleto = EXCLUDED.entrada_boleto,
-          entrada_ted = EXCLUDED.entrada_ted,
-          entrada_dinheiro = EXCLUDED.entrada_dinheiro,
-          outras_entradas = EXCLUDED.outras_entradas,
-          total_saidas = EXCLUDED.total_saidas,
-          saldo_medio = EXCLUDED.saldo_medio,
-          saldo_final = EXCLUDED.saldo_final,
-          quantidade_transacoes = EXCLUDED.quantidade_transacoes,
-          rating_bacen = EXCLUDED.rating_bacen,
-          rating_interno = EXCLUDED.rating_interno,
-          restricao_scr = EXCLUDED.restricao_scr,
-          restricao_cenprot = EXCLUDED.restricao_cenprot,
-          restricao_serasa = EXCLUDED.restricao_serasa,
-          cnd_regular = EXCLUDED.cnd_regular,
-          pld_aml = EXCLUDED.pld_aml,
-          operacao_suspeita_coaf = EXCLUDED.operacao_suspeita_coaf,
-          restricao_nova = EXCLUDED.restricao_nova,
-          devolucao_ou_estorno = EXCLUDED.devolucao_ou_estorno,
-          ocorrencia_negativa = EXCLUDED.ocorrencia_negativa,
-          status = EXCLUDED.status,
-          analise_semana = EXCLUDED.analise_semana,
-          orientacao_cliente = EXCLUDED.orientacao_cliente,
-          proxima_acao = EXCLUDED.proxima_acao,
-          updated_at = now()
-        RETURNING *`,
-        [
-          req.params.id,
-          numeroSemana,
-          req.body.periodo || null,
-          req.body.data_referencia_inicio || null,
-          req.body.data_referencia_fim || null,
-          req.body.data_atualizacao || null,
-          normalizarNumero(req.body.entrada_maquininha ?? req.body.entrada_maquina) || 0,
-          normalizarNumero(req.body.entrada_pix) || 0,
-          normalizarNumero(req.body.entrada_boleto) || 0,
-          normalizarNumero(req.body.entrada_ted) || 0,
-          normalizarNumero(req.body.entrada_dinheiro) || 0,
-          normalizarNumero(req.body.outras_entradas) || 0,
-          normalizarNumero(req.body.total_saidas) || 0,
-          normalizarNumero(req.body.saldo_medio) || 0,
-          normalizarNumero(req.body.saldo_final) || 0,
-          Number(req.body.quantidade_transacoes || 0),
-          req.body.rating_bacen || null,
-          req.body.rating_interno || null,
-          ((req.body.scr_status ?? req.body.restricao_scr) || null),
-          ((req.body.cenprot_status ?? req.body.restricao_cenprot) || null),
-          ((req.body.serasa_status ?? req.body.restricao_serasa) || null),
-          ((req.body.cnd_status ?? req.body.cnd_regular) || null),
-          ((req.body.pld_aml_status ?? req.body.pld_aml) || null),
-          ((req.body.coaf_status ?? req.body.operacao_suspeita_coaf) || null),
-          Boolean(req.body.restricao_nova),
-          Boolean(req.body.devolucao_ou_estorno),
-          Boolean(req.body.ocorrencia_negativa),
-          (() => {
-            const entradas = (normalizarNumero(req.body.entrada_maquininha ?? req.body.entrada_maquina) || 0) + (normalizarNumero(req.body.entrada_pix) || 0) + (normalizarNumero(req.body.entrada_boleto) || 0) + (normalizarNumero(req.body.entrada_ted) || 0) + (normalizarNumero(req.body.entrada_dinheiro) || 0) + (normalizarNumero(req.body.outras_entradas) || 0);
-            const saldo = entradas - (normalizarNumero(req.body.total_saidas) || 0);
-            if (Boolean(req.body.restricao_nova) || Boolean(req.body.ocorrencia_negativa) || Boolean(req.body.devolucao_ou_estorno)) return "atencao";
-            if (saldo > 0) return "positiva";
-            if (saldo < 0) return "negativa";
-            return "neutra";
-          })(),
-          req.body.analise_semana || null,
-          req.body.orientacao_cliente || null,
-          req.body.proxima_acao || null,
-          colaborador?.id || null,
-          refs.mediaMensal, refs.limiteMensal, refs.mediaSemanal, semanasMes,
-          compAnterior, comp.entradaComCompensacao, comp.diferenca, comp.compensacaoProxima,
-          comp.percentualSemanal, comp.percentualMensal, comp.percentualAnual, comp.alertaAderencia,
-          comp.alertaAderencia ? "Movimentação acima da referência configurada para o período. Recomenda-se revisar os lançamentos e a documentação comprobatória." : null,
-          diagnostico, statusComp,
-        ]
+        `INSERT INTO acompanhamento_bancario_atualizacoes (${columns.join(", ")})
+         VALUES (${placeholders})
+         ON CONFLICT (acompanhamento_id, numero_semana) DO UPDATE SET
+          ${updateSet},
+          updated_at = NOW()
+         RETURNING *`,
+        values
       );
 
-      const prox = proximaQuartaFeira(new Date());
+      const baseDataAtualizacao = b.data_atualizacao
+        ? new Date(String(b.data_atualizacao) + "T00:00:00Z")
+        : new Date();
+      const prox = proximaQuartaFeira(baseDataAtualizacao);
+
       await pool.query(
         `UPDATE acompanhamentos_bancarios
-         SET ultima_atualizacao_em = now(),
-             ultimo_update_em = now(),
-             proxima_atualizacao = $2,
-             status = CASE WHEN status = 'atualizacao_pendente' THEN 'em_acompanhamento' ELSE status END,
-             rating_bacen_atual = COALESCE($3, rating_bacen_atual),
-             rating_interno_atual = COALESCE($4, rating_interno_atual),
-             updated_at = now()
-         WHERE id = $1`,
-        [req.params.id, prox, req.body.rating_bacen || null, req.body.rating_interno || null]
+            SET ultima_atualizacao_em = NOW(),
+                ultimo_update_em = NOW(),
+                proxima_atualizacao = $2,
+                status = CASE WHEN status = 'atualizacao_pendente' THEN 'em_acompanhamento' ELSE status END,
+                rating_bacen_atual = COALESCE($3, rating_bacen_atual),
+                rating_interno_atual = COALESCE($4, rating_interno_atual),
+                updated_at = NOW()
+          WHERE id = $1`,
+        [acompanhamentoId, prox, b.rating_bacen || null, b.rating_interno || null]
       );
 
-      await pool.query(`INSERT INTO acompanhamento_compensacoes_historico (
-        acompanhamento_id, numero_semana, data_referencia_inicio, data_referencia_fim, entrada_realizada,
-        media_mensal_referencia, limite_mensal_referencia, media_semanal_referencia, quantidade_semanas_mes,
-        compensacao_anterior, entrada_com_compensacao, diferenca_referencia_semanal, compensacao_necessaria,
-        percentual_limite_semanal, percentual_limite_mensal, percentual_limite_anual, alerta_aderencia, motivo_alerta, criado_por
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`, [
-        req.params.id, numeroSemana, req.body.data_referencia_inicio || null, req.body.data_referencia_fim || null, entradas,
-        refs.mediaMensal, refs.limiteMensal, refs.mediaSemanal, semanasMes,
-        compAnterior, comp.entradaComCompensacao, comp.diferenca, comp.compensacaoProxima,
-        comp.percentualSemanal, comp.percentualMensal, comp.percentualAnual, comp.alertaAderencia,
-        comp.alertaAderencia ? "Movimentação acima da referência configurada para o período. Recomenda-se revisar os lançamentos e a documentação comprobatória." : diagnostico,
-        colaborador?.id || null
-      ]);
+      await pool.query(
+        `INSERT INTO acompanhamento_compensacoes_historico (
+          acompanhamento_id,
+          numero_semana,
+          data_referencia_inicio,
+          data_referencia_fim,
+          entrada_realizada,
+          media_mensal_referencia,
+          limite_mensal_referencia,
+          media_semanal_referencia,
+          quantidade_semanas_mes,
+          compensacao_anterior,
+          entrada_com_compensacao,
+          diferenca_referencia_semanal,
+          compensacao_necessaria,
+          percentual_limite_semanal,
+          percentual_limite_mensal,
+          percentual_limite_anual,
+          alerta_aderencia,
+          motivo_alerta,
+          criado_por
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19
+        )`,
+        [
+          acompanhamentoId,
+          numeroSemana,
+          b.data_referencia_inicio || null,
+          b.data_referencia_fim || null,
+          totalEntradas,
+          refs.mediaMensal,
+          refs.limiteMensal,
+          refs.mediaSemanal,
+          semanasMes,
+          compensacaoAnterior,
+          comp.entradaComCompensacao,
+          comp.diferenca,
+          comp.compensacaoProxima,
+          comp.percentualSemanal,
+          comp.percentualMensal,
+          comp.percentualAnual,
+          comp.alertaAderencia,
+          comp.alertaAderencia
+            ? "Movimentação acima da referência configurada para o período. Recomenda-se revisar os lançamentos e a documentação comprobatória."
+            : null,
+          colaborador?.id || null,
+        ]
+      ).catch(() => null);
 
       await dispararN8n("acompanhamento_bancario_atualizado", {
-        acompanhamento_id: req.params.id,
+        acompanhamento_id: acompanhamentoId,
         atualizacao: rows[0],
       });
 
-      res.status(201).json(rows[0]);
+      res.status(req.method === "PATCH" ? 200 : 201).json(rows[0]);
     } catch (err) {
-      console.error("[POST /api/acompanhamentos-bancarios/:id/atualizacoes]", err);
-      res.status(500).json({ error: "Erro ao registrar atualização semanal" });
+      console.error(`[${req.method} /api/acompanhamentos-bancarios/:id/atualizacoes]`, err);
+      res.status(500).json({ error: "Erro ao registrar atualização semanal." });
+    }
+  };
+
+  app.post("/api/acompanhamentos-bancarios/:id/atualizacoes", auth, requireAcessoAcompanhamento, salvarAtualizacaoSemanal);
+
+  app.patch("/api/acompanhamentos-bancarios/:id/atualizacoes/:semanaIdOuNumero", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+    try {
+      const chave = req.params.semanaIdOuNumero;
+      const byNumero = /^\d+$/.test(chave);
+
+      const existente = byNumero
+        ? await pool.query(
+            `SELECT id, numero_semana
+               FROM acompanhamento_bancario_atualizacoes
+              WHERE acompanhamento_id = $1
+                AND numero_semana = $2
+              LIMIT 1`,
+            [req.params.id, Number(chave)]
+          )
+        : await pool.query(
+            `SELECT id, numero_semana
+               FROM acompanhamento_bancario_atualizacoes
+              WHERE acompanhamento_id = $1
+                AND id = $2
+              LIMIT 1`,
+            [req.params.id, chave]
+          );
+
+      if (!existente.rows.length) {
+        res.status(404).json({ error: "Atualização semanal não encontrada." });
+        return;
+      }
+
+      req.body.numero_semana = Number(req.body.numero_semana || existente.rows[0].numero_semana);
+      await salvarAtualizacaoSemanal(req, res);
+    } catch (err) {
+      console.error("[PATCH /api/acompanhamentos-bancarios/:id/atualizacoes/:semanaIdOuNumero]", err);
+      res.status(500).json({ error: "Erro ao editar atualização semanal." });
     }
   });
 
+  app.delete("/api/acompanhamentos-bancarios/:id/atualizacoes/:semanaIdOuNumero", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+    const client = await pool.connect();
+    try {
+      const chave = req.params.semanaIdOuNumero;
+      const byNumero = /^\d+$/.test(chave);
 
-  app.patch("/api/acompanhamentos-bancarios/:id/atualizacoes/:semanaIdOuNumero", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
-    const chave = req.params.semanaIdOuNumero;
-    const byNum = /^\d+$/.test(chave);
-    const q = byNum ? await pool.query("SELECT id FROM acompanhamento_bancario_atualizacoes WHERE acompanhamento_id=$1 AND numero_semana=$2", [req.params.id, Number(chave)]) : await pool.query("SELECT id FROM acompanhamento_bancario_atualizacoes WHERE acompanhamento_id=$1 AND id=$2", [req.params.id, chave]);
-    if (!q.rows.length) return res.status(404).json({ error: "Atualização não encontrada" });
-    req.body.numero_semana = req.body.numero_semana || Number(chave);
-    return app._router.handle({ ...req, method: 'POST', url: `/api/acompanhamentos-bancarios/${req.params.id}/atualizacoes` }, res, () => undefined);
+      await client.query("BEGIN");
+
+      const deleted = byNumero
+        ? await client.query(
+            `DELETE FROM acompanhamento_bancario_atualizacoes
+              WHERE acompanhamento_id = $1
+                AND numero_semana = $2
+              RETURNING *`,
+            [req.params.id, Number(chave)]
+          )
+        : await client.query(
+            `DELETE FROM acompanhamento_bancario_atualizacoes
+              WHERE acompanhamento_id = $1
+                AND id = $2
+              RETURNING *`,
+            [req.params.id, chave]
+          );
+
+      if (!deleted.rows.length) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ error: "Atualização semanal não encontrada." });
+        return;
+      }
+
+      await client.query(
+        `DELETE FROM acompanhamento_compensacoes_historico
+          WHERE acompanhamento_id = $1
+            AND numero_semana = $2`,
+        [req.params.id, deleted.rows[0].numero_semana]
+      ).catch(() => null);
+
+      const ultima = await client.query(
+        `SELECT *
+           FROM acompanhamento_bancario_atualizacoes
+          WHERE acompanhamento_id = $1
+          ORDER BY numero_semana DESC, created_at DESC
+          LIMIT 1`,
+        [req.params.id]
+      );
+
+      if (ultima.rows.length) {
+        const u = ultima.rows[0];
+        const baseAtualizacao = u.data_atualizacao || u.data_referencia_fim || new Date().toISOString().slice(0, 10);
+        await client.query(
+          `UPDATE acompanhamentos_bancarios
+              SET rating_bacen_atual = COALESCE($2, rating_bacen_atual),
+                  rating_interno_atual = COALESCE($3, rating_interno_atual),
+                  ultimo_update_em = $4,
+                  proxima_atualizacao = $5,
+                  updated_at = NOW()
+            WHERE id = $1`,
+          [
+            req.params.id,
+            u.rating_bacen || null,
+            u.rating_interno || null,
+            u.data_atualizacao || null,
+            proximaQuartaFeira(new Date(String(baseAtualizacao) + "T00:00:00Z")),
+          ]
+        );
+      } else {
+        const acompanhamento = await client.query(
+          `SELECT data_inicio
+             FROM acompanhamentos_bancarios
+            WHERE id = $1
+            LIMIT 1`,
+          [req.params.id]
+        );
+
+        const dataInicio = acompanhamento.rows[0]?.data_inicio || new Date().toISOString().slice(0, 10);
+        await client.query(
+          `UPDATE acompanhamentos_bancarios
+              SET ultimo_update_em = NULL,
+                  proxima_atualizacao = $2,
+                  updated_at = NOW()
+            WHERE id = $1`,
+          [req.params.id, proximaQuartaFeira(new Date(String(dataInicio) + "T00:00:00Z"))]
+        );
+      }
+
+      await client.query("COMMIT");
+      res.json({ success: true, deleted: deleted.rows[0] });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      console.error("[DELETE /api/acompanhamentos-bancarios/:id/atualizacoes/:semanaIdOuNumero]", err);
+      res.status(500).json({ error: "Erro ao apagar atualização semanal." });
+    } finally {
+      client.release();
+    }
   });
 
-  app.delete("/api/acompanhamentos-bancarios/:id/atualizacoes/:semanaIdOuNumero", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
-    const chave = req.params.semanaIdOuNumero;
-    const byNum = /^\d+$/.test(chave);
-    const del = byNum
-      ? await pool.query("DELETE FROM acompanhamento_bancario_atualizacoes WHERE acompanhamento_id=$1 AND numero_semana=$2 RETURNING id, numero_semana", [req.params.id, Number(chave)])
-      : await pool.query("DELETE FROM acompanhamento_bancario_atualizacoes WHERE acompanhamento_id=$1 AND id=$2 RETURNING id, numero_semana", [req.params.id, chave]);
-    if (!del.rows.length) return res.status(404).json({ error: "Atualização não encontrada" });
-    await pool.query("DELETE FROM acompanhamento_compensacoes_historico WHERE acompanhamento_id=$1 AND numero_semana=$2", [req.params.id, del.rows[0].numero_semana]);
-    res.json({ success: true });
+  app.delete("/api/acompanhamentos-bancarios/:id", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const acompanhamento = await client.query(
+        `SELECT id, nome_empresa, banco_observado
+           FROM acompanhamentos_bancarios
+          WHERE id = $1
+          LIMIT 1`,
+        [req.params.id]
+      );
+
+      if (!acompanhamento.rows.length) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ error: "Acompanhamento não encontrado." });
+        return;
+      }
+
+      await client.query(
+        `DELETE FROM acompanhamento_bancario_atualizacoes
+          WHERE acompanhamento_id = $1`,
+        [req.params.id]
+      );
+
+      await client.query(
+        `DELETE FROM acompanhamento_bancario_alertas
+          WHERE acompanhamento_id = $1`,
+        [req.params.id]
+      ).catch(() => null);
+
+      const deleted = await client.query(
+        `DELETE FROM acompanhamentos_bancarios
+          WHERE id = $1
+          RETURNING *`,
+        [req.params.id]
+      );
+
+      await client.query("COMMIT");
+      res.json({ success: true, deleted: deleted.rows[0] });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      console.error("[DELETE /api/acompanhamentos-bancarios/:id]", err);
+      res.status(500).json({ error: "Erro ao apagar acompanhamento bancário." });
+    } finally {
+      client.release();
+    }
   });
 
   app.post("/api/acompanhamentos-bancarios/:id/prorrogar", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
-      const atual = await pool.query("SELECT * FROM acompanhamentos_bancarios WHERE id = $1", [req.params.id]);
-      if (!atual.rows.length) { res.status(404).json({ error: "Acompanhamento não encontrado" }); return; }
-      const base = atual.rows[0].data_fim_prorrogada || atual.rows[0].data_fim_prevista || new Date().toISOString().slice(0, 10);
-      const fim = new Date(`${base}T12:00:00`);
-      fim.setDate(fim.getDate() + 30);
+      const { rows: atuais } = await pool.query(
+        `SELECT data_fim_prevista, data_fim_prorrogada
+           FROM acompanhamentos_bancarios
+          WHERE id = $1
+          LIMIT 1`,
+        [req.params.id]
+      );
+
+      if (!atuais.length) {
+        res.status(404).json({ error: "Acompanhamento não encontrado." });
+        return;
+      }
+
+      const base = atuais[0].data_fim_prorrogada || atuais[0].data_fim_prevista || new Date().toISOString().slice(0, 10);
+
       const { rows } = await pool.query(
         `UPDATE acompanhamentos_bancarios
-         SET prorrogado = true,
-             data_prorrogacao = CURRENT_DATE,
-             data_fim_prorrogada = $2,
-             status = 'prorrogado',
-             proxima_atualizacao = COALESCE(proxima_atualizacao, $3),
-             updated_at = now()
-         WHERE id = $1 RETURNING *`,
-        [req.params.id, fim.toISOString().slice(0, 10), proximaQuartaFeira()]
+            SET prorrogado = true,
+                data_prorrogacao = CURRENT_DATE,
+                data_fim_prorrogada = ($2::date + INTERVAL '30 days')::date,
+                status = 'prorrogado',
+                updated_at = NOW()
+          WHERE id = $1
+          RETURNING *`,
+        [req.params.id, base]
       );
+
       res.json(rows[0]);
     } catch (err) {
       console.error("[POST /api/acompanhamentos-bancarios/:id/prorrogar]", err);
-      res.status(500).json({ error: "Erro ao prorrogar acompanhamento" });
+      res.status(500).json({ error: "Erro ao prorrogar acompanhamento." });
     }
   });
 
   app.post("/api/acompanhamentos-bancarios/:id/encerrar", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
+      const { observacoes_finais } = req.body || {};
+
       const { rows } = await pool.query(
         `UPDATE acompanhamentos_bancarios
-         SET status = $2, etapa = 'encerrado', observacoes_finais = $3, updated_at = now()
-         WHERE id = $1 RETURNING *`,
-        [req.params.id, req.body.status || 'encerrado', req.body.observacoes_finais || null]
+            SET status = 'encerrado',
+                observacoes_finais = COALESCE($2, observacoes_finais),
+                updated_at = NOW()
+          WHERE id = $1
+          RETURNING *`,
+        [req.params.id, observacoes_finais || null]
       );
-      if (!rows.length) { res.status(404).json({ error: "Acompanhamento não encontrado" }); return; }
+
+      if (!rows.length) {
+        res.status(404).json({ error: "Acompanhamento não encontrado." });
+        return;
+      }
+
       res.json(rows[0]);
     } catch (err) {
       console.error("[POST /api/acompanhamentos-bancarios/:id/encerrar]", err);
-      res.status(500).json({ error: "Erro ao encerrar acompanhamento" });
+      res.status(500).json({ error: "Erro ao encerrar acompanhamento." });
     }
   });
+
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // MÓDULO: ACOMPANHAMENTO FINANCEIRO SEMANAL
+  // Acesso: Gestor de Crédito, Diretor e Administrador
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  // ── Helpers de cálculo financeiro ──────────────────────────────────────────
+
+  /**
+   * Calcula os limites de acompanhamento com base no faturamento anual
+   * declarado e no percentual operacional configurável.
+   */
+  function calcularLimitesAcompanhamento(
+    faturamentoAnualDeclarado: number,
+    percentualOperacional: number,
+    anoRef: number,
+    mesRef: number
+  ): { limite_anual: number; limite_mensal: number; limite_semanal: number; semanas_no_mes: number } {
+    const limiteAnual = Math.round((faturamentoAnualDeclarado * percentualOperacional / 100) * 100) / 100;
+    const limiteMensal = Math.round((limiteAnual / 12) * 100) / 100;
+    const semanasNoMes = calcularSemanasDoMes(anoRef, mesRef);
+    const limiteSemanal = Math.round((limiteMensal / semanasNoMes) * 100) / 100;
+    return { limite_anual: limiteAnual, limite_mensal: limiteMensal, limite_semanal: limiteSemanal, semanas_no_mes: semanasNoMes };
+  }
+
+  /**
+   * Calcula a quantidade de semanas (segunda a domingo) que iniciam dentro
+   * de um determinado mês/ano.
+   */
+  function calcularSemanasDoMes(ano: number, mes: number): number {
+    const primeiroDia = new Date(ano, mes - 1, 1);
+    const ultimoDia = new Date(ano, mes, 0);
+    let semanas = 0;
+    for (let d = new Date(primeiroDia); d <= ultimoDia; d.setDate(d.getDate() + 1)) {
+      if (d.getDay() === 1) semanas++;
+    }
+    return semanas > 0 ? semanas : 4;
+  }
+
+  /**
+   * Calcula o resumo semanal: saldo final e saldo médio.
+   * Prefere média dos saldos diários; usa fallback se não houver.
+   */
+  function calcularResumoSemanal(
+    saldoInicial: number,
+    totalEntradas: number,
+    totalSaidas: number,
+    saldosDiarios: number[]
+  ): { saldo_final: number; saldo_medio: number } {
+    const saldoFinal = Math.round((saldoInicial + totalEntradas - totalSaidas) * 100) / 100;
+    let saldoMedio: number;
+    if (saldosDiarios.length > 0) {
+      // Cálculo ideal: média dos saldos diários informados
+      const soma = saldosDiarios.reduce((acc, s) => acc + s, 0);
+      saldoMedio = Math.round((soma / saldosDiarios.length) * 100) / 100;
+    } else {
+      // Fallback seguro: média entre saldo inicial e saldo final
+      saldoMedio = Math.round(((saldoInicial + saldoFinal) / 2) * 100) / 100;
+    }
+    return { saldo_final: saldoFinal, saldo_medio: saldoMedio };
+  }
+
+  /**
+   * Classifica o status de acompanhamento com base nos percentuais
+   * de uso semanal, mensal e anual.
+   * Regras de tolerância: semana acima não é erro definitivo se mês OK.
+   */
+  function classificarStatusAcompanhamento(
+    percentualSemana: number,
+    percentualMes: number,
+    percentualAno: number
+  ): string {
+    // Critério anual é o mais grave
+    if (percentualAno > 100) return 'critico';
+    // Critério mensal
+    if (percentualMes > 120) return 'critico';
+    if (percentualMes > 100) return 'incompativel';
+    // Critério semanal (tolerância: semana acima não é erro definitivo se mês ok)
+    if (percentualSemana > 200) return 'incompativel';
+    if (percentualSemana > 150) return 'atencao_media';
+    if (percentualSemana > 120) return 'atencao_media';
+    if (percentualSemana > 100) return 'atencao_leve';
+    return 'dentro_da_referencia';
+  }
+
+  /**
+   * Gera o diagnóstico técnico automático com linguagem adequada
+   * para análise de crédito e conformidade documental.
+   */
+  function gerarDiagnosticoAcompanhamento(
+    percentualSemana: number,
+    percentualMes: number,
+    percentualAno: number,
+    status: string,
+    limiteSemanal: number,
+    limiteMensal: number,
+    limiteAnual: number,
+    acumuladoMensal: number,
+    acumuladoAnual: number
+  ): string {
+    const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+    const pct = (v: number) => `${(Math.round(v * 100) / 100).toFixed(2).replace('.', ',')}%`;
+    if (status === 'aguardando_atualizacao') {
+      return 'Configuração de acompanhamento financeiro pendente. É necessário informar o faturamento anual declarado para iniciar o monitoramento de coerência financeira.';
+    }
+    if (status === 'critico') {
+      if (percentualAno > 100) {
+        return `O acumulado anual de ${fmt(acumuladoAnual)} ultrapassou o limite de referência anual de ${fmt(limiteAnual)} (${pct(percentualAno)} do limite). É necessário revisar os lançamentos, documentos comprobatórios e a aderência ao faturamento anual declarado antes da emissão de novos relatórios ou análise de crédito.`;
+      }
+      return `O acumulado mensal de ${fmt(acumuladoMensal)} ultrapassou em ${pct(percentualMes - 100)} o limite de referência mensal de ${fmt(limiteMensal)}. É necessário revisar os lançamentos, documentos comprobatórios e a aderência ao faturamento anual declarado antes da emissão de novos relatórios ou análise de crédito.`;
+    }
+    if (status === 'incompativel') {
+      if (percentualMes > 100) {
+        return `O acumulado mensal de ${fmt(acumuladoMensal)} ultrapassou o limite de referência mensal de ${fmt(limiteMensal)} (${pct(percentualMes)} do limite). Recomenda-se revisão dos lançamentos e verificação da capacidade de comprovação documental para preservar a conformidade com o faturamento anual declarado.`;
+      }
+      return `A movimentação semanal atingiu ${pct(percentualSemana)} do limite semanal de referência de ${fmt(limiteSemanal)}. O acumulado mensal permanece em ${pct(percentualMes)} do limite mensal. Recomenda-se atenção ao controle de movimentação das próximas semanas para preservar a coerência financeira.`;
+    }
+    if (status === 'atencao_media') {
+      return `A semana analisada apresentou movimentação de ${pct(percentualSemana)} do limite semanal de referência de ${fmt(limiteSemanal)}. O acumulado mensal permanece em ${pct(percentualMes)} do limite mensal de ${fmt(limiteMensal)}. Recomenda-se monitoramento rigoroso das próximas semanas para preservar a coerência entre faturamento declarado, movimentação financeira e capacidade de comprovação documental.`;
+    }
+    if (status === 'atencao_leve') {
+      return `A semana analisada apresentou entradas acima da referência semanal calculada (${pct(percentualSemana)} do limite de ${fmt(limiteSemanal)}). Entretanto, o acumulado mensal permanece dentro da faixa de acompanhamento definida com base no faturamento anual declarado (${pct(percentualMes)} do limite mensal). Recomenda-se manter o monitoramento das próximas semanas para preservar a coerência entre faturamento declarado, movimentação financeira e capacidade de comprovação documental.`;
+    }
+    return `A movimentação da semana analisada está dentro da referência semanal calculada (${pct(percentualSemana)} do limite de ${fmt(limiteSemanal)}). O acumulado mensal corresponde a ${pct(percentualMes)} do limite mensal de ${fmt(limiteMensal)} e o acumulado anual a ${pct(percentualAno)} do limite anual de ${fmt(limiteAnual)}. O acompanhamento financeiro está em conformidade com o faturamento anual declarado.`;
+  }
+
+  // ── Middleware de acesso ao módulo financeiro ────────────────────────────────
+  // Acesso: Gestor de Crédito, Diretor e Administrador
+
+  function normalizarCargoFinanceiro(v?: string | null): string {
+    return String(v || '').trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, '_').replace(/-/g, '_');
+  }
+
+  function usuarioPodeAcessarFinanceiro(user: { cargo?: string | null; perfil?: string | null; acesso_acompanhamento_financeiro?: boolean | null } | null | undefined): boolean {
+    if (!user) return false;
+    if (user.acesso_acompanhamento_financeiro === true) return true;
+    // Apenas: administrador, diretor, gestor_de_credito
+    const permitidos = new Set([
+      'admin', 'administrador', 'super_admin', 'superadmin',
+      'diretor',
+      'gestor_credito', 'gestor_de_credito', 'gestor de credito',
+    ]);
+    return (
+      permitidos.has(normalizarCargoFinanceiro(user.cargo)) ||
+      permitidos.has(normalizarCargoFinanceiro(user.perfil))
+    );
+  }
+
+  async function requireAcessoFinanceiro(req: Request, res: Response, next: NextFunction) {
+    const colaborador = (req as any).colaborador;
+    if (!colaborador?.id) {
+      res.status(403).json({ error: 'Acesso não autorizado.' });
+      return;
+    }
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, cargo, perfil,
+                COALESCE(acesso_acompanhamento_financeiro, false) AS acesso_acompanhamento_financeiro
+           FROM colaboradores
+          WHERE id = $1 AND ativo = true
+          LIMIT 1`,
+        [colaborador.id]
+      );
+      const user = rows[0] || colaborador;
+      if (!usuarioPodeAcessarFinanceiro(user)) {
+        res.status(403).json({ error: 'Acesso restrito a Gestor de Crédito, Diretor ou Administrador.' });
+        return;
+      }
+      (req as any).colaborador = { ...(colaborador || {}), ...(user || {}) };
+      next();
+    } catch (err) {
+      console.error('[requireAcessoFinanceiro]', err);
+      res.status(500).json({ error: 'Erro ao verificar permissão.' });
+    }
+  }
+
+  // ── Geração do HTML do Relatório PDF ────────────────────────────────────────
+
+  // ── Geração do HTML do Relatório PDF (padrão letterhead oficial) ──────────
+  function gerarHtmlRelatorioFinanceiro(payload: {
+    empresa: { razao_social: string; cnpj?: string; cidade?: string; estado?: string };
+    config: { faturamento_anual_declarado: number; percentual_operacional: number; limite_anual: number };
+    semana: {
+      ano: number; mes: number; numero_semana: number;
+      semana_inicio: string; semana_fim: string;
+      saldo_inicial: number; total_entradas: number; total_saidas: number;
+      saldo_final: number; saldo_medio: number;
+      limite_semanal_referencia: number; limite_mensal_referencia: number; limite_anual_referencia: number;
+      acumulado_mensal: number; acumulado_anual: number;
+      percentual_uso_semana: number; percentual_uso_mes: number; percentual_uso_ano: number;
+      status: string; diagnostico?: string; observacoes?: string;
+    };
+    movimentacoes?: Array<{ data_movimento: string; tipo: string; categoria?: string; descricao?: string; valor: number }>;
+    saldosDiarios?: Array<{ data_referencia: string; saldo_dia: number }>;
+    geradoPor?: string;
+  }): string {
+    const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v) || 0);
+    const fmtDate = (s: string) => {
+      if (!s) return '—';
+      const d = String(s).slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return s;
+      const [y, m, day] = d.split('-');
+      return `${day}/${m}/${y}`;
+    };
+    const fmtPct = (v: number) => `${(Math.round((Number(v) || 0) * 100) / 100).toFixed(2).replace('.', ',')}%`;
+    const esc = (s?: string | null) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    const nomeMesStr = meses[(payload.semana.mes - 1)] || String(payload.semana.mes);
+    const dataEmissao = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+    const statusLabel: Record<string, string> = {
+      dentro_da_referencia: 'Dentro da Referência',
+      atencao_leve: 'Atenção Leve',
+      atencao_media: 'Atenção Média',
+      incompativel: 'Incompatível',
+      critico: 'Crítico',
+      sem_documentacao: 'Sem Documentação',
+      aguardando_atualizacao: 'Aguardando Atualização',
+      regularizado: 'Regularizado',
+    };
+    const statusCor: Record<string, string> = {
+      dentro_da_referencia: '#166534', atencao_leve: '#854d0e', atencao_media: '#c2410c',
+      incompativel: '#991b1b', critico: '#7f1d1d', sem_documentacao: '#374151',
+      aguardando_atualizacao: '#1e40af', regularizado: '#065f46',
+    };
+    const statusBg: Record<string, string> = {
+      dentro_da_referencia: '#dcfce7', atencao_leve: '#fef9c3', atencao_media: '#ffedd5',
+      incompativel: '#fee2e2', critico: '#fecaca', sem_documentacao: '#f3f4f6',
+      aguardando_atualizacao: '#dbeafe', regularizado: '#d1fae5',
+    };
+    const st = payload.semana.status || 'aguardando_atualizacao';
+    const stLabel = statusLabel[st] || st;
+    const stCor = statusCor[st] || '#374151';
+    const stBg = statusBg[st] || '#f3f4f6';
+
+    // Barra de progresso HTML
+    const barraProgresso = (pct: number, label: string) => {
+      const clamped = Math.min(pct, 100);
+      const cor = pct > 120 ? '#dc2626' : pct > 100 ? '#f97316' : '#16a34a';
+      return `<div style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:8pt;margin-bottom:2px;">
+          <span style="color:#374151;">${esc(label)}</span>
+          <span style="font-weight:700;color:${pct > 100 ? '#dc2626' : '#374151'};">${fmtPct(pct)}</span>
+        </div>
+        <div style="height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;">
+          <div style="height:100%;width:${clamped}%;background:${cor};border-radius:4px;"></div>
+        </div>
+      </div>`;
+    };
+
+    const linhasMovimentacoes = (payload.movimentacoes || []).map(m => `
+      <tr>
+        <td style="padding:4px 7px;border:1px solid #d1d5db;">${esc(fmtDate(m.data_movimento))}</td>
+        <td style="padding:4px 7px;border:1px solid #d1d5db;text-transform:capitalize;font-weight:600;color:${m.tipo === 'entrada' ? '#166534' : '#991b1b'};">${esc(m.tipo === 'entrada' ? 'Entrada' : 'Saída')}</td>
+        <td style="padding:4px 7px;border:1px solid #d1d5db;">${esc(m.categoria || '—')}</td>
+        <td style="padding:4px 7px;border:1px solid #d1d5db;">${esc(m.descricao || '—')}</td>
+        <td style="padding:4px 7px;border:1px solid #d1d5db;text-align:right;font-weight:${m.tipo === 'entrada' ? '700' : '400'};color:${m.tipo === 'entrada' ? '#166534' : '#991b1b'};">${fmt(m.valor)}</td>
+      </tr>`).join('');
+
+    const linhasSaldosDiarios = (payload.saldosDiarios || []).map(s => `
+      <tr>
+        <td style="padding:4px 7px;border:1px solid #d1d5db;">${esc(fmtDate(s.data_referencia))}</td>
+        <td style="padding:4px 7px;border:1px solid #d1d5db;text-align:right;font-weight:600;">${fmt(s.saldo_dia)}</td>
+      </tr>`).join('');
+
+    let secNum = 1;
+
+    const body = `
+    <h1 class="doc-title" style="font-size:13pt;font-weight:700;text-align:center;text-transform:uppercase;margin:0 0 4px;">
+      Relatório Técnico de Acompanhamento Financeiro Semanal
+    </h1>
+    <p style="text-align:center;font-size:9pt;color:#374151;margin:0 0 16px;">
+      ${esc(payload.empresa.razao_social)}${payload.empresa.cnpj ? ` &nbsp;|&nbsp; CNPJ: ${esc(payload.empresa.cnpj)}` : ''} &nbsp;|&nbsp; ${esc(nomeMesStr)}/${payload.semana.ano} — Semana ${payload.semana.numero_semana}
+    </p>
+
+    <h2 class="section-title">${secNum++}. Dados da Empresa e Período Analisado</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;margin-bottom:12px;">
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">Razão Social</span><span style="font-size:9.5pt;font-weight:600;">${esc(payload.empresa.razao_social)}</span></div>
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">CNPJ</span><span style="font-size:9.5pt;font-weight:600;">${esc(payload.empresa.cnpj || '—')}</span></div>
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">Período da Semana</span><span style="font-size:9.5pt;font-weight:600;">${esc(fmtDate(payload.semana.semana_inicio))} a ${esc(fmtDate(payload.semana.semana_fim))}</span></div>
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">Referência</span><span style="font-size:9.5pt;font-weight:600;">${esc(nomeMesStr)}/${payload.semana.ano} — Semana ${payload.semana.numero_semana}</span></div>
+    </div>
+
+    <h2 class="section-title">${secNum++}. Parâmetros de Acompanhamento</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 14px;margin-bottom:12px;">
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">Faturamento Anual Declarado</span><span style="font-size:9.5pt;font-weight:600;">${fmt(payload.config.faturamento_anual_declarado)}</span></div>
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">Percentual Operacional</span><span style="font-size:9.5pt;font-weight:600;">${fmtPct(payload.config.percentual_operacional)}</span></div>
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">Limite Anual de Referência</span><span style="font-size:9.5pt;font-weight:600;">${fmt(payload.semana.limite_anual_referencia)}</span></div>
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">Limite Mensal de Referência</span><span style="font-size:9.5pt;font-weight:600;">${fmt(payload.semana.limite_mensal_referencia)}</span></div>
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">Limite Semanal de Referência</span><span style="font-size:9.5pt;font-weight:600;">${fmt(payload.semana.limite_semanal_referencia)}</span></div>
+    </div>
+
+    <h2 class="section-title">${secNum++}. Resumo Financeiro da Semana</h2>
+    <table class="data-table" style="margin-bottom:12px;">
+      <thead>
+        <tr>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 8px;text-align:left;font-weight:700;font-size:8pt;">Indicador</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 8px;text-align:right;font-weight:700;font-size:8pt;">Valor</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td style="padding:4px 8px;border:1px solid #d1d5db;">Saldo Inicial da Semana</td><td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;">${fmt(payload.semana.saldo_inicial)}</td></tr>
+        <tr style="background:#f0f7ff;"><td style="padding:4px 8px;border:1px solid #d1d5db;"><strong>Total de Entradas</strong></td><td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;color:#166534;font-weight:700;">${fmt(payload.semana.total_entradas)}</td></tr>
+        <tr><td style="padding:4px 8px;border:1px solid #d1d5db;">Total de Saídas</td><td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;color:#991b1b;">${fmt(payload.semana.total_saidas)}</td></tr>
+        <tr style="background:#dce3f5;"><td style="padding:4px 8px;border:1px solid #9ca3af;font-weight:700;"><strong>Saldo Final da Semana</strong></td><td style="padding:4px 8px;border:1px solid #9ca3af;text-align:right;font-weight:700;">${fmt(payload.semana.saldo_final)}</td></tr>
+        <tr><td style="padding:4px 8px;border:1px solid #d1d5db;">Saldo Médio Semanal</td><td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;">${fmt(payload.semana.saldo_medio)}</td></tr>
+      </tbody>
+    </table>
+
+    <h2 class="section-title">${secNum++}. Análise de Conformidade com os Limites de Referência</h2>
+    <table class="data-table" style="margin-bottom:10px;">
+      <thead>
+        <tr>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 8px;text-align:left;font-weight:700;font-size:8pt;">Indicador</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 8px;text-align:right;font-weight:700;font-size:8pt;">Valor Acumulado</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 8px;text-align:right;font-weight:700;font-size:8pt;">Limite de Referência</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 8px;text-align:right;font-weight:700;font-size:8pt;">% Utilizado</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;">Acumulado Semanal</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;">${fmt(payload.semana.total_entradas)}</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;">${fmt(payload.semana.limite_semanal_referencia)}</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700;color:${payload.semana.percentual_uso_semana > 100 ? '#dc2626' : '#166534'};">${fmtPct(payload.semana.percentual_uso_semana)}</td>
+        </tr>
+        <tr style="background:#f0f7ff;">
+          <td style="padding:4px 8px;border:1px solid #d1d5db;font-weight:600;">Acumulado Mensal</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;">${fmt(payload.semana.acumulado_mensal)}</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;">${fmt(payload.semana.limite_mensal_referencia)}</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700;color:${payload.semana.percentual_uso_mes > 100 ? '#dc2626' : '#166534'};">${fmtPct(payload.semana.percentual_uso_mes)}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;">Acumulado Anual</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;">${fmt(payload.semana.acumulado_anual)}</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;">${fmt(payload.semana.limite_anual_referencia)}</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700;color:${payload.semana.percentual_uso_ano > 100 ? '#dc2626' : '#166534'};">${fmtPct(payload.semana.percentual_uso_ano)}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-bottom:12px;">
+      ${barraProgresso(payload.semana.percentual_uso_semana, `Semanal — ${fmt(payload.semana.total_entradas)} / ${fmt(payload.semana.limite_semanal_referencia)}`)}
+      ${barraProgresso(payload.semana.percentual_uso_mes, `Mensal — ${fmt(payload.semana.acumulado_mensal)} / ${fmt(payload.semana.limite_mensal_referencia)}`)}
+      ${barraProgresso(payload.semana.percentual_uso_ano, `Anual — ${fmt(payload.semana.acumulado_anual)} / ${fmt(payload.semana.limite_anual_referencia)}`)}
+    </div>
+
+    <h2 class="section-title">${secNum++}. Status e Diagnóstico Técnico</h2>
+    <div style="margin-bottom:8px;">
+      <span style="font-size:8pt;color:#374151;">Status de Conformidade: </span>
+      <span style="display:inline-block;padding:3px 12px;border-radius:4px;font-size:9pt;font-weight:700;background:${stBg};color:${stCor};">${esc(stLabel)}</span>
+    </div>
+    <div style="background:#f8fafc;border-left:3px solid #1B3A8C;padding:9px 12px;font-size:9pt;line-height:1.55;text-align:justify;margin:6px 0 12px;page-break-inside:avoid;">
+      ${esc(payload.semana.diagnostico || 'Diagnóstico não disponível para este período.')}
+    </div>
+
+    ${(payload.movimentacoes && payload.movimentacoes.length > 0) ? `
+    <h2 class="section-title">${secNum++}. Movimentações Registradas</h2>
+    <table class="data-table" style="margin-bottom:12px;font-size:8.5pt;">
+      <thead>
+        <tr>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 7px;text-align:left;font-size:8pt;">Data</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 7px;text-align:left;font-size:8pt;">Tipo</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 7px;text-align:left;font-size:8pt;">Categoria</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 7px;text-align:left;font-size:8pt;">Descrição</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 7px;text-align:right;font-size:8pt;">Valor</th>
+        </tr>
+      </thead>
+      <tbody>${linhasMovimentacoes}</tbody>
+    </table>` : ''}
+
+    ${(payload.saldosDiarios && payload.saldosDiarios.length > 0) ? `
+    <h2 class="section-title">${secNum++}. Saldos Diários</h2>
+    <table class="data-table" style="max-width:320px;margin-bottom:12px;font-size:8.5pt;">
+      <thead>
+        <tr>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 7px;text-align:left;font-size:8pt;">Data</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 7px;text-align:right;font-size:8pt;">Saldo do Dia</th>
+        </tr>
+      </thead>
+      <tbody>${linhasSaldosDiarios}</tbody>
+    </table>` : ''}
+
+    ${payload.semana.observacoes ? `
+    <h2 class="section-title">Observações</h2>
+    <div style="background:#fffbeb;border-left:3px solid #f0a500;padding:8px 12px;font-size:9pt;line-height:1.5;margin:6px 0 12px;page-break-inside:avoid;">
+      ${esc(payload.semana.observacoes)}
+    </div>` : ''}
+
+    <div style="margin-top:18px;padding-top:8px;border-top:1px solid #d1d5db;font-size:7.5pt;color:#6b7280;display:flex;justify-content:space-between;">
+      <span>Emitido em: ${esc(dataEmissao)}${payload.geradoPor ? ` &nbsp;|&nbsp; Responsável: ${esc(payload.geradoPor)}` : ''}</span>
+      <span>DESTRAVA CRÉDITO LTDA &nbsp;|&nbsp; CNPJ 35.427.182/0001-66</span>
+    </div>
+    `;
+
+    return gerarHtmlTimbrado(body, 'Relatório de Acompanhamento Financeiro Semanal');
+  }
+
+  // ── ROTA: Configuração de Acompanhamento Financeiro ─────────────────────────
+
+  // GET /api/acompanhamento-financeiro/config/:empresaId
+  app.get('/api/acompanhamento-financeiro/config/:empresaId', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const { empresaId } = req.params;
+      const { rows } = await pool.query(
+        `SELECT c.*, e.razao_social, e.cnpj, e.faturamento_anual AS faturamento_anual_empresa
+           FROM acompanhamento_financeiro_config c
+           JOIN empresas e ON e.id = c.empresa_id
+          WHERE c.empresa_id = $1
+          LIMIT 1`,
+        [empresaId]
+      );
+      if (!rows.length) {
+        const { rows: emp } = await pool.query(
+          `SELECT id, razao_social, cnpj, faturamento_anual FROM empresas WHERE id = $1 LIMIT 1`,
+          [empresaId]
+        );
+        if (!emp.length) { res.status(404).json({ error: 'Empresa não encontrada.' }); return; }
+        res.json({
+          configurado: false,
+          empresa: emp[0],
+          faturamento_anual_empresa: emp[0].faturamento_anual,
+          percentual_operacional_padrao: 30,
+          status_config: 'pendente',
+        });
+        return;
+      }
+      res.json({ configurado: true, ...rows[0] });
+    } catch (err) {
+      console.error('[GET /api/acompanhamento-financeiro/config/:empresaId]', err);
+      res.status(500).json({ error: 'Erro ao buscar configuração.' });
+    }
+  });
+
+  // POST /api/acompanhamento-financeiro/config
+  app.post('/api/acompanhamento-financeiro/config', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const { empresa_id, faturamento_anual_declarado, percentual_operacional = 30 } = req.body;
+      if (!empresa_id) { res.status(400).json({ error: 'empresa_id é obrigatório.' }); return; }
+      const fat = Number(faturamento_anual_declarado);
+      const pct = Number(percentual_operacional);
+      if (!Number.isFinite(fat) || fat < 0) { res.status(400).json({ error: 'Faturamento anual declarado inválido.' }); return; }
+      if (!Number.isFinite(pct) || pct <= 0 || pct > 100) { res.status(400).json({ error: 'Percentual operacional deve estar entre 0,01 e 100.' }); return; }
+      const colaboradorId = (req as any).colaborador?.id || null;
+      const { rows } = await pool.query(
+        `INSERT INTO acompanhamento_financeiro_config
+           (empresa_id, faturamento_anual_declarado, percentual_operacional, ativo, criado_por)
+         VALUES ($1, $2, $3, true, $4)
+         ON CONFLICT (empresa_id) DO UPDATE SET
+           faturamento_anual_declarado = EXCLUDED.faturamento_anual_declarado,
+           percentual_operacional = EXCLUDED.percentual_operacional,
+           ativo = true,
+           updated_at = NOW()
+         RETURNING *`,
+        [empresa_id, fat, pct, colaboradorId]
+      );
+      res.status(201).json(rows[0]);
+    } catch (err) {
+      console.error('[POST /api/acompanhamento-financeiro/config]', err);
+      res.status(500).json({ error: 'Erro ao salvar configuração.' });
+    }
+  });
+
+  // ── ROTA: Listar semanas de uma empresa ─────────────────────────────────────
+
+  // GET /api/acompanhamento-financeiro/semanas/:empresaId
+  app.get('/api/acompanhamento-financeiro/semanas/:empresaId', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const { empresaId } = req.params;
+      const { ano, mes } = req.query;
+      const conditions: string[] = ['s.empresa_id = $1'];
+      const params: any[] = [empresaId];
+      if (ano) { params.push(Number(ano)); conditions.push(`s.ano = $${params.length}`); }
+      if (mes) { params.push(Number(mes)); conditions.push(`s.mes = $${params.length}`); }
+      const { rows } = await pool.query(
+        `SELECT s.*,
+                e.razao_social, e.cnpj,
+                c.faturamento_anual_declarado, c.percentual_operacional
+           FROM acompanhamento_financeiro_semanal s
+           JOIN empresas e ON e.id = s.empresa_id
+           LEFT JOIN acompanhamento_financeiro_config c ON c.empresa_id = s.empresa_id
+          WHERE ${conditions.join(' AND ')}
+          ORDER BY s.ano DESC, s.mes DESC, s.numero_semana DESC`,
+        params
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error('[GET /api/acompanhamento-financeiro/semanas/:empresaId]', err);
+      res.status(500).json({ error: 'Erro ao listar semanas.' });
+    }
+  });
+
+  // GET /api/acompanhamento-financeiro/semana/:id
+  app.get('/api/acompanhamento-financeiro/semana/:id', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { rows } = await pool.query(
+        `SELECT s.*,
+                e.razao_social, e.cnpj, e.cidade, e.estado,
+                c.faturamento_anual_declarado, c.percentual_operacional
+           FROM acompanhamento_financeiro_semanal s
+           JOIN empresas e ON e.id = s.empresa_id
+           LEFT JOIN acompanhamento_financeiro_config c ON c.empresa_id = s.empresa_id
+          WHERE s.id = $1
+          LIMIT 1`,
+        [id]
+      );
+      if (!rows.length) { res.status(404).json({ error: 'Registro não encontrado.' }); return; }
+      const semana = rows[0];
+      const { rows: movs } = await pool.query(
+        `SELECT * FROM acompanhamento_financeiro_movimentacoes WHERE acompanhamento_id = $1 ORDER BY data_movimento ASC, tipo ASC`,
+        [id]
+      );
+      const { rows: saldos } = await pool.query(
+        `SELECT * FROM acompanhamento_financeiro_saldos_diarios WHERE acompanhamento_id = $1 ORDER BY data_referencia ASC`,
+        [id]
+      );
+      res.json({ ...semana, movimentacoes: movs, saldos_diarios: saldos });
+    } catch (err) {
+      console.error('[GET /api/acompanhamento-financeiro/semana/:id]', err);
+      res.status(500).json({ error: 'Erro ao buscar semana.' });
+    }
+  });
+
+  // ── ROTA: Criar/Atualizar semana ────────────────────────────────────────────
+
+  // POST /api/acompanhamento-financeiro/semana
+  app.post('/api/acompanhamento-financeiro/semana', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const {
+        empresa_id, ano, mes, numero_semana,
+        semana_inicio, semana_fim,
+        saldo_inicial = 0,
+        total_entradas = 0, total_saidas = 0,
+        saldos_diarios = [],
+        movimentacoes = [],
+        observacoes,
+      } = req.body;
+
+      if (!empresa_id) { res.status(400).json({ error: 'empresa_id é obrigatório.' }); return; }
+      if (!ano || !mes || !numero_semana) { res.status(400).json({ error: 'ano, mes e numero_semana são obrigatórios.' }); return; }
+      if (!semana_inicio || !semana_fim) { res.status(400).json({ error: 'semana_inicio e semana_fim são obrigatórios.' }); return; }
+      if (new Date(semana_fim) < new Date(semana_inicio)) { res.status(400).json({ error: 'semana_fim não pode ser anterior a semana_inicio.' }); return; }
+
+      const saldoIni = Number(saldo_inicial);
+      const entradas = Number(total_entradas);
+      const saidas = Number(total_saidas);
+      if (!Number.isFinite(saldoIni) || saldoIni < 0) { res.status(400).json({ error: 'saldo_inicial inválido.' }); return; }
+      if (!Number.isFinite(entradas) || entradas < 0) { res.status(400).json({ error: 'total_entradas inválido.' }); return; }
+      if (!Number.isFinite(saidas) || saidas < 0) { res.status(400).json({ error: 'total_saidas inválido.' }); return; }
+
+      // Buscar configuração da empresa
+      const { rows: cfgRows } = await pool.query(
+        `SELECT faturamento_anual_declarado, percentual_operacional, limite_anual
+           FROM acompanhamento_financeiro_config
+          WHERE empresa_id = $1 AND ativo = true
+          LIMIT 1`,
+        [empresa_id]
+      );
+      let limites = { limite_anual: 0, limite_mensal: 0, limite_semanal: 0, semanas_no_mes: 4 };
+      if (cfgRows.length) {
+        limites = calcularLimitesAcompanhamento(
+          Number(cfgRows[0].faturamento_anual_declarado),
+          Number(cfgRows[0].percentual_operacional),
+          Number(ano), Number(mes)
+        );
+      }
+
+      // Calcular resumo semanal
+      const saldosDiariosNums = (saldos_diarios as any[]).map(s => Number(s.saldo_dia)).filter(n => Number.isFinite(n));
+      const { saldo_final, saldo_medio } = calcularResumoSemanal(saldoIni, entradas, saidas, saldosDiariosNums);
+
+      // Calcular acumulados (excluindo semana atual para evitar dupla contagem)
+      const colaboradorId = (req as any).colaborador?.id || null;
+      const { rows: acumMes } = await pool.query(
+        `SELECT COALESCE(SUM(total_entradas), 0) AS total
+           FROM acompanhamento_financeiro_semanal
+          WHERE empresa_id = $1 AND ano = $2 AND mes = $3 AND numero_semana != $4`,
+        [empresa_id, ano, mes, numero_semana]
+      );
+      const { rows: acumAno } = await pool.query(
+        `SELECT COALESCE(SUM(total_entradas), 0) AS total
+           FROM acompanhamento_financeiro_semanal
+          WHERE empresa_id = $1 AND ano = $2 AND NOT (mes = $3 AND numero_semana = $4)`,
+        [empresa_id, ano, mes, numero_semana]
+      );
+      const acumuladoMensal = Math.round((Number(acumMes[0]?.total || 0) + entradas) * 100) / 100;
+      const acumuladoAnual = Math.round((Number(acumAno[0]?.total || 0) + entradas) * 100) / 100;
+
+      // Calcular percentuais (protegido contra divisão por zero)
+      const pctSemana = limites.limite_semanal > 0 ? Math.round((entradas / limites.limite_semanal) * 10000) / 100 : 0;
+      const pctMes = limites.limite_mensal > 0 ? Math.round((acumuladoMensal / limites.limite_mensal) * 10000) / 100 : 0;
+      const pctAno = limites.limite_anual > 0 ? Math.round((acumuladoAnual / limites.limite_anual) * 10000) / 100 : 0;
+
+      // Classificar status e gerar diagnóstico
+      const semConfig = cfgRows.length === 0;
+      const status = semConfig ? 'aguardando_atualizacao' : classificarStatusAcompanhamento(pctSemana, pctMes, pctAno);
+      const diagnostico = gerarDiagnosticoAcompanhamento(
+        pctSemana, pctMes, pctAno, status,
+        limites.limite_semanal, limites.limite_mensal, limites.limite_anual,
+        acumuladoMensal, acumuladoAnual
+      );
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const { rows: semRows } = await client.query(
+          `INSERT INTO acompanhamento_financeiro_semanal (
+             empresa_id, ano, mes, numero_semana, semana_inicio, semana_fim,
+             saldo_inicial, total_entradas, total_saidas, saldo_final, saldo_medio,
+             limite_semanal_referencia, limite_mensal_referencia, limite_anual_referencia,
+             acumulado_mensal, acumulado_anual,
+             percentual_uso_semana, percentual_uso_mes, percentual_uso_ano,
+             status, diagnostico, observacoes, criado_por
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+           ON CONFLICT (empresa_id, ano, mes, numero_semana) DO UPDATE SET
+             semana_inicio = EXCLUDED.semana_inicio,
+             semana_fim = EXCLUDED.semana_fim,
+             saldo_inicial = EXCLUDED.saldo_inicial,
+             total_entradas = EXCLUDED.total_entradas,
+             total_saidas = EXCLUDED.total_saidas,
+             saldo_final = EXCLUDED.saldo_final,
+             saldo_medio = EXCLUDED.saldo_medio,
+             limite_semanal_referencia = EXCLUDED.limite_semanal_referencia,
+             limite_mensal_referencia = EXCLUDED.limite_mensal_referencia,
+             limite_anual_referencia = EXCLUDED.limite_anual_referencia,
+             acumulado_mensal = EXCLUDED.acumulado_mensal,
+             acumulado_anual = EXCLUDED.acumulado_anual,
+             percentual_uso_semana = EXCLUDED.percentual_uso_semana,
+             percentual_uso_mes = EXCLUDED.percentual_uso_mes,
+             percentual_uso_ano = EXCLUDED.percentual_uso_ano,
+             status = EXCLUDED.status,
+             diagnostico = EXCLUDED.diagnostico,
+             observacoes = EXCLUDED.observacoes,
+             updated_at = NOW()
+           RETURNING *`,
+          [
+            empresa_id, ano, mes, numero_semana, semana_inicio, semana_fim,
+            saldoIni, entradas, saidas, saldo_final, saldo_medio,
+            limites.limite_semanal, limites.limite_mensal, limites.limite_anual,
+            acumuladoMensal, acumuladoAnual,
+            pctSemana, pctMes, pctAno,
+            status, diagnostico, observacoes || null, colaboradorId,
+          ]
+        );
+        const semanaId = semRows[0].id;
+
+        // Saldos diários: apaga e reinsere
+        await client.query('DELETE FROM acompanhamento_financeiro_saldos_diarios WHERE acompanhamento_id = $1', [semanaId]);
+        for (const sd of (saldos_diarios as any[])) {
+          const sdVal = Number(sd.saldo_dia);
+          if (!Number.isFinite(sdVal)) continue;
+          await client.query(
+            `INSERT INTO acompanhamento_financeiro_saldos_diarios
+               (acompanhamento_id, empresa_id, data_referencia, saldo_dia, criado_por)
+             VALUES ($1,$2,$3,$4,$5)
+             ON CONFLICT (acompanhamento_id, data_referencia) DO UPDATE SET saldo_dia = EXCLUDED.saldo_dia`,
+            [semanaId, empresa_id, sd.data_referencia, sdVal, colaboradorId]
+          );
+        }
+
+        // Movimentações: apaga e reinsere
+        await client.query('DELETE FROM acompanhamento_financeiro_movimentacoes WHERE acompanhamento_id = $1', [semanaId]);
+        for (const mv of (movimentacoes as any[])) {
+          const mvVal = Number(mv.valor);
+          if (!Number.isFinite(mvVal) || mvVal <= 0) continue;
+          if (!['entrada', 'saida'].includes(mv.tipo)) continue;
+          await client.query(
+            `INSERT INTO acompanhamento_financeiro_movimentacoes
+               (acompanhamento_id, empresa_id, data_movimento, tipo, categoria, descricao, valor, comprovante_url, criado_por)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            [semanaId, empresa_id, mv.data_movimento, mv.tipo, mv.categoria || null, mv.descricao || null, mvVal, mv.comprovante_url || null, colaboradorId]
+          );
+        }
+
+        await client.query('COMMIT');
+        res.status(201).json({ ...semRows[0], id: semanaId });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      console.error('[POST /api/acompanhamento-financeiro/semana]', err);
+      res.status(500).json({ error: 'Erro ao salvar semana de acompanhamento.' });
+    }
+  });
+
+  // PATCH /api/acompanhamento-financeiro/semana/:id/status
+  app.patch('/api/acompanhamento-financeiro/semana/:id/status', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { status, observacoes } = req.body;
+      const statusValidos = ['dentro_da_referencia','atencao_leve','atencao_media','incompativel','critico','sem_documentacao','aguardando_atualizacao','regularizado'];
+      if (!statusValidos.includes(status)) { res.status(400).json({ error: 'Status inválido.' }); return; }
+      const { rows } = await pool.query(
+        `UPDATE acompanhamento_financeiro_semanal
+            SET status = $2, observacoes = COALESCE($3, observacoes), updated_at = NOW()
+          WHERE id = $1
+          RETURNING *`,
+        [id, status, observacoes || null]
+      );
+      if (!rows.length) { res.status(404).json({ error: 'Registro não encontrado.' }); return; }
+      res.json(rows[0]);
+    } catch (err) {
+      console.error('[PATCH /api/acompanhamento-financeiro/semana/:id/status]', err);
+      res.status(500).json({ error: 'Erro ao atualizar status.' });
+    }
+  });
+
+  // DELETE /api/acompanhamento-financeiro/semana/:id
+  app.delete('/api/acompanhamento-financeiro/semana/:id', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const colaborador = (req as any).colaborador;
+      const normC = (v?: string | null) => String(v || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
+      const isAdmin = ['admin','administrador','super_admin','superadmin','diretor'].includes(normC(colaborador?.cargo));
+      if (!isAdmin) { res.status(403).json({ error: 'Apenas Administradores e Diretores podem excluir registros.' }); return; }
+      const { rows } = await pool.query('DELETE FROM acompanhamento_financeiro_semanal WHERE id = $1 RETURNING id', [id]);
+      if (!rows.length) { res.status(404).json({ error: 'Registro não encontrado.' }); return; }
+      res.json({ success: true, id: rows[0].id });
+    } catch (err) {
+      console.error('[DELETE /api/acompanhamento-financeiro/semana/:id]', err);
+      res.status(500).json({ error: 'Erro ao excluir registro.' });
+    }
+  });
+
+  // ── ROTA: Calcular limites (preview sem salvar) ──────────────────────────────
+
+  // POST /api/acompanhamento-financeiro/calcular-limites
+  app.post('/api/acompanhamento-financeiro/calcular-limites', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const { faturamento_anual_declarado, percentual_operacional = 30, ano, mes } = req.body;
+      const fat = Number(faturamento_anual_declarado);
+      const pct = Number(percentual_operacional);
+      const anoN = Number(ano) || new Date().getFullYear();
+      const mesN = Number(mes) || (new Date().getMonth() + 1);
+      if (!Number.isFinite(fat) || fat < 0) { res.status(400).json({ error: 'Faturamento inválido.' }); return; }
+      if (!Number.isFinite(pct) || pct <= 0 || pct > 100) { res.status(400).json({ error: 'Percentual inválido.' }); return; }
+      const limites = calcularLimitesAcompanhamento(fat, pct, anoN, mesN);
+      res.json(limites);
+    } catch (err) {
+      console.error('[POST /api/acompanhamento-financeiro/calcular-limites]', err);
+      res.status(500).json({ error: 'Erro ao calcular limites.' });
+    }
+  });
+
+  // ── ROTA: Exportar PDF do relatório ─────────────────────────────────────────
+
+  // POST /api/acompanhamento-financeiro/semana/:id/exportar-pdf
+  app.post('/api/acompanhamento-financeiro/semana/:id/exportar-pdf', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { rows } = await pool.query(
+        `SELECT s.*,
+                e.razao_social, e.cnpj, e.cidade, e.estado,
+                c.faturamento_anual_declarado, c.percentual_operacional
+           FROM acompanhamento_financeiro_semanal s
+           JOIN empresas e ON e.id = s.empresa_id
+           LEFT JOIN acompanhamento_financeiro_config c ON c.empresa_id = s.empresa_id
+          WHERE s.id = $1
+          LIMIT 1`,
+        [id]
+      );
+      if (!rows.length) { res.status(404).json({ error: 'Registro não encontrado.' }); return; }
+      const semana = rows[0];
+      const { rows: movs } = await pool.query(
+        `SELECT * FROM acompanhamento_financeiro_movimentacoes WHERE acompanhamento_id = $1 ORDER BY data_movimento ASC`,
+        [id]
+      );
+      const { rows: saldos } = await pool.query(
+        `SELECT * FROM acompanhamento_financeiro_saldos_diarios WHERE acompanhamento_id = $1 ORDER BY data_referencia ASC`,
+        [id]
+      );
+      const colaborador = (req as any).colaborador;
+      const geradoPor = colaborador?.nome || colaborador?.email || null;
+      const html = gerarHtmlRelatorioFinanceiro({
+        empresa: { razao_social: semana.razao_social, cnpj: semana.cnpj, cidade: semana.cidade, estado: semana.estado },
+        config: {
+          faturamento_anual_declarado: Number(semana.faturamento_anual_declarado) || 0,
+          percentual_operacional: Number(semana.percentual_operacional) || 30,
+          limite_anual: Number(semana.limite_anual_referencia) || 0,
+        },
+        semana: {
+          ano: semana.ano, mes: semana.mes, numero_semana: semana.numero_semana,
+          semana_inicio: semana.semana_inicio, semana_fim: semana.semana_fim,
+          saldo_inicial: Number(semana.saldo_inicial) || 0,
+          total_entradas: Number(semana.total_entradas) || 0,
+          total_saidas: Number(semana.total_saidas) || 0,
+          saldo_final: Number(semana.saldo_final) || 0,
+          saldo_medio: Number(semana.saldo_medio) || 0,
+          limite_semanal_referencia: Number(semana.limite_semanal_referencia) || 0,
+          limite_mensal_referencia: Number(semana.limite_mensal_referencia) || 0,
+          limite_anual_referencia: Number(semana.limite_anual_referencia) || 0,
+          acumulado_mensal: Number(semana.acumulado_mensal) || 0,
+          acumulado_anual: Number(semana.acumulado_anual) || 0,
+          percentual_uso_semana: Number(semana.percentual_uso_semana) || 0,
+          percentual_uso_mes: Number(semana.percentual_uso_mes) || 0,
+          percentual_uso_ano: Number(semana.percentual_uso_ano) || 0,
+          status: semana.status,
+          diagnostico: semana.diagnostico,
+          observacoes: semana.observacoes,
+        },
+        movimentacoes: movs,
+        saldosDiarios: saldos,
+        geradoPor,
+      });
+      const uploadsDir = path.resolve('uploads', 'acompanhamento-financeiro');
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+      const fileName = `acomp-financeiro-${id}-${Date.now()}.pdf`;
+      const filePath = path.join(uploadsDir, fileName);
+      let browser: any;
+      try {
+        const puppeteer = await import('puppeteer-core');
+        let executablePath: string;
+        if (process.env.CHROMIUM_PATH) {
+          executablePath = process.env.CHROMIUM_PATH;
+        } else {
+          try {
+            const chromium = await import('@sparticuz/chromium');
+            executablePath = await chromium.default.executablePath();
+          } catch {
+            executablePath = '/usr/bin/chromium-browser';
+          }
+        }
+        browser = await puppeteer.default.launch({
+          executablePath,
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process'],
+          headless: true,
+        });
+        const page = await browser.newPage();
+        await page.setContent(html, { waitUntil: 'networkidle0' });
+        await page.pdf({
+          path: filePath,
+          format: 'A4',
+          printBackground: true,
+          displayHeaderFooter: false,
+          margin: { top: '6mm', bottom: '6mm', left: '0mm', right: '0mm' },
+        });
+      } finally {
+        if (browser) await browser.close();
+      }
+      const nomeArquivo = `relatorio-financeiro-${semana.razao_social.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}-sem${semana.numero_semana}-${semana.mes}-${semana.ano}.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
+      const stream = fs.createReadStream(filePath);
+      stream.pipe(res);
+      stream.on('end', () => { fs.unlink(filePath, () => {}); });
+    } catch (err: any) {
+      console.error('[POST /api/acompanhamento-financeiro/semana/:id/exportar-pdf]', err);
+      res.status(500).json({ error: err.message || 'Erro ao gerar PDF.' });
+    }
+  });
+
+  // ── FIM DO MÓDULO: ACOMPANHAMENTO FINANCEIRO SEMANAL ────────────────────────
+
 
 
   // Qualquer /api não encontrada deve responder JSON, nunca o index.html da SPA.

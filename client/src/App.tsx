@@ -53,6 +53,7 @@ import ColaboradorMeuCRM from "./pages/colaborador/MeuCRM";
 import Contadores from "./pages/colaborador/Contadores";
 import ClientesPF from "./pages/colaborador/ClientesPF";
 import AcompanhamentoBancario from "./pages/colaborador/AcompanhamentoBancario";
+import AcompanhamentoFinanceiro from "./pages/colaborador/AcompanhamentoFinanceiro";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CargoRoute from "./components/CargoRoute";
 
@@ -206,6 +207,13 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <AcompanhamentoBancario />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/acompanhamento-financeiro">
+        {() => (
+          <ProtectedRoute>
+            <AcompanhamentoFinanceiro />
           </ProtectedRoute>
         )}
       </Route>

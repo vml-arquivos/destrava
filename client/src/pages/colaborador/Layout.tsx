@@ -22,6 +22,7 @@ import {
   BookUser,
   UserCheck,
   Activity,
+  BarChart2,
 } from "lucide-react";
 
 interface NavItem {
@@ -51,7 +52,8 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/colaborador/fila",        label: "Fila Geral",         icon: ListOrdered, managementOnly: true },
   { href: "/colaborador/clientes",    label: "Clientes",        icon: Users },
   { href: "/colaborador/empresas",    label: "Empresas",        icon: Building2 },
-  { href: "/colaborador/acompanhamento-bancario", label: "Acompanhamento", icon: Activity },
+  { href: "/colaborador/acompanhamento-bancario", label: "Acomp. Bancário", icon: Activity },
+  { href: "/colaborador/acompanhamento-financeiro", label: "Acomp. Financeiro", icon: BarChart2 },
   // Faturamento: todos os colaboradores
   { href: "/colaborador/previsao-faturamento", label: "Faturamento", icon: TrendingUp },
   // Gerador de Contratos: todos os colaboradores
@@ -86,42 +88,7 @@ function normalizePermValue(value?: string | null) {
     .replace(/-/g, "_");
 }
 
-function podeAcessarAcompanhamentoBancario(user: any): boolean {
-  if (!user) return false;
-  if (user?.acesso_acompanhamento_bancario === true) return true;
-
-  const permitidos = new Set([
-    "admin",
-    "administrador",
-    "super_admin",
-    "superadmin",
-    "gestor_credito",
-  ]);
-
-  const cargo = normalizePermValue(user?.cargo);
-  const perfil = normalizePermValue(user?.perfil);
-  const role = normalizePermValue(user?.role);
-
-  return permitidos.has(cargo) || permitidos.has(perfil) || permitidos.has(role);
-}
-
-interface LayoutProps {
-  children: React.ReactNode;
-  title?: string;
-}
-
-export default function ColaboradorLayout({ children, title }: LayoutProps) {
-  const { colaborador, signOut } = useAuth();
-  const [location] = useLocation();
-  const [menuAberto, setMenuAberto] = useState(false);
-
-  const cargoLower = (colaborador?.cargo || '').toLowerCase();
-  const podeVerTudo = Boolean(colaborador?.pode_ver_todos_leads || colaborador?.permissoes?.podeVerTudo);
-
-  // Filtra itens de navegação conforme cargo e escopo operacional
-  const navItems = ALL_NAV_ITEMS.filter(item => {
-    if (item.managementOnly && !podeVerTudo) return false;
-    if (item.href === "/colaborador/acompanhamento-bancario" && !podeAcessarAcompanhamentoBancario(colaborador)) return false;
+    if (item.href === "/colaborador/acompanhamento-financeiro" && !podeAcessarFinanceiro(colaborador)) return false;
     if (!item.allowedCargos) return true;
     return item.allowedCargos.includes(cargoLower);
   });
