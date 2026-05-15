@@ -7997,6 +7997,7 @@ ${(temTest1 || temTest2) ? `
 
   // ── Geração do HTML do Relatório PDF ────────────────────────────────────────
 
+  // ── Geração do HTML do Relatório PDF (padrão letterhead oficial) ──────────
   function gerarHtmlRelatorioFinanceiro(payload: {
     empresa: { razao_social: string; cnpj?: string; cidade?: string; estado?: string };
     config: { faturamento_anual_declarado: number; percentual_operacional: number; limite_anual: number };
@@ -8025,8 +8026,9 @@ ${(temTest1 || temTest2) ? `
     const fmtPct = (v: number) => `${(Math.round((Number(v) || 0) * 100) / 100).toFixed(2).replace('.', ',')}%`;
     const esc = (s?: string | null) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-    const nomeMes = meses[(payload.semana.mes - 1)] || String(payload.semana.mes);
+    const nomeMesStr = meses[(payload.semana.mes - 1)] || String(payload.semana.mes);
     const dataEmissao = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+
     const statusLabel: Record<string, string> = {
       dentro_da_referencia: 'Dentro da Referência',
       atencao_leve: 'Atenção Leve',
@@ -8051,132 +8053,167 @@ ${(temTest1 || temTest2) ? `
     const stLabel = statusLabel[st] || st;
     const stCor = statusCor[st] || '#374151';
     const stBg = statusBg[st] || '#f3f4f6';
+
+    // Barra de progresso HTML
+    const barraProgresso = (pct: number, label: string) => {
+      const clamped = Math.min(pct, 100);
+      const cor = pct > 120 ? '#dc2626' : pct > 100 ? '#f97316' : '#16a34a';
+      return `<div style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:8pt;margin-bottom:2px;">
+          <span style="color:#374151;">${esc(label)}</span>
+          <span style="font-weight:700;color:${pct > 100 ? '#dc2626' : '#374151'};">${fmtPct(pct)}</span>
+        </div>
+        <div style="height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;">
+          <div style="height:100%;width:${clamped}%;background:${cor};border-radius:4px;"></div>
+        </div>
+      </div>`;
+    };
+
     const linhasMovimentacoes = (payload.movimentacoes || []).map(m => `
       <tr>
-        <td>${esc(fmtDate(m.data_movimento))}</td>
-        <td style="text-transform:capitalize">${esc(m.tipo)}</td>
-        <td>${esc(m.categoria || '—')}</td>
-        <td>${esc(m.descricao || '—')}</td>
-        <td style="text-align:right;font-weight:${m.tipo === 'entrada' ? '600' : 'normal'};color:${m.tipo === 'entrada' ? '#166534' : '#991b1b'}">${fmt(m.valor)}</td>
+        <td style="padding:4px 7px;border:1px solid #d1d5db;">${esc(fmtDate(m.data_movimento))}</td>
+        <td style="padding:4px 7px;border:1px solid #d1d5db;text-transform:capitalize;font-weight:600;color:${m.tipo === 'entrada' ? '#166534' : '#991b1b'};">${esc(m.tipo === 'entrada' ? 'Entrada' : 'Saída')}</td>
+        <td style="padding:4px 7px;border:1px solid #d1d5db;">${esc(m.categoria || '—')}</td>
+        <td style="padding:4px 7px;border:1px solid #d1d5db;">${esc(m.descricao || '—')}</td>
+        <td style="padding:4px 7px;border:1px solid #d1d5db;text-align:right;font-weight:${m.tipo === 'entrada' ? '700' : '400'};color:${m.tipo === 'entrada' ? '#166534' : '#991b1b'};">${fmt(m.valor)}</td>
       </tr>`).join('');
+
     const linhasSaldosDiarios = (payload.saldosDiarios || []).map(s => `
       <tr>
-        <td>${esc(fmtDate(s.data_referencia))}</td>
-        <td style="text-align:right">${fmt(s.saldo_dia)}</td>
+        <td style="padding:4px 7px;border:1px solid #d1d5db;">${esc(fmtDate(s.data_referencia))}</td>
+        <td style="padding:4px 7px;border:1px solid #d1d5db;text-align:right;font-weight:600;">${fmt(s.saldo_dia)}</td>
       </tr>`).join('');
-    return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8"/>
-  <title>Relatório Técnico de Acompanhamento Financeiro Semanal</title>
-  <style>
-    @page { size: A4; margin: 28mm 18mm 26mm 18mm; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #111827; background: #fff; line-height: 1.4; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .doc-header { display: flex; align-items: center; justify-content: flex-start; padding: 0 0 10px 0; border-bottom: 2px solid #f0a500; margin-bottom: 14px; }
-    .doc-header img { height: 44px; }
-    .doc-title { text-align: center; font-size: 12pt; font-weight: 700; text-transform: uppercase; color: #1B3A8C; margin: 0 0 4px; letter-spacing: 0.02em; }
-    .doc-subtitle { text-align: center; font-size: 9pt; color: #374151; margin: 0 0 14px; }
-    .section-title { font-size: 9pt; font-weight: 700; text-transform: uppercase; color: #1B3A8C; border-bottom: 1px solid #1B3A8C; padding-bottom: 3px; margin: 12px 0 7px; letter-spacing: 0.04em; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; margin-bottom: 8px; }
-    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 12px; margin-bottom: 8px; }
-    .field { display: flex; flex-direction: column; margin-bottom: 2px; }
-    .field-label { font-size: 7.5pt; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; }
-    .field-value { font-size: 9.5pt; font-weight: 600; color: #111827; }
-    .data-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-bottom: 10px; page-break-inside: avoid; }
-    .data-table th { background: #1B3A8C; color: #fff; padding: 5px 7px; text-align: left; font-weight: 700; font-size: 8pt; }
-    .data-table th.right { text-align: right; }
-    .data-table td { border: 1px solid #d1d5db; padding: 4px 7px; vertical-align: top; }
-    .data-table tr:nth-child(even) td { background: #f4f7ff; }
-    .data-table .total-row td { font-weight: 700; background: #dce3f5; border: 1px solid #9ca3af; }
-    .status-badge { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 9pt; font-weight: 700; }
-    .diagnostico { background: #f8fafc; border-left: 3px solid #1B3A8C; padding: 8px 10px; font-size: 9pt; line-height: 1.5; text-align: justify; margin: 6px 0 10px; page-break-inside: avoid; }
-    .obs { background: #fffbeb; border-left: 3px solid #f0a500; padding: 7px 10px; font-size: 9pt; line-height: 1.5; margin: 6px 0 10px; page-break-inside: avoid; }
-    .footer-info { margin-top: 14px; padding-top: 8px; border-top: 1px solid #d1d5db; font-size: 7.5pt; color: #6b7280; display: flex; justify-content: space-between; }
-    .page-footer-block { margin-top: 20px; padding-top: 8px; border-top: 1px solid #ccc; font-size: 7.5pt; color: #555; }
-    .highlight-row td { background: #f0f7ff !important; }
-  </style>
-</head>
-<body>
-  <div class="doc-header">
-    <img src="https://destravacredito.com/logo-destrava.png" alt="Destrava Crédito" onerror="this.style.display='none'"/>
-  </div>
-  <div class="doc-title">Relatório Técnico de Acompanhamento Financeiro Semanal</div>
-  <div class="doc-subtitle">${esc(payload.empresa.razao_social)}${payload.empresa.cnpj ? ` &nbsp;|&nbsp; CNPJ: ${esc(payload.empresa.cnpj)}` : ''} &nbsp;|&nbsp; ${esc(nomeMes)}/${payload.semana.ano} — Semana ${payload.semana.numero_semana}</div>
 
-  <div class="section-title">1. Dados da Empresa e Período Analisado</div>
-  <div class="grid-2">
-    <div class="field"><span class="field-label">Razão Social</span><span class="field-value">${esc(payload.empresa.razao_social)}</span></div>
-    <div class="field"><span class="field-label">CNPJ</span><span class="field-value">${esc(payload.empresa.cnpj || '—')}</span></div>
-    <div class="field"><span class="field-label">Período da Semana</span><span class="field-value">${esc(fmtDate(payload.semana.semana_inicio))} a ${esc(fmtDate(payload.semana.semana_fim))}</span></div>
-    <div class="field"><span class="field-label">Referência</span><span class="field-value">${esc(nomeMes)}/${payload.semana.ano} — Semana ${payload.semana.numero_semana}</span></div>
-  </div>
+    let secNum = 1;
 
-  <div class="section-title">2. Parâmetros de Acompanhamento</div>
-  <div class="grid-3">
-    <div class="field"><span class="field-label">Faturamento Anual Declarado</span><span class="field-value">${fmt(payload.config.faturamento_anual_declarado)}</span></div>
-    <div class="field"><span class="field-label">Percentual Operacional</span><span class="field-value">${fmtPct(payload.config.percentual_operacional)}</span></div>
-    <div class="field"><span class="field-label">Limite Anual de Acompanhamento</span><span class="field-value">${fmt(payload.semana.limite_anual_referencia)}</span></div>
-    <div class="field"><span class="field-label">Limite Mensal de Referência</span><span class="field-value">${fmt(payload.semana.limite_mensal_referencia)}</span></div>
-    <div class="field"><span class="field-label">Limite Semanal de Referência</span><span class="field-value">${fmt(payload.semana.limite_semanal_referencia)}</span></div>
-  </div>
+    const body = `
+    <h1 class="doc-title" style="font-size:13pt;font-weight:700;text-align:center;text-transform:uppercase;margin:0 0 4px;">
+      Relatório Técnico de Acompanhamento Financeiro Semanal
+    </h1>
+    <p style="text-align:center;font-size:9pt;color:#374151;margin:0 0 16px;">
+      ${esc(payload.empresa.razao_social)}${payload.empresa.cnpj ? ` &nbsp;|&nbsp; CNPJ: ${esc(payload.empresa.cnpj)}` : ''} &nbsp;|&nbsp; ${esc(nomeMesStr)}/${payload.semana.ano} — Semana ${payload.semana.numero_semana}
+    </p>
 
-  <div class="section-title">3. Resumo da Semana</div>
-  <table class="data-table">
-    <thead><tr><th>Indicador</th><th class="right">Valor</th></tr></thead>
-    <tbody>
-      <tr><td>Saldo Inicial da Semana</td><td style="text-align:right">${fmt(payload.semana.saldo_inicial)}</td></tr>
-      <tr class="highlight-row"><td><strong>Total de Entradas</strong></td><td style="text-align:right;color:#166534;font-weight:700">${fmt(payload.semana.total_entradas)}</td></tr>
-      <tr><td>Total de Saídas</td><td style="text-align:right;color:#991b1b">${fmt(payload.semana.total_saidas)}</td></tr>
-      <tr class="total-row"><td><strong>Saldo Final da Semana</strong></td><td style="text-align:right"><strong>${fmt(payload.semana.saldo_final)}</strong></td></tr>
-      <tr><td>Saldo Médio Semanal</td><td style="text-align:right">${fmt(payload.semana.saldo_medio)}</td></tr>
-    </tbody>
-  </table>
+    <h2 class="section-title">${secNum++}. Dados da Empresa e Período Analisado</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;margin-bottom:12px;">
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">Razão Social</span><span style="font-size:9.5pt;font-weight:600;">${esc(payload.empresa.razao_social)}</span></div>
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">CNPJ</span><span style="font-size:9.5pt;font-weight:600;">${esc(payload.empresa.cnpj || '—')}</span></div>
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">Período da Semana</span><span style="font-size:9.5pt;font-weight:600;">${esc(fmtDate(payload.semana.semana_inicio))} a ${esc(fmtDate(payload.semana.semana_fim))}</span></div>
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">Referência</span><span style="font-size:9.5pt;font-weight:600;">${esc(nomeMesStr)}/${payload.semana.ano} — Semana ${payload.semana.numero_semana}</span></div>
+    </div>
 
-  <div class="section-title">4. Análise de Conformidade</div>
-  <table class="data-table">
-    <thead><tr>
-      <th>Indicador</th><th class="right">Valor Acumulado</th><th class="right">Limite de Referência</th><th class="right">% Utilizado</th>
-    </tr></thead>
-    <tbody>
-      <tr><td>Acumulado Semanal</td><td style="text-align:right">${fmt(payload.semana.total_entradas)}</td><td style="text-align:right">${fmt(payload.semana.limite_semanal_referencia)}</td><td style="text-align:right">${fmtPct(payload.semana.percentual_uso_semana)}</td></tr>
-      <tr class="highlight-row"><td>Acumulado Mensal</td><td style="text-align:right">${fmt(payload.semana.acumulado_mensal)}</td><td style="text-align:right">${fmt(payload.semana.limite_mensal_referencia)}</td><td style="text-align:right">${fmtPct(payload.semana.percentual_uso_mes)}</td></tr>
-      <tr><td>Acumulado Anual</td><td style="text-align:right">${fmt(payload.semana.acumulado_anual)}</td><td style="text-align:right">${fmt(payload.semana.limite_anual_referencia)}</td><td style="text-align:right">${fmtPct(payload.semana.percentual_uso_ano)}</td></tr>
-    </tbody>
-  </table>
+    <h2 class="section-title">${secNum++}. Parâmetros de Acompanhamento</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 14px;margin-bottom:12px;">
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">Faturamento Anual Declarado</span><span style="font-size:9.5pt;font-weight:600;">${fmt(payload.config.faturamento_anual_declarado)}</span></div>
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">Percentual Operacional</span><span style="font-size:9.5pt;font-weight:600;">${fmtPct(payload.config.percentual_operacional)}</span></div>
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">Limite Anual de Referência</span><span style="font-size:9.5pt;font-weight:600;">${fmt(payload.semana.limite_anual_referencia)}</span></div>
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">Limite Mensal de Referência</span><span style="font-size:9.5pt;font-weight:600;">${fmt(payload.semana.limite_mensal_referencia)}</span></div>
+      <div><span style="font-size:7.5pt;color:#6b7280;text-transform:uppercase;display:block;">Limite Semanal de Referência</span><span style="font-size:9.5pt;font-weight:600;">${fmt(payload.semana.limite_semanal_referencia)}</span></div>
+    </div>
 
-  <div class="section-title">5. Status e Diagnóstico Técnico</div>
-  <div style="margin-bottom:8px">Status: <span class="status-badge" style="background:${stBg};color:${stCor}">${esc(stLabel)}</span></div>
-  <div class="diagnostico">${esc(payload.semana.diagnostico || '—')}</div>
+    <h2 class="section-title">${secNum++}. Resumo Financeiro da Semana</h2>
+    <table class="data-table" style="margin-bottom:12px;">
+      <thead>
+        <tr>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 8px;text-align:left;font-weight:700;font-size:8pt;">Indicador</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 8px;text-align:right;font-weight:700;font-size:8pt;">Valor</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td style="padding:4px 8px;border:1px solid #d1d5db;">Saldo Inicial da Semana</td><td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;">${fmt(payload.semana.saldo_inicial)}</td></tr>
+        <tr style="background:#f0f7ff;"><td style="padding:4px 8px;border:1px solid #d1d5db;"><strong>Total de Entradas</strong></td><td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;color:#166534;font-weight:700;">${fmt(payload.semana.total_entradas)}</td></tr>
+        <tr><td style="padding:4px 8px;border:1px solid #d1d5db;">Total de Saídas</td><td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;color:#991b1b;">${fmt(payload.semana.total_saidas)}</td></tr>
+        <tr style="background:#dce3f5;"><td style="padding:4px 8px;border:1px solid #9ca3af;font-weight:700;"><strong>Saldo Final da Semana</strong></td><td style="padding:4px 8px;border:1px solid #9ca3af;text-align:right;font-weight:700;">${fmt(payload.semana.saldo_final)}</td></tr>
+        <tr><td style="padding:4px 8px;border:1px solid #d1d5db;">Saldo Médio Semanal</td><td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;">${fmt(payload.semana.saldo_medio)}</td></tr>
+      </tbody>
+    </table>
 
-  ${(payload.movimentacoes && payload.movimentacoes.length > 0) ? `
-  <div class="section-title">6. Movimentações Registradas</div>
-  <table class="data-table">
-    <thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th><th class="right">Valor</th></tr></thead>
-    <tbody>${linhasMovimentacoes}</tbody>
-  </table>` : ''}
+    <h2 class="section-title">${secNum++}. Análise de Conformidade com os Limites de Referência</h2>
+    <table class="data-table" style="margin-bottom:10px;">
+      <thead>
+        <tr>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 8px;text-align:left;font-weight:700;font-size:8pt;">Indicador</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 8px;text-align:right;font-weight:700;font-size:8pt;">Valor Acumulado</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 8px;text-align:right;font-weight:700;font-size:8pt;">Limite de Referência</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 8px;text-align:right;font-weight:700;font-size:8pt;">% Utilizado</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;">Acumulado Semanal</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;">${fmt(payload.semana.total_entradas)}</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;">${fmt(payload.semana.limite_semanal_referencia)}</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700;color:${payload.semana.percentual_uso_semana > 100 ? '#dc2626' : '#166534'};">${fmtPct(payload.semana.percentual_uso_semana)}</td>
+        </tr>
+        <tr style="background:#f0f7ff;">
+          <td style="padding:4px 8px;border:1px solid #d1d5db;font-weight:600;">Acumulado Mensal</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;">${fmt(payload.semana.acumulado_mensal)}</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;">${fmt(payload.semana.limite_mensal_referencia)}</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700;color:${payload.semana.percentual_uso_mes > 100 ? '#dc2626' : '#166534'};">${fmtPct(payload.semana.percentual_uso_mes)}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;">Acumulado Anual</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;">${fmt(payload.semana.acumulado_anual)}</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;">${fmt(payload.semana.limite_anual_referencia)}</td>
+          <td style="padding:4px 8px;border:1px solid #d1d5db;text-align:right;font-weight:700;color:${payload.semana.percentual_uso_ano > 100 ? '#dc2626' : '#166534'};">${fmtPct(payload.semana.percentual_uso_ano)}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-bottom:12px;">
+      ${barraProgresso(payload.semana.percentual_uso_semana, `Semanal — ${fmt(payload.semana.total_entradas)} / ${fmt(payload.semana.limite_semanal_referencia)}`)}
+      ${barraProgresso(payload.semana.percentual_uso_mes, `Mensal — ${fmt(payload.semana.acumulado_mensal)} / ${fmt(payload.semana.limite_mensal_referencia)}`)}
+      ${barraProgresso(payload.semana.percentual_uso_ano, `Anual — ${fmt(payload.semana.acumulado_anual)} / ${fmt(payload.semana.limite_anual_referencia)}`)}
+    </div>
 
-  ${(payload.saldosDiarios && payload.saldosDiarios.length > 0) ? `
-  <div class="section-title">${(payload.movimentacoes && payload.movimentacoes.length > 0) ? '7' : '6'}. Saldos Diários</div>
-  <table class="data-table" style="max-width:320px">
-    <thead><tr><th>Data</th><th class="right">Saldo do Dia</th></tr></thead>
-    <tbody>${linhasSaldosDiarios}</tbody>
-  </table>` : ''}
+    <h2 class="section-title">${secNum++}. Status e Diagnóstico Técnico</h2>
+    <div style="margin-bottom:8px;">
+      <span style="font-size:8pt;color:#374151;">Status de Conformidade: </span>
+      <span style="display:inline-block;padding:3px 12px;border-radius:4px;font-size:9pt;font-weight:700;background:${stBg};color:${stCor};">${esc(stLabel)}</span>
+    </div>
+    <div style="background:#f8fafc;border-left:3px solid #1B3A8C;padding:9px 12px;font-size:9pt;line-height:1.55;text-align:justify;margin:6px 0 12px;page-break-inside:avoid;">
+      ${esc(payload.semana.diagnostico || 'Diagnóstico não disponível para este período.')}
+    </div>
 
-  ${payload.semana.observacoes ? `
-  <div class="section-title">Observações</div>
-  <div class="obs">${esc(payload.semana.observacoes)}</div>` : ''}
+    ${(payload.movimentacoes && payload.movimentacoes.length > 0) ? `
+    <h2 class="section-title">${secNum++}. Movimentações Registradas</h2>
+    <table class="data-table" style="margin-bottom:12px;font-size:8.5pt;">
+      <thead>
+        <tr>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 7px;text-align:left;font-size:8pt;">Data</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 7px;text-align:left;font-size:8pt;">Tipo</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 7px;text-align:left;font-size:8pt;">Categoria</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 7px;text-align:left;font-size:8pt;">Descrição</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 7px;text-align:right;font-size:8pt;">Valor</th>
+        </tr>
+      </thead>
+      <tbody>${linhasMovimentacoes}</tbody>
+    </table>` : ''}
 
-  <div class="footer-info">
-    <span>Emitido em: ${esc(dataEmissao)}${payload.geradoPor ? ` &nbsp;|&nbsp; Responsável: ${esc(payload.geradoPor)}` : ''}</span>
-    <span>DESTRAVA CRÉDITO LTDA &nbsp;|&nbsp; CNPJ 35.427.182/0001-66</span>
-  </div>
-  <div class="page-footer-block">
-    <strong>BRASÍLIA - SEDE</strong> — St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250 &nbsp;|&nbsp;
-    <strong>GOIÂNIA - FILIAL</strong> — Avenida Afonso Pena, qd-25 Alt. 05, S/N sala-02 setor Goiânia 2 CEP: 74665555 Goiânia-Go
-  </div>
-</body>
-</html>`;
+    ${(payload.saldosDiarios && payload.saldosDiarios.length > 0) ? `
+    <h2 class="section-title">${secNum++}. Saldos Diários</h2>
+    <table class="data-table" style="max-width:320px;margin-bottom:12px;font-size:8.5pt;">
+      <thead>
+        <tr>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 7px;text-align:left;font-size:8pt;">Data</th>
+          <th style="background:#1B3A8C;color:#fff;padding:5px 7px;text-align:right;font-size:8pt;">Saldo do Dia</th>
+        </tr>
+      </thead>
+      <tbody>${linhasSaldosDiarios}</tbody>
+    </table>` : ''}
+
+    ${payload.semana.observacoes ? `
+    <h2 class="section-title">Observações</h2>
+    <div style="background:#fffbeb;border-left:3px solid #f0a500;padding:8px 12px;font-size:9pt;line-height:1.5;margin:6px 0 12px;page-break-inside:avoid;">
+      ${esc(payload.semana.observacoes)}
+    </div>` : ''}
+
+    <div style="margin-top:18px;padding-top:8px;border-top:1px solid #d1d5db;font-size:7.5pt;color:#6b7280;display:flex;justify-content:space-between;">
+      <span>Emitido em: ${esc(dataEmissao)}${payload.geradoPor ? ` &nbsp;|&nbsp; Responsável: ${esc(payload.geradoPor)}` : ''}</span>
+      <span>DESTRAVA CRÉDITO LTDA &nbsp;|&nbsp; CNPJ 35.427.182/0001-66</span>
+    </div>
+    `;
+
+    return gerarHtmlTimbrado(body, 'Relatório de Acompanhamento Financeiro Semanal');
   }
 
   // ── ROTA: Configuração de Acompanhamento Financeiro ─────────────────────────
@@ -8619,7 +8656,7 @@ ${(temTest1 || temTest2) ? `
           format: 'A4',
           printBackground: true,
           displayHeaderFooter: false,
-          margin: { top: '10mm', bottom: '28mm', left: '18mm', right: '18mm' },
+          margin: { top: '6mm', bottom: '6mm', left: '0mm', right: '0mm' },
         });
       } finally {
         if (browser) await browser.close();
