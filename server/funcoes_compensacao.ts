@@ -36,10 +36,7 @@ export function round2(value: unknown): number {
   return Math.round(n * 100) / 100;
 }
 
-export function calcularQuantidadeSemanasDoMes(
-  _dataReferencia?: string | Date | null,
-  quantidadeConfigurada = 4
-): number {
+export function calcularQuantidadeSemanasDoMes(_dataReferencia?: string | Date | null, quantidadeConfigurada = 4): number {
   const n = Number(quantidadeConfigurada || 4);
   if (Number.isFinite(n) && n >= 1 && n <= 6) return Math.round(n);
   return 4;
@@ -51,7 +48,9 @@ export function calcularReferenciasFaturamento(
   quantidadeSemanasMes = 4
 ) {
   const mediaMensal = round2(Number(faturamentoAnual || 0) / 12);
-  const limiteMensal = round2(mediaMensal * (1 + Number(percentualMargem || 30) / 100));
+  const margem = Number(percentualMargem || 30);
+  const margemDecimal = margem > 1 ? margem / 100 : margem;
+  const limiteMensal = round2(mediaMensal * (1 + margemDecimal));
   const semanas = calcularQuantidadeSemanasDoMes(null, quantidadeSemanasMes);
   const mediaSemanal = round2(limiteMensal / semanas);
 
@@ -80,11 +79,7 @@ export function calcularAcompanhamentoBancarioDinamico(args: {
 }): AnaliseAcompanhamentoDinamico {
   const semanas = calcularQuantidadeSemanasDoMes(null, args.quantidadeSemanasMes || 4);
   const numeroSemana = Math.min(Math.max(1, Number(args.numeroSemana || 1)), semanas);
-  const refs = calcularReferenciasFaturamento(
-    args.faturamentoAnual,
-    args.percentualMargem ?? 30,
-    semanas
-  );
+  const refs = calcularReferenciasFaturamento(args.faturamentoAnual, args.percentualMargem ?? 30, semanas);
 
   const totalEntradas = round2(args.totalEntradas);
   const totalSaidas = round2(args.totalSaidas);
@@ -93,42 +88,28 @@ export function calcularAcompanhamentoBancarioDinamico(args: {
   const acumuladoAnualAnterior = round2(args.acumuladoAnualAnterior || 0);
 
   const saldoSemanal = round2(totalEntradas - totalSaidas);
-
   const entradaComCompensacao = round2(totalEntradas - compensacaoAnterior);
   const diferenca = round2(entradaComCompensacao - refs.mediaSemanal);
   const compensacaoProxima = diferenca;
 
   const acumuladoMensalComSemana = round2(acumuladoMensalAnterior + totalEntradas);
   const acumuladoAnualComSemana = round2(acumuladoAnualAnterior + totalEntradas);
-
   const saldoFaltanteMes = round2(refs.limiteMensal - acumuladoMensalComSemana);
   const valorExcedenteMes = round2(Math.max(0, acumuladoMensalComSemana - refs.limiteMensal));
-
   const semanasRestantes = Math.max(0, semanas - numeroSemana);
-  const metaDinamicaProximaSemana =
-    semanasRestantes > 0 ? round2(saldoFaltanteMes / semanasRestantes) : 0;
+  const metaDinamicaProximaSemana = semanasRestantes > 0 ? round2(saldoFaltanteMes / semanasRestantes) : 0;
 
-  const percentualSemanal =
-    refs.mediaSemanal > 0 ? round2((entradaComCompensacao / refs.mediaSemanal) * 100) : 0;
+  const percentualSemanal = refs.mediaSemanal > 0 ? round2((entradaComCompensacao / refs.mediaSemanal) * 100) : 0;
+  const percentualMensal = refs.limiteMensal > 0 ? round2((acumuladoMensalComSemana / refs.limiteMensal) * 100) : 0;
+  const percentualAnual = Number(args.faturamentoAnual || 0) > 0 ? round2((acumuladoAnualComSemana / Number(args.faturamentoAnual || 0)) * 100) : 0;
 
-  const percentualMensal =
-    refs.limiteMensal > 0 ? round2((acumuladoMensalComSemana / refs.limiteMensal) * 100) : 0;
-
-  const percentualAnual =
-    Number(args.faturamentoAnual || 0) > 0
-      ? round2((acumuladoAnualComSemana / Number(args.faturamentoAnual || 0)) * 100)
-      : 0;
-
-  const projecaoMensal =
-    numeroSemana > 0 ? round2((acumuladoMensalComSemana / numeroSemana) * semanas) : 0;
-
+  const projecaoMensal = numeroSemana > 0 ? round2((acumuladoMensalComSemana / numeroSemana) * semanas) : 0;
   const limiteRating = refs.limiteMensal * ((args.toleranciaAbaixoRatingPercent ?? 80) / 100);
 
   const alertaAderencia = percentualMensal > 100 || percentualSemanal > 150;
   const alertaRating = projecaoMensal > 0 && projecaoMensal < limiteRating;
 
   let status: StatusCompensacao = "dentro_referencia";
-
   if (percentualMensal > 120 || percentualSemanal > 200) status = "critico";
   else if (alertaAderencia) status = "alerta_aderencia";
   else if (alertaRating) status = "risco_rating";
@@ -184,12 +165,8 @@ export function calcularAcompanhamentoBancarioDinamico(args: {
 }
 
 export function gerarDiagnosticoCompensacao(data: Record<string, any>): string {
-  const fmt = (v: unknown) =>
-    round2(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-  const pct = (v: unknown) =>
-    `${round2(v).toFixed(2).replace(".", ",")}%`;
-
+  const fmt = (v: unknown) => round2(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const pct = (v: unknown) => `${round2(v).toFixed(2).replace(".", ",")}%`;
   const linhas: string[] = [];
 
   linhas.push(`Faturamento anual declarado: ${fmt(data.faturamentoAnual)}.`);
@@ -198,23 +175,17 @@ export function gerarDiagnosticoCompensacao(data: Record<string, any>): string {
   linhas.push(`Meta semanal de referência: ${fmt(data.media_semanal_referencia)}.`);
 
   if (round2(data.diferenca_referencia_semanal) > 0) {
-    linhas.push(
-      `A semana ficou acima da referência em ${fmt(data.diferenca_referencia_semanal)}. Próxima semana deve reduzir/segurar esse valor ou seguir a meta dinâmica.`
-    );
+    linhas.push(`A semana ficou acima da referência em ${fmt(data.diferenca_referencia_semanal)}. Próxima semana deve reduzir/segurar esse valor ou seguir a meta dinâmica.`);
   } else if (round2(data.diferenca_referencia_semanal) < 0) {
-    linhas.push(
-      `A semana ficou abaixo da referência em ${fmt(Math.abs(data.diferenca_referencia_semanal))}. Próxima semana deve aumentar esse valor ou seguir a meta dinâmica.`
-    );
+    linhas.push(`A semana ficou abaixo da referência em ${fmt(Math.abs(data.diferenca_referencia_semanal))}. Próxima semana deve aumentar esse valor ou seguir a meta dinâmica.`);
   } else {
     linhas.push("A semana ficou exatamente dentro da referência definida.");
   }
 
   linhas.push(`Saldo faltante para fechar o mês no teto permitido: ${fmt(data.saldo_faltante_mes)}.`);
-
   if (round2(data.meta_dinamica_proxima_semana) > 0) {
     linhas.push(`Meta dinâmica sugerida para cada semana restante: ${fmt(data.meta_dinamica_proxima_semana)}.`);
   }
-
   linhas.push(`Uso semanal: ${pct(data.percentual_limite_semanal)}. Uso mensal: ${pct(data.percentual_limite_mensal)}.`);
 
   if (data.status_compensacao === "alerta_aderencia" || data.status_compensacao === "critico") {
@@ -238,5 +209,37 @@ export function classificarStatusCompensacao(
   return "dentro_referencia";
 }
 
-// Compatibilidade com imports antigos.
-export const calcularCompensacaoSemanal = calcularAcompanhamentoBancarioDinamico;
+export function calcularCompensacaoSemanal(args: {
+  totalEntradas: number;
+  totalSaidas: number;
+  compensacaoSemanaAnterior: number;
+  mediaSemanalReferencia?: number;
+  acumuladoMensal?: number;
+  limiteMensalReferencia?: number;
+  acumuladoAnual?: number;
+  faturamentoAnual: number;
+  numeroSemana?: number;
+  quantidadeSemanasMes?: number;
+}) {
+  const resultado = calcularAcompanhamentoBancarioDinamico({
+    faturamentoAnual: args.faturamentoAnual,
+    totalEntradas: args.totalEntradas,
+    totalSaidas: args.totalSaidas,
+    numeroSemana: args.numeroSemana || 1,
+    quantidadeSemanasMes: args.quantidadeSemanasMes || 4,
+    compensacaoSemanaAnterior: args.compensacaoSemanaAnterior,
+    acumuladoMensalAnterior: Math.max(0, Number(args.acumuladoMensal || 0) - Number(args.totalEntradas || 0)),
+    acumuladoAnualAnterior: Math.max(0, Number(args.acumuladoAnual || 0) - Number(args.totalEntradas || 0)),
+  });
+
+  return {
+    ...resultado,
+    entradaComCompensacao: resultado.entrada_com_compensacao,
+    diferenca: resultado.diferenca_referencia_semanal,
+    compensacaoProxima: resultado.compensacao_necessaria_proxima,
+    percentualSemanal: resultado.percentual_limite_semanal,
+    percentualMensal: resultado.percentual_limite_mensal,
+    percentualAnual: resultado.percentual_limite_anual,
+    alertaAderencia: resultado.alerta_aderencia,
+  };
+}
