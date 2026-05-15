@@ -649,6 +649,17 @@ export default function AcompanhamentoBancario() {
     [filtered]
   );
 
+  const pendentesOperacionais = useMemo(
+    () =>
+      filtered.filter((r) => {
+        const hoje = hojeISO();
+        const data = String(r.proxima_atualizacao || "").slice(0, 10);
+        return Boolean(r.status_pendente || r.atualizacao_pendente || (data && data <= hoje));
+      }),
+    [filtered]
+  );
+
+
   // ─── Abrir modal de atualização ───────────────────────────────────────────────
   const abrirAtualizacao = async (row: Acompanhamento) => {
     let rowComAtualizacoes = row;
@@ -841,15 +852,65 @@ export default function AcompanhamentoBancario() {
           </button>
         </div>
 
-        {/* Alertas */}
-        {hojeEhQuarta() && (
-          <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-800">
-            Hoje é quarta-feira: dia de atualizar os acompanhamentos bancários.
-          </div>
-        )}
-        {resumo.pendentes > 0 && (
-          <div className="rounded border border-orange-200 bg-orange-50 p-3 text-sm font-medium text-orange-800">
-            Existem {resumo.pendentes} acompanhamento(s) pendente(s) de atualização.
+        {/* Alertas operacionais */}
+        {(hojeEhQuarta() || pendentesOperacionais.length > 0) && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="font-semibold">
+                  {hojeEhQuarta()
+                    ? "Hoje é quarta-feira: dia de atualizar os acompanhamentos bancários."
+                    : "Existem acompanhamentos pendentes de atualização."}
+                </div>
+                <p className="mt-1 text-xs text-amber-800">
+                  Acompanhe os responsáveis internos, cobre os dados semanais no WhatsApp e mantenha o histórico bancário atualizado.
+                </p>
+              </div>
+              {pendentesOperacionais.length > 0 && (
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {pendentesOperacionais.slice(0, 6).map((item) => {
+                    const whats = whatsappUrl(item);
+                    const vencida = String(item.proxima_atualizacao || "").slice(0, 10) < hojeISO();
+                    return (
+                      <div key={item.id} className="rounded-xl border border-amber-200 bg-white/80 p-3 shadow-sm">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="font-semibold text-gray-900">{item.nome_empresa}</div>
+                            <div className="text-xs text-gray-600">
+                              {item.banco_observado || "-"} • {item.responsavel_nome || "Sem responsável"}
+                            </div>
+                            <div className="mt-1 text-xs text-gray-700">
+                              Próxima atualização: {formatDateBR(item.proxima_atualizacao)}
+                            </div>
+                          </div>
+                          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs ${vencida ? "border-red-200 bg-red-50 text-red-700" : "border-amber-200 bg-amber-100 text-amber-800"}`}>
+                            {vencida ? "Atrasado" : "Hoje"}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                            onClick={() => abrirAtualizacao(item)}
+                          >
+                            Atualizar
+                          </button>
+                          {whats && (
+                            <a
+                              className="rounded-lg border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-100"
+                              href={whats}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Cobrar WhatsApp
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -918,141 +979,152 @@ export default function AcompanhamentoBancario() {
           </div>
         </div>
 
-        {/* Tabela */}
-        <div className="overflow-auto rounded-lg border border-gray-200 bg-white">
-          <table className="w-full min-w-[1300px] text-sm">
-            <thead>
-              <tr className="bg-gray-50 text-left text-xs uppercase text-gray-500">
-                <th className="p-3">Empresa</th>
-                <th>CNPJ</th>
-                <th>Banco</th>
-                <th>Rating atual</th>
-                <th>Última atualização</th>
-                <th>Próxima atualização</th>
-                <th>Saldo última semana</th>
-                <th>Status semana</th>
-                <th>Responsável</th>
-                <th>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td className="p-4 text-gray-500" colSpan={10}>
-                    Carregando acompanhamentos...
-                  </td>
-                </tr>
-              ) : filtered.length === 0 ? (
-                <tr>
-                  <td className="p-4 text-gray-500" colSpan={10}>
-                    Nenhum acompanhamento cadastrado.
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((row) => {
-                  const whats = whatsappUrl(row);
-                  const pendente =
-                    row.status_pendente || row.atualizacao_pendente;
-                  return (
-                    <tr key={row.id} className="border-t border-gray-100">
-                      <td className="p-3 font-medium">
-                        {row.nome_empresa}
+        {/* Lista operacional */}
+        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+          <div className="hidden border-b border-gray-100 bg-gray-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 xl:grid xl:grid-cols-[minmax(220px,1.6fr)_150px_110px_90px_120px_120px_130px_105px_120px_190px] xl:items-center xl:gap-3">
+            <div>Empresa</div>
+            <div>CNPJ</div>
+            <div>Banco</div>
+            <div>Rating</div>
+            <div>Última atualização</div>
+            <div>Próxima atualização</div>
+            <div>Saldo última semana</div>
+            <div>Status</div>
+            <div>Responsável</div>
+            <div>Ações</div>
+          </div>
+
+          <div className="divide-y divide-gray-100">
+            {loading ? (
+              <div className="p-5 text-sm text-gray-500">Carregando acompanhamentos...</div>
+            ) : filtered.length === 0 ? (
+              <div className="p-5 text-sm text-gray-500">Nenhum acompanhamento cadastrado.</div>
+            ) : (
+              filtered.map((row) => {
+                const whats = whatsappUrl(row);
+                const pendente = row.status_pendente || row.atualizacao_pendente || (String(row.proxima_atualizacao || "").slice(0, 10) <= hojeISO());
+                const ratingAtual = row.rating_interno_atual || row.rating_bacen_atual || "-";
+                return (
+                  <div
+                    key={row.id}
+                    className="grid grid-cols-1 gap-3 px-4 py-4 transition hover:bg-gray-50 xl:grid-cols-[minmax(220px,1.6fr)_150px_110px_90px_120px_120px_130px_105px_120px_190px] xl:items-center xl:gap-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          className="truncate text-left font-semibold text-gray-900 hover:text-blue-700"
+                          onClick={() => carregarDetalhe(row.id)}
+                          title={row.nome_empresa}
+                        >
+                          {row.nome_empresa || "-"}
+                        </button>
                         {pendente && (
-                          <span className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 text-xs text-orange-700">
+                          <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700">
                             Pendente
                           </span>
                         )}
-                      </td>
-                      <td>{row.cnpj || "-"}</td>
-                      <td>{row.banco_observado || "-"}</td>
-                      <td>
-                        {row.rating_interno_atual || row.rating_bacen_atual || "-"}
-                      </td>
-                      <td>
-                        {formatDateBR(
-                          row.ultima_atualizacao_em || row.ultimo_update_em
-                        )}
-                      </td>
-                      <td>{formatDateBR(row.proxima_atualizacao)}</td>
-                      <td>
-                        {moneyBR(row.saldo_semanal || row.saldo_ultima_semana)}
-                      </td>
-                      <td>
-                        <span
-                          className={`rounded-full border px-2 py-1 text-xs ${statusBadge(row.status_semana)}`}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500 xl:hidden">
+                        {row.cnpj || "-"} • {row.banco_observado || "-"} • Rating {ratingAtual}
+                      </div>
+                    </div>
+
+                    <div className="text-sm text-gray-700">
+                      <span className="font-medium text-gray-500 xl:hidden">CNPJ: </span>
+                      {row.cnpj || "-"}
+                    </div>
+                    <div className="text-sm font-medium text-gray-900">
+                      <span className="font-medium text-gray-500 xl:hidden">Banco: </span>
+                      {row.banco_observado || "-"}
+                    </div>
+                    <div className="text-sm text-gray-900">
+                      <span className="font-medium text-gray-500 xl:hidden">Rating: </span>
+                      {ratingAtual}
+                    </div>
+                    <div className="text-sm text-gray-700">
+                      <span className="font-medium text-gray-500 xl:hidden">Última atualização: </span>
+                      {formatDateBR(row.ultima_atualizacao_em || row.ultimo_update_em)}
+                    </div>
+                    <div className="text-sm text-gray-700">
+                      <span className="font-medium text-gray-500 xl:hidden">Próxima atualização: </span>
+                      {formatDateBR(row.proxima_atualizacao)}
+                    </div>
+                    <div className={`text-sm font-semibold ${Number(row.saldo_semanal || row.saldo_ultima_semana || 0) < 0 ? "text-red-700" : "text-emerald-700"}`}>
+                      <span className="font-medium text-gray-500 xl:hidden">Saldo: </span>
+                      {moneyBR(row.saldo_semanal || row.saldo_ultima_semana)}
+                    </div>
+                    <div>
+                      <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${statusBadge(row.status_semana)}`}>
+                        {labelStatus(row.status_semana)}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-700">
+                      <span className="font-medium text-gray-500 xl:hidden">Responsável: </span>
+                      {row.responsavel_nome || "-"}
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 xl:justify-end">
+                      <button
+                        className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                        onClick={() => carregarDetalhe(row.id)}
+                      >
+                        Detalhes
+                      </button>
+                      <button
+                        className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                        onClick={() => abrirAtualizacao(row)}
+                      >
+                        Atualizar
+                      </button>
+                      {whats && (
+                        <a
+                          className="rounded-lg border border-green-200 bg-green-50 px-2.5 py-1.5 text-xs font-medium text-green-700 hover:bg-green-100"
+                          href={whats}
+                          target="_blank"
+                          rel="noreferrer"
                         >
-                          {labelStatus(row.status_semana)}
-                        </span>
-                      </td>
-                      <td>{row.responsavel_nome || "-"}</td>
-                      <td>
-                        <div className="flex flex-wrap gap-1 py-1">
-                          <button
-                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
-                            onClick={() => carregarDetalhe(row.id)}
-                          >
-                            Detalhes
-                          </button>
-                          <button
-                            className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs text-blue-700 hover:bg-blue-100"
-                            onClick={() => abrirAtualizacao(row)}
-                          >
-                            Atualizar
-                          </button>
-                          {whats && (
-                            <a
-                              className="rounded border border-green-300 bg-green-50 px-2 py-1 text-xs text-green-700 hover:bg-green-100"
-                              href={whats}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              WhatsApp
-                            </a>
-                          )}
-                          <button
-                            className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
-                            onClick={() => prorrogar(row.id)}
-                          >
-                            Prorrogar
-                          </button>
-                          <button
-                            className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-                            onClick={() => encerrar(row.id)}
-                          >
-                            Encerrar
-                          </button>
-                          <button
-                            className="rounded border border-purple-200 bg-purple-50 px-2 py-1 text-xs text-purple-700 hover:bg-purple-100"
-                            onClick={() => abrirImpressao(row)}
-                          >
-                            Imprimir
-                          </button>
-                          <button
-                            className="rounded border border-teal-200 bg-teal-50 px-2 py-1 text-xs text-teal-700 hover:bg-teal-100"
-                            onClick={async () => {
-                              let rowCompleto = row;
-                              try {
-                                const resp = await fetch(
-                                  `/api/acompanhamentos-bancarios/${row.id}`,
-                                  { headers: authHeaders() }
-                                );
-                                if (resp.ok) rowCompleto = await resp.json();
-                              } catch {
-                                // usa row sem atualizações
-                              }
-                              exportarCSV(rowCompleto);
-                            }}
-                          >
-                            Exportar
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                          WhatsApp
+                        </a>
+                      )}
+                      <button
+                        className="rounded-lg border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-100"
+                        onClick={() => abrirImpressao(row)}
+                      >
+                        Imprimir
+                      </button>
+                      <button
+                        className="rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-100"
+                        onClick={async () => {
+                          let rowCompleto = row;
+                          try {
+                            const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}`, { headers: authHeaders() });
+                            if (resp.ok) rowCompleto = await resp.json();
+                          } catch {
+                            // usa row sem atualizações
+                          }
+                          exportarCSV(rowCompleto);
+                        }}
+                      >
+                        Exportar
+                      </button>
+                      <button
+                        className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                        onClick={() => prorrogar(row.id)}
+                      >
+                        Prorrogar
+                      </button>
+                      <button
+                        className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
+                        onClick={() => encerrar(row.id)}
+                      >
+                        Encerrar
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
 
         {/* ── Modal — Novo Acompanhamento ──────────────────────────────────── */}
@@ -1201,255 +1273,150 @@ export default function AcompanhamentoBancario() {
 
         {/* ── Modal — Atualização Semanal ──────────────────────────────────── */}
         {updOpen && (
-          <div className="fixed inset-0 z-50 overflow-auto bg-black/40 p-4">
-            <div className="mx-auto max-w-5xl rounded-lg bg-white p-5 shadow-xl">
-              <div className="mb-2 flex items-start justify-between">
-                <div>
-                  <h3 className="text-lg font-bold">Atualização Semanal</h3>
-                  <p className="text-sm font-medium text-gray-700">
-                    {updOpen.nome_empresa} — {updOpen.banco_observado}
-                  </p>
-                </div>
-                <button
-                  className="rounded border px-3 py-1 text-sm"
-                  onClick={() => setUpdOpen(null)}
-                >
-                  Fechar
-                </button>
-              </div>
-
-              {/* Contexto da semana */}
-              <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-800">
-                <strong>Semana {upd.numero_semana}</strong>
-                {" | "}
-                Período: {formatDateBR(upd.data_referencia_inicio)} a{" "}
-                {formatDateBR(upd.data_referencia_fim)}
-                {" | "}
-                Atualização prevista: {formatDateBR(upd.data_atualizacao)}
-                {" | "}
-                Próxima atualização:{" "}
-                {formatDateBR(upd.proxima_atualizacao_apos_salvar)}
-              </div>
-
-              {/* Bloco A — Período da semana (readonly) */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                A — Período da semana
-              </h4>
-              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <ReadonlyField
-                  label="Número da semana"
-                  value={String(upd.numero_semana)}
-                />
-                <ReadonlyField
-                  label="Início do período"
-                  value={formatDateBR(upd.data_referencia_inicio)}
-                />
-                <ReadonlyField
-                  label="Fim do período"
-                  value={formatDateBR(upd.data_referencia_fim)}
-                />
-                <ReadonlyField
-                  label="Data da atualização"
-                  value={formatDateBR(upd.data_atualizacao)}
-                />
-                <ReadonlyField
-                  label="Próxima atualização após salvar"
-                  value={formatDateBR(upd.proxima_atualizacao_apos_salvar)}
-                />
-              </div>
-
-              {/* Bloco B — Entradas */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                B — Entradas da semana
-              </h4>
-              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                {(
-                  [
-                    "entrada_maquininha",
-                    "entrada_pix",
-                    "entrada_boleto",
-                    "entrada_ted",
-                    "entrada_dinheiro",
-                    "outras_entradas",
-                  ] as const
-                ).map((key) => (
-                  <NumberField
-                    key={key}
-                    label={labelEntrada(key)}
-                    value={upd[key]}
-                    onChange={(v) => setUpd((p) => ({ ...p, [key]: v }))}
-                  />
-                ))}
-                <ReadonlyField
-                  label="Total de entradas"
-                  value={moneyBR(totalEntradas)}
-                  highlight
-                />
-              </div>
-
-              {/* Bloco C — Saídas e saldos */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                C — Saídas e saldos
-              </h4>
-              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <NumberField
-                  label="Total de saídas"
-                  value={upd.total_saidas}
-                  onChange={(v) => setUpd((p) => ({ ...p, total_saidas: v }))}
-                />
-                <NumberField
-                  label="Saldo médio"
-                  value={upd.saldo_medio}
-                  onChange={(v) => setUpd((p) => ({ ...p, saldo_medio: v }))}
-                />
-                <NumberField
-                  label="Saldo final"
-                  value={upd.saldo_final}
-                  onChange={(v) => setUpd((p) => ({ ...p, saldo_final: v }))}
-                />
-                <NumberField
-                  label="Quantidade de transações"
-                  value={upd.quantidade_transacoes}
-                  onChange={(v) =>
-                    setUpd((p) => ({ ...p, quantidade_transacoes: v }))
-                  }
-                  integer
-                />
-                <ReadonlyField
-                  label="Saldo semanal calculado"
-                  value={moneyBR(saldoSemanal)}
-                  highlight
-                />
-              </div>
-
-              {/* Bloco D — Rating e conformidade */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                D — Rating e conformidade
-              </h4>
-              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-4">
-                <TextFieldSimple
-                  label="Rating Bacen"
-                  value={upd.rating_bacen}
-                  onChange={(v) => setUpd((p) => ({ ...p, rating_bacen: v }))}
-                />
-                <TextFieldSimple
-                  label="Rating interno"
-                  value={upd.rating_interno}
-                  onChange={(v) => setUpd((p) => ({ ...p, rating_interno: v }))}
-                />
-                <TextFieldSimple
-                  label="SCR"
-                  value={upd.scr_status}
-                  onChange={(v) => setUpd((p) => ({ ...p, scr_status: v }))}
-                />
-                <TextFieldSimple
-                  label="Cenprot"
-                  value={upd.cenprot_status}
-                  onChange={(v) => setUpd((p) => ({ ...p, cenprot_status: v }))}
-                />
-                <TextFieldSimple
-                  label="Serasa"
-                  value={upd.serasa_status}
-                  onChange={(v) => setUpd((p) => ({ ...p, serasa_status: v }))}
-                />
-                <TextFieldSimple
-                  label="CND"
-                  value={upd.cnd_status}
-                  onChange={(v) => setUpd((p) => ({ ...p, cnd_status: v }))}
-                />
-                <TextFieldSimple
-                  label="PLD/AML"
-                  value={upd.pld_aml_status}
-                  onChange={(v) => setUpd((p) => ({ ...p, pld_aml_status: v }))}
-                />
-                <TextFieldSimple
-                  label="COAF"
-                  value={upd.coaf_status}
-                  onChange={(v) => setUpd((p) => ({ ...p, coaf_status: v }))}
-                />
-              </div>
-
-              {/* Bloco E — Ocorrências */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                E — Ocorrências
-              </h4>
-              <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-                {(
-                  [
-                    ["possui_restricao", "Possui restrição?"],
-                    ["restricao_nova", "Restrição nova?"],
-                    ["devolucao_ou_estorno", "Devolução ou estorno?"],
-                    ["ocorrencia_negativa", "Ocorrência negativa?"],
-                  ] as [keyof AtualizacaoForm, string][]
-                ).map(([key, label]) => (
-                  <label
-                    key={key}
-                    className="flex items-center gap-2 rounded border border-gray-200 p-2 text-sm"
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-3 md:p-6">
+            <div className="mx-auto max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="sticky top-0 z-10 border-b border-gray-200 bg-white/95 px-5 py-4 backdrop-blur">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-950">Atualização Semanal</h3>
+                    <p className="text-sm font-medium text-gray-600">
+                      {updOpen.nome_empresa} — {updOpen.banco_observado}
+                    </p>
+                  </div>
+                  <button
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium hover:bg-gray-50"
+                    onClick={() => setUpdOpen(null)}
                   >
-                    <input
-                      type="checkbox"
-                      checked={Boolean(upd[key])}
-                      onChange={(e) =>
-                        setUpd((p) => ({ ...p, [key]: e.target.checked }))
-                      }
-                    />
-                    {label}
-                  </label>
-                ))}
+                    Fechar
+                  </button>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                  <strong>Semana {upd.numero_semana}</strong>
+                  {" | "}
+                  Período: {formatDateBR(upd.data_referencia_inicio)} a{" "}
+                  {formatDateBR(upd.data_referencia_fim)}
+                  {" | "}
+                  Atualização prevista: {formatDateBR(upd.data_atualizacao)}
+                  {" | "}
+                  Próxima atualização: {formatDateBR(upd.proxima_atualizacao_apos_salvar)}
+                </div>
               </div>
 
-              {/* Bloco F — Análise */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                F — Análise
-              </h4>
-              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <TextareaField
-                  label="Análise da semana"
-                  value={upd.analise_semana}
-                  onChange={(v) =>
-                    setUpd((p) => ({ ...p, analise_semana: v }))
-                  }
-                />
-                <TextareaField
-                  label="Orientação ao cliente"
-                  value={upd.orientacao_cliente}
-                  onChange={(v) =>
-                    setUpd((p) => ({ ...p, orientacao_cliente: v }))
-                  }
-                />
-                <TextareaField
-                  label="Próxima ação"
-                  value={upd.proxima_acao}
-                  onChange={(v) => setUpd((p) => ({ ...p, proxima_acao: v }))}
-                />
+              <div className="max-h-[78vh] space-y-5 overflow-y-auto px-5 py-5">
+                <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <h4 className="mb-3 text-sm font-semibold text-gray-800">A — Período da semana</h4>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+                    <ReadonlyField label="Número da semana" value={String(upd.numero_semana)} />
+                    <ReadonlyField label="Início do período" value={formatDateBR(upd.data_referencia_inicio)} />
+                    <ReadonlyField label="Fim do período" value={formatDateBR(upd.data_referencia_fim)} />
+                    <ReadonlyField label="Data da atualização" value={formatDateBR(upd.data_atualizacao)} />
+                    <ReadonlyField label="Próxima atualização após salvar" value={formatDateBR(upd.proxima_atualizacao_apos_salvar)} />
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <h4 className="mb-3 text-sm font-semibold text-gray-800">B — Entradas da semana</h4>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {([
+                      "entrada_maquininha",
+                      "entrada_pix",
+                      "entrada_boleto",
+                      "entrada_ted",
+                      "entrada_dinheiro",
+                      "outras_entradas",
+                    ] as const).map((key) => (
+                      <NumberField
+                        key={key}
+                        label={labelEntrada(key)}
+                        value={upd[key]}
+                        onChange={(v) => setUpd((p) => ({ ...p, [key]: v }))}
+                      />
+                    ))}
+                    <ReadonlyField label="Total de entradas" value={moneyBR(totalEntradas)} highlight />
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <h4 className="mb-3 text-sm font-semibold text-gray-800">C — Saídas e saldos</h4>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+                    <NumberField label="Total de saídas" value={upd.total_saidas} onChange={(v) => setUpd((p) => ({ ...p, total_saidas: v }))} />
+                    <NumberField label="Saldo médio" value={upd.saldo_medio} onChange={(v) => setUpd((p) => ({ ...p, saldo_medio: v }))} />
+                    <NumberField label="Saldo final" value={upd.saldo_final} onChange={(v) => setUpd((p) => ({ ...p, saldo_final: v }))} />
+                    <NumberField label="Quantidade de transações" value={upd.quantidade_transacoes} onChange={(v) => setUpd((p) => ({ ...p, quantidade_transacoes: v }))} integer />
+                    <ReadonlyField label="Saldo semanal calculado" value={moneyBR(saldoSemanal)} highlight />
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <h4 className="mb-3 text-sm font-semibold text-gray-800">D — Rating e conformidade</h4>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <TextFieldSimple label="Rating Bacen" value={upd.rating_bacen} onChange={(v) => setUpd((p) => ({ ...p, rating_bacen: v }))} />
+                    <TextFieldSimple label="Rating interno" value={upd.rating_interno} onChange={(v) => setUpd((p) => ({ ...p, rating_interno: v }))} />
+                    <TextFieldSimple label="SCR" value={upd.scr_status} onChange={(v) => setUpd((p) => ({ ...p, scr_status: v }))} />
+                    <TextFieldSimple label="Cenprot" value={upd.cenprot_status} onChange={(v) => setUpd((p) => ({ ...p, cenprot_status: v }))} />
+                    <TextFieldSimple label="Serasa" value={upd.serasa_status} onChange={(v) => setUpd((p) => ({ ...p, serasa_status: v }))} />
+                    <TextFieldSimple label="CND" value={upd.cnd_status} onChange={(v) => setUpd((p) => ({ ...p, cnd_status: v }))} />
+                    <TextFieldSimple label="PLD/AML" value={upd.pld_aml_status} onChange={(v) => setUpd((p) => ({ ...p, pld_aml_status: v }))} />
+                    <TextFieldSimple label="COAF" value={upd.coaf_status} onChange={(v) => setUpd((p) => ({ ...p, coaf_status: v }))} />
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <h4 className="mb-3 text-sm font-semibold text-gray-800">E — Ocorrências</h4>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    {([
+                      ["possui_restricao", "Possui restrição?"],
+                      ["restricao_nova", "Restrição nova?"],
+                      ["devolucao_ou_estorno", "Devolução ou estorno?"],
+                      ["ocorrencia_negativa", "Ocorrência negativa?"],
+                    ] as [keyof AtualizacaoForm, string][]).map(([key, label]) => (
+                      <label key={key} className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(upd[key])}
+                          onChange={(e) => setUpd((p) => ({ ...p, [key]: e.target.checked }))}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <h4 className="mb-3 text-sm font-semibold text-gray-800">F — Análise e orientação</h4>
+                  <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+                    <TextareaField label="Análise da semana" value={upd.analise_semana} onChange={(v) => setUpd((p) => ({ ...p, analise_semana: v }))} />
+                    <TextareaField label="Orientação ao cliente" value={upd.orientacao_cliente} onChange={(v) => setUpd((p) => ({ ...p, orientacao_cliente: v }))} />
+                    <TextareaField label="Próxima ação" value={upd.proxima_acao} onChange={(v) => setUpd((p) => ({ ...p, proxima_acao: v }))} />
+                  </div>
+                </section>
+
+                <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div><span className="text-blue-700">Total de entradas</span><div className="text-lg font-bold">{moneyBR(totalEntradas)}</div></div>
+                    <div><span className="text-blue-700">Saldo semanal</span><div className="text-lg font-bold">{moneyBR(saldoSemanal)}</div></div>
+                    <div>
+                      <span className="text-blue-700">Status estimado</span>
+                      <div className="mt-1">
+                        <span className={`rounded-full border px-3 py-1 text-sm font-semibold ${statusBadge(statusSemanaCalculado)}`}>
+                          {labelStatus(statusSemanaCalculado)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* Resumo calculado */}
-              <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
-                <strong>Total de entradas:</strong> {moneyBR(totalEntradas)}
-                {" | "}
-                <strong>Saldo semanal:</strong> {moneyBR(saldoSemanal)}
-                {" | "}
-                <strong>Status estimado:</strong>{" "}
-                <span
-                  className={`rounded px-2 py-0.5 text-xs font-medium ${statusBadge(statusSemanaCalculado)}`}
-                >
-                  {labelStatus(statusSemanaCalculado)}
-                </span>
-              </div>
-
-              <div className="mt-4 flex gap-2">
+              <div className="sticky bottom-0 flex flex-col gap-2 border-t border-gray-200 bg-white px-5 py-4 md:flex-row md:justify-end">
                 <button
-                  className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                  className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white disabled:opacity-60 hover:bg-blue-700"
                   disabled={saving}
                   onClick={salvarAtualizacao}
                 >
                   {saving ? "Salvando..." : "Salvar atualização semanal"}
                 </button>
-                <button
-                  className="rounded border px-4 py-2 text-sm"
-                  onClick={() => setUpdOpen(null)}
-                >
+                <button className="rounded-lg border border-gray-200 px-5 py-2 text-sm font-medium hover:bg-gray-50" onClick={() => setUpdOpen(null)}>
                   Cancelar
                 </button>
               </div>
@@ -1459,287 +1426,169 @@ export default function AcompanhamentoBancario() {
 
         {/* ── Modal — Detalhes ─────────────────────────────────────────────── */}
         {detalhe && (
-          <div className="fixed inset-0 z-50 overflow-auto bg-black/40 p-4">
-            <div className="mx-auto max-w-6xl rounded-lg bg-white p-5 shadow-xl">
-              <div className="mb-4 flex items-start justify-between">
-                <div>
-                  <h3 className="text-lg font-bold">
-                    Detalhes do Acompanhamento
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {detalhe.nome_empresa} — {detalhe.banco_observado}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    className="rounded border border-teal-300 bg-teal-50 px-3 py-1 text-sm text-teal-700 hover:bg-teal-100"
-                    onClick={() => exportarCSV(detalhe)}
-                  >
-                    Exportar CSV
-                  </button>
-                  <button
-                    className="rounded border border-purple-300 bg-purple-50 px-3 py-1 text-sm text-purple-700 hover:bg-purple-100"
-                    onClick={() => {
-                      setImprimirOpen(detalhe);
-                      setDetalhe(null);
-                    }}
-                  >
-                    Imprimir
-                  </button>
-                  <button
-                    className="rounded border border-blue-300 bg-blue-50 px-3 py-1 text-sm text-blue-700 hover:bg-blue-100"
-                    onClick={() => adicionarOutroBanco(detalhe)}
-                  >
-                    + Outro banco
-                  </button>
-                  <button
-                    className="rounded border px-3 py-1 text-sm"
-                    onClick={() => setDetalhe(null)}
-                  >
-                    Fechar
-                  </button>
-                </div>
-              </div>
-
-              {/* Dados da empresa */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                Dados da empresa
-              </h4>
-              <div className="mb-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-4">
-                <InfoCard label="Empresa" value={detalhe.nome_empresa} />
-                <InfoCard label="CNPJ" value={detalhe.cnpj} />
-                <InfoCard label="Banco observado" value={detalhe.banco_observado} />
-                <InfoCard label="Agência" value={detalhe.agencia} />
-                <InfoCard label="Conta" value={detalhe.conta} />
-                <InfoCard label="Gerente do banco" value={detalhe.gerente_banco} />
-                <InfoCard label="Contato do banco" value={detalhe.contato_banco} />
-                <InfoCard label="E-mail" value={detalhe.email_cliente} />
-              </div>
-
-              {/* Dados do relacionamento */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                Dados do relacionamento
-              </h4>
-              <div className="mb-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-4">
-                <InfoCard
-                  label="Início do relacionamento"
-                  value={formatDateBR(detalhe.data_abertura_conta)}
-                />
-                <InfoCard
-                  label="Abertura de conta"
-                  value={formatDateBR(detalhe.data_abertura_conta)}
-                />
-                <InfoCard
-                  label="Início do acompanhamento"
-                  value={formatDateBR(detalhe.data_inicio)}
-                />
-                <InfoCard
-                  label="Fim previsto"
-                  value={formatDateBR(detalhe.data_fim_prevista)}
-                />
-                <InfoCard
-                  label="Próxima atualização"
-                  value={formatDateBR(detalhe.proxima_atualizacao)}
-                />
-                <InfoCard
-                  label="Status"
-                  value={labelStatus(detalhe.status)}
-                />
-                <InfoCard
-                  label="Prorrogado"
-                  value={detalhe.prorrogado ? "Sim" : "Não"}
-                />
-                <InfoCard
-                  label="Responsável"
-                  value={detalhe.responsavel_nome}
-                />
-              </div>
-
-              {/* Dados de rating */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                Dados de rating
-              </h4>
-              <div className="mb-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-4">
-                <InfoCard
-                  label="Rating Bacen atual"
-                  value={detalhe.rating_bacen_atual}
-                />
-                <InfoCard
-                  label="Rating interno inicial"
-                  value={detalhe.rating_interno_inicial}
-                />
-                <InfoCard
-                  label="Rating interno atual"
-                  value={detalhe.rating_interno_atual}
-                />
-                <InfoCard
-                  label="Rating Bacen inicial"
-                  value={detalhe.rating_bacen_inicial}
-                />
-              </div>
-
-              {/* Dados financeiros */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                Dados financeiros
-              </h4>
-              <div className="mb-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-4">
-                <InfoCard
-                  label="Faturamento anual"
-                  value={moneyBR(detalhe.faturamento_anual)}
-                />
-                <InfoCard
-                  label="Média mensal"
-                  value={moneyBR(detalhe.media_mensal)}
-                />
-                <InfoCard
-                  label="Margem ±30%"
-                  value={moneyBR(detalhe.margem_seguranca_30)}
-                />
-                <InfoCard
-                  label="Objetivo do crédito"
-                  value={detalhe.objetivo_credito}
-                />
-                <InfoCard
-                  label="Valor pretendido"
-                  value={moneyBR(detalhe.valor_credito_pretendido)}
-                />
-                <InfoCard
-                  label="Linha pretendida"
-                  value={detalhe.linha_credito_pretendida}
-                />
-              </div>
-
-              {/* Histórico semanal completo */}
-              <h4 className="mb-2 mt-4 text-sm font-semibold text-gray-700">
-                Histórico semanal completo
-              </h4>
-              <div className="overflow-auto rounded border">
-                <table className="w-full min-w-[1400px] text-xs">
-                  <thead>
-                    <tr className="bg-gray-50 text-left text-gray-600">
-                      <th className="p-2 font-semibold">Semana</th>
-                      <th className="p-2 font-semibold">Período</th>
-                      <th className="p-2 font-semibold">Máquina</th>
-                      <th className="p-2 font-semibold">PIX</th>
-                      <th className="p-2 font-semibold">Boleto</th>
-                      <th className="p-2 font-semibold">TED</th>
-                      <th className="p-2 font-semibold">Dinheiro</th>
-                      <th className="p-2 font-semibold">Outras</th>
-                      <th className="p-2 font-semibold">Total Entradas</th>
-                      <th className="p-2 font-semibold">Saídas</th>
-                      <th className="p-2 font-semibold">Saldo Semanal</th>
-                      <th className="p-2 font-semibold">Saldo Médio</th>
-                      <th className="p-2 font-semibold">Saldo Final</th>
-                      <th className="p-2 font-semibold">Rating Bacen</th>
-                      <th className="p-2 font-semibold">Rating Interno</th>
-                      <th className="p-2 font-semibold">SCR</th>
-                      <th className="p-2 font-semibold">Cenprot</th>
-                      <th className="p-2 font-semibold">Serasa</th>
-                      <th className="p-2 font-semibold">CND</th>
-                      <th className="p-2 font-semibold">PLD/AML</th>
-                      <th className="p-2 font-semibold">COAF</th>
-                      <th className="p-2 font-semibold">Status</th>
-                      <th className="p-2 font-semibold">Análise</th>
-                      <th className="p-2 font-semibold">Orientação</th>
-                      <th className="p-2 font-semibold">Próxima ação</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Array.isArray(detalhe.atualizacoes) &&
-                    detalhe.atualizacoes.length > 0 ? (
-                      detalhe.atualizacoes.map((item: any) => (
-                        <tr key={item.id} className="border-t">
-                          <td className="p-2 font-medium">
-                            Semana {item.numero_semana}
-                          </td>
-                          <td className="whitespace-nowrap p-2">
-                            {formatDateBR(item.data_referencia_inicio)} a{" "}
-                            {formatDateBR(item.data_referencia_fim)}
-                          </td>
-                          <td className="p-2">
-                            {moneyBR(item.entrada_maquininha)}
-                          </td>
-                          <td className="p-2">{moneyBR(item.entrada_pix)}</td>
-                          <td className="p-2">
-                            {moneyBR(item.entrada_boleto)}
-                          </td>
-                          <td className="p-2">{moneyBR(item.entrada_ted)}</td>
-                          <td className="p-2">
-                            {moneyBR(item.entrada_dinheiro)}
-                          </td>
-                          <td className="p-2">
-                            {moneyBR(item.outras_entradas)}
-                          </td>
-                          <td className="p-2 font-semibold">
-                            {moneyBR(item.total_entradas)}
-                          </td>
-                          <td className="p-2">{moneyBR(item.total_saidas)}</td>
-                          <td className="p-2 font-semibold">
-                            {moneyBR(item.saldo_semanal)}
-                          </td>
-                          <td className="p-2">{moneyBR(item.saldo_medio)}</td>
-                          <td className="p-2">{moneyBR(item.saldo_final)}</td>
-                          <td className="p-2">{item.rating_bacen || "-"}</td>
-                          <td className="p-2">{item.rating_interno || "-"}</td>
-                          <td className="p-2">
-                            {item.scr_status ||
-                              item.restricao_scr ||
-                              "-"}
-                          </td>
-                          <td className="p-2">
-                            {item.cenprot_status ||
-                              item.restricao_cenprot ||
-                              "-"}
-                          </td>
-                          <td className="p-2">
-                            {item.serasa_status ||
-                              item.restricao_serasa ||
-                              "-"}
-                          </td>
-                          <td className="p-2">
-                            {item.cnd_status || item.cnd_regular || "-"}
-                          </td>
-                          <td className="p-2">
-                            {item.pld_aml_status || item.pld_aml || "-"}
-                          </td>
-                          <td className="p-2">
-                            {item.coaf_status ||
-                              item.operacao_suspeita_coaf ||
-                              "-"}
-                          </td>
-                          <td className="p-2">
-                            <span
-                              className={`rounded-full border px-2 py-0.5 text-xs ${statusBadge(item.status_semana || item.status)}`}
-                            >
-                              {labelStatus(item.status_semana || item.status)}
-                            </span>
-                          </td>
-                          <td className="max-w-[120px] p-2 text-xs text-gray-600">
-                            {item.analise_semana || "-"}
-                          </td>
-                          <td className="max-w-[120px] p-2 text-xs text-gray-600">
-                            {item.orientacao_cliente || "-"}
-                          </td>
-                          <td className="max-w-[120px] p-2 text-xs text-gray-600">
-                            {item.proxima_acao || "-"}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td className="p-3 text-gray-500" colSpan={25}>
-                          Nenhuma atualização semanal registrada.
-                        </td>
-                      </tr>
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-3 md:p-6">
+            <div className="mx-auto max-w-7xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="sticky top-0 z-10 border-b border-gray-200 bg-white/95 px-5 py-4 backdrop-blur">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-950">Detalhes do Acompanhamento</h3>
+                    <p className="text-sm font-medium text-gray-600">
+                      {detalhe.nome_empresa} — {detalhe.banco_observado}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-700 hover:bg-teal-100" onClick={() => exportarCSV(detalhe)}>
+                      Exportar CSV
+                    </button>
+                    <button
+                      className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-sm font-medium text-purple-700 hover:bg-purple-100"
+                      onClick={() => {
+                        setImprimirOpen(detalhe);
+                        setDetalhe(null);
+                      }}
+                    >
+                      Imprimir
+                    </button>
+                    <button className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100" onClick={() => adicionarOutroBanco(detalhe)}>
+                      + Outro banco
+                    </button>
+                    {whatsappUrl(detalhe) && (
+                      <a
+                        className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100"
+                        href={whatsappUrl(detalhe)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Cobrar WhatsApp
+                      </a>
                     )}
-                  </tbody>
-                </table>
+                    <button className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium hover:bg-gray-50" onClick={() => setDetalhe(null)}>
+                      Fechar
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              {/* Recomendação */}
-              <div className="mt-4 rounded border border-blue-100 bg-blue-50 p-3 text-sm">
-                <strong>Recomendação operacional:</strong>{" "}
-                {calcularRecomendacao(detalhe)}
+              <div className="max-h-[80vh] space-y-6 overflow-y-auto px-5 py-5">
+                <section>
+                  <SectionTitle title="Dados da empresa" />
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <InfoCard label="Empresa" value={detalhe.nome_empresa} />
+                    <InfoCard label="CNPJ" value={detalhe.cnpj} />
+                    <InfoCard label="Banco observado" value={detalhe.banco_observado} />
+                    <InfoCard label="Agência" value={detalhe.agencia} />
+                    <InfoCard label="Conta" value={detalhe.conta} />
+                    <InfoCard label="Gerente do banco" value={detalhe.gerente_banco} />
+                    <InfoCard label="Contato do banco" value={detalhe.contato_banco} />
+                    <InfoCard label="E-mail" value={detalhe.email_cliente} />
+                    <InfoCard label="WhatsApp / telefone" value={detalhe.whatsapp_cliente || detalhe.telefone_cliente} />
+                  </div>
+                </section>
+
+                <section>
+                  <SectionTitle title="Dados do relacionamento" />
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <InfoCard label="Início do relacionamento" value={formatDateBR(detalhe.data_abertura_conta)} />
+                    <InfoCard label="Abertura de conta" value={formatDateBR(detalhe.data_abertura_conta)} />
+                    <InfoCard label="Início do acompanhamento" value={formatDateBR(detalhe.data_inicio)} />
+                    <InfoCard label="Fim previsto" value={formatDateBR(detalhe.data_fim_prevista)} />
+                    <InfoCard label="Próxima atualização" value={formatDateBR(detalhe.proxima_atualizacao)} />
+                    <InfoCard label="Status" value={labelStatus(detalhe.status)} />
+                    <InfoCard label="Prorrogado" value={detalhe.prorrogado ? "Sim" : "Não"} />
+                    <InfoCard label="Responsável" value={detalhe.responsavel_nome} />
+                  </div>
+                </section>
+
+                <section>
+                  <SectionTitle title="Rating, dados financeiros e objetivo" />
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <InfoCard label="Rating Bacen inicial" value={detalhe.rating_bacen_inicial} />
+                    <InfoCard label="Rating Bacen atual" value={detalhe.rating_bacen_atual} />
+                    <InfoCard label="Rating interno inicial" value={detalhe.rating_interno_inicial} />
+                    <InfoCard label="Rating interno atual" value={detalhe.rating_interno_atual} />
+                    <InfoCard label="Faturamento anual" value={moneyBR(detalhe.faturamento_anual)} />
+                    <InfoCard label="Média mensal" value={moneyBR(detalhe.media_mensal)} />
+                    <InfoCard label="Margem ±30%" value={moneyBR(detalhe.margem_seguranca_30)} />
+                    <InfoCard label="Valor pretendido" value={moneyBR(detalhe.valor_credito_pretendido)} />
+                    <InfoCard label="Linha pretendida" value={detalhe.linha_credito_pretendida} />
+                    <InfoCard label="Objetivo do crédito" value={detalhe.objetivo_credito} wide />
+                  </div>
+                </section>
+
+                <section>
+                  <SectionTitle title="Histórico semanal completo" />
+                  {Array.isArray(detalhe.atualizacoes) && detalhe.atualizacoes.length > 0 ? (
+                    <div className="space-y-4">
+                      {detalhe.atualizacoes
+                        .slice()
+                        .sort((a: any, b: any) => Number(a.numero_semana) - Number(b.numero_semana))
+                        .map((item: any) => (
+                          <div key={item.id || item.numero_semana} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                            <div className="flex flex-col gap-2 border-b border-gray-100 pb-3 md:flex-row md:items-center md:justify-between">
+                              <div>
+                                <div className="text-base font-bold text-gray-950">Semana {item.numero_semana}</div>
+                                <div className="text-sm text-gray-600">
+                                  {formatDateBR(item.data_referencia_inicio)} a {formatDateBR(item.data_referencia_fim)}
+                                </div>
+                              </div>
+                              <span className={`w-fit rounded-full border px-3 py-1 text-sm font-semibold ${statusBadge(item.status_semana || item.status)}`}>
+                                {labelStatus(item.status_semana || item.status)}
+                              </span>
+                            </div>
+
+                            <div className="mt-4 grid gap-4 xl:grid-cols-4">
+                              <div className="rounded-xl bg-blue-50 p-3">
+                                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-700">Entradas</div>
+                                <MiniLine label="Maquininha" value={moneyBR(item.entrada_maquininha)} />
+                                <MiniLine label="Pix" value={moneyBR(item.entrada_pix)} />
+                                <MiniLine label="Boleto" value={moneyBR(item.entrada_boleto)} />
+                                <MiniLine label="TED" value={moneyBR(item.entrada_ted)} />
+                                <MiniLine label="Dinheiro" value={moneyBR(item.entrada_dinheiro)} />
+                                <MiniLine label="Outras" value={moneyBR(item.outras_entradas)} />
+                                <MiniLine label="Total" value={moneyBR(item.total_entradas)} strong />
+                              </div>
+
+                              <div className="rounded-xl bg-gray-50 p-3">
+                                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">Saídas e saldos</div>
+                                <MiniLine label="Saídas" value={moneyBR(item.total_saidas)} />
+                                <MiniLine label="Saldo semanal" value={moneyBR(item.saldo_semanal)} strong />
+                                <MiniLine label="Saldo médio" value={moneyBR(item.saldo_medio)} />
+                                <MiniLine label="Saldo final" value={moneyBR(item.saldo_final)} />
+                                <MiniLine label="Transações" value={String(item.quantidade_transacoes ?? "-")} />
+                              </div>
+
+                              <div className="rounded-xl bg-emerald-50 p-3">
+                                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-700">Rating e conformidade</div>
+                                <MiniLine label="Rating Bacen" value={item.rating_bacen || "-"} />
+                                <MiniLine label="Rating interno" value={item.rating_interno || "-"} />
+                                <MiniLine label="SCR" value={item.scr_status || item.restricao_scr || "-"} />
+                                <MiniLine label="Cenprot" value={item.cenprot_status || item.restricao_cenprot || "-"} />
+                                <MiniLine label="Serasa" value={item.serasa_status || item.restricao_serasa || "-"} />
+                                <MiniLine label="CND" value={item.cnd_status || item.cnd_regular || "-"} />
+                                <MiniLine label="PLD/AML" value={item.pld_aml_status || item.pld_aml || "-"} />
+                                <MiniLine label="COAF" value={item.coaf_status || item.operacao_suspeita_coaf || "-"} />
+                              </div>
+
+                              <div className="rounded-xl bg-amber-50 p-3">
+                                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-700">Análise operacional</div>
+                                <MiniLine label="Análise" value={item.analise_semana || "-"} block />
+                                <MiniLine label="Orientação" value={item.orientacao_cliente || "-"} block />
+                                <MiniLine label="Próxima ação" value={item.proxima_acao || "-"} block />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                      Nenhuma atualização semanal registrada.
+                    </div>
+                  )}
+                </section>
+
+                <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+                  <strong>Recomendação operacional:</strong> {calcularRecomendacao(detalhe)}
+                </div>
               </div>
             </div>
           </div>
@@ -2263,17 +2112,61 @@ function TextareaField({
   );
 }
 
-function InfoCard({
+function SectionTitle({ title }: { title: string }) {
+  return (
+    <div className="mb-3 flex items-center gap-2">
+      <div className="h-5 w-1 rounded-full bg-blue-600" />
+      <h4 className="text-sm font-bold uppercase tracking-wide text-gray-800">
+        {title}
+      </h4>
+    </div>
+  );
+}
+
+function MiniLine({
   label,
   value,
+  strong,
+  block,
 }: {
   label: string;
   value?: string | null;
+  strong?: boolean;
+  block?: boolean;
 }) {
   return (
-    <div className="rounded border p-3">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="mt-1 font-semibold">{value || "-"}</div>
+    <div className={block ? "mb-2" : "mb-1 flex items-start justify-between gap-3"}>
+      <span className="text-xs font-medium text-gray-500">{label}</span>
+      <span
+        className={`${strong ? "font-bold text-gray-950" : "font-semibold text-gray-800"} ${
+          block ? "mt-0.5 block text-sm leading-relaxed" : "text-right text-xs"
+        }`}
+      >
+        {value || "-"}
+      </span>
+    </div>
+  );
+}
+
+function InfoCard({
+  label,
+  value,
+  wide,
+}: {
+  label: string;
+  value?: string | null;
+  wide?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-xl border border-gray-200 bg-white p-3 shadow-sm ${
+        wide ? "md:col-span-2 xl:col-span-2" : ""
+      }`}
+    >
+      <div className="text-xs font-medium text-gray-500">{label}</div>
+      <div className="mt-1 break-words text-sm font-semibold leading-relaxed text-gray-950">
+        {value || "-"}
+      </div>
     </div>
   );
 }
