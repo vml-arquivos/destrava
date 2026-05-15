@@ -1,6 +1,7 @@
 import { Fragment, useState, useMemo, useEffect, useRef } from "react";
 import ColaboradorLayout from "./Layout";
 import { useAuth } from "@/hooks/useAuth";
+import CompensacaoSemanalCard from "@/components/CompensacaoSemanalCard";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 type Acompanhamento = Record<string, any>;
@@ -1397,6 +1398,26 @@ export default function AcompanhamentoBancario() {
     </section>
 
     <section class="kpis">
+      <div class="kpi"><b>Média mensal base</b><strong>${htmlEscape(moneyBR(semanaAtual?.media_mensal_referencia || acomp.media_mensal))}</strong></div>
+      <div class="kpi"><b>Teto mensal +30%</b><strong>${htmlEscape(moneyBR(semanaAtual?.limite_mensal_referencia || acomp.margem_seguranca_30))}</strong></div>
+      <div class="kpi"><b>Meta semanal</b><strong>${htmlEscape(moneyBR(semanaAtual?.media_semanal_referencia))}</strong></div>
+      <div class="kpi"><b>Entrada compensada</b><strong>${htmlEscape(moneyBR(semanaAtual?.entrada_com_compensacao))}</strong></div>
+      <div class="kpi"><b>Diferença referência</b><strong>${htmlEscape(moneyBR(semanaAtual?.diferenca_referencia_semanal))}</strong></div>
+      <div class="kpi"><b>Meta dinâmica próxima</b><strong>${htmlEscape(moneyBR(semanaAtual?.meta_dinamica_proxima_semana))}</strong></div>
+    </section>
+
+    <section class="kpis">
+      <div class="kpi"><b>Saldo faltante mês</b><strong>${htmlEscape(moneyBR(semanaAtual?.saldo_faltante_mes))}</strong></div>
+      <div class="kpi"><b>Valor excedente</b><strong>${htmlEscape(moneyBR(semanaAtual?.valor_excedente_mes))}</strong></div>
+      <div class="kpi"><b>Uso semanal</b><strong>${htmlEscape(`${Number(semanaAtual?.percentual_limite_semanal || 0).toFixed(2).replace(".", ",")}%`)}</strong></div>
+      <div class="kpi"><b>Uso mensal</b><strong>${htmlEscape(`${Number(semanaAtual?.percentual_limite_mensal || 0).toFixed(2).replace(".", ",")}%`)}</strong></div>
+      <div class="kpi"><b>Uso anual</b><strong>${htmlEscape(`${Number(semanaAtual?.percentual_limite_anual || 0).toFixed(2).replace(".", ",")}%`)}</strong></div>
+      <div class="kpi"><b>Status dinâmico</b><strong>${htmlEscape(labelStatus(semanaAtual?.status_compensacao || "-"))}</strong></div>
+    </section>
+
+    ${semanaAtual?.diagnostico_compensacao ? `<div class="note"><b>Diagnóstico de compensação:</b><br/>${htmlEscape(semanaAtual.diagnostico_compensacao).replace(/\n/g, "<br/>")}</div>` : ""}
+
+    <section class="kpis">
       <div class="kpi"><b>Rating Bacen</b><strong>${htmlEscape(acomp.rating_bacen_atual || acomp.rating_bacen_inicial || "-")}</strong></div>
       <div class="kpi"><b>Rating Inicial</b><strong>${htmlEscape(acomp.rating_interno_inicial || "-")}</strong></div>
       <div class="kpi"><b>Rating Atual</b><strong>${htmlEscape(acomp.rating_interno_atual || "-")}</strong></div>
@@ -2217,6 +2238,13 @@ export default function AcompanhamentoBancario() {
                       </div>
                     </section>
                   );
+                })()}
+
+                {(() => {
+                  const semanaAtual = getSemanaAtual(detalhe);
+                  return semanaAtual ? (
+                    <CompensacaoSemanalCard semana={semanaAtual} />
+                  ) : null;
                 })()}
 
                 <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
