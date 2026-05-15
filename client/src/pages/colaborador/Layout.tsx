@@ -46,21 +46,21 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/colaborador/meu-crm",     label: "Meu CRM",            icon: User },
   { href: "/colaborador/fila?scope=meus", label: "Minha Fila",     icon: ListOrdered },
   { href: "/colaborador/fila?scope=sem_responsavel", label: "Sem Responsável", icon: ShieldAlert, managementOnly: true },
-  { href: "/colaborador/calculadora", label: "Calculadora",     icon: Calculator },
-  { href: "/colaborador/simulacoes",  label: "Simulações",      icon: FileText },
+  { href: "/colaborador/calculadora", label: "Calculadora",        icon: Calculator },
+  { href: "/colaborador/simulacoes",  label: "Simulações",         icon: FileText },
   { href: "/colaborador/triagem",     label: "Triagem",            icon: ShieldAlert },
   { href: "/colaborador/fila",        label: "Fila Geral",         icon: ListOrdered, managementOnly: true },
-  { href: "/colaborador/clientes",    label: "Clientes",        icon: Users },
-  { href: "/colaborador/empresas",    label: "Empresas",        icon: Building2 },
-  { href: "/colaborador/acompanhamento-bancario", label: "Acomp. Bancário", icon: Activity },
-  { href: "/colaborador/acompanhamento-financeiro", label: "Acomp. Financeiro", icon: BarChart2 },
+  { href: "/colaborador/clientes",    label: "Clientes",           icon: Users },
+  { href: "/colaborador/empresas",    label: "Empresas",           icon: Building2 },
+  { href: "/colaborador/acompanhamento-bancario",    label: "Acomp. Bancário",   icon: Activity },
+  { href: "/colaborador/acompanhamento-financeiro",  label: "Acomp. Financeiro", icon: BarChart2 },
   // Faturamento: todos os colaboradores
   { href: "/colaborador/previsao-faturamento", label: "Faturamento", icon: TrendingUp },
   // Gerador de Contratos: todos os colaboradores
-  { href: "/colaborador/contratos",   label: "Contratos",    icon: FileText },
+  { href: "/colaborador/contratos",   label: "Contratos",          icon: FileText },
   // Cadastro de Contadores: somente Administrador e Diretor
-  { href: "/colaborador/contadores",  label: "Contadores",       icon: BookUser, allowedCargos: ['administrador', 'diretor'] },
-  { href: "/colaborador/clientes-pf",  label: "Clientes PF",      icon: UserCheck },
+  { href: "/colaborador/contadores",  label: "Contadores",         icon: BookUser, allowedCargos: ['administrador', 'diretor'] },
+  { href: "/colaborador/clientes-pf", label: "Clientes PF",        icon: UserCheck },
   // Integrações n8n: somente Administrador
   {
     href: "/colaborador/integracoes",
@@ -77,8 +77,9 @@ const ALL_NAV_ITEMS: NavItem[] = [
   },
 ];
 
+// ─── Helpers de permissão ────────────────────────────────────────────────────
 
-function normalizePermValue(value?: string | null) {
+function normalizePermValue(value?: string | null): string {
   return String(value || "")
     .trim()
     .toLowerCase()
@@ -88,9 +89,72 @@ function normalizePermValue(value?: string | null) {
     .replace(/-/g, "_");
 }
 
+function podeAcessarAcompanhamentoBancario(user: any): boolean {
+  if (!user) return false;
+  if (user?.acesso_acompanhamento_bancario === true) return true;
+  const permitidos = new Set([
+    "admin",
+    "administrador",
+    "super_admin",
+    "superadmin",
+    "gestor_credito",
+    "gestor_de_credito",
+    "diretor",
+  ]);
+  return (
+    permitidos.has(normalizePermValue(user?.cargo)) ||
+    permitidos.has(normalizePermValue(user?.perfil)) ||
+    permitidos.has(normalizePermValue(user?.role))
+  );
+}
+
+function podeAcessarFinanceiro(user: any): boolean {
+  if (!user) return false;
+  if (user?.acesso_acompanhamento_financeiro === true) return true;
+  const permitidos = new Set([
+    "admin",
+    "administrador",
+    "super_admin",
+    "superadmin",
+    "diretor",
+    "gestor_credito",
+    "gestor_de_credito",
+    "gestor_de_credito",
+  ]);
+  return (
+    permitidos.has(normalizePermValue(user?.cargo)) ||
+    permitidos.has(normalizePermValue(user?.perfil)) ||
+    permitidos.has(normalizePermValue(user?.role))
+  );
+}
+
+// ─── Componente ──────────────────────────────────────────────────────────────
+
+interface ColaboradorLayoutProps {
+  children: React.ReactNode;
+  title?: string;
+}
+
+export default function ColaboradorLayout({ children, title }: ColaboradorLayoutProps) {
+  const [location] = useLocation();
+  const [menuAberto, setMenuAberto] = useState(false);
+  const { colaborador, signOut } = useAuth();
+
+  const cargoLower = normalizePermValue(colaborador?.cargo);
+
+  const navItems = ALL_NAV_ITEMS.filter((item) => {
+    // Itens exclusivos de gestão
+    if (item.managementOnly) {
+      const isGestor = CARGOS_GESTAO.map(normalizePermValue).includes(cargoLower);
+      if (!isGestor) return false;
+    }
+    // Acesso ao Acompanhamento Bancário
+    if (item.href === "/colaborador/acompanhamento-bancario" && !podeAcessarAcompanhamentoBancario(colaborador)) return false;
+    // Acesso ao Acompanhamento Financeiro
     if (item.href === "/colaborador/acompanhamento-financeiro" && !podeAcessarFinanceiro(colaborador)) return false;
+    // Restrição por cargos específicos
     if (!item.allowedCargos) return true;
-    return item.allowedCargos.includes(cargoLower);
+    return item.allowedCargos.map(normalizePermValue).includes(cargoLower);
   });
 
   const handleSignOut = async () => {
@@ -105,7 +169,12 @@ function normalizePermValue(value?: string | null) {
         {/* Logo */}
         <div className="p-5 border-b border-gray-200">
           <a href="/" className="flex items-center gap-2">
-            <img src="/destrava-logo.svg" alt="Destrava Crédito" className="h-8" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+            <img
+              src="/destrava-logo.svg"
+              alt="Destrava Crédito"
+              className="h-8"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
           </a>
           <div className="mt-2">
             <Badge variant="secondary" className="text-xs">Área do Colaborador</Badge>
@@ -130,9 +199,12 @@ function normalizePermValue(value?: string | null) {
         </div>
 
         {/* Navegação */}
-        <nav className="flex-1 p-3 space-y-0.5">
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           {navItems.map((item) => {
-            const isActive = location === item.href || location.startsWith(item.href + "/") || (item.href.includes("?") && location.startsWith(item.href.split("?")[0]));
+            const isActive =
+              location === item.href ||
+              location.startsWith(item.href + "/") ||
+              (item.href.includes("?") && location.startsWith(item.href.split("?")[0]));
             const Icon = item.icon;
             return (
               <Link key={item.href} href={item.href}>
@@ -174,7 +246,12 @@ function normalizePermValue(value?: string | null) {
       {/* ── Mobile: Header + Drawer ── */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 px-4 h-14 flex items-center justify-between shadow-sm">
         <a href="/" className="flex items-center gap-2">
-          <img src="/destrava-logo.svg" alt="Destrava Crédito" className="h-7" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+          <img
+            src="/destrava-logo.svg"
+            alt="Destrava Crédito"
+            className="h-7"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          />
           <Badge variant="secondary" className="text-xs">Colaborador</Badge>
         </a>
         <button
@@ -187,9 +264,12 @@ function normalizePermValue(value?: string | null) {
 
       {/* Mobile Drawer */}
       {menuAberto && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMenuAberto(false)}>
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-black/50"
+          onClick={() => setMenuAberto(false)}
+        >
           <div
-            className="absolute left-0 top-14 bottom-0 w-64 bg-white shadow-xl"
+            className="absolute left-0 top-14 bottom-0 w-64 bg-white shadow-xl overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-gray-100 bg-gray-50">
@@ -205,7 +285,9 @@ function normalizePermValue(value?: string | null) {
             </div>
             <nav className="p-3 space-y-0.5">
               {navItems.map((item) => {
-                const isActive = location === item.href || (item.href.includes("?") && location.startsWith(item.href.split("?")[0]));
+                const isActive =
+                  location === item.href ||
+                  (item.href.includes("?") && location.startsWith(item.href.split("?")[0]));
                 const Icon = item.icon;
                 return (
                   <Link key={item.href} href={item.href}>
@@ -246,7 +328,9 @@ function normalizePermValue(value?: string | null) {
           <h2 className="text-base font-semibold text-gray-900">{title || "Painel"}</h2>
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-500">
-              <strong className="text-gray-900">{colaborador?.nome?.split(" ")[0] || "Colaborador"}</strong>
+              <strong className="text-gray-900">
+                {colaborador?.nome?.split(" ")[0] || "Colaborador"}
+              </strong>
             </span>
             <Link href="/colaborador/meu-perfil">
               <a className="inline-flex items-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
@@ -254,7 +338,12 @@ function normalizePermValue(value?: string | null) {
                 Perfil
               </a>
             </Link>
-            <Button variant="outline" size="sm" onClick={handleSignOut} className="text-gray-500 hover:text-red-600">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSignOut}
+              className="text-gray-500 hover:text-red-600"
+            >
               <LogOut className="h-4 w-4 mr-1" />
               Sair
             </Button>
