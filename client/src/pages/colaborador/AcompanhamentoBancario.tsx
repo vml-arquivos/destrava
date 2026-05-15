@@ -762,13 +762,17 @@ export default function AcompanhamentoBancario() {
     }
   };
 
-  // ─── Salvar atualização semanal ───────────────────────────────────────────────
+  // ─── Salvar atualização semanal / edição de semana já salva ──────────────────
   const salvarAtualizacao = async () => {
     if (!updOpen?.id) return;
     setSaving(true);
     try {
       const payload = {
         ...upd,
+        periodo:
+          upd.data_referencia_inicio && upd.data_referencia_fim
+            ? `${formatDateBR(upd.data_referencia_inicio)} a ${formatDateBR(upd.data_referencia_fim)}`
+            : undefined,
         total_entradas: totalEntradas,
         saldo_semanal: saldoSemanal,
         status_semana: statusSemanaCalculado,
@@ -783,12 +787,24 @@ export default function AcompanhamentoBancario() {
       );
       if (!response.ok) {
         const errorText = await response.text().catch(() => "");
-        alert(`Erro ao salvar atualização. ${errorText}`);
+        alert(`Erro ao ${editandoSemanaNumero ? "editar a semana" : "salvar atualização"}. ${errorText}`);
         return;
       }
+
+      const acompanhamentoId = updOpen.id;
       setUpdOpen(null);
       setEditandoSemanaNumero(null);
-      fetchData();
+      await fetchData();
+
+      // Se a edição partiu do relatório de detalhes, reabre o detalhe já atualizado
+      try {
+        const detalheResp = await fetch(`/api/acompanhamentos-bancarios/${acompanhamentoId}`, {
+          headers: authHeaders(),
+        });
+        if (detalheResp.ok) setDetalhe(await detalheResp.json());
+      } catch {
+        /* detalhe é reaberto apenas se a API responder */
+      }
     } finally {
       setSaving(false);
     }
@@ -1256,6 +1272,11 @@ export default function AcompanhamentoBancario() {
                   <p className="text-sm font-medium text-gray-700">
                     {updOpen.nome_empresa} — {updOpen.banco_observado}
                   </p>
+                  {editandoSemanaNumero && (
+                    <p className="mt-1 max-w-3xl text-xs font-semibold text-amber-700">
+                      Modo edição: corrija entradas, saídas, saldos, rating, restrições, datas, análise, orientação e próxima ação da semana já salva.
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -1267,22 +1288,59 @@ export default function AcompanhamentoBancario() {
               </div>
 
               {/* Banner de contexto */}
-              <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-800">
-                <strong>Semana {upd.numero_semana}</strong>
+              <div className={`mb-4 rounded-lg border px-4 py-2 text-sm ${
+                editandoSemanaNumero
+                  ? "border-amber-200 bg-amber-50 text-amber-900"
+                  : "border-blue-100 bg-blue-50 text-blue-800"
+              }`}>
+                <strong>{editandoSemanaNumero ? "Editando" : "Nova atualização"} — Semana {upd.numero_semana}</strong>
                 {" | "}Período: {formatDateBR(upd.data_referencia_inicio)} a {formatDateBR(upd.data_referencia_fim)}
                 {" | "}Atualização prevista: {formatDateBR(upd.data_atualizacao)}
                 {" | "}Próxima: {formatDateBR(upd.proxima_atualizacao_apos_salvar)}
               </div>
 
-              {/* Bloco A — Período (readonly) */}
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">A — Período da semana</h4>
-              <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <ReadonlyField label="Número da semana" value={String(upd.numero_semana)} />
-                <ReadonlyField label="Início do período" value={formatDateBR(upd.data_referencia_inicio)} />
-                <ReadonlyField label="Fim do período" value={formatDateBR(upd.data_referencia_fim)} />
-                <ReadonlyField label="Data da atualização" value={formatDateBR(upd.data_atualizacao)} />
-                <ReadonlyField label="Próxima atualização após salvar" value={formatDateBR(upd.proxima_atualizacao_apos_salvar)} />
-              </div>
+              {/* Bloco A — Período */}
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                A — Período da semana {editandoSemanaNumero ? "(editável)" : "(automático)"}
+              </h4>
+              {editandoSemanaNumero ? (
+                <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <NumberField
+                    label="Número da semana"
+                    value={upd.numero_semana}
+                    integer
+                    onChange={(v) => setUpd((p) => ({ ...p, numero_semana: v }))}
+                  />
+                  <DateEditField
+                    label="Início do período"
+                    value={upd.data_referencia_inicio}
+                    onChange={(v) => setUpd((p) => ({ ...p, data_referencia_inicio: v }))}
+                  />
+                  <DateEditField
+                    label="Fim do período"
+                    value={upd.data_referencia_fim}
+                    onChange={(v) => setUpd((p) => ({ ...p, data_referencia_fim: v }))}
+                  />
+                  <DateEditField
+                    label="Data da atualização"
+                    value={upd.data_atualizacao}
+                    onChange={(v) => setUpd((p) => ({ ...p, data_atualizacao: v }))}
+                  />
+                  <DateEditField
+                    label="Próxima atualização após salvar"
+                    value={upd.proxima_atualizacao_apos_salvar}
+                    onChange={(v) => setUpd((p) => ({ ...p, proxima_atualizacao_apos_salvar: v }))}
+                  />
+                </div>
+              ) : (
+                <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <ReadonlyField label="Número da semana" value={String(upd.numero_semana)} />
+                  <ReadonlyField label="Início do período" value={formatDateBR(upd.data_referencia_inicio)} />
+                  <ReadonlyField label="Fim do período" value={formatDateBR(upd.data_referencia_fim)} />
+                  <ReadonlyField label="Data da atualização" value={formatDateBR(upd.data_atualizacao)} />
+                  <ReadonlyField label="Próxima atualização após salvar" value={formatDateBR(upd.proxima_atualizacao_apos_salvar)} />
+                </div>
+              )}
 
               {/* Bloco B — Entradas */}
               <h4 className="mb-2 text-sm font-semibold text-gray-700">B — Entradas da semana</h4>
@@ -1560,10 +1618,11 @@ export default function AcompanhamentoBancario() {
                                 <td className="px-3 py-2.5 font-bold text-slate-700">
                                   <div>S{item.numero_semana}</div>
                                   <button
-                                    className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700 hover:bg-amber-100"
+                                    className="mt-1 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-800 shadow-sm hover:bg-amber-100"
                                     onClick={() => abrirEditarSemana(detalhe, item)}
+                                    title="Editar todos os valores, entradas, saídas, rating e análise desta semana"
                                   >
-                                    Editar
+                                    Editar valores
                                   </button>
                                 </td>
                                 <td className="whitespace-nowrap px-3 py-2.5 text-slate-500">
@@ -1594,6 +1653,12 @@ export default function AcompanhamentoBancario() {
                                   <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusBadge(item.status_semana || item.status)}`}>
                                     {labelStatus(item.status_semana || item.status)}
                                   </span>
+                                  <button
+                                    className="mt-2 block whitespace-nowrap rounded-md border border-amber-300 bg-white px-2 py-1 text-[10px] font-bold text-amber-700 hover:bg-amber-50"
+                                    onClick={() => abrirEditarSemana(detalhe, item)}
+                                  >
+                                    Corrigir semana
+                                  </button>
                                 </td>
                               </tr>
                             );
@@ -1623,7 +1688,7 @@ export default function AcompanhamentoBancario() {
                               className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700 hover:bg-amber-100"
                               onClick={() => abrirEditarSemana(detalhe, item)}
                             >
-                              Editar semana
+                              Editar análise/semana
                             </button>
                           </div>
                           <div className="grid grid-cols-1 gap-3 text-xs text-slate-700 sm:grid-cols-3">
@@ -1846,6 +1911,23 @@ function FieldInput({ field, value, onChange }: {
         type={field.type || "text"}
         step={field.type === "number" ? "0.01" : undefined}
         value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </label>
+  );
+}
+
+
+function DateEditField({ label, value, onChange }: {
+  label: string; value: string; onChange: (v: string) => void;
+}) {
+  return (
+    <label>
+      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
+      <input
+        className="w-full rounded border border-amber-200 bg-amber-50/40 p-2 text-sm font-semibold text-gray-800 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+        type="date"
+        value={String(value || "").slice(0, 10)}
         onChange={(e) => onChange(e.target.value)}
       />
     </label>
