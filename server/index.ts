@@ -7818,6 +7818,828 @@ ${(temTest1 || temTest2) ? `
   });
 
 
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // MÓDULO: ACOMPANHAMENTO FINANCEIRO SEMANAL
+  // Acesso: Gestor de Crédito, Diretor e Administrador
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  // ── Helpers de cálculo financeiro ──────────────────────────────────────────
+
+  /**
+   * Calcula os limites de acompanhamento com base no faturamento anual
+   * declarado e no percentual operacional configurável.
+   */
+  function calcularLimitesAcompanhamento(
+    faturamentoAnualDeclarado: number,
+    percentualOperacional: number,
+    anoRef: number,
+    mesRef: number
+  ): { limite_anual: number; limite_mensal: number; limite_semanal: number; semanas_no_mes: number } {
+    const limiteAnual = Math.round((faturamentoAnualDeclarado * percentualOperacional / 100) * 100) / 100;
+    const limiteMensal = Math.round((limiteAnual / 12) * 100) / 100;
+    const semanasNoMes = calcularSemanasDoMes(anoRef, mesRef);
+    const limiteSemanal = Math.round((limiteMensal / semanasNoMes) * 100) / 100;
+    return { limite_anual: limiteAnual, limite_mensal: limiteMensal, limite_semanal: limiteSemanal, semanas_no_mes: semanasNoMes };
+  }
+
+  /**
+   * Calcula a quantidade de semanas (segunda a domingo) que iniciam dentro
+   * de um determinado mês/ano.
+   */
+  function calcularSemanasDoMes(ano: number, mes: number): number {
+    const primeiroDia = new Date(ano, mes - 1, 1);
+    const ultimoDia = new Date(ano, mes, 0);
+    let semanas = 0;
+    for (let d = new Date(primeiroDia); d <= ultimoDia; d.setDate(d.getDate() + 1)) {
+      if (d.getDay() === 1) semanas++;
+    }
+    return semanas > 0 ? semanas : 4;
+  }
+
+  /**
+   * Calcula o resumo semanal: saldo final e saldo médio.
+   * Prefere média dos saldos diários; usa fallback se não houver.
+   */
+  function calcularResumoSemanal(
+    saldoInicial: number,
+    totalEntradas: number,
+    totalSaidas: number,
+    saldosDiarios: number[]
+  ): { saldo_final: number; saldo_medio: number } {
+    const saldoFinal = Math.round((saldoInicial + totalEntradas - totalSaidas) * 100) / 100;
+    let saldoMedio: number;
+    if (saldosDiarios.length > 0) {
+      // Cálculo ideal: média dos saldos diários informados
+      const soma = saldosDiarios.reduce((acc, s) => acc + s, 0);
+      saldoMedio = Math.round((soma / saldosDiarios.length) * 100) / 100;
+    } else {
+      // Fallback seguro: média entre saldo inicial e saldo final
+      saldoMedio = Math.round(((saldoInicial + saldoFinal) / 2) * 100) / 100;
+    }
+    return { saldo_final: saldoFinal, saldo_medio: saldoMedio };
+  }
+
+  /**
+   * Classifica o status de acompanhamento com base nos percentuais
+   * de uso semanal, mensal e anual.
+   * Regras de tolerância: semana acima não é erro definitivo se mês OK.
+   */
+  function classificarStatusAcompanhamento(
+    percentualSemana: number,
+    percentualMes: number,
+    percentualAno: number
+  ): string {
+    // Critério anual é o mais grave
+    if (percentualAno > 100) return 'critico';
+    // Critério mensal
+    if (percentualMes > 120) return 'critico';
+    if (percentualMes > 100) return 'incompativel';
+    // Critério semanal (tolerância: semana acima não é erro definitivo se mês ok)
+    if (percentualSemana > 200) return 'incompativel';
+    if (percentualSemana > 150) return 'atencao_media';
+    if (percentualSemana > 120) return 'atencao_media';
+    if (percentualSemana > 100) return 'atencao_leve';
+    return 'dentro_da_referencia';
+  }
+
+  /**
+   * Gera o diagnóstico técnico automático com linguagem adequada
+   * para análise de crédito e conformidade documental.
+   */
+  function gerarDiagnosticoAcompanhamento(
+    percentualSemana: number,
+    percentualMes: number,
+    percentualAno: number,
+    status: string,
+    limiteSemanal: number,
+    limiteMensal: number,
+    limiteAnual: number,
+    acumuladoMensal: number,
+    acumuladoAnual: number
+  ): string {
+    const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+    const pct = (v: number) => `${(Math.round(v * 100) / 100).toFixed(2).replace('.', ',')}%`;
+    if (status === 'aguardando_atualizacao') {
+      return 'Configuração de acompanhamento financeiro pendente. É necessário informar o faturamento anual declarado para iniciar o monitoramento de coerência financeira.';
+    }
+    if (status === 'critico') {
+      if (percentualAno > 100) {
+        return `O acumulado anual de ${fmt(acumuladoAnual)} ultrapassou o limite de referência anual de ${fmt(limiteAnual)} (${pct(percentualAno)} do limite). É necessário revisar os lançamentos, documentos comprobatórios e a aderência ao faturamento anual declarado antes da emissão de novos relatórios ou análise de crédito.`;
+      }
+      return `O acumulado mensal de ${fmt(acumuladoMensal)} ultrapassou em ${pct(percentualMes - 100)} o limite de referência mensal de ${fmt(limiteMensal)}. É necessário revisar os lançamentos, documentos comprobatórios e a aderência ao faturamento anual declarado antes da emissão de novos relatórios ou análise de crédito.`;
+    }
+    if (status === 'incompativel') {
+      if (percentualMes > 100) {
+        return `O acumulado mensal de ${fmt(acumuladoMensal)} ultrapassou o limite de referência mensal de ${fmt(limiteMensal)} (${pct(percentualMes)} do limite). Recomenda-se revisão dos lançamentos e verificação da capacidade de comprovação documental para preservar a conformidade com o faturamento anual declarado.`;
+      }
+      return `A movimentação semanal atingiu ${pct(percentualSemana)} do limite semanal de referência de ${fmt(limiteSemanal)}. O acumulado mensal permanece em ${pct(percentualMes)} do limite mensal. Recomenda-se atenção ao controle de movimentação das próximas semanas para preservar a coerência financeira.`;
+    }
+    if (status === 'atencao_media') {
+      return `A semana analisada apresentou movimentação de ${pct(percentualSemana)} do limite semanal de referência de ${fmt(limiteSemanal)}. O acumulado mensal permanece em ${pct(percentualMes)} do limite mensal de ${fmt(limiteMensal)}. Recomenda-se monitoramento rigoroso das próximas semanas para preservar a coerência entre faturamento declarado, movimentação financeira e capacidade de comprovação documental.`;
+    }
+    if (status === 'atencao_leve') {
+      return `A semana analisada apresentou entradas acima da referência semanal calculada (${pct(percentualSemana)} do limite de ${fmt(limiteSemanal)}). Entretanto, o acumulado mensal permanece dentro da faixa de acompanhamento definida com base no faturamento anual declarado (${pct(percentualMes)} do limite mensal). Recomenda-se manter o monitoramento das próximas semanas para preservar a coerência entre faturamento declarado, movimentação financeira e capacidade de comprovação documental.`;
+    }
+    return `A movimentação da semana analisada está dentro da referência semanal calculada (${pct(percentualSemana)} do limite de ${fmt(limiteSemanal)}). O acumulado mensal corresponde a ${pct(percentualMes)} do limite mensal de ${fmt(limiteMensal)} e o acumulado anual a ${pct(percentualAno)} do limite anual de ${fmt(limiteAnual)}. O acompanhamento financeiro está em conformidade com o faturamento anual declarado.`;
+  }
+
+  // ── Middleware de acesso ao módulo financeiro ────────────────────────────────
+  // Acesso: Gestor de Crédito, Diretor e Administrador
+
+  function normalizarCargoFinanceiro(v?: string | null): string {
+    return String(v || '').trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, '_').replace(/-/g, '_');
+  }
+
+  function usuarioPodeAcessarFinanceiro(user: { cargo?: string | null; perfil?: string | null; acesso_acompanhamento_financeiro?: boolean | null } | null | undefined): boolean {
+    if (!user) return false;
+    if (user.acesso_acompanhamento_financeiro === true) return true;
+    // Apenas: administrador, diretor, gestor_de_credito
+    const permitidos = new Set([
+      'admin', 'administrador', 'super_admin', 'superadmin',
+      'diretor',
+      'gestor_credito', 'gestor_de_credito', 'gestor de credito',
+    ]);
+    return (
+      permitidos.has(normalizarCargoFinanceiro(user.cargo)) ||
+      permitidos.has(normalizarCargoFinanceiro(user.perfil))
+    );
+  }
+
+  async function requireAcessoFinanceiro(req: Request, res: Response, next: NextFunction) {
+    const colaborador = (req as any).colaborador;
+    if (!colaborador?.id) {
+      res.status(403).json({ error: 'Acesso não autorizado.' });
+      return;
+    }
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, cargo, perfil,
+                COALESCE(acesso_acompanhamento_financeiro, false) AS acesso_acompanhamento_financeiro
+           FROM colaboradores
+          WHERE id = $1 AND ativo = true
+          LIMIT 1`,
+        [colaborador.id]
+      );
+      const user = rows[0] || colaborador;
+      if (!usuarioPodeAcessarFinanceiro(user)) {
+        res.status(403).json({ error: 'Acesso restrito a Gestor de Crédito, Diretor ou Administrador.' });
+        return;
+      }
+      (req as any).colaborador = { ...(colaborador || {}), ...(user || {}) };
+      next();
+    } catch (err) {
+      console.error('[requireAcessoFinanceiro]', err);
+      res.status(500).json({ error: 'Erro ao verificar permissão.' });
+    }
+  }
+
+  // ── Geração do HTML do Relatório PDF ────────────────────────────────────────
+
+  function gerarHtmlRelatorioFinanceiro(payload: {
+    empresa: { razao_social: string; cnpj?: string; cidade?: string; estado?: string };
+    config: { faturamento_anual_declarado: number; percentual_operacional: number; limite_anual: number };
+    semana: {
+      ano: number; mes: number; numero_semana: number;
+      semana_inicio: string; semana_fim: string;
+      saldo_inicial: number; total_entradas: number; total_saidas: number;
+      saldo_final: number; saldo_medio: number;
+      limite_semanal_referencia: number; limite_mensal_referencia: number; limite_anual_referencia: number;
+      acumulado_mensal: number; acumulado_anual: number;
+      percentual_uso_semana: number; percentual_uso_mes: number; percentual_uso_ano: number;
+      status: string; diagnostico?: string; observacoes?: string;
+    };
+    movimentacoes?: Array<{ data_movimento: string; tipo: string; categoria?: string; descricao?: string; valor: number }>;
+    saldosDiarios?: Array<{ data_referencia: string; saldo_dia: number }>;
+    geradoPor?: string;
+  }): string {
+    const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v) || 0);
+    const fmtDate = (s: string) => {
+      if (!s) return '—';
+      const d = String(s).slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return s;
+      const [y, m, day] = d.split('-');
+      return `${day}/${m}/${y}`;
+    };
+    const fmtPct = (v: number) => `${(Math.round((Number(v) || 0) * 100) / 100).toFixed(2).replace('.', ',')}%`;
+    const esc = (s?: string | null) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    const nomeMes = meses[(payload.semana.mes - 1)] || String(payload.semana.mes);
+    const dataEmissao = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+    const statusLabel: Record<string, string> = {
+      dentro_da_referencia: 'Dentro da Referência',
+      atencao_leve: 'Atenção Leve',
+      atencao_media: 'Atenção Média',
+      incompativel: 'Incompatível',
+      critico: 'Crítico',
+      sem_documentacao: 'Sem Documentação',
+      aguardando_atualizacao: 'Aguardando Atualização',
+      regularizado: 'Regularizado',
+    };
+    const statusCor: Record<string, string> = {
+      dentro_da_referencia: '#166534', atencao_leve: '#854d0e', atencao_media: '#c2410c',
+      incompativel: '#991b1b', critico: '#7f1d1d', sem_documentacao: '#374151',
+      aguardando_atualizacao: '#1e40af', regularizado: '#065f46',
+    };
+    const statusBg: Record<string, string> = {
+      dentro_da_referencia: '#dcfce7', atencao_leve: '#fef9c3', atencao_media: '#ffedd5',
+      incompativel: '#fee2e2', critico: '#fecaca', sem_documentacao: '#f3f4f6',
+      aguardando_atualizacao: '#dbeafe', regularizado: '#d1fae5',
+    };
+    const st = payload.semana.status || 'aguardando_atualizacao';
+    const stLabel = statusLabel[st] || st;
+    const stCor = statusCor[st] || '#374151';
+    const stBg = statusBg[st] || '#f3f4f6';
+    const linhasMovimentacoes = (payload.movimentacoes || []).map(m => `
+      <tr>
+        <td>${esc(fmtDate(m.data_movimento))}</td>
+        <td style="text-transform:capitalize">${esc(m.tipo)}</td>
+        <td>${esc(m.categoria || '—')}</td>
+        <td>${esc(m.descricao || '—')}</td>
+        <td style="text-align:right;font-weight:${m.tipo === 'entrada' ? '600' : 'normal'};color:${m.tipo === 'entrada' ? '#166534' : '#991b1b'}">${fmt(m.valor)}</td>
+      </tr>`).join('');
+    const linhasSaldosDiarios = (payload.saldosDiarios || []).map(s => `
+      <tr>
+        <td>${esc(fmtDate(s.data_referencia))}</td>
+        <td style="text-align:right">${fmt(s.saldo_dia)}</td>
+      </tr>`).join('');
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Relatório Técnico de Acompanhamento Financeiro Semanal</title>
+  <style>
+    @page { size: A4; margin: 28mm 18mm 26mm 18mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #111827; background: #fff; line-height: 1.4; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .doc-header { display: flex; align-items: center; justify-content: flex-start; padding: 0 0 10px 0; border-bottom: 2px solid #f0a500; margin-bottom: 14px; }
+    .doc-header img { height: 44px; }
+    .doc-title { text-align: center; font-size: 12pt; font-weight: 700; text-transform: uppercase; color: #1B3A8C; margin: 0 0 4px; letter-spacing: 0.02em; }
+    .doc-subtitle { text-align: center; font-size: 9pt; color: #374151; margin: 0 0 14px; }
+    .section-title { font-size: 9pt; font-weight: 700; text-transform: uppercase; color: #1B3A8C; border-bottom: 1px solid #1B3A8C; padding-bottom: 3px; margin: 12px 0 7px; letter-spacing: 0.04em; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; margin-bottom: 8px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 12px; margin-bottom: 8px; }
+    .field { display: flex; flex-direction: column; margin-bottom: 2px; }
+    .field-label { font-size: 7.5pt; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; }
+    .field-value { font-size: 9.5pt; font-weight: 600; color: #111827; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-bottom: 10px; page-break-inside: avoid; }
+    .data-table th { background: #1B3A8C; color: #fff; padding: 5px 7px; text-align: left; font-weight: 700; font-size: 8pt; }
+    .data-table th.right { text-align: right; }
+    .data-table td { border: 1px solid #d1d5db; padding: 4px 7px; vertical-align: top; }
+    .data-table tr:nth-child(even) td { background: #f4f7ff; }
+    .data-table .total-row td { font-weight: 700; background: #dce3f5; border: 1px solid #9ca3af; }
+    .status-badge { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 9pt; font-weight: 700; }
+    .diagnostico { background: #f8fafc; border-left: 3px solid #1B3A8C; padding: 8px 10px; font-size: 9pt; line-height: 1.5; text-align: justify; margin: 6px 0 10px; page-break-inside: avoid; }
+    .obs { background: #fffbeb; border-left: 3px solid #f0a500; padding: 7px 10px; font-size: 9pt; line-height: 1.5; margin: 6px 0 10px; page-break-inside: avoid; }
+    .footer-info { margin-top: 14px; padding-top: 8px; border-top: 1px solid #d1d5db; font-size: 7.5pt; color: #6b7280; display: flex; justify-content: space-between; }
+    .page-footer-block { margin-top: 20px; padding-top: 8px; border-top: 1px solid #ccc; font-size: 7.5pt; color: #555; }
+    .highlight-row td { background: #f0f7ff !important; }
+  </style>
+</head>
+<body>
+  <div class="doc-header">
+    <img src="https://destravacredito.com/logo-destrava.png" alt="Destrava Crédito" onerror="this.style.display='none'"/>
+  </div>
+  <div class="doc-title">Relatório Técnico de Acompanhamento Financeiro Semanal</div>
+  <div class="doc-subtitle">${esc(payload.empresa.razao_social)}${payload.empresa.cnpj ? ` &nbsp;|&nbsp; CNPJ: ${esc(payload.empresa.cnpj)}` : ''} &nbsp;|&nbsp; ${esc(nomeMes)}/${payload.semana.ano} — Semana ${payload.semana.numero_semana}</div>
+
+  <div class="section-title">1. Dados da Empresa e Período Analisado</div>
+  <div class="grid-2">
+    <div class="field"><span class="field-label">Razão Social</span><span class="field-value">${esc(payload.empresa.razao_social)}</span></div>
+    <div class="field"><span class="field-label">CNPJ</span><span class="field-value">${esc(payload.empresa.cnpj || '—')}</span></div>
+    <div class="field"><span class="field-label">Período da Semana</span><span class="field-value">${esc(fmtDate(payload.semana.semana_inicio))} a ${esc(fmtDate(payload.semana.semana_fim))}</span></div>
+    <div class="field"><span class="field-label">Referência</span><span class="field-value">${esc(nomeMes)}/${payload.semana.ano} — Semana ${payload.semana.numero_semana}</span></div>
+  </div>
+
+  <div class="section-title">2. Parâmetros de Acompanhamento</div>
+  <div class="grid-3">
+    <div class="field"><span class="field-label">Faturamento Anual Declarado</span><span class="field-value">${fmt(payload.config.faturamento_anual_declarado)}</span></div>
+    <div class="field"><span class="field-label">Percentual Operacional</span><span class="field-value">${fmtPct(payload.config.percentual_operacional)}</span></div>
+    <div class="field"><span class="field-label">Limite Anual de Acompanhamento</span><span class="field-value">${fmt(payload.semana.limite_anual_referencia)}</span></div>
+    <div class="field"><span class="field-label">Limite Mensal de Referência</span><span class="field-value">${fmt(payload.semana.limite_mensal_referencia)}</span></div>
+    <div class="field"><span class="field-label">Limite Semanal de Referência</span><span class="field-value">${fmt(payload.semana.limite_semanal_referencia)}</span></div>
+  </div>
+
+  <div class="section-title">3. Resumo da Semana</div>
+  <table class="data-table">
+    <thead><tr><th>Indicador</th><th class="right">Valor</th></tr></thead>
+    <tbody>
+      <tr><td>Saldo Inicial da Semana</td><td style="text-align:right">${fmt(payload.semana.saldo_inicial)}</td></tr>
+      <tr class="highlight-row"><td><strong>Total de Entradas</strong></td><td style="text-align:right;color:#166534;font-weight:700">${fmt(payload.semana.total_entradas)}</td></tr>
+      <tr><td>Total de Saídas</td><td style="text-align:right;color:#991b1b">${fmt(payload.semana.total_saidas)}</td></tr>
+      <tr class="total-row"><td><strong>Saldo Final da Semana</strong></td><td style="text-align:right"><strong>${fmt(payload.semana.saldo_final)}</strong></td></tr>
+      <tr><td>Saldo Médio Semanal</td><td style="text-align:right">${fmt(payload.semana.saldo_medio)}</td></tr>
+    </tbody>
+  </table>
+
+  <div class="section-title">4. Análise de Conformidade</div>
+  <table class="data-table">
+    <thead><tr>
+      <th>Indicador</th><th class="right">Valor Acumulado</th><th class="right">Limite de Referência</th><th class="right">% Utilizado</th>
+    </tr></thead>
+    <tbody>
+      <tr><td>Acumulado Semanal</td><td style="text-align:right">${fmt(payload.semana.total_entradas)}</td><td style="text-align:right">${fmt(payload.semana.limite_semanal_referencia)}</td><td style="text-align:right">${fmtPct(payload.semana.percentual_uso_semana)}</td></tr>
+      <tr class="highlight-row"><td>Acumulado Mensal</td><td style="text-align:right">${fmt(payload.semana.acumulado_mensal)}</td><td style="text-align:right">${fmt(payload.semana.limite_mensal_referencia)}</td><td style="text-align:right">${fmtPct(payload.semana.percentual_uso_mes)}</td></tr>
+      <tr><td>Acumulado Anual</td><td style="text-align:right">${fmt(payload.semana.acumulado_anual)}</td><td style="text-align:right">${fmt(payload.semana.limite_anual_referencia)}</td><td style="text-align:right">${fmtPct(payload.semana.percentual_uso_ano)}</td></tr>
+    </tbody>
+  </table>
+
+  <div class="section-title">5. Status e Diagnóstico Técnico</div>
+  <div style="margin-bottom:8px">Status: <span class="status-badge" style="background:${stBg};color:${stCor}">${esc(stLabel)}</span></div>
+  <div class="diagnostico">${esc(payload.semana.diagnostico || '—')}</div>
+
+  ${(payload.movimentacoes && payload.movimentacoes.length > 0) ? `
+  <div class="section-title">6. Movimentações Registradas</div>
+  <table class="data-table">
+    <thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th><th class="right">Valor</th></tr></thead>
+    <tbody>${linhasMovimentacoes}</tbody>
+  </table>` : ''}
+
+  ${(payload.saldosDiarios && payload.saldosDiarios.length > 0) ? `
+  <div class="section-title">${(payload.movimentacoes && payload.movimentacoes.length > 0) ? '7' : '6'}. Saldos Diários</div>
+  <table class="data-table" style="max-width:320px">
+    <thead><tr><th>Data</th><th class="right">Saldo do Dia</th></tr></thead>
+    <tbody>${linhasSaldosDiarios}</tbody>
+  </table>` : ''}
+
+  ${payload.semana.observacoes ? `
+  <div class="section-title">Observações</div>
+  <div class="obs">${esc(payload.semana.observacoes)}</div>` : ''}
+
+  <div class="footer-info">
+    <span>Emitido em: ${esc(dataEmissao)}${payload.geradoPor ? ` &nbsp;|&nbsp; Responsável: ${esc(payload.geradoPor)}` : ''}</span>
+    <span>DESTRAVA CRÉDITO LTDA &nbsp;|&nbsp; CNPJ 35.427.182/0001-66</span>
+  </div>
+  <div class="page-footer-block">
+    <strong>BRASÍLIA - SEDE</strong> — St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250 &nbsp;|&nbsp;
+    <strong>GOIÂNIA - FILIAL</strong> — Avenida Afonso Pena, qd-25 Alt. 05, S/N sala-02 setor Goiânia 2 CEP: 74665555 Goiânia-Go
+  </div>
+</body>
+</html>`;
+  }
+
+  // ── ROTA: Configuração de Acompanhamento Financeiro ─────────────────────────
+
+  // GET /api/acompanhamento-financeiro/config/:empresaId
+  app.get('/api/acompanhamento-financeiro/config/:empresaId', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const { empresaId } = req.params;
+      const { rows } = await pool.query(
+        `SELECT c.*, e.razao_social, e.cnpj, e.faturamento_anual AS faturamento_anual_empresa
+           FROM acompanhamento_financeiro_config c
+           JOIN empresas e ON e.id = c.empresa_id
+          WHERE c.empresa_id = $1
+          LIMIT 1`,
+        [empresaId]
+      );
+      if (!rows.length) {
+        const { rows: emp } = await pool.query(
+          `SELECT id, razao_social, cnpj, faturamento_anual FROM empresas WHERE id = $1 LIMIT 1`,
+          [empresaId]
+        );
+        if (!emp.length) { res.status(404).json({ error: 'Empresa não encontrada.' }); return; }
+        res.json({
+          configurado: false,
+          empresa: emp[0],
+          faturamento_anual_empresa: emp[0].faturamento_anual,
+          percentual_operacional_padrao: 30,
+          status_config: 'pendente',
+        });
+        return;
+      }
+      res.json({ configurado: true, ...rows[0] });
+    } catch (err) {
+      console.error('[GET /api/acompanhamento-financeiro/config/:empresaId]', err);
+      res.status(500).json({ error: 'Erro ao buscar configuração.' });
+    }
+  });
+
+  // POST /api/acompanhamento-financeiro/config
+  app.post('/api/acompanhamento-financeiro/config', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const { empresa_id, faturamento_anual_declarado, percentual_operacional = 30 } = req.body;
+      if (!empresa_id) { res.status(400).json({ error: 'empresa_id é obrigatório.' }); return; }
+      const fat = Number(faturamento_anual_declarado);
+      const pct = Number(percentual_operacional);
+      if (!Number.isFinite(fat) || fat < 0) { res.status(400).json({ error: 'Faturamento anual declarado inválido.' }); return; }
+      if (!Number.isFinite(pct) || pct <= 0 || pct > 100) { res.status(400).json({ error: 'Percentual operacional deve estar entre 0,01 e 100.' }); return; }
+      const colaboradorId = (req as any).colaborador?.id || null;
+      const { rows } = await pool.query(
+        `INSERT INTO acompanhamento_financeiro_config
+           (empresa_id, faturamento_anual_declarado, percentual_operacional, ativo, criado_por)
+         VALUES ($1, $2, $3, true, $4)
+         ON CONFLICT (empresa_id) DO UPDATE SET
+           faturamento_anual_declarado = EXCLUDED.faturamento_anual_declarado,
+           percentual_operacional = EXCLUDED.percentual_operacional,
+           ativo = true,
+           updated_at = NOW()
+         RETURNING *`,
+        [empresa_id, fat, pct, colaboradorId]
+      );
+      res.status(201).json(rows[0]);
+    } catch (err) {
+      console.error('[POST /api/acompanhamento-financeiro/config]', err);
+      res.status(500).json({ error: 'Erro ao salvar configuração.' });
+    }
+  });
+
+  // ── ROTA: Listar semanas de uma empresa ─────────────────────────────────────
+
+  // GET /api/acompanhamento-financeiro/semanas/:empresaId
+  app.get('/api/acompanhamento-financeiro/semanas/:empresaId', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const { empresaId } = req.params;
+      const { ano, mes } = req.query;
+      const conditions: string[] = ['s.empresa_id = $1'];
+      const params: any[] = [empresaId];
+      if (ano) { params.push(Number(ano)); conditions.push(`s.ano = $${params.length}`); }
+      if (mes) { params.push(Number(mes)); conditions.push(`s.mes = $${params.length}`); }
+      const { rows } = await pool.query(
+        `SELECT s.*,
+                e.razao_social, e.cnpj,
+                c.faturamento_anual_declarado, c.percentual_operacional
+           FROM acompanhamento_financeiro_semanal s
+           JOIN empresas e ON e.id = s.empresa_id
+           LEFT JOIN acompanhamento_financeiro_config c ON c.empresa_id = s.empresa_id
+          WHERE ${conditions.join(' AND ')}
+          ORDER BY s.ano DESC, s.mes DESC, s.numero_semana DESC`,
+        params
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error('[GET /api/acompanhamento-financeiro/semanas/:empresaId]', err);
+      res.status(500).json({ error: 'Erro ao listar semanas.' });
+    }
+  });
+
+  // GET /api/acompanhamento-financeiro/semana/:id
+  app.get('/api/acompanhamento-financeiro/semana/:id', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { rows } = await pool.query(
+        `SELECT s.*,
+                e.razao_social, e.cnpj, e.cidade, e.estado,
+                c.faturamento_anual_declarado, c.percentual_operacional
+           FROM acompanhamento_financeiro_semanal s
+           JOIN empresas e ON e.id = s.empresa_id
+           LEFT JOIN acompanhamento_financeiro_config c ON c.empresa_id = s.empresa_id
+          WHERE s.id = $1
+          LIMIT 1`,
+        [id]
+      );
+      if (!rows.length) { res.status(404).json({ error: 'Registro não encontrado.' }); return; }
+      const semana = rows[0];
+      const { rows: movs } = await pool.query(
+        `SELECT * FROM acompanhamento_financeiro_movimentacoes WHERE acompanhamento_id = $1 ORDER BY data_movimento ASC, tipo ASC`,
+        [id]
+      );
+      const { rows: saldos } = await pool.query(
+        `SELECT * FROM acompanhamento_financeiro_saldos_diarios WHERE acompanhamento_id = $1 ORDER BY data_referencia ASC`,
+        [id]
+      );
+      res.json({ ...semana, movimentacoes: movs, saldos_diarios: saldos });
+    } catch (err) {
+      console.error('[GET /api/acompanhamento-financeiro/semana/:id]', err);
+      res.status(500).json({ error: 'Erro ao buscar semana.' });
+    }
+  });
+
+  // ── ROTA: Criar/Atualizar semana ────────────────────────────────────────────
+
+  // POST /api/acompanhamento-financeiro/semana
+  app.post('/api/acompanhamento-financeiro/semana', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const {
+        empresa_id, ano, mes, numero_semana,
+        semana_inicio, semana_fim,
+        saldo_inicial = 0,
+        total_entradas = 0, total_saidas = 0,
+        saldos_diarios = [],
+        movimentacoes = [],
+        observacoes,
+      } = req.body;
+
+      if (!empresa_id) { res.status(400).json({ error: 'empresa_id é obrigatório.' }); return; }
+      if (!ano || !mes || !numero_semana) { res.status(400).json({ error: 'ano, mes e numero_semana são obrigatórios.' }); return; }
+      if (!semana_inicio || !semana_fim) { res.status(400).json({ error: 'semana_inicio e semana_fim são obrigatórios.' }); return; }
+      if (new Date(semana_fim) < new Date(semana_inicio)) { res.status(400).json({ error: 'semana_fim não pode ser anterior a semana_inicio.' }); return; }
+
+      const saldoIni = Number(saldo_inicial);
+      const entradas = Number(total_entradas);
+      const saidas = Number(total_saidas);
+      if (!Number.isFinite(saldoIni) || saldoIni < 0) { res.status(400).json({ error: 'saldo_inicial inválido.' }); return; }
+      if (!Number.isFinite(entradas) || entradas < 0) { res.status(400).json({ error: 'total_entradas inválido.' }); return; }
+      if (!Number.isFinite(saidas) || saidas < 0) { res.status(400).json({ error: 'total_saidas inválido.' }); return; }
+
+      // Buscar configuração da empresa
+      const { rows: cfgRows } = await pool.query(
+        `SELECT faturamento_anual_declarado, percentual_operacional, limite_anual
+           FROM acompanhamento_financeiro_config
+          WHERE empresa_id = $1 AND ativo = true
+          LIMIT 1`,
+        [empresa_id]
+      );
+      let limites = { limite_anual: 0, limite_mensal: 0, limite_semanal: 0, semanas_no_mes: 4 };
+      if (cfgRows.length) {
+        limites = calcularLimitesAcompanhamento(
+          Number(cfgRows[0].faturamento_anual_declarado),
+          Number(cfgRows[0].percentual_operacional),
+          Number(ano), Number(mes)
+        );
+      }
+
+      // Calcular resumo semanal
+      const saldosDiariosNums = (saldos_diarios as any[]).map(s => Number(s.saldo_dia)).filter(n => Number.isFinite(n));
+      const { saldo_final, saldo_medio } = calcularResumoSemanal(saldoIni, entradas, saidas, saldosDiariosNums);
+
+      // Calcular acumulados (excluindo semana atual para evitar dupla contagem)
+      const colaboradorId = (req as any).colaborador?.id || null;
+      const { rows: acumMes } = await pool.query(
+        `SELECT COALESCE(SUM(total_entradas), 0) AS total
+           FROM acompanhamento_financeiro_semanal
+          WHERE empresa_id = $1 AND ano = $2 AND mes = $3 AND numero_semana != $4`,
+        [empresa_id, ano, mes, numero_semana]
+      );
+      const { rows: acumAno } = await pool.query(
+        `SELECT COALESCE(SUM(total_entradas), 0) AS total
+           FROM acompanhamento_financeiro_semanal
+          WHERE empresa_id = $1 AND ano = $2 AND NOT (mes = $3 AND numero_semana = $4)`,
+        [empresa_id, ano, mes, numero_semana]
+      );
+      const acumuladoMensal = Math.round((Number(acumMes[0]?.total || 0) + entradas) * 100) / 100;
+      const acumuladoAnual = Math.round((Number(acumAno[0]?.total || 0) + entradas) * 100) / 100;
+
+      // Calcular percentuais (protegido contra divisão por zero)
+      const pctSemana = limites.limite_semanal > 0 ? Math.round((entradas / limites.limite_semanal) * 10000) / 100 : 0;
+      const pctMes = limites.limite_mensal > 0 ? Math.round((acumuladoMensal / limites.limite_mensal) * 10000) / 100 : 0;
+      const pctAno = limites.limite_anual > 0 ? Math.round((acumuladoAnual / limites.limite_anual) * 10000) / 100 : 0;
+
+      // Classificar status e gerar diagnóstico
+      const semConfig = cfgRows.length === 0;
+      const status = semConfig ? 'aguardando_atualizacao' : classificarStatusAcompanhamento(pctSemana, pctMes, pctAno);
+      const diagnostico = gerarDiagnosticoAcompanhamento(
+        pctSemana, pctMes, pctAno, status,
+        limites.limite_semanal, limites.limite_mensal, limites.limite_anual,
+        acumuladoMensal, acumuladoAnual
+      );
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const { rows: semRows } = await client.query(
+          `INSERT INTO acompanhamento_financeiro_semanal (
+             empresa_id, ano, mes, numero_semana, semana_inicio, semana_fim,
+             saldo_inicial, total_entradas, total_saidas, saldo_final, saldo_medio,
+             limite_semanal_referencia, limite_mensal_referencia, limite_anual_referencia,
+             acumulado_mensal, acumulado_anual,
+             percentual_uso_semana, percentual_uso_mes, percentual_uso_ano,
+             status, diagnostico, observacoes, criado_por
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+           ON CONFLICT (empresa_id, ano, mes, numero_semana) DO UPDATE SET
+             semana_inicio = EXCLUDED.semana_inicio,
+             semana_fim = EXCLUDED.semana_fim,
+             saldo_inicial = EXCLUDED.saldo_inicial,
+             total_entradas = EXCLUDED.total_entradas,
+             total_saidas = EXCLUDED.total_saidas,
+             saldo_final = EXCLUDED.saldo_final,
+             saldo_medio = EXCLUDED.saldo_medio,
+             limite_semanal_referencia = EXCLUDED.limite_semanal_referencia,
+             limite_mensal_referencia = EXCLUDED.limite_mensal_referencia,
+             limite_anual_referencia = EXCLUDED.limite_anual_referencia,
+             acumulado_mensal = EXCLUDED.acumulado_mensal,
+             acumulado_anual = EXCLUDED.acumulado_anual,
+             percentual_uso_semana = EXCLUDED.percentual_uso_semana,
+             percentual_uso_mes = EXCLUDED.percentual_uso_mes,
+             percentual_uso_ano = EXCLUDED.percentual_uso_ano,
+             status = EXCLUDED.status,
+             diagnostico = EXCLUDED.diagnostico,
+             observacoes = EXCLUDED.observacoes,
+             updated_at = NOW()
+           RETURNING *`,
+          [
+            empresa_id, ano, mes, numero_semana, semana_inicio, semana_fim,
+            saldoIni, entradas, saidas, saldo_final, saldo_medio,
+            limites.limite_semanal, limites.limite_mensal, limites.limite_anual,
+            acumuladoMensal, acumuladoAnual,
+            pctSemana, pctMes, pctAno,
+            status, diagnostico, observacoes || null, colaboradorId,
+          ]
+        );
+        const semanaId = semRows[0].id;
+
+        // Saldos diários: apaga e reinsere
+        await client.query('DELETE FROM acompanhamento_financeiro_saldos_diarios WHERE acompanhamento_id = $1', [semanaId]);
+        for (const sd of (saldos_diarios as any[])) {
+          const sdVal = Number(sd.saldo_dia);
+          if (!Number.isFinite(sdVal)) continue;
+          await client.query(
+            `INSERT INTO acompanhamento_financeiro_saldos_diarios
+               (acompanhamento_id, empresa_id, data_referencia, saldo_dia, criado_por)
+             VALUES ($1,$2,$3,$4,$5)
+             ON CONFLICT (acompanhamento_id, data_referencia) DO UPDATE SET saldo_dia = EXCLUDED.saldo_dia`,
+            [semanaId, empresa_id, sd.data_referencia, sdVal, colaboradorId]
+          );
+        }
+
+        // Movimentações: apaga e reinsere
+        await client.query('DELETE FROM acompanhamento_financeiro_movimentacoes WHERE acompanhamento_id = $1', [semanaId]);
+        for (const mv of (movimentacoes as any[])) {
+          const mvVal = Number(mv.valor);
+          if (!Number.isFinite(mvVal) || mvVal <= 0) continue;
+          if (!['entrada', 'saida'].includes(mv.tipo)) continue;
+          await client.query(
+            `INSERT INTO acompanhamento_financeiro_movimentacoes
+               (acompanhamento_id, empresa_id, data_movimento, tipo, categoria, descricao, valor, comprovante_url, criado_por)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            [semanaId, empresa_id, mv.data_movimento, mv.tipo, mv.categoria || null, mv.descricao || null, mvVal, mv.comprovante_url || null, colaboradorId]
+          );
+        }
+
+        await client.query('COMMIT');
+        res.status(201).json({ ...semRows[0], id: semanaId });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      console.error('[POST /api/acompanhamento-financeiro/semana]', err);
+      res.status(500).json({ error: 'Erro ao salvar semana de acompanhamento.' });
+    }
+  });
+
+  // PATCH /api/acompanhamento-financeiro/semana/:id/status
+  app.patch('/api/acompanhamento-financeiro/semana/:id/status', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { status, observacoes } = req.body;
+      const statusValidos = ['dentro_da_referencia','atencao_leve','atencao_media','incompativel','critico','sem_documentacao','aguardando_atualizacao','regularizado'];
+      if (!statusValidos.includes(status)) { res.status(400).json({ error: 'Status inválido.' }); return; }
+      const { rows } = await pool.query(
+        `UPDATE acompanhamento_financeiro_semanal
+            SET status = $2, observacoes = COALESCE($3, observacoes), updated_at = NOW()
+          WHERE id = $1
+          RETURNING *`,
+        [id, status, observacoes || null]
+      );
+      if (!rows.length) { res.status(404).json({ error: 'Registro não encontrado.' }); return; }
+      res.json(rows[0]);
+    } catch (err) {
+      console.error('[PATCH /api/acompanhamento-financeiro/semana/:id/status]', err);
+      res.status(500).json({ error: 'Erro ao atualizar status.' });
+    }
+  });
+
+  // DELETE /api/acompanhamento-financeiro/semana/:id
+  app.delete('/api/acompanhamento-financeiro/semana/:id', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const colaborador = (req as any).colaborador;
+      const normC = (v?: string | null) => String(v || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
+      const isAdmin = ['admin','administrador','super_admin','superadmin','diretor'].includes(normC(colaborador?.cargo));
+      if (!isAdmin) { res.status(403).json({ error: 'Apenas Administradores e Diretores podem excluir registros.' }); return; }
+      const { rows } = await pool.query('DELETE FROM acompanhamento_financeiro_semanal WHERE id = $1 RETURNING id', [id]);
+      if (!rows.length) { res.status(404).json({ error: 'Registro não encontrado.' }); return; }
+      res.json({ success: true, id: rows[0].id });
+    } catch (err) {
+      console.error('[DELETE /api/acompanhamento-financeiro/semana/:id]', err);
+      res.status(500).json({ error: 'Erro ao excluir registro.' });
+    }
+  });
+
+  // ── ROTA: Calcular limites (preview sem salvar) ──────────────────────────────
+
+  // POST /api/acompanhamento-financeiro/calcular-limites
+  app.post('/api/acompanhamento-financeiro/calcular-limites', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const { faturamento_anual_declarado, percentual_operacional = 30, ano, mes } = req.body;
+      const fat = Number(faturamento_anual_declarado);
+      const pct = Number(percentual_operacional);
+      const anoN = Number(ano) || new Date().getFullYear();
+      const mesN = Number(mes) || (new Date().getMonth() + 1);
+      if (!Number.isFinite(fat) || fat < 0) { res.status(400).json({ error: 'Faturamento inválido.' }); return; }
+      if (!Number.isFinite(pct) || pct <= 0 || pct > 100) { res.status(400).json({ error: 'Percentual inválido.' }); return; }
+      const limites = calcularLimitesAcompanhamento(fat, pct, anoN, mesN);
+      res.json(limites);
+    } catch (err) {
+      console.error('[POST /api/acompanhamento-financeiro/calcular-limites]', err);
+      res.status(500).json({ error: 'Erro ao calcular limites.' });
+    }
+  });
+
+  // ── ROTA: Exportar PDF do relatório ─────────────────────────────────────────
+
+  // POST /api/acompanhamento-financeiro/semana/:id/exportar-pdf
+  app.post('/api/acompanhamento-financeiro/semana/:id/exportar-pdf', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { rows } = await pool.query(
+        `SELECT s.*,
+                e.razao_social, e.cnpj, e.cidade, e.estado,
+                c.faturamento_anual_declarado, c.percentual_operacional
+           FROM acompanhamento_financeiro_semanal s
+           JOIN empresas e ON e.id = s.empresa_id
+           LEFT JOIN acompanhamento_financeiro_config c ON c.empresa_id = s.empresa_id
+          WHERE s.id = $1
+          LIMIT 1`,
+        [id]
+      );
+      if (!rows.length) { res.status(404).json({ error: 'Registro não encontrado.' }); return; }
+      const semana = rows[0];
+      const { rows: movs } = await pool.query(
+        `SELECT * FROM acompanhamento_financeiro_movimentacoes WHERE acompanhamento_id = $1 ORDER BY data_movimento ASC`,
+        [id]
+      );
+      const { rows: saldos } = await pool.query(
+        `SELECT * FROM acompanhamento_financeiro_saldos_diarios WHERE acompanhamento_id = $1 ORDER BY data_referencia ASC`,
+        [id]
+      );
+      const colaborador = (req as any).colaborador;
+      const geradoPor = colaborador?.nome || colaborador?.email || null;
+      const html = gerarHtmlRelatorioFinanceiro({
+        empresa: { razao_social: semana.razao_social, cnpj: semana.cnpj, cidade: semana.cidade, estado: semana.estado },
+        config: {
+          faturamento_anual_declarado: Number(semana.faturamento_anual_declarado) || 0,
+          percentual_operacional: Number(semana.percentual_operacional) || 30,
+          limite_anual: Number(semana.limite_anual_referencia) || 0,
+        },
+        semana: {
+          ano: semana.ano, mes: semana.mes, numero_semana: semana.numero_semana,
+          semana_inicio: semana.semana_inicio, semana_fim: semana.semana_fim,
+          saldo_inicial: Number(semana.saldo_inicial) || 0,
+          total_entradas: Number(semana.total_entradas) || 0,
+          total_saidas: Number(semana.total_saidas) || 0,
+          saldo_final: Number(semana.saldo_final) || 0,
+          saldo_medio: Number(semana.saldo_medio) || 0,
+          limite_semanal_referencia: Number(semana.limite_semanal_referencia) || 0,
+          limite_mensal_referencia: Number(semana.limite_mensal_referencia) || 0,
+          limite_anual_referencia: Number(semana.limite_anual_referencia) || 0,
+          acumulado_mensal: Number(semana.acumulado_mensal) || 0,
+          acumulado_anual: Number(semana.acumulado_anual) || 0,
+          percentual_uso_semana: Number(semana.percentual_uso_semana) || 0,
+          percentual_uso_mes: Number(semana.percentual_uso_mes) || 0,
+          percentual_uso_ano: Number(semana.percentual_uso_ano) || 0,
+          status: semana.status,
+          diagnostico: semana.diagnostico,
+          observacoes: semana.observacoes,
+        },
+        movimentacoes: movs,
+        saldosDiarios: saldos,
+        geradoPor,
+      });
+      const uploadsDir = path.resolve('uploads', 'acompanhamento-financeiro');
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+      const fileName = `acomp-financeiro-${id}-${Date.now()}.pdf`;
+      const filePath = path.join(uploadsDir, fileName);
+      let browser: any;
+      try {
+        const puppeteer = await import('puppeteer-core');
+        let executablePath: string;
+        if (process.env.CHROMIUM_PATH) {
+          executablePath = process.env.CHROMIUM_PATH;
+        } else {
+          try {
+            const chromium = await import('@sparticuz/chromium');
+            executablePath = await chromium.default.executablePath();
+          } catch {
+            executablePath = '/usr/bin/chromium-browser';
+          }
+        }
+        browser = await puppeteer.default.launch({
+          executablePath,
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process'],
+          headless: true,
+        });
+        const page = await browser.newPage();
+        await page.setContent(html, { waitUntil: 'networkidle0' });
+        await page.pdf({
+          path: filePath,
+          format: 'A4',
+          printBackground: true,
+          displayHeaderFooter: false,
+          margin: { top: '10mm', bottom: '28mm', left: '18mm', right: '18mm' },
+        });
+      } finally {
+        if (browser) await browser.close();
+      }
+      const nomeArquivo = `relatorio-financeiro-${semana.razao_social.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}-sem${semana.numero_semana}-${semana.mes}-${semana.ano}.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
+      const stream = fs.createReadStream(filePath);
+      stream.pipe(res);
+      stream.on('end', () => { fs.unlink(filePath, () => {}); });
+    } catch (err: any) {
+      console.error('[POST /api/acompanhamento-financeiro/semana/:id/exportar-pdf]', err);
+      res.status(500).json({ error: err.message || 'Erro ao gerar PDF.' });
+    }
+  });
+
+  // ── FIM DO MÓDULO: ACOMPANHAMENTO FINANCEIRO SEMANAL ────────────────────────
+
+
+
   // Qualquer /api não encontrada deve responder JSON, nunca o index.html da SPA.
   app.use('/api', (req: Request, res: Response) => {
     res.status(404).json({
