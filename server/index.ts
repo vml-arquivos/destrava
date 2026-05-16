@@ -3,7 +3,6 @@ import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-import { calcularAcompanhamentoBancarioDinamico, calcularQuantidadeSemanasDoMes } from "./funcoes_compensacao";
 import crypto from "crypto";
 import pkg from "pg";
 import jwt from "jsonwebtoken";
@@ -12,6 +11,13 @@ import { auth } from "./middleware/auth.ts";
 import { authorize } from "./middleware/authorize.ts";
 import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
 import { gerarHtmlTimbrado, getPuppeteerHeaderTemplate, getPuppeteerFooterTemplate, getDocumentStyles, CONTRATADA_DADOS, getHtmlHeaderEmbutido, getHtmlFooterEmbutido } from "./letterhead.ts";
+import {
+  calcularReferenciasAcompanhamento,
+  calcularTotaisSemana as calcTotaisSem,
+  calcularCompensacaoMensal,
+  gerarDiagnosticoSemana,
+  calcularAcumulados,
+} from "./funcoes_acompanhamento.ts";
 
 const { Pool } = pkg;
 
@@ -7151,7 +7157,18 @@ ${(temTest1 || temTest2) ? `
               status_semana
             FROM acompanhamento_bancario_atualizacoes u
             WHERE u.acompanhamento_id = a.id
-            ORDER BY u.numero_semana DESC, u.created_at DESC
+              -- REGRA INEGOCIÁVEL: semana da data atual (nunca futura)
+              -- Prioridade 1: semana cujo período contém hoje
+              -- Prioridade 2: última semana encerrada antes de hoje
+              AND (
+                (u.data_referencia_inicio <= CURRENT_DATE AND u.data_referencia_fim >= CURRENT_DATE)
+                OR (u.data_referencia_fim < CURRENT_DATE)
+              )
+              AND u.data_referencia_inicio <= CURRENT_DATE
+            ORDER BY
+              CASE WHEN u.data_referencia_inicio <= CURRENT_DATE AND u.data_referencia_fim >= CURRENT_DATE THEN 0 ELSE 1 END ASC,
+              u.numero_semana DESC,
+              u.created_at DESC
             LIMIT 1
           ) ult ON TRUE
           LEFT JOIN LATERAL (
@@ -7277,19 +7294,6 @@ ${(temTest1 || temTest2) ? `
     } catch (err) {
       console.error("[GET /api/acompanhamentos-bancarios/:id]", err);
       res.status(500).json({ error: "Erro ao buscar acompanhamento." });
-    }
-  });
-
-  app.get("/api/acompanhamentos-bancarios/:id/atualizacoes", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
-    try {
-      const { rows } = await pool.query(
-        `SELECT * FROM acompanhamento_bancario_atualizacoes WHERE acompanhamento_id = $1 ORDER BY numero_semana DESC, created_at DESC`,
-        [req.params.id]
-      );
-      res.json(rows);
-    } catch (err) {
-      console.error("[GET /api/acompanhamentos-bancarios/:id/atualizacoes]", err);
-      res.status(500).json({ error: "Erro ao listar atualizações" });
     }
   });
 
@@ -7466,34 +7470,187 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
-  const salvarAtualizacaoSemanal = async (req: Request, res: Response) => {
+    // ── PATCH: Editar semana existente ────────────────────────────────────────
+  app.patch("/api/acompanhamentos-bancarios/:id/atualizacoes/:semana", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+    const client = await pool.connect();
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const numeroSemana = Number(req.params.semana || 0);
+      if (!numeroSemana) {
+        res.status(400).json({ error: "Número da semana inválido." });
+        return;
+      }
+      const b = req.body || {};
+      // Verificar se a semana existe
+      const semanaExistente = await client.query(
+        `SELECT * FROM acompanhamento_bancario_atualizacoes WHERE acompanhamento_id = $1 AND numero_semana = $2 LIMIT 1`,
+        [req.params.id, numeroSemana]
+      );
+      if (!semanaExistente.rows.length) {
+        res.status(404).json({ error: "Semana não encontrada." });
+        return;
+      }
+      // Buscar acompanhamento para faturamento
+      const acompResult = await client.query(
+        `SELECT faturamento_anual, percentual_operacional FROM acompanhamentos_bancarios WHERE id = $1 LIMIT 1`,
+        [req.params.id]
+      );
+      const acomp = acompResult.rows[0] || {};
+      const faturamentoAnual = Number(acomp.faturamento_anual || 0);
+      // Calcular entradas
+      const entradas = {
+        entrada_maquininha: normalizarNumeroAcompanhamento(b.entrada_maquininha) ?? Number(semanaExistente.rows[0].entrada_maquininha || 0),
+        entrada_pix: normalizarNumeroAcompanhamento(b.entrada_pix) ?? Number(semanaExistente.rows[0].entrada_pix || 0),
+        entrada_boleto: normalizarNumeroAcompanhamento(b.entrada_boleto) ?? Number(semanaExistente.rows[0].entrada_boleto || 0),
+        entrada_ted: normalizarNumeroAcompanhamento(b.entrada_ted) ?? Number(semanaExistente.rows[0].entrada_ted || 0),
+        entrada_dinheiro: normalizarNumeroAcompanhamento(b.entrada_dinheiro) ?? Number(semanaExistente.rows[0].entrada_dinheiro || 0),
+        outras_entradas: normalizarNumeroAcompanhamento(b.outras_entradas) ?? Number(semanaExistente.rows[0].outras_entradas || 0),
+      };
+      const totalEntradas = entradas.entrada_maquininha + entradas.entrada_pix + entradas.entrada_boleto + entradas.entrada_ted + entradas.entrada_dinheiro + entradas.outras_entradas;
+      const totalSaidas = normalizarNumeroAcompanhamento(b.total_saidas) ?? Number(semanaExistente.rows[0].total_saidas || 0);
+      const saldoSemanal = totalEntradas - totalSaidas;
+      const statusSemana = statusSemanaAcompanhamento({
+        saldo: saldoSemanal,
+        restricaoNova: Boolean(b.restricao_nova ?? semanaExistente.rows[0].restricao_nova),
+        ocorrenciaNegativa: Boolean(b.ocorrencia_negativa ?? semanaExistente.rows[0].ocorrencia_negativa),
+        devolucaoOuEstorno: Boolean(b.devolucao_ou_estorno ?? semanaExistente.rows[0].devolucao_ou_estorno),
+      });
+      // Calcular referências e compensação
+      const dataRef = b.data_referencia_inicio || semanaExistente.rows[0].data_referencia_inicio;
+      const anoRef = dataRef ? new Date(String(dataRef) + 'T00:00:00Z').getUTCFullYear() : new Date().getFullYear();
+      const mesRef = dataRef ? new Date(String(dataRef) + 'T00:00:00Z').getUTCMonth() + 1 : new Date().getMonth() + 1;
+      const refs = calcularReferenciasAcompanhamento(faturamentoAnual, anoRef, mesRef);
+      // Buscar todas as semanas exceto a atual para calcular acumulados
+      const todasSemanas = await client.query(
+        `SELECT * FROM acompanhamento_bancario_atualizacoes WHERE acompanhamento_id = $1 ORDER BY numero_semana ASC`,
+        [req.params.id]
+      );
+      const semanasParaAcumulo = todasSemanas.rows.filter((s: any) => Number(s.numero_semana) !== numeroSemana);
+      const { acumuladoMensalAnterior, acumuladoAnual } = calcularAcumulados(semanasParaAcumulo, numeroSemana, mesRef, anoRef);
+      const comp = calcularCompensacaoMensal(totalEntradas, acumuladoMensalAnterior, acumuladoAnual, numeroSemana, refs);
+      const diagnostico = gerarDiagnosticoSemana(comp, refs, numeroSemana);
+      await client.query('BEGIN');
+      const { rows } = await client.query(
+        `UPDATE acompanhamento_bancario_atualizacoes SET
+          data_referencia_inicio = COALESCE($3::date, data_referencia_inicio),
+          data_referencia_fim = COALESCE($4::date, data_referencia_fim),
+          data_atualizacao = COALESCE($5::date, data_atualizacao),
+          entrada_maquininha = $6, entrada_pix = $7, entrada_boleto = $8,
+          entrada_ted = $9, entrada_dinheiro = $10, outras_entradas = $11,
+          total_entradas = $12, total_saidas = $13, saldo_semanal = $14,
+          saldo_medio = $15, saldo_final = $16, quantidade_transacoes = $17,
+          rating_bacen = COALESCE($18, rating_bacen), rating_interno = COALESCE($19, rating_interno),
+          possui_restricao = $20, restricao_nova = $21,
+          scr_status = COALESCE($22, scr_status), cenprot_status = COALESCE($23, cenprot_status),
+          serasa_status = COALESCE($24, serasa_status), cnd_status = COALESCE($25, cnd_status),
+          pld_aml_status = COALESCE($26, pld_aml_status), coaf_status = COALESCE($27, coaf_status),
+          devolucao_ou_estorno = $28, ocorrencia_negativa = $29, status_semana = $30,
+          analise_semana = COALESCE($31, analise_semana),
+          orientacao_cliente = COALESCE($32, orientacao_cliente),
+          proxima_acao = COALESCE($33, proxima_acao),
+          faturamento_anual_ref = $34, teto_anual_movimentacao = $35,
+          faturamento_mensal_base = $36, teto_mensal_movimentacao = $37,
+          referencia_semanal_base = $38, teto_semanal_movimentacao = $39,
+          semanas_no_mes = $40, acumulado_mensal = $41, acumulado_anual = $42,
+          valor_abaixo_semana = $43, valor_excedente_semana = $44,
+          saldo_faltante_ref_mensal = $45, saldo_disponivel_teto_mensal = $46,
+          semanas_restantes_mes = $47, meta_base_dinamica = $48, teto_dinamico_proxima = $49,
+          percentual_uso_semanal = $50, percentual_uso_mensal = $51, percentual_uso_anual = $52,
+          status_aderencia = $53, alerta_aderencia = $54, motivo_alerta_aderencia = $55,
+          diagnostico_tecnico = $56, updated_at = NOW()
+        WHERE acompanhamento_id = $1 AND numero_semana = $2
+        RETURNING *`,
+        [
+          req.params.id, numeroSemana,
+          b.data_referencia_inicio || null, b.data_referencia_fim || null, b.data_atualizacao || null,
+          entradas.entrada_maquininha, entradas.entrada_pix, entradas.entrada_boleto,
+          entradas.entrada_ted, entradas.entrada_dinheiro, entradas.outras_entradas,
+          totalEntradas, totalSaidas, saldoSemanal,
+          normalizarNumeroAcompanhamento(b.saldo_medio) ?? Number(semanaExistente.rows[0].saldo_medio || 0),
+          normalizarNumeroAcompanhamento(b.saldo_final) ?? Number(semanaExistente.rows[0].saldo_final || 0),
+          Number(b.quantidade_transacoes ?? semanaExistente.rows[0].quantidade_transacoes ?? 0),
+          b.rating_bacen || null, b.rating_interno || null,
+          Boolean(b.possui_restricao ?? semanaExistente.rows[0].possui_restricao),
+          Boolean(b.restricao_nova ?? semanaExistente.rows[0].restricao_nova),
+          b.scr_status || null, b.cenprot_status || null, b.serasa_status || null,
+          b.cnd_status || null, b.pld_aml_status || null, b.coaf_status || null,
+          Boolean(b.devolucao_ou_estorno ?? semanaExistente.rows[0].devolucao_ou_estorno),
+          Boolean(b.ocorrencia_negativa ?? semanaExistente.rows[0].ocorrencia_negativa),
+          statusSemana,
+          b.analise_semana || null, b.orientacao_cliente || null, b.proxima_acao || null,
+          refs.faturamento_anual_ref, refs.teto_anual_movimentacao,
+          refs.faturamento_mensal_base, refs.teto_mensal_movimentacao,
+          refs.referencia_semanal_base, refs.teto_semanal_movimentacao,
+          refs.semanas_no_mes, comp.acumulado_mensal, Number(acumuladoAnual) + totalEntradas,
+          comp.valor_abaixo_semana, comp.valor_excedente_semana,
+          comp.saldo_faltante_ref_mensal, comp.saldo_disponivel_teto_mensal,
+          comp.semanas_restantes_mes, comp.meta_base_dinamica, comp.teto_dinamico_proxima,
+          comp.percentual_uso_semanal, comp.percentual_uso_mensal, comp.percentual_uso_anual,
+          comp.status_aderencia, comp.alerta_aderencia, comp.motivo_alerta_aderencia,
+          diagnostico,
+        ]
+      );
+      // Salvar histórico de compensação
+      await client.query(
+        `INSERT INTO acompanhamento_compensacoes_historico (
+          acompanhamento_id, numero_semana, data_referencia_inicio, data_referencia_fim,
+          entrada_realizada, faturamento_anual_ref, teto_anual_movimentacao,
+          faturamento_mensal_base, teto_mensal_movimentacao, referencia_semanal_base,
+          teto_semanal_movimentacao, acumulado_mensal, valor_abaixo_semana, valor_excedente_semana,
+          saldo_faltante_ref_mensal, saldo_disponivel_teto_mensal, meta_base_dinamica,
+          teto_dinamico_proxima, percentual_uso_semanal, percentual_uso_mensal, percentual_uso_anual,
+          status_aderencia, alerta_aderencia, motivo_alerta, diagnostico_tecnico, criado_por
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+        ON CONFLICT (acompanhamento_id, numero_semana) DO UPDATE SET
+          entrada_realizada = EXCLUDED.entrada_realizada, acumulado_mensal = EXCLUDED.acumulado_mensal,
+          valor_abaixo_semana = EXCLUDED.valor_abaixo_semana, valor_excedente_semana = EXCLUDED.valor_excedente_semana,
+          status_aderencia = EXCLUDED.status_aderencia, alerta_aderencia = EXCLUDED.alerta_aderencia,
+          motivo_alerta = EXCLUDED.motivo_alerta, diagnostico_tecnico = EXCLUDED.diagnostico_tecnico`,
+        [
+          req.params.id, numeroSemana,
+          b.data_referencia_inicio || null, b.data_referencia_fim || null,
+          totalEntradas, refs.faturamento_anual_ref, refs.teto_anual_movimentacao,
+          refs.faturamento_mensal_base, refs.teto_mensal_movimentacao, refs.referencia_semanal_base,
+          refs.teto_semanal_movimentacao, comp.acumulado_mensal, comp.valor_abaixo_semana, comp.valor_excedente_semana,
+          comp.saldo_faltante_ref_mensal, comp.saldo_disponivel_teto_mensal, comp.meta_base_dinamica,
+          comp.teto_dinamico_proxima, comp.percentual_uso_semanal, comp.percentual_uso_mensal, comp.percentual_uso_anual,
+          comp.status_aderencia, comp.alerta_aderencia, comp.motivo_alerta_aderencia, diagnostico,
+          colaborador?.id || null,
+        ]
+      );
+      // Atualizar acompanhamento principal
+      const baseDataAtualizacao = b.data_atualizacao ? new Date(String(b.data_atualizacao) + 'T00:00:00Z') : new Date();
+      await client.query(
+        `UPDATE acompanhamentos_bancarios SET
+          rating_bacen_atual = COALESCE($2, rating_bacen_atual),
+          rating_interno_atual = COALESCE($3, rating_interno_atual),
+          ultimo_update_em = NOW(), proxima_atualizacao = $4, updated_at = NOW()
+        WHERE id = $1`,
+        [req.params.id, b.rating_bacen || null, b.rating_interno || null, proximaQuartaFeira(baseDataAtualizacao)]
+      );
+      await client.query('COMMIT');
+      res.json(rows[0]);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error('[PATCH /api/acompanhamentos-bancarios/:id/atualizacoes/:semana]', err);
+      res.status(500).json({ error: 'Erro ao editar semana.' });
+    } finally {
+      client.release();
+    }
+  });
+
+  app.post("/api/acompanhamentos-bancarios/:id/atualizacoes", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const b = req.body || {};
-      const acompanhamentoId = req.params.id;
-
-      const acompanhamento = await pool.query(
-        `SELECT id, faturamento_anual, media_mensal, margem_seguranca_30, margem_30
-           FROM acompanhamentos_bancarios
-          WHERE id = $1
-          LIMIT 1`,
-        [acompanhamentoId]
-      );
-
-      if (!acompanhamento.rows.length) {
-        res.status(404).json({ error: "Acompanhamento não encontrado." });
-        return;
-      }
-
       const entradas = {
-        entrada_maquininha: normalizarNumeroAcompanhamento(b.entrada_maquininha ?? b.entrada_maquina) || 0,
+        entrada_maquininha: normalizarNumeroAcompanhamento(b.entrada_maquininha) || 0,
         entrada_pix: normalizarNumeroAcompanhamento(b.entrada_pix) || 0,
         entrada_boleto: normalizarNumeroAcompanhamento(b.entrada_boleto) || 0,
         entrada_ted: normalizarNumeroAcompanhamento(b.entrada_ted) || 0,
         entrada_dinheiro: normalizarNumeroAcompanhamento(b.entrada_dinheiro) || 0,
         outras_entradas: normalizarNumeroAcompanhamento(b.outras_entradas) || 0,
       };
-
       const totalEntradas =
         entradas.entrada_maquininha +
         entradas.entrada_pix +
@@ -7501,406 +7658,198 @@ ${(temTest1 || temTest2) ? `
         entradas.entrada_ted +
         entradas.entrada_dinheiro +
         entradas.outras_entradas;
-
       const totalSaidas = normalizarNumeroAcompanhamento(b.total_saidas) || 0;
       const saldoSemanal = totalEntradas - totalSaidas;
-
-      const numeroSemana = Number(b.numero_semana || 1);
-      const dataReferencia = String(
-        b.data_referencia_inicio ||
-        b.data_atualizacao ||
-        new Date().toISOString().slice(0, 10)
-      ).slice(0, 10);
-
-      const semanasMes = Number(
-        b.quantidade_semanas_mes ||
-        calcularQuantidadeSemanasDoMes(dataReferencia)
-      ) || 4;
-
-      const faturamentoAnual = normalizarNumeroAcompanhamento(acompanhamento.rows[0].faturamento_anual) || 0;
-
-      const compAnteriorQuery = await pool.query(
-        `SELECT compensacao_necessaria_proxima
-           FROM acompanhamento_bancario_atualizacoes
-          WHERE acompanhamento_id = $1
-            AND numero_semana < $2
-          ORDER BY numero_semana DESC, created_at DESC
-          LIMIT 1`,
-        [acompanhamentoId, numeroSemana]
-      );
-
-      const compensacaoAnterior = Number(compAnteriorQuery.rows[0]?.compensacao_necessaria_proxima || 0);
-
-      const acumuladoMensalQuery = await pool.query(
-        `SELECT COALESCE(SUM(total_entradas), 0) AS total
-           FROM acompanhamento_bancario_atualizacoes
-          WHERE acompanhamento_id = $1
-            AND numero_semana <> $2
-            AND date_trunc('month', COALESCE(data_referencia_inicio, data_atualizacao)) = date_trunc('month', $3::date)`,
-        [acompanhamentoId, numeroSemana, dataReferencia]
-      );
-
-      const acumuladoAnualQuery = await pool.query(
-        `SELECT COALESCE(SUM(total_entradas), 0) AS total
-           FROM acompanhamento_bancario_atualizacoes
-          WHERE acompanhamento_id = $1
-            AND numero_semana <> $2
-            AND date_trunc('year', COALESCE(data_referencia_inicio, data_atualizacao)) = date_trunc('year', $3::date)`,
-        [acompanhamentoId, numeroSemana, dataReferencia]
-      );
-
-      const acumuladoMensalAnterior = Number(acumuladoMensalQuery.rows[0]?.total || 0);
-      const acumuladoAnualAnterior = Number(acumuladoAnualQuery.rows[0]?.total || 0);
-
-      const comp = calcularAcompanhamentoBancarioDinamico({
-        faturamentoAnual,
-        totalEntradas,
-        totalSaidas,
-        numeroSemana,
-        quantidadeSemanasMes: semanasMes,
-        percentualMargem: 30,
-        compensacaoSemanaAnterior: compensacaoAnterior,
-        acumuladoMensalAnterior,
-        acumuladoAnualAnterior,
-        toleranciaAbaixoRatingPercent: 80,
-      });
-
-      const refs = {
-        mediaMensal: comp.media_mensal_referencia,
-        limiteMensal: comp.limite_mensal_referencia,
-        mediaSemanal: comp.media_semanal_referencia,
-      };
-
-      const diagnostico = comp.diagnostico_compensacao;
-      const statusComp = comp.status_compensacao;
-
       const statusSemana = statusSemanaAcompanhamento({
         saldo: saldoSemanal,
         restricaoNova: Boolean(b.restricao_nova),
         ocorrenciaNegativa: Boolean(b.ocorrencia_negativa),
         devolucaoOuEstorno: Boolean(b.devolucao_ou_estorno),
       });
-
-      const columns = [
-        "acompanhamento_id",
-        "numero_semana",
-        "data_referencia_inicio",
-        "data_referencia_fim",
-        "data_atualizacao",
-        "entrada_maquininha",
-        "entrada_pix",
-        "entrada_boleto",
-        "entrada_ted",
-        "entrada_dinheiro",
-        "outras_entradas",
-        "total_entradas",
-        "total_saidas",
-        "saldo_semanal",
-        "saldo_medio",
-        "saldo_final",
-        "quantidade_transacoes",
-        "rating_bacen",
-        "rating_interno",
-        "possui_restricao",
-        "restricao_nova",
-        "scr_status",
-        "cenprot_status",
-        "serasa_status",
-        "cnd_status",
-        "pld_aml_status",
-        "coaf_status",
-        "devolucao_ou_estorno",
-        "ocorrencia_negativa",
-        "status_semana",
-        "analise_semana",
-        "orientacao_cliente",
-        "proxima_acao",
-        "criado_por",
-        "media_mensal_referencia",
-        "limite_mensal_referencia",
-        "media_semanal_referencia",
-        "quantidade_semanas_mes",
-        "compensacao_semana_anterior",
-        "entrada_com_compensacao",
-        "diferenca_referencia_semanal",
-        "compensacao_necessaria_proxima",
-        "saldo_faltante_mes",
-        "meta_dinamica_proxima_semana",
-        "valor_excedente_mes",
-        "percentual_limite_semanal",
-        "percentual_limite_mensal",
-        "percentual_limite_anual",
-        "alerta_aderencia",
-        "alerta_rating",
-        "motivo_alerta_aderencia",
-        "diagnostico_compensacao",
-        "status_compensacao"
-      ];
-
-      const values = [
-        acompanhamentoId,
-        numeroSemana,
-        b.data_referencia_inicio || null,
-        b.data_referencia_fim || null,
-        b.data_atualizacao || null,
-        entradas.entrada_maquininha,
-        entradas.entrada_pix,
-        entradas.entrada_boleto,
-        entradas.entrada_ted,
-        entradas.entrada_dinheiro,
-        entradas.outras_entradas,
-        totalEntradas,
-        totalSaidas,
-        saldoSemanal,
-        normalizarNumeroAcompanhamento(b.saldo_medio) || 0,
-        normalizarNumeroAcompanhamento(b.saldo_final) || 0,
-        Number(b.quantidade_transacoes || 0),
-        b.rating_bacen || null,
-        b.rating_interno || null,
-        Boolean(b.possui_restricao),
-        Boolean(b.restricao_nova),
-        b.scr_status || null,
-        b.cenprot_status || null,
-        b.serasa_status || null,
-        b.cnd_status || null,
-        b.pld_aml_status || null,
-        b.coaf_status || null,
-        Boolean(b.devolucao_ou_estorno),
-        Boolean(b.ocorrencia_negativa),
-        statusSemana,
-        b.analise_semana || null,
-        b.orientacao_cliente || null,
-        b.proxima_acao || null,
-        colaborador?.id || null,
-        refs.mediaMensal,
-        refs.limiteMensal,
-        refs.mediaSemanal,
-        semanasMes,
-        compensacaoAnterior,
-        comp.entrada_com_compensacao,
-        comp.diferenca_referencia_semanal,
-        comp.compensacao_necessaria_proxima,
-        comp.saldo_faltante_mes,
-        comp.meta_dinamica_proxima_semana,
-        comp.valor_excedente_mes,
-        comp.percentual_limite_semanal,
-        comp.percentual_limite_mensal,
-        comp.percentual_limite_anual,
-        comp.alerta_aderencia,
-        comp.alerta_rating,
-        comp.motivo_alerta_aderencia,
-        diagnostico,
-        statusComp,
-      ];
-
-      const placeholders = values.map((_, index) => `$${index + 1}`).join(",");
-      const updateSet = columns
-        .filter((col) => !["acompanhamento_id", "numero_semana", "criado_por"].includes(col))
-        .map((col) => `${col} = EXCLUDED.${col}`)
-        .join(",\n          ");
-
+      const numeroSemana = Number(b.numero_semana || 1);
+      // Buscar acompanhamento para calcular referências
+      const acompResult = await pool.query(
+        `SELECT faturamento_anual, percentual_operacional FROM acompanhamentos_bancarios WHERE id = $1 LIMIT 1`,
+        [req.params.id]
+      );
+      const acomp = acompResult.rows[0] || {};
+      const faturamentoAnual = Number(acomp.faturamento_anual || 0);
+      // Calcular referências de aderência
+      const dataRef = b.data_referencia_inicio;
+      const anoRef = dataRef ? new Date(String(dataRef) + 'T00:00:00Z').getUTCFullYear() : new Date().getFullYear();
+      const mesRef = dataRef ? new Date(String(dataRef) + 'T00:00:00Z').getUTCMonth() + 1 : new Date().getMonth() + 1;
+      const refs = calcularReferenciasAcompanhamento(faturamentoAnual, anoRef, mesRef);
+      // Buscar semanas anteriores para acumulados
+      const semanasAnteriores = await pool.query(
+        `SELECT * FROM acompanhamento_bancario_atualizacoes WHERE acompanhamento_id = $1 AND numero_semana < $2 ORDER BY numero_semana ASC`,
+        [req.params.id, numeroSemana]
+      );
+      const { acumuladoMensalAnterior, acumuladoAnual } = calcularAcumulados(semanasAnteriores.rows, numeroSemana, mesRef, anoRef);
+      const comp = calcularCompensacaoMensal(totalEntradas, acumuladoMensalAnterior, acumuladoAnual, numeroSemana, refs);
+      const diagnostico = gerarDiagnosticoSemana(comp, refs, numeroSemana);
       const { rows } = await pool.query(
-        `INSERT INTO acompanhamento_bancario_atualizacoes (${columns.join(", ")})
-         VALUES (${placeholders})
-         ON CONFLICT (acompanhamento_id, numero_semana) DO UPDATE SET
-          ${updateSet},
-          updated_at = NOW()
-         RETURNING *`,
-        values
-      );
-
-      const baseDataAtualizacao = b.data_atualizacao
-        ? new Date(String(b.data_atualizacao) + "T00:00:00Z")
-        : new Date();
-      const prox = proximaQuartaFeira(baseDataAtualizacao);
-
-      await pool.query(
-        `UPDATE acompanhamentos_bancarios
-            SET ultima_atualizacao_em = NOW(),
-                ultimo_update_em = NOW(),
-                proxima_atualizacao = $2,
-                status = CASE WHEN status = 'atualizacao_pendente' THEN 'em_acompanhamento' ELSE status END,
-                rating_bacen_atual = COALESCE($3, rating_bacen_atual),
-                rating_interno_atual = COALESCE($4, rating_interno_atual),
-                updated_at = NOW()
-          WHERE id = $1`,
-        [acompanhamentoId, prox, b.rating_bacen || null, b.rating_interno || null]
-      );
-
-      await pool.query(
-        `INSERT INTO acompanhamento_compensacoes_historico (
-          acompanhamento_id,
-          numero_semana,
-          data_referencia_inicio,
-          data_referencia_fim,
-          entrada_realizada,
-          saida_realizada,
-          saldo_semanal,
-          media_mensal_referencia,
-          limite_mensal_referencia,
-          media_semanal_referencia,
-          quantidade_semanas_mes,
-          compensacao_anterior,
-          entrada_com_compensacao,
-          diferenca_referencia_semanal,
-          compensacao_necessaria,
-          saldo_faltante_mes,
-          meta_dinamica_proxima_semana,
-          valor_excedente_mes,
-          percentual_limite_semanal,
-          percentual_limite_mensal,
-          percentual_limite_anual,
-          alerta_aderencia,
-          alerta_rating,
-          motivo_alerta,
-          status_compensacao,
-          criado_por
+        `INSERT INTO acompanhamento_bancario_atualizacoes (
+          acompanhamento_id, numero_semana,
+          data_referencia_inicio, data_referencia_fim, data_atualizacao,
+          entrada_maquininha, entrada_pix, entrada_boleto, entrada_ted, entrada_dinheiro, outras_entradas,
+          total_entradas, total_saidas, saldo_semanal, saldo_medio, saldo_final, quantidade_transacoes,
+          rating_bacen, rating_interno, possui_restricao, restricao_nova,
+          scr_status, cenprot_status, serasa_status, cnd_status, pld_aml_status, coaf_status,
+          devolucao_ou_estorno, ocorrencia_negativa, status_semana,
+          analise_semana, orientacao_cliente, proxima_acao, criado_por,
+          faturamento_anual_ref, teto_anual_movimentacao, faturamento_mensal_base, teto_mensal_movimentacao,
+          referencia_semanal_base, teto_semanal_movimentacao, semanas_no_mes,
+          acumulado_mensal, acumulado_anual, valor_abaixo_semana, valor_excedente_semana,
+          saldo_faltante_ref_mensal, saldo_disponivel_teto_mensal, semanas_restantes_mes,
+          meta_base_dinamica, teto_dinamico_proxima,
+          percentual_uso_semanal, percentual_uso_mensal, percentual_uso_anual,
+          status_aderencia, alerta_aderencia, motivo_alerta_aderencia, diagnostico_tecnico
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-          $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-          $21,$22,$23,$24,$25,$26
+          $1,$2,$3,$4,COALESCE($5::date,CURRENT_DATE),
+          $6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
+          $22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,
+          $35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56
         )
         ON CONFLICT (acompanhamento_id, numero_semana) DO UPDATE SET
           data_referencia_inicio = EXCLUDED.data_referencia_inicio,
           data_referencia_fim = EXCLUDED.data_referencia_fim,
-          entrada_realizada = EXCLUDED.entrada_realizada,
-          saida_realizada = EXCLUDED.saida_realizada,
-          saldo_semanal = EXCLUDED.saldo_semanal,
-          media_mensal_referencia = EXCLUDED.media_mensal_referencia,
-          limite_mensal_referencia = EXCLUDED.limite_mensal_referencia,
-          media_semanal_referencia = EXCLUDED.media_semanal_referencia,
-          quantidade_semanas_mes = EXCLUDED.quantidade_semanas_mes,
-          compensacao_anterior = EXCLUDED.compensacao_anterior,
-          entrada_com_compensacao = EXCLUDED.entrada_com_compensacao,
-          diferenca_referencia_semanal = EXCLUDED.diferenca_referencia_semanal,
-          compensacao_necessaria = EXCLUDED.compensacao_necessaria,
-          saldo_faltante_mes = EXCLUDED.saldo_faltante_mes,
-          meta_dinamica_proxima_semana = EXCLUDED.meta_dinamica_proxima_semana,
-          valor_excedente_mes = EXCLUDED.valor_excedente_mes,
-          percentual_limite_semanal = EXCLUDED.percentual_limite_semanal,
-          percentual_limite_mensal = EXCLUDED.percentual_limite_mensal,
-          percentual_limite_anual = EXCLUDED.percentual_limite_anual,
-          alerta_aderencia = EXCLUDED.alerta_aderencia,
-          alerta_rating = EXCLUDED.alerta_rating,
-          motivo_alerta = EXCLUDED.motivo_alerta,
-          status_compensacao = EXCLUDED.status_compensacao,
-          updated_at = NOW()`,
+          data_atualizacao = EXCLUDED.data_atualizacao,
+          entrada_maquininha = EXCLUDED.entrada_maquininha, entrada_pix = EXCLUDED.entrada_pix,
+          entrada_boleto = EXCLUDED.entrada_boleto, entrada_ted = EXCLUDED.entrada_ted,
+          entrada_dinheiro = EXCLUDED.entrada_dinheiro, outras_entradas = EXCLUDED.outras_entradas,
+          total_entradas = EXCLUDED.total_entradas, total_saidas = EXCLUDED.total_saidas,
+          saldo_semanal = EXCLUDED.saldo_semanal, saldo_medio = EXCLUDED.saldo_medio,
+          saldo_final = EXCLUDED.saldo_final, quantidade_transacoes = EXCLUDED.quantidade_transacoes,
+          rating_bacen = EXCLUDED.rating_bacen, rating_interno = EXCLUDED.rating_interno,
+          possui_restricao = EXCLUDED.possui_restricao, restricao_nova = EXCLUDED.restricao_nova,
+          scr_status = EXCLUDED.scr_status, cenprot_status = EXCLUDED.cenprot_status,
+          serasa_status = EXCLUDED.serasa_status, cnd_status = EXCLUDED.cnd_status,
+          pld_aml_status = EXCLUDED.pld_aml_status, coaf_status = EXCLUDED.coaf_status,
+          devolucao_ou_estorno = EXCLUDED.devolucao_ou_estorno, ocorrencia_negativa = EXCLUDED.ocorrencia_negativa,
+          status_semana = EXCLUDED.status_semana, analise_semana = EXCLUDED.analise_semana,
+          orientacao_cliente = EXCLUDED.orientacao_cliente, proxima_acao = EXCLUDED.proxima_acao,
+          faturamento_anual_ref = EXCLUDED.faturamento_anual_ref, teto_anual_movimentacao = EXCLUDED.teto_anual_movimentacao,
+          faturamento_mensal_base = EXCLUDED.faturamento_mensal_base, teto_mensal_movimentacao = EXCLUDED.teto_mensal_movimentacao,
+          referencia_semanal_base = EXCLUDED.referencia_semanal_base, teto_semanal_movimentacao = EXCLUDED.teto_semanal_movimentacao,
+          semanas_no_mes = EXCLUDED.semanas_no_mes, acumulado_mensal = EXCLUDED.acumulado_mensal,
+          acumulado_anual = EXCLUDED.acumulado_anual, valor_abaixo_semana = EXCLUDED.valor_abaixo_semana,
+          valor_excedente_semana = EXCLUDED.valor_excedente_semana,
+          saldo_faltante_ref_mensal = EXCLUDED.saldo_faltante_ref_mensal,
+          saldo_disponivel_teto_mensal = EXCLUDED.saldo_disponivel_teto_mensal,
+          semanas_restantes_mes = EXCLUDED.semanas_restantes_mes,
+          meta_base_dinamica = EXCLUDED.meta_base_dinamica, teto_dinamico_proxima = EXCLUDED.teto_dinamico_proxima,
+          percentual_uso_semanal = EXCLUDED.percentual_uso_semanal,
+          percentual_uso_mensal = EXCLUDED.percentual_uso_mensal, percentual_uso_anual = EXCLUDED.percentual_uso_anual,
+          status_aderencia = EXCLUDED.status_aderencia, alerta_aderencia = EXCLUDED.alerta_aderencia,
+          motivo_alerta_aderencia = EXCLUDED.motivo_alerta_aderencia,
+          diagnostico_tecnico = EXCLUDED.diagnostico_tecnico, updated_at = NOW()
+        RETURNING *`,
         [
-          acompanhamentoId,
-          numeroSemana,
-          b.data_referencia_inicio || null,
-          b.data_referencia_fim || null,
-          totalEntradas,
-          totalSaidas,
-          saldoSemanal,
-          refs.mediaMensal,
-          refs.limiteMensal,
-          refs.mediaSemanal,
-          semanasMes,
-          compensacaoAnterior,
-          comp.entrada_com_compensacao,
-          comp.diferenca_referencia_semanal,
-          comp.compensacao_necessaria_proxima,
-          comp.saldo_faltante_mes,
-          comp.meta_dinamica_proxima_semana,
-          comp.valor_excedente_mes,
-          comp.percentual_limite_semanal,
-          comp.percentual_limite_mensal,
-          comp.percentual_limite_anual,
-          comp.alerta_aderencia,
-          comp.alerta_rating,
-          comp.motivo_alerta_aderencia,
-          statusComp,
+          req.params.id, numeroSemana,
+          b.data_referencia_inicio || null, b.data_referencia_fim || null, b.data_atualizacao || null,
+          entradas.entrada_maquininha, entradas.entrada_pix, entradas.entrada_boleto,
+          entradas.entrada_ted, entradas.entrada_dinheiro, entradas.outras_entradas,
+          totalEntradas, totalSaidas, saldoSemanal,
+          normalizarNumeroAcompanhamento(b.saldo_medio) || 0,
+          normalizarNumeroAcompanhamento(b.saldo_final) || 0,
+          Number(b.quantidade_transacoes || 0),
+          b.rating_bacen || null, b.rating_interno || null,
+          Boolean(b.possui_restricao), Boolean(b.restricao_nova),
+          b.scr_status || null, b.cenprot_status || null, b.serasa_status || null,
+          b.cnd_status || null, b.pld_aml_status || null, b.coaf_status || null,
+          Boolean(b.devolucao_ou_estorno), Boolean(b.ocorrencia_negativa),
+          statusSemana,
+          b.analise_semana || null, b.orientacao_cliente || null, b.proxima_acao || null,
+          colaborador?.id || null,
+          refs.faturamento_anual_ref, refs.teto_anual_movimentacao,
+          refs.faturamento_mensal_base, refs.teto_mensal_movimentacao,
+          refs.referencia_semanal_base, refs.teto_semanal_movimentacao, refs.semanas_no_mes,
+          comp.acumulado_mensal, Number(acumuladoAnual) + totalEntradas,
+          comp.valor_abaixo_semana, comp.valor_excedente_semana,
+          comp.saldo_faltante_ref_mensal, comp.saldo_disponivel_teto_mensal, comp.semanas_restantes_mes,
+          comp.meta_base_dinamica, comp.teto_dinamico_proxima,
+          comp.percentual_uso_semanal, comp.percentual_uso_mensal, comp.percentual_uso_anual,
+          comp.status_aderencia, comp.alerta_aderencia, comp.motivo_alerta_aderencia, diagnostico,
+        ]
+      );
+      // Salvar histórico de compensação
+      await pool.query(
+        `INSERT INTO acompanhamento_compensacoes_historico (
+          acompanhamento_id, numero_semana, data_referencia_inicio, data_referencia_fim,
+          entrada_realizada, faturamento_anual_ref, teto_anual_movimentacao,
+          faturamento_mensal_base, teto_mensal_movimentacao, referencia_semanal_base,
+          teto_semanal_movimentacao, acumulado_mensal, valor_abaixo_semana, valor_excedente_semana,
+          saldo_faltante_ref_mensal, saldo_disponivel_teto_mensal, meta_base_dinamica,
+          teto_dinamico_proxima, percentual_uso_semanal, percentual_uso_mensal, percentual_uso_anual,
+          status_aderencia, alerta_aderencia, motivo_alerta, diagnostico_tecnico, criado_por
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+        ON CONFLICT (acompanhamento_id, numero_semana) DO UPDATE SET
+          entrada_realizada = EXCLUDED.entrada_realizada, acumulado_mensal = EXCLUDED.acumulado_mensal,
+          valor_abaixo_semana = EXCLUDED.valor_abaixo_semana, valor_excedente_semana = EXCLUDED.valor_excedente_semana,
+          status_aderencia = EXCLUDED.status_aderencia, alerta_aderencia = EXCLUDED.alerta_aderencia,
+          motivo_alerta = EXCLUDED.motivo_alerta, diagnostico_tecnico = EXCLUDED.diagnostico_tecnico`,
+        [
+          req.params.id, numeroSemana,
+          b.data_referencia_inicio || null, b.data_referencia_fim || null,
+          totalEntradas, refs.faturamento_anual_ref, refs.teto_anual_movimentacao,
+          refs.faturamento_mensal_base, refs.teto_mensal_movimentacao, refs.referencia_semanal_base,
+          refs.teto_semanal_movimentacao, comp.acumulado_mensal, comp.valor_abaixo_semana, comp.valor_excedente_semana,
+          comp.saldo_faltante_ref_mensal, comp.saldo_disponivel_teto_mensal, comp.meta_base_dinamica,
+          comp.teto_dinamico_proxima, comp.percentual_uso_semanal, comp.percentual_uso_mensal, comp.percentual_uso_anual,
+          comp.status_aderencia, comp.alerta_aderencia, comp.motivo_alerta_aderencia, diagnostico,
           colaborador?.id || null,
         ]
-      ).catch(() => null);
-
+      );
+      // Calcula próxima atualização a partir da data de atualização enviada (ou hoje)
+      const baseDataAtualizacao = b.data_atualizacao
+        ? new Date(String(b.data_atualizacao) + 'T00:00:00Z')
+        : new Date();
+      const prox = proximaQuartaFeira(baseDataAtualizacao);
+      await pool.query(
+        `UPDATE acompanhamentos_bancarios
+            SET rating_bacen_atual = COALESCE($2, rating_bacen_atual),
+                rating_interno_atual = COALESCE($3, rating_interno_atual),
+                ultimo_update_em = NOW(),
+                proxima_atualizacao = $4,
+                updated_at = NOW()
+          WHERE id = $1`,
+        [req.params.id, b.rating_bacen || null, b.rating_interno || null, prox]
+      );
       await dispararN8n("acompanhamento_bancario_atualizado", {
-        acompanhamento_id: acompanhamentoId,
+        acompanhamento_id: req.params.id,
         atualizacao: rows[0],
       });
-
-      res.status(req.method === "PATCH" ? 200 : 201).json(rows[0]);
+      res.status(201).json(rows[0]);
     } catch (err) {
-      console.error(`[${req.method} /api/acompanhamentos-bancarios/:id/atualizacoes]`, err);
+      console.error("[POST /api/acompanhamentos-bancarios/:id/atualizacoes]", err);
       res.status(500).json({ error: "Erro ao registrar atualização semanal." });
-    }
-  };
-
-  app.post("/api/acompanhamentos-bancarios/:id/atualizacoes", auth, requireAcessoAcompanhamento, salvarAtualizacaoSemanal);
-
-  app.patch("/api/acompanhamentos-bancarios/:id/atualizacoes/:semanaIdOuNumero", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
-    try {
-      const chave = req.params.semanaIdOuNumero;
-      const byNumero = /^\d+$/.test(chave);
-
-      const existente = byNumero
-        ? await pool.query(
-            `SELECT id, numero_semana
-               FROM acompanhamento_bancario_atualizacoes
-              WHERE acompanhamento_id = $1
-                AND numero_semana = $2
-              LIMIT 1`,
-            [req.params.id, Number(chave)]
-          )
-        : await pool.query(
-            `SELECT id, numero_semana
-               FROM acompanhamento_bancario_atualizacoes
-              WHERE acompanhamento_id = $1
-                AND id = $2
-              LIMIT 1`,
-            [req.params.id, chave]
-          );
-
-      if (!existente.rows.length) {
-        res.status(404).json({ error: "Atualização semanal não encontrada." });
-        return;
-      }
-
-      req.body.numero_semana = Number(req.body.numero_semana || existente.rows[0].numero_semana);
-      await salvarAtualizacaoSemanal(req, res);
-    } catch (err) {
-      console.error("[PATCH /api/acompanhamentos-bancarios/:id/atualizacoes/:semanaIdOuNumero]", err);
-      res.status(500).json({ error: "Erro ao editar atualização semanal." });
     }
   });
 
-  app.delete("/api/acompanhamentos-bancarios/:id/atualizacoes/:semanaIdOuNumero", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+  app.delete("/api/acompanhamentos-bancarios/:id/atualizacoes/:numeroSemana", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     const client = await pool.connect();
     try {
-      const chave = req.params.semanaIdOuNumero;
-      const byNumero = /^\d+$/.test(chave);
+      const numeroSemana = Number(req.params.numeroSemana || 0);
+      if (!numeroSemana) {
+        res.status(400).json({ error: "Número da semana inválido." });
+        return;
+      }
 
       await client.query("BEGIN");
 
-      const deleted = byNumero
-        ? await client.query(
-            `DELETE FROM acompanhamento_bancario_atualizacoes
-              WHERE acompanhamento_id = $1
-                AND numero_semana = $2
-              RETURNING *`,
-            [req.params.id, Number(chave)]
-          )
-        : await client.query(
-            `DELETE FROM acompanhamento_bancario_atualizacoes
-              WHERE acompanhamento_id = $1
-                AND id = $2
-              RETURNING *`,
-            [req.params.id, chave]
-          );
+      const deleted = await client.query(
+        `DELETE FROM acompanhamento_bancario_atualizacoes
+          WHERE acompanhamento_id = $1
+            AND numero_semana = $2
+          RETURNING *`,
+        [req.params.id, numeroSemana]
+      );
 
       if (!deleted.rows.length) {
         await client.query("ROLLBACK");
         res.status(404).json({ error: "Atualização semanal não encontrada." });
         return;
       }
-
-      await client.query(
-        `DELETE FROM acompanhamento_compensacoes_historico
-          WHERE acompanhamento_id = $1
-            AND numero_semana = $2`,
-        [req.params.id, deleted.rows[0].numero_semana]
-      ).catch(() => null);
 
       const ultima = await client.query(
         `SELECT *
@@ -7932,13 +7881,9 @@ ${(temTest1 || temTest2) ? `
         );
       } else {
         const acompanhamento = await client.query(
-          `SELECT data_inicio
-             FROM acompanhamentos_bancarios
-            WHERE id = $1
-            LIMIT 1`,
+          `SELECT data_inicio FROM acompanhamentos_bancarios WHERE id = $1 LIMIT 1`,
           [req.params.id]
         );
-
         const dataInicio = acompanhamento.rows[0]?.data_inicio || new Date().toISOString().slice(0, 10);
         await client.query(
           `UPDATE acompanhamentos_bancarios
@@ -7954,7 +7899,7 @@ ${(temTest1 || temTest2) ? `
       res.json({ success: true, deleted: deleted.rows[0] });
     } catch (err) {
       await client.query("ROLLBACK");
-      console.error("[DELETE /api/acompanhamentos-bancarios/:id/atualizacoes/:semanaIdOuNumero]", err);
+      console.error("[DELETE /api/acompanhamentos-bancarios/:id/atualizacoes/:numeroSemana]", err);
       res.status(500).json({ error: "Erro ao apagar atualização semanal." });
     } finally {
       client.release();
@@ -8007,40 +7952,6 @@ ${(temTest1 || temTest2) ? `
       res.status(500).json({ error: "Erro ao apagar acompanhamento bancário." });
     } finally {
       client.release();
-    }
-  });
-
-
-  app.get("/api/acompanhamentos-bancarios/:id/compensacoes", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
-    try {
-      const { rows } = await pool.query(
-        `SELECT *
-           FROM acompanhamento_compensacoes_historico
-          WHERE acompanhamento_id = $1
-          ORDER BY numero_semana ASC, created_at ASC`,
-        [req.params.id]
-      );
-      res.json(rows);
-    } catch (err) {
-      console.error("[GET /api/acompanhamentos-bancarios/:id/compensacoes]", err);
-      res.status(500).json({ error: "Erro ao buscar histórico de compensações." });
-    }
-  });
-
-  app.get("/api/acompanhamentos-bancarios/:id/alertas-aderencia", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
-    try {
-      const { rows } = await pool.query(
-        `SELECT *
-           FROM acompanhamento_compensacoes_historico
-          WHERE acompanhamento_id = $1
-            AND (alerta_aderencia = true OR alerta_rating = true)
-          ORDER BY numero_semana DESC, created_at DESC`,
-        [req.params.id]
-      );
-      res.json(rows);
-    } catch (err) {
-      console.error("[GET /api/acompanhamentos-bancarios/:id/alertas-aderencia]", err);
-      res.status(500).json({ error: "Erro ao buscar alertas de aderência financeira." });
     }
   });
 

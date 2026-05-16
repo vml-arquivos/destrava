@@ -361,30 +361,55 @@ function atualizacoesOrdenadas(row: Acompanhamento): any[] {
     .sort((a: any, b: any) => Number(a.numero_semana || 0) - Number(b.numero_semana || 0));
 }
 
+/**
+ * REGRA INEGOCIÁVEL: A semana em evidência é SEMPRE a semana da data atual.
+ *
+ * Lógica:
+ * 1. Procura a semana cujo período (início–fim) contém hoje.
+ *    → Se encontrada, essa é a semana atual (mesmo que ainda não tenha sido
+ *      alimentada na quarta-feira — ela existe no sistema e está em andamento).
+ * 2. Se hoje não está dentro de nenhum período registrado, exibe a última
+ *    semana cujo fim já passou (semana mais recente encerrada).
+ * 3. NUNCA exibe semana futura (início > hoje).
+ * 4. A alimentação ocorre toda quarta-feira; antes disso, a semana em curso
+ *    pode aparecer sem dados completos — isso é esperado.
+ */
 function getSemanaAtual(row: Acompanhamento): any | null {
   const atualizacoes = atualizacoesOrdenadas(row);
   if (!atualizacoes.length) return null;
 
   const hoje = todayLocal();
 
-  // Regra operacional: a semana em evidência é a última semana consolidada.
-  // Semana futura ou ainda em andamento não deve ser tratada como atual,
-  // para não distorcer saldo, status, diagnóstico e PDF.
-  const semanasConsolidadas = atualizacoes.filter((semana) => {
+  // Passo 1: semana cujo período contém hoje (início <= hoje <= fim)
+  const semanaEmCurso = atualizacoes.find((semana) => {
     const inicio = parseDateLocal(semana?.data_referencia_inicio);
     const fim = parseDateLocal(semana?.data_referencia_fim);
-
     if (!inicio || !fim) return false;
     if (fim < inicio) return false;
+    // Semana futura: bloqueada
     if (inicio > hoje) return false;
-
-    return fim <= hoje;
+    // Hoje está dentro do período
+    return inicio <= hoje && hoje <= fim;
   });
 
-  if (semanasConsolidadas.length) {
-    return semanasConsolidadas[semanasConsolidadas.length - 1];
+  if (semanaEmCurso) return semanaEmCurso;
+
+  // Passo 2: semanas encerradas (fim < hoje) — retorna a mais recente
+  const semanasEncerradas = atualizacoes.filter((semana) => {
+    const inicio = parseDateLocal(semana?.data_referencia_inicio);
+    const fim = parseDateLocal(semana?.data_referencia_fim);
+    if (!inicio || !fim) return false;
+    if (fim < inicio) return false;
+    // Nunca futura
+    if (inicio > hoje) return false;
+    return fim < hoje;
+  });
+
+  if (semanasEncerradas.length) {
+    return semanasEncerradas[semanasEncerradas.length - 1];
   }
 
+  // Passo 3: nenhuma semana válida para hoje
   return null;
 }
 
@@ -542,7 +567,7 @@ function exportarCSV(row: Acompanhamento, prestadoraKey: PrestadoraKey = "destra
   </div>
 
   <div class="section">
-    <div class="section-title">Semana consolidada em evidência</div>
+    <div class="section-title">Semana atual em evidência (data de hoje)</div>
     <div class="grid">
       <div class="card featured"><div class="label">Semana atual</div><div class="value">Semana ${safe(semanaAtual?.numero_semana || "-")}</div></div>
       <div class="card featured"><div class="label">Período</div><div class="value">${safe(formatDateBR(semanaAtual?.data_referencia_inicio))} a ${safe(formatDateBR(semanaAtual?.data_referencia_fim))}</div></div>
@@ -986,14 +1011,15 @@ export default function AcompanhamentoBancario() {
         saldo_semanal: saldoSemanal,
         status_semana: statusSemanaCalculado,
       };
-      const response = await fetch(
-        `/api/acompanhamentos-bancarios/${updOpen.id}/atualizacoes`,
-        {
-          method: "POST",
-          headers: authHeaders(),
-          body: JSON.stringify(payload),
-        }
-      );
+      const url = editandoSemanaNumero
+        ? `/api/acompanhamentos-bancarios/${updOpen.id}/atualizacoes/${editandoSemanaNumero}`
+        : `/api/acompanhamentos-bancarios/${updOpen.id}/atualizacoes`;
+      const method = editandoSemanaNumero ? "PATCH" : "POST";
+      const response = await fetch(url, {
+        method,
+        headers: authHeaders(),
+        body: JSON.stringify(payload),
+      });
       if (!response.ok) {
         const errorText = await response.text().catch(() => "");
         alert(`Erro ao ${editandoSemanaNumero ? "editar a semana" : "salvar atualização"}. ${errorText}`);
@@ -1368,8 +1394,28 @@ export default function AcompanhamentoBancario() {
     font-size: 7.2pt;
   }
   @media print {
-    html, body { width: 281mm !important; height: auto !important; overflow: visible !important; }
-    .page { width: 281mm !important; max-width: 281mm !important; margin: 0 !important; }
+    html, body {
+      width: 281mm !important;
+      height: auto !important;
+      overflow: visible !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    .page {
+      width: 281mm !important;
+      max-width: 281mm !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      box-shadow: none !important;
+    }
+    /* Evitar duplicidade: garantir que o conteúdo não seja repetido */
+    body > * { display: block !important; }
+    body > main { display: block !important; }
+    /* Forçar quebra de página apenas onde explicitamente solicitado */
+    table { page-break-inside: auto; }
+    tr { page-break-inside: avoid; page-break-after: auto; }
+    thead { display: table-header-group; }
+    tfoot { display: table-footer-group; }
   }
 </style>
 </head>
@@ -1386,7 +1432,7 @@ export default function AcompanhamentoBancario() {
     </header>
 
     <section class="current">
-      <h3 class="section-title">Semana consolidada em evidência</h3>
+      <h3 class="section-title">Semana atual em evidência (data de hoje)</h3>
       <div class="grid-6">
         <div class="item"><b>Semana</b>${semanaAtual ? `Semana ${htmlEscape(semanaAtual.numero_semana)}` : "-"}</div>
         <div class="item"><b>Período</b>${htmlEscape(formatDateBR(semanaAtual?.data_referencia_inicio))} a ${htmlEscape(formatDateBR(semanaAtual?.data_referencia_fim))}</div>
@@ -1700,7 +1746,7 @@ export default function AcompanhamentoBancario() {
                   <th className="px-3 py-3">Rating</th>
                   <th className="px-3 py-3">Última atualização</th>
                   <th className="px-3 py-3">Próxima atualização</th>
-                  <th className="px-3 py-3 text-right">Saldo última semana</th>
+                  <th className="px-3 py-3 text-right">Saldo semana atual</th>
                   <th className="px-3 py-3">Status</th>
                   <th className="px-3 py-3">Responsável</th>
                 </tr>
@@ -2204,8 +2250,8 @@ export default function AcompanhamentoBancario() {
                       <div className="rounded-2xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-white p-4 shadow-sm xl:col-span-2">
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                           <div>
-                            <h4 className="text-sm font-bold uppercase tracking-wide text-amber-700">Semana consolidada em evidência</h4>
-                            <p className="text-xs text-amber-700/80">Última semana consolidada pela data de fechamento do período.</p>
+                            <h4 className="text-sm font-bold uppercase tracking-wide text-amber-700">Semana atual em evidência</h4>
+                            <p className="text-xs text-amber-700/80">Semana da data de hoje. Semanas futuras nunca aparecem. Alimentação toda quarta-feira.</p>
                           </div>
                           <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(semanaAtual?.status_semana || semanaAtual?.status)}`}>
                             {labelStatus(semanaAtual?.status_semana || semanaAtual?.status)}
@@ -2239,14 +2285,65 @@ export default function AcompanhamentoBancario() {
                     </section>
                   );
                 })()}
-
+                {/* ── Painel de Aderência Financeira ─────────────────────────────── */}
                 {(() => {
                   const semanaAtual = getSemanaAtual(detalhe);
-                  return semanaAtual ? (
-                    <CompensacaoSemanalCard semana={semanaAtual} />
-                  ) : null;
+                  if (!semanaAtual) return null;
+                  const refSemanal = Number(semanaAtual.referencia_semanal_base || 0);
+                  const tetoSemanal = Number(semanaAtual.teto_semanal_movimentacao || 0);
+                  const refMensal = Number(semanaAtual.faturamento_mensal_base || 0);
+                  const tetoMensal = Number(semanaAtual.teto_mensal_movimentacao || 0);
+                  const acumuladoMensal = Number(semanaAtual.acumulado_mensal || 0);
+                  const pctSemanal = Number(semanaAtual.percentual_uso_semanal || 0);
+                  const pctMensal = Number(semanaAtual.percentual_uso_mensal || 0);
+                  const pctAnual = Number(semanaAtual.percentual_uso_anual || 0);
+                  const statusAd = semanaAtual.status_aderencia || '';
+                  const alerta = Boolean(semanaAtual.alerta_aderencia);
+                  const motivo = semanaAtual.motivo_alerta_aderencia || '';
+                  const diagnostico = semanaAtual.diagnostico_tecnico || '';
+                  const metaDinamica = Number(semanaAtual.meta_base_dinamica || 0);
+                  const tetoDinamico = Number(semanaAtual.teto_dinamico_proxima || 0);
+                  const semanasRestantes = Number(semanaAtual.semanas_restantes_mes || 0);
+                  if (!refSemanal && !tetoSemanal) return null;
+                  const corStatus = statusAd === 'dentro_da_faixa' ? 'emerald' : statusAd === 'abaixo_da_referencia' ? 'amber' : 'red';
+                  const labelAd = statusAd === 'dentro_da_faixa' ? 'Dentro da faixa' : statusAd === 'abaixo_da_referencia' ? 'Abaixo da referência' : statusAd === 'acima_do_teto' ? 'Acima do teto' : statusAd === 'critico' ? 'Crítico' : 'Aguardando';
+                  return (
+                    <section className={`rounded-2xl border-2 p-4 shadow-sm ${ alerta ? 'border-red-300 bg-red-50' : 'border-emerald-200 bg-emerald-50/40' }`}>
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h4 className="text-sm font-bold uppercase tracking-wide text-slate-700">Aderência Financeira — Semana {semanaAtual.numero_semana}</h4>
+                          <p className="text-xs text-slate-500">Referência: faturamento anual × 130% ÷ 12 ÷ semanas do mês</p>
+                        </div>
+                        <span className={`rounded-full border px-3 py-1 text-xs font-semibold bg-${corStatus}-50 text-${corStatus}-700 border-${corStatus}-200`}>{labelAd}</span>
+                      </div>
+                      {alerta && motivo && (
+                        <div className="mb-3 rounded-xl border border-red-200 bg-white/80 p-3 text-xs text-red-800">{motivo}</div>
+                      )}
+                      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                        <InfoCard label="Ref. semanal base" value={moneyBR(refSemanal)} />
+                        <InfoCard label="Teto semanal" value={moneyBR(tetoSemanal)} />
+                        <InfoCard label="Ref. mensal base" value={moneyBR(refMensal)} />
+                        <InfoCard label="Teto mensal" value={moneyBR(tetoMensal)} />
+                        <InfoCard label="Acumulado mensal" value={moneyBR(acumuladoMensal)} positive={acumuladoMensal >= refMensal} negative={acumuladoMensal > tetoMensal} />
+                        <InfoCard label="Uso semanal" value={`${pctSemanal.toFixed(1)}%`} negative={pctSemanal > 130} positive={pctSemanal >= 80 && pctSemanal <= 130} />
+                        <InfoCard label="Uso mensal" value={`${pctMensal.toFixed(1)}%`} negative={pctMensal > 100} positive={pctMensal >= 70 && pctMensal <= 100} />
+                        <InfoCard label="Uso anual" value={`${pctAnual.toFixed(1)}%`} negative={pctAnual > 100} positive={pctAnual >= 70 && pctAnual <= 100} />
+                      </div>
+                      {semanasRestantes > 0 && (
+                        <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
+                          <InfoCard label="Semanas restantes" value={`${semanasRestantes}`} />
+                          <InfoCard label="Meta dinâmica/semana" value={moneyBR(metaDinamica)} />
+                          <InfoCard label="Teto dinâmico/semana" value={moneyBR(tetoDinamico)} />
+                        </div>
+                      )}
+                      {diagnostico && (
+                        <div className="mt-3 rounded-xl border border-slate-200 bg-white/70 p-3 text-xs text-slate-700">
+                          <strong className="text-slate-500">Diagnóstico técnico:</strong> {diagnostico}
+                        </div>
+                      )}
+                    </section>
+                  );
                 })()}
-
                 <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                     <div>
