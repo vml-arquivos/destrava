@@ -1170,42 +1170,84 @@ export default function AcompanhamentoBancario() {
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
 
-  const gerarHtmlRelatorioA4 = (acomp: Acompanhamento, prestadora: PrestadoraKey) => {
+    const gerarHtmlRelatorioA4 = (acomp: Acompanhamento, prestadora: PrestadoraKey) => {
     const meta = prestadoraMeta(prestadora);
     const semanaAtual = getSemanaAtual(acomp);
     const evolucao = calcularEvolucaoAcompanhamento(acomp);
-    const atualizacoes = Array.isArray(acomp.atualizacoes) ? acomp.atualizacoes : [];
+    // REGRA: somente semanas cuja data de início <= hoje (nunca futuras)
+    const hoje = todayLocal();
+    const atualizacoes = (Array.isArray(acomp.atualizacoes) ? acomp.atualizacoes : [])
+      .filter((s: any) => {
+        const ini = parseDateLocal(s?.data_referencia_inicio);
+        return !ini || ini <= hoje;
+      })
+      .sort((a: any, b: any) => Number(a.numero_semana || 0) - Number(b.numero_semana || 0));
     const saldoAtual = Number(semanaAtual?.saldo_semanal || 0);
     const logoBlock = meta.logoUrl
       ? `<img src="${htmlEscape(meta.logoUrl)}" alt="${htmlEscape(meta.logoAlt)}" />`
       : `<strong>${htmlEscape(meta.marca)}</strong>`;
 
+    // Fallback de cálculo de aderência por semana (quando migration 025 não foi aplicada)
+    const fatAnual = Number(acomp.faturamento_anual || 0);
+    const semanasMes = 4;
+    const tetoMensalBase = fatAnual > 0 ? Math.round((fatAnual / 12 * 1.30) * 100) / 100 : 0;
+    const refSemanalBase = fatAnual > 0 ? Math.round((tetoMensalBase / semanasMes) * 100) / 100 : 0;
+
+    // Acumulados mensais por mês
+    const acumuladosPorMes: Record<string, number> = {};
+    for (const s of atualizacoes) {
+      const mes = (s.data_referencia_inicio || '').slice(0, 7);
+      if (mes) {
+        const ent = Number(s.total_entradas || 0) || totalEntradasSemana(s);
+        acumuladosPorMes[mes] = (acumuladosPorMes[mes] || 0) + ent;
+      }
+    }
+
     const rows = atualizacoes.length
       ? atualizacoes.map((item: any) => {
           const saldo = Number(item.saldo_semanal || 0);
+          const entradas = Number(item.total_entradas || 0) || totalEntradasSemana(item);
+          const isAtual = Number(item.numero_semana) === Number(semanaAtual?.numero_semana);
+          // Aderência: usa campos do banco ou calcula fallback
+          const refSem = Number(item.referencia_semanal_base || 0) || refSemanalBase;
+          const tetoSem = Number(item.teto_semanal_movimentacao || 0) || refSemanalBase;
+          const pctSem = refSem > 0 ? Number(item.percentual_uso_semanal || 0) || Math.round((entradas / refSem) * 1000) / 10 : 0;
+          const mes = (item.data_referencia_inicio || '').slice(0, 7);
+          const acumMes = Number(item.acumulado_mensal || 0) || (acumuladosPorMes[mes] || 0);
+          const tetoMes = Number(item.teto_mensal_movimentacao || 0) || tetoMensalBase;
+          const pctMes = tetoMes > 0 ? Number(item.percentual_uso_mensal || 0) || Math.round((acumMes / tetoMes) * 1000) / 10 : 0;
+          const statusAd = item.status_aderencia || (pctSem > 130 ? 'acima_do_teto' : pctSem < 50 ? 'abaixo_da_referencia' : 'dentro_da_faixa');
+          const alertaAd = Boolean(item.alerta_aderencia) || pctSem > 130 || pctSem < 50;
+          const corAd = statusAd === 'dentro_da_faixa' ? '#047857' : statusAd === 'abaixo_da_referencia' ? '#b45309' : '#dc2626';
+          const labelAd = statusAd === 'dentro_da_faixa' ? '✔ OK' : statusAd === 'abaixo_da_referencia' ? '▼ Baixo' : '▲ Alto';
+          const rowStyle = isAtual ? 'background:#fff9df;font-weight:bold;' : '';
           return `
-            <tr>
-              <td class="center">${htmlEscape(item.numero_semana || "-")}</td>
-              <td>${htmlEscape(formatDateBR(item.data_referencia_inicio))}<br/>a ${htmlEscape(formatDateBR(item.data_referencia_fim))}</td>
-              <td>${htmlEscape(moneyBR(item.entrada_maquininha))}</td>
-              <td>${htmlEscape(moneyBR(item.entrada_pix))}</td>
-              <td>${htmlEscape(moneyBR(item.entrada_boleto))}</td>
-              <td>${htmlEscape(moneyBR(item.entrada_ted))}</td>
-              <td>${htmlEscape(moneyBR(item.entrada_dinheiro))}</td>
-              <td>${htmlEscape(moneyBR(item.outras_entradas))}</td>
-              <td class="strong green">${htmlEscape(moneyBR(item.total_entradas || totalEntradasSemana(item)))}</td>
-              <td class="red">${htmlEscape(moneyBR(item.total_saidas))}</td>
-              <td class="${saldo < 0 ? "red" : "green"} strong">${htmlEscape(moneyBR(saldo))}</td>
-              <td>${htmlEscape(item.rating_bacen || "-")}</td>
-              <td>${htmlEscape(item.rating_interno || "-")}</td>
+            <tr style="${rowStyle}">
+              <td class="center" style="${isAtual ? 'color:#92400e;font-weight:bold;' : ''}">${htmlEscape(item.numero_semana || "-")}${isAtual ? '<br/><span style="font-size:5.5pt;color:#92400e;">● Atual</span>' : ''}</td>
+              <td style="font-size:6.5pt;">${htmlEscape(formatDateBR(item.data_referencia_inicio))}<br/>a ${htmlEscape(formatDateBR(item.data_referencia_fim))}</td>
+              <td class="right">${htmlEscape(moneyBR(item.entrada_maquininha))}</td>
+              <td class="right">${htmlEscape(moneyBR(item.entrada_pix))}</td>
+              <td class="right">${htmlEscape(moneyBR(item.entrada_boleto))}</td>
+              <td class="right">${htmlEscape(moneyBR(item.entrada_ted))}</td>
+              <td class="right">${htmlEscape(moneyBR(item.entrada_dinheiro))}</td>
+              <td class="right">${htmlEscape(moneyBR(item.outras_entradas))}</td>
+              <td class="right strong green">${htmlEscape(moneyBR(entradas))}</td>
+              <td class="right red">${htmlEscape(moneyBR(item.total_saidas))}</td>
+              <td class="right ${saldo < 0 ? 'red' : 'green'} strong">${htmlEscape(moneyBR(saldo))}</td>
+              <td class="right" style="font-size:6pt;">${htmlEscape(moneyBR(item.saldo_medio))}</td>
+              <td class="center">${htmlEscape(item.rating_bacen || "-")}</td>
+              <td class="center">${htmlEscape(item.rating_interno || "-")}</td>
+              <td class="right" style="font-size:6pt;">${htmlEscape(moneyBR(refSem))}</td>
+              <td class="right ${pctSem > 130 ? 'red' : pctSem < 50 ? 'amber' : 'green'}">${htmlEscape(pctSem.toFixed(1))}%</td>
+              <td class="right" style="font-size:6pt;">${htmlEscape(pctMes.toFixed(1))}%</td>
+              <td class="center" style="color:${corAd};font-weight:bold;font-size:6.5pt;">${alertaAd ? '⚠ ' : ''}${labelAd}</td>
               <td>${htmlEscape(labelStatus(item.status_semana || item.status || "-"))}</td>
             </tr>
           `;
         }).join("")
-      : `<tr><td colspan="14">Nenhuma atualização registrada.</td></tr>`;
-
-    const analises = atualizacoes.length
-      ? atualizacoes.map((item: any) => `
+      : `<tr><td colspan="18">Nenhuma atualização registrada.</td></tr>`;
+    const analises = atualizacoes.filter((item: any) => item.analise_semana || item.orientacao_cliente || item.proxima_acao).length
+      ? atualizacoes.filter((item: any) => item.analise_semana || item.orientacao_cliente || item.proxima_acao).map((item: any) => `
         <div class="analysis-row">
           <strong>Semana ${htmlEscape(item.numero_semana || "-")}</strong>
           <span><b>Análise:</b> ${htmlEscape(item.analise_semana || "-")}</span>
@@ -1214,6 +1256,34 @@ export default function AcompanhamentoBancario() {
         </div>
       `).join("")
       : `<div class="analysis-row">Nenhuma análise semanal registrada.</div>`;
+
+
+    // === Cálculos de aderência para o PDF (fallback sem migration 025) ===
+    const pdfFatAno = Number(acomp.faturamento_anual || 0);
+    const pdfTetoMesRef = pdfFatAno > 0 ? Math.round((pdfFatAno / 12 * 1.30) * 100) / 100 : 0;
+    const pdfRefSemRef = pdfFatAno > 0 ? Math.round((pdfTetoMesRef / 4) * 100) / 100 : 0;
+    const pdfMediaMesRef = pdfFatAno > 0 ? Math.round((pdfFatAno / 12) * 100) / 100 : 0;
+    const pdfEntradasSemAtual = totalEntradasSemana(semanaAtual);
+    const pdfMesSemAtual = semanaAtual?.data_referencia_inicio?.slice(0, 7) || '';
+    const pdfAcumMesAtual = atualizacoes
+      .filter((s: any) => (s.data_referencia_inicio || '').slice(0, 7) === pdfMesSemAtual)
+      .reduce((acc: number, s: any) => acc + (Number(s.total_entradas || 0) || totalEntradasSemana(s)), 0);
+    const pdfRefSemFinal = Number(semanaAtual?.referencia_semanal_base || 0) || pdfRefSemRef;
+    const pdfTetoMesFinal = Number(semanaAtual?.teto_mensal_movimentacao || 0) || pdfTetoMesRef;
+    const pdfMediaMesFinal = Number(semanaAtual?.faturamento_mensal_base || 0) || pdfMediaMesRef;
+    const pdfAcumMesFinal = Number(semanaAtual?.acumulado_mensal || 0) || pdfAcumMesAtual;
+    const pdfPctSemFinal = pdfRefSemFinal > 0 ? Number(semanaAtual?.percentual_uso_semanal || 0) || Math.round((pdfEntradasSemAtual / pdfRefSemFinal) * 1000) / 10 : 0;
+    const pdfPctMesFinal = pdfTetoMesFinal > 0 ? Number(semanaAtual?.percentual_uso_mensal || 0) || Math.round((pdfAcumMesFinal / pdfTetoMesFinal) * 1000) / 10 : 0;
+    const pdfStatusAdFinal = semanaAtual?.status_aderencia || (pdfPctSemFinal > 130 ? 'acima_do_teto' : pdfPctSemFinal < 50 ? 'abaixo_da_referencia' : 'dentro_da_faixa');
+    const pdfAlertaFinal = Boolean(semanaAtual?.alerta_aderencia) || pdfPctSemFinal > 130 || pdfPctSemFinal < 50;
+    const pdfMotivoFinal = semanaAtual?.motivo_alerta_aderencia || (pdfPctSemFinal > 130 ? `Movimentação acima do teto semanal (${pdfPctSemFinal.toFixed(1)}%). Reduza nas próximas semanas.` : pdfPctSemFinal < 50 ? `Movimentação muito abaixo da referência (${pdfPctSemFinal.toFixed(1)}%). Aumente para manter o padrão.` : '');
+    const pdfDiagFinal = semanaAtual?.diagnostico_tecnico || semanaAtual?.diagnostico_compensacao || '';
+    const pdfCorAdFinal = pdfStatusAdFinal === 'dentro_da_faixa' ? '#047857' : pdfStatusAdFinal === 'abaixo_da_referencia' ? '#b45309' : '#dc2626';
+    const pdfLabelAdFinal = pdfStatusAdFinal === 'dentro_da_faixa' ? '✔ Dentro da faixa' : pdfStatusAdFinal === 'abaixo_da_referencia' ? '▼ Abaixo da referência' : '▲ Acima do teto';
+    const pdfPctAnualFinal = Number(semanaAtual?.percentual_uso_anual || 0);
+    const pdfMetaDinamica = Number(semanaAtual?.meta_base_dinamica || 0) || pdfRefSemFinal;
+    const pdfTetoDinamico = Number(semanaAtual?.teto_dinamico_proxima || 0) || pdfRefSemFinal;
+    const pdfSemanasRestantes = semanaAtual?.semanas_restantes_mes || '-';
 
     return `<!doctype html>
 <html lang="pt-BR">
@@ -1335,9 +1405,11 @@ export default function AcompanhamentoBancario() {
   }
   tr { page-break-inside: avoid; }
   .center { text-align: center; }
+  .right { text-align: right; }
   .strong { font-weight: 700; }
   .green { color: #047857; }
   .red { color: #dc2626; }
+  .amber { color: #b45309; }
   .note {
     margin-top: 4mm;
     padding: 3.2mm;
@@ -1394,13 +1466,22 @@ export default function AcompanhamentoBancario() {
     font-size: 7.2pt;
   }
   @media print {
-    html, body {
+    @page { size: A4 landscape; margin: 8mm; }
+    html {
+      width: 281mm !important;
+      height: auto !important;
+    }
+    body {
       width: 281mm !important;
       height: auto !important;
       overflow: visible !important;
       margin: 0 !important;
       padding: 0 !important;
+      /* Garantir que não haja duplicidade: body só tem um filho (main.page) */
     }
+    /* Apenas o main.page é visível; nada mais no body */
+    body > * { display: none !important; }
+    body > main.page { display: block !important; }
     .page {
       width: 281mm !important;
       max-width: 281mm !important;
@@ -1408,14 +1489,13 @@ export default function AcompanhamentoBancario() {
       padding: 0 !important;
       box-shadow: none !important;
     }
-    /* Evitar duplicidade: garantir que o conteúdo não seja repetido */
-    body > * { display: block !important; }
-    body > main { display: block !important; }
-    /* Forçar quebra de página apenas onde explicitamente solicitado */
     table { page-break-inside: auto; }
     tr { page-break-inside: avoid; page-break-after: auto; }
     thead { display: table-header-group; }
     tfoot { display: table-footer-group; }
+    .signatures { page-break-inside: avoid; }
+    .declaration { page-break-inside: avoid; }
+    .current { page-break-inside: avoid; }
   }
 </style>
 </head>
@@ -1443,25 +1523,25 @@ export default function AcompanhamentoBancario() {
       </div>
     </section>
 
-    <section class="kpis">
-      <div class="kpi"><b>Média mensal base</b><strong>${htmlEscape(moneyBR(semanaAtual?.media_mensal_referencia || acomp.media_mensal))}</strong></div>
-      <div class="kpi"><b>Teto mensal +30%</b><strong>${htmlEscape(moneyBR(semanaAtual?.limite_mensal_referencia || acomp.margem_seguranca_30))}</strong></div>
-      <div class="kpi"><b>Meta semanal</b><strong>${htmlEscape(moneyBR(semanaAtual?.media_semanal_referencia))}</strong></div>
-      <div class="kpi"><b>Entrada compensada</b><strong>${htmlEscape(moneyBR(semanaAtual?.entrada_com_compensacao))}</strong></div>
-      <div class="kpi"><b>Diferença referência</b><strong>${htmlEscape(moneyBR(semanaAtual?.diferenca_referencia_semanal))}</strong></div>
-      <div class="kpi"><b>Meta dinâmica próxima</b><strong>${htmlEscape(moneyBR(semanaAtual?.meta_dinamica_proxima_semana))}</strong></div>
-    </section>
 
-    <section class="kpis">
-      <div class="kpi"><b>Saldo faltante mês</b><strong>${htmlEscape(moneyBR(semanaAtual?.saldo_faltante_mes))}</strong></div>
-      <div class="kpi"><b>Valor excedente</b><strong>${htmlEscape(moneyBR(semanaAtual?.valor_excedente_mes))}</strong></div>
-      <div class="kpi"><b>Uso semanal</b><strong>${htmlEscape(`${Number(semanaAtual?.percentual_limite_semanal || 0).toFixed(2).replace(".", ",")}%`)}</strong></div>
-      <div class="kpi"><b>Uso mensal</b><strong>${htmlEscape(`${Number(semanaAtual?.percentual_limite_mensal || 0).toFixed(2).replace(".", ",")}%`)}</strong></div>
-      <div class="kpi"><b>Uso anual</b><strong>${htmlEscape(`${Number(semanaAtual?.percentual_limite_anual || 0).toFixed(2).replace(".", ",")}%`)}</strong></div>
-      <div class="kpi"><b>Status dinâmico</b><strong>${htmlEscape(labelStatus(semanaAtual?.status_compensacao || "-"))}</strong></div>
+    <section class="kpis" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:3mm;padding:3mm;margin-top:5mm;">
+      <div class="kpi" style="background:#fff;"><b>Faturamento anual</b><strong>${htmlEscape(moneyBR(pdfFatAno))}</strong></div>
+      <div class="kpi" style="background:#fff;"><b>Média mensal</b><strong>${htmlEscape(moneyBR(pdfMediaMesFinal))}</strong></div>
+      <div class="kpi" style="background:#fff;"><b>Teto mensal (+30%)</b><strong>${htmlEscape(moneyBR(pdfTetoMesFinal))}</strong></div>
+      <div class="kpi" style="background:#fff;"><b>Referência semanal</b><strong>${htmlEscape(moneyBR(pdfRefSemFinal))}</strong></div>
+      <div class="kpi" style="background:#fff;"><b>Acumulado mês</b><strong>${htmlEscape(moneyBR(pdfAcumMesFinal))}</strong></div>
+      <div class="kpi" style="background:#fff;color:${pdfCorAdFinal};"><b>Status aderência</b><strong>${pdfAlertaFinal ? '⚠ ' : ''}${pdfLabelAdFinal}</strong></div>
     </section>
-
-    ${semanaAtual?.diagnostico_compensacao ? `<div class="note"><b>Diagnóstico de compensação:</b><br/>${htmlEscape(semanaAtual.diagnostico_compensacao).replace(/\n/g, "<br/>")}</div>` : ""}
+    <section class="kpis">
+      <div class="kpi"><b>Uso semanal</b><strong style="color:${pdfPctSemFinal > 130 ? '#dc2626' : pdfPctSemFinal < 50 ? '#b45309' : '#047857'}">${htmlEscape(pdfPctSemFinal.toFixed(1))}%</strong></div>
+      <div class="kpi"><b>Uso mensal</b><strong style="color:${pdfPctMesFinal > 100 ? '#dc2626' : pdfPctMesFinal < 70 ? '#b45309' : '#047857'}">${htmlEscape(pdfPctMesFinal.toFixed(1))}%</strong></div>
+      <div class="kpi"><b>Uso anual</b><strong>${htmlEscape(pdfPctAnualFinal.toFixed(1))}%</strong></div>
+      <div class="kpi"><b>Meta dinâmica/sem.</b><strong>${htmlEscape(moneyBR(pdfMetaDinamica))}</strong></div>
+      <div class="kpi"><b>Teto dinâmico/sem.</b><strong>${htmlEscape(moneyBR(pdfTetoDinamico))}</strong></div>
+      <div class="kpi"><b>Sem. restantes mês</b><strong>${htmlEscape(String(pdfSemanasRestantes))}</strong></div>
+    </section>
+    ${pdfAlertaFinal && pdfMotivoFinal ? `<div class="note" style="border-color:#fca5a5;background:#fff1f2;"><b>⚠ Alerta de aderência:</b> ${htmlEscape(pdfMotivoFinal)}</div>` : ''}
+    ${pdfDiagFinal ? `<div class="note"><b>Diagnóstico técnico:</b><br/>${htmlEscape(pdfDiagFinal).replace(/\n/g, '<br/>')}</div>` : ''}
 
     <section class="kpis">
       <div class="kpi"><b>Rating Bacen</b><strong>${htmlEscape(acomp.rating_bacen_atual || acomp.rating_bacen_inicial || "-")}</strong></div>
@@ -1481,24 +1561,36 @@ export default function AcompanhamentoBancario() {
       <div class="kpi"><b>Evolução</b><strong>${htmlEscape(evolucao.leitura)}</strong></div>
     </section>
 
-    <h3>Histórico Semanal</h3>
+    <h3>Histórico Semanal — Movimentação e Aderência</h3>
+    <p style="font-size:7pt;color:#64748b;margin:0 0 2mm;">Referência: faturamento anual × 130% ÷ 12 ÷ semanas do mês. Semanas futuras não aparecem.</p>
     <table>
       <thead>
         <tr>
-          <th style="width: 7mm;">Sem.</th>
-          <th style="width: 21mm;">Período</th>
+          <th rowspan="2" style="width: 8mm;">Sem.</th>
+          <th rowspan="2" style="width: 20mm;">Período</th>
+          <th colspan="7" style="text-align:center;background:#d1fae5;color:#065f46;">Entradas</th>
+          <th colspan="3" style="text-align:center;background:#fee2e2;color:#991b1b;">Saídas e Saldos</th>
+          <th colspan="2" style="text-align:center;background:#dbeafe;color:#1e40af;">Rating</th>
+          <th colspan="4" style="text-align:center;background:#fef9c3;color:#92400e;">Aderência Financeira</th>
+          <th rowspan="2" style="width: 14mm;">Status</th>
+        </tr>
+        <tr>
           <th>Máquina</th>
           <th>PIX</th>
           <th>Boleto</th>
           <th>TED</th>
           <th>Dinheiro</th>
           <th>Outras</th>
-          <th>Total</th>
+          <th style="background:#d1fae5;color:#065f46;">Total</th>
           <th>Saídas</th>
           <th>Saldo</th>
-          <th style="width: 10mm;">Bacen</th>
-          <th style="width: 10mm;">Interno</th>
-          <th style="width: 15mm;">Status</th>
+          <th>Saldo méd.</th>
+          <th style="width: 9mm;">Bacen</th>
+          <th style="width: 9mm;">Interno</th>
+          <th style="background:#fef9c3;color:#92400e;">Ref. sem.</th>
+          <th style="background:#fef9c3;color:#92400e;">% sem.</th>
+          <th style="background:#fef9c3;color:#92400e;">% mês</th>
+          <th style="background:#fef9c3;color:#92400e;">Aderência</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
@@ -2180,7 +2272,29 @@ export default function AcompanhamentoBancario() {
                       {labelStatus(detalhe.status_semana || detalhe.status)}
                     </span>
                     <button className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100" onClick={() => abrirEditarAcompanhamento(detalhe)}>Editar acompanhamento</button>
-                    <button className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100" onClick={() => abrirAtualizacao(detalhe)}>Atualizar semana</button>
+                    {/* Botão Atualizar semana: só ativo se a próxima semana já iniciou */}
+                    {(() => {
+                      const campos = calcularCamposSemana(detalhe);
+                      const inicioProxima = parseDateLocal(campos.data_referencia_inicio);
+                      const hoje = todayLocal();
+                      const bloqueado = inicioProxima ? inicioProxima > hoje : false;
+                      return (
+                        <button
+                          className={`rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                            bloqueado
+                              ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                              : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                          }`}
+                          onClick={() => { if (!bloqueado) abrirAtualizacao(detalhe); }}
+                          title={bloqueado
+                            ? `Próxima semana inicia em ${formatDateBR(campos.data_referencia_inicio)} — ainda não chegou`
+                            : 'Registrar dados da semana atual'}
+                          disabled={bloqueado}
+                        >
+                          {bloqueado ? `Aguardando ${formatDateBR(campos.data_referencia_inicio)}` : 'Atualizar semana'}
+                        </button>
+                      );
+                    })()}
                     <button className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100" onClick={() => adicionarOutroBanco(detalhe)}>+ Outro banco</button>
                     <button className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100" onClick={() => exportarCSV(detalhe, prestadoraRelatorio)}>Exportar XLS</button>
                     <button className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-100" onClick={() => { setImprimirOpen(detalhe); setDetalhe(null); }}>Imprimir</button>
@@ -2289,22 +2403,38 @@ export default function AcompanhamentoBancario() {
                 {(() => {
                   const semanaAtual = getSemanaAtual(detalhe);
                   if (!semanaAtual) return null;
-                  const refSemanal = Number(semanaAtual.referencia_semanal_base || 0);
-                  const tetoSemanal = Number(semanaAtual.teto_semanal_movimentacao || 0);
-                  const refMensal = Number(semanaAtual.faturamento_mensal_base || 0);
-                  const tetoMensal = Number(semanaAtual.teto_mensal_movimentacao || 0);
-                  const acumuladoMensal = Number(semanaAtual.acumulado_mensal || 0);
-                  const pctSemanal = Number(semanaAtual.percentual_uso_semanal || 0);
-                  const pctMensal = Number(semanaAtual.percentual_uso_mensal || 0);
+                  // Fallback: calcula aderência direto do faturamento_anual se migration 025 não foi aplicada
+                  const fatAnual = Number(detalhe.faturamento_anual || 0);
+                  const semanasMes = 4;
+                  const refMensalCalc = fatAnual > 0 ? Math.round((fatAnual / 12) * 100) / 100 : 0;
+                  const tetoMensalCalc = fatAnual > 0 ? Math.round((fatAnual / 12 * 1.30) * 100) / 100 : 0;
+                  const refSemanalCalc = fatAnual > 0 ? Math.round((tetoMensalCalc / semanasMes) * 100) / 100 : 0;
+                  const tetoSemanalCalc = refSemanalCalc; // teto = ref (já inclui +30%)
+                  const entradasSemanaAtual = totalEntradasSemana(semanaAtual);
+                  // Acumulado mensal: soma de todas as semanas do mesmo mês
+                  const mesAtual = semanaAtual.data_referencia_inicio?.slice(0, 7) || '';
+                  const acumuladoMensalCalc = Array.isArray(detalhe.atualizacoes)
+                    ? detalhe.atualizacoes
+                        .filter((s: any) => (s.data_referencia_inicio || '').slice(0, 7) === mesAtual)
+                        .reduce((acc: number, s: any) => acc + (Number(s.total_entradas || 0) || totalEntradasSemana(s)), 0)
+                    : 0;
+
+                  const refSemanal = Number(semanaAtual.referencia_semanal_base || 0) || refSemanalCalc;
+                  const tetoSemanal = Number(semanaAtual.teto_semanal_movimentacao || 0) || tetoSemanalCalc;
+                  const refMensal = Number(semanaAtual.faturamento_mensal_base || 0) || refMensalCalc;
+                  const tetoMensal = Number(semanaAtual.teto_mensal_movimentacao || 0) || tetoMensalCalc;
+                  const acumuladoMensal = Number(semanaAtual.acumulado_mensal || 0) || acumuladoMensalCalc;
+                  const pctSemanal = tetoSemanal > 0 ? Number(semanaAtual.percentual_uso_semanal || 0) || Math.round((entradasSemanaAtual / tetoSemanal) * 1000) / 10 : 0;
+                  const pctMensal = tetoMensal > 0 ? Number(semanaAtual.percentual_uso_mensal || 0) || Math.round((acumuladoMensal / tetoMensal) * 1000) / 10 : 0;
                   const pctAnual = Number(semanaAtual.percentual_uso_anual || 0);
-                  const statusAd = semanaAtual.status_aderencia || '';
-                  const alerta = Boolean(semanaAtual.alerta_aderencia);
-                  const motivo = semanaAtual.motivo_alerta_aderencia || '';
+                  const statusAd = semanaAtual.status_aderencia || (pctSemanal > 130 ? 'acima_do_teto' : pctSemanal < 50 ? 'abaixo_da_referencia' : 'dentro_da_faixa');
+                  const alerta = Boolean(semanaAtual.alerta_aderencia) || pctSemanal > 130 || pctSemanal < 50;
+                  const motivo = semanaAtual.motivo_alerta_aderencia || (pctSemanal > 130 ? `Movimentação acima do teto semanal (${pctSemanal.toFixed(1)}%). Reduza nas próximas semanas para compensar.` : pctSemanal < 50 ? `Movimentação muito abaixo da referência (${pctSemanal.toFixed(1)}%). Aumente para manter o padrão.` : '');
                   const diagnostico = semanaAtual.diagnostico_tecnico || '';
-                  const metaDinamica = Number(semanaAtual.meta_base_dinamica || 0);
-                  const tetoDinamico = Number(semanaAtual.teto_dinamico_proxima || 0);
+                  const metaDinamica = Number(semanaAtual.meta_base_dinamica || 0) || refSemanal;
+                  const tetoDinamico = Number(semanaAtual.teto_dinamico_proxima || 0) || tetoSemanal;
                   const semanasRestantes = Number(semanaAtual.semanas_restantes_mes || 0);
-                  if (!refSemanal && !tetoSemanal) return null;
+                  if (!refSemanal && !tetoSemanal && !fatAnual) return null;
                   const corStatus = statusAd === 'dentro_da_faixa' ? 'emerald' : statusAd === 'abaixo_da_referencia' ? 'amber' : 'red';
                   const labelAd = statusAd === 'dentro_da_faixa' ? 'Dentro da faixa' : statusAd === 'abaixo_da_referencia' ? 'Abaixo da referência' : statusAd === 'acima_do_teto' ? 'Acima do teto' : statusAd === 'critico' ? 'Crítico' : 'Aguardando';
                   return (
@@ -2351,13 +2481,19 @@ export default function AcompanhamentoBancario() {
                       <p className="text-xs text-slate-400">Evolução semana a semana — entradas, saídas, saldos e conformidade</p>
                     </div>
                     <span className="text-xs font-medium text-slate-400">
-                      {Array.isArray(detalhe.atualizacoes) ? detalhe.atualizacoes.length : 0} semana(s)
+                      {Array.isArray(detalhe.atualizacoes)
+                        ? detalhe.atualizacoes.filter((s: any) => {
+                            const ini = parseDateLocal(s?.data_referencia_inicio);
+                            return !ini || ini <= todayLocal();
+                          }).length
+                        : 0} semana(s)
                     </span>
                   </div>
 
                   {Array.isArray(detalhe.atualizacoes) && detalhe.atualizacoes.length > 0 ? (
                     <div className="overflow-x-auto">
                       <table className="w-full min-w-[900px] text-xs">
+                        {/* REGRA: semanas futuras nunca aparecem no histórico */}
                         <thead>
                           <tr className="border-b border-slate-200 bg-slate-50">
                             <th className="px-3 py-2.5 text-left font-semibold text-slate-500" rowSpan={2}>Semana</th>
@@ -2391,7 +2527,14 @@ export default function AcompanhamentoBancario() {
                           </tr>
                         </thead>
                         <tbody>
-                          {detalhe.atualizacoes.map((item: any, idx: number) => {
+                          {detalhe.atualizacoes
+                            .filter((item: any) => {
+                              // Bloquear semanas futuras: início > hoje
+                              const inicio = parseDateLocal(item?.data_referencia_inicio);
+                              if (!inicio) return true; // sem data: exibe (pode ser rascunho)
+                              return inicio <= todayLocal();
+                            })
+                            .map((item: any, idx: number) => {
                             const entradas =
                               Number(item.total_entradas || 0) ||
                               Number(item.entrada_maquininha || 0) +

@@ -7841,7 +7841,9 @@ ${(temTest1 || temTest2) ? `
         `DELETE FROM acompanhamento_bancario_atualizacoes
           WHERE acompanhamento_id = $1
             AND numero_semana = $2
-          RETURNING *`,
+          RETURNING id, acompanhamento_id, numero_semana,
+            data_referencia_inicio, data_referencia_fim, data_atualizacao,
+            total_entradas, total_saidas, saldo_semanal, status_semana`,
         [req.params.id, numeroSemana]
       );
 
@@ -7852,7 +7854,9 @@ ${(temTest1 || temTest2) ? `
       }
 
       const ultima = await client.query(
-        `SELECT *
+        `SELECT id, numero_semana, data_referencia_inicio, data_referencia_fim,
+                data_atualizacao, total_entradas, total_saidas, saldo_semanal,
+                rating_bacen, rating_interno, status_semana
            FROM acompanhamento_bancario_atualizacoes
           WHERE acompanhamento_id = $1
           ORDER BY numero_semana DESC, created_at DESC
