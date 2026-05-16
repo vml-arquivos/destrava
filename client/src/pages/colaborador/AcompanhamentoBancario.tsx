@@ -2346,10 +2346,39 @@ export default function AcompanhamentoBancario() {
                     <h4 className="text-sm font-bold uppercase tracking-wide text-blue-700">Recomendação operacional</h4>
                     <p className="mt-2 text-sm leading-6 text-blue-900">{calcularRecomendacao(detalhe)}</p>
                     <div className="mt-4 rounded-xl border border-blue-200 bg-white/70 p-3">
-                      <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">Saldo última semana</div>
-                      <div className={`mt-1 text-lg font-bold ${Number(detalhe.saldo_semanal || 0) < 0 ? "text-red-600" : "text-emerald-700"}`}>
-                        {moneyBR(detalhe.saldo_semanal)}
-                      </div>
+                      {(() => {
+                        // Mostrar saldo da última semana COM DADOS REAIS
+                        // Se a semana atual está zerada (não alimentada), usa a anterior
+                        const semAtual = getSemanaAtual(detalhe);
+                        const entradasAtual = totalEntradasSemana(semAtual);
+                        const semanasOrdenadas = atualizacoesOrdenadas(detalhe);
+                        const hoje = todayLocal();
+                        const semanasComDados = semanasOrdenadas.filter((s: any) => {
+                          const ini = parseDateLocal(s?.data_referencia_inicio);
+                          if (!ini || ini > hoje) return false;
+                          return (Number(s.total_entradas || 0) || totalEntradasSemana(s)) > 0;
+                        });
+                        const semanaComSaldo = semanasComDados.length > 0
+                          ? semanasComDados[semanasComDados.length - 1]
+                          : semAtual;
+                        const saldoExibir = Number(semanaComSaldo?.saldo_semanal || 0);
+                        const naoAlimentada = entradasAtual === 0 && semAtual && semAtual !== semanaComSaldo;
+                        return (
+                          <>
+                            <div className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                              {naoAlimentada ? `Saldo S${semanaComSaldo?.numero_semana || ''} (última com dados)` : 'Saldo semana atual'}
+                            </div>
+                            <div className={`mt-1 text-lg font-bold ${saldoExibir < 0 ? "text-red-600" : "text-emerald-700"}`}>
+                              {moneyBR(saldoExibir)}
+                            </div>
+                            {naoAlimentada && (
+                              <div className="mt-1 text-[10px] text-amber-700 font-medium">
+                                ⏳ S{semAtual?.numero_semana} aguardando alimentação (quarta-feira)
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </section>
@@ -2372,6 +2401,18 @@ export default function AcompanhamentoBancario() {
                           </span>
                         </div>
                         {semanaAtual ? (
+                          <>
+                          {entradasAtual === 0 && (() => {
+                            const ini = parseDateLocal(semanaAtual.data_referencia_inicio);
+                            const fim = parseDateLocal(semanaAtual.data_referencia_fim);
+                            const hj = todayLocal();
+                            const emAndamento = ini && fim && ini <= hj && hj <= fim;
+                            return emAndamento ? (
+                              <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                                ⏳ Semana {semanaAtual.numero_semana} em andamento — dados serão alimentados na próxima quarta-feira
+                              </div>
+                            ) : null;
+                          })()}
                           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                             <InfoCard label="Semana" value={`Semana ${semanaAtual.numero_semana || "-"}`} />
                             <InfoCard label="Período" value={`${formatDateBR(semanaAtual.data_referencia_inicio)} a ${formatDateBR(semanaAtual.data_referencia_fim)}`} />
@@ -2382,6 +2423,7 @@ export default function AcompanhamentoBancario() {
                             <InfoCard label="Rating interno" value={semanaAtual.rating_interno || detalhe.rating_interno_atual || "-"} />
                             <InfoCard label="Atualização" value={formatDateBR(semanaAtual.data_atualizacao || semanaAtual.data_referencia_fim)} />
                           </div>
+                          </>
                         ) : (
                           <div className="rounded-xl border border-dashed border-amber-300 bg-white/70 p-4 text-sm text-amber-800">
                             Nenhuma semana preenchida ainda. Clique em <strong>Atualizar semana</strong> para registrar a primeira atualização.
@@ -2427,18 +2469,30 @@ export default function AcompanhamentoBancario() {
                   const pctSemanal = tetoSemanal > 0 ? Number(semanaAtual.percentual_uso_semanal || 0) || Math.round((entradasSemanaAtual / tetoSemanal) * 1000) / 10 : 0;
                   const pctMensal = tetoMensal > 0 ? Number(semanaAtual.percentual_uso_mensal || 0) || Math.round((acumuladoMensal / tetoMensal) * 1000) / 10 : 0;
                   const pctAnual = Number(semanaAtual.percentual_uso_anual || 0);
-                  const statusAd = semanaAtual.status_aderencia || (pctSemanal > 130 ? 'acima_do_teto' : pctSemanal < 50 ? 'abaixo_da_referencia' : 'dentro_da_faixa');
-                  const alerta = Boolean(semanaAtual.alerta_aderencia) || pctSemanal > 130 || pctSemanal < 50;
-                  const motivo = semanaAtual.motivo_alerta_aderencia || (pctSemanal > 130 ? `Movimentação acima do teto semanal (${pctSemanal.toFixed(1)}%). Reduza nas próximas semanas para compensar.` : pctSemanal < 50 ? `Movimentação muito abaixo da referência (${pctSemanal.toFixed(1)}%). Aumente para manter o padrão.` : '');
+                  // Semana em andamento mas ainda não alimentada (quarta-feira)
+                  const semanaEmAndamento = (() => {
+                    const ini = parseDateLocal(semanaAtual.data_referencia_inicio);
+                    const fim = parseDateLocal(semanaAtual.data_referencia_fim);
+                    const hj = todayLocal();
+                    return ini && fim && ini <= hj && hj <= fim;
+                  })();
+                  const naoAlimentada = semanaEmAndamento && entradasSemanaAtual === 0;
+                  const statusAd = naoAlimentada
+                    ? 'aguardando_alimentacao'
+                    : (semanaAtual.status_aderencia || (pctSemanal > 130 ? 'acima_do_teto' : pctSemanal < 50 ? 'abaixo_da_referencia' : 'dentro_da_faixa'));
+                  const alerta = !naoAlimentada && (Boolean(semanaAtual.alerta_aderencia) || pctSemanal > 130 || pctSemanal < 50);
+                  const motivo = naoAlimentada
+                    ? `Semana ${semanaAtual.numero_semana} em andamento. Dados serão alimentados na próxima quarta-feira.`
+                    : (semanaAtual.motivo_alerta_aderencia || (pctSemanal > 130 ? `Movimentação acima do teto semanal (${pctSemanal.toFixed(1)}%). Reduza nas próximas semanas para compensar.` : pctSemanal < 50 ? `Movimentação muito abaixo da referência (${pctSemanal.toFixed(1)}%). Aumente para manter o padrão.` : ''));
                   const diagnostico = semanaAtual.diagnostico_tecnico || '';
                   const metaDinamica = Number(semanaAtual.meta_base_dinamica || 0) || refSemanal;
                   const tetoDinamico = Number(semanaAtual.teto_dinamico_proxima || 0) || tetoSemanal;
                   const semanasRestantes = Number(semanaAtual.semanas_restantes_mes || 0);
                   if (!refSemanal && !tetoSemanal && !fatAnual) return null;
-                  const corStatus = statusAd === 'dentro_da_faixa' ? 'emerald' : statusAd === 'abaixo_da_referencia' ? 'amber' : 'red';
-                  const labelAd = statusAd === 'dentro_da_faixa' ? 'Dentro da faixa' : statusAd === 'abaixo_da_referencia' ? 'Abaixo da referência' : statusAd === 'acima_do_teto' ? 'Acima do teto' : statusAd === 'critico' ? 'Crítico' : 'Aguardando';
+                  const corStatus = naoAlimentada ? 'amber' : (statusAd === 'dentro_da_faixa' ? 'emerald' : statusAd === 'abaixo_da_referencia' ? 'amber' : 'red');
+                  const labelAd = naoAlimentada ? '⏳ Aguardando alimentação' : (statusAd === 'dentro_da_faixa' ? 'Dentro da faixa' : statusAd === 'abaixo_da_referencia' ? 'Abaixo da referência' : statusAd === 'acima_do_teto' ? 'Acima do teto' : statusAd === 'critico' ? 'Crítico' : 'Aguardando');
                   return (
-                    <section className={`rounded-2xl border-2 p-4 shadow-sm ${ alerta ? 'border-red-300 bg-red-50' : 'border-emerald-200 bg-emerald-50/40' }`}>
+                    <section className={`rounded-2xl border-2 p-4 shadow-sm ${ naoAlimentada ? 'border-amber-300 bg-amber-50/60' : alerta ? 'border-red-300 bg-red-50' : 'border-emerald-200 bg-emerald-50/40' }`}>
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <h4 className="text-sm font-bold uppercase tracking-wide text-slate-700">Aderência Financeira — Semana {semanaAtual.numero_semana}</h4>
@@ -2446,8 +2500,8 @@ export default function AcompanhamentoBancario() {
                         </div>
                         <span className={`rounded-full border px-3 py-1 text-xs font-semibold bg-${corStatus}-50 text-${corStatus}-700 border-${corStatus}-200`}>{labelAd}</span>
                       </div>
-                      {alerta && motivo && (
-                        <div className="mb-3 rounded-xl border border-red-200 bg-white/80 p-3 text-xs text-red-800">{motivo}</div>
+                      {motivo && (
+                        <div className={`mb-3 rounded-xl border p-3 text-xs ${naoAlimentada ? 'border-amber-200 bg-white/80 text-amber-800' : 'border-red-200 bg-white/80 text-red-800'}`}>{motivo}</div>
                       )}
                       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                         <InfoCard label="Ref. semanal base" value={moneyBR(refSemanal)} />

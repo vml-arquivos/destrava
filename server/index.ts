@@ -7149,6 +7149,11 @@ ${(temTest1 || temTest2) ? `
           FROM acompanhamentos_bancarios a
           LEFT JOIN colaboradores c ON c.id = a.responsavel_id
           LEFT JOIN LATERAL (
+            -- REGRA INEGÓCIÁVEL: semana da data atual (nunca futura)
+            -- Prioridade 1: semana em curso COM dados reais (entradas > 0)
+            -- Prioridade 2: última semana encerrada COM dados reais
+            -- Prioridade 3: semana em curso sem dados (aguardando alimentação)
+            -- Prioridade 4: qualquer semana encerrada
             SELECT
               data_atualizacao,
               total_entradas,
@@ -7157,16 +7162,22 @@ ${(temTest1 || temTest2) ? `
               status_semana
             FROM acompanhamento_bancario_atualizacoes u
             WHERE u.acompanhamento_id = a.id
-              -- REGRA INEGOCIÁVEL: semana da data atual (nunca futura)
-              -- Prioridade 1: semana cujo período contém hoje
-              -- Prioridade 2: última semana encerrada antes de hoje
+              AND u.data_referencia_inicio <= CURRENT_DATE
               AND (
                 (u.data_referencia_inicio <= CURRENT_DATE AND u.data_referencia_fim >= CURRENT_DATE)
                 OR (u.data_referencia_fim < CURRENT_DATE)
               )
-              AND u.data_referencia_inicio <= CURRENT_DATE
             ORDER BY
-              CASE WHEN u.data_referencia_inicio <= CURRENT_DATE AND u.data_referencia_fim >= CURRENT_DATE THEN 0 ELSE 1 END ASC,
+              CASE
+                WHEN u.data_referencia_inicio <= CURRENT_DATE
+                     AND u.data_referencia_fim >= CURRENT_DATE
+                     AND COALESCE(u.total_entradas, 0) > 0 THEN 0
+                WHEN u.data_referencia_fim < CURRENT_DATE
+                     AND COALESCE(u.total_entradas, 0) > 0 THEN 1
+                WHEN u.data_referencia_inicio <= CURRENT_DATE
+                     AND u.data_referencia_fim >= CURRENT_DATE THEN 2
+                ELSE 3
+              END ASC,
               u.numero_semana DESC,
               u.created_at DESC
             LIMIT 1
