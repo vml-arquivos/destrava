@@ -75,6 +75,20 @@ export default function GeradorContratos() {
   const [loadingContratos, setLoadingContratos] = useState(false);
   const [abaAtiva, setAbaAtiva]           = useState<'gerar' | 'lista' | 'parceiros' | 'contratadas'>('gerar');
 
+  // Filtros da lista de contratos
+  const [filtroTipo, setFiltroTipo]       = useState('');
+  const [filtroStatus, setFiltroStatus]   = useState('');
+  const [filtroDataInicio, setFiltroDataInicio] = useState('');
+  const [filtroDataFim, setFiltroDataFim] = useState('');
+
+  // Hierarquia: admin/diretor/gerente vê tudo
+  function normCargo(c: string | undefined) {
+    return (c || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  }
+  const CARGOS_VE_TUDO = ['administrador', 'admin', 'diretor', 'gerente comercial', 'gerente', 'gestor'];
+  const podeTudo = CARGOS_VE_TUDO.includes(normCargo(userCargo));
+  const podeExcluir = ['administrador', 'admin', 'diretor'].includes(normCargo(userCargo));
+
   // Novo parceiro
   const [novoParceiro, setNovoParceiro]   = useState({ nome: '', cpf: '', email: '', telefone: '' });
   const [editandoParceiro, setEditandoParceiro] = useState<string | null>(null);
@@ -117,7 +131,13 @@ export default function GeradorContratos() {
   const carregarContratos = async () => {
     setLoadingContratos(true);
     try {
-      const data: Contrato[] = await apiFetch('/api/contratos');
+      const params = new URLSearchParams();
+      if (filtroTipo) params.set('tipo', filtroTipo);
+      if (filtroStatus) params.set('status', filtroStatus);
+      if (filtroDataInicio) params.set('data_inicio', filtroDataInicio);
+      if (filtroDataFim) params.set('data_fim', filtroDataFim);
+      const qs = params.toString();
+      const data: Contrato[] = await apiFetch(`/api/contratos${qs ? '?' + qs : ''}`);
       setContratos(data);
     } catch {
       toast.error('Erro ao carregar contratos');
@@ -336,6 +356,77 @@ export default function GeradorContratos() {
                 {loadingContratos ? 'Carregando...' : 'Atualizar lista'}
               </button>
             </div>
+
+            {/* Filtros */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Tipo</label>
+                <select
+                  value={filtroTipo}
+                  onChange={e => setFiltroTipo(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Todos</option>
+                  <option value="assessoria">Assessoria</option>
+                  <option value="limpa_nome">Limpa Nome</option>
+                  <option value="limpa_bacen">Limpa BACEN</option>
+                  <option value="rating">Rating</option>
+                  <option value="parceria_comercial">Parceria Comercial</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
+                <select
+                  value={filtroStatus}
+                  onChange={e => setFiltroStatus(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Todos</option>
+                  <option value="gerado">Gerado</option>
+                  <option value="assinado">Assinado</option>
+                  <option value="cancelado">Cancelado</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Data início</label>
+                <input
+                  type="date"
+                  value={filtroDataInicio}
+                  onChange={e => setFiltroDataInicio(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Data fim</label>
+                <input
+                  type="date"
+                  value={filtroDataFim}
+                  onChange={e => setFiltroDataFim(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="col-span-2 sm:col-span-4 flex gap-2">
+                <button
+                  onClick={() => void carregarContratos()}
+                  disabled={loadingContratos}
+                  className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Filtrar
+                </button>
+                <button
+                  onClick={() => { setFiltroTipo(''); setFiltroStatus(''); setFiltroDataInicio(''); setFiltroDataFim(''); }}
+                  className="px-3 py-1.5 bg-gray-200 text-gray-700 text-xs rounded-lg hover:bg-gray-300"
+                >
+                  Limpar
+                </button>
+                {!podeTudo && (
+                  <span className="ml-auto text-xs text-gray-400 self-center">
+                    Exibindo apenas seus contratos
+                  </span>
+                )}
+              </div>
+            </div>
+
             {loadingContratos ? (
               <div className="text-center py-6 text-gray-400 text-sm">Carregando contratos...</div>
             ) : (
@@ -344,6 +435,8 @@ export default function GeradorContratos() {
                 onStatusChange={handleStatusChange}
                 onDelete={handleDelete}
                 userCargo={userCargo}
+                podeTudo={podeTudo}
+                podeExcluir={podeExcluir}
               />
             )}
           </div>
