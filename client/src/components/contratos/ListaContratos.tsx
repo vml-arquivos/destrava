@@ -29,11 +29,24 @@ interface Props {
   onStatusChange: (id: string, status: string) => void;
   onDelete?: (id: string) => void;
   userCargo?: string;
+  podeTudo?: boolean;
+  podeExcluir?: boolean;
 }
 
 const formatBRL = (v: number | undefined | null) => {
   if (v == null) return '—';
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v));
+};
+
+const formatData = (value: string | null | undefined): string => {
+  if (!value) return '—';
+  try {
+    const d = new Date(value.includes('T') ? value : value + 'T12:00:00');
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('pt-BR');
+  } catch {
+    return '—';
+  }
 };
 
 const tipoLabel: Record<string, string> = {
@@ -65,8 +78,8 @@ function podeExcluir(cargo: string | undefined | null): boolean {
   return ['administrador', 'admin', 'diretor'].includes(c);
 }
 
-export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo }: Props) {
-  const podeExcluirContrato = podeExcluir(userCargo);
+export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo, podeTudo, podeExcluir: podeExcluirProp }: Props) {
+  const podeExcluirContrato = podeExcluirProp ?? podeExcluir(userCargo);
 
   const abrirPdf = (id: string) => {
     const token = getToken();
@@ -201,7 +214,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo 
                 </td>
                 <td className="py-2 px-3 font-medium text-gray-900">{formatBRL(valor)}</td>
                 <td className="py-2 px-3 text-gray-700">
-                  {c.data_assinatura ? new Date(c.data_assinatura + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+                  {formatData(c.data_assinatura || c.created_at)}
                 </td>
                 <td className="py-2 px-3 text-gray-600">{c.responsavel_contrato_nome || c.criado_por_nome || '—'}</td>
                 <td className="py-2 px-3">
