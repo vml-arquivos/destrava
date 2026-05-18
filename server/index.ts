@@ -6619,14 +6619,37 @@ ${(temTest1 || temTest2) ? `
   // ─── LISTA GERAL DE CONTRATOS (todos os tipos) ───────────────────────────────
   app.get('/api/contratos', auth, async (req: Request, res: Response) => {
     try {
-      const { tipo, status, empresa_id: empId, limit = '50', offset = '0' } = req.query as Record<string, string>;
+      const colaborador = (req as any).colaborador;
+      const cargoRaw = (colaborador?.cargo || colaborador?.role || '').toLowerCase().trim()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+      // Hierarquia de visibilidade:
+      // admin/administrador/diretor → vê TODOS
+      // gerente comercial/gerente/gestor → vê TODOS (escopo comercial)
+      // demais → vê apenas os próprios (criado_por = seu id)
+      const CARGOS_VE_TUDO = ['administrador', 'admin', 'diretor', 'gerente comercial', 'gerente', 'gestor'];
+      const podeTudo = CARGOS_VE_TUDO.includes(cargoRaw);
+
+      const { tipo, status, empresa_id: empId, data_inicio, data_fim, responsavel_id, limit = '100', offset = '0' } = req.query as Record<string, string>;
       const params: any[] = [];
       const conditions: string[] = [];
+
+      // RBAC: usuário comum só vê os próprios contratos
+      if (!podeTudo) {
+        params.push(colaborador.id);
+        conditions.push(`cg.criado_por = $${params.length}`);
+      }
+
       if (tipo) { params.push(tipo); conditions.push(`cg.tipo_contrato = $${params.length}`); }
       if (status) { params.push(status); conditions.push(`cg.status = $${params.length}`); }
       if (empId) { params.push(empId); conditions.push(`cg.empresa_id = $${params.length}`); }
+      if (data_inicio) { params.push(data_inicio); conditions.push(`cg.created_at >= $${params.length}::date`); }
+      if (data_fim) { params.push(data_fim); conditions.push(`cg.created_at < ($${params.length}::date + interval '1 day')`); }
+      // Gerente/admin podem filtrar por responsável específico
+      if (responsavel_id && podeTudo) { params.push(responsavel_id); conditions.push(`cg.criado_por = $${params.length}`); }
+
       const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
-      params.push(parseInt(limit) || 50);
+      params.push(parseInt(limit) || 100);
       params.push(parseInt(offset) || 0);
       const { rows } = await pool.query(
         `SELECT cg.id, cg.tipo_contrato, cg.status, cg.data_assinatura, cg.created_at,
