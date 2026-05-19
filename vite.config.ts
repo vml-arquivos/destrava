@@ -9,7 +9,9 @@ export default defineConfig({
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
       "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+      // "@assets" removido — a pasta attached_assets/ não existe no repositório.
+      // Se for necessário no futuro, crie a pasta e reative o alias abaixo:
+      // "@assets": path.resolve(import.meta.dirname, "attached_assets"),
     },
     dedupe: ["react", "react-dom", "react/jsx-runtime", "scheduler"],
   },
