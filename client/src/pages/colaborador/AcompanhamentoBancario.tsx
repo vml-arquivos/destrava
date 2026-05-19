@@ -2984,6 +2984,65 @@ function ReadonlyField({ label, value, highlight, negative }: {
 }
 
 /**
+ * Converte string digitada pelo usuário para número float.
+ * Suporta formatos:
+ *   "1234,56"    → 1234.56  (BR decimal com vírgula)
+ *   "1234.56"    → 1234.56  (EN decimal com ponto)
+ *   "1.234,56"   → 1234.56  (BR com milhar e vírgula decimal)
+ *   "1,234.56"   → 1234.56  (EN com milhar e ponto decimal)
+ *   "1.234"      → 1234     (milhar sem decimal)
+ *   "1234"       → 1234
+ */
+function parseBRLInput(raw: string): number {
+  const s = raw.trim();
+  if (!s) return 0;
+
+  // Detecta se vírgula é decimal: existe vírgula E (não existe ponto OU ponto vem antes da vírgula)
+  const hasComma = s.includes(",");
+  const hasDot = s.includes(".");
+
+  let normalized: string;
+
+  if (hasComma && hasDot) {
+    // Formato misto: determina qual é decimal pelo que aparece por último
+    const lastComma = s.lastIndexOf(",");
+    const lastDot = s.lastIndexOf(".");
+    if (lastComma > lastDot) {
+      // "1.234,56" → vírgula é decimal
+      normalized = s.replace(/\./g, "").replace(",", ".");
+    } else {
+      // "1,234.56" → ponto é decimal
+      normalized = s.replace(/,/g, "");
+    }
+  } else if (hasComma && !hasDot) {
+    // Só vírgula: pode ser milhar ("1,234") ou decimal ("1234,56")
+    const partes = s.split(",");
+    if (partes.length === 2 && partes[1].length <= 2) {
+      // "1234,56" ou "0,5" → vírgula decimal
+      normalized = s.replace(",", ".");
+    } else {
+      // "1,234" → vírgula de milhar
+      normalized = s.replace(/,/g, "");
+    }
+  } else if (hasDot && !hasComma) {
+    // Só ponto: pode ser milhar ("1.234") ou decimal ("1234.56")
+    const partes = s.split(".");
+    if (partes.length === 2 && partes[1].length <= 2) {
+      // "1234.56" ou "0.5" → ponto decimal
+      normalized = s;
+    } else {
+      // "1.234" → ponto de milhar
+      normalized = s.replace(/\./g, "");
+    }
+  } else {
+    // Só dígitos
+    normalized = s.replace(/[^\d]/g, "");
+  }
+
+  return parseFloat(normalized);
+}
+
+/**
  * CurrencyField — input com máscara BRL.
  * - Focado: mostra o valor bruto para edição (ex: "190,65")
  * - Desfocado: formata como moeda BRL (ex: "R$ 190,65")
@@ -3011,21 +3070,15 @@ function CurrencyField({ label, value, onChange }: {
     const raw = e.target.value;
     setDraft(raw);
     // Parseia em tempo real para atualizar totalEntradas e saldoSemanal
-    // Suporta: "1234,56" | "1234.56" | "1.234,56"
-    const normalized = raw
-      .replace(/[^\d,]/g, "")   // mantém apenas dígitos e vírgula
-      .replace(",", ".");        // converte vírgula decimal → ponto
-    const parsed = parseFloat(normalized);
+    // Suporta: "1234,56" | "1234.56" | "1.234,56" | "1,234.56"
+    const parsed = parseBRLInput(raw);
     onChange(isNaN(parsed) ? 0 : parsed);
   };
 
   const handleBlur = () => {
     setFocused(false);
     // Re-parse com fallback para garantir consistência no blur
-    const normalized = draft
-      .replace(/[^\d,]/g, "")
-      .replace(",", ".");
-    const parsed = parseFloat(normalized);
+    const parsed = parseBRLInput(draft);
     onChange(isNaN(parsed) ? 0 : parsed);
   };
 
