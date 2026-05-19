@@ -662,6 +662,39 @@ function exportarCSV(row: Acompanhamento, prestadoraKey: PrestadoraKey = "destra
   URL.revokeObjectURL(url);
 }
 
+async function exportarRelatorioMensalPDF(row: Acompanhamento, authHeaders: () => Record<string, string>) {
+  if (!row?.id) return;
+  const hoje = new Date();
+  const ano = hoje.getFullYear();
+  const mes = hoje.getMonth() + 1;
+
+  const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}/relatorio-mensal`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ ano, mes }),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    alert(`Erro ao gerar relatório mensal: ${text || resp.statusText}`);
+    return;
+  }
+
+  const blob = await resp.blob();
+  const url = URL.createObjectURL(blob);
+  const contentDisposition = resp.headers.get("content-disposition") || "";
+  const match = contentDisposition.match(/filename="?([^"]+)"?/i);
+  const fileName = match?.[1] || nomeArquivoRelatorio(row, "destrava", "pdf").replace("relatorio-", "relatorio-mensal-bancario-");
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ─── Bancos sugeridos ─────────────────────────────────────────────────────────
 const BANCOS_SUGERIDOS = [
   "SICOOB", "Caixa", "Banco do Brasil", "Bradesco", "Itaú",
@@ -1690,6 +1723,17 @@ export default function AcompanhamentoBancario() {
           }}
         >Exportar XLS</button>
         <button
+          className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+          onClick={async () => {
+            let rowCompleto = row;
+            try {
+              const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}`, { headers: authHeaders() });
+              if (resp.ok) rowCompleto = await resp.json();
+            } catch { /* usa row sem atualizações */ }
+            await exportarRelatorioMensalPDF(rowCompleto, authHeaders);
+          }}
+        >Relatório mensal PDF</button>
+        <button
           className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50"
           onClick={() => prorrogar(row.id)}
         >Prorrogar</button>
@@ -2297,6 +2341,7 @@ export default function AcompanhamentoBancario() {
                     })()}
                     <button className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100" onClick={() => adicionarOutroBanco(detalhe)}>+ Outro banco</button>
                     <button className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100" onClick={() => exportarCSV(detalhe, prestadoraRelatorio)}>Exportar XLS</button>
+                    <button className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100" onClick={() => exportarRelatorioMensalPDF(detalhe, authHeaders)}>Relatório mensal PDF</button>
                     <button className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-100" onClick={() => { setImprimirOpen(detalhe); setDetalhe(null); }}>Imprimir</button>
                     <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50" onClick={() => setDetalhe(null)}>Fechar</button>
                   </div>
@@ -2450,8 +2495,8 @@ export default function AcompanhamentoBancario() {
                   const semanasMes = 4;
                   const refMensalCalc = fatAnual > 0 ? Math.round((fatAnual / 12) * 100) / 100 : 0;
                   const tetoMensalCalc = fatAnual > 0 ? Math.round((fatAnual / 12 * 1.30) * 100) / 100 : 0;
-                  const refSemanalCalc = fatAnual > 0 ? Math.round((tetoMensalCalc / semanasMes) * 100) / 100 : 0;
-                  const tetoSemanalCalc = refSemanalCalc; // teto = ref (já inclui +30%)
+                  const refSemanalCalc = fatAnual > 0 ? Math.round((refMensalCalc / semanasMes) * 100) / 100 : 0;
+                  const tetoSemanalCalc = fatAnual > 0 ? Math.round((tetoMensalCalc / semanasMes) * 100) / 100 : 0;
                   const entradasSemanaAtual = totalEntradasSemana(semanaAtual);
                   // Acumulado mensal: soma de todas as semanas do mesmo mês
                   const mesAtual = semanaAtual.data_referencia_inicio?.slice(0, 7) || '';
@@ -2479,11 +2524,11 @@ export default function AcompanhamentoBancario() {
                   const naoAlimentada = semanaEmAndamento && entradasSemanaAtual === 0;
                   const statusAd = naoAlimentada
                     ? 'aguardando_alimentacao'
-                    : (semanaAtual.status_aderencia || (pctSemanal > 130 ? 'acima_do_teto' : pctSemanal < 50 ? 'abaixo_da_referencia' : 'dentro_da_faixa'));
-                  const alerta = !naoAlimentada && (Boolean(semanaAtual.alerta_aderencia) || pctSemanal > 130 || pctSemanal < 50);
+                    : (semanaAtual.status_aderencia || (pctSemanal > 100 ? 'acima_do_teto' : pctSemanal > 0 && entradasSemanaAtual < refSemanal ? 'abaixo_da_referencia' : 'dentro_da_faixa'));
+                  const alerta = !naoAlimentada && (Boolean(semanaAtual.alerta_aderencia) || pctSemanal > 100 || (pctSemanal > 0 && entradasSemanaAtual < refSemanal));
                   const motivo = naoAlimentada
                     ? `Semana ${semanaAtual.numero_semana} em andamento. Dados serão alimentados na próxima quarta-feira.`
-                    : (semanaAtual.motivo_alerta_aderencia || (pctSemanal > 130 ? `Movimentação acima do teto semanal (${pctSemanal.toFixed(1)}%). Reduza nas próximas semanas para compensar.` : pctSemanal < 50 ? `Movimentação muito abaixo da referência (${pctSemanal.toFixed(1)}%). Aumente para manter o padrão.` : ''));
+                    : (semanaAtual.motivo_alerta_aderencia || (pctSemanal > 100 ? `Movimentação acima do teto semanal (${pctSemanal.toFixed(1)}%). Reduza nas próximas semanas para compensar.` : pctSemanal > 0 && entradasSemanaAtual < refSemanal ? `Movimentação abaixo da referência (${pctSemanal.toFixed(1)}%). Aumente para manter o padrão.` : ''));
                   const diagnostico = semanaAtual.diagnostico_tecnico || '';
                   const metaDinamica = Number(semanaAtual.meta_base_dinamica || 0) || refSemanal;
                   const tetoDinamico = Number(semanaAtual.teto_dinamico_proxima || 0) || tetoSemanal;
