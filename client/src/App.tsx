@@ -54,6 +54,7 @@ import Contadores from "./pages/colaborador/Contadores";
 import ClientesPF from "./pages/colaborador/ClientesPF";
 import AcompanhamentoBancario from "./pages/colaborador/AcompanhamentoBancario";
 import AcompanhamentoFinanceiro from "./pages/colaborador/AcompanhamentoFinanceiro";
+import WeeklyMonitorPage from "./pages/colaborador/WeeklyMonitorPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CargoRoute from "./components/CargoRoute";
 
@@ -214,6 +215,13 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <AcompanhamentoFinanceiro />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/monitor-semanal">
+        {() => (
+          <ProtectedRoute>
+            <WeeklyMonitorPage />
           </ProtectedRoute>
         )}
       </Route>
