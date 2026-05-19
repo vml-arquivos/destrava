@@ -3,18 +3,24 @@
 
 const API_BASE = "";
 
+// Chave canônica do token. A leitura ainda tenta a chave legada "token"
+// para compatibilidade com sessões já abertas antes desta padronização.
+const TOKEN_KEY = "destrava_token";
+const TOKEN_KEY_LEGACY = "token";
+
 export function getToken(): string | null {
-  return localStorage.getItem("destrava_token") || localStorage.getItem("token");
+  return localStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY_LEGACY) || null;
 }
 
 export function setToken(token: string): void {
-  localStorage.setItem("destrava_token", token);
-  localStorage.setItem("token", token);
+  localStorage.setItem(TOKEN_KEY, token);
+  // Remove a chave legada ao fazer login para não deixar dois tokens em aberto
+  localStorage.removeItem(TOKEN_KEY_LEGACY);
 }
 
 export function removeToken(): void {
-  localStorage.removeItem("destrava_token");
-  localStorage.removeItem("token");
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(TOKEN_KEY_LEGACY);
 }
 
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<any> {
