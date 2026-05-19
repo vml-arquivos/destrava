@@ -147,7 +147,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [parceiroIdAssessoria, setParceiroIdAssessoria] = useState('');
   const [valorReferencia, setValorReferencia] = useState('');
   const [taxaComissao, setTaxaComissao]       = useState('10');
-  const [percentualMulta, setPercentualMulta] = useState('10');
+  const [taxaDesistencia, setTaxaDesistencia] = useState('5');
+  const [custeioMensal, setCusteioMensal]     = useState('250');
 
   // ── Limpa Nome ──
   const [clienteTipo, setClienteTipo]         = useState<'empresa' | 'lead' | 'pf'>('lead');
@@ -352,7 +353,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         parceiro_id: parceiroIdAssessoria || undefined,
         valor_referencia: Number(valorReferencia),
         taxa_comissao: Number(taxaComissao),
-        percentual_multa: Number(percentualMulta),
+        taxa_desistencia: Number(taxaDesistencia),
+        custeio_mensal: Number(custeioMensal),
         data_assinatura: dataAssinatura,
         foro_eleito: foroEleito,
       });
@@ -571,10 +573,19 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 onChange={e => setTaxaComissao(e.target.value)} className={cls} />
             </div>
           </div>
-          <div>
-            <label className={lbl}>Multa por Rescisão Antecipada (%)</label>
-            <input type="number" min="1" max="100" step="0.1" value={percentualMulta}
-              onChange={e => setPercentualMulta(e.target.value)} placeholder="Ex: 10" className={cls} />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Multa por Desistência — Cláusula 4.3 (%)</label>
+              <input type="number" min="1" max="100" step="0.1" value={taxaDesistencia}
+                onChange={e => setTaxaDesistencia(e.target.value)} placeholder="Ex: 5" className={cls} />
+              <p className="text-[11px] text-gray-500 mt-1">Incide sobre o valor de referência na cláusula 4.3.</p>
+            </div>
+            <div>
+              <label className={lbl}>Custeio Mensal — Cláusula 5.7-V (R$)</label>
+              <input type="number" min="0" step="0.01" value={custeioMensal}
+                onChange={e => setCusteioMensal(e.target.value)} placeholder="Ex: 250" className={cls} />
+              <p className="text-[11px] text-gray-500 mt-1">Valor mensal quando Rating inferior a "C". Padrão: R$ 250,00.</p>
+            </div>
           </div>
         </>
       )}
@@ -921,7 +932,9 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1B3A8C] text-white font-medium rounded-lg hover:bg-[#142d6e] disabled:opacity-50 transition-colors"
       >
         {loading ? (
-          <><Loader2 className="w-4 h-4 animate-spin" />Gerando contrato...</>
+          <><Loader2 className="w-4 h-4 animate-spin" />Carregando contrato...</>
+        ) : tipoContrato === 'assessoria' ? (
+          <><Eye className="w-4 h-4" />Abrir Pré-visualização do Contrato</>
         ) : (
           <><Eye className="w-4 h-4" />Gerar Contrato PDF</>
         )}
