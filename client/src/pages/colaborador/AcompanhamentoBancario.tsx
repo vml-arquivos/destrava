@@ -2000,7 +2000,7 @@ export default function AcompanhamentoBancario() {
 
         {/* ── Modal — Novo Acompanhamento ──────────────────────────────────── */}
         {novoOpen && (
-          <div className="fixed inset-0 z-50 overflow-auto bg-black/40 p-4">
+          <div className="fixed inset-0 z-[99999] overflow-auto bg-black/40 p-4">
             <div className="mx-auto max-w-5xl rounded-lg bg-white p-5 shadow-xl">
               <div className="mb-4 flex items-start justify-between">
                 <div>
@@ -2076,7 +2076,7 @@ export default function AcompanhamentoBancario() {
 
         {/* ── Modal — Atualização Semanal ──────────────────────────────────── */}
         {updOpen && (
-          <div className="fixed inset-0 z-50 overflow-auto bg-black/40 p-4">
+          <div className="fixed inset-0 z-[99999] overflow-auto bg-black/40 p-4">
             <div className="mx-auto max-w-5xl rounded-lg bg-white p-5 shadow-xl">
               <div className="mb-2 flex items-start justify-between">
                 <div>
@@ -2291,7 +2291,7 @@ export default function AcompanhamentoBancario() {
 
         {/* ── Modal — Detalhes ─────────────────────────────────────────────── */}
         {detalhe && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 p-3 sm:p-5">
+          <div className="fixed inset-0 z-[9999] overflow-y-auto bg-slate-900/50 p-3 sm:p-5">
             <div className="mx-auto flex min-h-[calc(100vh-40px)] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
               <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-4 backdrop-blur sm:px-6">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -2993,100 +2993,112 @@ function ReadonlyField({ label, value, highlight, negative }: {
  *   "1.234"      → 1234     (milhar sem decimal)
  *   "1234"       → 1234
  */
+/**
+ * parseBRLInput — converte qualquer string digitada pelo usuário para float.
+ *
+ * Estratégia: trata vírgula e ponto como separadores intercambiáveis.
+ * Regra central: o ÚLTIMO separador (vírgula ou ponto) é o decimal.
+ * Todos os separadores antes do último são de milhar e são descartados.
+ *
+ * Exemplos:
+ *   "175,49"    → 175.49   (BR decimal)
+ *   "175.49"    → 175.49   (EN decimal)
+ *   "1.234,56"  → 1234.56  (BR com milhar)
+ *   "1,234.56"  → 1234.56  (EN com milhar)
+ *   "1.234"     → 1234     (milhar sem decimal — 3 casas após ponto = milhar)
+ *   "1,234"     → 1234     (milhar sem decimal — 3 casas após vírgula = milhar)
+ *   "1234"      → 1234
+ *   "0,5"       → 0.5
+ *   ""          → 0
+ */
 function parseBRLInput(raw: string): number {
-  const s = raw.trim();
+  // Remove espaços e símbolo R$
+  const s = raw.replace(/\s|R\$\s*/g, "").trim();
   if (!s) return 0;
 
-  // Detecta se vírgula é decimal: existe vírgula E (não existe ponto OU ponto vem antes da vírgula)
-  const hasComma = s.includes(",");
-  const hasDot = s.includes(".");
+  // Encontra o último separador (vírgula ou ponto)
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
 
-  let normalized: string;
+  const lastSep = Math.max(lastComma, lastDot);
 
-  if (hasComma && hasDot) {
-    // Formato misto: determina qual é decimal pelo que aparece por último
-    const lastComma = s.lastIndexOf(",");
-    const lastDot = s.lastIndexOf(".");
-    if (lastComma > lastDot) {
-      // "1.234,56" → vírgula é decimal
-      normalized = s.replace(/\./g, "").replace(",", ".");
-    } else {
-      // "1,234.56" → ponto é decimal
-      normalized = s.replace(/,/g, "");
-    }
-  } else if (hasComma && !hasDot) {
-    // Só vírgula: pode ser milhar ("1,234") ou decimal ("1234,56")
-    const partes = s.split(",");
-    if (partes.length === 2 && partes[1].length <= 2) {
-      // "1234,56" ou "0,5" → vírgula decimal
-      normalized = s.replace(",", ".");
-    } else {
-      // "1,234" → vírgula de milhar
-      normalized = s.replace(/,/g, "");
-    }
-  } else if (hasDot && !hasComma) {
-    // Só ponto: pode ser milhar ("1.234") ou decimal ("1234.56")
-    const partes = s.split(".");
-    if (partes.length === 2 && partes[1].length <= 2) {
-      // "1234.56" ou "0.5" → ponto decimal
-      normalized = s;
-    } else {
-      // "1.234" → ponto de milhar
-      normalized = s.replace(/\./g, "");
-    }
-  } else {
-    // Só dígitos
-    normalized = s.replace(/[^\d]/g, "");
+  if (lastSep === -1) {
+    // Sem separador — número puro
+    return parseFloat(s.replace(/\D/g, "")) || 0;
   }
 
-  return parseFloat(normalized);
+  const afterLastSep = s.slice(lastSep + 1);
+
+  // Se depois do último separador há exatamente 3 dígitos, é milhar (não decimal)
+  // Ex: "1.234" ou "1,234"
+  if (/^\d{3}$/.test(afterLastSep)) {
+    // Remove todos os separadores — trata como número inteiro
+    return parseFloat(s.replace(/[.,]/g, "")) || 0;
+  }
+
+  // Caso geral: o último separador é decimal
+  // Remove todos os separadores anteriores ao último e troca o último por ponto
+  const intPart = s.slice(0, lastSep).replace(/[.,]/g, "");
+  const decPart = afterLastSep.replace(/\D/g, ""); // só dígitos após decimal
+  const normalized = decPart ? `${intPart}.${decPart}` : intPart;
+  return parseFloat(normalized) || 0;
 }
 
 /**
- * CurrencyField — input com máscara BRL.
- * - Focado: mostra o valor bruto para edição (ex: "190,65")
- * - Desfocado: formata como moeda BRL (ex: "R$ 190,65")
- * - Campo vazio quando value = 0 (não exibe "0" espúrio)
- * - Atualiza o cálculo em tempo real enquanto o usuário digita
+ * CurrencyField — input de valor monetário BRL.
+ *
+ * Comportamento:
+ * - Focado: campo livre para digitação. Aceita qualquer formato (vírgula ou ponto).
+ *   O usuário pode digitar: "175,49" | "175.49" | "1.234,56" etc.
+ * - Desfocado: exibe o valor formatado em pt-BR (ex: "1.234,56").
+ * - Campo em branco quando value = 0 (não exibe "0" fantasma).
+ * - Atualiza totalEntradas/saldoSemanal em tempo real durante a digitação.
  */
 function CurrencyField({ label, value, onChange }: {
   label: string; value: number; onChange: (v: number) => void;
 }) {
   const [focused, setFocused] = useState(false);
+  // draft: texto livre que o usuário está digitando
   const [draft, setDraft] = useState("");
 
-  // Formata número para exibição quando não está em foco
+  // Valor exibido quando fora do foco — formato pt-BR sem R$
   const formatted = value
     ? value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : "";
 
-  const handleFocus = () => {
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
     setFocused(true);
-    // Preenche o rascunho com o valor atual em formato editável
-    setDraft(value ? value.toFixed(2).replace(".", ",") : "");
+    // Ao focar, mostra o valor atual sem formatação de milhar, usando vírgula decimal
+    // Ex: 1234.56 → "1234,56" (fácil de editar)
+    const editValue = value ? value.toFixed(2).replace(".", ",") : "";
+    setDraft(editValue);
+    // Seleciona todo o texto para facilitar substituição
+    setTimeout(() => e.target.select(), 0);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-    setDraft(raw);
-    // Parseia em tempo real para atualizar totalEntradas e saldoSemanal
-    // Suporta: "1234,56" | "1234.56" | "1.234,56" | "1,234.56"
-    const parsed = parseBRLInput(raw);
-    onChange(isNaN(parsed) ? 0 : parsed);
+    // Permite apenas: dígitos, vírgula, ponto, e R$ (para colar valores formatados)
+    const cleaned = raw.replace(/[^\d.,]/g, "");
+    setDraft(cleaned);
+    const parsed = parseBRLInput(cleaned);
+    onChange(parsed);
   };
 
   const handleBlur = () => {
     setFocused(false);
-    // Re-parse com fallback para garantir consistência no blur
+    // Ao sair, confirma o parse final e normaliza
     const parsed = parseBRLInput(draft);
-    onChange(isNaN(parsed) ? 0 : parsed);
+    onChange(parsed);
+    // Limpa o draft (será recalculado no próximo foco)
+    setDraft("");
   };
 
   return (
     <label>
       <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
       <input
-        className="w-full rounded border border-gray-300 p-2 text-right font-mono text-sm tabular-nums"
+        className="w-full rounded border border-gray-300 p-2 text-right font-mono text-sm tabular-nums focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
         type="text"
         inputMode="decimal"
         value={focused ? draft : formatted}
@@ -3110,17 +3122,21 @@ function NumberField({ label, value, onChange, integer }: {
 
   const formatted = value ? value.toLocaleString("pt-BR") : "";
 
-  const handleFocus = () => {
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
     setFocused(true);
     setDraft(value ? String(value) : "");
+    setTimeout(() => e.target.select(), 0);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-    setDraft(raw);
+    const cleaned = integer
+      ? raw.replace(/\D/g, "")
+      : raw.replace(/[^\d.,]/g, "");
+    setDraft(cleaned);
     const parsed = integer
-      ? parseInt(raw.replace(/\D/g, "") || "0", 10)
-      : parseFloat(raw.replace(",", ".") || "0");
+      ? parseInt(cleaned || "0", 10)
+      : parseBRLInput(cleaned);
     onChange(isNaN(parsed) ? 0 : parsed);
   };
 
@@ -3128,15 +3144,16 @@ function NumberField({ label, value, onChange, integer }: {
     setFocused(false);
     const parsed = integer
       ? parseInt(draft.replace(/\D/g, "") || "0", 10)
-      : parseFloat(draft.replace(",", ".") || "0");
+      : parseBRLInput(draft);
     onChange(isNaN(parsed) ? 0 : parsed);
+    setDraft("");
   };
 
   return (
     <label>
       <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
       <input
-        className="w-full rounded border border-gray-300 p-2 text-right font-mono text-sm tabular-nums"
+        className="w-full rounded border border-gray-300 p-2 text-right font-mono text-sm tabular-nums focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
         type="text"
         inputMode="numeric"
         value={focused ? draft : formatted}
