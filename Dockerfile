@@ -24,9 +24,6 @@ RUN pnpm exec esbuild server/index.ts \
     --format=esm \
     --outdir=dist
 
-# Remove devDependencies antes de copiar para o runner
-RUN pnpm prune --prod
-
 # ─── Stage 2: Production ─────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 
@@ -51,8 +48,13 @@ RUN mkdir -p /var/data/destrava /var/log/destrava && \
 
 COPY package.json pnpm-lock.yaml .npmrc ./
 COPY patches/ ./patches/
+
+# Instala apenas dependências de produção direto no runner
+# (elimina a cópia massiva de node_modules entre stages)
+RUN --mount=type=cache,id=pnpm-store-prod,target=/root/.local/share/pnpm/store \
+    pnpm install --prod --frozen-lockfile
+
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/scripts ./scripts
 
 USER node
