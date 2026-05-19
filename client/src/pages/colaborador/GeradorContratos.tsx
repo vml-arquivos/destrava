@@ -46,6 +46,9 @@ interface PrestadorServico {
 interface Contrato {
   id: string;
   tipo_contrato?: string;
+  numero_contrato?: string;
+  protocolo_contrato?: string;
+  codigo_tipo_contrato?: string;
   empresa_id?: string;
   lead_id?: string;
   parceiro_id?: string;
