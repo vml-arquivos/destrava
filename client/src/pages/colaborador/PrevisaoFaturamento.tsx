@@ -37,7 +37,7 @@ import { TabelaHistorico } from '../../components/faturamento/TabelaHistorico';
 import { FormHistorico } from '../../components/faturamento/FormHistorico';
 
 // ── NOVOS IMPORTS (geração client-side) ──────────────────────────────────────
-import { DocumentoPreview } from '../../components/faturamento/DocumentoPreview';
+import { DocumentoPreview } from '../../components/DocumentoPreview';
 import { type DadosPdfFaturamento } from '../../lib/gerarPdfFaturamento';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
