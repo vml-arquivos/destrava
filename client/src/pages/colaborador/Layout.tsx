@@ -13,7 +13,7 @@ import {
   ChevronRight,
   User,
   Users,
-  Zap,
+ 
   Kanban,
   Building2,
   ShieldAlert,
@@ -54,7 +54,6 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/colaborador/empresas",    label: "Empresas",           icon: Building2 },
   { href: "/colaborador/acompanhamento-bancario",    label: "Acomp. Bancário",   icon: Activity },
   { href: "/colaborador/acompanhamento-financeiro",  label: "Acomp. Financeiro", icon: BarChart2 },
-  { href: "/colaborador/monitor-semanal",            label: "Monitor Semanal",   icon: Zap },
   // Faturamento: todos os colaboradores
   { href: "/colaborador/previsao-faturamento", label: "Faturamento", icon: TrendingUp },
   // Gerador de Contratos: todos os colaboradores
@@ -66,7 +65,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   {
     href: "/colaborador/integracoes",
     label: "Integrações n8n",
-    icon: Zap,
+    icon:
     allowedCargos: ['administrador'],
   },
   // Usuários: somente Administrador, Diretor e Gerente Comercial
@@ -151,8 +150,6 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
     }
     // Acesso ao Acompanhamento Bancário
     if (item.href === "/colaborador/acompanhamento-bancario" && !podeAcessarAcompanhamentoBancario(colaborador)) return false;
-    // Acesso ao Monitor Semanal (mesma permissão do Acomp. Bancário)
-    if (item.href === "/colaborador/monitor-semanal" && !podeAcessarAcompanhamentoBancario(colaborador)) return false;
     // Acesso ao Acompanhamento Financeiro
     if (item.href === "/colaborador/acompanhamento-financeiro" && !podeAcessarFinanceiro(colaborador)) return false;
     // Restrição por cargos específicos
