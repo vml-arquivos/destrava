@@ -5,6 +5,9 @@ import { toast } from 'sonner';
 interface Contrato {
   id: string;
   tipo_contrato?: string;
+  numero_contrato?: string;
+  protocolo_contrato?: string;
+  codigo_tipo_contrato?: string;
   empresa_id?: string;
   lead_id?: string;
   parceiro_id?: string;
@@ -78,6 +81,16 @@ function podeExcluir(cargo: string | undefined | null): boolean {
   return ['administrador', 'admin', 'diretor'].includes(c);
 }
 
+const nomeArquivoContrato = (contrato: Contrato): string => {
+  const base = contrato.protocolo_contrato || contrato.numero_contrato || `contrato-${contrato.id}`;
+  return `${String(base)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')}.pdf`;
+};
+
 export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo, podeTudo, podeExcluir: podeExcluirProp }: Props) {
   const podeExcluirContrato = podeExcluirProp ?? podeExcluir(userCargo);
 
@@ -96,7 +109,8 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
       .catch((err: any) => toast.error(err?.message || 'Erro ao visualizar contrato'));
   };
 
-  const handleDownload = (id: string) => {
+  const handleDownload = (contrato: Contrato) => {
+    const id = contrato.id;
     const token = getToken();
     const url = `/api/contratos/${id}/download`;
     fetch(url, { headers: { Authorization: `Bearer ${token || ''}` } })
@@ -105,7 +119,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = blobUrl;
-        a.download = `contrato-${id}.pdf`;
+        a.download = nomeArquivoContrato(contrato);
         a.click();
         URL.revokeObjectURL(blobUrl);
       })
@@ -185,6 +199,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
         <thead>
           <tr className="bg-gray-50 border-b border-gray-200">
             <th className="text-left py-2 px-3 font-medium text-gray-600">Tipo</th>
+            <th className="text-left py-2 px-3 font-medium text-gray-600">Nº / Protocolo</th>
             <th className="text-left py-2 px-3 font-medium text-gray-600">Cliente / Empresa</th>
             <th className="text-left py-2 px-3 font-medium text-gray-600">Parceiro</th>
             <th className="text-left py-2 px-3 font-medium text-gray-600">Contratada</th>
@@ -207,6 +222,10 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                     {tipoLabel[c.tipo_contrato || ''] || c.tipo_contrato || '—'}
                   </span>
                 </td>
+                <td className="py-2 px-3 text-gray-700 min-w-[150px]">
+                  <div className="font-semibold text-gray-900">{c.numero_contrato || '—'}</div>
+                  <div className="text-[11px] text-gray-500">{c.protocolo_contrato || 'Sem protocolo'}</div>
+                </td>
                 <td className="py-2 px-3 text-gray-700 max-w-[180px] truncate">{nomeCliente}</td>
                 <td className="py-2 px-3 text-gray-600">{c.parceiro_nome || '—'}</td>
                 <td className="py-2 px-3 text-gray-600 max-w-[180px] truncate">
@@ -228,7 +247,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                       className="p-1 text-slate-600 hover:text-slate-800 rounded">
                       <Eye className="w-4 h-4" />
                     </button>
-                    <button onClick={() => handleDownload(c.id)} title="Baixar PDF"
+                    <button onClick={() => handleDownload(c)} title="Baixar PDF"
                       className="p-1 text-blue-600 hover:text-blue-800 rounded">
                       <Download className="w-4 h-4" />
                     </button>
