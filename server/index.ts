@@ -3876,6 +3876,7 @@ ${temParceiro ? `<p class="clause"><strong>5.1</strong> - O PARCEIRO COMERCIAL, 
   <p style="margin-top:28px;"><strong>CONTRATADA:</strong></p>
   <div class="sig-line"></div>
   <p class="sig-name">DESTRAVA CRÉDITO LTDA - CNPJ n° ${contratada.cnpj}</p>
+  <p class="sig-sub">${contratada.representante} - CPF n° ${contratada.cpf_representante}</p>
 </div>
 
 <div class="page-break"></div>
@@ -4467,10 +4468,7 @@ tr:nth-child(even) td { background: #f4f7ff; }
     }
 
     .page-header {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
+      width: 100%;
       height: 22mm;
       display: flex;
       align-items: center;
@@ -4479,7 +4477,8 @@ tr:nth-child(even) td { background: #f4f7ff; }
       border-bottom: 1px solid var(--line-soft);
       padding-bottom: 7px;
       background: #fff;
-      z-index: 2;
+      margin-bottom: 14px;
+      /* SEM position:fixed — aparece apenas na 1ª página (fluxo normal) */
     }
 
     .brand-left {
@@ -4570,25 +4569,24 @@ tr:nth-child(even) td { background: #f4f7ff; }
     }
 
     .page-footer {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
+      width: 100%;
       min-height: 14mm;
       border-top: 1px solid var(--line-soft);
       padding-top: 5px;
+      margin-top: 28px;
       color: #64748b;
       font-size: 7.8pt;
       line-height: 1.28;
       background: #fff;
-      z-index: 2;
       text-align: center;
+      /* SEM position:fixed — aparece apenas na última página (fluxo normal) */
     }
 
     .contract-content {
       width: 100%;
-      padding-top: 22mm;
-      padding-bottom: 14mm;
+      /* padding-top zerado: header agora é inline, não fixed */
+      padding-top: 0;
+      padding-bottom: 0;
     }
 
     .doc-title {
@@ -4725,13 +4723,13 @@ tr:nth-child(even) td { background: #f4f7ff; }
     ${cabecalhoCustom}
   </header>
 
-  <footer class="page-footer">
-    ${rodapeHtml}
-  </footer>
-
   <main class="contract-content">
     ${body}
   </main>
+
+  <footer class="page-footer">
+    ${rodapeHtml}
+  </footer>
 </body>
 </html>`;
   }
