@@ -3,12 +3,18 @@
  * Funções de cálculo para o módulo de Acompanhamento Bancário
  * Sistema: Destrava Crédito
  *
- * REGRA OFICIAL:
- *   teto_anual = faturamento_anual * 1.30
- *   faturamento_mensal_base = faturamento_anual / 12
- *   teto_mensal = teto_anual / 12
- *   referencia_semanal_base = faturamento_mensal_base / semanas_no_mes (padrão 4)
- *   teto_semanal = teto_mensal / semanas_no_mes
+ * REGRA OPERACIONAL OFICIAL:
+ *   - faturamento_anual_ref = faturamento anual declarado pela empresa
+ *   - teto_anual_movimentacao = faturamento_anual_ref + percentual operacional (padrão 30%)
+ *   - faturamento_mensal_base = faturamento_anual_ref / 12
+ *   - teto_mensal_movimentacao = teto_anual_movimentacao / 12
+ *   - referencia_semanal_base = faturamento_mensal_base / 4
+ *   - teto_semanal_movimentacao = teto_mensal_movimentacao / 4
+ *
+ * Observação importante:
+ *   A operação bancária descrita pela Destrava usa 4 semanas operacionais fixas
+ *   por mês para controle de acompanhamento, mesmo quando o calendário possui
+ *   5 segundas-feiras. Isso evita oscilação indevida da meta semanal.
  */
 
 // ─── Arredondamento seguro ────────────────────────────────────────────────────
@@ -16,21 +22,13 @@ export function round2(value: unknown): number {
   return Math.round(Number(value ?? 0) * 100) / 100;
 }
 
-// ─── Quantidade de semanas do mês ─────────────────────────────────────────────
+// ─── Quantidade de semanas operacionais ───────────────────────────────────────
 /**
- * Conta quantas semanas (segunda-feira como início) começam dentro do mês.
- * Retorna no mínimo 4 (padrão operacional).
+ * Regra operacional do acompanhamento bancário: mês dividido por 4.
+ * Mantida como função para compatibilidade com chamadas antigas.
  */
-export function calcularSemanasDoMes(ano: number, mes: number): number {
-  const primeiroDia = new Date(ano, mes - 1, 1);
-  const ultimoDia = new Date(ano, mes, 0);
-  let semanas = 0;
-  const d = new Date(primeiroDia);
-  while (d <= ultimoDia) {
-    if (d.getDay() === 1) semanas++; // segunda-feira
-    d.setDate(d.getDate() + 1);
-  }
-  return semanas > 0 ? semanas : 4;
+export function calcularSemanasDoMes(_ano: number, _mes: number): number {
+  return 4;
 }
 
 // ─── Calcular referências de acompanhamento ───────────────────────────────────
@@ -42,14 +40,21 @@ export interface ReferenciasAcompanhamento {
   referencia_semanal_base: number;
   teto_semanal_movimentacao: number;
   semanas_no_mes: number;
+  percentual_operacional: number;
+  limite_minimo_semanal_alerta: number;
 }
 
 export function calcularReferenciasAcompanhamento(
   faturamentoAnual: number,
   anoRef?: number,
-  mesRef?: number
+  mesRef?: number,
+  percentualOperacional = 30
 ): ReferenciasAcompanhamento {
   const fat = round2(faturamentoAnual);
+  const pct = Number.isFinite(Number(percentualOperacional)) && Number(percentualOperacional) >= 0
+    ? Number(percentualOperacional)
+    : 30;
+
   if (!fat || fat <= 0) {
     return {
       faturamento_anual_ref: 0,
@@ -59,13 +64,17 @@ export function calcularReferenciasAcompanhamento(
       referencia_semanal_base: 0,
       teto_semanal_movimentacao: 0,
       semanas_no_mes: 4,
+      percentual_operacional: pct,
+      limite_minimo_semanal_alerta: 0,
     };
   }
+
   const ano = anoRef ?? new Date().getFullYear();
   const mes = mesRef ?? new Date().getMonth() + 1;
   const semanasNoMes = calcularSemanasDoMes(ano, mes);
+  const fatorOperacional = 1 + pct / 100;
 
-  const tetoAnual = round2(fat * 1.30);
+  const tetoAnual = round2(fat * fatorOperacional);
   const fatMensalBase = round2(fat / 12);
   const tetoMensal = round2(tetoAnual / 12);
   const refSemanal = round2(fatMensalBase / semanasNoMes);
@@ -79,6 +88,8 @@ export function calcularReferenciasAcompanhamento(
     referencia_semanal_base: refSemanal,
     teto_semanal_movimentacao: tetoSemanal,
     semanas_no_mes: semanasNoMes,
+    percentual_operacional: pct,
+    limite_minimo_semanal_alerta: round2(refSemanal * 0.70),
   };
 }
 
@@ -91,7 +102,7 @@ export interface TotaisSemana {
 
 export function calcularTotaisSemana(semana: Record<string, unknown>): TotaisSemana {
   const totalEntradas = round2(
-    Number(semana.entrada_maquininha ?? 0) +
+    Number(semana.entrada_maquininha ?? semana.entrada_maquina ?? 0) +
     Number(semana.entrada_pix ?? 0) +
     Number(semana.entrada_boleto ?? 0) +
     Number(semana.entrada_ted ?? 0) +
@@ -117,11 +128,12 @@ export function calcularStatusAderencia(
   tetoSemanal: number
 ): StatusAderencia {
   if (!referenciaSemanal || !tetoSemanal) return 'aguardando_atualizacao';
+  if (totalEntradas <= 0) return 'aguardando_atualizacao';
   if (totalEntradas < referenciaSemanal) return 'abaixo_da_referencia';
   if (totalEntradas <= tetoSemanal) return 'dentro_da_faixa';
-  // Acima do teto
-  const percentualExcedente = (totalEntradas / tetoSemanal) * 100;
-  if (percentualExcedente > 200) return 'critico';
+
+  const percentualUsoTeto = (totalEntradas / tetoSemanal) * 100;
+  if (percentualUsoTeto >= 150) return 'critico';
   return 'acima_do_teto';
 }
 
@@ -150,13 +162,14 @@ export function calcularCompensacaoMensal(
   numeroSemanaAtual: number,
   refs: ReferenciasAcompanhamento
 ): CompensacaoMensal {
-  const acumuladoMensal = round2(acumuladoMensalAnterior + totalEntradasSemana);
-  const acumuladoAnualTotal = round2(acumuladoAnual + totalEntradasSemana);
+  const totalSemana = round2(totalEntradasSemana);
+  const acumuladoMensal = round2(Number(acumuladoMensalAnterior || 0) + totalSemana);
+  const acumuladoAnualTotal = round2(Number(acumuladoAnual || 0) + totalSemana);
 
   const saldoFaltante = round2(refs.faturamento_mensal_base - acumuladoMensal);
   const saldoDisponivel = round2(refs.teto_mensal_movimentacao - acumuladoMensal);
 
-  const semanasRestantes = Math.max(0, refs.semanas_no_mes - numeroSemanaAtual);
+  const semanasRestantes = Math.max(0, refs.semanas_no_mes - Number(numeroSemanaAtual || 1));
 
   const metaBaseDinamica = semanasRestantes > 0
     ? round2(Math.max(0, saldoFaltante) / semanasRestantes)
@@ -165,15 +178,15 @@ export function calcularCompensacaoMensal(
     ? round2(Math.max(0, saldoDisponivel) / semanasRestantes)
     : 0;
 
-  const valorAbaixo = totalEntradasSemana < refs.referencia_semanal_base
-    ? round2(refs.referencia_semanal_base - totalEntradasSemana)
+  const valorAbaixo = totalSemana > 0 && totalSemana < refs.referencia_semanal_base
+    ? round2(refs.referencia_semanal_base - totalSemana)
     : 0;
-  const valorExcedente = totalEntradasSemana > refs.teto_semanal_movimentacao
-    ? round2(totalEntradasSemana - refs.teto_semanal_movimentacao)
+  const valorExcedente = totalSemana > refs.teto_semanal_movimentacao
+    ? round2(totalSemana - refs.teto_semanal_movimentacao)
     : 0;
 
   const pctSemanal = refs.teto_semanal_movimentacao > 0
-    ? round2((totalEntradasSemana / refs.teto_semanal_movimentacao) * 100)
+    ? round2((totalSemana / refs.teto_semanal_movimentacao) * 100)
     : 0;
   const pctMensal = refs.teto_mensal_movimentacao > 0
     ? round2((acumuladoMensal / refs.teto_mensal_movimentacao) * 100)
@@ -183,19 +196,36 @@ export function calcularCompensacaoMensal(
     : 0;
 
   const statusAderencia = calcularStatusAderencia(
-    totalEntradasSemana,
+    totalSemana,
     refs.referencia_semanal_base,
     refs.teto_semanal_movimentacao
   );
 
-  const alertaAderencia = pctMensal > 100 || pctAnual > 100 || pctSemanal > 150;
+  const alertaAderencia =
+    statusAderencia === 'abaixo_da_referencia' ||
+    statusAderencia === 'acima_do_teto' ||
+    statusAderencia === 'critico' ||
+    pctMensal > 100 ||
+    pctAnual > 100;
+
   let motivoAlerta = '';
-  if (statusAderencia === 'abaixo_da_referencia') {
-    motivoAlerta = `Alerta de rating: a movimentação semanal ficou abaixo da referência esperada. Faltou movimentar aproximadamente ${moneyBRServer(valorAbaixo)} para atingir a referência semanal base. Recomenda-se reforçar a movimentação das próximas semanas para manter coerência com o faturamento declarado.`;
-  } else if (statusAderencia === 'acima_do_teto' || statusAderencia === 'critico') {
-    motivoAlerta = `Alerta de aderência financeira: a movimentação semanal ultrapassou o teto permitido para o período em aproximadamente ${moneyBRServer(valorExcedente)}. Recomenda-se controlar as próximas semanas para manter compatibilidade com o faturamento declarado.`;
-  } else if (alertaAderencia) {
-    motivoAlerta = 'Movimentação acima da referência configurada para o período. Recomenda-se revisar os lançamentos e a documentação comprobatória.';
+  if (statusAderencia === 'aguardando_atualizacao') {
+    motivoAlerta = 'Semana aguardando alimentação. A movimentação deve ser atualizada com os valores enviados pela empresa.';
+  } else if (statusAderencia === 'abaixo_da_referencia') {
+    motivoAlerta =
+      `Alerta de rating: a movimentação semanal ficou abaixo da média esperada. ` +
+      `Faltou movimentar aproximadamente ${moneyBRServer(valorAbaixo)} para atingir a referência semanal base ` +
+      `(${moneyBRServer(refs.referencia_semanal_base)}). Recomenda-se orientar o cliente a reforçar a movimentação documentada nas próximas semanas.`;
+  } else if (statusAderencia === 'acima_do_teto') {
+    motivoAlerta =
+      `Alerta de aderência/COAF: a movimentação semanal ultrapassou o teto operacional de ${moneyBRServer(refs.teto_semanal_movimentacao)} ` +
+      `em aproximadamente ${moneyBRServer(valorExcedente)}. Recomenda-se reduzir/compensar nas próximas semanas para manter compatibilidade com o faturamento declarado.`;
+  } else if (statusAderencia === 'critico') {
+    motivoAlerta =
+      `CRÍTICO: movimentação semanal muito acima do teto operacional. Excedente aproximado: ${moneyBRServer(valorExcedente)}. ` +
+      `Ação imediata recomendada para evitar inconsistência, alerta operacional, questionamento bancário ou risco de fiscalização.`;
+  } else if (pctMensal > 100 || pctAnual > 100) {
+    motivoAlerta = 'Movimentação acumulada acima do limite operacional configurado. Recomenda-se revisar lançamentos e documentação comprobatória.';
   }
 
   return {
@@ -225,25 +255,33 @@ export function gerarDiagnosticoSemana(
   const linhas: string[] = [];
   linhas.push(`Semana ${numeroSemana} — Diagnóstico técnico de aderência financeira.`);
 
-  if (comp.status_aderencia === 'abaixo_da_referencia') {
+  linhas.push(
+    `Regra aplicada: faturamento anual declarado de ${moneyBRServer(refs.faturamento_anual_ref)}, ` +
+    `teto anual com ${refs.percentual_operacional}% de margem de ${moneyBRServer(refs.teto_anual_movimentacao)}, ` +
+    `teto mensal de ${moneyBRServer(refs.teto_mensal_movimentacao)} e teto semanal operacional de ${moneyBRServer(refs.teto_semanal_movimentacao)}.`
+  );
+
+  if (comp.status_aderencia === 'aguardando_atualizacao') {
+    linhas.push('Semana aguardando alimentação. Assim que os dados forem incluídos, o sistema recalculará os alertas e a compensação.');
+  } else if (comp.status_aderencia === 'abaixo_da_referencia') {
     linhas.push(`Movimentação abaixo da referência semanal base (${moneyBRServer(refs.referencia_semanal_base)}).`);
     linhas.push(`Faltou movimentar ${moneyBRServer(comp.valor_abaixo_semana)}.`);
-    linhas.push(`Recomenda-se reforçar a movimentação nas próximas semanas para manter coerência com o faturamento declarado e melhorar o acompanhamento bancário.`);
+    linhas.push(`Recomenda-se reforçar a movimentação nas próximas semanas para manter coerência com o faturamento declarado e preservar evolução de rating.`);
   } else if (comp.status_aderencia === 'dentro_da_faixa') {
-    linhas.push(`Movimentação dentro da faixa esperada (entre ${moneyBRServer(refs.referencia_semanal_base)} e ${moneyBRServer(refs.teto_semanal_movimentacao)}).`);
+    linhas.push(`Movimentação dentro da faixa esperada: entre ${moneyBRServer(refs.referencia_semanal_base)} e ${moneyBRServer(refs.teto_semanal_movimentacao)}.`);
   } else if (comp.status_aderencia === 'acima_do_teto') {
     linhas.push(`Movimentação acima do teto semanal permitido (${moneyBRServer(refs.teto_semanal_movimentacao)}).`);
     linhas.push(`Excedeu ${moneyBRServer(comp.valor_excedente_semana)} acima do teto.`);
-    linhas.push(`Recomenda-se controlar/reduzir a movimentação das próximas semanas para manter aderência ao teto mensal.`);
+    linhas.push(`Recomenda-se controlar/reduzir a movimentação das próximas semanas para manter aderência ao teto mensal e reduzir risco de alerta operacional/COAF.`);
   } else if (comp.status_aderencia === 'critico') {
-    linhas.push(`CRÍTICO: Movimentação muito acima do teto semanal permitido.`);
+    linhas.push(`CRÍTICO: movimentação muito acima do teto semanal permitido.`);
     linhas.push(`Excedeu ${moneyBRServer(comp.valor_excedente_semana)} acima do teto.`);
-    linhas.push(`Ação imediata necessária para controle de aderência financeira.`);
+    linhas.push(`Ação imediata necessária para controle de aderência financeira e documentação justificativa.`);
   }
 
   if (comp.semanas_restantes_mes > 0) {
     linhas.push(`Semanas restantes no mês: ${comp.semanas_restantes_mes}.`);
-    linhas.push(`Meta base para próximas semanas: ${moneyBRServer(comp.meta_base_dinamica)}/semana.`);
+    linhas.push(`Meta base dinâmica para próximas semanas: ${moneyBRServer(comp.meta_base_dinamica)}/semana.`);
     linhas.push(`Teto dinâmico para próximas semanas: ${moneyBRServer(comp.teto_dinamico_proxima)}/semana.`);
   } else {
     const fechamento =
@@ -261,7 +299,7 @@ export function gerarDiagnosticoSemana(
 
 // ─── Helper de formatação monetária para o servidor ───────────────────────────
 function moneyBRServer(value: number): string {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  return (Number(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 // ─── Calcular acumulado mensal e anual a partir de lista de atualizações ───────
@@ -276,15 +314,15 @@ export function calcularAcumulados(
 
   for (const s of atualizacoes) {
     const numSem = Number(s.numero_semana ?? 0);
-    if (numSem >= numeroSemanaAtual) continue; // não inclui a semana atual
+    if (numSem >= numeroSemanaAtual) continue;
 
     const dataInicio = s.data_referencia_inicio
-      ? new Date(String(s.data_referencia_inicio) + 'T00:00:00Z')
+      ? new Date(String(s.data_referencia_inicio).slice(0, 10) + 'T00:00:00Z')
       : null;
 
     const entradas = round2(
       Number(s.total_entradas ?? 0) ||
-      (Number(s.entrada_maquininha ?? 0) +
+      (Number(s.entrada_maquininha ?? s.entrada_maquina ?? 0) +
         Number(s.entrada_pix ?? 0) +
         Number(s.entrada_boleto ?? 0) +
         Number(s.entrada_ted ?? 0) +
@@ -292,12 +330,10 @@ export function calcularAcumulados(
         Number(s.outras_entradas ?? 0))
     );
 
-    // Acumulado anual: todas as semanas do ano
     if (dataInicio && dataInicio.getUTCFullYear() === anoRef) {
       acumuladoAnual = round2(acumuladoAnual + entradas);
     }
 
-    // Acumulado mensal: semanas do mesmo mês
     if (
       dataInicio &&
       dataInicio.getUTCFullYear() === anoRef &&
