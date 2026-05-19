@@ -969,8 +969,14 @@ async function startServer() {
   try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_contratos_cliente_pf ON contratos_gerados(cliente_pf_id)`); }
   catch { /* já existe */ }
 
-  // P13: ADD COLUMN percentual_multa
+  // P13: ADD COLUMN percentual_multa (legado)
   try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS percentual_multa NUMERIC(5,2) DEFAULT 10.00`); }
+  catch { /* já existe */ }
+
+  // P13B: Campos atuais do contrato de assessoria
+  try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS taxa_desistencia NUMERIC(5,2) DEFAULT 5.00`); }
+  catch { /* já existe */ }
+  try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS custeio_mensal NUMERIC(15,2) DEFAULT 250.00`); }
   catch { /* já existe */ }
 
   // P14: ADD COLUMN contador_id para faturamento
@@ -3557,16 +3563,24 @@ Responda APENAS com um JSON válido no seguinte formato:
 
     const temParceiro = parceiro && parceiro.nome;
     const vigenciaMeses = contrato.vigencia_meses || 12;
-    const comissaoPct   = contrato.taxa_comissao || 10;
-    const honorMinMes   = contrato.honorario_minimo_mes || 1;
-    const honorMinTotal = contrato.honorario_minimo_total || 12;
-    const valorRef      = contrato.valor_referencia_formatado || 'R$ 0,00';
-    const valorRefNum   = contrato.valor_referencia_str || '0,00';
+    const comissaoPct   = Number(contrato.taxa_comissao ?? 10);
+    const valorRefNumBruto = Number(contrato.valor_referencia ?? 0);
+    const taxaDesistenciaPct = Number(contrato.taxa_desistencia ?? contrato.percentual_multa ?? 5);
+    const custeioMensal = Number(contrato.custeio_mensal ?? 250);
+    const valorDesistencia = valorRefNumBruto * taxaDesistenciaPct / 100;
+    const valorRef      = contrato.valor_referencia_formatado || new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorRefNumBruto || 0);
     const foro          = contrato.foro_eleito || 'Taguatinga';
     const dataAss       = contrato.data_assinatura_formatada || '';
     const cidadeAss     = contrato.cidade_assinatura || 'BRASÍLIA – DF';
-    const pctMulta      = contrato.percentual_multa || 10;
-    const pctMultaExtenso = pctMulta === 10 ? 'dez' : pctMulta === 5 ? 'cinco' : pctMulta === 15 ? 'quinze' : pctMulta === 20 ? 'vinte' : pctMulta === 25 ? 'vinte e cinco' : String(pctMulta);
+    const pctExtenso = (pct: number) => {
+      const mapa: Record<number, string> = {
+        1: 'um', 2: 'dois', 3: 'três', 4: 'quatro', 5: 'cinco',
+        6: 'seis', 7: 'sete', 8: 'oito', 9: 'nove', 10: 'dez',
+        12: 'doze', 15: 'quinze', 20: 'vinte', 25: 'vinte e cinco',
+      };
+      return mapa[pct] || String(pct);
+    };
+    const brl = (valor: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number.isFinite(valor) ? valor : 0);
 
     const body = `
 <h1 class="doc-title">CONTRATO DE ANÁLISE DOCUMENTAL PARA ACESSO A LINHA DE CRÉDITO</h1>
@@ -3607,13 +3621,13 @@ ${temParceiro ? `<p class="clause"><strong>2.3</strong> - O PARCEIRO COMERCIAL p
 
 <h2 class="section-title">V - DA REMUNERAÇÃO POR COMISSÃO E HONORÁRIO MÍNIMO</h2>
 
-<p class="clause"><strong>Cláusula 4</strong> - A CONTRATADA fará jus a comissão de <strong>${comissaoPct}% (${comissaoPct === 10 ? 'dez' : comissaoPct} por cento)</strong> sobre qualquer valor efetivamente liberado em favor da CONTRATANTE, no prazo de até 12 meses da entrega do relatório inicial. A CONTRATANTE compromete-se a comunicar qualquer operação de crédito aprovada e contratada dentro do período de vigência deste contrato e a fornecer cópia do contrato, comprovante de liberação e/ou extrato bancário correspondente.</p>
+<p class="clause"><strong>Cláusula 4</strong> - A CONTRATADA fará jus a comissão de <strong>${comissaoPct}% (${pctExtenso(comissaoPct)} por cento)</strong> sobre qualquer valor efetivamente liberado em favor da CONTRATANTE, no prazo de até 12 meses da entrega do relatório inicial. A CONTRATANTE compromete-se a comunicar qualquer operação de crédito aprovada e contratada dentro do período de vigência deste contrato e a fornecer cópia do contrato, comprovante de liberação e/ou extrato bancário correspondente.</p>
 
 <p class="clause"><strong>4.1</strong> - A comissão deverá ser paga pela CONTRATANTE à CONTRATADA no prazo máximo de 1 (um) dia útil após a liberação do crédito, mediante transferência bancária para conta informada pela CONTRATADA.</p>
 
 <p class="clause"><strong>4.2</strong> - A CONTRATADA declara, que não realiza, direta ou indiretamente, qualquer tipo de pagamento, vantagem indevida, comissão oculta ou propina, seja a servidores públicos, agentes privados ou terceiros, sendo vedada qualquer prática que contrarie a legislação anticorrupção vigente (Lei nº 12.846/2013 e demais normas aplicáveis).</p>
 
-<p class="clause"><strong>4.3</strong> - Fica estabelecido que, caso a CONTRATANTE não contrate operações de crédito em valor igual ou superior a <strong>${valorRef}</strong> no período de vigência do contrato, 12 (doze) meses, por motivos causados por ela, será devido à CONTRATADA, a título de honorário mínimo garantido, o valor de <strong>${honorMinMes}% (um por cento) por mês</strong>, totalizando <strong>${honorMinTotal}% (doze por cento)</strong> ao final do contrato de 12 (doze) meses, independente da sua renovação.</p>
+<p class="clause"><strong>4.3</strong> - Fica estabelecido que, caso a CONTRATANTE não contrate operações de crédito em valor igual ou superior a <strong>${valorRef}</strong> no período de vigência do contrato, 12 (doze) meses, por motivos causados por ela, será devido à CONTRATADA, a título de honorário mínimo garantido, o valor correspondente a <strong>${taxaDesistenciaPct}% (${pctExtenso(taxaDesistenciaPct)} por cento)</strong> sobre o valor de referência pretendido inicialmente, totalizando <strong>${brl(valorDesistencia)}</strong>.</p>
 
 <p class="clause"><strong>PARÁGRAFO ÚNICO - CAUSAS DE IMPEDIMENTO A CRÉDITO POR PARTE DA CONTRATANTE</strong><br>
 As causas de impedimento a crédito por parte da CONTRATANTE são: 1 – Apontamento, direto ou indireto (replicação) de restrição financeira, fiscal ou de simples protesto, inclusive em grupo econômico e cônjuge. 2 – Rating Bacen diferente de C, B ou A. 3 – Movimentação bancária inferior à declarada no faturamento bruto e quando exigido na declaração de imposto de renda. 4 – Anotação de apontamento de fraude documental ou ideológica no Banco Central. 5 – Mudança de endereço da sede empresarial sem comunicação prévia. 6 – Falta de comprovação de endereço da sede ou endereço divergente ao registrado nos órgãos competentes.</p>
@@ -3621,6 +3635,8 @@ As causas de impedimento a crédito por parte da CONTRATANTE são: 1 – Apontam
 <p class="clause"><strong>4.4</strong> - O valor do honorário mínimo poderá ser cobrado integralmente ao final do contrato, ou em parcelas mensais, conforme acordo entre as partes.</p>
 
 <p class="clause"><strong>4.5</strong> - Caso a CONTRATANTE venha a contratar operações de crédito que, somadas, ultrapassem o valor de <strong>${valorRef}</strong> durante a vigência do contrato, 12 (doze) meses, a CONTRATADA renunciará ao recebimento do honorário mínimo, mantendo-se exclusivamente o direito à comissão de ${comissaoPct}% sobre o valor contratado.</p>
+
+<p class="clause"><strong>4.6</strong> - Caso o Rating Bancário interno, no ato da abertura da conta ou após o término do primeiro ciclo de validação, seja inferior a <strong>"C"</strong>, será cobrado o valor mensal de <strong>${brl(custeioMensal)}</strong> a título de custeio do acompanhamento intensivo de extratos bancários, certidões fiscais e restrições comerciais ou bancárias, enquanto o Rating permanecer abaixo do nível "C".</p>
 
 <h2 class="section-title">VI – CONFIDENCIALIDADE</h2>
 
@@ -3640,7 +3656,7 @@ ${temParceiro ? `<p class="clause"><strong>5.1</strong> - O PARCEIRO COMERCIAL, 
 
 <p class="clause"><strong>7.1</strong> - A Cláusula Penal será acionada caso a CONTRATANTE atrase o pagamento de 3 (três) parcelas consecutivas ou 5 (cinco) parcelas alternadas do contrato de crédito obtido junto à instituição financeira.</p>
 
-<p class="clause"><strong>7.2</strong> - O valor da multa será de ${pctMulta}% (${pctMultaExtenso} por cento) sobre o valor total do crédito contratado pela CONTRATANTE junto à instituição financeira, a ser pago à CONTRATADA no prazo de 10 (dez) dias úteis após a notificação da inadimplência.</p>
+<p class="clause"><strong>7.2</strong> - O valor da multa será de ${taxaDesistenciaPct}% (${pctExtenso(taxaDesistenciaPct)} por cento) sobre o valor total do crédito contratado pela CONTRATANTE junto à instituição financeira, a ser pago à CONTRATADA no prazo de 10 (dez) dias úteis após a notificação da inadimplência.</p>
 
 <p class="clause"><strong>7.3</strong> - A aplicação desta Cláusula Penal não impede a CONTRATADA de buscar outras medidas legais cabíveis para a recuperação de quaisquer valores devidos, incluindo, mas não se limitando, aos honorários e comissões previstos na Cláusula 4.</p>
 
@@ -5568,6 +5584,35 @@ ${(temTest1 || temTest2) ? `
   // causando "Unexpected token '<'" ao tentar fazer response.json().
   app.get('/api/parceiros-comerciais', auth, listarParceirosComerciais);
 
+  app.get('/api/parceiros/:id', auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        'SELECT * FROM parceiros_comerciais WHERE id = $1 AND ativo = true',
+        [req.params.id]
+      );
+      if (!rows.length) { res.status(404).json({ error: 'Parceiro não encontrado' }); return; }
+      res.json(rows[0]);
+    } catch (err) {
+      console.error('[GET /api/parceiros/:id]', err);
+      res.status(500).json({ error: 'Erro ao buscar parceiro' });
+    }
+  });
+
+  app.get('/api/parceiros-comerciais/:id', auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        'SELECT * FROM parceiros_comerciais WHERE id = $1 AND ativo = true',
+        [req.params.id]
+      );
+      if (!rows.length) { res.status(404).json({ error: 'Parceiro não encontrado' }); return; }
+      res.json(rows[0]);
+    } catch (err) {
+      console.error('[GET /api/parceiros-comerciais/:id]', err);
+      res.status(500).json({ error: 'Erro ao buscar parceiro' });
+    }
+  });
+
+
   app.post('/api/parceiros', auth, async (req: Request, res: Response) => {
     try {
       const {
@@ -5895,7 +5940,9 @@ ${(temTest1 || temTest2) ? `
         empresa_id, parceiro_id, lead_id,
         contratada_id, responsavel_contrato_id,
         // campos contrato assessoria
-        valor_referencia, taxa_comissao = 10, percentual_multa = 10,
+        valor_referencia, taxa_comissao = 10, taxa_desistencia = 5, custeio_mensal = 250, percentual_multa,
+        empresa_razao_social, empresa_cnpj, empresa_endereco,
+        empresa_representante, empresa_cpf_representante,
         // campos contrato limpa nome
         cliente_id, cliente_tipo, // 'empresa' ou 'lead'
         valor_contrato, condicao_pagamento, prazo_entrega_dias = 30,
@@ -6362,23 +6409,54 @@ ${(temTest1 || temTest2) ? `
       }
 
       // ── CONTRATO DE ASSESSORIA (padrão) ─────────────────────────────────────
-      if (!empresa_id || !valor_referencia) {
-        res.status(400).json({ error: 'Campos obrigatórios: empresa_id, valor_referencia, data_assinatura, foro_eleito' });
+      const parseNumeroContrato = (valor: any, fallback = 0): number => {
+        if (valor === undefined || valor === null || valor === '') return fallback;
+        if (typeof valor === 'number') return Number.isFinite(valor) ? valor : fallback;
+        let normalizado = String(valor)
+          .trim()
+          .replace(/\s/g, '')
+          .replace(/R\$/gi, '');
+        if (normalizado.includes(',') && normalizado.includes('.')) {
+          normalizado = normalizado.replace(/\./g, '').replace(',', '.');
+        } else if (normalizado.includes(',')) {
+          normalizado = normalizado.replace(',', '.');
+        }
+        const parsed = Number.parseFloat(normalizado);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
+
+      const valorReferenciaNum = parseNumeroContrato(valor_referencia);
+      const taxaComissaoNum = parseNumeroContrato(taxa_comissao, 10);
+      const taxaDesistenciaNum = parseNumeroContrato(
+        taxa_desistencia !== undefined ? taxa_desistencia : percentual_multa,
+        5,
+      );
+      const custeioMensalNum = parseNumeroContrato(custeio_mensal, 250);
+
+      if (!valorReferenciaNum) {
+        res.status(400).json({ error: 'Campos obrigatórios: valor_referencia, data_assinatura, foro_eleito' });
         return;
       }
-      if (valor_referencia < 1000) {
+      if (valorReferenciaNum < 1000) {
         res.status(400).json({ error: 'Valor de referência mínimo é R$ 1.000,00' });
         return;
       }
-
-      const { rows: empresaRows } = await pool.query('SELECT * FROM empresas WHERE id = $1', [empresa_id]);
-      if (!empresaRows.length) {
-        res.status(404).json({ error: 'Empresa não encontrada' });
+      if (!empresa_id && !empresa_razao_social) {
+        res.status(400).json({ error: 'Informe empresa_id ou os dados editados da contratante.' });
         return;
       }
-      const empresa = empresaRows[0];
 
-      let parceiro = null;
+      let empresa: any = null;
+      if (empresa_id) {
+        const { rows: empresaRows } = await pool.query('SELECT * FROM empresas WHERE id = $1', [empresa_id]);
+        if (!empresaRows.length) {
+          res.status(404).json({ error: 'Empresa não encontrada' });
+          return;
+        }
+        empresa = empresaRows[0];
+      }
+
+      let parceiro: any = null;
       if (parceiro_id) {
         const { rows: parceiroRows } = await pool.query(
           'SELECT * FROM parceiros_comerciais WHERE id = $1',
@@ -6386,29 +6464,43 @@ ${(temTest1 || temTest2) ? `
         );
         parceiro = parceiroRows[0] || null;
       }
+      if (parceiro_nome || parceiro_cpf) {
+        parceiro = {
+          ...(parceiro || {}),
+          nome: parceiro_nome || parceiro?.nome || '',
+          cpf: parceiro_cpf || parceiro?.cpf || '',
+        };
+      }
+
+      const enderecoEmpresaBanco = empresa
+        ? [empresa.logradouro, empresa.numero, empresa.bairro, empresa.cidade, empresa.estado || empresa.uf]
+            .filter(Boolean).join(', ')
+        : '';
 
       const payload = {
         contratada: CONTRATADA,
         contratante: {
-          razao_social: empresa.razao_social,
-          cnpj: empresa.cnpj || '',
-          endereco: [empresa.logradouro, empresa.numero, empresa.bairro, empresa.cidade, empresa.estado]
-            .filter(Boolean).join(', '),
-          representante: empresa.responsavel_nome || '',
-          cpf_representante: empresa.responsavel_cpf || '',
+          razao_social: empresa_razao_social || empresa?.razao_social || '',
+          cnpj: empresa_cnpj || empresa?.cnpj || '',
+          endereco: empresa_endereco || enderecoEmpresaBanco,
+          representante: empresa_representante || empresa?.responsavel_nome || empresa?.representante_nome || '',
+          cpf_representante: empresa_cpf_representante || empresa?.responsavel_cpf || empresa?.representante_cpf || '',
         },
-        parceiro: parceiro ? { nome: parceiro.nome, cpf: parceiro.cpf } : null,
+        parceiro: parceiro && parceiro.nome ? { nome: parceiro.nome, cpf: parceiro.cpf || '' } : null,
         contrato: {
-          valor_referencia: parseFloat(valor_referencia),
-          valor_referencia_formatado: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor_referencia),
-          taxa_comissao: parseFloat(taxa_comissao),
-          percentual_multa: parseFloat(percentual_multa),
-          honorario_minimo_mes: 1,
-          honorario_minimo_total: 12,
+          valor_referencia: valorReferenciaNum,
+          valor_referencia_formatado: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorReferenciaNum),
+          taxa_comissao: taxaComissaoNum,
+          taxa_desistencia: taxaDesistenciaNum,
+          custeio_mensal: custeioMensalNum,
+          percentual_multa: taxaDesistenciaNum, // compatibilidade com PDFs antigos
+          honorario_minimo_mes: null,
+          honorario_minimo_total: null,
           data_assinatura,
           data_assinatura_formatada: new Date(data_assinatura + 'T12:00:00').toLocaleDateString('pt-BR', {
             day: '2-digit', month: 'long', year: 'numeric'
           }),
+          cidade_assinatura: cidade_assinatura || empresa?.cidade || 'BRASÍLIA – DF',
           foro_eleito,
           vigencia_meses: 12,
         },
@@ -6421,22 +6513,25 @@ ${(temTest1 || temTest2) ? `
         `INSERT INTO contratos_gerados
            (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id,
             valor_referencia, valor_contrato, condicao_pagamento, taxa_comissao,
+            taxa_desistencia, custeio_mensal,
             honorario_minimo_mes, honorario_minimo_total, data_assinatura,
             foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
          RETURNING id, created_at`,
         [
           'assessoria',
           null,
-          empresa_id,
+          empresa_id || null,
           parceiro_id || null,
           lead_id || null,
-          valor_referencia,
+          valorReferenciaNum,
           null,
           null,
-          taxa_comissao,
-          1,
-          12,
+          taxaComissaoNum,
+          taxaDesistenciaNum,
+          custeioMensalNum,
+          null,
+          null,
           data_assinatura,
           foro_eleito,
           pdfPath,
