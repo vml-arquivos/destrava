@@ -161,8 +161,9 @@ export default function CapturaLead() {
           origem: "simulador-publico",
         }),
       });
-    } catch {
-      // silencioso
+    } catch (err) {
+      // Falha não bloqueia o fluxo do usuário, mas registra para monitoramento
+      console.error("[CapturaLead] Falha ao registrar lead na API:", err);
     }
     setEnviando(false);
     setEtapa("resultado");
