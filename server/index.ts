@@ -979,6 +979,24 @@ async function startServer() {
   try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS custeio_mensal NUMERIC(15,2) DEFAULT 250.00`); }
   catch { /* já existe */ }
 
+  // P13C: Identificação operacional de contratos (número e protocolo)
+  try { await pool.query(`CREATE SEQUENCE IF NOT EXISTS contratos_gerados_sequencial_global_seq START WITH 1 INCREMENT BY 1`); }
+  catch { /* já existe ou sem permissão */ }
+  try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS numero_contrato TEXT`); }
+  catch { /* já existe */ }
+  try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS protocolo_contrato TEXT`); }
+  catch { /* já existe */ }
+  try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS codigo_tipo_contrato TEXT`); }
+  catch { /* já existe */ }
+  try { await pool.query(`ALTER TABLE contratos_gerados ADD COLUMN IF NOT EXISTS sequencial_contrato INTEGER`); }
+  catch { /* já existe */ }
+  try { await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_contratos_numero_contrato_unique ON contratos_gerados(numero_contrato) WHERE numero_contrato IS NOT NULL`); }
+  catch { /* já existe */ }
+  try { await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_contratos_protocolo_contrato_unique ON contratos_gerados(protocolo_contrato) WHERE protocolo_contrato IS NOT NULL`); }
+  catch { /* já existe */ }
+  try { await pool.query(`CREATE INDEX IF NOT EXISTS idx_contratos_codigo_tipo_contrato ON contratos_gerados(codigo_tipo_contrato)`); }
+  catch { /* já existe */ }
+
   // P14: ADD COLUMN contador_id para faturamento
   try { await pool.query(`ALTER TABLE faturamento_historico ADD COLUMN IF NOT EXISTS contador_id UUID REFERENCES contadores(id) ON DELETE SET NULL`); }
   catch { /* já existe */ }
@@ -3555,6 +3573,180 @@ Responda APENAS com um JSON válido no seguinte formato:
 
   // ─── FUNÇÕES AUXILIARES PARA CONTRATOS ────────────────────────────────────
 
+
+  // ─── IDENTIFICAÇÃO OPERACIONAL DOS CONTRATOS ───────────────────────────────
+  type IdentificacaoContrato = {
+    numero_contrato: string;
+    protocolo_contrato: string;
+    codigo_tipo_contrato: string;
+    tipo_contrato_nome: string;
+    sequencial_contrato: number;
+    documento_referencia_codigo: string;
+  };
+
+  const CONFIG_TIPOS_CONTRATO: Record<string, { codigo: string; nome: string }> = {
+    assessoria: {
+      codigo: 'ASS',
+      nome: 'Assessoria de Crédito',
+    },
+    limpa_nome: {
+      codigo: 'LNR',
+      nome: 'Limpa Nome / Não Exposição de Restrições',
+    },
+    limpa_bacen: {
+      codigo: 'SCR',
+      nome: 'Limpa BACEN / SCR',
+    },
+    rating: {
+      codigo: 'RAT',
+      nome: 'Rating / Algoritmo Financeiro',
+    },
+    parceria_comercial: {
+      codigo: 'PAR',
+      nome: 'Parceria Comercial',
+    },
+  };
+
+  function escapeHtmlContrato(value: unknown): string {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function somenteDigitosContrato(value: unknown): string {
+    return String(value ?? '').replace(/\D/g, '');
+  }
+
+  function documentoReferenciaContrato(payload: any): string {
+    const candidatos = [
+      payload?.contratante?.cnpj,
+      payload?.contratante?.cpf,
+      payload?.contratante?.cpf_representante,
+      payload?.representante?.cpf,
+      payload?.parceiro?.cpf,
+      payload?.parceiro?.cnpj,
+      payload?.contratada?.cnpj,
+      payload?.contratada?.cpf,
+    ];
+
+    for (const candidato of candidatos) {
+      const digitos = somenteDigitosContrato(candidato);
+      if (digitos.length >= 4) return digitos.slice(-4);
+    }
+
+    return '0000';
+  }
+
+  function nomeArquivoSeguroContrato(value: unknown, fallback = 'contrato'): string {
+    const base = String(value || fallback)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9._-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 140);
+
+    return base || fallback;
+  }
+
+  async function gerarIdentificacaoContrato(tipoContrato: string, payload: any): Promise<IdentificacaoContrato> {
+    const config = CONFIG_TIPOS_CONTRATO[tipoContrato] || {
+      codigo: 'CTR',
+      nome: 'Contrato',
+    };
+
+    await pool.query(`
+      CREATE SEQUENCE IF NOT EXISTS contratos_gerados_sequencial_global_seq
+      START WITH 1
+      INCREMENT BY 1
+    `);
+
+    const { rows } = await pool.query(
+      `SELECT nextval('contratos_gerados_sequencial_global_seq')::integer AS sequencial`
+    );
+
+    const sequencial = Number(rows[0]?.sequencial || 0);
+    const seqFormatado = String(sequencial).padStart(6, '0');
+    const agora = new Date();
+    const ano = String(agora.getFullYear());
+    const data = [
+      agora.getFullYear(),
+      String(agora.getMonth() + 1).padStart(2, '0'),
+      String(agora.getDate()).padStart(2, '0'),
+    ].join('');
+    const docCodigo = documentoReferenciaContrato(payload).padStart(4, '0').slice(-4);
+
+    return {
+      numero_contrato: `${config.codigo}-${ano}-${seqFormatado}`,
+      protocolo_contrato: `DC-${config.codigo}-${data}-DOC${docCodigo}-${seqFormatado}`,
+      codigo_tipo_contrato: config.codigo,
+      tipo_contrato_nome: config.nome,
+      sequencial_contrato: sequencial,
+      documento_referencia_codigo: docCodigo,
+    };
+  }
+
+  function aplicarIdentificacaoContrato(payload: any, identificacao: IdentificacaoContrato) {
+    payload.contrato = {
+      ...(payload.contrato || {}),
+      ...identificacao,
+    };
+    return payload;
+  }
+
+  async function salvarIdentificacaoContrato(contratoId: string, contrato: any) {
+    if (!contratoId || !contrato?.numero_contrato || !contrato?.protocolo_contrato) return;
+
+    await pool.query(
+      `UPDATE contratos_gerados
+          SET numero_contrato = $1,
+              protocolo_contrato = $2,
+              codigo_tipo_contrato = $3,
+              sequencial_contrato = $4,
+              updated_at = NOW()
+        WHERE id = $5`,
+      [
+        contrato.numero_contrato,
+        contrato.protocolo_contrato,
+        contrato.codigo_tipo_contrato || null,
+        contrato.sequencial_contrato || null,
+        contratoId,
+      ]
+    );
+  }
+
+  function identificacaoContratoExistente(contrato: any): Partial<IdentificacaoContrato> {
+    return {
+      numero_contrato: contrato?.numero_contrato || '',
+      protocolo_contrato: contrato?.protocolo_contrato || '',
+      codigo_tipo_contrato: contrato?.codigo_tipo_contrato || '',
+      tipo_contrato_nome: CONFIG_TIPOS_CONTRATO[contrato?.tipo_contrato || '']?.nome || 'Contrato',
+      sequencial_contrato: Number(contrato?.sequencial_contrato || 0),
+      documento_referencia_codigo: '',
+    };
+  }
+
+  function blocoIdentificacaoContrato(contrato: any): string {
+    if (!contrato?.numero_contrato && !contrato?.protocolo_contrato) return '';
+
+    const numero = escapeHtmlContrato(contrato.numero_contrato || '—');
+    const protocolo = escapeHtmlContrato(contrato.protocolo_contrato || '—');
+    const codigo = escapeHtmlContrato(contrato.codigo_tipo_contrato || 'CTR');
+    const tipo = escapeHtmlContrato(contrato.tipo_contrato_nome || 'Contrato');
+
+    return `
+<div style="border:1px solid #d1d5db;border-radius:8px;padding:10px 12px;margin:0 0 18px 0;background:#f9fafb;font-size:11px;line-height:1.45;">
+  <div style="font-weight:700;text-transform:uppercase;color:#111827;margin-bottom:4px;">Identificação do contrato</div>
+  <div><strong>Tipo:</strong> ${codigo} — ${tipo}</div>
+  <div><strong>Nº do contrato:</strong> ${numero}</div>
+  <div><strong>Protocolo:</strong> ${protocolo}</div>
+</div>`;
+  }
+
+
   async function gerarHtmlContrato(payload: any): Promise<string> {
     const { contratante, parceiro, contrato } = payload;
 
@@ -3584,6 +3776,8 @@ Responda APENAS com um JSON válido no seguinte formato:
 
     const body = `
 <h1 class="doc-title">CONTRATO DE ANÁLISE DOCUMENTAL PARA ACESSO A LINHA DE CRÉDITO</h1>
+
+${blocoIdentificacaoContrato(contrato)}
 
 <h2 class="section-title">I – IDENTIFICAÇÃO DAS PARTES</h2>
 
@@ -4515,6 +4709,8 @@ tr:nth-child(even) td { background: #f4f7ff; }
     const body = `
 <h1 class="doc-title">CONTRATO DE PRESTAÇÃO DE SERVIÇOS</h1>
 
+${blocoIdentificacaoContrato(contrato)}
+
 <h2 class="section-title">QUADRO RESUMIDO</h2>
 <table class="data-table" style="margin-bottom:20px;">
   <tr><td style="width:40%; font-weight:bold; background:#f0f4ff;">CONTRATADA</td><td>${nomeContratada}${docContratada ? ` — ${docContratada}` : ''}</td></tr>
@@ -4638,6 +4834,8 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
 
     const body = `
 <h1 class="doc-title">CONTRATO DE PRESTAÇÃO DE SERVIÇOS</h1>
+
+${blocoIdentificacaoContrato(contrato)}
 <h2 class="section-title">IDENTIFICAÇÃO DAS PARTES</h2>
 <p class="clause"><strong>CONTRATADA:</strong> ${qualifContratada}</p>
 ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA ASSESSORIA:</strong> ${responsavelTexto}.</p>` : ''}
@@ -4693,6 +4891,8 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
     const cidadeAss     = contrato.cidade_assinatura || 'BRASÍLIA – DF';
     const body = `
 <h1 class="doc-title">CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE ASSESSORIA FINANCEIRA</h1>
+
+${blocoIdentificacaoContrato(contrato)}
 <h1 class="doc-title" style="font-size:10pt; font-weight:normal; margin-bottom:20px;">ALGORITMO FINANCEIRO / RATING DE CRÉDITO</h1>
 <h2 class="section-title">I – IDENTIFICAÇÃO DAS PARTES</h2>
 <p class="clause"><strong>CONTRATADA:</strong> ${contratada.razao_social}, CNPJ n° ${contratada.cnpj}, com sede na ${contratada.endereco_sede}, representada neste ato por ${contratada.representante}, ${contratada.cargo_representante}, CPF n° ${contratada.cpf_representante}.</p>
@@ -4781,6 +4981,8 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
     ].join('');
     const body = `
 <h1 class="doc-title">CONTRATO DE PARCERIA COMERCIAL</h1>
+
+${blocoIdentificacaoContrato(contrato)}
 <p class="clause"><strong>CONTRATADA:</strong> DESTRAVA CREDITO LTDA, pessoa jurídica de direito privado, inscrita no CNPJ sob o n° ${contratada.cnpj}, com sede na ${contratada.endereco_sede}, doravante denominada simplesmente DESTRAVA CRÉDITO, neste ato representada por seu sócio administrador, Sr. ${contratada.representante}, brasileiro, portador do CPF n° ${contratada.cpf_representante}.</p>
 <p class="clause"><strong>PARCEIRA COMERCIAL:</strong> ${parceiro.nome}, brasileira${qualificacaoParceiro}, doravante denominada simplesmente PARCEIRA.</p>
 <p class="clause">As partes acima qualificadas celebram o presente Contrato de Parceria Comercial, que se regerá pelas seguintes cláusulas e condições:</p>
@@ -4880,7 +5082,7 @@ ${(temTest1 || temTest2) ? `
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
     const html = await gerarHtmlContrato(payload);
-    const fileName = `contrato-${crypto.randomUUID()}.pdf`;
+    const fileName = `${nomeArquivoSeguroContrato(payload?.contrato?.protocolo_contrato, 'contrato-assessoria')}.pdf`;
     const filePath = path.join(uploadsDir, fileName);
 
     let browser;
@@ -6046,7 +6248,7 @@ ${(temTest1 || temTest2) ? `
           return;
         }
 
-        const payloadLN = {
+        const payloadLN: any = {
           contratante: contratanteData,
           contratada: contratadaSelecionada,
           responsavel_contrato: responsavelContrato,
@@ -6062,10 +6264,11 @@ ${(temTest1 || temTest2) ? `
           },
         };
 
+        aplicarIdentificacaoContrato(payloadLN, await gerarIdentificacaoContrato('limpa_nome', payloadLN));
         const htmlLN = await gerarHtmlContratoLimpaNome(payloadLN);
         const uploadsDir2 = path.resolve('uploads', 'contratos');
         if (!fs.existsSync(uploadsDir2)) fs.mkdirSync(uploadsDir2, { recursive: true });
-        const fileNameLN = `contrato-limpa-nome-${crypto.randomUUID()}.pdf`;
+        const fileNameLN = `${nomeArquivoSeguroContrato(payloadLN.contrato?.protocolo_contrato, 'contrato-limpa-nome')}.pdf`;
         const filePathLN = path.join(uploadsDir2, fileNameLN);
         let browser2;
         try {
@@ -6126,7 +6329,16 @@ ${(temTest1 || temTest2) ? `
           ]
         );
         const contrato2 = contratoRows2[0];
-        res.status(201).json({ success: true, contrato_id: contrato2.id, pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`, hash_documento: hash2, created_at: contrato2.created_at });
+        await salvarIdentificacaoContrato(contrato2.id, payloadLN.contrato);
+        res.status(201).json({
+          success: true,
+          contrato_id: contrato2.id,
+          numero_contrato: payloadLN.contrato.numero_contrato,
+          protocolo_contrato: payloadLN.contrato.protocolo_contrato,
+          pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`,
+          hash_documento: hash2,
+          created_at: contrato2.created_at,
+        });
         return;
       }
 
@@ -6208,7 +6420,7 @@ ${(temTest1 || temTest2) ? `
           };
         }
 
-        const payloadBacen = {
+        const payloadBacen: any = {
           contratante: contratanteBacenData,
           representante: representanteBacenData,
           contratada: contratadaSelecionada,
@@ -6223,10 +6435,11 @@ ${(temTest1 || temTest2) ? `
             cidade_assinatura: cidade_assinatura || 'BRASÍLIA – DF',
           },
         };
+        aplicarIdentificacaoContrato(payloadBacen, await gerarIdentificacaoContrato('limpa_bacen', payloadBacen));
         const htmlBacen = await gerarHtmlContratoBacen(payloadBacen);
         const uploadsDir3 = path.resolve('uploads', 'contratos');
         if (!fs.existsSync(uploadsDir3)) fs.mkdirSync(uploadsDir3, { recursive: true });
-        const fileNameBacen = `contrato-limpa-bacen-${crypto.randomUUID()}.pdf`;
+        const fileNameBacen = `${nomeArquivoSeguroContrato(payloadBacen.contrato?.protocolo_contrato, 'contrato-limpa-bacen')}.pdf`;
         const filePathBacen = path.join(uploadsDir3, fileNameBacen);
         let browserBacen;
         try {
@@ -6265,7 +6478,16 @@ ${(temTest1 || temTest2) ? `
            colaborador.id]
         );
         const contratoBacen = contratoRowsBacen[0];
-        res.status(201).json({ success: true, contrato_id: contratoBacen.id, pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`, hash_documento: hashBacen, created_at: contratoBacen.created_at });
+        await salvarIdentificacaoContrato(contratoBacen.id, payloadBacen.contrato);
+        res.status(201).json({
+          success: true,
+          contrato_id: contratoBacen.id,
+          numero_contrato: payloadBacen.contrato.numero_contrato,
+          protocolo_contrato: payloadBacen.contrato.protocolo_contrato,
+          pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`,
+          hash_documento: hashBacen,
+          created_at: contratoBacen.created_at,
+        });
         return;
       }
 
@@ -6282,7 +6504,7 @@ ${(temTest1 || temTest2) ? `
         const { rows: empRating } = await pool.query('SELECT * FROM empresas WHERE id=$1', [empresa_id]);
         if (!empRating.length) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
         const er = empRating[0];
-        const payloadRating = {
+        const payloadRating: any = {
           contratante: {
             razao_social: er.razao_social,
             cnpj: er.cnpj || '',
@@ -6302,10 +6524,11 @@ ${(temTest1 || temTest2) ? `
             cidade_assinatura: cidade_assinatura || 'BRASÍLIA – DF',
           },
         };
+        aplicarIdentificacaoContrato(payloadRating, await gerarIdentificacaoContrato('rating', payloadRating));
         const htmlRating = await gerarHtmlContratoRating(payloadRating);
         const uploadsDir4 = path.resolve('uploads', 'contratos');
         if (!fs.existsSync(uploadsDir4)) fs.mkdirSync(uploadsDir4, { recursive: true });
-        const fileNameRating = `contrato-rating-${crypto.randomUUID()}.pdf`;
+        const fileNameRating = `${nomeArquivoSeguroContrato(payloadRating.contrato?.protocolo_contrato, 'contrato-rating')}.pdf`;
         const filePathRating = path.join(uploadsDir4, fileNameRating);
         let browserRating;
         try {
@@ -6333,7 +6556,16 @@ ${(temTest1 || temTest2) ? `
            data_assinatura, foro_eleito, pdfPath, hashRating, JSON.stringify(payloadRating), colaborador.id]
         );
         const contratoRating = contratoRowsRating[0];
-        res.status(201).json({ success: true, contrato_id: contratoRating.id, pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`, hash_documento: hashRating, created_at: contratoRating.created_at });
+        await salvarIdentificacaoContrato(contratoRating.id, payloadRating.contrato);
+        res.status(201).json({
+          success: true,
+          contrato_id: contratoRating.id,
+          numero_contrato: payloadRating.contrato.numero_contrato,
+          protocolo_contrato: payloadRating.contrato.protocolo_contrato,
+          pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`,
+          hash_documento: hashRating,
+          created_at: contratoRating.created_at,
+        });
         return;
       }
 
@@ -6350,7 +6582,7 @@ ${(temTest1 || temTest2) ? `
           res.status(400).json({ error: 'Campos obrigatórios para Parceria Comercial: parceiro_nome, parceiro_cpf' });
           return;
         }
-        const payloadParceria = {
+        const payloadParceria: any = {
           parceiro: {
             nome: parceiro_nome,
             cpf: parceiro_cpf,
@@ -6373,10 +6605,11 @@ ${(temTest1 || temTest2) ? `
             testemunha_2_cpf: testemunha_2_cpf || '',
           },
         };
+        aplicarIdentificacaoContrato(payloadParceria, await gerarIdentificacaoContrato('parceria_comercial', payloadParceria));
         const htmlParceria = await gerarHtmlContratoParceriaComercial(payloadParceria);
         const uploadsDir5 = path.resolve('uploads', 'contratos');
         if (!fs.existsSync(uploadsDir5)) fs.mkdirSync(uploadsDir5, { recursive: true });
-        const fileNameParceria = `contrato-parceria-${crypto.randomUUID()}.pdf`;
+        const fileNameParceria = `${nomeArquivoSeguroContrato(payloadParceria.contrato?.protocolo_contrato, 'contrato-parceria')}.pdf`;
         const filePathParceria = path.join(uploadsDir5, fileNameParceria);
         let browserParceria;
         try {
@@ -6404,7 +6637,16 @@ ${(temTest1 || temTest2) ? `
            data_assinatura, foro_eleito, pdfPath, hashParceria, JSON.stringify(payloadParceria), colaborador.id]
         );
         const contratoParceria = contratoRowsParceria[0];
-        res.status(201).json({ success: true, contrato_id: contratoParceria.id, pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`, hash_documento: hashParceria, created_at: contratoParceria.created_at });
+        await salvarIdentificacaoContrato(contratoParceria.id, payloadParceria.contrato);
+        res.status(201).json({
+          success: true,
+          contrato_id: contratoParceria.id,
+          numero_contrato: payloadParceria.contrato.numero_contrato,
+          protocolo_contrato: payloadParceria.contrato.protocolo_contrato,
+          pdf_url: `/uploads/contratos/${path.basename(pdfPath)}`,
+          hash_documento: hashParceria,
+          created_at: contratoParceria.created_at,
+        });
         return;
       }
 
@@ -6477,7 +6719,7 @@ ${(temTest1 || temTest2) ? `
             .filter(Boolean).join(', ')
         : '';
 
-      const payload = {
+      const payload: any = {
         contratada: CONTRATADA,
         contratante: {
           razao_social: empresa_razao_social || empresa?.razao_social || '',
@@ -6506,6 +6748,7 @@ ${(temTest1 || temTest2) ? `
         },
       };
 
+      aplicarIdentificacaoContrato(payload, await gerarIdentificacaoContrato('assessoria', payload));
       pdfPath = await gerarPdfContrato(payload);
       const hash = await calcularHashArquivo(pdfPath);
 
@@ -6542,11 +6785,14 @@ ${(temTest1 || temTest2) ? `
       );
 
       const contrato = contratoRows[0];
+      await salvarIdentificacaoContrato(contrato.id, payload.contrato);
       const pdfUrl = `/uploads/contratos/${path.basename(pdfPath)}`;
 
       res.status(201).json({
         success: true,
         contrato_id: contrato.id,
+        numero_contrato: payload.contrato.numero_contrato,
+        protocolo_contrato: payload.contrato.protocolo_contrato,
         pdf_url: pdfUrl,
         hash_documento: hash,
         created_at: contrato.created_at,
@@ -6579,7 +6825,7 @@ ${(temTest1 || temTest2) ? `
   app.get('/api/contratos/:id/download', auth, async (req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
-        'SELECT pdf_path, empresa_id FROM contratos_gerados WHERE id = $1',
+        'SELECT pdf_path, empresa_id, numero_contrato, protocolo_contrato FROM contratos_gerados WHERE id = $1',
         [req.params.id]
       );
       if (!rows.length || !rows[0].pdf_path) {
@@ -6592,7 +6838,8 @@ ${(temTest1 || temTest2) ? `
         return;
       }
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="contrato-${req.params.id}.pdf"`);
+      const nomeDownload = nomeArquivoSeguroContrato(rows[0].protocolo_contrato || rows[0].numero_contrato || `contrato-${req.params.id}`, `contrato-${req.params.id}`);
+      res.setHeader('Content-Disposition', `attachment; filename="${nomeDownload}.pdf"`);
       fs.createReadStream(filePath).pipe(res);
     } catch (err) {
       console.error('[GET /api/contratos/:id/download]', err);
@@ -6805,6 +7052,7 @@ ${(temTest1 || temTest2) ? `
       contrato: {
         ...((contrato.payload_snapshot || {}).contrato || {}),
         ...(contrato.dados_editaveis || {}),
+        ...identificacaoContratoExistente(contrato),
       },
     };
     let html: string;
@@ -6817,7 +7065,7 @@ ${(temTest1 || temTest2) ? `
     }
     const uploadsDir = path.resolve('uploads', 'contratos');
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-    const fileName = `contrato-${contrato.tipo_contrato || 'gerado'}-${crypto.randomUUID()}.pdf`;
+    const fileName = `${nomeArquivoSeguroContrato(payload?.contrato?.protocolo_contrato, `contrato-${contrato.tipo_contrato || 'gerado'}`)}.pdf`;
     const pdfPath = path.join(uploadsDir, fileName);
     let browser: any;
     try {
