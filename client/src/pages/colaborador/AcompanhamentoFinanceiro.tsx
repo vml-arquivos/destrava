@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import ColaboradorLayout from "./Layout";
 import { useAuth } from "@/hooks/useAuth";
+import { getToken } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -1219,8 +1220,19 @@ export default function AcompanhamentoFinanceiro() {
   const exportarPdf = async (semanaId: string) => {
     setExportandoPdf(true);
     try {
-      const r = await fetch(`/api/acompanhamento-financeiro/semana/${semanaId}/exportar-pdf`, { method: "POST" });
-      if (!r.ok) { toast.error("Erro ao gerar PDF."); return; }
+      const token = getToken();
+      const r = await fetch(`/api/acompanhamento-financeiro/semana/${semanaId}/exportar-pdf`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!r.ok) {
+        const errBody = await r.json().catch(() => ({}));
+        toast.error(errBody.error || `Erro ao gerar PDF (HTTP ${r.status}).`);
+        return;
+      }
       const data = await r.json();
       if (data.url) {
         const a = document.createElement("a");
