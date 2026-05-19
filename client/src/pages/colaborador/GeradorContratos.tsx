@@ -6,6 +6,7 @@ import { useAuth } from '../../hooks/useAuth';
 import Layout from './Layout';
 import { FormGerarContrato } from '../../components/contratos/FormGerarContrato';
 import { ListaContratos } from '../../components/contratos/ListaContratos';
+import { ContratoAssessoria, type DadosContratoAssessoria } from '../../components/contratos/ContratoAssessoria';
 
 interface Parceiro {
   id: string;
@@ -81,6 +82,10 @@ export default function GeradorContratos() {
   const [filtroDataInicio, setFiltroDataInicio] = useState('');
   const [filtroDataFim, setFiltroDataFim] = useState('');
 
+  // Visualizador de assessoria — abre em vez de gerar PDF direto
+  const [dadosAssessoria, setDadosAssessoria]         = useState<DadosContratoAssessoria | null>(null);
+  const [loadingPdfAssessoria, setLoadingPdfAssessoria] = useState(false);
+
   // Hierarquia: admin/diretor/gerente vê tudo
   function normCargo(c: string | undefined) {
     return (c || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
@@ -150,10 +155,63 @@ export default function GeradorContratos() {
     if (abaAtiva === 'lista') {
       void carregarContratos();
     }
-  }, [abaAtiva]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abaAtiva, filtroTipo, filtroStatus, filtroDataInicio, filtroDataFim]);
 
-  // Gera contrato PDF diretamente (todos os tipos)
+  // Bifurcação: assessoria → visualizador inline; outros tipos → PDF via API
   const handleGerarContrato = async (formData: any) => {
+    if (formData.tipo_contrato === 'assessoria') {
+      setLoading(true);
+      try {
+        const empresa: any = await apiFetch(`/api/empresas/${formData.empresa_id}`);
+
+        let parceiroNome: string | undefined;
+        let parceiroCpf: string | undefined;
+        if (formData.parceiro_id) {
+          try {
+            const parceiro: any = await apiFetch(`/api/parceiros/${formData.parceiro_id}`);
+            parceiroNome = parceiro?.nome;
+            parceiroCpf  = parceiro?.cpf;
+          } catch { /* parceiro é opcional */ }
+        }
+
+        const enderecoEmpresa = empresa?.endereco || [
+          empresa?.logradouro,
+          empresa?.numero,
+          empresa?.bairro,
+          empresa?.cidade,
+          empresa?.estado || empresa?.uf,
+        ].filter(Boolean).join(', ');
+
+        const dados: DadosContratoAssessoria = {
+          empresa_id:                 formData.empresa_id,
+          parceiro_id:                formData.parceiro_id,
+          empresa_razao_social:       empresa?.razao_social || '',
+          empresa_cnpj:               empresa?.cnpj || '',
+          empresa_endereco:           enderecoEmpresa || '',
+          empresa_representante:      empresa?.responsavel_nome || empresa?.representante_nome || empresa?.nome_representante || '',
+          empresa_cpf_representante:  empresa?.responsavel_cpf || empresa?.representante_cpf || empresa?.cpf_representante || '',
+          parceiro_nome:              parceiroNome,
+          parceiro_cpf:               parceiroCpf,
+          valor_contrato:             formData.valor_referencia ?? 0,
+          taxa_comissao:              formData.taxa_comissao ?? 10,
+          taxa_desistencia:           formData.taxa_desistencia ?? 5,
+          custeio_mensal:             formData.custeio_mensal ?? 250,
+          data_assinatura:            formData.data_assinatura,
+          cidade_assinatura:          formData.cidade_assinatura || empresa?.cidade || 'Brasília',
+          foro_eleito:                formData.foro_eleito,
+        };
+
+        setDadosAssessoria(dados);
+      } catch (err: any) {
+        toast.error(err.message || 'Erro ao carregar dados da empresa');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Fluxo original para todos os outros tipos: POST → download PDF
     setLoading(true);
     try {
       const result: any = await apiFetch('/api/contratos/gerar', {
@@ -171,7 +229,6 @@ export default function GeradorContratos() {
       const tipo = tipoLabel[formData.tipo_contrato] || formData.tipo_contrato;
       toast.success(`Contrato ${tipo} gerado! Baixando PDF...`);
 
-      // Download automático
       const token = getToken();
       const response = await fetch(`/api/contratos/${result.contrato_id}/download`, {
         headers: { Authorization: `Bearer ${token || ''}` },
@@ -187,6 +244,54 @@ export default function GeradorContratos() {
       toast.error(err.message || 'Erro ao gerar contrato');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Chamado pelo ContratoAssessoria após edição inline — gera PDF timbrado via API
+  const handleGerarPdfAssessoria = async (dadosEditados: DadosContratoAssessoria) => {
+    setLoadingPdfAssessoria(true);
+    try {
+      const result: any = await apiFetch('/api/contratos/gerar', {
+        method: 'POST',
+        body: JSON.stringify({
+          tipo_contrato:             'assessoria',
+          empresa_id:                 dadosEditados.empresa_id,
+          parceiro_id:                dadosEditados.parceiro_id,
+          empresa_razao_social:      dadosEditados.empresa_razao_social,
+          empresa_cnpj:              dadosEditados.empresa_cnpj,
+          empresa_endereco:          dadosEditados.empresa_endereco,
+          empresa_representante:     dadosEditados.empresa_representante,
+          empresa_cpf_representante: dadosEditados.empresa_cpf_representante,
+          parceiro_nome:             dadosEditados.parceiro_nome,
+          parceiro_cpf:              dadosEditados.parceiro_cpf,
+          valor_referencia:          dadosEditados.valor_contrato,
+          taxa_comissao:             dadosEditados.taxa_comissao,
+          taxa_desistencia:          dadosEditados.taxa_desistencia,
+          custeio_mensal:            dadosEditados.custeio_mensal,
+          data_assinatura:           dadosEditados.data_assinatura,
+          cidade_assinatura:         dadosEditados.cidade_assinatura,
+          foro_eleito:               dadosEditados.foro_eleito,
+        }),
+      });
+
+      toast.success('Contrato Assessoria gerado! Baixando PDF...');
+      const token = getToken();
+      const response = await fetch(`/api/contratos/${result.contrato_id}/download`, {
+        headers: { Authorization: `Bearer ${token || ''}` },
+      });
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `contrato-assessoria-${result.contrato_id}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setDadosAssessoria(null);
+      await carregarContratos();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao gerar PDF do contrato');
+    } finally {
+      setLoadingPdfAssessoria(false);
     }
   };
 
@@ -294,6 +399,7 @@ export default function GeradorContratos() {
   };
 
   return (
+    <>
     <Layout>
       <div className="p-6 max-w-6xl mx-auto space-y-6">
         {/* Cabeçalho */}
@@ -764,5 +870,16 @@ export default function GeradorContratos() {
         )}
       </div>
     </Layout>
+
+    {/* ── Visualizador de assessoria — renderizado sobre o Layout ── */}
+    {dadosAssessoria && (
+      <ContratoAssessoria
+        dados={dadosAssessoria}
+        onClose={() => setDadosAssessoria(null)}
+        onGerarPdf={handleGerarPdfAssessoria}
+        loadingPdf={loadingPdfAssessoria}
+      />
+    )}
+  </>
   );
 }
