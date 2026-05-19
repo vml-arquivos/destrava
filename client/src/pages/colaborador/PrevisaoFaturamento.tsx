@@ -1,5 +1,33 @@
+/**
+ * PrevisaoFaturamento.tsx
+ * ─────────────────────────────────────────────────────────────────────────────
+ * REFATORAÇÃO COMPLETA — 3º arquivo do conjunto cirúrgico.
+ *
+ * ALTERAÇÕES vs. versão original:
+ *   ✅ PDF 100% client-side via gerarPdfFaturamento() — sem round-trip ao servidor
+ *   ✅ Preview na tela (DocumentoPreview) antes de imprimir/baixar PDF
+ *   ✅ Novos campos de entrada: escritório, contador livre (nome + CRC manual)
+ *        → mantém o select de contadores cadastrados E permite entrada livre
+ *   ✅ Número de documento gerado automaticamente (estabilizado no preview)
+ *   ✅ Botões "Ver Declaração" e "Ver Previsão" abrem o preview antes do PDF
+ *   ✅ Fluxo de declaração e previsão completamente desacoplado do backend
+ *   ✅ Todos os hooks/handlers originais preservados (histórico, IA, CSV)
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { TrendingUp, Save, RefreshCw, AlertCircle, Loader2, FileDown, FileText } from 'lucide-react';
+import {
+  TrendingUp,
+  Save,
+  RefreshCw,
+  AlertCircle,
+  Loader2,
+  FileText,
+  Eye,
+  Building2,
+  UserCheck,
+  Hash,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch } from '../../lib/api';
 import Layout from './Layout';
@@ -8,6 +36,11 @@ import { CardCapacidade } from '../../components/faturamento/CardCapacidade';
 import { TabelaHistorico } from '../../components/faturamento/TabelaHistorico';
 import { FormHistorico } from '../../components/faturamento/FormHistorico';
 
+// ── NOVOS IMPORTS (geração client-side) ──────────────────────────────────────
+import { DocumentoPreview } from '../../components/faturamento/DocumentoPreview';
+import { type DadosPdfFaturamento } from '../../lib/gerarPdfFaturamento';
+
+// ─── Interfaces ───────────────────────────────────────────────────────────────
 interface Empresa {
   id: string;
   razao_social: string;
@@ -46,6 +79,7 @@ interface ResultadoPrevisao {
   aviso?: string;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function gerarMesesVazios(qtd = 12): RegistroHistorico[] {
   const meses: RegistroHistorico[] = [];
   const hoje = new Date();
@@ -56,11 +90,13 @@ function gerarMesesVazios(qtd = 12): RegistroHistorico[] {
   return meses;
 }
 
+// ─── Componente ───────────────────────────────────────────────────────────────
 export default function PrevisaoFaturamento() {
+  // ── Estado original (preservado) ──────────────────────────────────────────
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [empresaId, setEmpresaId] = useState('');
   const [contadores, setContadores] = useState<Contador[]>([]);
-  const [contadorId, setContadorId] = useState('');
+  const [contadorId, setContadorId] = useState(''); // select de cadastrados
   const [registros, setRegistros] = useState<RegistroHistorico[]>(gerarMesesVazios(12));
   const [horizonte, setHorizonte] = useState<12 | 24 | 36>(12);
   const [previsao, setPrevisao] = useState<ResultadoPrevisao | null>(null);
@@ -69,14 +105,22 @@ export default function PrevisaoFaturamento() {
   const [loadingHistorico, setLoadingHistorico] = useState(false);
   const [loadingSalvar, setLoadingSalvar] = useState(false);
   const [loadingPrevisao, setLoadingPrevisao] = useState(false);
-  const [loadingPdf, setLoadingPdf] = useState(false);
-  const [loadingDeclaracao, setLoadingDeclaracao] = useState(false);
-  const [dataReferenciaDeclaracao, setDataReferenciaDeclaracao] = useState<string>(() => {
-    const hoje = new Date();
-    return hoje.toISOString().slice(0, 7); // YYYY-MM
-  });
+  const [dataReferenciaDeclaracao, setDataReferenciaDeclaracao] = useState<string>(() =>
+    new Date().toISOString().slice(0, 7),
+  );
   const graficoRef = useRef<HTMLDivElement>(null);
 
+  // ── NOVO: campos do escritório / contador livre ────────────────────────────
+  // Quando o usuário seleciona um contador cadastrado, esses campos são
+  // preenchidos automaticamente. Mas o usuário pode também digitar livremente.
+  const [escritorio, setEscritorio] = useState('');
+  const [nomeContadorLivre, setNomeContadorLivre] = useState('');
+  const [crcLivre, setCrcLivre] = useState('');
+
+  // ── NOVO: controle do preview ──────────────────────────────────────────────
+  const [previewDados, setPreviewDados] = useState<DadosPdfFaturamento | null>(null);
+
+  // ─── Carregamento inicial ──────────────────────────────────────────────────
   useEffect(() => {
     apiFetch('/api/empresas?limit=500')
       .then((data: any) => setEmpresas(Array.isArray(data) ? data : data.empresas || []))
@@ -84,27 +128,46 @@ export default function PrevisaoFaturamento() {
       .finally(() => setLoadingEmpresas(false));
 
     apiFetch('/api/contadores')
-      .then((data: any) => setContadores(Array.isArray(data) ? data.filter((c: Contador) => c.ativo) : []))
-      .catch(() => { /* contadores são opcionais */ })
+      .then((data: any) =>
+        setContadores(Array.isArray(data) ? data.filter((c: Contador) => c.ativo) : []),
+      )
+      .catch(() => {/* contadores são opcionais */})
       .finally(() => setLoadingContadores(false));
   }, []);
 
+  // ── NOVO: ao selecionar contador cadastrado, preenche campos livres ────────
+  const handleContadorChange = (id: string) => {
+    setContadorId(id);
+    if (id) {
+      const c = contadores.find(c => c.id === id);
+      if (c) {
+        setNomeContadorLivre(c.nome);
+        setCrcLivre(c.crc);
+      }
+    }
+  };
+
+  // ─── Handlers originais (preservados) ─────────────────────────────────────
   const carregarHistorico = useCallback(async (id: string) => {
     if (!id) return;
     setLoadingHistorico(true);
     try {
       const data: any[] = await apiFetch(`/api/faturamento/historico/${id}`);
       if (data.length > 0) {
-        setRegistros(data.map(r => ({
-          competencia: r.competencia.slice(0, 10),
-          valor: parseFloat(r.valor),
-          origem: r.origem,
-        })));
+        setRegistros(
+          data.map(r => ({
+            competencia: r.competencia.slice(0, 10),
+            valor: parseFloat(r.valor),
+            origem: r.origem,
+          })),
+        );
       } else {
         setRegistros(gerarMesesVazios(12));
       }
       try {
-        const prev: ResultadoPrevisao = await apiFetch(`/api/faturamento/previsao/${id}/ultima`);
+        const prev: ResultadoPrevisao = await apiFetch(
+          `/api/faturamento/previsao/${id}/ultima`,
+        );
         setPrevisao(prev);
       } catch {
         setPrevisao(null);
@@ -124,18 +187,26 @@ export default function PrevisaoFaturamento() {
     else setRegistros(gerarMesesVazios(12));
   };
 
-  const handleRegistroChange = (index: number, campo: keyof RegistroHistorico, valor: string) => {
-    setRegistros(prev => prev.map((r, i) => i === index ? { ...r, [campo]: valor } : r));
+  const handleRegistroChange = (
+    index: number,
+    campo: keyof RegistroHistorico,
+    valor: string,
+  ) => {
+    setRegistros(prev => prev.map((r, i) => (i === index ? { ...r, [campo]: valor } : r)));
   };
 
-  const handleImportCsv = (importados: { competencia: string; valor: number; origem: string }[]) => {
+  const handleImportCsv = (
+    importados: { competencia: string; valor: number; origem: string }[],
+  ) => {
     setRegistros(importados);
     toast.success(`${importados.length} registros importados`);
   };
 
   const handleSalvarHistorico = async () => {
     if (!empresaId) { toast.error('Selecione uma empresa'); return; }
-    const registrosValidos = registros.filter(r => r.valor !== '' && r.valor !== null && !isNaN(Number(r.valor)));
+    const registrosValidos = registros.filter(
+      r => r.valor !== '' && r.valor !== null && !isNaN(Number(r.valor)),
+    );
     if (registrosValidos.length < 12) {
       toast.error(`Preencha pelo menos 12 meses. Atualmente: ${registrosValidos.length}`);
       return;
@@ -163,7 +234,9 @@ export default function PrevisaoFaturamento() {
 
   const handleGerarPrevisao = async () => {
     if (!empresaId) { toast.error('Selecione uma empresa'); return; }
-    const registrosValidos = registros.filter(r => r.valor !== '' && r.valor !== null && !isNaN(Number(r.valor)));
+    const registrosValidos = registros.filter(
+      r => r.valor !== '' && r.valor !== null && !isNaN(Number(r.valor)),
+    );
     if (registrosValidos.length < 12) {
       toast.error(`Preencha pelo menos 12 meses. Atualmente: ${registrosValidos.length}`);
       return;
@@ -198,87 +271,94 @@ export default function PrevisaoFaturamento() {
     }
   };
 
-  const handleExportarPdf = async () => {
-    if (!previsao?.previsao_id) return;
-    setLoadingPdf(true);
-    try {
-      let chartImageBase64: string | undefined;
-      if (graficoRef.current) {
-        try {
-          const canvas = graficoRef.current.querySelector('canvas');
-          if (canvas) chartImageBase64 = canvas.toDataURL('image/png');
-        } catch { /* sem gráfico */ }
-      }
-      const token = localStorage.getItem('destrava_token') || '';
-      const resp = await fetch(`/api/faturamento/previsao/${previsao.previsao_id}/exportar-pdf`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ chartImageBase64, contador_id: contadorId || undefined }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: 'Erro ao gerar PDF' }));
-        throw new Error(err.error || 'Erro ao gerar PDF');
-      }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const empresa = empresas.find(e => e.id === empresaId);
-      a.download = `previsao-faturamento-${empresa?.razao_social?.replace(/[^a-zA-Z0-9]/g, '-') || 'empresa'}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success('PDF gerado com papel timbrado!');
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao exportar PDF');
-    } finally {
-      setLoadingPdf(false);
+  // ── NOVO: valida campos obrigatórios do escritório antes do preview ────────
+  const validarContabilidade = (): boolean => {
+    if (!escritorio.trim()) {
+      toast.error('Informe o nome do escritório de contabilidade');
+      return false;
     }
+    if (!nomeContadorLivre.trim()) {
+      toast.error('Informe o nome do contador responsável');
+      return false;
+    }
+    if (!crcLivre.trim()) {
+      toast.error('Informe o CRC do contador');
+      return false;
+    }
+    return true;
   };
 
-  const handleDeclaracaoAnual = async () => {
+  // ── NOVO: abre preview de DECLARAÇÃO (client-side) ────────────────────────
+  const handleVerDeclaracao = () => {
     if (!empresaId) { toast.error('Selecione uma empresa'); return; }
-    setLoadingDeclaracao(true);
-    try {
-      const token = localStorage.getItem('destrava_token') || '';
-      const resp = await fetch(`/api/faturamento/declaracao-anual/${empresaId}/exportar-pdf`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ contador_id: contadorId || undefined, data_referencia: dataReferenciaDeclaracao ? dataReferenciaDeclaracao + '-01' : undefined }),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: 'Erro ao gerar declaração' }));
-        throw new Error(err.error || 'Erro ao gerar declaração');
-      }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const empresa = empresas.find(e => e.id === empresaId);
-      a.download = `declaracao-faturamento-anual-${empresa?.razao_social?.replace(/[^a-zA-Z0-9]/g, '-') || 'empresa'}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success('Declaração Anual gerada com sucesso!');
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao gerar declaração anual');
-    } finally {
-      setLoadingDeclaracao(false);
+    if (!validarContabilidade()) return;
+
+    // Filtra os 12 meses válidos relativos ao mês de referência
+    const refDate = dataReferenciaDeclaracao
+      ? new Date(dataReferenciaDeclaracao + '-01')
+      : new Date();
+    // Pega os registros válidos, ordena e pega os 12 mais recentes até a ref
+    const validos = registros
+      .filter(r => r.valor !== '' && !isNaN(Number(r.valor)))
+      .filter(r => new Date(r.competencia + 'T00:00:00') <= refDate)
+      .sort((a, b) => a.competencia.localeCompare(b.competencia))
+      .slice(-12);
+
+    if (validos.length < 12) {
+      toast.error(`São necessários 12 meses de histórico válido. Encontrados: ${validos.length}`);
+      return;
     }
+
+    const empresa = empresas.find(e => e.id === empresaId);
+    setPreviewDados({
+      tipo: 'declaracao',
+      empresa: {
+        razaoSocial: empresa?.razao_social ?? '',
+        cnpj: empresa?.cnpj,
+      },
+      contabilidade: {
+        escritorio: escritorio.trim(),
+        nomeContador: nomeContadorLivre.trim(),
+        crc: crcLivre.trim(),
+        // numeroDocumento omitido → será gerado automaticamente no DocumentoPreview
+      },
+      registros: validos.map(r => ({
+        competencia: r.competencia,
+        valor: parseFloat(String(r.valor)),
+      })),
+      cidade: 'Brasília - DF',
+    });
   };
 
+  // ── NOVO: abre preview de PREVISÃO (client-side) ──────────────────────────
+  const handleVerPrevisao = () => {
+    if (!previsao) { toast.error('Gere a previsão IA primeiro'); return; }
+    if (!validarContabilidade()) return;
+
+    const empresa = empresas.find(e => e.id === empresaId);
+    setPreviewDados({
+      tipo: 'previsao',
+      empresa: {
+        razaoSocial: empresa?.razao_social ?? '',
+        cnpj: empresa?.cnpj,
+      },
+      contabilidade: {
+        escritorio: escritorio.trim(),
+        nomeContador: nomeContadorLivre.trim(),
+        crc: crcLivre.trim(),
+      },
+      pontos: previsao.pontos,
+      horizonte: previsao.horizonte_meses as 12 | 24 | 36,
+      cidade: 'Brasília - DF',
+    });
+  };
+
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <Layout title="Faturamento">
       <div className="p-6 max-w-6xl mx-auto space-y-6">
-        {/* Cabeçalho */}
+
+        {/* ── Cabeçalho ──────────────────────────────────────────────────── */}
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
             <TrendingUp className="w-5 h-5 text-blue-700" />
@@ -289,10 +369,12 @@ export default function PrevisaoFaturamento() {
           </div>
         </div>
 
-        {/* Seleção de empresa e contador */}
+        {/* ── Configuração: empresa + contador ───────────────────────────── */}
         <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
           <h2 className="font-semibold text-gray-800">Configuração</h2>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Empresa */}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Empresa *</label>
               <select
@@ -311,19 +393,21 @@ export default function PrevisaoFaturamento() {
                 ))}
               </select>
             </div>
+
+            {/* Contador cadastrado (opcional — preenche campos abaixo) */}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
-                Contador responsável{' '}
-                <span className="text-gray-400 font-normal">(opcional — para PDFs)</span>
+                Contador cadastrado{' '}
+                <span className="text-gray-400 font-normal">(opcional — preenche os campos abaixo)</span>
               </label>
               <select
                 value={contadorId}
-                onChange={e => setContadorId(e.target.value)}
+                onChange={e => handleContadorChange(e.target.value)}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 disabled={loadingContadores}
               >
                 <option value="">
-                  {loadingContadores ? 'Carregando...' : 'Sem contador (opcional)'}
+                  {loadingContadores ? 'Carregando...' : 'Digitar manualmente abaixo →'}
                 </option>
                 {contadores.map(c => (
                   <option key={c.id} value={c.id}>
@@ -341,9 +425,66 @@ export default function PrevisaoFaturamento() {
               )}
             </div>
           </div>
+
+          {/* ── NOVO: campos do documento (escritório + contador) ─────────── */}
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5" />
+              Dados para o Documento PDF
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Escritório */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                  <Building2 className="w-3 h-3" />
+                  Escritório de Contabilidade *
+                </label>
+                <input
+                  type="text"
+                  value={escritorio}
+                  onChange={e => setEscritorio(e.target.value)}
+                  placeholder="Ex.: Contabilidade Silva & Assoc."
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Nome do Contador */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                  <UserCheck className="w-3 h-3" />
+                  Contador Responsável *
+                </label>
+                <input
+                  type="text"
+                  value={nomeContadorLivre}
+                  onChange={e => setNomeContadorLivre(e.target.value)}
+                  placeholder="Nome completo do contador"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* CRC */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
+                  <Hash className="w-3 h-3" />
+                  CRC *
+                </label>
+                <input
+                  type="text"
+                  value={crcLivre}
+                  onChange={e => setCrcLivre(e.target.value)}
+                  placeholder="Ex.: DF-187654-0"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              * Campos obrigatórios para gerar o PDF. O número do documento é gerado automaticamente.
+            </p>
+          </div>
         </div>
 
-        {/* Histórico de faturamento */}
+        {/* ── Histórico de faturamento ────────────────────────────────────── */}
         {empresaId && (
           <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-3">
@@ -355,7 +496,11 @@ export default function PrevisaoFaturamento() {
                   disabled={loadingSalvar}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
                 >
-                  {loadingSalvar ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  {loadingSalvar ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
                   Salvar Histórico
                 </button>
               </div>
@@ -369,8 +514,9 @@ export default function PrevisaoFaturamento() {
               <TabelaHistorico registros={registros} onChange={handleRegistroChange} />
             )}
 
-            {/* Ações */}
+            {/* ── Ações da linha de fundo ────────────────────────────────── */}
             <div className="flex items-center gap-3 pt-2 border-t border-gray-100 flex-wrap">
+              {/* Horizonte */}
               <div className="flex items-center gap-2">
                 <label className="text-sm text-gray-600 font-medium">Horizonte:</label>
                 <select
@@ -383,6 +529,8 @@ export default function PrevisaoFaturamento() {
                   <option value={36}>36 meses</option>
                 </select>
               </div>
+
+              {/* Gerar previsão IA */}
               <button
                 onClick={handleGerarPrevisao}
                 disabled={loadingPrevisao}
@@ -394,6 +542,8 @@ export default function PrevisaoFaturamento() {
                   <><RefreshCw className="w-4 h-4" /> Gerar Previsão IA</>
                 )}
               </button>
+
+              {/* Mês de referência */}
               <div className="flex items-center gap-2">
                 <label className="text-xs text-gray-500 whitespace-nowrap">Mês ref.:</label>
                 <input
@@ -404,28 +554,28 @@ export default function PrevisaoFaturamento() {
                   title="Mês de referência para os últimos 12 meses"
                 />
               </div>
+
+              {/* ── NOVO: Ver Declaração (abre preview) ───────────────────── */}
               <button
-                onClick={handleDeclaracaoAnual}
-                disabled={loadingDeclaracao}
-                className="flex items-center gap-2 px-4 py-2 bg-[#1B3A6B] text-white text-sm rounded-lg hover:bg-[#142d55] disabled:opacity-50 transition-colors"
+                onClick={handleVerDeclaracao}
+                className="flex items-center gap-2 px-4 py-2 bg-[#1B3A6B] text-white text-sm rounded-lg hover:bg-[#142d55] transition-colors"
               >
-                {loadingDeclaracao ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Gerando declaração...</>
-                ) : (
-                  <><FileText className="w-4 h-4" /> Declaração 12 Meses</>
-                )}
+                <Eye className="w-4 h-4" />
+                Ver Declaração
               </button>
+
+              {/* Aviso de carregamento IA */}
               {loadingPrevisao && (
                 <span className="text-xs text-gray-400 flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" />
-                  Pode levar até 45s (Prophet está treinando o modelo)
+                  Pode levar até 45s (Prophet treinando o modelo)
                 </span>
               )}
             </div>
           </div>
         )}
 
-        {/* Resultado da previsão */}
+        {/* ── Resultado da previsão ───────────────────────────────────────── */}
         {previsao && (
           <div className="space-y-4">
             <CardCapacidade
@@ -443,16 +593,14 @@ export default function PrevisaoFaturamento() {
                   <span className="text-xs text-gray-400">
                     Gerado em {new Date(previsao.gerada_em).toLocaleString('pt-BR')}
                   </span>
+
+                  {/* ── NOVO: Ver Previsão (abre preview) ─────────────────── */}
                   <button
-                    onClick={handleExportarPdf}
-                    disabled={loadingPdf}
-                    className="flex items-center gap-2 px-4 py-2 bg-[#1B3A6B] text-white text-sm rounded-lg hover:bg-[#142d55] disabled:opacity-50 transition-colors"
+                    onClick={handleVerPrevisao}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#1B3A6B] text-white text-sm rounded-lg hover:bg-[#142d55] transition-colors"
                   >
-                    {loadingPdf ? (
-                      <><Loader2 className="w-4 h-4 animate-spin" /> Gerando PDF...</>
-                    ) : (
-                      <><FileDown className="w-4 h-4" /> Exportar PDF Timbrado</>
-                    )}
+                    <FileText className="w-4 h-4" />
+                    Ver Demonstrativo PDF
                   </button>
                 </div>
               </div>
@@ -467,6 +615,16 @@ export default function PrevisaoFaturamento() {
           </div>
         )}
       </div>
+
+      {/* ── NOVO: Preview do documento (overlay fullscreen) ─────────────────
+           Renderizado fora do container principal para z-index correto.
+           DocumentoPreview gerencia internamente o gerarPdfFaturamento().   */}
+      {previewDados && (
+        <DocumentoPreview
+          dados={previewDados}
+          onFechar={() => setPreviewDados(null)}
+        />
+      )}
     </Layout>
   );
 }
