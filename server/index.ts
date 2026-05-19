@@ -18,6 +18,7 @@ import {
   gerarDiagnosticoSemana,
   calcularAcumulados,
 } from "./funcoes_acompanhamento.ts";
+import { registerWeeklyMonitorRoutes } from "./services/routesWeeklyMonitor.ts";
 
 const { Pool } = pkg;
 
@@ -9755,7 +9756,9 @@ ${(temTest1 || temTest2) ? `
 
   // ── FIM DO MÓDULO: ACOMPANHAMENTO FINANCEIRO SEMANAL ────────────────────────
 
-
+  // ── MONITOR SEMANAL INTELIGENTE ──────────────────────────────────────────────
+  registerWeeklyMonitorRoutes(app, pool, auth, requireAcessoAcompanhamento);
+  // ────────────────────────────────────────────────────────────────────────────
 
   // Qualquer /api não encontrada deve responder JSON, nunca o index.html da SPA.
   app.use('/api', (req: Request, res: Response) => {
