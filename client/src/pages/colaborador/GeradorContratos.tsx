@@ -236,6 +236,10 @@ export default function GeradorContratos() {
       const response = await fetch(`/api/contratos/${result.contrato_id}/download`, {
         headers: { Authorization: `Bearer ${token || ''}` },
       });
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error || `Erro ao baixar PDF (HTTP ${response.status})`);
+      }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -282,6 +286,10 @@ export default function GeradorContratos() {
       const response = await fetch(`/api/contratos/${result.contrato_id}/download`, {
         headers: { Authorization: `Bearer ${token || ''}` },
       });
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error || `Erro ao baixar PDF (HTTP ${response.status})`);
+      }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
