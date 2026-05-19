@@ -13,7 +13,7 @@ import {
   ChevronRight,
   User,
   Users,
- 
+  Workflow,
   Kanban,
   Building2,
   ShieldAlert,
@@ -65,7 +65,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   {
     href: "/colaborador/integracoes",
     label: "Integrações n8n",
-    icon:
+    icon: Workflow,
     allowedCargos: ['administrador'],
   },
   // Usuários: somente Administrador, Diretor e Gerente Comercial
@@ -118,7 +118,6 @@ function podeAcessarFinanceiro(user: any): boolean {
     "superadmin",
     "diretor",
     "gestor_credito",
-    "gestor_de_credito",
     "gestor_de_credito",
   ]);
   return (
