@@ -1082,9 +1082,11 @@ export default function AcompanhamentoBancario() {
   const apagarSemana = async (row: Acompanhamento, semana: any) => {
     if (!row?.id || !semana) return;
 
-    const semanaRef = semana.numero_semana || semana.id;
+    // Usa nullish coalescing (??) para que numero_semana = 0 não seja tratado como falsy
+    // e caia indevidamente no semana.id (UUID), causando 400 no servidor.
+    const semanaRef = semana.numero_semana ?? semana.id;
 
-    if (!semanaRef) {
+    if (semanaRef === null || semanaRef === undefined) {
       alert("Não foi possível identificar a semana para apagar.");
       return;
     }
