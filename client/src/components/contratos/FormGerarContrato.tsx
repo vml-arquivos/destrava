@@ -187,6 +187,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [prazoAcompanhamento, setPrazoAcompanhamento]     = useState('90');
   const [prazoProrrogacao, setPrazoProrrogacao]           = useState('90');
   const [parceiroIdRating, setParceiroIdRating]           = useState('');
+  const [contratadaIdRating, setContratadaIdRating]       = useState('');
+  const [responsavelContratoIdRating, setResponsavelContratoIdRating] = useState('');
 
   // ── Parceria Comercial ──
   const [parceiroIdPC, setParceiroIdPC]               = useState('');
@@ -403,6 +405,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         representante_nome: representanteNomeRating,
         representante_cpf: representanteCpfRating,
         parceiro_id: parceiroIdRating || undefined,
+        contratada_id: contratadaIdRating || undefined,
+        responsavel_contrato_id: responsavelContratoIdRating || undefined,
         valor_contrato: Number(valorContratoRating),
         condicao_pagamento: condicaoPgtoRating,
         prazo_acompanhamento_dias: Number.parseInt(prazoAcompanhamento, 10),
@@ -454,16 +458,18 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     responsavelId,
     onResponsavelChange,
     errorKey,
+    obrigatoria = true,
   }: {
     contratadaId: string;
     onContratadaChange: (v: string) => void;
     responsavelId: string;
     onResponsavelChange: (v: string) => void;
-    errorKey: 'contratadaIdLimpaNome' | 'contratadaIdBacen';
+    errorKey: 'contratadaIdLimpaNome' | 'contratadaIdBacen' | 'contratadaIdRating';
+    obrigatoria?: boolean;
   }) => (
     <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 space-y-3">
       <div>
-        <label className={lbl}>Contratada / Prestadora de Serviço *</label>
+        <label className={lbl}>Contratada / Prestadora de Serviço {obrigatoria ? "*" : "(opcional — padrão Destrava)"}</label>
         <select value={contratadaId} onChange={e => onContratadaChange(e.target.value)} className={cls}>
           <option value="">Selecione quem aparecerá como CONTRATADA...</option>
           {prestadores.map(p => (
@@ -804,6 +810,14 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
             </div>
           </div>
           <SelectParceiro value={parceiroIdRating} onChange={setParceiroIdRating} />
+          <SelectContratadaResponsavel
+            contratadaId={contratadaIdRating}
+            onContratadaChange={setContratadaIdRating}
+            responsavelId={responsavelContratoIdRating}
+            onResponsavelChange={setResponsavelContratoIdRating}
+            errorKey="contratadaIdRating"
+            obrigatoria={false}
+          />
         </>
       )}
 
