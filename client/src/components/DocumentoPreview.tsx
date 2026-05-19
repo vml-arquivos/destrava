@@ -13,12 +13,13 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
+import { useState } from 'react';
 import { X, FileDown, Printer } from 'lucide-react';
 import {
   gerarPdfFaturamento,
   gerarNumeroDocumento,
   type DadosPdfFaturamento,
-} from '../../lib/gerarPdfFaturamento';
+} from '../lib/gerarPdfFaturamento';
 
 // ─── Helpers de formatação ────────────────────────────────────────────────────
 const fmtBRL = (v: number) =>
@@ -42,14 +43,17 @@ interface Props {
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 export function DocumentoPreview({ dados, onFechar }: Props) {
-  // Número de documento estabilizado para o preview (será reutilizado no PDF)
-  if (!dados.contabilidade.numeroDocumento) {
-    dados.contabilidade.numeroDocumento = gerarNumeroDocumento(
-      dados.tipo === 'declaracao' ? 'DCL' : 'PRV',
-    );
-  }
+  // Número de documento estabilizado via estado interno — nunca muta a prop recebida
+  const [numDoc] = useState<string>(() => {
+    if (dados.contabilidade.numeroDocumento) return dados.contabilidade.numeroDocumento;
+    return gerarNumeroDocumento(dados.tipo === 'declaracao' ? 'DCL' : 'PRV');
+  });
 
-  const numDoc = dados.contabilidade.numeroDocumento;
+  // Cópia local com o número preenchido, usada apenas para o PDF
+  const dadosComNum: DadosPdfFaturamento = {
+    ...dados,
+    contabilidade: { ...dados.contabilidade, numeroDocumento: numDoc },
+  };
   const cidade = dados.cidade ?? 'Brasília - DF';
   const isDeclaracao = dados.tipo === 'declaracao';
 
@@ -110,7 +114,7 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
               Imprimir
             </button>
             <button
-              onClick={() => gerarPdfFaturamento(dados)}
+              onClick={() => gerarPdfFaturamento(dadosComNum)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#1B3A6B] text-white rounded-lg hover:bg-[#142d55] transition font-medium"
             >
               <FileDown className="w-3.5 h-3.5" />
