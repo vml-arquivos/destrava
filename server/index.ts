@@ -8332,10 +8332,125 @@ ${(temTest1 || temTest2) ? `
 
   app.patch("/api/acompanhamentos-bancarios/:id", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
-      const updates = { ...(req.body || {}), updated_at: new Date().toISOString() };
-      delete updates.id;
-      delete updates.atualizacoes;
-      delete updates.created_at;
+      const rawUpdates = { ...(req.body || {}) } as Record<string, any>;
+
+      // Compatibilidade com nomes usados pela tela: "fim_previsto" vira a coluna real.
+      if (
+        Object.prototype.hasOwnProperty.call(rawUpdates, "fim_previsto") &&
+        !Object.prototype.hasOwnProperty.call(rawUpdates, "data_fim_prevista")
+      ) {
+        rawUpdates.data_fim_prevista = rawUpdates.fim_previsto;
+      }
+
+      const DATE_FIELDS = new Set([
+        "data_abertura_conta",
+        "data_inicio",
+        "data_fim_prevista",
+        "data_fim_prorrogada",
+        "data_prorrogacao",
+        "proxima_atualizacao",
+      ]);
+
+      const NUMERIC_FIELDS = new Set([
+        "valor_credito_pretendido",
+        "faturamento_anual",
+        "media_mensal",
+        "margem_seguranca_30",
+        "percentual_operacional",
+        "limite_operacional_anual",
+        "media_mensal_base",
+        "teto_mensal",
+        "referencia_semanal",
+        "teto_semanal",
+      ]);
+
+      const BOOLEAN_FIELDS = new Set(["prorrogado"]);
+
+      const REQUIRED_TEXT_FIELDS = new Set(["nome_empresa", "banco_observado", "status", "etapa"]);
+
+      const ALLOWED_FIELDS = new Set([
+        "empresa_id",
+        "lead_id",
+        "nome_empresa",
+        "cnpj",
+        "telefone_cliente",
+        "whatsapp_cliente",
+        "email_cliente",
+        "banco_observado",
+        "agencia",
+        "conta",
+        "gerente_banco",
+        "contato_banco",
+        "data_abertura_conta",
+        "objetivo_credito",
+        "valor_credito_pretendido",
+        "linha_credito_pretendida",
+        "status",
+        "etapa",
+        "data_inicio",
+        "data_fim_prevista",
+        "data_fim_prorrogada",
+        "data_prorrogacao",
+        "responsavel_id",
+        "rating_bacen_inicial",
+        "rating_bacen_atual",
+        "rating_interno_inicial",
+        "rating_interno_atual",
+        "faturamento_anual",
+        "media_mensal",
+        "margem_seguranca_30",
+        "percentual_operacional",
+        "limite_operacional_anual",
+        "media_mensal_base",
+        "teto_mensal",
+        "referencia_semanal",
+        "teto_semanal",
+        "status_operacional",
+        "diagnostico_operacional",
+        "proxima_atualizacao",
+        "observacoes_iniciais",
+        "observacoes_finais",
+        "prorrogado",
+      ]);
+
+      const updates: Record<string, any> = {};
+
+      for (const [field, value] of Object.entries(rawUpdates)) {
+        if (!ALLOWED_FIELDS.has(field)) continue;
+
+        let normalized = value;
+
+        if (typeof normalized === "string") {
+          const trimmed = normalized.trim();
+
+          if (trimmed === "") {
+            if (REQUIRED_TEXT_FIELDS.has(field)) continue;
+            normalized = null;
+          } else if (NUMERIC_FIELDS.has(field)) {
+            normalized = normalizarNumeroAcompanhamento(trimmed);
+          } else {
+            normalized = trimmed;
+          }
+        } else if (normalized === undefined) {
+          continue;
+        }
+
+        if (DATE_FIELDS.has(field) && normalized === "") {
+          normalized = null;
+        }
+
+        if (NUMERIC_FIELDS.has(field) && normalized !== null && normalized !== undefined && typeof normalized !== "number") {
+          normalized = normalizarNumeroAcompanhamento(normalized);
+        }
+
+        if (BOOLEAN_FIELDS.has(field) && normalized !== null && normalized !== undefined) {
+          normalized = normalized === true || normalized === "true" || normalized === 1 || normalized === "1";
+        }
+
+        updates[field] = normalized;
+      }
+
+      updates.updated_at = new Date().toISOString();
 
       const keys = Object.keys(updates);
       if (!keys.length) {
