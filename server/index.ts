@@ -18,7 +18,6 @@ import {
   gerarDiagnosticoSemana,
   calcularAcumulados,
 } from "./funcoes_acompanhamento.ts";
-import { registerWeeklyMonitorRoutes } from "./services/routesWeeklyMonitor.ts";
 
 const { Pool } = pkg;
 
@@ -4384,6 +4383,25 @@ tr:nth-child(even) td { background: #f4f7ff; }
     return fallback;
   }
 
+  function contratadaDestravaNormalizada(): any {
+    return normalizarPrestadorServico({
+      tipo_pessoa: 'pj',
+      razao_social: CONTRATADA_DADOS.razao_social,
+      nome_fantasia: 'Destrava Crédito',
+      cnpj: CONTRATADA_DADOS.cnpj,
+      endereco: CONTRATADA_DADOS.endereco_sede,
+      representante_nome: CONTRATADA_DADOS.representante,
+      representante_cpf: CONTRATADA_DADOS.cpf_representante,
+      representante_cargo: CONTRATADA_DADOS.cargo_representante,
+      logo_url: 'https://destravacredito.com/logo-destrava.png',
+      cor_primaria: '#1B3A8C',
+      cor_secundaria: '#f0a500',
+      cidade_assinatura: 'BRASÍLIA',
+      uf_assinatura: 'DF',
+      rodape_html: '<strong>BRASÍLIA - SEDE</strong><br/>St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250<br/><strong>GOIÂNIA - FILIAL</strong><br/>Avenida Afonso Pena, qd-25 Alt. 05, S/N sala-02 setor Goiânia 2 CEP: 74665555 Goiânia-GO',
+    });
+  }
+
   function renderContratoPdfHtml(titulo: string, body: string, contratada: any): string {
     const nome = contratada?.nome_exibicao || contratada?.razao_social || contratada?.nome || 'DESTRAVA CRÉDITO';
     const documento = contratada?.documento
@@ -4394,9 +4412,13 @@ tr:nth-child(even) td { background: #f4f7ff; }
     const corPrimaria = corContrato(contratada?.cor_primaria, '#1e3a8a');
     const corSecundaria = corContrato(contratada?.cor_secundaria, '#334155');
     const logo = contratada?.mostrar_logo_contrato !== false ? (contratada?.logo_url || contratada?.logo_path || '') : '';
+    const nomeNormalizado = String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const isPermuPay = nomeNormalizado.includes('permupay') || nomeNormalizado.includes('permu pay');
     const logoHtml = logo
       ? `<img class="brand-logo" src="${escapeHtmlContrato(logo)}" alt="${escapeHtmlContrato(nome)}" />`
-      : `<div class="brand-mark">${escapeHtmlContrato((nome || 'D').trim().charAt(0).toUpperCase())}</div>`;
+      : isPermuPay
+        ? `<div class="brand-wordmark brand-wordmark-permupay"><span>Permu</span><strong>Pay</strong></div>`
+        : `<div class="brand-mark">${escapeHtmlContrato((nome || 'D').trim().charAt(0).toUpperCase())}</div>`;
 
     const cabecalhoCustom = contratada?.usar_papel_personalizado !== false && contratada?.cabecalho_html
       ? `<div class="brand-custom-header">${contratada.cabecalho_html}</div>`
@@ -4472,6 +4494,36 @@ tr:nth-child(even) td { background: #f4f7ff; }
       max-height: 14mm;
       object-fit: contain;
       display: block;
+    }
+
+    .brand-wordmark {
+      min-width: 34mm;
+      height: 13mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(30, 58, 138, .18);
+      background: linear-gradient(135deg, rgba(30,58,138,.06), rgba(14,165,233,.10));
+      color: var(--brand-primary);
+      font-size: 13pt;
+      font-weight: 800;
+      letter-spacing: -.02em;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .brand-wordmark strong {
+      color: #0ea5e9;
+      margin-left: 1px;
+      font-weight: 900;
+    }
+
+    .brand-wordmark-permupay {
+      color: #0f172a;
+      border-color: rgba(14, 165, 233, .26);
+      background: linear-gradient(135deg, #ffffff, rgba(14,165,233,.12));
     }
 
     .brand-mark {
@@ -4882,7 +4934,12 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
   // ─── CONTRATO RATING ──────────────────────────────────────────────────────
   async function gerarHtmlContratoRating(payload: any): Promise<string> {
     const { contratante, representante, contrato } = payload;
-    const contratada   = CONTRATADA_DADOS;
+    const contratada   = payload.contratada || contratadaDestravaNormalizada();
+    const responsavelContrato = payload.responsavel_contrato || null;
+    const nomeContratada = contratada?.nome_exibicao || contratada?.razao_social || contratada?.nome || CONTRATADA_DADOS.razao_social;
+    const docContratada = contratada?.documento ? `${contratada.documento_label || 'Documento'}: ${contratada.documento}` : '';
+    const qualifContratada = qualificacaoContratada(contratada);
+    const responsavelTexto = responsavelContrato?.nome ? responsavelContrato.nome : '';
     const valorContrato = contrato.valor_contrato_formatado || 'R$ 0,00';
     const condicaoPgto  = contrato.condicao_pagamento || 'a combinar';
     const prazoAcomp    = contrato.prazo_acompanhamento_dias || 90;
@@ -4896,7 +4953,8 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
 ${blocoIdentificacaoContrato(contrato)}
 <h1 class="doc-title" style="font-size:10pt; font-weight:normal; margin-bottom:20px;">ALGORITMO FINANCEIRO / RATING DE CRÉDITO</h1>
 <h2 class="section-title">I – IDENTIFICAÇÃO DAS PARTES</h2>
-<p class="clause"><strong>CONTRATADA:</strong> ${contratada.razao_social}, CNPJ n° ${contratada.cnpj}, com sede na ${contratada.endereco_sede}, representada neste ato por ${contratada.representante}, ${contratada.cargo_representante}, CPF n° ${contratada.cpf_representante}.</p>
+<p class="clause"><strong>CONTRATADA:</strong> ${qualifContratada}</p>
+${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA ASSESSORIA:</strong> ${responsavelTexto}.</p>` : ''}
 <p class="clause"><strong>CONTRATANTE:</strong> ${contratante.razao_social}, CNPJ n° ${contratante.cnpj}, com sede em ${contratante.endereco}, representada neste ato por ${representante.nome}, CPF n° ${representante.cpf}.</p>
 <h2 class="section-title">CLÁUSULA PRIMEIRA – DO OBJETO</h2>
 <p class="clause"><strong>1.1.</strong> O presente contrato tem por objeto a prestação de serviços de assessoria financeira especializada pela CONTRATADA, consistente na análise, monitoramento e orientação para melhoria do rating de crédito e do score financeiro do CONTRATANTE junto às instituições financeiras, bureaus de crédito e demais órgãos competentes, por meio da aplicação de metodologias e algoritmos financeiros proprietários.</p>
@@ -4933,37 +4991,19 @@ ${blocoIdentificacaoContrato(contrato)}
   </div>
   <div style="text-align:center; width:45%;">
     <div class="sig-line"></div>
-    <p class="sig-name">${contratada.razao_social}</p>
-    <p class="sig-sub">CNPJ: ${contratada.cnpj}</p>
+    <p class="sig-name">${nomeContratada}</p>
+    ${docContratada ? `<p class="sig-sub">${docContratada}</p>` : ''}
     <p class="sig-sub">CONTRATADA</p>
   </div>
 </div>
 `;
-    return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8"/>
-  <title>Destrava Crédito — CONTRATO RATING</title>
-  <style>
-    ${getDocumentStyles()}
-    body { padding: 0; background: #fff; }
-    .contract-content { width: 100%; }
-  </style>
-</head>
-<body>
-  ${getHtmlHeaderEmbutido()}
-  <main class="contract-content">
-    ${body}
-  </main>
-  ${getHtmlFooterEmbutido()}
-</body>
-</html>`;
+    return renderContratoPdfHtml('CONTRATO RATING / ALGORITMO FINANCEIRO', body, contratada);
   }
 
   // ─── CONTRATO PARCERIA COMERCIAL ──────────────────────────────────────────
   async function gerarHtmlContratoParceriaComercial(payload: any): Promise<string> {
     const { parceiro, contrato } = payload;
-    const contratada  = CONTRATADA_DADOS;
+    const contratada  = contratadaDestravaNormalizada();
     const pctDestrava = contrato.percentual_destrava || 70;
     const pctParceiro = contrato.percentual_parceiro || 30;
     const prazoPgto   = contrato.prazo_pagamento_dias_uteis || 5;
@@ -4984,7 +5024,7 @@ ${blocoIdentificacaoContrato(contrato)}
 <h1 class="doc-title">CONTRATO DE PARCERIA COMERCIAL</h1>
 
 ${blocoIdentificacaoContrato(contrato)}
-<p class="clause"><strong>CONTRATADA:</strong> DESTRAVA CREDITO LTDA, pessoa jurídica de direito privado, inscrita no CNPJ sob o n° ${contratada.cnpj}, com sede na ${contratada.endereco_sede}, doravante denominada simplesmente DESTRAVA CRÉDITO, neste ato representada por seu sócio administrador, Sr. ${contratada.representante}, brasileiro, portador do CPF n° ${contratada.cpf_representante}.</p>
+<p class="clause"><strong>CONTRATADA:</strong> ${qualificacaoContratada(contratada)}, doravante denominada simplesmente DESTRAVA CRÉDITO.</p>
 <p class="clause"><strong>PARCEIRA COMERCIAL:</strong> ${parceiro.nome}, brasileira${qualificacaoParceiro}, doravante denominada simplesmente PARCEIRA.</p>
 <p class="clause">As partes acima qualificadas celebram o presente Contrato de Parceria Comercial, que se regerá pelas seguintes cláusulas e condições:</p>
 <h2 class="section-title">CLÁUSULA PRIMEIRA – DO OBJETO</h2>
@@ -5029,8 +5069,8 @@ ${blocoIdentificacaoContrato(contrato)}
 <div class="sig-block" style="display:flex; justify-content:space-between; margin-top:40px;">
   <div style="text-align:center; width:45%;">
     <div class="sig-line"></div>
-    <p class="sig-name">${contratada.razao_social}</p>
-    <p class="sig-sub">CNPJ: ${contratada.cnpj}</p>
+    <p class="sig-name">${contratada.nome_exibicao || contratada.razao_social}</p>
+    <p class="sig-sub">${contratada.documento_label || 'CNPJ'}: ${contratada.documento || contratada.cnpj}</p>
   </div>
   <div style="text-align:center; width:45%;">
     <div class="sig-line"></div>
@@ -5057,25 +5097,7 @@ ${(temTest1 || temTest2) ? `
   </div>
 </div>` : ''}
 `;
-    return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8"/>
-  <title>Destrava Crédito — CONTRATO DE PARCERIA COMERCIAL</title>
-  <style>
-    ${getDocumentStyles()}
-    body { padding: 0; background: #fff; }
-    .contract-content { width: 100%; }
-  </style>
-</head>
-<body>
-  ${getHtmlHeaderEmbutido()}
-  <main class="contract-content">
-    ${body}
-  </main>
-  ${getHtmlFooterEmbutido()}
-</body>
-</html>`;
+    return renderContratoPdfHtml('CONTRATO DE PARCERIA COMERCIAL', body, contratada);
   }
 
     async function gerarPdfContrato(payload: any): Promise<string> {
@@ -6505,7 +6527,22 @@ ${(temTest1 || temTest2) ? `
         const { rows: empRating } = await pool.query('SELECT * FROM empresas WHERE id=$1', [empresa_id]);
         if (!empRating.length) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
         const er = empRating[0];
+
+        const contratadaRating = contratada_id
+          ? await buscarPrestadorServicoAtivo(contratada_id)
+          : contratadaDestravaNormalizada();
+        if (contratada_id && !contratadaRating) {
+          res.status(404).json({ error: 'Contratada/prestadora não encontrada ou inativa.' });
+          return;
+        }
+
+        const responsavelContratoRating = responsavel_contrato_id
+          ? await buscarResponsavelContrato(responsavel_contrato_id)
+          : null;
+
         const payloadRating: any = {
+          contratada: contratadaRating,
+          responsavel_contrato: responsavelContratoRating,
           contratante: {
             razao_social: er.razao_social,
             cnpj: er.cnpj || '',
@@ -6547,14 +6584,20 @@ ${(temTest1 || temTest2) ? `
         const { rows: contratoRowsRating } = await pool.query(
           `INSERT INTO contratos_gerados
              (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id,
+              contratada_id, responsavel_contrato_id,
               valor_referencia, valor_contrato, condicao_pagamento, taxa_comissao,
               honorario_minimo_mes, honorario_minimo_total, data_assinatura,
-              foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+              foro_eleito, pdf_path, hash_documento, payload_snapshot,
+              contratada_snapshot, responsavel_contrato_snapshot, criado_por)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
            RETURNING id, created_at`,
           ['rating', 'empresa', empresa_id, parceiro_id || null, null,
+           contratadaRating?.id || null, responsavelContratoRating?.id || null,
            null, valor_contrato, condicao_pagamento, null, null, null,
-           data_assinatura, foro_eleito, pdfPath, hashRating, JSON.stringify(payloadRating), colaborador.id]
+           data_assinatura, foro_eleito, pdfPath, hashRating, JSON.stringify(payloadRating),
+           contratadaRating ? JSON.stringify(contratadaRating) : null,
+           responsavelContratoRating ? JSON.stringify(responsavelContratoRating) : null,
+           colaborador.id]
         );
         const contratoRating = contratoRowsRating[0];
         await salvarIdentificacaoContrato(contratoRating.id, payloadRating.contrato);
@@ -9756,9 +9799,7 @@ ${(temTest1 || temTest2) ? `
 
   // ── FIM DO MÓDULO: ACOMPANHAMENTO FINANCEIRO SEMANAL ────────────────────────
 
-  // ── MONITOR SEMANAL INTELIGENTE ──────────────────────────────────────────────
-  registerWeeklyMonitorRoutes(app, pool, auth, requireAcessoAcompanhamento);
-  // ────────────────────────────────────────────────────────────────────────────
+
 
   // Qualquer /api não encontrada deve responder JSON, nunca o index.html da SPA.
   app.use('/api', (req: Request, res: Response) => {
