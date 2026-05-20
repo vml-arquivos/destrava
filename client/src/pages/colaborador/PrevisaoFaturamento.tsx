@@ -91,26 +91,42 @@ const OPCOES_PERIODO = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Gera N meses vazios regressivos (do passado para hoje). */
+/**
+ * Formata uma data local (ano, mês 0-based) como 'YYYY-MM-01' sem conversão UTC.
+ * Evita o bug de fuso onde toISOString() pode retroceder um dia em GMT-3.
+ */
+function competenciaLocal(ano: number, mes: number): string {
+  const mm = String(mes + 1).padStart(2, '0');
+  return `${ano}-${mm}-01`;
+}
+
+/**
+ * Gera N meses vazios regressivos (do passado para hoje, incluindo o mês atual).
+ * Exemplo com N=12 e hoje=maio/2026: gera junho/2025 … maio/2026.
+ */
 function gerarMesesVazios(qtd: number): RegistroHistorico[] {
   const meses: RegistroHistorico[] = [];
   const hoje = new Date();
+  const anoAtual = hoje.getFullYear();
+  const mesAtual = hoje.getMonth(); // 0-based
   for (let i = qtd - 1; i >= 0; i--) {
-    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
-    meses.push({ competencia: d.toISOString().slice(0, 10), valor: '', origem: 'manual' });
+    // Calcula o mês deslocado sem criar Date intermediária (evita bug de UTC)
+    let mes = mesAtual - i;
+    let ano = anoAtual;
+    while (mes < 0) { mes += 12; ano -= 1; }
+    meses.push({ competencia: competenciaLocal(ano, mes), valor: '', origem: 'manual' });
   }
   return meses;
 }
 
 /**
  * Recorta ou complementa o histórico carregado do banco para exibir
- * exatamente `qtd` meses regressivos a partir de hoje.
+ * exatamente `qtd` meses regressivos a partir de hoje (inclusive).
  */
 function recortarHistorico(
   historicoBanco: RegistroHistorico[],
   qtd: number,
 ): RegistroHistorico[] {
-  const hoje = new Date();
   // Gera a grade de meses esperados
   const grade = gerarMesesVazios(qtd);
   // Para cada mês da grade, tenta encontrar o valor no banco
