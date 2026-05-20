@@ -104,18 +104,22 @@ function competenciaLocal(ano: number, mes: number): string {
 }
 
 /**
- * Gera N meses vazios regressivos (do passado para hoje, incluindo o mês atual).
- * Exemplo com N=12 e hoje=maio/2026: gera junho/2025 … maio/2026.
+ * Gera N meses regressivos (do passado para hoje), incluindo o mês atual como último.
+ *
+ * Regra: o último mês da grade é SEMPRE o mês atual (hoje).
+ * Exemplo com N=12 e hoje=maio/2026: gera junho/2025, julho/2025, …, maio/2026 (12 meses).
+ * Exemplo com N=12 e hoje=abril/2026: gera maio/2025, junho/2025, …, abril/2026 (12 meses).
  */
 function gerarMesesVazios(qtd: number): RegistroHistorico[] {
   const meses: RegistroHistorico[] = [];
   const hoje = new Date();
   const anoAtual = hoje.getFullYear();
-  const mesAtual = hoje.getMonth(); // 0-based
+  const mesAtual = hoje.getMonth(); // 0-based, 0=jan … 11=dez
+  // i vai de (qtd-1) até 0 — quando i=0 gera o mês atual
   for (let i = qtd - 1; i >= 0; i--) {
-    // Calcula o mês deslocado sem criar Date intermediária (evita bug de UTC)
     let mes = mesAtual - i;
     let ano = anoAtual;
+    // Normaliza meses negativos (ex: mes=-1 vira dez do ano anterior)
     while (mes < 0) { mes += 12; ano -= 1; }
     meses.push({ competencia: competenciaLocal(ano, mes), valor: '', origem: 'manual' });
   }
@@ -145,11 +149,11 @@ function recortarHistorico(
  * Distribui um valor total em N parcelas mensais com variação realista.
  *
  * Regra de negócio:
- *   - Os meses mais antigos (início da série) têm valores ligeiramente mais altos
- *   - Os meses mais recentes (fim da série) têm valores progressivamente menores
- *   - Nenhum mês ultrapassa o teto = total / N * 1.15
- *   - A soma exata bate com o total informado (ajuste no último mês)
- *   - Variação máxima: ±15% da média, com seed determinístico por índice
+ *   - Os meses mais antigos (início da série, passado) têm valores MENORES
+ *   - Os meses mais recentes (fim da série, presente) têm valores MAIORES
+ *   - Progressivo: o faturamento cresce do passado para o presente
+ *   - Oscilação senoidal garante que nenhum mês seja igual ao outro
+ *   - A soma exata bate com o total informado (ajuste no último mês em centavos)
  */
 function ratearFaturamento(
   totalAnual: number,
@@ -161,17 +165,17 @@ function ratearFaturamento(
   const media = totalAnual / qtdMeses;
 
   // Gera fatores de variação por índice:
-  // - Meses iniciais (i=0): fator mais alto (~1.08 a 1.15)
-  // - Meses finais (i=N-1): fator mais baixo (~0.85 a 0.92)
-  // - Usa função senoidal + decaimento linear para naturalidade
+  // - i=0 (mais antigo / passado): fator mais baixo (~0.92)
+  // - i=N-1 (mais recente / presente): fator mais alto (~1.08)
+  // - Progressivo crescente + oscilação senoidal para naturalidade
   const fatores: number[] = [];
   for (let i = 0; i < qtdMeses; i++) {
-    const posicaoNorm = i / Math.max(qtdMeses - 1, 1); // 0 = mais antigo, 1 = mais recente
-    // Decaimento linear: mais antigo = maior, mais recente = menor
-    const decaimento = 1.08 - 0.16 * posicaoNorm;
+    const posicaoNorm = i / Math.max(qtdMeses - 1, 1); // 0 = passado, 1 = presente
+    // Crescimento linear: passado = menor, presente = maior
+    const crescimento = 0.92 + 0.16 * posicaoNorm;
     // Oscilação senoidal para dar naturalidade (não todos iguais)
     const oscilacao = 0.05 * Math.sin(i * 2.3 + 1.1);
-    fatores.push(decaimento + oscilacao);
+    fatores.push(crescimento + oscilacao);
   }
 
   // Normaliza os fatores para que a soma seja exatamente qtdMeses
