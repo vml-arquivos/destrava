@@ -1,16 +1,15 @@
 /**
  * PrevisaoFaturamento.tsx
  * ─────────────────────────────────────────────────────────────────────────────
- * REFATORAÇÃO COMPLETA — 3º arquivo do conjunto cirúrgico.
+ * REFATORAÇÃO — Seletor de período regressivo + separação histórico × previsão.
  *
- * ALTERAÇÕES vs. versão original:
- *   ✅ PDF 100% client-side via gerarPdfFaturamento() — sem round-trip ao servidor
- *   ✅ Preview na tela (DocumentoPreview) antes de imprimir/baixar PDF
- *   ✅ Novos campos de entrada: escritório, contador livre (nome + CRC manual)
- *        → mantém o select de contadores cadastrados E permite entrada livre
- *   ✅ Número de documento gerado automaticamente (estabilizado no preview)
- *   ✅ Botões "Ver Declaração" e "Ver Previsão" abrem o preview antes do PDF
- *   ✅ Fluxo de declaração e previsão completamente desacoplado do backend
+ * ALTERAÇÕES nesta versão:
+ *   ✅ Seletor de período: 3 | 6 | 12 | 24 meses ou personalizado (N meses)
+ *   ✅ Faturamento Bruto = regressivo (passado → hoje), período configurável
+ *   ✅ Previsão = futura (hoje → próximos N meses), baseada no histórico salvo
+ *   ✅ Ao trocar período, regenera meses vazios ou recorta histórico do banco
+ *   ✅ Validação mínima de 3 meses para salvar; mínimo de 12 para gerar previsão
+ *   ✅ Textos do PDF/preview refletem o período real selecionado
  *   ✅ Todos os hooks/handlers originais preservados (histórico, IA, CSV)
  * ─────────────────────────────────────────────────────────────────────────────
  */
@@ -18,6 +17,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   TrendingUp,
+  TrendingDown,
   Save,
   RefreshCw,
   AlertCircle,
@@ -27,6 +27,9 @@ import {
   Building2,
   UserCheck,
   Hash,
+  Calendar,
+  ChevronDown,
+  BarChart2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch } from '../../lib/api';
@@ -35,8 +38,6 @@ import { GraficoPrevisao } from '../../components/faturamento/GraficoPrevisao';
 import { CardCapacidade } from '../../components/faturamento/CardCapacidade';
 import { TabelaHistorico } from '../../components/faturamento/TabelaHistorico';
 import { FormHistorico } from '../../components/faturamento/FormHistorico';
-
-// ── NOVOS IMPORTS (geração client-side) ──────────────────────────────────────
 import { DocumentoPreview } from '../../components/DocumentoPreview';
 import { type DadosPdfFaturamento } from '../../lib/gerarPdfFaturamento';
 
@@ -79,8 +80,19 @@ interface ResultadoPrevisao {
   aviso?: string;
 }
 
+// ─── Opções de período regressivo ─────────────────────────────────────────────
+const OPCOES_PERIODO = [
+  { label: 'Últimos 3 meses',  value: 3  },
+  { label: 'Últimos 6 meses',  value: 6  },
+  { label: 'Últimos 12 meses', value: 12 },
+  { label: 'Últimos 24 meses', value: 24 },
+  { label: 'Personalizado',    value: 0  }, // 0 = modo personalizado
+] as const;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function gerarMesesVazios(qtd = 12): RegistroHistorico[] {
+
+/** Gera N meses vazios regressivos (do passado para hoje). */
+function gerarMesesVazios(qtd: number): RegistroHistorico[] {
   const meses: RegistroHistorico[] = [];
   const hoje = new Date();
   for (let i = qtd - 1; i >= 0; i--) {
@@ -90,13 +102,46 @@ function gerarMesesVazios(qtd = 12): RegistroHistorico[] {
   return meses;
 }
 
+/**
+ * Recorta ou complementa o histórico carregado do banco para exibir
+ * exatamente `qtd` meses regressivos a partir de hoje.
+ */
+function recortarHistorico(
+  historicoBanco: RegistroHistorico[],
+  qtd: number,
+): RegistroHistorico[] {
+  const hoje = new Date();
+  // Gera a grade de meses esperados
+  const grade = gerarMesesVazios(qtd);
+  // Para cada mês da grade, tenta encontrar o valor no banco
+  return grade.map(slot => {
+    const encontrado = historicoBanco.find(
+      r => r.competencia.slice(0, 7) === slot.competencia.slice(0, 7),
+    );
+    return encontrado ?? slot;
+  });
+}
+
 // ─── Componente ───────────────────────────────────────────────────────────────
 export default function PrevisaoFaturamento() {
+  // ── Período regressivo ────────────────────────────────────────────────────
+  const [periodoSelecionado, setPeriodoSelecionado] = useState<number>(12); // meses
+  const [periodoPersonalizado, setPeriodoPersonalizado] = useState<string>('12');
+  const [modoPersonalizado, setModoPersonalizado] = useState(false);
+
+  // Período efetivo (número de meses)
+  const periodoEfetivo = modoPersonalizado
+    ? Math.max(1, parseInt(periodoPersonalizado, 10) || 12)
+    : periodoSelecionado;
+
   // ── Estado original (preservado) ──────────────────────────────────────────
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [empresaId, setEmpresaId] = useState('');
   const [contadores, setContadores] = useState<Contador[]>([]);
-  const [contadorId, setContadorId] = useState(''); // select de cadastrados
+  const [contadorId, setContadorId] = useState('');
+  // historicoBanco: todos os registros carregados do banco (sem filtro de período)
+  const [historicoBanco, setHistoricoBanco] = useState<RegistroHistorico[]>([]);
+  // registros: o que é exibido na tabela (recortado pelo período selecionado)
   const [registros, setRegistros] = useState<RegistroHistorico[]>(gerarMesesVazios(12));
   const [horizonte, setHorizonte] = useState<12 | 24 | 36>(12);
   const [previsao, setPrevisao] = useState<ResultadoPrevisao | null>(null);
@@ -110,15 +155,16 @@ export default function PrevisaoFaturamento() {
   );
   const graficoRef = useRef<HTMLDivElement>(null);
 
-  // ── NOVO: campos do escritório / contador livre ────────────────────────────
-  // Quando o usuário seleciona um contador cadastrado, esses campos são
-  // preenchidos automaticamente. Mas o usuário pode também digitar livremente.
+  // ── Campos do escritório / contador livre ─────────────────────────────────
   const [escritorio, setEscritorio] = useState('');
   const [nomeContadorLivre, setNomeContadorLivre] = useState('');
   const [crcLivre, setCrcLivre] = useState('');
 
-  // ── NOVO: controle do preview ──────────────────────────────────────────────
+  // ── Controle do preview ───────────────────────────────────────────────────
   const [previewDados, setPreviewDados] = useState<DadosPdfFaturamento | null>(null);
+
+  // ── Seção ativa: 'faturamento' | 'previsao' ───────────────────────────────
+  const [secaoAtiva, setSecaoAtiva] = useState<'faturamento' | 'previsao'>('faturamento');
 
   // ─── Carregamento inicial ──────────────────────────────────────────────────
   useEffect(() => {
@@ -135,7 +181,16 @@ export default function PrevisaoFaturamento() {
       .finally(() => setLoadingContadores(false));
   }, []);
 
-  // ── NOVO: ao selecionar contador cadastrado, preenche campos livres ────────
+  // ── Ao mudar o período, recorta o histórico já carregado ──────────────────
+  useEffect(() => {
+    if (historicoBanco.length > 0) {
+      setRegistros(recortarHistorico(historicoBanco, periodoEfetivo));
+    } else {
+      setRegistros(gerarMesesVazios(periodoEfetivo));
+    }
+  }, [periodoEfetivo, historicoBanco]);
+
+  // ── Ao selecionar contador cadastrado, preenche campos livres ─────────────
   const handleContadorChange = (id: string) => {
     setContadorId(id);
     if (id) {
@@ -154,15 +209,15 @@ export default function PrevisaoFaturamento() {
     try {
       const data: any[] = await apiFetch(`/api/faturamento/historico/${id}`);
       if (data.length > 0) {
-        setRegistros(
-          data.map(r => ({
-            competencia: r.competencia.slice(0, 10),
-            valor: parseFloat(r.valor),
-            origem: r.origem,
-          })),
-        );
+        const todos: RegistroHistorico[] = data.map(r => ({
+          competencia: r.competencia.slice(0, 10),
+          valor: parseFloat(r.valor),
+          origem: r.origem,
+        }));
+        setHistoricoBanco(todos);
+        // O useEffect acima cuida de recortar pelo período efetivo
       } else {
-        setRegistros(gerarMesesVazios(12));
+        setHistoricoBanco([]);
       }
       try {
         const prev: ResultadoPrevisao = await apiFetch(
@@ -174,7 +229,7 @@ export default function PrevisaoFaturamento() {
       }
     } catch {
       toast.error('Erro ao carregar histórico');
-      setRegistros(gerarMesesVazios(12));
+      setHistoricoBanco([]);
     } finally {
       setLoadingHistorico(false);
     }
@@ -183,8 +238,9 @@ export default function PrevisaoFaturamento() {
   const handleEmpresaChange = (id: string) => {
     setEmpresaId(id);
     setPrevisao(null);
+    setHistoricoBanco([]);
     if (id) carregarHistorico(id);
-    else setRegistros(gerarMesesVazios(12));
+    else setRegistros(gerarMesesVazios(periodoEfetivo));
   };
 
   const handleRegistroChange = (
@@ -198,7 +254,13 @@ export default function PrevisaoFaturamento() {
   const handleImportCsv = (
     importados: { competencia: string; valor: number; origem: string }[],
   ) => {
-    setRegistros(importados);
+    // Ao importar, atualiza também o historicoBanco para que a troca de período funcione
+    const novoBanco = importados.map(r => ({
+      competencia: r.competencia,
+      valor: r.valor,
+      origem: r.origem,
+    }));
+    setHistoricoBanco(novoBanco);
     toast.success(`${importados.length} registros importados`);
   };
 
@@ -207,8 +269,8 @@ export default function PrevisaoFaturamento() {
     const registrosValidos = registros.filter(
       r => r.valor !== '' && r.valor !== null && !isNaN(Number(r.valor)),
     );
-    if (registrosValidos.length < 12) {
-      toast.error(`Preencha pelo menos 12 meses. Atualmente: ${registrosValidos.length}`);
+    if (registrosValidos.length < 3) {
+      toast.error(`Preencha pelo menos 3 meses. Atualmente: ${registrosValidos.length}`);
       return;
     }
     setLoadingSalvar(true);
@@ -225,6 +287,8 @@ export default function PrevisaoFaturamento() {
         }),
       });
       toast.success('Histórico salvo com sucesso!');
+      // Recarrega o banco para manter sincronizado
+      await carregarHistorico(empresaId);
     } catch (err: any) {
       toast.error(err.message || 'Erro ao salvar histórico');
     } finally {
@@ -234,27 +298,19 @@ export default function PrevisaoFaturamento() {
 
   const handleGerarPrevisao = async () => {
     if (!empresaId) { toast.error('Selecione uma empresa'); return; }
-    const registrosValidos = registros.filter(
+    // Para gerar previsão, precisa de pelo menos 12 meses no banco (não apenas no recorte)
+    const registrosValidos = historicoBanco.filter(
       r => r.valor !== '' && r.valor !== null && !isNaN(Number(r.valor)),
     );
     if (registrosValidos.length < 12) {
-      toast.error(`Preencha pelo menos 12 meses. Atualmente: ${registrosValidos.length}`);
+      toast.error(
+        `Para gerar previsão são necessários pelo menos 12 meses no histórico salvo. ` +
+        `Encontrados: ${registrosValidos.length}. Salve o histórico completo primeiro.`,
+      );
       return;
     }
     setLoadingPrevisao(true);
     try {
-      toast.loading('Salvando histórico...', { id: 'previsao-progress' });
-      await apiFetch('/api/faturamento/historico', {
-        method: 'POST',
-        body: JSON.stringify({
-          empresa_id: empresaId,
-          registros: registrosValidos.map(r => ({
-            competencia: r.competencia,
-            valor: parseFloat(String(r.valor)),
-            origem: r.origem || 'manual',
-          })),
-        }),
-      });
       toast.loading('Consultando IA preditiva...', { id: 'previsao-progress' });
       const result: ResultadoPrevisao = await apiFetch('/api/faturamento/prever', {
         method: 'POST',
@@ -262,6 +318,7 @@ export default function PrevisaoFaturamento() {
       });
       toast.dismiss('previsao-progress');
       setPrevisao(result);
+      setSecaoAtiva('previsao');
       toast.success(`Previsão gerada com modelo ${result.modelo_usado.toUpperCase()}!`);
     } catch (err: any) {
       toast.dismiss('previsao-progress');
@@ -271,7 +328,7 @@ export default function PrevisaoFaturamento() {
     }
   };
 
-  // ── NOVO: valida campos obrigatórios do escritório antes do preview ────────
+  // ── Valida campos obrigatórios do escritório antes do preview ─────────────
   const validarContabilidade = (): boolean => {
     if (!escritorio.trim()) {
       toast.error('Informe o nome do escritório de contabilidade');
@@ -288,24 +345,22 @@ export default function PrevisaoFaturamento() {
     return true;
   };
 
-  // ── NOVO: abre preview de DECLARAÇÃO (client-side) ────────────────────────
+  // ── Abre preview de DECLARAÇÃO (histórico do período selecionado) ──────────
   const handleVerDeclaracao = () => {
     if (!empresaId) { toast.error('Selecione uma empresa'); return; }
     if (!validarContabilidade()) return;
 
-    // Filtra os 12 meses válidos relativos ao mês de referência
     const refDate = dataReferenciaDeclaracao
       ? new Date(dataReferenciaDeclaracao + '-01')
       : new Date();
-    // Pega os registros válidos, ordena e pega os 12 mais recentes até a ref
+
     const validos = registros
       .filter(r => r.valor !== '' && !isNaN(Number(r.valor)))
       .filter(r => new Date(r.competencia + 'T00:00:00') <= refDate)
-      .sort((a, b) => a.competencia.localeCompare(b.competencia))
-      .slice(-12);
+      .sort((a, b) => a.competencia.localeCompare(b.competencia));
 
-    if (validos.length < 12) {
-      toast.error(`São necessários 12 meses de histórico válido. Encontrados: ${validos.length}`);
+    if (validos.length < 3) {
+      toast.error(`São necessários pelo menos 3 meses de histórico válido. Encontrados: ${validos.length}`);
       return;
     }
 
@@ -320,17 +375,18 @@ export default function PrevisaoFaturamento() {
         escritorio: escritorio.trim(),
         nomeContador: nomeContadorLivre.trim(),
         crc: crcLivre.trim(),
-        // numeroDocumento omitido → será gerado automaticamente no DocumentoPreview
       },
       registros: validos.map(r => ({
         competencia: r.competencia,
         valor: parseFloat(String(r.valor)),
       })),
+      // Passa o número de meses para o PDF refletir o período correto
+      periodoMeses: validos.length,
       cidade: 'Brasília - DF',
-    });
+    } as any);
   };
 
-  // ── NOVO: abre preview de PREVISÃO (client-side) ──────────────────────────
+  // ── Abre preview de PREVISÃO (futura) ─────────────────────────────────────
   const handleVerPrevisao = () => {
     if (!previsao) { toast.error('Gere a previsão IA primeiro'); return; }
     if (!validarContabilidade()) return;
@@ -353,6 +409,14 @@ export default function PrevisaoFaturamento() {
     });
   };
 
+  // ── Estatísticas do período exibido ───────────────────────────────────────
+  const registrosComValor = registros.filter(
+    r => r.valor !== '' && r.valor !== null && !isNaN(Number(r.valor)) && Number(r.valor) > 0,
+  );
+  const totalPeriodo = registrosComValor.reduce((acc, r) => acc + Number(r.valor), 0);
+  const mediaMensal = registrosComValor.length > 0 ? totalPeriodo / registrosComValor.length : 0;
+  const mesesPreenchidos = registrosComValor.length;
+
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <Layout title="Faturamento">
@@ -365,8 +429,36 @@ export default function PrevisaoFaturamento() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900">Faturamento</h1>
-            <p className="text-sm text-gray-500">Histórico, previsão IA e declaração anual</p>
+            <p className="text-sm text-gray-500">Histórico regressivo e previsão futura por IA</p>
           </div>
+        </div>
+
+        {/* ── Abas: Faturamento Bruto | Previsão ─────────────────────────── */}
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+          <button
+            onClick={() => setSecaoAtiva('faturamento')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${
+              secaoAtiva === 'faturamento'
+                ? 'bg-white text-blue-700 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <TrendingDown className="w-4 h-4" />
+            Faturamento Bruto
+            <span className="text-xs font-normal opacity-70">(histórico)</span>
+          </button>
+          <button
+            onClick={() => setSecaoAtiva('previsao')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${
+              secaoAtiva === 'previsao'
+                ? 'bg-white text-emerald-700 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <BarChart2 className="w-4 h-4" />
+            Previsão de Faturamento
+            <span className="text-xs font-normal opacity-70">(futuro)</span>
+          </button>
         </div>
 
         {/* ── Configuração: empresa + contador ───────────────────────────── */}
@@ -394,7 +486,7 @@ export default function PrevisaoFaturamento() {
               </select>
             </div>
 
-            {/* Contador cadastrado (opcional — preenche campos abaixo) */}
+            {/* Contador cadastrado */}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
                 Contador cadastrado{' '}
@@ -426,14 +518,13 @@ export default function PrevisaoFaturamento() {
             </div>
           </div>
 
-          {/* ── NOVO: campos do documento (escritório + contador) ─────────── */}
+          {/* Campos do documento (escritório + contador) */}
           <div className="border-t border-gray-100 pt-4">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
               <Building2 className="w-3.5 h-3.5" />
               Dados para o Documento PDF
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Escritório */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
                   <Building2 className="w-3 h-3" />
@@ -447,8 +538,6 @@ export default function PrevisaoFaturamento() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-
-              {/* Nome do Contador */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
                   <UserCheck className="w-3 h-3" />
@@ -462,8 +551,6 @@ export default function PrevisaoFaturamento() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-
-              {/* CRC */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
                   <Hash className="w-3 h-3" />
@@ -484,11 +571,23 @@ export default function PrevisaoFaturamento() {
           </div>
         </div>
 
-        {/* ── Histórico de faturamento ────────────────────────────────────── */}
-        {empresaId && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <h2 className="font-semibold text-gray-800">Histórico de Faturamento</h2>
+        {/* ════════════════════════════════════════════════════════════════════
+            ABA: FATURAMENTO BRUTO (histórico regressivo)
+        ════════════════════════════════════════════════════════════════════ */}
+        {secaoAtiva === 'faturamento' && empresaId && (
+          <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-5">
+
+            {/* Cabeçalho da seção */}
+            <div className="flex items-start justify-between flex-wrap gap-3">
+              <div>
+                <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+                  <TrendingDown className="w-4 h-4 text-blue-600" />
+                  Faturamento Bruto — Histórico Regressivo
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Valores do passado até hoje. Selecione o período desejado abaixo.
+                </p>
+              </div>
               <div className="flex gap-2 flex-wrap">
                 <FormHistorico onImport={handleImportCsv} />
                 <button
@@ -506,6 +605,77 @@ export default function PrevisaoFaturamento() {
               </div>
             </div>
 
+            {/* ── Seletor de período regressivo ─────────────────────────── */}
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
+              <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5" />
+                Período do Faturamento
+              </p>
+              <div className="flex flex-wrap gap-2 items-center">
+                {OPCOES_PERIODO.map(op => (
+                  <button
+                    key={op.value}
+                    onClick={() => {
+                      if (op.value === 0) {
+                        setModoPersonalizado(true);
+                      } else {
+                        setModoPersonalizado(false);
+                        setPeriodoSelecionado(op.value);
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                      (op.value === 0 && modoPersonalizado) ||
+                      (op.value !== 0 && !modoPersonalizado && periodoSelecionado === op.value)
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400 hover:text-blue-600'
+                    }`}
+                  >
+                    {op.label}
+                  </button>
+                ))}
+
+                {/* Input personalizado */}
+                {modoPersonalizado && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      value={periodoPersonalizado}
+                      onChange={e => setPeriodoPersonalizado(e.target.value)}
+                      className="w-20 border border-blue-300 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="N"
+                    />
+                    <span className="text-xs text-gray-500">meses</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Resumo do período */}
+              <div className="flex flex-wrap gap-4 pt-1">
+                <div className="text-xs text-blue-600">
+                  <span className="font-semibold">Período exibido:</span>{' '}
+                  {periodoEfetivo} {periodoEfetivo === 1 ? 'mês' : 'meses'} regressivos a partir de hoje
+                </div>
+                {mesesPreenchidos > 0 && (
+                  <>
+                    <div className="text-xs text-gray-600">
+                      <span className="font-semibold">Meses preenchidos:</span> {mesesPreenchidos}/{periodoEfetivo}
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      <span className="font-semibold">Total do período:</span>{' '}
+                      {totalPeriodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </div>
+                    <div className="text-xs text-gray-600">
+                      <span className="font-semibold">Média mensal:</span>{' '}
+                      {mediaMensal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Tabela de histórico */}
             {loadingHistorico ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
@@ -514,111 +684,176 @@ export default function PrevisaoFaturamento() {
               <TabelaHistorico registros={registros} onChange={handleRegistroChange} />
             )}
 
-            {/* ── Ações da linha de fundo ────────────────────────────────── */}
+            {/* Ações da linha de fundo */}
             <div className="flex items-center gap-3 pt-2 border-t border-gray-100 flex-wrap">
-              {/* Horizonte */}
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600 font-medium">Horizonte:</label>
-                <select
-                  value={horizonte}
-                  onChange={e => setHorizonte(Number(e.target.value) as 12 | 24 | 36)}
-                  className="border border-gray-300 rounded px-2 py-1 text-sm"
-                >
-                  <option value={12}>12 meses</option>
-                  <option value={24}>24 meses</option>
-                  <option value={36}>36 meses</option>
-                </select>
-              </div>
-
-              {/* Gerar previsão IA */}
-              <button
-                onClick={handleGerarPrevisao}
-                disabled={loadingPrevisao}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-              >
-                {loadingPrevisao ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Gerando previsão...</>
-                ) : (
-                  <><RefreshCw className="w-4 h-4" /> Gerar Previsão IA</>
-                )}
-              </button>
-
               {/* Mês de referência */}
               <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-500 whitespace-nowrap">Mês ref.:</label>
+                <label className="text-xs text-gray-500 whitespace-nowrap">Mês ref. declaração:</label>
                 <input
                   type="month"
                   value={dataReferenciaDeclaracao}
                   onChange={e => setDataReferenciaDeclaracao(e.target.value)}
                   className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                  title="Mês de referência para os últimos 12 meses"
+                  title="Mês de referência para a declaração"
                 />
               </div>
 
-              {/* ── NOVO: Ver Declaração (abre preview) ───────────────────── */}
+              {/* Ver Declaração */}
               <button
                 onClick={handleVerDeclaracao}
                 className="flex items-center gap-2 px-4 py-2 bg-[#1B3A6B] text-white text-sm rounded-lg hover:bg-[#142d55] transition-colors"
               >
                 <Eye className="w-4 h-4" />
-                Ver Declaração
+                Ver Declaração PDF
               </button>
+            </div>
+          </div>
+        )}
 
-              {/* Aviso de carregamento IA */}
-              {loadingPrevisao && (
-                <span className="text-xs text-gray-400 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />
-                  Pode levar até 45s (Prophet treinando o modelo)
-                </span>
+        {/* Placeholder quando empresa não selecionada */}
+        {secaoAtiva === 'faturamento' && !empresaId && (
+          <div className="bg-white rounded-xl border border-dashed border-gray-300 p-10 text-center">
+            <TrendingDown className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 text-sm">Selecione uma empresa para visualizar o histórico de faturamento.</p>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════════════════════
+            ABA: PREVISÃO DE FATURAMENTO (futuro)
+        ════════════════════════════════════════════════════════════════════ */}
+        {secaoAtiva === 'previsao' && (
+          <div className="space-y-5">
+
+            {/* Painel de geração */}
+            <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+              <div>
+                <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+                  <BarChart2 className="w-4 h-4 text-emerald-600" />
+                  Previsão de Faturamento — Projeção Futura
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Baseada no histórico salvo. A IA projeta os próximos meses a partir dos dados reais registrados.
+                </p>
+              </div>
+
+              {!empresaId && (
+                <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+                  Selecione uma empresa na seção de Configuração acima para gerar a previsão.
+                </div>
+              )}
+
+              {empresaId && (
+                <>
+                  {/* Aviso sobre histórico necessário */}
+                  {historicoBanco.filter(r => r.valor !== '' && !isNaN(Number(r.valor))).length < 12 && (
+                    <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700 flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="font-semibold">Histórico insuficiente para previsão</p>
+                        <p className="text-xs mt-0.5">
+                          São necessários pelo menos 12 meses salvos no banco.
+                          Vá para a aba <strong>Faturamento Bruto</strong>, preencha os dados e clique em <strong>Salvar Histórico</strong>.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Controles de geração */}
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm text-gray-600 font-medium">Horizonte da previsão:</label>
+                      <select
+                        value={horizonte}
+                        onChange={e => setHorizonte(Number(e.target.value) as 12 | 24 | 36)}
+                        className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <option value={12}>Próximos 12 meses</option>
+                        <option value={24}>Próximos 24 meses</option>
+                        <option value={36}>Próximos 36 meses</option>
+                      </select>
+                    </div>
+
+                    <button
+                      onClick={handleGerarPrevisao}
+                      disabled={loadingPrevisao}
+                      className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors font-semibold"
+                    >
+                      {loadingPrevisao ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Gerando previsão...</>
+                      ) : (
+                        <><RefreshCw className="w-4 h-4" /> Gerar Previsão IA</>
+                      )}
+                    </button>
+
+                    {loadingPrevisao && (
+                      <span className="text-xs text-gray-400 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        Pode levar até 45s (Prophet treinando o modelo)
+                      </span>
+                    )}
+                  </div>
+                </>
               )}
             </div>
-          </div>
-        )}
 
-        {/* ── Resultado da previsão ───────────────────────────────────────── */}
-        {previsao && (
-          <div className="space-y-4">
-            <CardCapacidade
-              min={previsao.capacidade_pgto_min}
-              max={previsao.capacidade_pgto_max}
-              modelo={previsao.modelo_usado}
-              aviso={previsao.aviso}
-            />
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-                <h2 className="font-semibold text-gray-800">
-                  Gráfico de Previsão — {previsao.horizonte_meses} meses
-                </h2>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className="text-xs text-gray-400">
-                    Gerado em {new Date(previsao.gerada_em).toLocaleString('pt-BR')}
-                  </span>
-
-                  {/* ── NOVO: Ver Previsão (abre preview) ─────────────────── */}
-                  <button
-                    onClick={handleVerPrevisao}
-                    className="flex items-center gap-2 px-4 py-2 bg-[#1B3A6B] text-white text-sm rounded-lg hover:bg-[#142d55] transition-colors"
-                  >
-                    <FileText className="w-4 h-4" />
-                    Ver Demonstrativo PDF
-                  </button>
+            {/* Resultado da previsão */}
+            {previsao && (
+              <div className="space-y-4">
+                <CardCapacidade
+                  min={previsao.capacidade_pgto_min}
+                  max={previsao.capacidade_pgto_max}
+                  modelo={previsao.modelo_usado}
+                  aviso={previsao.aviso}
+                />
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                    <div>
+                      <h2 className="font-semibold text-gray-800">
+                        Gráfico de Previsão — Próximos {previsao.horizonte_meses} meses
+                      </h2>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Linha azul = histórico real · Linha laranja tracejada = projeção futura
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="text-xs text-gray-400">
+                        Gerado em {new Date(previsao.gerada_em).toLocaleString('pt-BR')}
+                      </span>
+                      <button
+                        onClick={handleVerPrevisao}
+                        className="flex items-center gap-2 px-4 py-2 bg-[#1B3A6B] text-white text-sm rounded-lg hover:bg-[#142d55] transition-colors"
+                      >
+                        <FileText className="w-4 h-4" />
+                        Ver Demonstrativo PDF
+                      </button>
+                    </div>
+                  </div>
+                  <div ref={graficoRef}>
+                    <GraficoPrevisao
+                      pontos={previsao.pontos}
+                      capacidadeMin={previsao.capacidade_pgto_min}
+                      capacidadeMax={previsao.capacidade_pgto_max}
+                    />
+                  </div>
                 </div>
               </div>
-              <div ref={graficoRef}>
-                <GraficoPrevisao
-                  pontos={previsao.pontos}
-                  capacidadeMin={previsao.capacidade_pgto_min}
-                  capacidadeMax={previsao.capacidade_pgto_max}
-                />
+            )}
+
+            {/* Placeholder sem previsão */}
+            {!previsao && empresaId && !loadingPrevisao && (
+              <div className="bg-white rounded-xl border border-dashed border-gray-300 p-10 text-center">
+                <BarChart2 className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 text-sm">
+                  Nenhuma previsão gerada ainda. Clique em <strong>Gerar Previsão IA</strong> acima.
+                </p>
               </div>
-            </div>
+            )}
           </div>
         )}
+
       </div>
 
-      {/* ── NOVO: Preview do documento (overlay fullscreen) ─────────────────
-           Renderizado fora do container principal para z-index correto.
-           DocumentoPreview gerencia internamente o gerarPdfFaturamento().   */}
+      {/* Preview do documento (overlay fullscreen) */}
       {previewDados && (
         <DocumentoPreview
           dados={previewDados}

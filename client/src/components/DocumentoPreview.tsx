@@ -87,8 +87,12 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
     ? `Período apurado: ${inicio} a ${fim}`
     : `Projeção para: ${inicio} a ${fim} (${dados.horizonte} meses)`;
 
+  // Título dinâmico: reflete o período real selecionado
+  const qtdMesesDeclaracao = isDeclaracao ? dados.registros.length : 0;
   const tituloDoc = isDeclaracao
-    ? 'DECLARAÇÃO DE FATURAMENTO DOS ÚLTIMOS 12 MESES'
+    ? (qtdMesesDeclaracao === 12
+        ? 'DECLARAÇÃO DE FATURAMENTO DOS ÚLTIMOS 12 MESES'
+        : `DECLARAÇÃO DE FATURAMENTO — ÚLTIMOS ${qtdMesesDeclaracao} MESES`)
     : 'DEMONSTRATIVO DE PREVISÃO DE FATURAMENTO';
 
   return (
@@ -207,7 +211,9 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
               {/* Total */}
               <div className="bg-[#1B3A6B] grid grid-cols-2 px-4 py-3">
                 <span className="text-white text-xs font-bold uppercase">
-                  {isDeclaracao ? 'Total (12 Meses)' : 'Total Previsto'}
+                  {isDeclaracao
+                    ? `Total do Período (${qtdMesesDeclaracao} ${qtdMesesDeclaracao === 1 ? 'Mês' : 'Meses'})`
+                    : 'Total Previsto'}
                 </span>
                 <span className="text-white text-sm font-bold text-right">{fmtBRL(total)}</span>
               </div>

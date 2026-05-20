@@ -78,7 +78,8 @@ export interface DadosPdfDeclaracao {
   tipo: 'declaracao';
   empresa: DadosEmpresa;
   contabilidade: DadosContabilidade;
-  registros: RegistroFaturamento[];  // Exatamente 12 meses
+  registros: RegistroFaturamento[];  // N meses (configurado pelo usuário)
+  periodoMeses?: number;             // Número de meses do período (para o título do PDF)
   cidade?: string;                   // Default: "Brasília - DF"
 }
 
@@ -258,7 +259,7 @@ function desenharTabelaFaturamento(
   doc.setTextColor(...BRANCO);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
-  doc.text('TOTAL (12 MESES)', ML + 4, y + 6);
+  doc.text('TOTAL DO PERÍODO', ML + 4, y + 6);
   doc.text(fmtBRL(total), ML + CW - 4, y + 6, { align: 'right' });
   y += 12;
 
@@ -443,16 +444,22 @@ export function gerarPdfFaturamento(dados: DadosPdfFaturamento): void {
     const fim = meses[meses.length - 1]?.competencia.slice(0, 7).replace('-', '/') ?? '';
     const periodo = `Período apurado: ${inicio} a ${fim}`;
 
+    const qtdMeses = dados.periodoMeses ?? meses.length;
+    const tituloPdf = qtdMeses === 12
+      ? 'DECLARAÇÃO DE FATURAMENTO DOS ÚLTIMOS 12 MESES'
+      : `DECLARAÇÃO DE FATURAMENTO — ÚLTIMOS ${qtdMeses} MESES`;
+
     let y = desenharCabecalho(
       doc,
       dados.empresa,
       dados.contabilidade,
-      'DECLARAÇÃO DE FATURAMENTO DOS ÚLTIMOS 12 MESES',
+      tituloPdf,
       periodo,
     );
 
     y = desenharTabelaFaturamento(doc, y, meses, ['Mês/Ano', 'Faturamento Total (R$)'], 'FATURAMENTO MENSAL');
 
+    // Linha de total com label dinâmico
     desenharAssinaturas(doc, dados.empresa, dados.contabilidade, cidade);
     desenharRodape(doc);
 
