@@ -104,22 +104,25 @@ function competenciaLocal(ano: number, mes: number): string {
 }
 
 /**
- * Gera N meses regressivos (do passado para hoje), incluindo o mês atual como último.
+ * Gera N meses regressivos, sendo o último SEMPRE o mês anterior ao atual.
  *
- * Regra: o último mês da grade é SEMPRE o mês atual (hoje).
- * Exemplo com N=12 e hoje=maio/2026: gera junho/2025, julho/2025, …, maio/2026 (12 meses).
- * Exemplo com N=12 e hoje=abril/2026: gera maio/2025, junho/2025, …, abril/2026 (12 meses).
+ * Regra de negócio: o mês corrente ainda não fechou faturamento,
+ * portanto a série termina no mês anterior.
+ *
+ * Exemplo com N=12 e hoje=maio/2026: gera maio/2025 … abril/2026.
+ * Exemplo com N=12 e hoje=janeiro/2026: gera janeiro/2025 … dezembro/2025.
  */
 function gerarMesesVazios(qtd: number): RegistroHistorico[] {
   const meses: RegistroHistorico[] = [];
   const hoje = new Date();
-  const anoAtual = hoje.getFullYear();
-  const mesAtual = hoje.getMonth(); // 0-based, 0=jan … 11=dez
-  // i vai de (qtd-1) até 0 — quando i=0 gera o mês atual
+  // Mês de referência = mês anterior ao atual (0-based)
+  let mesRef = hoje.getMonth() - 1;
+  let anoRef = hoje.getFullYear();
+  if (mesRef < 0) { mesRef = 11; anoRef -= 1; } // janeiro → dezembro do ano anterior
+  // i vai de (qtd-1) até 0 — quando i=0 gera o mês de referência (anterior ao atual)
   for (let i = qtd - 1; i >= 0; i--) {
-    let mes = mesAtual - i;
-    let ano = anoAtual;
-    // Normaliza meses negativos (ex: mes=-1 vira dez do ano anterior)
+    let mes = mesRef - i;
+    let ano = anoRef;
     while (mes < 0) { mes += 12; ano -= 1; }
     meses.push({ competencia: competenciaLocal(ano, mes), valor: '', origem: 'manual' });
   }
