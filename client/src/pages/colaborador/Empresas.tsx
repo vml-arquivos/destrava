@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import Layout from "./Layout";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
+import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from "@/lib/currency";
 import {
   Building2, Plus, Search, Phone, Mail, Globe, MapPin,
   Edit2, Trash2, ChevronRight, Loader2, X, Save,
@@ -1257,12 +1258,16 @@ export default function Empresas() {
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Faturamento Anual (R$)</label>
                     <input
-                      type="number"
-                      value={form.faturamento_anual || ""}
-                      onChange={e => set("faturamento_anual", e.target.value ? Number(e.target.value) : undefined)}
+                      type="text"
+                      inputMode="numeric"
+                      value={form.faturamento_anual ? formatBRLCurrency(form.faturamento_anual) : ""}
+                      onChange={e => {
+                        const formatted = maskCurrencyInput(e.target.value);
+                        set("faturamento_anual", unmaskCurrencyInput(formatted) || undefined);
+                      }}
                       placeholder="0,00"
-                      min="0"
-                      className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      autoComplete="off"
+                      className="w-full border rounded-xl px-3 py-2 text-sm text-right font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 
@@ -1497,12 +1502,16 @@ export default function Empresas() {
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Limite de Crédito Atual (R$)</label>
                     <input
-                      type="number"
-                      value={form.limite_credito_atual || ""}
-                      onChange={e => set("limite_credito_atual", e.target.value ? Number(e.target.value) : undefined)}
+                      type="text"
+                      inputMode="numeric"
+                      value={form.limite_credito_atual ? formatBRLCurrency(form.limite_credito_atual) : ""}
+                      onChange={e => {
+                        const formatted = maskCurrencyInput(e.target.value);
+                        set("limite_credito_atual", unmaskCurrencyInput(formatted) || undefined);
+                      }}
                       placeholder="0,00"
-                      min="0"
-                      className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      autoComplete="off"
+                      className="w-full border rounded-xl px-3 py-2 text-sm text-right font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <div className="space-y-1.5">

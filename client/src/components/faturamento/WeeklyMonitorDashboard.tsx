@@ -27,6 +27,7 @@ import {
   RefreshCw, X, Info, Zap, ArrowRight,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { maskCurrencyInput, unmaskCurrencyInput } from "@/lib/currency";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIPOS (espelho de analisadorSemanal.ts)
@@ -337,7 +338,8 @@ function FormManual({
   const [margin, setMargin] = useState("30");
   const [seasonIdx, setSeasonIdx] = useState("");
 
-  const setC = (k: string, v: string) => setChannels(p => ({ ...p, [k]: v }));
+  // setC aplica máscara automática ao digitar valores nos canais
+  const setC = (k: string, v: string) => setChannels(p => ({ ...p, [k]: maskCurrencyInput(v) }));
 
   const CANAIS = [
     { key: "maquininha", label: "Maquininha" },
@@ -349,14 +351,14 @@ function FormManual({
   ];
 
   const totalPreview = useMemo(() =>
-    Object.values(channels).reduce((s, v) => s + (parseFloat(v) || 0), 0),
+    Object.values(channels).reduce((s, v) => s + unmaskCurrencyInput(v), 0),
     [channels]
   );
 
   const handleSubmit = () => {
     const ch: Record<string, number> = {};
     for (const [k, v] of Object.entries(channels)) {
-      ch[k] = parseFloat(v) || 0;
+      ch[k] = unmaskCurrencyInput(v);
     }
     onAnalise({
       client_id: "manual",
@@ -364,8 +366,8 @@ function FormManual({
       week_start: weekStart,
       channels: ch,
       previous_accumulated: {
-        monthly_total: parseFloat(prevMonth) || 0,
-        annual_total:  parseFloat(prevYear)  || 0,
+        monthly_total: unmaskCurrencyInput(prevMonth),
+        annual_total:  unmaskCurrencyInput(prevYear),
       },
       operational_margin: parseFloat(margin) || 30,
       seasonal_index: seasonIdx ? parseFloat(seasonIdx) : undefined,
@@ -397,11 +399,13 @@ function FormManual({
           <div key={key}>
             <label className="text-xs text-gray-600 mb-1 block">{label} (R$)</label>
             <input
-              type="number" min={0} step={0.01}
+              type="text"
+              inputMode="numeric"
               value={channels[key]}
               onChange={e => setC(key, e.target.value)}
               placeholder="0,00"
-              className={cls}
+              autoComplete="off"
+              className={`${cls} text-right font-mono tabular-nums`}
             />
           </div>
         ))}
@@ -416,11 +420,27 @@ function FormManual({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-xs text-gray-600 mb-1 block">Acumulado mês anterior (R$)</label>
-          <input type="number" min={0} step={0.01} value={prevMonth} onChange={e => setPrevMonth(e.target.value)} className={cls} />
+          <input
+            type="text"
+            inputMode="numeric"
+            value={prevMonth}
+            onChange={e => setPrevMonth(maskCurrencyInput(e.target.value))}
+            placeholder="0,00"
+            autoComplete="off"
+            className={`${cls} text-right font-mono tabular-nums`}
+          />
         </div>
         <div>
           <label className="text-xs text-gray-600 mb-1 block">Acumulado ano anterior (R$)</label>
-          <input type="number" min={0} step={0.01} value={prevYear}  onChange={e => setPrevYear(e.target.value)}  className={cls} />
+          <input
+            type="text"
+            inputMode="numeric"
+            value={prevYear}
+            onChange={e => setPrevYear(maskCurrencyInput(e.target.value))}
+            placeholder="0,00"
+            autoComplete="off"
+            className={`${cls} text-right font-mono tabular-nums`}
+          />
         </div>
       </div>
 

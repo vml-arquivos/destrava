@@ -2,6 +2,7 @@ import { Fragment, useState, useMemo, useEffect, useRef } from "react";
 import ColaboradorLayout from "./Layout";
 import { useAuth } from "@/hooks/useAuth";
 import CompensacaoSemanalCard from "@/components/CompensacaoSemanalCard";
+import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from "@/lib/currency";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 type Acompanhamento = Record<string, any>;
@@ -2933,13 +2934,25 @@ function FieldInput({ field, value, onChange }: {
       </label>
     );
   }
+  // Campos monetários usam máscara automática de digitação
+  if (field.type === "number") {
+    const numericValue = typeof value === "number" ? value : (parseFloat(String(value || "0")) || 0);
+    return (
+      <label>
+        <span className="mb-1 block text-xs font-medium text-gray-600">{field.label}{field.required ? " *" : ""}</span>
+        <FieldCurrencyInput
+          value={numericValue}
+          onChange={(num) => onChange(num)}
+        />
+      </label>
+    );
+  }
   return (
     <label>
       <span className="mb-1 block text-xs font-medium text-gray-600">{field.label}{field.required ? " *" : ""}</span>
       <input
         className="w-full rounded border border-gray-300 p-2 text-sm"
         type={field.type || "text"}
-        step={field.type === "number" ? "0.01" : undefined}
         value={value || ""}
         onChange={(e) => onChange(e.target.value)}
       />
@@ -2984,15 +2997,42 @@ function ReadonlyField({ label, value, highlight, negative }: {
 }
 
 /**
- * Converte string digitada pelo usuário para número float.
- * Suporta formatos:
- *   "1234,56"    → 1234.56  (BR decimal com vírgula)
- *   "1234.56"    → 1234.56  (EN decimal com ponto)
- *   "1.234,56"   → 1234.56  (BR com milhar e vírgula decimal)
- *   "1,234.56"   → 1234.56  (EN com milhar e ponto decimal)
- *   "1.234"      → 1234     (milhar sem decimal)
- *   "1234"       → 1234
+ * FieldCurrencyInput — input monetário inline para uso no FieldInput.
+ * Usa máscara automática de digitação.
  */
+function FieldCurrencyInput({ value, onChange }: {
+  value: number; onChange: (v: number) => void;
+}) {
+  const [displayValue, setDisplayValue] = useState<string>(() =>
+    value ? formatBRLCurrency(value) : ""
+  );
+  const prevRef = useRef<number>(value);
+  useEffect(() => {
+    if (prevRef.current !== value) {
+      prevRef.current = value;
+      setDisplayValue(value ? formatBRLCurrency(value) : "");
+    }
+  }, [value]);
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = maskCurrencyInput(e.target.value);
+    setDisplayValue(formatted);
+    const num = unmaskCurrencyInput(formatted);
+    prevRef.current = num;
+    onChange(num);
+  };
+  return (
+    <input
+      className="w-full rounded border border-gray-300 p-2 text-right font-mono text-sm tabular-nums focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+      type="text"
+      inputMode="numeric"
+      value={displayValue}
+      placeholder="0,00"
+      onChange={handleChange}
+      autoComplete="off"
+    />
+  );
+}
+
 /**
  * parseBRLInput — converte qualquer string digitada pelo usuário para float.
  *
@@ -3047,51 +3087,34 @@ function parseBRLInput(raw: string): number {
 /**
  * CurrencyField — input de valor monetário BRL.
  *
- * Comportamento:
- * - Focado: campo livre para digitação. Aceita qualquer formato (vírgula ou ponto).
- *   O usuário pode digitar: "175,49" | "175.49" | "1.234,56" etc.
- * - Desfocado: exibe o valor formatado em pt-BR (ex: "1.234,56").
+ * Comportamento (máscara automática):
+ * - Ao digitar dígitos, o campo formata automaticamente com separadores pt-BR.
+ * - Ex: digitar "100000000" → exibe "1.000.000,00"
  * - Campo em branco quando value = 0 (não exibe "0" fantasma).
  * - Atualiza totalEntradas/saldoSemanal em tempo real durante a digitação.
  */
 function CurrencyField({ label, value, onChange }: {
   label: string; value: number; onChange: (v: number) => void;
 }) {
-  const [focused, setFocused] = useState(false);
-  // draft: texto livre que o usuário está digitando
-  const [draft, setDraft] = useState("");
+  const [displayValue, setDisplayValue] = useState<string>(() =>
+    value ? formatBRLCurrency(value) : ""
+  );
 
-  // Valor exibido quando fora do foco — formato pt-BR sem R$
-  const formatted = value
-    ? value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    : "";
-
-  const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    setFocused(true);
-    // Ao focar, mostra o valor atual sem formatação de milhar, usando vírgula decimal
-    // Ex: 1234.56 → "1234,56" (fácil de editar)
-    const editValue = value ? value.toFixed(2).replace(".", ",") : "";
-    setDraft(editValue);
-    // Seleciona todo o texto para facilitar substituição
-    setTimeout(() => e.target.select(), 0);
-  };
+  // Sincroniza quando o valor externo muda (ex: reset do formulário)
+  const prevValueRef = useRef<number>(value);
+  useEffect(() => {
+    if (prevValueRef.current !== value) {
+      prevValueRef.current = value;
+      setDisplayValue(value ? formatBRLCurrency(value) : "");
+    }
+  }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value;
-    // Permite apenas: dígitos, vírgula, ponto, e R$ (para colar valores formatados)
-    const cleaned = raw.replace(/[^\d.,]/g, "");
-    setDraft(cleaned);
-    const parsed = parseBRLInput(cleaned);
-    onChange(parsed);
-  };
-
-  const handleBlur = () => {
-    setFocused(false);
-    // Ao sair, confirma o parse final e normaliza
-    const parsed = parseBRLInput(draft);
-    onChange(parsed);
-    // Limpa o draft (será recalculado no próximo foco)
-    setDraft("");
+    const formatted = maskCurrencyInput(e.target.value);
+    setDisplayValue(formatted);
+    const num = unmaskCurrencyInput(formatted);
+    prevValueRef.current = num;
+    onChange(num);
   };
 
   return (
@@ -3100,12 +3123,11 @@ function CurrencyField({ label, value, onChange }: {
       <input
         className="w-full rounded border border-gray-300 p-2 text-right font-mono text-sm tabular-nums focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
         type="text"
-        inputMode="decimal"
-        value={focused ? draft : formatted}
+        inputMode="numeric"
+        value={displayValue}
         placeholder="0,00"
-        onFocus={handleFocus}
         onChange={handleChange}
-        onBlur={handleBlur}
+        autoComplete="off"
       />
     </label>
   );

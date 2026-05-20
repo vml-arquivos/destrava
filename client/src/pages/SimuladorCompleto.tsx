@@ -23,6 +23,7 @@ import {
   type CreditProduct,
 } from "@/data/creditProductsSimplified";
 import { useState, useEffect } from "react";
+import { maskCurrencyInput, unmaskCurrencyInput } from "@/lib/currency";
 import {
   Calculator,
   TrendingUp,
@@ -43,7 +44,9 @@ export default function SimuladorCompleto() {
   const [months, setMonths] = useState(24);
   const [interestRate, setInterestRate] = useState(3.5);
   const [annualRevenue, setAnnualRevenue] = useState(0);
+  const [annualRevenueDisplay, setAnnualRevenueDisplay] = useState('');
   const [monthlyIncome, setMonthlyIncome] = useState(0);
+  const [monthlyIncomeDisplay, setMonthlyIncomeDisplay] = useState('');
   const [productCategory, setProductCategory] = useState<"empresa" | "pessoa-fisica">("empresa");
   const [companyAge, setCompanyAge] = useState(12);
   const [hasRestrictions, setHasRestrictions] = useState(false);
@@ -292,13 +295,17 @@ export default function SimuladorCompleto() {
                       </Label>
                       <Input
                         id="annualRevenue"
-                        type="number"
-                        value={annualRevenue}
-                        onChange={(e) =>
-                          setAnnualRevenue(Number(e.target.value))
-                        }
-                        min={0}
-                        placeholder="Ex: 500000"
+                        type="text"
+                        inputMode="numeric"
+                        value={annualRevenueDisplay}
+                        onChange={(e) => {
+                          const formatted = maskCurrencyInput(e.target.value);
+                          setAnnualRevenueDisplay(formatted);
+                          setAnnualRevenue(unmaskCurrencyInput(formatted));
+                        }}
+                        placeholder="0,00"
+                        autoComplete="off"
+                        className="text-right font-mono tabular-nums"
                       />
                     </div>
                   )}
@@ -309,13 +316,17 @@ export default function SimuladorCompleto() {
                       </Label>
                       <Input
                         id="monthlyIncome"
-                        type="number"
-                        value={monthlyIncome}
-                        onChange={(e) =>
-                          setMonthlyIncome(Number(e.target.value))
-                        }
-                        min={0}
-                        placeholder="Ex: 5000"
+                        type="text"
+                        inputMode="numeric"
+                        value={monthlyIncomeDisplay}
+                        onChange={(e) => {
+                          const formatted = maskCurrencyInput(e.target.value);
+                          setMonthlyIncomeDisplay(formatted);
+                          setMonthlyIncome(unmaskCurrencyInput(formatted));
+                        }}
+                        placeholder="0,00"
+                        autoComplete="off"
+                        className="text-right font-mono tabular-nums"
                       />
                     </div>
                   )}

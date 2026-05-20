@@ -4,6 +4,7 @@ import Layout from "./Layout";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from "@/lib/currency";
 import {
   Users, Plus, Search, Phone, Mail, Building2, ChevronRight,
   Clock, Star, Calendar, RefreshCw, Loader2, Filter,
@@ -705,10 +706,16 @@ function FichaLead({
                       <div>
                         <label className="text-xs text-gray-500 mb-1 block">Valor Solicitado</label>
                         <Input
-                          className="h-8 text-sm"
-                          type="number"
-                          defaultValue={lead.valor_solicitado ?? ""}
-                          onChange={e => setDadosEdit(prev => ({ ...prev, valor_solicitado: parseFloat(e.target.value) }))}
+                          className="h-8 text-sm text-right font-mono tabular-nums"
+                          type="text"
+                          inputMode="numeric"
+                          defaultValue={lead.valor_solicitado ? formatBRLCurrency(lead.valor_solicitado) : ""}
+                          onChange={e => {
+                            const formatted = maskCurrencyInput(e.target.value);
+                            setDadosEdit(prev => ({ ...prev, valor_solicitado: unmaskCurrencyInput(formatted) || undefined }));
+                          }}
+                          placeholder="0,00"
+                          autoComplete="off"
                         />
                       </div>
                       <div>

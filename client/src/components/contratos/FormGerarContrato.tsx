@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, Eye, RefreshCw, AlertCircle } from 'lucide-react';
 import { getToken } from '../../lib/api';
+import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from '../../lib/currency';
 
 interface Empresa  { id: string; razao_social: string; cnpj?: string; }
 interface Lead     { id: string; nome?: string; razao_social?: string; cpf?: string; cnpj?: string; }
@@ -148,7 +149,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [valorReferencia, setValorReferencia] = useState('');
   const [taxaComissao, setTaxaComissao]       = useState('10');
   const [taxaDesistencia, setTaxaDesistencia] = useState('5');
-  const [custeioMensal, setCusteioMensal]     = useState('250');
+  const [custeioMensal, setCusteioMensal]     = useState(formatBRLCurrency(250));
 
   // ── Limpa Nome ──
   const [clienteTipo, setClienteTipo]         = useState<'empresa' | 'lead' | 'pf'>('lead');
@@ -182,7 +183,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [empresaIdRating, setEmpresaIdRating]             = useState('');
   const [representanteNomeRating, setRepresentanteNomeRating] = useState('');
   const [representanteCpfRating, setRepresentanteCpfRating]   = useState('');
-  const [valorContratoRating, setValorContratoRating]     = useState('3500');
+  const [valorContratoRating, setValorContratoRating]     = useState(formatBRLCurrency(3500));
   const [condicaoPgtoRating, setCondicaoPgtoRating]       = useState('');
   const [prazoAcompanhamento, setPrazoAcompanhamento]     = useState('90');
   const [prazoProrrogacao, setPrazoProrrogacao]           = useState('90');
@@ -353,10 +354,10 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         tipo_contrato: 'assessoria',
         empresa_id: empresaId,
         parceiro_id: parceiroIdAssessoria || undefined,
-        valor_referencia: Number(valorReferencia),
+        valor_referencia: unmaskCurrencyInput(valorReferencia),
         taxa_comissao: Number(taxaComissao),
         taxa_desistencia: Number(taxaDesistencia),
-        custeio_mensal: Number(custeioMensal),
+        custeio_mensal: unmaskCurrencyInput(custeioMensal),
         data_assinatura: dataAssinatura,
         foro_eleito: foroEleito,
       });
@@ -370,7 +371,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         parceiro_id: parceiroIdLimpaNome || undefined,
         contratada_id: contratadaIdLimpaNome,
         responsavel_contrato_id: responsavelContratoIdLimpaNome || undefined,
-        valor_contrato: Number(valorContrato),
+        valor_contrato: unmaskCurrencyInput(valorContrato),
         condicao_pagamento: condicaoPgto,
         prazo_entrega_dias: Number.parseInt(prazoEntrega, 10),
         prorrogacao_excepcional_dias: Number.parseInt(prorrogacaoExcepcional, 10),
@@ -391,7 +392,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         parceiro_id: parceiroIdBacen || undefined,
         contratada_id: contratadaIdBacen,
         responsavel_contrato_id: responsavelContratoIdBacen || undefined,
-        valor_contrato: Number(valorContratoBacen),
+        valor_contrato: unmaskCurrencyInput(valorContratoBacen),
         condicao_pagamento: condicaoPgtoBacen,
         prazo_execucao_dias_uteis: Number.parseInt(prazoExecucaoBacen, 10),
         prazo_atualizacao_orgao_dias: Number.parseInt(prazoAtualizacaoBacen, 10),
@@ -407,7 +408,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         parceiro_id: parceiroIdRating || undefined,
         contratada_id: contratadaIdRating || undefined,
         responsavel_contrato_id: responsavelContratoIdRating || undefined,
-        valor_contrato: Number(valorContratoRating),
+        valor_contrato: unmaskCurrencyInput(valorContratoRating),
         condicao_pagamento: condicaoPgtoRating,
         prazo_acompanhamento_dias: Number.parseInt(prazoAcompanhamento, 10),
         prazo_prorrogacao_dias: Number.parseInt(prazoProrrogacao, 10),
@@ -569,8 +570,15 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Valor de Referência (R$) *</label>
-              <input type="number" min="1000" step="0.01" value={valorReferencia}
-                onChange={e => setValorReferencia(e.target.value)} placeholder="Ex: 100000" className={cls} />
+              <input
+                type="text"
+                inputMode="numeric"
+                value={valorReferencia}
+                onChange={e => setValorReferencia(maskCurrencyInput(e.target.value))}
+                placeholder="0,00"
+                autoComplete="off"
+                className={`${cls} text-right font-mono tabular-nums`}
+              />
               {errors.valorReferencia && <p className="text-red-500 text-xs mt-1">{errors.valorReferencia}</p>}
             </div>
             <div>
@@ -588,8 +596,15 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
             </div>
             <div>
               <label className={lbl}>Custeio Mensal — Cláusula 5.7-V (R$)</label>
-              <input type="number" min="0" step="0.01" value={custeioMensal}
-                onChange={e => setCusteioMensal(e.target.value)} placeholder="Ex: 250" className={cls} />
+              <input
+                type="text"
+                inputMode="numeric"
+                value={custeioMensal}
+                onChange={e => setCusteioMensal(maskCurrencyInput(e.target.value))}
+                placeholder="0,00"
+                autoComplete="off"
+                className={`${cls} text-right font-mono tabular-nums`}
+              />
               <p className="text-[11px] text-gray-500 mt-1">Valor mensal quando Rating inferior a "C". Padrão: R$ 250,00.</p>
             </div>
           </div>
@@ -641,8 +656,15 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Valor do Contrato (R$) *</label>
-              <input type="number" min="1" step="0.01" value={valorContrato}
-                onChange={e => setValorContrato(e.target.value)} placeholder="Ex: 1500" className={cls} />
+              <input
+                type="text"
+                inputMode="numeric"
+                value={valorContrato}
+                onChange={e => setValorContrato(maskCurrencyInput(e.target.value))}
+                placeholder="0,00"
+                autoComplete="off"
+                className={`${cls} text-right font-mono tabular-nums`}
+              />
               {errors.valorContrato && <p className="text-red-500 text-xs mt-1">{errors.valorContrato}</p>}
             </div>
             <div>
@@ -735,8 +757,15 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Valor do Contrato (R$) *</label>
-              <input type="number" min="1" step="0.01" value={valorContratoBacen}
-                onChange={e => setValorContratoBacen(e.target.value)} placeholder="Ex: 20000" className={cls} />
+              <input
+                type="text"
+                inputMode="numeric"
+                value={valorContratoBacen}
+                onChange={e => setValorContratoBacen(maskCurrencyInput(e.target.value))}
+                placeholder="0,00"
+                autoComplete="off"
+                className={`${cls} text-right font-mono tabular-nums`}
+              />
               {errors.valorContratoBacen && <p className="text-red-500 text-xs mt-1">{errors.valorContratoBacen}</p>}
             </div>
             <div>
@@ -788,8 +817,15 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Valor do Contrato (R$) *</label>
-              <input type="number" min="1" step="0.01" value={valorContratoRating}
-                onChange={e => setValorContratoRating(e.target.value)} placeholder="Ex: 3500" className={cls} />
+              <input
+                type="text"
+                inputMode="numeric"
+                value={valorContratoRating}
+                onChange={e => setValorContratoRating(maskCurrencyInput(e.target.value))}
+                placeholder="0,00"
+                autoComplete="off"
+                className={`${cls} text-right font-mono tabular-nums`}
+              />
               {errors.valorContratoRating && <p className="text-red-500 text-xs mt-1">{errors.valorContratoRating}</p>}
             </div>
             <div>

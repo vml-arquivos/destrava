@@ -1,5 +1,6 @@
-import { useState, useMemo, type CSSProperties } from 'react';
+import { useState, useMemo, useEffect, useRef, type CSSProperties } from 'react';
 import { X, Printer, FileDown, Loader2, Settings2, ChevronDown, ChevronUp } from 'lucide-react';
+import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from '../../lib/currency';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIPOS EXPORTADOS — usados pelo GeradorContratos para montar as props
@@ -167,6 +168,7 @@ function PainelInput({
   suffix,
   min = 0,
   step = 1,
+  isCurrency = false,
 }: {
   label: string;
   value: number;
@@ -175,7 +177,56 @@ function PainelInput({
   suffix?: string;
   min?: number;
   step?: number;
+  isCurrency?: boolean;
 }) {
+  const [displayValue, setDisplayValue] = useState<string>(() =>
+    isCurrency ? (value ? formatBRLCurrency(value) : '') : String(value)
+  );
+  const prevRef = useRef<number>(value);
+  useEffect(() => {
+    if (prevRef.current !== value) {
+      prevRef.current = value;
+      setDisplayValue(isCurrency ? (value ? formatBRLCurrency(value) : '') : String(value));
+    }
+  }, [value, isCurrency]);
+
+  if (isCurrency) {
+    return (
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide leading-tight">
+          {label}
+        </label>
+        <div className="flex items-center bg-white border border-gray-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-400 focus-within:border-blue-400 transition-all">
+          {prefix && (
+            <span className="px-2 py-1.5 text-xs text-gray-400 bg-gray-50 border-r border-gray-200 select-none">
+              {prefix}
+            </span>
+          )}
+          <input
+            type="text"
+            inputMode="numeric"
+            value={displayValue}
+            onChange={e => {
+              const formatted = maskCurrencyInput(e.target.value);
+              setDisplayValue(formatted);
+              const num = unmaskCurrencyInput(formatted);
+              prevRef.current = num;
+              onChange(num);
+            }}
+            placeholder="0,00"
+            autoComplete="off"
+            className="flex-1 px-2 py-1.5 text-sm font-semibold text-gray-800 text-right font-mono tabular-nums focus:outline-none bg-white"
+          />
+          {suffix && (
+            <span className="px-2 py-1.5 text-xs text-gray-400 bg-gray-50 border-l border-gray-200 select-none">
+              {suffix}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-1">
       <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide leading-tight">
@@ -351,6 +402,7 @@ export function ContratoAssessoria({ dados, onClose, onGerarPdf, loadingPdf }: P
                 prefix="R$"
                 step={1000}
                 min={0}
+                isCurrency
               />
 
               <PainelInput
@@ -400,6 +452,7 @@ export function ContratoAssessoria({ dados, onClose, onGerarPdf, loadingPdf }: P
                 prefix="R$"
                 step={50}
                 min={0}
+                isCurrency
               />
 
               {/* Resumo financeiro */}

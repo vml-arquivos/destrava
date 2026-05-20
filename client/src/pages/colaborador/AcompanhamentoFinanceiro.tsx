@@ -44,6 +44,7 @@ import {
   Printer,
 } from "lucide-react";
 import { toast } from "sonner";
+import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from "@/lib/currency";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -266,9 +267,11 @@ function FormConfig({
   onClose: () => void;
   user: any;
 }) {
-  const [fat, setFat] = useState(
-    String(config.faturamento_anual_declarado || config.faturamento_anual_empresa || "")
-  );
+  // fat: valor de faturamento exibido no input (string formatada com máscara)
+  const [fat, setFat] = useState(() => {
+    const v = config.faturamento_anual_declarado || config.faturamento_anual_empresa || 0;
+    return v ? formatBRLCurrency(v) : "";
+  });
   const [pct, setPct] = useState(
     String(config.percentual_operacional || config.percentual_operacional_padrao || 30)
   );
@@ -276,8 +279,11 @@ function FormConfig({
   const [limites, setLimites] = useState<{ limite_anual: number; limite_mensal: number; limite_semanal: number; semanas_no_mes: number } | null>(null);
   const editarPct = podeEditarPercentual(user);
 
+  // Valor numérico do faturamento (derivado da string formatada)
+  const fatNum = unmaskCurrencyInput(fat);
+
   const calcularPreview = useCallback(async () => {
-    const f = parseMoneyInput(fat);
+    const f = fatNum;
     const p = parseFloat(String(pct).replace(",", "."));
     if (!isFinite(f) || f <= 0 || !isFinite(p) || p <= 0) { setLimites(null); return; }
     try {
@@ -293,12 +299,12 @@ function FormConfig({
       });
       if (r.ok) setLimites(await r.json());
     } catch {}
-  }, [fat, pct]);
+  }, [fatNum, pct]);
 
   useEffect(() => { calcularPreview(); }, [calcularPreview]);
 
   const salvar = async () => {
-    const f = parseMoneyInput(fat);
+    const f = fatNum;
     const p = parseFloat(String(pct).replace(",", "."));
     if (!isFinite(f) || f < 0) { toast.error("Faturamento anual inválido."); return; }
     if (!isFinite(p) || p <= 0 || p > 100) { toast.error("Percentual deve estar entre 0,01% e 100%."); return; }
@@ -323,9 +329,11 @@ function FormConfig({
           <Label>Faturamento Anual Declarado (R$)</Label>
           <Input
             value={fat}
-            onChange={e => setFat(e.target.value)}
-            placeholder="Ex: 100000,00"
-            className="mt-1"
+            onChange={e => setFat(maskCurrencyInput(e.target.value))}
+            placeholder="0,00"
+            inputMode="numeric"
+            autoComplete="off"
+            className="mt-1 text-right font-mono tabular-nums"
           />
           <p className="text-xs text-gray-500 mt-1">Informe o valor bruto anual declarado</p>
         </div>
@@ -351,7 +359,7 @@ function FormConfig({
             <div className="text-center bg-white rounded border border-blue-100 p-3">
               <p className="text-xs text-blue-500 uppercase font-medium">Limite Anual</p>
               <p className="text-base font-bold text-blue-800 mt-1">{moneyBR(limites.limite_anual)}</p>
-              <p className="text-xs text-blue-400">{pct}% de {moneyBR(parseMoneyInput(fat))}</p>
+              <p className="text-xs text-blue-400">{pct}% de {moneyBR(fatNum)}</p>
             </div>
             <div className="text-center bg-white rounded border border-blue-100 p-3">
               <p className="text-xs text-blue-500 uppercase font-medium">Limite Mensal</p>
@@ -422,7 +430,7 @@ function FormSemana({
   // Cálculos em tempo real
   const totalEntradas = movs.filter(m => m.tipo === "entrada").reduce((s, m) => s + Number(m.valor), 0);
   const totalSaidas = movs.filter(m => m.tipo === "saida").reduce((s, m) => s + Number(m.valor), 0);
-  const saldoIni = parseMoneyInput(form.saldo_inicial);
+  const saldoIni = unmaskCurrencyInput(form.saldo_inicial);
   const saldoFinal = saldoIni + totalEntradas - totalSaidas;
   const saldoMedio = saldos.length > 0
     ? saldos.reduce((s, d) => s + Number(d.saldo_dia), 0) / saldos.length
@@ -531,7 +539,14 @@ function FormSemana({
           </div>
           <div>
             <Label className="text-xs">Saldo Inicial (R$)</Label>
-            <Input value={form.saldo_inicial} onChange={e => setForm(f => ({ ...f, saldo_inicial: e.target.value }))} placeholder="0,00" className="mt-1" />
+            <Input
+              value={form.saldo_inicial}
+              onChange={e => setForm(f => ({ ...f, saldo_inicial: maskCurrencyInput(e.target.value) }))}
+              placeholder="0,00"
+              inputMode="numeric"
+              autoComplete="off"
+              className="mt-1 text-right font-mono tabular-nums"
+            />
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
@@ -595,7 +610,18 @@ function FormSemana({
             </div>
             <div>
               <Label className="text-xs">Valor (R$)</Label>
-              <Input type="number" min="0.01" step="0.01" placeholder="0,00" value={novaMov.valor || ""} onChange={e => setNovaMov(m => ({ ...m, valor: Number(e.target.value) }))} className="mt-1 text-sm" />
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="0,00"
+                value={novaMov.valor ? formatBRLCurrency(Number(novaMov.valor)) : ""}
+                onChange={e => {
+                  const formatted = maskCurrencyInput(e.target.value);
+                  setNovaMov(m => ({ ...m, valor: unmaskCurrencyInput(formatted) }));
+                }}
+                autoComplete="off"
+                className="mt-1 text-sm text-right font-mono tabular-nums"
+              />
             </div>
             <div>
               <Label className="text-xs">Categoria</Label>
@@ -649,7 +675,18 @@ function FormSemana({
             </div>
             <div className="flex-1">
               <Label className="text-xs">Saldo do Dia (R$)</Label>
-              <Input type="number" step="0.01" placeholder="0,00" value={novoSaldo.saldo_dia || ""} onChange={e => setNovoSaldo(s => ({ ...s, saldo_dia: Number(e.target.value) }))} className="mt-1 text-sm" />
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="0,00"
+                value={novoSaldo.saldo_dia ? formatBRLCurrency(Number(novoSaldo.saldo_dia)) : ""}
+                onChange={e => {
+                  const formatted = maskCurrencyInput(e.target.value);
+                  setNovoSaldo(s => ({ ...s, saldo_dia: unmaskCurrencyInput(formatted) }));
+                }}
+                autoComplete="off"
+                className="mt-1 text-sm text-right font-mono tabular-nums"
+              />
             </div>
             <div className="flex items-end">
               <Button type="button" size="sm" variant="outline" onClick={adicionarSaldo} className="w-full sm:w-auto mt-1">
@@ -742,7 +779,18 @@ function MovimentacaoItem({
           </div>
           <div>
             <Label className="text-xs">Valor (R$)</Label>
-            <Input type="number" min="0.01" step="0.01" value={dados.valor || ""} onChange={e => setDados(d => ({ ...d, valor: Number(e.target.value) }))} className="mt-1 text-sm" />
+            <Input
+              type="text"
+              inputMode="numeric"
+              placeholder="0,00"
+              value={dados.valor ? formatBRLCurrency(Number(dados.valor)) : ""}
+              onChange={e => {
+                const formatted = maskCurrencyInput(e.target.value);
+                setDados(d => ({ ...d, valor: unmaskCurrencyInput(formatted) }));
+              }}
+              autoComplete="off"
+              className="mt-1 text-sm text-right font-mono tabular-nums"
+            />
           </div>
           <div>
             <Label className="text-xs">Categoria</Label>
@@ -833,7 +881,18 @@ function SaldoDiarioItem({
           </div>
           <div className="flex-1">
             <Label className="text-xs">Saldo do Dia (R$)</Label>
-            <Input type="number" step="0.01" value={dados.saldo_dia || ""} onChange={e => setDados(d => ({ ...d, saldo_dia: Number(e.target.value) }))} className="mt-1 text-sm" />
+            <Input
+              type="text"
+              inputMode="numeric"
+              placeholder="0,00"
+              value={dados.saldo_dia ? formatBRLCurrency(Number(dados.saldo_dia)) : ""}
+              onChange={e => {
+                const formatted = maskCurrencyInput(e.target.value);
+                setDados(d => ({ ...d, saldo_dia: unmaskCurrencyInput(formatted) }));
+              }}
+              autoComplete="off"
+              className="mt-1 text-sm text-right font-mono tabular-nums"
+            />
           </div>
         </div>
         <div className="flex gap-2 justify-end mt-2">
