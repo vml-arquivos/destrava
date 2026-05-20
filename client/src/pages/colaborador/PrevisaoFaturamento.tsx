@@ -30,7 +30,10 @@ import {
   Calendar,
   ChevronDown,
   BarChart2,
+  Divide,
+  Sparkles,
 } from 'lucide-react';
+import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from '../../lib/currency';
 import { toast } from 'sonner';
 import { apiFetch } from '../../lib/api';
 import Layout from './Layout';
@@ -138,6 +141,58 @@ function recortarHistorico(
   });
 }
 
+/**
+ * Distribui um valor total em N parcelas mensais com variação realista.
+ *
+ * Regra de negócio:
+ *   - Os meses mais antigos (início da série) têm valores ligeiramente mais altos
+ *   - Os meses mais recentes (fim da série) têm valores progressivamente menores
+ *   - Nenhum mês ultrapassa o teto = total / N * 1.15
+ *   - A soma exata bate com o total informado (ajuste no último mês)
+ *   - Variação máxima: ±15% da média, com seed determinístico por índice
+ */
+function ratearFaturamento(
+  totalAnual: number,
+  qtdMeses: number,
+  grade: RegistroHistorico[],
+): RegistroHistorico[] {
+  if (totalAnual <= 0 || qtdMeses <= 0) return grade;
+
+  const media = totalAnual / qtdMeses;
+
+  // Gera fatores de variação por índice:
+  // - Meses iniciais (i=0): fator mais alto (~1.08 a 1.15)
+  // - Meses finais (i=N-1): fator mais baixo (~0.85 a 0.92)
+  // - Usa função senoidal + decaimento linear para naturalidade
+  const fatores: number[] = [];
+  for (let i = 0; i < qtdMeses; i++) {
+    const posicaoNorm = i / Math.max(qtdMeses - 1, 1); // 0 = mais antigo, 1 = mais recente
+    // Decaimento linear: mais antigo = maior, mais recente = menor
+    const decaimento = 1.08 - 0.16 * posicaoNorm;
+    // Oscilação senoidal para dar naturalidade (não todos iguais)
+    const oscilacao = 0.05 * Math.sin(i * 2.3 + 1.1);
+    fatores.push(decaimento + oscilacao);
+  }
+
+  // Normaliza os fatores para que a soma seja exatamente qtdMeses
+  const somaFatores = fatores.reduce((a, b) => a + b, 0);
+  const fatorNorm = qtdMeses / somaFatores;
+  const valores = fatores.map(f => Math.round(media * f * fatorNorm * 100) / 100);
+
+  // Ajusta o último mês para garantir soma exata em centavos
+  // Usa inteiros (centavos) para eliminar erros de ponto flutuante
+  const totalCentavos = Math.round(totalAnual * 100);
+  const somaAnteriorCentavos = valores.slice(0, -1).reduce((acc, v) => acc + Math.round(v * 100), 0);
+  valores[qtdMeses - 1] = (totalCentavos - somaAnteriorCentavos) / 100;
+
+  // Aplica os valores na grade de meses
+  return grade.map((slot, idx) => ({
+    ...slot,
+    valor: valores[idx] ?? slot.valor,
+    origem: 'manual',
+  }));
+}
+
 // ─── Componente ───────────────────────────────────────────────────────────────
 export default function PrevisaoFaturamento() {
   // ── Período regressivo ────────────────────────────────────────────────────
@@ -181,6 +236,10 @@ export default function PrevisaoFaturamento() {
 
   // ── Seção ativa: 'faturamento' | 'previsao' ───────────────────────────────
   const [secaoAtiva, setSecaoAtiva] = useState<'faturamento' | 'previsao'>('faturamento');
+
+  // ── Faturamento bruto anual (rateio inteligente) ──────────────────────────
+  const [faturamentoBrutoDisplay, setFaturamentoBrutoDisplay] = useState<string>('');
+  const [faturamentoBrutoNum, setFaturamentoBrutoNum] = useState<number>(0);
 
   // ─── Carregamento inicial ──────────────────────────────────────────────────
   useEffect(() => {
@@ -433,6 +492,21 @@ export default function PrevisaoFaturamento() {
   const mediaMensal = registrosComValor.length > 0 ? totalPeriodo / registrosComValor.length : 0;
   const mesesPreenchidos = registrosComValor.length;
 
+  // ── Handler de rateio inteligente ────────────────────────────────────────
+  const handleRatear = () => {
+    if (faturamentoBrutoNum <= 0) {
+      toast.error("Informe o faturamento bruto antes de ratear");
+      return;
+    }
+    const grade = registros.length > 0 ? registros : gerarMesesVazios(periodoEfetivo);
+    const novoRegistros = ratearFaturamento(faturamentoBrutoNum, grade.length, grade);
+    setRegistros(novoRegistros);
+    toast.success(
+      `Faturamento de ${faturamentoBrutoNum.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} ` +
+      `rateado em ${grade.length} meses com variação progressiva regressiva.`
+    );
+  };
+
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <Layout title="Faturamento">
@@ -621,6 +695,61 @@ export default function PrevisaoFaturamento() {
               </div>
             </div>
 
+
+            {/* ── Painel: Faturamento Bruto Anual + Rateio Inteligente ─────── */}
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-3">
+              <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5" />
+                Faturamento Bruto Anual — Rateio Automático
+              </p>
+              <p className="text-xs text-emerald-600">
+                Informe o faturamento bruto total do período e clique em <strong>Ratear</strong> para distribuir
+                automaticamente em {periodoEfetivo} meses com variação progressiva regressiva (meses mais antigos
+                ligeiramente maiores, meses recentes menores), garantindo que a soma seja exata.
+              </p>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="block text-xs font-medium text-emerald-700 mb-1">
+                    Faturamento Bruto Total (R$)
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={faturamentoBrutoDisplay}
+                    onChange={e => {
+                      const masked = maskCurrencyInput(e.target.value);
+                      setFaturamentoBrutoDisplay(masked);
+                      setFaturamentoBrutoNum(unmaskCurrencyInput(masked));
+                    }}
+                    placeholder="Ex.: 1.200.000,00"
+                    className="w-full border border-emerald-300 rounded-lg px-3 py-2 text-sm text-right font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-emerald-700">Divisor</label>
+                  <div className="flex items-center gap-2 px-3 py-2 bg-white border border-emerald-200 rounded-lg text-sm text-emerald-700 font-semibold">
+                    <Divide className="w-3.5 h-3.5" />
+                    {periodoEfetivo} meses
+                  </div>
+                </div>
+                {faturamentoBrutoNum > 0 && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-emerald-700">Média mensal</label>
+                    <div className="px-3 py-2 bg-white border border-emerald-200 rounded-lg text-sm text-emerald-800 font-mono tabular-nums">
+                      {(faturamentoBrutoNum / periodoEfetivo).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                    </div>
+                  </div>
+                )}
+                <button
+                  onClick={handleRatear}
+                  disabled={faturamentoBrutoNum <= 0}
+                  className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-semibold"
+                >
+                  <Divide className="w-4 h-4" />
+                  Ratear em {periodoEfetivo} meses
+                </button>
+              </div>
+            </div>
             {/* ── Seletor de período regressivo ─────────────────────────── */}
             <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
               <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide flex items-center gap-1.5">
