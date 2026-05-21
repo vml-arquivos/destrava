@@ -5209,10 +5209,11 @@ ${(temTest1 || temTest2) ? `
   async function mergeAnexosNoPdf(
     contratoPath: string,
     anexos: Array<{ buffer: Buffer; mimetype: string; categoria: string; descricao: string }>,
+    numeroContrato?: string,
   ): Promise<string> {
     if (anexos.length === 0) return contratoPath;
 
-    const { PDFDocument, rgb, StandardFonts } = await import('pdf-lib');
+    const { PDFDocument, rgb, StandardFonts, degrees } = await import('pdf-lib');
 
     const contratoPdfBytes = fs.readFileSync(contratoPath);
     const pdfFinal = await PDFDocument.load(contratoPdfBytes);
@@ -5237,12 +5238,34 @@ ${(temTest1 || temTest2) ? `
       outros:                'Documento Anexo',
     };
 
+    // Aplica marca d'água diagonal em uma página
+    const aplicarMarcaDagua = (page: any) => {
+      const { width, height } = page.getSize();
+      const texto = numeroContrato
+        ? `Anexo contrato nº: ${numeroContrato}`
+        : 'Anexo — Destrava Crédito';
+      const fontSize = 18;
+      const textWidth = helvetica.widthOfTextAtSize(texto, fontSize);
+      // Centraliza diagonal (45°)
+      const cx = width / 2;
+      const cy = height / 2;
+      page.drawText(texto, {
+        x: cx - textWidth / 2,
+        y: cy,
+        font: helvetica,
+        size: fontSize,
+        color: rgb(0.55, 0.55, 0.55),
+        opacity: 0.35,
+        rotate: degrees(45),
+      });
+    };
+
     for (let i = 0; i < anexos.length; i++) {
       const anexo = anexos[i];
       const labelCat = LABEL_CATEGORIA[anexo.categoria] ?? 'Documento Anexo';
       const numAnexo = i + 1;
 
-      // Página de capa do anexo
+      // ── Página de capa do anexo ──────────────────────────────────────────
       const capaPage = pdfFinal.addPage([595.28, 841.89]);
       const { width, height } = capaPage.getSize();
 
@@ -5264,37 +5287,46 @@ ${(temTest1 || temTest2) ? `
         start: { x: 40, y: height - 165 }, end: { x: width - 40, y: height - 165 },
         thickness: 1, color: rgb(0.8, 0.8, 0.8),
       });
+      if (numeroContrato) {
+        capaPage.drawText(`Contrato nº: ${numeroContrato}`, {
+          x: 40, y: height - 190, font: helveticaBold, size: 10, color: rgb(0.2, 0.2, 0.2),
+        });
+      }
       capaPage.drawText('Documento integrante do contrato — Destrava Crédito', {
         x: 40, y: 30, font: helvetica, size: 8, color: rgb(0.6, 0.6, 0.6),
       });
 
-      // Conteúdo do anexo
+      // ── Conteúdo do anexo ────────────────────────────────────────────────
       if (anexo.mimetype === 'application/pdf') {
+        // PDF: copia páginas exatamente como vieram, adiciona marca d'água em cada uma
         const pdfAnexo = await PDFDocument.load(anexo.buffer);
         const paginas = await pdfFinal.copyPages(pdfAnexo, pdfAnexo.getPageIndices());
-        paginas.forEach((p: any) => pdfFinal.addPage(p));
+        paginas.forEach((p: any) => {
+          pdfFinal.addPage(p);
+          aplicarMarcaDagua(p);
+        });
       } else {
+        // Imagem (RG, CNH etc.): página no tamanho real do documento (A4),
+        // imagem ocupa toda a área útil sem reduzir proporcionalmente
         let imgEmbed: any;
         if (anexo.mimetype === 'image/png') {
           imgEmbed = await pdfFinal.embedPng(anexo.buffer);
         } else {
           imgEmbed = await pdfFinal.embedJpg(anexo.buffer);
         }
-        const imgPage = pdfFinal.addPage([595.28, 841.89]);
-        const margem = 50;
-        const maxW = imgPage.getWidth()  - margem * 2;
-        const maxH = imgPage.getHeight() - margem * 2;
-        const ratio = Math.min(maxW / imgEmbed.width, maxH / imgEmbed.height);
+
+        // Usa as dimensões reais da imagem como tamanho da página
+        // (limitado a A4 máximo para não extrapolar)
+        const A4_W = 595.28;
+        const A4_H = 841.89;
+        const ratio = Math.min(A4_W / imgEmbed.width, A4_H / imgEmbed.height, 1);
         const iw = imgEmbed.width  * ratio;
         const ih = imgEmbed.height * ratio;
-        const ix = (imgPage.getWidth()  - iw) / 2;
-        const iy = (imgPage.getHeight() - ih) / 2;
-        imgPage.drawRectangle({
-          x: ix - 4, y: iy - 4, width: iw + 8, height: ih + 8,
-          borderColor: rgb(0.85, 0.85, 0.85), borderWidth: 1, color: rgb(0.98, 0.98, 0.98),
-        });
-        imgPage.drawImage(imgEmbed, { x: ix, y: iy, width: iw, height: ih });
-        imgPage.drawText(labelCat, { x: margem, y: 20, font: helvetica, size: 8, color: rgb(0.5, 0.5, 0.5) });
+
+        // Página exatamente do tamanho da imagem (em pontos)
+        const imgPage = pdfFinal.addPage([iw, ih]);
+        imgPage.drawImage(imgEmbed, { x: 0, y: 0, width: iw, height: ih });
+        aplicarMarcaDagua(imgPage);
       }
     }
 
@@ -6492,7 +6524,7 @@ ${(temTest1 || temTest2) ? `
         }
         pdfPath = filePathLN;
         if (arquivosMultipart.length > 0) {
-          pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart);
+          pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart, payloadLN.contrato?.numero_contrato || payloadLN.contrato?.protocolo_contrato);
         }
 
         const hash2 = await calcularHashArquivo(pdfPath);
@@ -6660,7 +6692,7 @@ ${(temTest1 || temTest2) ? `
         } finally { if (browserBacen) await (browserBacen as any).close(); }
         pdfPath = filePathBacen;
         if (arquivosMultipart.length > 0) {
-          pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart);
+          pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart, payloadBacen.contrato?.numero_contrato || payloadBacen.contrato?.protocolo_contrato);
         }
         const hashBacen = await calcularHashArquivo(pdfPath);
         const { rows: contratoRowsBacen } = await pool.query(
@@ -6767,7 +6799,7 @@ ${(temTest1 || temTest2) ? `
         } finally { if (browserRating) await (browserRating as any).close(); }
         pdfPath = filePathRating;
         if (arquivosMultipart.length > 0) {
-          pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart);
+          pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart, payloadRating.contrato?.numero_contrato || payloadRating.contrato?.protocolo_contrato);
         }
         const hashRating = await calcularHashArquivo(pdfPath);
         const { rows: contratoRowsRating } = await pool.query(
@@ -6857,7 +6889,7 @@ ${(temTest1 || temTest2) ? `
         } finally { if (browserParceria) await (browserParceria as any).close(); }
         pdfPath = filePathParceria;
         if (arquivosMultipart.length > 0) {
-          pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart);
+          pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart, payloadParceria.contrato?.numero_contrato || payloadParceria.contrato?.protocolo_contrato);
         }
         const hashParceria = await calcularHashArquivo(pdfPath);
         const { rows: contratoRowsParceria } = await pool.query(
@@ -6988,7 +7020,7 @@ ${(temTest1 || temTest2) ? `
       pdfPath = await gerarPdfContrato(payload);
       // Mescla documentos anexos ao PDF do contrato
       if (arquivosMultipart.length > 0) {
-        pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart);
+        pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart, payload.contrato?.numero_contrato || payload.contrato?.protocolo_contrato);
       }
       const hash = await calcularHashArquivo(pdfPath);
 
