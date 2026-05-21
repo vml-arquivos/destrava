@@ -217,10 +217,37 @@ export default function GeradorContratos() {
     // Fluxo original para todos os outros tipos: POST → download PDF
     setLoading(true);
     try {
-      const result: any = await apiFetch('/api/contratos/gerar', {
-        method: 'POST',
-        body: JSON.stringify(formData),
-      });
+      // Extrai documentos anexos do payload (não devem ir no JSON)
+      const { _documentosAnexos, ...dadosContrato } = formData;
+      const documentos: any[] = _documentosAnexos || [];
+
+      let result: any;
+      if (documentos.length > 0) {
+        // Envia como multipart/form-data para incluir os arquivos
+        const fd = new FormData();
+        fd.append('dados', JSON.stringify(dadosContrato));
+        documentos.forEach((doc: any, idx: number) => {
+          fd.append(`arquivo_${idx}`, doc.file, doc.file.name);
+          fd.append(`meta_${idx}`, JSON.stringify({ categoria: doc.categoria, descricao: doc.descricao, tipo: doc.tipo }));
+        });
+        fd.append('total_arquivos', String(documentos.length));
+        const token = getToken();
+        const resp = await fetch('/api/contratos/gerar', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token || ''}` },
+          body: fd,
+        });
+        if (!resp.ok) {
+          const errBody = await resp.json().catch(() => ({}));
+          throw new Error(errBody.error || `Erro ao gerar contrato (HTTP ${resp.status})`);
+        }
+        result = await resp.json();
+      } else {
+        result = await apiFetch('/api/contratos/gerar', {
+          method: 'POST',
+          body: JSON.stringify(dadosContrato),
+        });
+      }
 
       const tipoLabel: Record<string, string> = {
         assessoria:         'Assessoria Empresarial',

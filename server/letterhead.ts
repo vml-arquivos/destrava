@@ -164,14 +164,18 @@ export function getDocumentStyles(): string {
       color: #555;
     }
 
+    /* ─── Cidade e Data ─────────────────────────────────────────────────── */
     .city-date,
     .signature-date {
-      text-align: center;
-      margin: 18px 0 24px 0;
+      text-align: right;
+      margin: 28px 0 36px 0;
       font-size: 10pt;
-      line-height: 1.35;
+      font-style: italic;
+      color: #374151;
+      line-height: 1.4;
     }
 
+    /* ─── Contenção de quebra de página ─────────────────────────────────── */
     .signature-section,
     .sig-block,
     .sig-wrapper,
@@ -180,87 +184,122 @@ export function getDocumentStyles(): string {
       break-inside: avoid;
     }
 
+    /* ─── Seção de assinatura ────────────────────────────────────────────── */
     .signature-section {
-      margin-top: 28px;
-      padding-top: 4px;
+      margin-top: 44px;
+      padding-top: 0;
       text-align: center;
     }
 
+    /* ─── Grade de assinaturas (2 colunas) ──────────────────────────────── */
     .signature-grid {
       width: 100%;
+      max-width: 160mm;
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 30px;
-      margin: 20px auto 0;
+      gap: 24mm;
+      margin: 0 auto;
       align-items: end;
       page-break-inside: avoid;
       break-inside: avoid;
     }
 
+    /* ─── Caixa individual de cada assinante ────────────────────────────── */
     .signature-party,
     .signature-box {
       text-align: center;
-      min-height: 88px;
+      /* Espaço generoso para assinatura digital ou manuscrita */
+      min-height: 120px;
       display: flex;
       flex-direction: column;
       justify-content: flex-end;
+      padding-bottom: 2px;
     }
 
+    /* ─── Linha de assinatura ───────────────────────────────────────────── */
     .sig-line,
     .signature-line {
-      border-top: 1px solid #111827;
+      border: none;
+      border-top: 1.5px solid #1e293b;
       width: 100%;
-      max-width: 72mm;
-      margin: 0 auto 6px;
-      height: 1px;
+      max-width: 76mm;
+      margin: 0 auto 8px;
+      height: 0;
     }
 
+    /* ─── Rótulo "Assine acima" (opcional, para uso futuro) ─────────────── */
+    .sig-hint {
+      font-size: 7pt;
+      color: #94a3b8;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin: 0 0 10px;
+    }
+
+    /* ─── Nome do assinante ─────────────────────────────────────────────── */
     .sig-name,
     .signature-name {
-      font-size: 9.2pt;
-      line-height: 1.25;
+      font-size: 9pt;
+      line-height: 1.3;
       font-weight: 700;
       color: #111827;
       text-transform: uppercase;
+      letter-spacing: 0.02em;
       overflow-wrap: anywhere;
-      margin: 0 0 2px;
+      margin: 0 0 3px;
     }
 
+    /* ─── Informações secundárias (CPF, CNPJ, papel) ───────────────────── */
     .sig-sub,
     .signature-role {
-      font-size: 8.5pt;
-      line-height: 1.25;
-      color: #374151;
+      font-size: 8pt;
+      line-height: 1.3;
+      color: #475569;
       margin: 0 0 2px;
     }
 
+    /* ─── Papel / função do assinante (ex: CONTRATANTE) ────────────────── */
+    .sig-role-label {
+      font-size: 7.8pt;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #1e3a5f;
+      margin: 4px 0 0;
+      border-top: 1px dashed #cbd5e1;
+      padding-top: 4px;
+    }
+
+    /* ─── Grade de testemunhas ──────────────────────────────────────────── */
     .witness-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 30px;
-      margin-top: 28px;
+      gap: 24mm;
+      max-width: 160mm;
+      margin: 36px auto 0;
       page-break-inside: avoid;
       break-inside: avoid;
     }
 
     .witness-box {
-      min-height: 76px;
+      min-height: 100px;
       display: flex;
       flex-direction: column;
       justify-content: flex-end;
       text-align: center;
     }
 
+    /* ─── Rodapé final do contrato ──────────────────────────────────────── */
     .contract-footer-final {
       page-break-inside: avoid;
       break-inside: avoid;
-      margin-top: 24px;
-      padding-top: 10px;
-      border-top: 1px solid #d1d5db;
+      margin-top: 32px;
+      padding-top: 12px;
+      border-top: 1px solid #e2e8f0;
       text-align: center;
-      font-size: 8pt;
-      color: #374151;
-      line-height: 1.35;
+      font-size: 7.8pt;
+      color: #64748b;
+      line-height: 1.4;
     }
 
     .nota {

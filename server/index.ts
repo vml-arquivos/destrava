@@ -4,6 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import crypto from "crypto";
+import multer from "multer";
 import pkg from "pg";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
@@ -3862,31 +3863,61 @@ ${temParceiro ? `<p class="clause"><strong>5.1</strong> - O PARCEIRO COMERCIAL, 
 
 <p class="city-date"><strong>${cidadeAss}, ${dataAss}.</strong></p>
 
-<div class="sig-block">
-  <p><strong>CONTRATANTE:</strong></p>
-  <div class="sig-line"></div>
-  <p class="sig-name">${contratante.razao_social}</p>
-
+<div class="signature-section">
   ${temParceiro ? `
-  <p style="margin-top:28px;"><strong>PARCEIRO COMERCIAL:</strong></p>
-  <div class="sig-line"></div>
-  <p class="sig-name">${parceiro.nome} - CPF n° ${parceiro.cpf}</p>
-  ` : ''}
-
-  <p style="margin-top:28px;"><strong>CONTRATADA:</strong></p>
-  <div class="sig-line"></div>
-  <p class="sig-name">DESTRAVA CRÉDITO LTDA - CNPJ n° ${contratada.cnpj}</p>
-  <p class="sig-sub">${contratada.representante} - CPF n° ${contratada.cpf_representante}</p>
+  <div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr; max-width: 180mm;">
+    <div class="signature-party">
+      <div class="sig-line"></div>
+      <p class="sig-name">${contratante.razao_social}</p>
+      <p class="sig-sub">CNPJ: ${contratante.cnpj}</p>
+      <p class="sig-sub">CONTRATANTE</p>
+    </div>
+    <div class="signature-party">
+      <div class="sig-line"></div>
+      <p class="sig-name">${parceiro.nome}</p>
+      <p class="sig-sub">CPF: ${parceiro.cpf}</p>
+      <p class="sig-sub">PARCEIRO COMERCIAL</p>
+    </div>
+    <div class="signature-party">
+      <div class="sig-line"></div>
+      <p class="sig-name">DESTRAVA CRÉDITO LTDA</p>
+      <p class="sig-sub">CNPJ: ${contratada.cnpj}</p>
+      <p class="sig-sub">CONTRATADA</p>
+    </div>
+  </div>
+  ` : `
+  <div class="signature-grid">
+    <div class="signature-party">
+      <div class="sig-line"></div>
+      <p class="sig-name">${contratante.razao_social}</p>
+      <p class="sig-sub">CNPJ: ${contratante.cnpj}</p>
+      <p class="sig-sub">CONTRATANTE</p>
+    </div>
+    <div class="signature-party">
+      <div class="sig-line"></div>
+      <p class="sig-name">DESTRAVA CRÉDITO LTDA</p>
+      <p class="sig-sub">CNPJ: ${contratada.cnpj}</p>
+      <p class="sig-sub">CONTRATADA</p>
+    </div>
+  </div>
+  `}
 </div>
 
 <div class="page-break"></div>
 
-<div class="sig-block">
-  <p style="margin-bottom:6px;"><strong>TESTEMUNHA 1:</strong></p>
-  <div class="sig-line"></div>
-
-  <p style="margin-top:40px;margin-bottom:6px;"><strong>TESTEMUNHA 2:</strong></p>
-  <div class="sig-line"></div>
+<div class="witness-grid" style="max-width: 160mm; margin: 40px auto 0;">
+  <div class="witness-box">
+    <p style="font-size:8pt; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#1e3a5f; margin:0 0 8px;">Testemunha 1</p>
+    <div class="sig-line"></div>
+    <p class="sig-sub">Nome: ___________________________________</p>
+    <p class="sig-sub">CPF: ____________________________________</p>
+  </div>
+  <div class="witness-box">
+    <p style="font-size:8pt; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#1e3a5f; margin:0 0 8px;">Testemunha 2</p>
+    <div class="sig-line"></div>
+    <p class="sig-sub">Nome: ___________________________________</p>
+    <p class="sig-sub">CPF: ____________________________________</p>
+  </div>
 </div>
 `;
 
@@ -3993,11 +4024,13 @@ th { background: #1B3A8C; color: #fff; padding: 6px 8px; text-align: center; fon
 td { border: 1px solid #ccc; padding: 5px 8px; text-align: center; }
 tr:nth-child(even) td { background: #f4f7ff; }
 .total-row td { font-weight: bold; background: #dce3f5; border: 1px solid #999; }
-.city-date { text-align: right; font-style: italic; margin: 14px 0 28px; font-size: 9.5pt; }
-.signature-section { margin-top: 32px; page-break-inside: avoid; break-inside: avoid; }
-.signature-grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 32px; justify-content: center; align-items: start; }
-.signature-card { text-align: center; font-size: 9.5pt; line-height: 1.25; min-width: 220px; max-width: 280px; word-break: normal; overflow-wrap: normal; white-space: normal; }
-.signature-line { border-top: 1px solid #111; margin: 0 auto 6px auto; width: 100%; }
+.city-date { text-align: right; font-style: italic; margin: 28px 0 36px; font-size: 10pt; color: #374151; }
+.signature-section { margin-top: 44px; page-break-inside: avoid; break-inside: avoid; }
+.signature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24mm; max-width: 160mm; margin: 0 auto; align-items: end; page-break-inside: avoid; break-inside: avoid; }
+.signature-card { text-align: center; min-height: 120px; display: flex; flex-direction: column; justify-content: flex-end; }
+.signature-line { border: none; border-top: 1.5px solid #1e293b; max-width: 76mm; width: 100%; margin: 0 auto 8px; height: 0; }
+.sig-name { font-size: 9pt; font-weight: 700; color: #111827; text-transform: uppercase; letter-spacing: 0.02em; margin: 0 0 3px; }
+.sig-sub { font-size: 8pt; color: #475569; margin: 0 0 2px; }
   </style>
 </head>
 <body>
@@ -4143,11 +4176,13 @@ th { background: #1B3A8C; color: #fff; padding: 6px 8px; text-align: center; fon
 td { border: 1px solid #ccc; padding: 5px 8px; text-align: center; }
 tr:nth-child(even) td { background: #f4f7ff; }
 .total-row td { font-weight: bold; background: #dce3f5; border: 1px solid #999; }
-.city-date { text-align: right; font-style: italic; margin: 14px 0 28px; font-size: 9.5pt; }
-.signature-section { margin-top: 32px; page-break-inside: avoid; break-inside: avoid; }
-.signature-grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 32px; justify-content: center; align-items: start; }
-.signature-card { text-align: center; font-size: 9.5pt; line-height: 1.25; min-width: 220px; max-width: 280px; word-break: normal; overflow-wrap: normal; white-space: normal; }
-.signature-line { border-top: 1px solid #111; margin: 0 auto 6px auto; width: 100%; }
+.city-date { text-align: right; font-style: italic; margin: 28px 0 36px; font-size: 10pt; color: #374151; }
+.signature-section { margin-top: 44px; page-break-inside: avoid; break-inside: avoid; }
+.signature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24mm; max-width: 160mm; margin: 0 auto; align-items: end; page-break-inside: avoid; break-inside: avoid; }
+.signature-card { text-align: center; min-height: 120px; display: flex; flex-direction: column; justify-content: flex-end; }
+.signature-line { border: none; border-top: 1.5px solid #1e293b; max-width: 76mm; width: 100%; margin: 0 auto 8px; height: 0; }
+.sig-name { font-size: 9pt; font-weight: 700; color: #111827; text-transform: uppercase; letter-spacing: 0.02em; margin: 0 0 3px; }
+.sig-sub { font-size: 8pt; color: #475569; margin: 0 0 2px; }
   </style>
 </head>
 <body>
@@ -4980,18 +5015,20 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
 <h2 class="section-title">CLÁUSULA OITAVA – DO FORO</h2>
 <p class="clause">Para dirimir quaisquer controvérsias oriundas deste contrato, as partes elegem o foro da Circunscrição Judiciária de <strong>${foro}</strong>, com renúncia expressa a qualquer outro, por mais privilegiado que seja.</p>
 <p class="city-date">${cidadeAss}, ${dataAss}.</p>
-<div class="sig-block" style="display:flex; justify-content:space-between; margin-top:40px;">
-  <div style="text-align:center; width:45%;">
-    <div class="sig-line"></div>
-    <p class="sig-name">${contratante.razao_social}</p>
-    <p class="sig-sub">CNPJ: ${contratante.cnpj}</p>
-    <p class="sig-sub">CONTRATANTE</p>
-  </div>
-  <div style="text-align:center; width:45%;">
-    <div class="sig-line"></div>
-    <p class="sig-name">${nomeContratada}</p>
-    ${docContratada ? `<p class="sig-sub">${docContratada}</p>` : ''}
-    <p class="sig-sub">CONTRATADA</p>
+<div class="signature-section">
+  <div class="signature-grid">
+    <div class="signature-party">
+      <div class="sig-line"></div>
+      <p class="sig-name">${contratante.razao_social}</p>
+      <p class="sig-sub">CNPJ: ${contratante.cnpj}</p>
+      <p class="sig-sub">CONTRATANTE</p>
+    </div>
+    <div class="signature-party">
+      <div class="sig-line"></div>
+      <p class="sig-name">${nomeContratada}</p>
+      ${docContratada ? `<p class="sig-sub">${docContratada}</p>` : ''}
+      <p class="sig-sub">CONTRATADA</p>
+    </div>
   </div>
 </div>
 `;
@@ -5064,34 +5101,35 @@ ${blocoIdentificacaoContrato(contrato)}
 <p class="clause"><strong>9.1.</strong> Para dirimir quaisquer controvérsias oriundas deste contrato, as partes elegem o foro da Circunscrição Judiciária de <strong>${foro}</strong>, com renúncia expressa a qualquer outro, por mais privilegiado que seja.</p>
 <p class="clause">E, por estarem justas e contratadas, as partes assinam o presente instrumento em 2 (duas) vias de igual teor e forma, na presença de 2 (duas) testemunhas.</p>
 <p class="city-date">${cidadeAss}, ${dataAss}.</p>
-<div class="sig-block" style="display:flex; justify-content:space-between; margin-top:40px;">
-  <div style="text-align:center; width:45%;">
-    <div class="sig-line"></div>
-    <p class="sig-name">${contratada.nome_exibicao || contratada.razao_social}</p>
-    <p class="sig-sub">${contratada.documento_label || 'CNPJ'}: ${contratada.documento || contratada.cnpj}</p>
-  </div>
-  <div style="text-align:center; width:45%;">
-    <div class="sig-line"></div>
-    <p class="sig-name">${parceiro.nome}</p>
-    <p class="sig-sub">CPF: ${parceiro.cpf}</p>
+<div class="signature-section">
+  <div class="signature-grid">
+    <div class="signature-party">
+      <div class="sig-line"></div>
+      <p class="sig-name">${contratada.nome_exibicao || contratada.razao_social}</p>
+      <p class="sig-sub">${contratada.documento_label || 'CNPJ'}: ${contratada.documento || contratada.cnpj}</p>
+      <p class="sig-sub">CONTRATADA</p>
+    </div>
+    <div class="signature-party">
+      <div class="sig-line"></div>
+      <p class="sig-name">${parceiro.nome}</p>
+      <p class="sig-sub">CPF: ${parceiro.cpf}</p>
+      <p class="sig-sub">PARCEIRA COMERCIAL</p>
+    </div>
   </div>
 </div>
 ${(temTest1 || temTest2) ? `
-<div style="margin-top:32px;">
-  <p style="font-size:10pt; font-weight:bold; margin-bottom:16px;">Testemunhas:</p>
-  <div style="display:flex; justify-content:space-between;">
-    <div style="text-align:center; width:45%;">
-      <p style="margin-bottom:28px;">1.</p>
-      <div class="sig-line"></div>
-      <p class="sig-sub">Nome: ${contrato.testemunha_1_nome || ''}</p>
-      <p class="sig-sub">CPF: ${contrato.testemunha_1_cpf || ''}</p>
-    </div>
-    <div style="text-align:center; width:45%;">
-      <p style="margin-bottom:28px;">2.</p>
-      <div class="sig-line"></div>
-      <p class="sig-sub">Nome: ${contrato.testemunha_2_nome || ''}</p>
-      <p class="sig-sub">CPF: ${contrato.testemunha_2_cpf || ''}</p>
-    </div>
+<div class="witness-grid" style="max-width: 160mm; margin: 36px auto 0;">
+  <div class="witness-box">
+    <p style="font-size:8pt; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#1e3a5f; margin:0 0 8px;">Testemunha 1</p>
+    <div class="sig-line"></div>
+    <p class="sig-sub">${contrato.testemunha_1_nome || 'Nome: ___________________________________'}</p>
+    <p class="sig-sub">${contrato.testemunha_1_cpf ? 'CPF: ' + contrato.testemunha_1_cpf : 'CPF: ____________________________________'}</p>
+  </div>
+  <div class="witness-box">
+    <p style="font-size:8pt; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#1e3a5f; margin:0 0 8px;">Testemunha 2</p>
+    <div class="sig-line"></div>
+    <p class="sig-sub">${contrato.testemunha_2_nome || 'Nome: ___________________________________'}</p>
+    <p class="sig-sub">${contrato.testemunha_2_cpf ? 'CPF: ' + contrato.testemunha_2_cpf : 'CPF: ____________________________________'}</p>
   </div>
 </div>` : ''}
 `;
@@ -5151,6 +5189,123 @@ ${(temTest1 || temTest2) ? `
   }
 
   // ─── EXPORTAR PDF DE PREVISÃO DE FATURAMENTO ────────────────────────────────
+
+  // ─── MULTER — Upload de documentos para contratos ──────────────────────────
+  const uploadContratos = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 30 * 1024 * 1024 }, // 30 MB por arquivo
+    fileFilter: (_req: any, file: any, cb: any) => {
+      const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+      if (allowed.includes(file.mimetype)) cb(null, true);
+      else cb(new Error(`Tipo de arquivo não permitido: ${file.mimetype}`));
+    },
+  });
+
+  /**
+   * Mescla o PDF do contrato com documentos anexos (imagens e PDFs).
+   * Cada documento ganha uma página de capa formatada + o conteúdo.
+   * Retorna o caminho do PDF final mesclado.
+   */
+  async function mergeAnexosNoPdf(
+    contratoPath: string,
+    anexos: Array<{ buffer: Buffer; mimetype: string; categoria: string; descricao: string }>,
+  ): Promise<string> {
+    if (anexos.length === 0) return contratoPath;
+
+    const { PDFDocument, rgb, StandardFonts } = await import('pdf-lib');
+
+    const contratoPdfBytes = fs.readFileSync(contratoPath);
+    const pdfFinal = await PDFDocument.load(contratoPdfBytes);
+    const helveticaBold = await pdfFinal.embedFont(StandardFonts.HelveticaBold);
+    const helvetica    = await pdfFinal.embedFont(StandardFonts.Helvetica);
+
+    const LABEL_CATEGORIA: Record<string, string> = {
+      rg_frente:             'RG — Frente',
+      rg_verso:              'RG — Verso',
+      cnh_frente:            'CNH — Frente',
+      cnh_verso:             'CNH — Verso',
+      comprovante_endereco:  'Comprovante de Endereço',
+      contrato_social:       'Contrato Social',
+      alteracao_contratual:  'Alteração Contratual',
+      procuracao:            'Procuração',
+      rating_scr:            'Rating SCR / BACEN',
+      boa_vista:             'Consulta Boa Vista',
+      cemprot:               'Consulta CEMPROT',
+      serasa:                'Consulta Serasa',
+      spc:                   'Consulta SPC',
+      receita_federal:       'Consulta Receita Federal',
+      outros:                'Documento Anexo',
+    };
+
+    for (let i = 0; i < anexos.length; i++) {
+      const anexo = anexos[i];
+      const labelCat = LABEL_CATEGORIA[anexo.categoria] ?? 'Documento Anexo';
+      const numAnexo = i + 1;
+
+      // Página de capa do anexo
+      const capaPage = pdfFinal.addPage([595.28, 841.89]);
+      const { width, height } = capaPage.getSize();
+
+      capaPage.drawRectangle({ x: 0, y: height - 80, width, height: 80, color: rgb(0.106, 0.227, 0.549) });
+      capaPage.drawRectangle({ x: 0, y: height - 84, width, height: 4, color: rgb(0.945, 0.769, 0.059) });
+
+      capaPage.drawText(`ANEXO Nº ${numAnexo}`, {
+        x: 40, y: height - 52, font: helveticaBold, size: 22, color: rgb(1, 1, 1),
+      });
+      capaPage.drawText(labelCat.toUpperCase(), {
+        x: 40, y: height - 120, font: helveticaBold, size: 14, color: rgb(0.106, 0.227, 0.549),
+      });
+      if (anexo.descricao && anexo.descricao !== labelCat) {
+        capaPage.drawText(anexo.descricao, {
+          x: 40, y: height - 145, font: helvetica, size: 11, color: rgb(0.3, 0.3, 0.3),
+        });
+      }
+      capaPage.drawLine({
+        start: { x: 40, y: height - 165 }, end: { x: width - 40, y: height - 165 },
+        thickness: 1, color: rgb(0.8, 0.8, 0.8),
+      });
+      capaPage.drawText('Documento integrante do contrato — Destrava Crédito', {
+        x: 40, y: 30, font: helvetica, size: 8, color: rgb(0.6, 0.6, 0.6),
+      });
+
+      // Conteúdo do anexo
+      if (anexo.mimetype === 'application/pdf') {
+        const pdfAnexo = await PDFDocument.load(anexo.buffer);
+        const paginas = await pdfFinal.copyPages(pdfAnexo, pdfAnexo.getPageIndices());
+        paginas.forEach((p: any) => pdfFinal.addPage(p));
+      } else {
+        let imgEmbed: any;
+        if (anexo.mimetype === 'image/png') {
+          imgEmbed = await pdfFinal.embedPng(anexo.buffer);
+        } else {
+          imgEmbed = await pdfFinal.embedJpg(anexo.buffer);
+        }
+        const imgPage = pdfFinal.addPage([595.28, 841.89]);
+        const margem = 50;
+        const maxW = imgPage.getWidth()  - margem * 2;
+        const maxH = imgPage.getHeight() - margem * 2;
+        const ratio = Math.min(maxW / imgEmbed.width, maxH / imgEmbed.height);
+        const iw = imgEmbed.width  * ratio;
+        const ih = imgEmbed.height * ratio;
+        const ix = (imgPage.getWidth()  - iw) / 2;
+        const iy = (imgPage.getHeight() - ih) / 2;
+        imgPage.drawRectangle({
+          x: ix - 4, y: iy - 4, width: iw + 8, height: ih + 8,
+          borderColor: rgb(0.85, 0.85, 0.85), borderWidth: 1, color: rgb(0.98, 0.98, 0.98),
+        });
+        imgPage.drawImage(imgEmbed, { x: ix, y: iy, width: iw, height: ih });
+        imgPage.drawText(labelCat, { x: margem, y: 20, font: helvetica, size: 8, color: rgb(0.5, 0.5, 0.5) });
+      }
+    }
+
+    const dir = path.dirname(contratoPath);
+    const base = path.basename(contratoPath, '.pdf');
+    const finalPath = path.join(dir, `${base}_completo.pdf`);
+    const finalBytes = await pdfFinal.save();
+    fs.writeFileSync(finalPath, finalBytes);
+    return finalPath;
+  }
+
   app.post('/api/faturamento/previsao/:id/exportar-pdf', auth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
@@ -6155,9 +6310,36 @@ ${(temTest1 || temTest2) ? `
 
   // ─── CONTRATOS GERADOS ───────────────────────────────────────────────────
 
-  app.post('/api/contratos/gerar', auth, async (req: Request, res: Response) => {
+  app.post('/api/contratos/gerar', auth, uploadContratos.any(), async (req: Request, res: Response) => {
     try {
       const colaborador = (req as any).colaborador;
+
+      // Suporte a multipart/form-data (com arquivos) e application/json (sem arquivos)
+      let bodyData: any = req.body;
+      if (req.body?.dados) {
+        try { bodyData = JSON.parse(req.body.dados); } catch { bodyData = req.body; }
+      }
+
+      // Coleta os arquivos enviados
+      const arquivosMultipart: Array<{ buffer: Buffer; mimetype: string; categoria: string; descricao: string }> = [];
+      const totalArquivos = parseInt(req.body?.total_arquivos || '0', 10);
+      const files = (req as any).files as Express.Multer.File[] | undefined;
+      if (files && totalArquivos > 0) {
+        for (let i = 0; i < totalArquivos; i++) {
+          const arquivo = files.find((f: any) => f.fieldname === `arquivo_${i}`);
+          const metaStr = req.body?.[`meta_${i}`];
+          if (arquivo && metaStr) {
+            const meta = JSON.parse(metaStr);
+            arquivosMultipart.push({
+              buffer: arquivo.buffer,
+              mimetype: arquivo.mimetype,
+              categoria: meta.categoria || 'outros',
+              descricao: meta.descricao || 'Documento Anexo',
+            });
+          }
+        }
+      }
+
       const {
         tipo_contrato = 'assessoria',
         empresa_id, parceiro_id, lead_id,
@@ -6185,7 +6367,7 @@ ${(temTest1 || temTest2) ? `
         parceiro_profissao, parceiro_endereco,
         // campos comuns
         data_assinatura, foro_eleito, cidade_assinatura,
-      } = req.body;
+      } = bodyData;
 
       if (!data_assinatura || !foro_eleito) {
         res.status(400).json({ error: 'Campos obrigatórios: data_assinatura, foro_eleito' });
@@ -6792,6 +6974,10 @@ ${(temTest1 || temTest2) ? `
 
       aplicarIdentificacaoContrato(payload, await gerarIdentificacaoContrato('assessoria', payload));
       pdfPath = await gerarPdfContrato(payload);
+      // Mescla documentos anexos ao PDF do contrato
+      if (arquivosMultipart.length > 0) {
+        pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart);
+      }
       const hash = await calcularHashArquivo(pdfPath);
 
       const { rows: contratoRows } = await pool.query(

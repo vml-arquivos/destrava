@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Eye, RefreshCw, AlertCircle } from 'lucide-react';
+import { Loader2, Eye, RefreshCw, AlertCircle, Paperclip } from 'lucide-react';
 import { getToken } from '../../lib/api';
 import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from '../../lib/currency';
+import { UploadDocumentos, type DocumentoAnexo } from './UploadDocumentos';
 
 interface Empresa  { id: string; razao_social: string; cnpj?: string; }
 interface Lead     { id: string; nome?: string; razao_social?: string; cpf?: string; cnpj?: string; }
@@ -212,6 +213,9 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [dataAssinatura, setDataAssinatura] = useState(new Date().toISOString().slice(0, 10));
   const [foroEleito, setForoEleito]         = useState('Taguatinga/DF');
 
+  // ── Documentos anexados ──
+  const [documentosAnexos, setDocumentosAnexos] = useState<DocumentoAnexo[]>([]);
+
   // ── Listas ──
   const [empresas, setEmpresas]       = useState<Empresa[]>([]);
   const [leads, setLeads]             = useState<Lead[]>([]);
@@ -358,12 +362,14 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         taxa_comissao: Number(taxaComissao),
         taxa_desistencia: Number(taxaDesistencia),
         custeio_mensal: unmaskCurrencyInput(custeioMensal),
+        _documentosAnexos: documentosAnexos,
         data_assinatura: dataAssinatura,
         foro_eleito: foroEleito,
       });
     } else if (tipoContrato === 'limpa_nome') {
       await onSubmit({
         tipo_contrato: 'limpa_nome',
+        _documentosAnexos: documentosAnexos,
         cliente_tipo: clienteTipo,
         empresa_id: clienteTipo === 'empresa' ? clienteId : undefined,
         cliente_pf_id: clienteTipo === 'pf' ? clienteId : undefined,
@@ -384,6 +390,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     } else if (tipoContrato === 'limpa_bacen') {
       await onSubmit({
         tipo_contrato: 'limpa_bacen',
+        _documentosAnexos: documentosAnexos,
         cliente_tipo: clienteTipoBacen,
         empresa_id: clienteTipoBacen === 'empresa' ? empresaIdBacen : undefined,
         cliente_pf_id: clienteTipoBacen === 'pf' ? clientePfIdBacen : undefined,
@@ -402,6 +409,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     } else if (tipoContrato === 'rating') {
       await onSubmit({
         tipo_contrato: 'rating',
+        _documentosAnexos: documentosAnexos,
         empresa_id: empresaIdRating,
         representante_nome: representanteNomeRating,
         representante_cpf: representanteCpfRating,
@@ -419,6 +427,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
       const pc = parceiroSelecionado(parceiroIdPC);
       await onSubmit({
         tipo_contrato: 'parceria_comercial',
+        _documentosAnexos: documentosAnexos,
         parceiro_id: parceiroIdPC,
         parceiro_nome: pc?.nome || '',
         parceiro_cpf: parceiroCpfPC,
@@ -973,6 +982,29 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
           <input type="text" value={foroEleito} onChange={e => setForoEleito(e.target.value)}
             placeholder="Ex: Taguatinga/DF" className={cls} />
           {errors.foroEleito && <p className="text-red-500 text-xs mt-1">{errors.foroEleito}</p>}
+        </div>
+      </div>
+
+      {/* ── UPLOAD DE DOCUMENTOS ── */}
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex items-center gap-2">
+          <Paperclip className="w-4 h-4 text-gray-500" />
+          <span className="text-sm font-semibold text-gray-700">Documentos Anexos</span>
+          <span className="text-xs text-gray-400 ml-1">
+            — RG, CNH, Comprovante, Contrato Social, Rating SCR, Boa Vista, CEMPROT, Serasa, SPC e outros
+          </span>
+          {documentosAnexos.length > 0 && (
+            <span className="ml-auto text-xs font-semibold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+              {documentosAnexos.length} arquivo{documentosAnexos.length !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+        <div className="p-4">
+          <UploadDocumentos
+            documentos={documentosAnexos}
+            onChange={setDocumentosAnexos}
+            disabled={loading}
+          />
         </div>
       </div>
 
