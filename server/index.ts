@@ -6491,6 +6491,9 @@ ${(temTest1 || temTest2) ? `
           if (browser2) await (browser2 as any).close();
         }
         pdfPath = filePathLN;
+        if (arquivosMultipart.length > 0) {
+          pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart);
+        }
 
         const hash2 = await calcularHashArquivo(pdfPath);
         const empresaContratoId = cliente_tipo === 'empresa' ? empresa_id : null;
@@ -6656,6 +6659,9 @@ ${(temTest1 || temTest2) ? `
           await pageB.pdf({ path: filePathBacen, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '20mm', bottom: '20mm', left: '22mm', right: '22mm' } });
         } finally { if (browserBacen) await (browserBacen as any).close(); }
         pdfPath = filePathBacen;
+        if (arquivosMultipart.length > 0) {
+          pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart);
+        }
         const hashBacen = await calcularHashArquivo(pdfPath);
         const { rows: contratoRowsBacen } = await pool.query(
           `INSERT INTO contratos_gerados
@@ -6760,6 +6766,9 @@ ${(temTest1 || temTest2) ? `
           await pageR.pdf({ path: filePathRating, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '18mm', bottom: '18mm', left: '22mm', right: '22mm' } });
         } finally { if (browserRating) await (browserRating as any).close(); }
         pdfPath = filePathRating;
+        if (arquivosMultipart.length > 0) {
+          pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart);
+        }
         const hashRating = await calcularHashArquivo(pdfPath);
         const { rows: contratoRowsRating } = await pool.query(
           `INSERT INTO contratos_gerados
@@ -6847,6 +6856,9 @@ ${(temTest1 || temTest2) ? `
           await pageP.pdf({ path: filePathParceria, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '18mm', bottom: '18mm', left: '22mm', right: '22mm' } });
         } finally { if (browserParceria) await (browserParceria as any).close(); }
         pdfPath = filePathParceria;
+        if (arquivosMultipart.length > 0) {
+          pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart);
+        }
         const hashParceria = await calcularHashArquivo(pdfPath);
         const { rows: contratoRowsParceria } = await pool.query(
           `INSERT INTO contratos_gerados
