@@ -6349,7 +6349,7 @@ ${(temTest1 || temTest2) ? `
         empresa_razao_social, empresa_cnpj, empresa_endereco,
         empresa_representante, empresa_cpf_representante,
         // campos contrato limpa nome
-        cliente_id, cliente_tipo, // 'empresa' ou 'lead'
+        cliente_id, cliente_tipo, cliente_pf_id, // 'empresa', 'lead' ou 'pf'
         valor_contrato, condicao_pagamento, prazo_entrega_dias = 30,
         prazo_garantia_meses = 6, taxa_consulta_serasa, taxa_reprotocolo,
         // campos contrato bacen
@@ -6421,8 +6421,8 @@ ${(temTest1 || temTest2) ? `
             representante: e.responsavel_nome || '',
             cpf_representante: e.responsavel_cpf || '',
           };
-        } else if (cliente_tipo === 'pf' && req.body.cliente_pf_id) {
-          const { rows } = await pool.query('SELECT * FROM clientes_pf WHERE id=$1', [req.body.cliente_pf_id]);
+        } else if (cliente_tipo === 'pf' && cliente_pf_id) {
+          const { rows } = await pool.query('SELECT * FROM clientes_pf WHERE id=$1', [cliente_pf_id]);
           if (!rows.length) { res.status(404).json({ error: 'Cliente PF não encontrado' }); return; }
           const pf = rows[0];
           contratanteData = {
@@ -6512,7 +6512,7 @@ ${(temTest1 || temTest2) ? `
             empresaContratoId,
             parceiro_id || null,
             leadContratoId,
-            req.body.cliente_pf_id || null,
+            cliente_pf_id || null,
             contratadaSelecionada.id,
             responsavelContrato?.id || null,
             null,
@@ -6547,7 +6547,7 @@ ${(temTest1 || temTest2) ? `
 
       // ── CONTRATO LIMPA BACEN ────────────────────────────────────────────────
       if (tipo_contrato === 'limpa_bacen') {
-        const clienteTipoBacen = cliente_tipo || (req.body.cliente_pf_id ? 'pf' : 'empresa');
+        const clienteTipoBacen = cliente_tipo || (cliente_pf_id ? 'pf' : 'empresa');
 
         if (!valor_contrato || !condicao_pagamento) {
           res.status(400).json({ error: 'Campos obrigatórios para Limpa BACEN: cliente, valor_contrato, condicao_pagamento' });
@@ -6557,7 +6557,7 @@ ${(temTest1 || temTest2) ? `
           res.status(400).json({ error: 'Selecione uma empresa para o contrato Limpa BACEN.' });
           return;
         }
-        if (clienteTipoBacen === 'pf' && !req.body.cliente_pf_id) {
+        if (clienteTipoBacen === 'pf' && !cliente_pf_id) {
           res.status(400).json({ error: 'Selecione uma pessoa física para o contrato Limpa BACEN.' });
           return;
         }
@@ -6597,7 +6597,7 @@ ${(temTest1 || temTest2) ? `
             cpf: representante_cpf || eb.responsavel_cpf || '',
           };
         } else if (clienteTipoBacen === 'pf') {
-          const { rows: pfRows } = await pool.query('SELECT * FROM clientes_pf WHERE id=$1', [req.body.cliente_pf_id]);
+          const { rows: pfRows } = await pool.query('SELECT * FROM clientes_pf WHERE id=$1', [cliente_pf_id]);
           if (!pfRows.length) { res.status(404).json({ error: 'Cliente PF não encontrado' }); return; }
           const pf = pfRows[0];
           contratanteBacenData = {
@@ -6672,7 +6672,7 @@ ${(temTest1 || temTest2) ? `
            clienteTipoBacen === 'empresa' ? empresa_id : null,
            parceiro_id || null,
            clienteTipoBacen === 'lead' ? cliente_id : null,
-           clienteTipoBacen === 'pf' ? req.body.cliente_pf_id : null,
+           clienteTipoBacen === 'pf' ? cliente_pf_id : null,
            contratadaSelecionada.id, responsavelContrato?.id || null,
            null, valor_contrato, condicao_pagamento, null, null, null,
            data_assinatura, foro_eleito, pdfPath, hashBacen, JSON.stringify(payloadBacen),
