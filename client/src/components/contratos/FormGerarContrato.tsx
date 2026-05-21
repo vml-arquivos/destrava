@@ -354,6 +354,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     const parceiroSelecionado = (id: string) => parceiros.find(p => p.id === id);
 
     if (tipoContrato === 'assessoria') {
+      // Para assessoria o GeradorContratos abre preview — passa _documentosAnexos
+      // para que o handler de onGerarPdf possa incluí-los no multipart
       await onSubmit({
         tipo_contrato: 'assessoria',
         empresa_id: empresaId,
