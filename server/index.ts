@@ -5226,103 +5226,121 @@ ${(temTest1 || temTest2) ? `
     const textoMarca = numeroContrato
       ? `Anexo contrato nº: ${numeroContrato}`
       : 'Anexo — Destrava Crédito';
+    const FONT_SIZE  = 14;
+    const COR_MARCA  = rgb(0.50, 0.50, 0.50);
+    const OPACIDADE  = 0.25;
 
-    // Aplica marca d'água diagonal centralizada em qualquer página já adicionada ao pdfFinal
+    /**
+     * Estampa a marca d'água em grade diagonal sobre a página.
+     * Funciona para qualquer tamanho (A4, landscape, páginas largas de PDF).
+     * A rotação de 45° é aplicada via matriz de transformação manual para
+     * evitar o bug de posicionamento do pdf-lib com rotate + opacity.
+     */
     const aplicarMarcaDagua = (page: any) => {
       const { width, height } = page.getSize();
-      const fontSize = 16;
-      const textWidth = helvetica.widthOfTextAtSize(textoMarca, fontSize);
-      page.drawText(textoMarca, {
-        x: (width  - textWidth) / 2,
-        y: height / 2,
-        font: helvetica,
-        size: fontSize,
-        color: rgb(0.45, 0.45, 0.45),
-        opacity: 0.30,
-        rotate: degrees(45),
-      });
+      const textWidth = helvetica.widthOfTextAtSize(textoMarca, FONT_SIZE);
+      const stepX = textWidth + 80;
+      const stepY = 120;
+      // Cobre a diagonal com margem extra para não deixar cantos sem marca
+      const diag = Math.sqrt(width * width + height * height);
+      const cols = Math.ceil(diag / stepX) + 2;
+      const rows = Math.ceil(diag / stepY) + 2;
+      const startX = -(cols * stepX) / 2 + width  / 2;
+      const startY = -(rows * stepY) / 2 + height / 2;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          page.drawText(textoMarca, {
+            x: startX + c * stepX,
+            y: startY + r * stepY,
+            font: helvetica,
+            size: FONT_SIZE,
+            color: COR_MARCA,
+            opacity: OPACIDADE,
+            rotate: degrees(35),
+          });
+        }
+      }
     };
 
     const LABEL_CATEGORIA: Record<string, string> = {
-      rg_frente:             'RG — Frente',
-      rg_verso:              'RG — Verso',
-      cnh_frente:            'CNH — Frente',
-      cnh_verso:             'CNH — Verso',
-      comprovante_endereco:  'Comprovante de Endereço',
-      contrato_social:       'Contrato Social',
-      alteracao_contratual:  'Alteração Contratual',
-      procuracao:            'Procuração',
-      rating_scr:            'Rating SCR / BACEN',
-      boa_vista:             'Consulta Boa Vista',
-      cemprot:               'Consulta CEMPROT',
-      serasa:                'Consulta Serasa',
-      spc:                   'Consulta SPC',
-      receita_federal:       'Consulta Receita Federal',
-      outros:                'Documento Anexo',
+      rg_frente:            'RG — Frente',
+      rg_verso:             'RG — Verso',
+      cnh_frente:           'CNH — Frente',
+      cnh_verso:            'CNH — Verso',
+      comprovante_endereco: 'Comprovante de Endereço',
+      contrato_social:      'Contrato Social',
+      alteracao_contratual: 'Alteração Contratual',
+      procuracao:           'Procuração',
+      rating_scr:           'Rating SCR / BACEN',
+      boa_vista:            'Consulta Boa Vista',
+      cemprot:              'Consulta CEMPROT',
+      serasa:               'Consulta Serasa',
+      spc:                  'Consulta SPC',
+      receita_federal:      'Consulta Receita Federal',
+      outros:               'Documento Anexo',
     };
 
     for (let i = 0; i < anexos.length; i++) {
-      const anexo  = anexos[i];
+      const anexo    = anexos[i];
       const labelCat = LABEL_CATEGORIA[anexo.categoria] ?? 'Documento Anexo';
       const numAnexo = i + 1;
 
-      // ── Página de capa ────────────────────────────────────────────────────
-      const capaPage = pdfFinal.addPage([A4_W, A4_H]);
-      capaPage.drawRectangle({ x: 0, y: A4_H - 80, width: A4_W, height: 80, color: rgb(0.106, 0.227, 0.549) });
-      capaPage.drawRectangle({ x: 0, y: A4_H - 84, width: A4_W, height: 4,  color: rgb(0.945, 0.769, 0.059) });
-      capaPage.drawText(`ANEXO Nº ${numAnexo}`, {
+      // ── Página de capa (sempre A4) ────────────────────────────────────────
+      const capa = pdfFinal.addPage([A4_W, A4_H]);
+      // Cabeçalho azul
+      capa.drawRectangle({ x: 0, y: A4_H - 80, width: A4_W, height: 80, color: rgb(0.106, 0.227, 0.549) });
+      capa.drawRectangle({ x: 0, y: A4_H - 84, width: A4_W, height: 4,  color: rgb(0.945, 0.769, 0.059) });
+      capa.drawText(`ANEXO Nº ${numAnexo}`, {
         x: 40, y: A4_H - 52, font: helveticaBold, size: 22, color: rgb(1, 1, 1),
       });
-      capaPage.drawText(labelCat.toUpperCase(), {
-        x: 40, y: A4_H - 120, font: helveticaBold, size: 14, color: rgb(0.106, 0.227, 0.549),
+      capa.drawText(labelCat.toUpperCase(), {
+        x: 40, y: A4_H - 118, font: helveticaBold, size: 13, color: rgb(0.106, 0.227, 0.549),
       });
       if (anexo.descricao && anexo.descricao !== labelCat) {
-        capaPage.drawText(anexo.descricao, {
-          x: 40, y: A4_H - 145, font: helvetica, size: 11, color: rgb(0.3, 0.3, 0.3),
+        capa.drawText(anexo.descricao, {
+          x: 40, y: A4_H - 140, font: helvetica, size: 11, color: rgb(0.3, 0.3, 0.3),
         });
       }
-      capaPage.drawLine({
-        start: { x: 40, y: A4_H - 165 }, end: { x: A4_W - 40, y: A4_H - 165 },
+      capa.drawLine({
+        start: { x: 40, y: A4_H - 160 }, end: { x: A4_W - 40, y: A4_H - 160 },
         thickness: 1, color: rgb(0.8, 0.8, 0.8),
       });
       if (numeroContrato) {
-        capaPage.drawText(`Contrato nº: ${numeroContrato}`, {
-          x: 40, y: A4_H - 190, font: helveticaBold, size: 10, color: rgb(0.2, 0.2, 0.2),
+        capa.drawText(`Contrato nº: ${numeroContrato}`, {
+          x: 40, y: A4_H - 182, font: helveticaBold, size: 10, color: rgb(0.2, 0.2, 0.2),
         });
       }
-      capaPage.drawText('Documento integrante do contrato — Destrava Crédito', {
+      capa.drawText('Documento integrante do contrato — Destrava Crédito', {
         x: 40, y: 30, font: helvetica, size: 8, color: rgb(0.6, 0.6, 0.6),
       });
 
       // ── Conteúdo do anexo ─────────────────────────────────────────────────
       if (anexo.mimetype === 'application/pdf') {
-        // PDF: cada página copiada é adicionada em A4 com marca d'água sobreposta
-        const pdfAnexo   = await PDFDocument.load(anexo.buffer);
-        const indices    = pdfAnexo.getPageIndices();
-        const copiadas   = await pdfFinal.copyPages(pdfAnexo, indices);
+        // PDF: copia páginas NO TAMANHO ORIGINAL (sem alterar setSize),
+        // depois estampa a marca d'água em cima.
+        const pdfAnexo = await PDFDocument.load(anexo.buffer);
+        const copiadas = await pdfFinal.copyPages(pdfAnexo, pdfAnexo.getPageIndices());
         for (const pag of copiadas) {
-          // Força tamanho A4 para manter consistência visual
-          pag.setSize(A4_W, A4_H);
-          pdfFinal.addPage(pag);
-          aplicarMarcaDagua(pag);
+          pdfFinal.addPage(pag);   // tamanho original preservado
+          aplicarMarcaDagua(pag); // marca em grade sobre o conteúdo real
         }
       } else {
-        // Imagem (RG, CNH, etc.): sempre A4, imagem proporcional ocupando toda a área útil
+        // Imagem (RG, CNH, foto etc.):
+        // Página A4, imagem proporcional centralizada com margem de 20pt.
         let imgEmbed: any;
         if (anexo.mimetype === 'image/png') {
           imgEmbed = await pdfFinal.embedPng(anexo.buffer);
         } else {
           imgEmbed = await pdfFinal.embedJpg(anexo.buffer);
         }
-
-        const margem = 20; // margem mínima de 20pt em cada lado
+        const margem = 20;
         const maxW   = A4_W - margem * 2;
         const maxH   = A4_H - margem * 2;
         const ratio  = Math.min(maxW / imgEmbed.width, maxH / imgEmbed.height);
-        const iw     = imgEmbed.width  * ratio;
-        const ih     = imgEmbed.height * ratio;
-        const ix     = (A4_W - iw) / 2;
-        const iy     = (A4_H - ih) / 2;
+        const iw = imgEmbed.width  * ratio;
+        const ih = imgEmbed.height * ratio;
+        const ix = (A4_W - iw) / 2;
+        const iy = (A4_H - ih) / 2;
 
         const imgPage = pdfFinal.addPage([A4_W, A4_H]);
         imgPage.drawImage(imgEmbed, { x: ix, y: iy, width: iw, height: ih });
