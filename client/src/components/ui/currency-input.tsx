@@ -1,190 +1,142 @@
 /**
- * CurrencyInput.tsx — máscara brasileira estável para valores monetários
+ * CurrencyInput — Componente de input monetário BRL com máscara automática.
  *
- * Regra de digitação:
- * - usuário digita apenas números;
- * - o valor é formatado automaticamente como 0,01 / 1,23 / 12,34 / 1.234,56;
- * - o cursor permanece no final, evitando saltos para o meio do texto;
- * - o componente retorna o número limpo em onValueChange.
+ * Comportamento:
+ *   - Ao digitar dígitos, formata automaticamente com separadores pt-BR.
+ *   - Ex: digitar "1000000" → exibe "10.000,00"
+ *   - Para R$ 1.000.000,00: digitar "100000000"
+ *   - Aceita valor numérico via prop `value` e retorna número via `onValueChange`.
+ *
+ * Props:
+ *   - value: número atual (controlado externamente)
+ *   - onValueChange: callback com o número atualizado
+ *   - label: rótulo do campo (opcional)
+ *   - placeholder: texto de placeholder (padrão: "0,00")
+ *   - className: classes CSS adicionais
+ *   - disabled: desabilita o campo
+ *   - required: campo obrigatório
+ *   - id: id do input
+ *   - name: name do input
+ *
+ * Uso básico:
+ *   <CurrencyInput
+ *     label="Faturamento Anual (R$)"
+ *     value={faturamento}
+ *     onValueChange={(num) => setFaturamento(num)}
+ *   />
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from "../../lib/currency";
+import { cn } from "../../lib/utils";
 
-interface CurrencyInputProps {
-  value?: number | string;
-  onValueChange: (value: number) => void;
-  placeholder?: string;
-  disabled?: boolean;
-  className?: string;
-  id?: string;
-  name?: string;
-  noPrefix?: boolean;
-  size?: "sm" | "md" | "lg";
-  decimalPlaces?: number;
+export interface CurrencyInputProps
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "type"> {
+  /** Valor numérico controlado externamente */
+  value?: number | null;
+  /** Callback chamado com o valor numérico atualizado */
+  onValueChange?: (value: number) => void;
+  /** Rótulo do campo */
+  label?: string;
+  /** Classes CSS adicionais para o wrapper */
+  wrapperClassName?: string;
 }
 
-function onlyDigits(value: unknown): string {
-  return String(value ?? "").replace(/\D/g, "");
-}
-
-export function parseCurrencyValue(value: unknown): number {
-  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-  const raw = String(value ?? "").trim();
-  if (!raw) return 0;
-
-  const cleaned = raw
-    .replace(/[R$US$\s]/g, "")
-    .replace(/[^\d,.-]/g, "");
-
-  if (!cleaned) return 0;
-
-  // Formato BR: 1.234,56
-  if (cleaned.includes(",")) {
-    const parsed = Number.parseFloat(cleaned.replace(/\./g, "").replace(",", "."));
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  const parsed = Number.parseFloat(cleaned);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-export function formatCurrencyInput(value: number, decimalPlaces = 2): string {
-  if (!Number.isFinite(value) || value <= 0) return "";
-  return new Intl.NumberFormat("pt-BR", {
-    minimumFractionDigits: decimalPlaces,
-    maximumFractionDigits: decimalPlaces,
-  }).format(value);
-}
-
-function maskDigitsToCurrency(digits: string, decimalPlaces = 2): string {
-  const clean = onlyDigits(digits);
-  if (!clean) return "";
-
-  const padded = clean.padStart(decimalPlaces + 1, "0");
-  const integerPart = padded.slice(0, padded.length - decimalPlaces);
-  const decimalPart = padded.slice(padded.length - decimalPlaces);
-  const integerNumber = Number.parseInt(integerPart, 10);
-
-  if (!Number.isFinite(integerNumber)) return "";
-
-  return `${new Intl.NumberFormat("pt-BR").format(integerNumber)},${decimalPart}`;
-}
-
-function maskedStringToNumber(masked: string, decimalPlaces = 2): number {
-  const clean = onlyDigits(masked);
-  if (!clean) return 0;
-  return Number.parseInt(clean, 10) / Math.pow(10, decimalPlaces);
-}
-
-export function CurrencyInput({
-  value,
-  onValueChange,
-  placeholder = "0,00",
-  disabled = false,
-  className,
-  id,
-  name,
-  noPrefix = false,
-  size = "md",
-  decimalPlaces = 2,
-}: CurrencyInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const focusedRef = useRef(false);
-  const [displayValue, setDisplayValue] = useState(() =>
-    formatCurrencyInput(parseCurrencyValue(value), decimalPlaces),
-  );
-
-  useEffect(() => {
-    if (focusedRef.current) return;
-    const formatted = formatCurrencyInput(parseCurrencyValue(value), decimalPlaces);
-    setDisplayValue((current) => (current === formatted ? current : formatted));
-  }, [value, decimalPlaces]);
-
-  const keepCursorAtEnd = useCallback(() => {
-    requestAnimationFrame(() => {
-      const input = inputRef.current;
-      if (!input) return;
-      const end = input.value.length;
-      input.setSelectionRange(end, end);
-    });
-  }, []);
-
-  const handleChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const digits = onlyDigits(event.target.value);
-      const masked = maskDigitsToCurrency(digits, decimalPlaces);
-      setDisplayValue(masked);
-      onValueChange(maskedStringToNumber(masked, decimalPlaces));
-      keepCursorAtEnd();
+export const CurrencyInput = React.forwardRef<HTMLInputElement, CurrencyInputProps>(
+  (
+    {
+      value,
+      onValueChange,
+      label,
+      placeholder = "0,00",
+      className,
+      wrapperClassName,
+      disabled,
+      required,
+      id,
+      name,
+      ...rest
     },
-    [decimalPlaces, keepCursorAtEnd, onValueChange],
-  );
+    ref
+  ) => {
+    // displayValue: o que aparece no input
+    const [displayValue, setDisplayValue] = useState<string>(() => {
+      if (value == null || value === 0) return "";
+      return formatBRLCurrency(value);
+    });
 
-  const handleFocus = useCallback(() => {
-    focusedRef.current = true;
-    keepCursorAtEnd();
-  }, [keepCursorAtEnd]);
+    // Controla se o componente está montado para evitar updates em componentes desmontados
+    const isMounted = useRef(true);
+    useEffect(() => {
+      isMounted.current = true;
+      return () => { isMounted.current = false; };
+    }, []);
 
-  const handleBlur = useCallback(() => {
-    focusedRef.current = false;
-    const valueNumber = maskedStringToNumber(displayValue, decimalPlaces);
-    setDisplayValue(formatCurrencyInput(valueNumber, decimalPlaces));
-  }, [decimalPlaces, displayValue]);
+    // Sincroniza o displayValue quando o valor externo muda (ex: reset de formulário)
+    const prevValueRef = useRef<number | null | undefined>(value);
+    useEffect(() => {
+      if (!isMounted.current) return;
+      // Só sincroniza se o valor externo mudou e não está sendo editado pelo usuário
+      if (prevValueRef.current !== value) {
+        prevValueRef.current = value;
+        if (value == null || value === 0) {
+          setDisplayValue("");
+        } else {
+          setDisplayValue(formatBRLCurrency(value));
+        }
+      }
+    }, [value]);
 
-  const sizeClass = {
-    sm: "h-8 text-sm",
-    md: "h-9 text-sm",
-    lg: "h-10 text-base",
-  }[size];
+    const handleChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        const formatted = maskCurrencyInput(e.target.value);
+        setDisplayValue(formatted);
+        prevValueRef.current = unmaskCurrencyInput(formatted);
+        onValueChange?.(unmaskCurrencyInput(formatted));
+      },
+      [onValueChange]
+    );
 
-  return (
-    <div className="relative flex items-center">
-      {!noPrefix && (
-        <span className="absolute left-3 z-10 select-none font-mono text-xs text-muted-foreground pointer-events-none">
-          R$
-        </span>
-      )}
-      <Input
-        ref={inputRef}
+    const inputElement = (
+      <input
+        ref={ref}
         id={id}
         name={name}
         type="text"
         inputMode="numeric"
         value={displayValue}
         onChange={handleChange}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
         placeholder={placeholder}
         disabled={disabled}
-        autoComplete="off"
+        required={required}
         className={cn(
-          sizeClass,
-          !noPrefix && "pl-9",
-          "font-mono tabular-nums",
-          disabled && "cursor-not-allowed opacity-50",
-          className,
+          "w-full rounded border border-gray-300 px-3 py-2 text-right font-mono text-sm tabular-nums",
+          "focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400",
+          disabled && "cursor-not-allowed bg-gray-50 opacity-60",
+          className
         )}
+        autoComplete="off"
+        {...rest}
       />
-    </div>
-  );
-}
+    );
 
-export function CurrencyInputCompact({
-  value,
-  onValueChange,
-  disabled,
-  className,
-}: Pick<CurrencyInputProps, "value" | "onValueChange" | "disabled" | "className">) {
-  return (
-    <CurrencyInput
-      value={value}
-      onValueChange={onValueChange}
-      disabled={disabled}
-      className={cn("h-8 text-sm", className)}
-      noPrefix
-      placeholder="0,00"
-    />
-  );
-}
+    if (label) {
+      return (
+        <div className={cn("space-y-1", wrapperClassName)}>
+          <label
+            htmlFor={id}
+            className="block text-xs font-semibold text-gray-600"
+          >
+            {label}
+            {required && <span className="ml-0.5 text-red-500">*</span>}
+          </label>
+          {inputElement}
+        </div>
+      );
+    }
+
+    return inputElement;
+  }
+);
+
+CurrencyInput.displayName = "CurrencyInput";
