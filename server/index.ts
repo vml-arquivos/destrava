@@ -2857,6 +2857,40 @@ async function startServer() {
     }
   });
 
+  // ─── CNPJ PROXY ───────────────────────────────────────────────────────────
+  // Proxy para BrasilAPI — mantém chamada externa no backend, evita CORS no frontend
+  app.get("/api/cnpj/:cnpj", auth, async (req: Request, res: Response) => {
+    const raw = (req.params.cnpj || '').replace(/\D/g, '');
+    if (raw.length !== 14) {
+      res.status(400).json({ error: 'CNPJ deve ter 14 dígitos.' });
+      return;
+    }
+    try {
+      const upstream = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${raw}`, {
+        headers: { 'User-Agent': 'destrava-credito/1.0' },
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (upstream.status === 404) {
+        res.status(404).json({ error: 'CNPJ não encontrado na Receita Federal.' });
+        return;
+      }
+      if (!upstream.ok) {
+        res.status(502).json({ error: 'BrasilAPI retornou erro. Tente novamente.' });
+        return;
+      }
+      const data = await upstream.json();
+      res.json(data);
+    } catch (err: unknown) {
+      const isTimeout = err instanceof Error && err.name === 'TimeoutError';
+      console.error('[GET /api/cnpj]', err);
+      res.status(502).json({
+        error: isTimeout
+          ? 'Tempo esgotado ao consultar a Receita Federal.'
+          : 'Erro ao consultar CNPJ.',
+      });
+    }
+  });
+
   // ─── TRIAGEM API ──────────────────────────────────────────────────────────
   app.get("/api/triagem", auth, async (req: Request, res: Response) => {
     try {
