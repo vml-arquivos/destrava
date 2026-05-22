@@ -5202,33 +5202,31 @@ ${(temTest1 || temTest2) ? `
   });
 
   /**
-   * Mescla o PDF do contrato com documentos anexos (imagens e PDFs) sem cortar conteúdo.
+   * Mescla o PDF do contrato com documentos anexos (imagens e PDFs) sem criar páginas em branco.
    *
-   * Regras implementadas:
-   * - o contrato principal permanece intacto;
-   * - cada arquivo enviado vira um ANEXO numerado;
-   * - páginas PDF originais são encaixadas proporcionalmente em A4, sem crop;
-   * - imagens são reduzidas e centralizadas em A4, preservando proporção;
-   * - todas as páginas de anexo recebem rodapé e marca d'água com o número do contrato;
-   * - a ordem dos anexos é exatamente a ordem recebida do formulário.
+   * Regras aplicadas:
+   * - Não cria capa separada/folha quase vazia para o anexo.
+   * - O conteúdo do anexo entra na própria página numerada do anexo.
+   * - PDFs anexados mantêm suas páginas originais completas, sem corte.
+   * - Imagens são encaixadas proporcionalmente em A4 retrato ou paisagem, conforme orientação da imagem.
+   * - Todas as páginas anexas recebem marca d'água com o número do contrato.
+   * - Todas as páginas anexas recebem rodapé vinculando o arquivo ao contrato.
    */
   async function mergeAnexosNoPdf(
     contratoPath: string,
     anexos: Array<{ buffer: Buffer; mimetype: string; categoria: string; descricao: string }>,
     numeroContrato?: string,
   ): Promise<string> {
-    if (anexos.length === 0) return contratoPath;
+    const anexosValidos = (anexos || []).filter((a) => a?.buffer?.length);
+    if (anexosValidos.length === 0) return contratoPath;
 
     const { PDFDocument, rgb, StandardFonts, degrees } = await import('pdf-lib');
 
-    const A4_WIDTH = 595.28;
-    const A4_HEIGHT = 841.89;
-    const SAFE_MARGIN_X = 42;
-    const SAFE_MARGIN_TOP = 42;
-    const SAFE_MARGIN_BOTTOM = 58;
-    const WATERMARK_TEXT = numeroContrato
-      ? `ANEXO DO CONTRATO Nº ${numeroContrato}`
-      : 'ANEXO DO CONTRATO';
+    const A4_RETRATO: [number, number] = [595.28, 841.89];
+    const A4_PAISAGEM: [number, number] = [841.89, 595.28];
+    const SAFE_MARGIN = 24;
+    const FIRST_PAGE_HEADER_HEIGHT = 34;
+    const FOOTER_HEIGHT = 22;
 
     const contratoPdfBytes = fs.readFileSync(contratoPath);
     const pdfFinal = await PDFDocument.load(contratoPdfBytes);
@@ -5236,176 +5234,145 @@ ${(temTest1 || temTest2) ? `
     const helvetica = await pdfFinal.embedFont(StandardFonts.Helvetica);
 
     const LABEL_CATEGORIA: Record<string, string> = {
-      rg_frente:             'RG — Frente',
-      rg_verso:              'RG — Verso',
-      cnh_frente:            'CNH — Frente',
-      cnh_verso:             'CNH — Verso',
-      comprovante_endereco:  'Comprovante de Endereço',
-      contrato_social:       'Contrato Social',
-      alteracao_contratual:  'Alteração Contratual',
-      procuracao:            'Procuração',
-      rating_scr:            'Rating SCR / BACEN',
-      boa_vista:             'Consulta Boa Vista',
-      cemprot:               'Consulta CEMPROT',
-      cenprot:               'Consulta CENPROT',
-      serasa:                'Consulta Serasa',
-      spc:                   'Consulta SPC',
-      receita_federal:       'Consulta Receita Federal',
-      outros:                'Documento Anexo',
+      rg_frente: 'RG — Frente',
+      rg_verso: 'RG — Verso',
+      cnh_frente: 'CNH — Frente',
+      cnh_verso: 'CNH — Verso',
+      comprovante_endereco: 'Comprovante de Endereço',
+      contrato_social: 'Contrato Social',
+      alteracao_contratual: 'Alteração Contratual',
+      procuracao: 'Procuração',
+      rating_scr: 'Rating SCR / BACEN',
+      boa_vista: 'Consulta Boa Vista',
+      cemprot: 'Consulta CEMPROT',
+      serasa: 'Consulta Serasa',
+      spc: 'Consulta SPC',
+      receita_federal: 'Consulta Receita Federal',
+      outros: 'Documento Anexo',
     };
 
-    function drawWatermarkAndFooter(page: any, labelCat: string) {
-      const { width, height } = page.getSize();
+    function fitInside(srcW: number, srcH: number, maxW: number, maxH: number) {
+      const scale = Math.min(maxW / srcW, maxH / srcH);
+      return { width: srcW * scale, height: srcH * scale, scale };
+    }
 
-      // Marca d'água diagonal por cima do anexo. A opacidade baixa mantém leitura/impressão.
-      page.drawText(WATERMARK_TEXT, {
-        x: width * 0.16,
-        y: height * 0.43,
+    function drawWatermark(page: any, contratoNumero?: string) {
+      if (!contratoNumero) return;
+      const { width, height } = page.getSize();
+      const text = `ANEXO DO CONTRATO Nº ${contratoNumero}`;
+      page.drawText(text, {
+        x: width * 0.11,
+        y: height * 0.30,
+        size: Math.max(18, Math.min(width, height) * 0.045),
         font: helveticaBold,
-        size: 22,
-        color: rgb(0.45, 0.45, 0.45),
-        opacity: 0.16,
+        color: rgb(0.62, 0.62, 0.62),
+        opacity: 0.20,
         rotate: degrees(38),
       });
+    }
 
+    function drawFooter(page: any, labelCat: string, contratoNumero?: string) {
+      const { width } = page.getSize();
       page.drawText(labelCat, {
-        x: SAFE_MARGIN_X,
-        y: 24,
+        x: SAFE_MARGIN,
+        y: 12,
         font: helvetica,
-        size: 8,
-        color: rgb(0.42, 0.42, 0.42),
+        size: 7,
+        color: rgb(0.45, 0.45, 0.45),
       });
-
-      if (numeroContrato) {
-        page.drawText(`Anexo contrato nº: ${numeroContrato}`, {
-          x: width - 205,
-          y: 24,
+      if (contratoNumero) {
+        page.drawText(`Anexo contrato nº: ${contratoNumero}`, {
+          x: Math.max(SAFE_MARGIN, width - 205),
+          y: 12,
           font: helvetica,
-          size: 8,
-          color: rgb(0.42, 0.42, 0.42),
+          size: 7,
+          color: rgb(0.45, 0.45, 0.45),
         });
       }
     }
 
-    function drawCapaAnexo(numAnexo: number, labelCat: string, descricao: string) {
-      const capaPage = pdfFinal.addPage([A4_WIDTH, A4_HEIGHT]);
-      const { width, height } = capaPage.getSize();
-
-      capaPage.drawRectangle({ x: 0, y: height - 80, width, height: 80, color: rgb(0.106, 0.227, 0.549) });
-      capaPage.drawRectangle({ x: 0, y: height - 84, width, height: 4, color: rgb(0.945, 0.769, 0.059) });
-
-      capaPage.drawText(`ANEXO Nº ${numAnexo}`, {
-        x: 40,
-        y: height - 52,
-        font: helveticaBold,
-        size: 22,
+    function drawFirstPageHeader(page: any, numAnexo: number, labelCat: string, contratoNumero?: string) {
+      const { width, height } = page.getSize();
+      const title = `ANEXO Nº ${numAnexo} — ${labelCat.toUpperCase()}`;
+      page.drawRectangle({
+        x: SAFE_MARGIN,
+        y: height - SAFE_MARGIN - FIRST_PAGE_HEADER_HEIGHT,
+        width: width - SAFE_MARGIN * 2,
+        height: FIRST_PAGE_HEADER_HEIGHT,
         color: rgb(1, 1, 1),
+        borderColor: rgb(0.82, 0.82, 0.82),
+        borderWidth: 0.5,
+        opacity: 0.92,
       });
-
-      capaPage.drawText(labelCat.toUpperCase(), {
-        x: 40,
-        y: height - 120,
+      page.drawText(title, {
+        x: SAFE_MARGIN + 8,
+        y: height - SAFE_MARGIN - 21,
         font: helveticaBold,
-        size: 14,
+        size: 10,
         color: rgb(0.106, 0.227, 0.549),
       });
-
-      if (descricao && descricao !== labelCat) {
-        capaPage.drawText(descricao, {
-          x: 40,
-          y: height - 145,
+      if (contratoNumero) {
+        page.drawText(`Contrato nº: ${contratoNumero}`, {
+          x: SAFE_MARGIN + 8,
+          y: height - SAFE_MARGIN - 32,
           font: helvetica,
-          size: 11,
-          color: rgb(0.3, 0.3, 0.3),
+          size: 7,
+          color: rgb(0.25, 0.25, 0.25),
         });
       }
-
-      if (numeroContrato) {
-        capaPage.drawText(`Contrato nº: ${numeroContrato}`, {
-          x: 40,
-          y: height - 165,
-          font: helveticaBold,
-          size: 9,
-          color: rgb(0.15, 0.15, 0.15),
-        });
-      }
-
-      capaPage.drawLine({
-        start: { x: 40, y: height - 185 },
-        end: { x: width - 40, y: height - 185 },
-        thickness: 1,
-        color: rgb(0.8, 0.8, 0.8),
-      });
-
-      drawWatermarkAndFooter(capaPage, labelCat);
     }
 
-    for (let i = 0; i < anexos.length; i++) {
-      const anexo = anexos[i];
-      const labelCat = LABEL_CATEGORIA[anexo.categoria] ?? 'Documento Anexo';
+    for (let i = 0; i < anexosValidos.length; i++) {
+      const anexo = anexosValidos[i];
+      const labelCat = LABEL_CATEGORIA[anexo.categoria] ?? anexo.descricao ?? 'Documento Anexo';
       const numAnexo = i + 1;
-
-      drawCapaAnexo(numAnexo, labelCat, anexo.descricao || labelCat);
 
       if (anexo.mimetype === 'application/pdf') {
         const pdfAnexo = await PDFDocument.load(anexo.buffer, { ignoreEncryption: true });
-        const pageIndices = pdfAnexo.getPageIndices();
+        const paginas = await pdfFinal.copyPages(pdfAnexo, pdfAnexo.getPageIndices());
 
-        for (const pageIndex of pageIndices) {
-          const [embeddedPage] = await pdfFinal.embedPdf(anexo.buffer, [pageIndex]);
-          const contentPage = pdfFinal.addPage([A4_WIDTH, A4_HEIGHT]);
-
-          const availableW = A4_WIDTH - SAFE_MARGIN_X * 2;
-          const availableH = A4_HEIGHT - SAFE_MARGIN_TOP - SAFE_MARGIN_BOTTOM;
-          const scale = Math.min(
-            availableW / embeddedPage.width,
-            availableH / embeddedPage.height,
-            1, // nunca amplia PDF original; só reduz quando necessário para não cortar
-          );
-          const drawW = embeddedPage.width * scale;
-          const drawH = embeddedPage.height * scale;
-          const x = (A4_WIDTH - drawW) / 2;
-          const y = SAFE_MARGIN_BOTTOM + (availableH - drawH) / 2;
-
-          contentPage.drawPage(embeddedPage, { x, y, width: drawW, height: drawH });
-          drawWatermarkAndFooter(contentPage, labelCat);
-        }
+        paginas.forEach((pagina: any, pageIndex: number) => {
+          // Mantém a página original do PDF anexo. Isso evita páginas cortadas, folhas pela metade
+          // e excesso de redução quando o PDF original já está correto.
+          pdfFinal.addPage(pagina);
+          if (pageIndex === 0) drawFirstPageHeader(pagina, numAnexo, labelCat, numeroContrato);
+          drawWatermark(pagina, numeroContrato);
+          drawFooter(pagina, labelCat, numeroContrato);
+        });
       } else {
         let imgEmbed: any;
         if (anexo.mimetype === 'image/png') {
           imgEmbed = await pdfFinal.embedPng(anexo.buffer);
-        } else if (anexo.mimetype === 'image/jpeg' || anexo.mimetype === 'image/jpg') {
-          imgEmbed = await pdfFinal.embedJpg(anexo.buffer);
         } else {
-          throw new Error(`Tipo de imagem não suportado para anexo: ${anexo.mimetype}`);
+          imgEmbed = await pdfFinal.embedJpg(anexo.buffer);
         }
 
-        const imgPage = pdfFinal.addPage([A4_WIDTH, A4_HEIGHT]);
-        const availableW = A4_WIDTH - SAFE_MARGIN_X * 2;
-        const availableH = A4_HEIGHT - SAFE_MARGIN_TOP - SAFE_MARGIN_BOTTOM;
+        const isLandscape = imgEmbed.width > imgEmbed.height;
+        const imgPage = pdfFinal.addPage(isLandscape ? A4_PAISAGEM : A4_RETRATO);
+        const { width, height } = imgPage.getSize();
 
-        // Imagens ficam menores, centralizadas e sempre inteiras na folha.
-        const scale = Math.min(
-          availableW / imgEmbed.width,
-          availableH / imgEmbed.height,
-          0.92,
-        );
-        const iw = imgEmbed.width * scale;
-        const ih = imgEmbed.height * scale;
-        const ix = (A4_WIDTH - iw) / 2;
-        const iy = SAFE_MARGIN_BOTTOM + (availableH - ih) / 2;
+        drawFirstPageHeader(imgPage, numAnexo, labelCat, numeroContrato);
+
+        const availableX = SAFE_MARGIN;
+        const availableY = FOOTER_HEIGHT + SAFE_MARGIN;
+        const availableW = width - SAFE_MARGIN * 2;
+        const availableH = height - FIRST_PAGE_HEADER_HEIGHT - FOOTER_HEIGHT - SAFE_MARGIN * 3;
+        const fitted = fitInside(imgEmbed.width, imgEmbed.height, availableW, availableH);
+        const ix = availableX + (availableW - fitted.width) / 2;
+        const iy = availableY + (availableH - fitted.height) / 2;
 
         imgPage.drawRectangle({
-          x: ix - 5,
-          y: iy - 5,
-          width: iw + 10,
-          height: ih + 10,
-          borderColor: rgb(0.84, 0.84, 0.84),
-          borderWidth: 1,
+          x: ix - 3,
+          y: iy - 3,
+          width: fitted.width + 6,
+          height: fitted.height + 6,
           color: rgb(0.985, 0.985, 0.985),
+          borderColor: rgb(0.82, 0.82, 0.82),
+          borderWidth: 0.5,
         });
-        imgPage.drawImage(imgEmbed, { x: ix, y: iy, width: iw, height: ih });
-        drawWatermarkAndFooter(imgPage, labelCat);
+        imgPage.drawImage(imgEmbed, { x: ix, y: iy, width: fitted.width, height: fitted.height });
+        drawWatermark(imgPage, numeroContrato);
+        drawFooter(imgPage, labelCat, numeroContrato);
       }
     }
 
