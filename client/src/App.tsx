@@ -53,9 +53,9 @@ import ColaboradorMeuCRM from "./pages/colaborador/MeuCRM";
 import Contadores from "./pages/colaborador/Contadores";
 import ClientesPF from "./pages/colaborador/ClientesPF";
 import AcompanhamentoBancario from "./pages/colaborador/AcompanhamentoBancario";
-import CadastroEmpresa from "./pages/colaborador/CadastroEmpresa";
 import AcompanhamentoFinanceiro from "./pages/colaborador/AcompanhamentoFinanceiro";
 import WeeklyMonitorPage from "./pages/colaborador/WeeklyMonitorPage";
+import CadastroEmpresa from "./pages/colaborador/CadastroEmpresa";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CargoRoute from "./components/CargoRoute";
 
@@ -161,13 +161,6 @@ function Router() {
           </ProtectedRoute>
         )}
       </Route>
-      <Route path="/colaborador/empresas/novo">
-        {() => (
-          <ProtectedRoute>
-            <CadastroEmpresa />
-          </ProtectedRoute>
-        )}
-      </Route>
       <Route path="/colaborador/empresas">
         {() => (
           <ProtectedRoute>
@@ -246,6 +239,14 @@ function Router() {
             <CargoRoute allowedCargos={['administrador', 'diretor']}>
               <Contadores />
             </CargoRoute>
+          </ProtectedRoute>
+        )}
+      </Route>
+      {/* Cadastro de Empresas */}
+      <Route path="/colaborador/cadastro-empresa">
+        {() => (
+          <ProtectedRoute>
+            <CadastroEmpresa />
           </ProtectedRoute>
         )}
       </Route>
