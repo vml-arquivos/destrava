@@ -1,6 +1,12 @@
 import { useState, useCallback, useRef } from 'react';
 import { fetchCNPJData, cleanDigits, type CNPJData } from '../utils/cnpj';
 
+// Este hook fornece uma API simples para consulta de CNPJ. Ele mantém
+// internamente o status da consulta (idle, loading, found, error) e
+// permite debouncing das requisições. Utilização típica:
+// const { status, error, lookup, reset } = useCNPJLookup();
+// lookup('00.000.000/0001-00', data => {/* ... preencher formulário ... */});
+
 type Status = 'idle' | 'loading' | 'found' | 'error';
 
 interface UseCNPJLookupReturn {
@@ -18,13 +24,13 @@ export function useCNPJLookup(): UseCNPJLookupReturn {
   const lookup = useCallback(
     (cnpj: string, onSuccess: (data: CNPJData) => void) => {
       const clean = cleanDigits(cnpj);
+      // Só consulta quando houver 14 dígitos válidos
       if (clean.length !== 14) return;
-
+      // Cancela qualquer consulta pendente
       if (timerRef.current) clearTimeout(timerRef.current);
-
       setStatus('loading');
       setError(null);
-
+      // Debounce de 600ms para evitar múltiplas requisições em sequência
       timerRef.current = setTimeout(async () => {
         try {
           const data = await fetchCNPJData(cnpj);
@@ -35,7 +41,7 @@ export function useCNPJLookup(): UseCNPJLookupReturn {
           setError(msg);
           setStatus('error');
         }
-      }, 600); // debounce 600ms
+      }, 600);
     },
     [],
   );
