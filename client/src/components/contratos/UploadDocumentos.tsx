@@ -11,7 +11,7 @@
  *   Outros       → Documentos genéricos
  *
  * Funcionalidades:
- *   ✅ Upload de imagens (JPG, PNG, WEBP) e PDFs
+ *   ✅ Upload de imagens (JPG, PNG) e PDFs
  *   ✅ Preview visual inline para imagens
  *   ✅ Ícone + nome do arquivo para PDFs
  *   ✅ Reordenação por drag (ordem de impressão)
@@ -166,7 +166,7 @@ export function UploadDocumentos({ documentos, onChange, maxArquivos = 30, disab
       });
 
       if (invalidos.length > 0)
-        setErroTipo(`Formato não suportado: ${invalidos.join(', ')}. Use JPG, PNG, WEBP ou PDF.`);
+        setErroTipo(`Formato não suportado: ${invalidos.join(', ')}. Use JPG, PNG ou PDF.`);
       if (novos.length > 0)
         onChange([...documentos, ...novos]);
     },
