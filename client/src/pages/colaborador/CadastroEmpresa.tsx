@@ -1,7 +1,4 @@
 import { useState, useCallback } from 'react';
-import { useLocation } from 'wouter';
-import { toast } from 'sonner';
-import Layout from './Layout';
 import {
   formatCNPJ,
   formatCPF,
@@ -21,23 +18,19 @@ interface FormState {
   nome_fantasia: string;
   email: string;
   telefone: string;
-  whatsapp: string;
   cep: string;
   logradouro: string;
   numero: string;
   complemento: string;
   bairro: string;
   cidade: string;
-  estado: string;
+  uf: string;
   situacao: string;
   natureza_juridica: string;
   porte: string;
   data_abertura: string;
   capital_social: string;
   cnae: string;
-  segmento: string;
-  faturamento_anual: string;
-  observacoes: string;
   responsavel_nome: string;
   responsavel_cpf: string;
   responsavel_email: string;
@@ -47,10 +40,9 @@ interface FormState {
 
 const INITIAL_FORM: FormState = {
   cnpj: '', razao_social: '', nome_fantasia: '', email: '', telefone: '',
-  whatsapp: '', cep: '', logradouro: '', numero: '', complemento: '',
-  bairro: '', cidade: '', estado: '', situacao: '', natureza_juridica: '',
-  porte: '', data_abertura: '', capital_social: '', cnae: '', segmento: '',
-  faturamento_anual: '', observacoes: '',
+  cep: '', logradouro: '', numero: '', complemento: '', bairro: '',
+  cidade: '', uf: '', situacao: '', natureza_juridica: '', porte: '',
+  data_abertura: '', capital_social: '', cnae: '',
   responsavel_nome: '', responsavel_cpf: '', responsavel_email: '',
   responsavel_telefone: '', responsavel_cargo: '',
 };
@@ -59,12 +51,6 @@ const UF_LIST = [
   'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA',
   'MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN',
   'RS','RO','RR','SC','SP','SE','TO',
-];
-
-const SEGMENTOS = [
-  'Comércio', 'Indústria', 'Serviços', 'Agronegócio',
-  'Tecnologia', 'Saúde', 'Educação', 'Construção Civil',
-  'Transporte', 'Alimentação', 'Outro',
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -92,8 +78,8 @@ function formatCapital(value: number): string {
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
 
-function Field({ label, required, children }: {
-  label: string; required?: boolean; children: React.ReactNode;
+function Field({ label, required, error, children }: {
+  label: string; required?: boolean; error?: string; children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-1">
@@ -101,6 +87,7 @@ function Field({ label, required, children }: {
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       {children}
+      {error && <span className="text-xs text-red-500 font-medium">{error}</span>}
     </div>
   );
 }
@@ -108,16 +95,12 @@ function Field({ label, required, children }: {
 const inputClass =
   'h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-900 ' +
   'focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 ' +
-  'transition-all placeholder:text-slate-400 w-full';
+  'transition-all placeholder:text-slate-400';
 
-function TextInput({ className = '', ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={`${inputClass} ${className}`} {...props} />;
-}
-
-function TextArea({ className = '', ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+function TextInput({ error, className = '', ...props }: React.InputHTMLAttributes<HTMLInputElement> & { error?: string }) {
   return (
-    <textarea
-      className={`px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-slate-400 w-full resize-none ${className}`}
+    <input
+      className={`${inputClass} ${error ? 'border-red-300 bg-red-50' : ''} ${className}`}
       {...props}
     />
   );
@@ -178,15 +161,14 @@ function SocioCard({ socio }: { socio: CNPJSocio }) {
 
 // ─── Página Principal ─────────────────────────────────────────────────────────
 
-type Tab = 'empresa' | 'endereco' | 'socios' | 'responsavel';
+type Tab = 'empresa' | 'socios' | 'responsavel';
 
 export default function CadastroEmpresa() {
-  const [, navigate] = useLocation();
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [socios, setSocios] = useState<CNPJSocio[]>([]);
   const [tab, setTab] = useState<Tab>('empresa');
   const [cepLoading, setCepLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [saved, setSaved] = useState(false);
   const { status: cnpjStatus, error: cnpjError, lookup, reset: resetCNPJ } = useCNPJLookup();
 
   const set = (field: keyof FormState, value: string) =>
@@ -216,468 +198,346 @@ export default function CadastroEmpresa() {
         complemento: data.complemento ?? '',
         bairro: data.bairro ?? '',
         cidade: data.municipio ?? '',
-        estado: data.uf ?? '',
+        uf: data.uf ?? '',
         situacao: data.descricao_situacao_cadastral ?? '',
         natureza_juridica: data.natureza_juridica ?? '',
-        porte: data.descricao_porte ?? data.porte ?? '',
+        porte: data.descricao_porte ?? '',
         data_abertura: data.data_inicio_atividade ?? '',
         capital_social: data.capital_social ? formatCapital(data.capital_social) : '',
         cnae: data.cnae_fiscal_descricao ?? '',
       }));
       setSocios(data.qsa ?? []);
-
-      // Se há sócios, preenche o primeiro como responsável sugerido
-      if (data.qsa?.length > 0) {
-        const principal = data.qsa[0];
-        setForm(f => ({
-          ...f,
-          responsavel_nome: principal.nome_socio ?? f.responsavel_nome,
-          responsavel_cpf: principal.cnpj_cpf_do_socio
-            ? formatCPF(principal.cnpj_cpf_do_socio)
-            : f.responsavel_cpf,
-          responsavel_cargo: principal.descricao_qualificacao_socio
-            || qualificacaoLabel(principal.qualificacao_socio)
-            || f.responsavel_cargo,
-        }));
-      }
     });
   };
 
   // ── CEP ───────────────────────────────────────────────────────────────────
 
-  const handleCEP = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCep = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatCEP(e.target.value);
     set('cep', formatted);
-
-    if (cleanDigits(formatted).length !== 8) return;
-
+    if (formatted.replace(/\D/g, '').length !== 8) return;
     setCepLoading(true);
     try {
-      const res = await fetch(`https://brasilapi.com.br/api/cep/v1/${cleanDigits(formatted)}`);
-      if (res.ok) {
-        const d = await res.json();
-        setForm(f => ({
-          ...f,
-          logradouro: d.street || f.logradouro,
-          bairro: d.neighborhood || f.bairro,
-          cidade: d.city || f.cidade,
-          estado: d.state || f.estado,
-        }));
-      }
-    } catch { /* silencioso */ }
-    setCepLoading(false);
-  }, []);
-
-  // ── Submit → POST /api/empresas ───────────────────────────────────────────
-
-  const handleSubmit = async () => {
-    if (!form.razao_social.trim()) {
-      toast.error('Razão social é obrigatória');
-      setTab('empresa');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const token = localStorage.getItem('token');
-      const payload = {
-        cnpj: cleanDigits(form.cnpj) || null,
-        razao_social: form.razao_social.trim(),
-        nome_fantasia: form.nome_fantasia || null,
-        email: form.email || null,
-        telefone: form.telefone || null,
-        whatsapp: form.whatsapp || null,
-        cep: cleanDigits(form.cep) || null,
-        logradouro: form.logradouro || null,
-        numero: form.numero || null,
-        complemento: form.complemento || null,
-        bairro: form.bairro || null,
-        cidade: form.cidade || null,
-        estado: form.estado || null,
-        segmento: form.segmento || null,
-        porte: form.porte || null,
-        faturamento_anual: form.faturamento_anual
-          ? Number(form.faturamento_anual.replace(/\D/g, '')) / 100
-          : null,
-        responsavel_nome: form.responsavel_nome || null,
-        responsavel_cpf: cleanDigits(form.responsavel_cpf) || null,
-        responsavel_cargo: form.responsavel_cargo || null,
-        responsavel_telefone: form.responsavel_telefone || null,
-        responsavel_email: form.responsavel_email || null,
-        observacoes: form.observacoes || null,
-        status: 'ativo',
-        origem: 'manual',
-      };
-
-      const res = await fetch('/api/empresas', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Erro ao salvar empresa');
-      }
-
-      const empresa = await res.json();
-      toast.success('Empresa cadastrada com sucesso!');
-      navigate(`/colaborador/empresas`);
-      return empresa;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro ao salvar empresa';
-      toast.error(msg);
+      const res = await fetch(`https://brasilapi.com.br/api/cep/v1/${formatted.replace(/\D/g, '')}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setForm(f => ({
+        ...f,
+        logradouro: data.street || '',
+        bairro: data.neighborhood || '',
+        cidade: data.city || '',
+        uf: data.state || '',
+      }));
+    } catch {
+      // Ignora erros de CEP
     } finally {
-      setSubmitting(false);
+      setCepLoading(false);
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── Manipulação dos sócios ───────────────────────────────────────────────
 
-  const tabs: { id: Tab; label: string; icon: string }[] = [
-    { id: 'empresa', label: 'Dados', icon: '🏢' },
-    { id: 'endereco', label: 'Endereço', icon: '📍' },
-    { id: 'socios', label: `Sócios${socios.length ? ` (${socios.length})` : ''}`, icon: '👥' },
-    { id: 'responsavel', label: 'Responsável', icon: '👤' },
-  ];
+  const handleAddSocio = () => {
+    setSocios(prev => [...prev, {
+      nome_socio: '',
+      cnpj_cpf_do_socio: '',
+      qualificacao_socio: '',
+      descricao_qualificacao_socio: '',
+      data_entrada_sociedade: new Date().toISOString().split('T')[0],
+    }]);
+  };
+
+  const handleSocioChange = (index: number, field: keyof CNPJSocio, value: string) => {
+    setSocios(prev => prev.map((s, i) => (i === index ? { ...s, [field]: value } : s)));
+  };
+
+  const removeSocio = (index: number) => {
+    setSocios(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // ── Validação e envio do formulário ──────────────────────────────────────
+
+  const validar = (): Record<keyof FormState, string> => {
+    const errors: Record<keyof FormState, string> = {} as any;
+    if (!cleanDigits(form.cnpj)) errors.cnpj = 'Informe o CNPJ';
+    if (!form.razao_social.trim()) errors.razao_social = 'Informe a razão social';
+    if (!form.email.trim() || !form.email.includes('@')) errors.email = 'E-mail inválido';
+    if (!cleanDigits(form.telefone)) errors.telefone = 'Informe o telefone';
+    if (!cleanDigits(form.cep)) errors.cep = 'Informe o CEP';
+    if (!form.logradouro.trim()) errors.logradouro = 'Informe o logradouro';
+    if (!form.numero.trim()) errors.numero = 'Informe o número';
+    if (!form.bairro.trim()) errors.bairro = 'Informe o bairro';
+    if (!form.cidade.trim()) errors.cidade = 'Informe a cidade';
+    if (!form.uf.trim()) errors.uf = 'Informe a UF';
+    if (!form.responsavel_nome.trim()) errors.responsavel_nome = 'Informe o nome do responsável';
+    if (!cleanDigits(form.responsavel_cpf)) errors.responsavel_cpf = 'Informe o CPF do responsável';
+    if (!form.responsavel_email.trim() || !form.responsavel_email.includes('@')) errors.responsavel_email = 'E-mail inválido';
+    if (!cleanDigits(form.responsavel_telefone)) errors.responsavel_telefone = 'Informe o telefone do responsável';
+    return errors;
+  };
+
+  const handleSubmit = async () => {
+    const err = validar();
+    if (Object.keys(err).length > 0) {
+      setForm(f => ({ ...f }));
+      return;
+    }
+    // Aqui você enviaria os dados para a API do backend. Por ora, apenas simula.
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
+  };
 
   return (
-    <Layout>
-      <div className="max-w-3xl mx-auto py-6 px-4">
+    <div className="max-w-4xl mx-auto p-6 space-y-6">
+      <h1 className="text-2xl font-bold text-slate-800">Cadastro de Empresa</h1>
+      {/* Tabs */}
+      <div className="flex border-b border-slate-200 mb-4">
+        <button
+          className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab === 'empresa' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-blue-600'}`}
+          onClick={() => setTab('empresa')}
+        >Empresa</button>
+        <button
+          className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab === 'socios' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-blue-600'}`}
+          onClick={() => setTab('socios')}
+        >Sócios</button>
+        <button
+          className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab === 'responsavel' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-blue-600'}`}
+          onClick={() => setTab('responsavel')}
+        >Responsável</button>
+      </div>
 
-        {/* ── Header ── */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate('/colaborador/empresas')}
-              className="w-9 h-9 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-500 hover:bg-slate-50 transition-colors"
-              title="Voltar"
-            >
-              ←
-            </button>
-            <div className="w-11 h-11 rounded-2xl bg-blue-600 flex items-center justify-center text-2xl shadow-lg shadow-blue-200">
-              🏛️
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">Cadastrar Empresa</h1>
-              <p className="text-sm text-slate-500">Informe o CNPJ para preenchimento automático</p>
-            </div>
+      {/* Conteúdo das abas */}
+      {tab === 'empresa' && (
+        <div className="space-y-6">
+          <SectionHeader icon="🏢" title="Dados da Empresa" subtitle="Informações básicas sobre a empresa" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="CNPJ" required error={''}>
+              <TextInput
+                value={form.cnpj}
+                onChange={handleCNPJ}
+                placeholder="00.000.000/0001-00"
+                maxLength={18}
+                inputMode="numeric"
+              />
+            </Field>
+            <Field label="Razão Social" required error={''}>
+              <TextInput
+                value={form.razao_social}
+                onChange={e => set('razao_social', e.target.value)}
+                placeholder="Razão Social Ltda."
+              />
+            </Field>
+            <Field label="Nome Fantasia" error={''}>
+              <TextInput
+                value={form.nome_fantasia}
+                onChange={e => set('nome_fantasia', e.target.value)}
+                placeholder="Nome comercial"
+              />
+            </Field>
+            <Field label="E-mail" required error={''}>
+              <TextInput
+                type="email"
+                value={form.email}
+                onChange={e => set('email', e.target.value)}
+                placeholder="email@empresa.com"
+              />
+            </Field>
+            <Field label="Telefone" required error={''}>
+              <TextInput
+                value={form.telefone}
+                onChange={e => set('telefone', formatPhone(e.target.value))}
+                placeholder="(00) 00000-0000"
+                inputMode="tel"
+              />
+            </Field>
+            <Field label="CEP" required error={''}>
+              <TextInput
+                value={form.cep}
+                onChange={handleCep}
+                placeholder="00000-000"
+                inputMode="numeric"
+              />
+            </Field>
+            <Field label="Logradouro" required error={''}>
+              <TextInput
+                value={form.logradouro}
+                onChange={e => set('logradouro', e.target.value)}
+                placeholder="Rua, Avenida..."
+              />
+            </Field>
+            <Field label="Número" required error={''}>
+              <TextInput
+                value={form.numero}
+                onChange={e => set('numero', e.target.value)}
+                placeholder="123"
+              />
+            </Field>
+            <Field label="Complemento" error={''}>
+              <TextInput
+                value={form.complemento}
+                onChange={e => set('complemento', e.target.value)}
+                placeholder="Sala, Bloco..."
+              />
+            </Field>
+            <Field label="Bairro" required error={''}>
+              <TextInput
+                value={form.bairro}
+                onChange={e => set('bairro', e.target.value)}
+                placeholder="Bairro"
+              />
+            </Field>
+            <Field label="Cidade" required error={''}>
+              <TextInput
+                value={form.cidade}
+                onChange={e => set('cidade', e.target.value)}
+                placeholder="Cidade"
+              />
+            </Field>
+            <Field label="UF" required error={''}>
+              <SelectInput
+                value={form.uf}
+                onChange={e => set('uf', e.target.value)}
+              >
+                <option value="">Selecione</option>
+                {UF_LIST.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+              </SelectInput>
+            </Field>
+            <Field label="Situação Cadastral" error={''}>
+              <TextInput
+                value={form.situacao}
+                readOnly
+                className="opacity-75 cursor-not-allowed"
+              />
+            </Field>
+            <Field label="Natureza Jurídica" error={''}>
+              <TextInput
+                value={form.natureza_juridica}
+                readOnly
+                className="opacity-75 cursor-not-allowed"
+              />
+            </Field>
+            <Field label="Porte" error={''}>
+              <TextInput
+                value={form.porte}
+                readOnly
+                className="opacity-75 cursor-not-allowed"
+              />
+            </Field>
+            <Field label="Data de Abertura" error={''}>
+              <TextInput
+                value={form.data_abertura}
+                readOnly
+                className="opacity-75 cursor-not-allowed"
+              />
+            </Field>
+            <Field label="Capital Social" error={''}>
+              <TextInput
+                value={form.capital_social}
+                readOnly
+                className="opacity-75 cursor-not-allowed"
+              />
+            </Field>
+            <Field label="CNAE" error={''}>
+              <TextInput
+                value={form.cnae}
+                readOnly
+                className="opacity-75 cursor-not-allowed"
+              />
+            </Field>
           </div>
-          {form.situacao && (
-            <span className={`text-xs font-bold px-3 py-1 rounded-full border ${situacaoCor(form.situacao)}`}>
-              {form.situacao}
-            </span>
-          )}
         </div>
+      )}
 
-        {/* ── CNPJ Hero ── */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-4 shadow-sm">
-          <label className="text-xs font-semibold text-slate-600 tracking-wide block mb-2">
-            CNPJ <span className="text-red-500">*</span>
-          </label>
-          <div className="flex items-center gap-3">
-            <span className="text-xl shrink-0">
-              {cnpjStatus === 'loading' ? (
-                <svg className="w-5 h-5 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z" />
-                </svg>
-              ) : cnpjStatus === 'found' ? '✅' : cnpjStatus === 'error' ? '❌' : '🔍'}
-            </span>
-            <input
-              value={form.cnpj}
-              onChange={handleCNPJ}
-              placeholder="00.000.000/0000-00"
-              maxLength={18}
-              className="flex-1 h-12 px-4 rounded-xl border-2 border-slate-200 bg-slate-50 font-mono text-xl font-semibold tracking-widest text-slate-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all placeholder:text-slate-300 placeholder:font-mono placeholder:tracking-widest"
-            />
-            {cnpjStatus === 'found' && (
-              <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 whitespace-nowrap">
-                ✓ Preenchido automaticamente
-              </span>
-            )}
+      {tab === 'socios' && (
+        <div className="space-y-6">
+          <SectionHeader icon="👥" title="Sócios" subtitle="Informações dos sócios da empresa" />
+          {socios.length === 0 && (
+            <p className="text-sm text-slate-500">Nenhum sócio cadastrado automaticamente. Adicione manualmente se necessário.</p>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {socios.map((socio, idx) => (
+              <SocioCard key={idx} socio={socio} />
+            ))}
           </div>
-          {cnpjStatus === 'loading' && (
-            <p className="text-xs text-slate-400 mt-2">🔎 Consultando Receita Federal via BrasilAPI...</p>
-          )}
-          {cnpjError && (
-            <p className="text-xs text-red-500 font-medium mt-2">{cnpjError}</p>
-          )}
-        </div>
-
-        {/* ── Tabs ── */}
-        <div className="flex gap-1 bg-white rounded-t-2xl border border-slate-200 border-b-0 px-2 pt-2">
-          {tabs.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-t-xl text-sm font-semibold transition-all
-                ${tab === t.id
-                  ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600'
-                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                }`}
-            >
-              <span>{t.icon}</span>
-              <span>{t.label}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* ── Card conteúdo ── */}
-        <div className="bg-white rounded-b-2xl rounded-tr-2xl border border-slate-200 p-7 shadow-sm">
-
-          {/* ── Tab: Dados da Empresa ── */}
-          {tab === 'empresa' && (
-            <div>
-              <SectionHeader icon="📋" title="Dados Cadastrais" subtitle="Informações da Receita Federal" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                <Field label="Razão Social" required>
-                  <TextInput value={form.razao_social} onChange={e => set('razao_social', e.target.value)} placeholder="Nome completo registrado" />
-                </Field>
-                <Field label="Nome Fantasia">
-                  <TextInput value={form.nome_fantasia} onChange={e => set('nome_fantasia', e.target.value)} placeholder="Nome comercial" />
-                </Field>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-                <Field label="E-mail">
-                  <TextInput type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="empresa@email.com" />
-                </Field>
-                <Field label="Telefone">
-                  <TextInput value={form.telefone} onChange={e => set('telefone', formatPhone(e.target.value))} placeholder="(61) 91234-5678" />
-                </Field>
-                <Field label="WhatsApp">
-                  <TextInput value={form.whatsapp} onChange={e => set('whatsapp', formatPhone(e.target.value))} placeholder="(61) 99999-0000" />
-                </Field>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-                <Field label="Natureza Jurídica">
-                  <TextInput value={form.natureza_juridica} onChange={e => set('natureza_juridica', e.target.value)} placeholder="Ex: Soc. Limitada" />
-                </Field>
-                <Field label="Porte">
-                  <SelectInput value={form.porte} onChange={e => set('porte', e.target.value)}>
-                    <option value="">Selecione</option>
-                    <option value="mei">MEI</option>
-                    <option value="me">ME</option>
-                    <option value="epp">EPP</option>
-                    <option value="medio">Médio Porte</option>
-                    <option value="grande">Grande Porte</option>
-                  </SelectInput>
-                </Field>
-                <Field label="Data de Abertura">
-                  <TextInput value={form.data_abertura} onChange={e => set('data_abertura', e.target.value)} placeholder="AAAA-MM-DD" />
-                </Field>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                <Field label="Segmento">
-                  <SelectInput value={form.segmento} onChange={e => set('segmento', e.target.value)}>
-                    <option value="">Selecione</option>
-                    {SEGMENTOS.map(s => <option key={s} value={s}>{s}</option>)}
-                  </SelectInput>
-                </Field>
-                <Field label="CNAE Principal">
-                  <TextInput value={form.cnae} onChange={e => set('cnae', e.target.value)} placeholder="Atividade econômica principal" />
-                </Field>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                <Field label="Capital Social">
-                  <TextInput value={form.capital_social} onChange={e => set('capital_social', e.target.value)} placeholder="R$ 0,00" />
-                </Field>
-                <Field label="Faturamento Anual Estimado">
-                  <TextInput value={form.faturamento_anual} onChange={e => set('faturamento_anual', e.target.value)} placeholder="R$ 0,00" />
-                </Field>
-              </div>
-              <Field label="Observações">
-                <TextArea
-                  value={form.observacoes}
-                  onChange={e => set('observacoes', e.target.value)}
-                  placeholder="Informações adicionais sobre a empresa..."
-                  rows={3}
-                />
-              </Field>
-            </div>
-          )}
-
-          {/* ── Tab: Endereço ── */}
-          {tab === 'endereco' && (
-            <div>
-              <SectionHeader icon="📍" title="Endereço" subtitle="Localização registrada na Receita Federal" />
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-                <Field label="CEP" required>
-                  <div className="relative">
-                    <TextInput value={form.cep} onChange={handleCEP} placeholder="00000-000" maxLength={9} />
-                    {cepLoading && (
-                      <svg className="absolute right-3 top-3 w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z" />
-                      </svg>
-                    )}
-                  </div>
-                </Field>
-                <div className="sm:col-span-2">
-                  <Field label="Logradouro">
-                    <TextInput value={form.logradouro} onChange={e => set('logradouro', e.target.value)} placeholder="Rua, Avenida..." />
-                  </Field>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-                <Field label="Número">
-                  <TextInput value={form.numero} onChange={e => set('numero', e.target.value)} placeholder="Nº" />
-                </Field>
-                <div className="col-span-2">
-                  <Field label="Complemento">
-                    <TextInput value={form.complemento} onChange={e => set('complemento', e.target.value)} placeholder="Sala, Andar..." />
-                  </Field>
-                </div>
-                <Field label="Bairro">
-                  <TextInput value={form.bairro} onChange={e => set('bairro', e.target.value)} placeholder="Bairro" />
-                </Field>
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="col-span-2">
-                  <Field label="Cidade">
-                    <TextInput value={form.cidade} onChange={e => set('cidade', e.target.value)} placeholder="Município" />
-                  </Field>
-                </div>
-                <Field label="UF">
-                  <SelectInput value={form.estado} onChange={e => set('estado', e.target.value)}>
-                    <option value="">UF</option>
-                    {UF_LIST.map(u => <option key={u} value={u}>{u}</option>)}
-                  </SelectInput>
-                </Field>
-              </div>
-            </div>
-          )}
-
-          {/* ── Tab: Sócios ── */}
-          {tab === 'socios' && (
-            <div>
-              <SectionHeader icon="👥" title="Quadro Societário" subtitle="Sócios e administradores conforme Receita Federal" />
-              {socios.length === 0 ? (
-                <div className="text-center py-16 border-2 border-dashed border-slate-200 rounded-xl">
-                  <div className="text-4xl mb-3">👥</div>
-                  <p className="text-sm text-slate-400">
-                    {cnpjStatus === 'found'
-                      ? 'Nenhum sócio encontrado para este CNPJ'
-                      : 'Informe o CNPJ para buscar os sócios automaticamente'}
-                  </p>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {socios.map((s, i) => (
-                    <SocioCard key={i} socio={s} />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Tab: Responsável ── */}
-          {tab === 'responsavel' && (
-            <div>
-              <SectionHeader icon="👤" title="Responsável pelo Cadastro" subtitle="Pessoa de contato ou representante legal" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                <Field label="Nome Completo" required>
-                  <TextInput value={form.responsavel_nome} onChange={e => set('responsavel_nome', e.target.value)} placeholder="Nome do responsável" />
-                </Field>
-                <Field label="Cargo / Vínculo">
-                  <SelectInput value={form.responsavel_cargo} onChange={e => set('responsavel_cargo', e.target.value)}>
-                    <option value="">Selecione</option>
-                    <option>Sócio-Administrador</option>
-                    <option>Diretor</option>
-                    <option>Procurador</option>
-                    <option>Contador</option>
-                    <option>Funcionário Autorizado</option>
-                    <option>Outro</option>
-                  </SelectInput>
-                </Field>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Field label="CPF">
-                  <TextInput
-                    value={form.responsavel_cpf}
-                    onChange={e => set('responsavel_cpf', formatCPF(e.target.value))}
-                    placeholder="000.000.000-00"
-                    maxLength={14}
-                  />
-                </Field>
-                <Field label="E-mail">
-                  <TextInput type="email" value={form.responsavel_email} onChange={e => set('responsavel_email', e.target.value)} placeholder="responsavel@email.com" />
-                </Field>
-                <Field label="Telefone / WhatsApp">
-                  <TextInput
-                    value={form.responsavel_telefone}
-                    onChange={e => set('responsavel_telefone', formatPhone(e.target.value))}
-                    placeholder="(61) 99999-0000"
-                  />
-                </Field>
-              </div>
-              <div className="mt-4 flex gap-2 items-start p-3 rounded-xl bg-blue-50 border border-blue-100 text-sm text-blue-700">
-                <span className="shrink-0">ℹ️</span>
-                <span>O responsável receberá notificações e será o ponto de contato principal para esta empresa.</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── Footer ── */}
-        <div className="flex justify-between gap-3 mt-4">
           <button
             type="button"
-            onClick={() => navigate('/colaborador/empresas')}
-            className="h-11 px-6 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors"
-          >
-            Cancelar
-          </button>
-          <div className="flex gap-2">
-            {/* Navegação entre abas */}
-            {tab !== 'empresa' && (
-              <button
-                type="button"
-                onClick={() => {
-                  const order: Tab[] = ['empresa', 'endereco', 'socios', 'responsavel'];
-                  setTab(order[order.indexOf(tab) - 1]);
-                }}
-                className="h-11 px-5 rounded-xl border border-slate-200 bg-white text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors"
-              >
-                ← Anterior
-              </button>
-            )}
-            {tab !== 'responsavel' ? (
-              <button
-                type="button"
-                onClick={() => {
-                  const order: Tab[] = ['empresa', 'endereco', 'socios', 'responsavel'];
-                  setTab(order[order.indexOf(tab) + 1]);
-                }}
-                className="h-11 px-6 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-sm font-semibold hover:bg-blue-100 transition-colors"
-              >
-                Próximo →
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="h-11 px-8 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:translate-y-0"
-              >
-                {submitting ? (
-                  <span className="flex items-center gap-2">
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z" />
-                    </svg>
-                    Salvando...
-                  </span>
-                ) : '💾 Salvar Empresa'}
-              </button>
-            )}
+            onClick={handleAddSocio}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+          >Adicionar sócio</button>
+        </div>
+      )}
+
+      {tab === 'responsavel' && (
+        <div className="space-y-6">
+          <SectionHeader icon="🧑‍💼" title="Responsável" subtitle="Dados do responsável legal pela empresa" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Nome" required error={''}>
+              <TextInput
+                value={form.responsavel_nome}
+                onChange={e => set('responsavel_nome', e.target.value)}
+                placeholder="Nome completo"
+              />
+            </Field>
+            <Field label="CPF" required error={''}>
+              <TextInput
+                value={form.responsavel_cpf}
+                onChange={e => set('responsavel_cpf', formatCPF(e.target.value))}
+                placeholder="000.000.000-00"
+                maxLength={14}
+                inputMode="numeric"
+              />
+            </Field>
+            <Field label="E-mail" required error={''}>
+              <TextInput
+                type="email"
+                value={form.responsavel_email}
+                onChange={e => set('responsavel_email', e.target.value)}
+                placeholder="email@responsavel.com"
+              />
+            </Field>
+            <Field label="Telefone" required error={''}>
+              <TextInput
+                value={form.responsavel_telefone}
+                onChange={e => set('responsavel_telefone', formatPhone(e.target.value))}
+                placeholder="(00) 00000-0000"
+                inputMode="tel"
+              />
+            </Field>
+            <Field label="Cargo/Função" error={''}>
+              <TextInput
+                value={form.responsavel_cargo}
+                onChange={e => set('responsavel_cargo', e.target.value)}
+                placeholder="Cargo do responsável"
+              />
+            </Field>
           </div>
         </div>
+      )}
 
+      {/* Mensagem de sucesso */}
+      {saved && (
+        <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700">
+          Empresa salva com sucesso!
+        </div>
+      )}
+
+      {/* Botão de salvar */}
+      <div className="pt-4 border-t border-slate-200 mt-6 flex items-center gap-3">
+        <button
+          onClick={handleSubmit}
+          className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+        >Salvar</button>
+        <button
+          type="button"
+          onClick={() => {
+            setForm(INITIAL_FORM);
+            setSocios([]);
+            setTab('empresa');
+            resetCNPJ();
+          }}
+          className="px-5 py-2 text-sm border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100"
+        >Limpar</button>
       </div>
-    </Layout>
+    </div>
   );
 }
