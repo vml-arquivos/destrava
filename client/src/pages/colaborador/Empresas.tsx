@@ -4,6 +4,13 @@ import Layout from "./Layout";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from "@/lib/currency";
+// Importa utilitários e hook para busca de CNPJ via backend. Isso permite uma etapa
+// inicial no modal de criação que consulta a Receita Federal e pré-preenche os
+// dados da empresa automaticamente. `useCNPJLookup` gerencia estados de
+// carregamento/erro e possui debounce. `fmtCNPJBrasil` formata o input do
+// CNPJ e `cleanDigits` remove caracteres não numéricos.
+import { useCNPJLookup } from "../../hooks/useCNPJLookup";
+import { formatCNPJ as fmtCNPJBrasil, cleanDigits } from "../../utils/cnpj";
 import {
   Building2, Plus, Search, Phone, Mail, Globe, MapPin,
   Edit2, Trash2, ChevronRight, Loader2, X, Save,
@@ -291,6 +298,20 @@ export default function Empresas() {
   const captadores = captacao;
   const analistas = atendimento;
 
+  // ─── CNPJ Lookup ─────────────────────────────────────────────────────────
+  // Estado que controla a etapa atual do modal de cadastro. Etapas possíveis:
+  // "cnpj" (entrada e busca de CNPJ) e "form" (formulário completo). Ao
+  // cadastrar uma nova empresa (não em edição), inicia na etapa "cnpj".
+  const [etapaModal, setEtapaModal] = useState<"cnpj" | "form">("cnpj");
+  // Armazena o valor do input de CNPJ digitado pelo usuário. Usado
+  // independentemente do valor no form principal para permitir edição
+  // temporária e busca automática após 14 dígitos.
+  const [cnpjInput, setCnpjInput] = useState("");
+  // Hook de consulta: lookup faz a chamada ao backend após debounce,
+  // status indica "idle" | "loading" | "found" | "error", error contém
+  // mensagem em caso de falha. reset limpa o estado.
+  const { lookup: cnpjLookup, status: cnpjStatus, error: cnpjError, reset: cnpjReset } = useCNPJLookup();
+
   // ── CORREÇÃO: fallback sem condições vazias no .filter() ──────────────────
   useEffect(() => {
     apiFetch("/api/colaboradores/para-empresa")
@@ -392,6 +413,11 @@ export default function Empresas() {
     setErros({});
     setSecaoAberta("basico");
     setTagInput("");
+    // Ao iniciar um novo cadastro, garante que a etapa inicial do modal seja
+    // a busca de CNPJ. Reseta o input do CNPJ e o estado do hook de lookup.
+    setEtapaModal("cnpj");
+    setCnpjInput("");
+    cnpjReset();
     setModalAberto(true);
   }
 
@@ -446,6 +472,11 @@ export default function Empresas() {
     setEditando(null);
     setForm({ ...FORM_VAZIO });
     setErros({});
+    // Resetar etapas de CNPJ e estados ao fechar modal para garantir que
+    // próximas aberturas iniciem corretamente.
+    setEtapaModal("cnpj");
+    setCnpjInput("");
+    cnpjReset();
   }
 
   function set(k: keyof FormEmpresa, v: any) {
@@ -1173,16 +1204,104 @@ export default function Empresas() {
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-6">
             <div className="flex items-center justify-between p-5 border-b">
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-blue-600" />
-                {editando ? "Editar Empresa" : "Nova Empresa"}
-              </h2>
+              <div className="flex items-center gap-3">
+                {!editando && etapaModal === "form" && (
+                  <button
+                    onClick={() => { setEtapaModal("cnpj"); cnpjReset(); }}
+                    className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+                    title="Voltar"
+                  >←</button>
+                )}
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-blue-600" />
+                  {editando ? "Editar Empresa" : etapaModal === "cnpj" ? "Nova Empresa" : "Dados da Empresa"}
+                </h2>
+              </div>
               <button onClick={fecharModal} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
+            {/* ── ETAPA 1: Tela de CNPJ ── */}
+            {!editando && etapaModal === "cnpj" && (
+              <div className="p-8 flex flex-col items-center gap-6">
+                <div className="text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-blue-600 flex items-center justify-center text-3xl shadow-lg shadow-blue-200 mx-auto mb-4">🏛️</div>
+                  <h3 className="text-base font-bold text-gray-900">Informe o CNPJ da empresa</h3>
+                  <p className="text-sm text-gray-500 mt-1">Os dados serão preenchidos automaticamente via Receita Federal</p>
+                </div>
+                <div className="w-full max-w-sm">
+                  <div className="flex items-center gap-3 border-2 border-slate-200 rounded-xl px-4 py-3 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all bg-slate-50">
+                    <span className="text-xl shrink-0">
+                      {cnpjStatus === "loading" ? (
+                        <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                      ) : cnpjStatus === "found" ? "✅" : cnpjStatus === "error" ? "❌" : "🔍"}
+                    </span>
+                    <input
+                      autoFocus
+                      value={cnpjInput}
+                      onChange={e => {
+                        const formatted = fmtCNPJBrasil(e.target.value);
+                        setCnpjInput(formatted);
+                        const digits = cleanDigits(formatted);
+                        if (digits.length < 14) { cnpjReset(); return; }
+                        cnpjLookup(formatted, (data) => {
+                          // Preencher form com dados da Receita Federal
+                          const socio = data.qsa?.[0];
+                          setForm(f => ({
+                            ...f,
+                            cnpj: formatted,
+                            razao_social: data.razao_social ?? "",
+                            nome_fantasia: data.nome_fantasia ?? "",
+                            email: data.email ?? "",
+                            telefone: data.ddd_telefone_1
+                              ? data.ddd_telefone_1.replace(/\D/g,"").replace(/(\d{2})(\d{4,5})(\d{4})/,"($1) $2-$3")
+                              : "",
+                            cep: data.cep?.replace(/\D/g,"").replace(/(\d{5})(\d)/,"$1-$2") ?? "",
+                            logradouro: data.logradouro ?? "",
+                            numero: data.numero ?? "",
+                            complemento: data.complemento ?? "",
+                            bairro: data.bairro ?? "",
+                            cidade: data.municipio ?? "",
+                            estado: data.uf ?? "",
+                            responsavel_nome: socio?.nome_socio ?? "",
+                            responsavel_cpf: socio?.cnpj_cpf_do_socio ?? "",
+                            responsavel_cargo: socio?.descricao_qualificacao_socio ?? "",
+                          }));
+                          setTimeout(() => setEtapaModal("form"), 600);
+                        });
+                      }}
+                      placeholder="00.000.000/0000-00"
+                      maxLength={18}
+                      inputMode="numeric"
+                      className="flex-1 bg-transparent font-mono text-xl font-semibold tracking-widest text-slate-900 focus:outline-none placeholder:text-slate-300 placeholder:text-base placeholder:tracking-widest"
+                    />
+                  </div>
+                  {cnpjStatus === "loading" && (
+                    <p className="text-xs text-slate-400 mt-2 text-center">🔎 Consultando Receita Federal...</p>
+                  )}
+                  {cnpjError && (
+                    <p className="text-xs text-red-500 font-medium mt-2 text-center">{cnpjError}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Se usuário quiser pular a busca e preencher manualmente,
+                    // ainda assim pré-carregamos o CNPJ digitado no form para evitar retrabalho.
+                    setForm(f => ({ ...f, cnpj: cnpjInput }));
+                    setEtapaModal("form");
+                  }}
+                  className="text-xs text-blue-600 hover:underline"
+                >
+                  Prefiro preencher manualmente
+                </button>
+              </div>
+            )}
+
+            {/* ── ETAPA 2: Formulário ── */}
+            {(editando || etapaModal === "form") && (
+              <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
 
               <Secao id="basico" titulo="Dados da Empresa" icon={<Building2 className="w-4 h-4 text-blue-600" />} secaoAberta={secaoAberta} setSecaoAberta={setSecaoAberta}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1627,8 +1746,10 @@ export default function Empresas() {
                 </div>
               </Secao>
             </div>
+            )}
 
-            <div className="flex items-center justify-end gap-3 p-5 border-t bg-gray-50">
+            {(editando || etapaModal === "form") && (
+              <div className="flex items-center justify-end gap-3 p-5 border-t bg-gray-50">
               <button
                 type="button"
                 onClick={fecharModal}
@@ -1645,7 +1766,8 @@ export default function Empresas() {
                 {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 {editando ? "Salvar Alterações" : "Cadastrar Empresa"}
               </button>
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}
