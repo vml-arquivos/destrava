@@ -10,6 +10,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { auth } from "./middleware/auth.ts";
 import { authorize } from "./middleware/authorize.ts";
+import cnpjRouter from './routes/cnpj.ts';
 import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
 import { gerarHtmlTimbrado, getPuppeteerHeaderTemplate, getPuppeteerFooterTemplate, getDocumentStyles, CONTRATADA_DADOS, getHtmlHeaderEmbutido, getHtmlFooterEmbutido } from "./letterhead.ts";
 import {
@@ -668,6 +669,8 @@ async function listarConversasChatwoot({
 // ─── App ─────────────────────────────────────────────────────────────────────
 async function startServer() {
   const app = express();
+  // Rota para consulta de CNPJ (proxy para BrasilAPI)
+  app.use('/api/cnpj', cnpjRouter);
   const server = createServer(app);
 
   // ─── AUTO-CREATE: Módulos de Faturamento e Contratos ─────────────────────────
@@ -2854,40 +2857,6 @@ async function startServer() {
     } catch (err) {
       console.error("[DELETE /api/empresas/:id]", err);
       res.status(500).json({ error: "Erro ao excluir empresa" });
-    }
-  });
-
-  // ─── CNPJ PROXY ───────────────────────────────────────────────────────────
-  // Proxy para BrasilAPI — mantém chamada externa no backend, evita CORS no frontend
-  app.get("/api/cnpj/:cnpj", auth, async (req: Request, res: Response) => {
-    const raw = (req.params.cnpj || '').replace(/\D/g, '');
-    if (raw.length !== 14) {
-      res.status(400).json({ error: 'CNPJ deve ter 14 dígitos.' });
-      return;
-    }
-    try {
-      const upstream = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${raw}`, {
-        headers: { 'User-Agent': 'destrava-credito/1.0' },
-        signal: AbortSignal.timeout(8_000),
-      });
-      if (upstream.status === 404) {
-        res.status(404).json({ error: 'CNPJ não encontrado na Receita Federal.' });
-        return;
-      }
-      if (!upstream.ok) {
-        res.status(502).json({ error: 'BrasilAPI retornou erro. Tente novamente.' });
-        return;
-      }
-      const data = await upstream.json();
-      res.json(data);
-    } catch (err: unknown) {
-      const isTimeout = err instanceof Error && err.name === 'TimeoutError';
-      console.error('[GET /api/cnpj]', err);
-      res.status(502).json({
-        error: isTimeout
-          ? 'Tempo esgotado ao consultar a Receita Federal.'
-          : 'Erro ao consultar CNPJ.',
-      });
     }
   });
 
