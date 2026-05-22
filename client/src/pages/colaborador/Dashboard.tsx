@@ -46,7 +46,8 @@ interface EmpresaRow {
 interface Colaborador { id: string; nome: string; cargo: string; }
 interface ColaboradoresFiltro { captacao: Colaborador[]; atendimento: Colaborador[]; }
 
-const fmt = (v: number) => v?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) ?? "R$ 0,00";
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const fmt = (v: number) => v?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) ?? "R$ 0,00";
 const fmtDate = (d: string) => d ? new Date(d).toLocaleDateString("pt-BR") : "—";
 const fmtDia = (d: string) => {
   if (!d) return "";
@@ -81,13 +82,14 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
-  // Filtros
+  // Filtros do dashboard
   const [periodo, setPeriodo] = useState<Periodo>("30d");
   const [captadorFiltro, setCaptadorFiltro] = useState<string>("");
   const [analistaFiltro, setAnalistaFiltro] = useState<string>("");
   const [captadores, setCaptadores] = useState<Colaborador[]>([]);
   const [analistas, setAnalistas] = useState<Colaborador[]>([]);
 
+  // Aba ativa do ranking
   const [rankingAba, setRankingAba] = useState<"captadores" | "analistas">("captadores");
 
   const cargo = (colaborador?.cargo || "").toLowerCase();
@@ -96,6 +98,8 @@ export default function Dashboard() {
   const isAnalista = CARGOS_ANALISTA.includes(cargo);
   const isAdmin   = cargo === "administrador";
 
+  // Carrega lista de colaboradores para os filtros (apenas gestores)
+  // Usa /api/colaboradores/para-empresa que já filtra por ativo=true e separa por cargo
   useEffect(() => {
     if (isGestor) {
       apiFetch("/api/colaboradores/para-empresa")
@@ -104,6 +108,7 @@ export default function Dashboard() {
           setAnalistas(Array.isArray(data?.atendimento) ? data.atendimento : []);
         })
         .catch(() => {
+          // Fallback: tenta a rota geral e filtra manualmente
           apiFetch("/api/colaboradores")
             .then((data: any) => {
               const lista: Colaborador[] = Array.isArray(data) ? data : [];
@@ -122,44 +127,44 @@ export default function Dashboard() {
   }, [isGestor]);
 
   const carregarDados = useCallback(async () => {
-  setLoading(true);
-  setErro(null);
-  try {
-    const params = new URLSearchParams({ periodo });
-    if (captadorFiltro) params.set("captador_id", captadorFiltro);
-    if (analistaFiltro) params.set("analista_id", analistaFiltro);
+    setLoading(true);
+    setErro(null);
+    try {
+      const params = new URLSearchParams({ periodo });
+      if (captadorFiltro) params.set("captador_id", captadorFiltro);
+      if (analistaFiltro) params.set("analista_id", analistaFiltro);
 
-    const promises: Promise<any>[] = [
-      apiFetch(`/api/stats?${params}`).catch(() => null),
-      apiFetch("/api/leads").catch(() => []),
-      apiFetch("/api/simulacoes").catch(() => []),
-      apiFetch("/api/triagem/stats").catch(() => ({})),
-    ];
-    if (isCaptador || isAnalista) {
-      promises.push(apiFetch("/api/empresas").catch(() => []));
+      const promises: Promise<any>[] = [
+        apiFetch(`/api/stats?${params}`).catch(() => null),
+        apiFetch("/api/leads").catch(() => []),
+        apiFetch("/api/simulacoes").catch(() => []),
+        apiFetch("/api/triagem/stats").catch(() => ({})),
+      ];
+      if (isCaptador || isAnalista) {
+        promises.push(apiFetch("/api/empresas").catch(() => []));
+      }
+
+      const results = await Promise.all(promises);
+      const [statsData, leadsData, simsData, triagemData, empresasData] = results;
+
+      if (statsData) setStats(statsData);
+
+      const leadsArr: LeadRow[] = Array.isArray(leadsData) ? leadsData : (leadsData?.leads ?? []);
+      setLeadsRecentes(leadsArr.slice(0, 5));
+
+      const simsArr: SimulacaoRow[] = Array.isArray(simsData) ? simsData : (simsData?.simulacoes ?? []);
+      setSimulacoesRecentes(simsArr);
+
+      if (empresasData) {
+        const empArr: EmpresaRow[] = Array.isArray(empresasData) ? empresasData : (empresasData?.empresas ?? []);
+        setEmpresasRecentes(empArr.slice(0, 5));
+      }
+      setTriagemPendente(triagemData?.pendente ?? 0);
+    } catch {
+      setErro("Erro ao carregar dados. Verifique a conexão.");
     }
-
-    const results = await Promise.all(promises);
-    const [statsData, leadsData, simsData, triagemData, empresasData] = results;
-
-    if (statsData) setStats(statsData);
-
-    const leadsArr: LeadRow[] = Array.isArray(leadsData) ? leadsData : (leadsData?.leads ?? []);
-    setLeadsRecentes(leadsArr.slice(0, 5));
-
-    const simsArr: SimulacaoRow[] = Array.isArray(simsData) ? simsData : (simsData?.simulacoes ?? []);
-    setSimulacoesRecentes(simsArr);
-
-    if (empresasData) {
-      const empArr: EmpresaRow[] = Array.isArray(empresasData) ? empresasData : (empresasData?.empresas ?? []);
-      setEmpresasRecentes(empArr.slice(0, 5));
-    }
-    setTriagemPendente(triagemData?.pendente ?? 0);
-  } catch {
-    setErro("Erro ao carregar dados. Verifique a conexão.");
-  }
-  setLoading(false);
-}, [periodo, captadorFiltro, analistaFiltro, isCaptador, isAnalista]);
+    setLoading(false);
+  }, [periodo, captadorFiltro, analistaFiltro, isCaptador, isAnalista]);
 
   useEffect(() => { carregarDados(); }, [carregarDados]);
 
@@ -174,8 +179,7 @@ export default function Dashboard() {
   ].filter(a => a.visivel);
 
   // Dados para o gráfico de pizza (distribuição por produto)
-  // Garantimos que a propriedade exista antes de acessá-la para evitar falhas em tempo de execução.
-  const pieData = stats?.leads?.byProduto
+  const pieData = stats
     ? Object.entries(stats.leads.byProduto)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 8)
@@ -183,7 +187,7 @@ export default function Dashboard() {
     : [];
 
   // Dados para o gráfico de barras (status dos leads)
-  const barStatusData = stats?.leads?.byStatus
+  const barStatusData = stats
     ? Object.entries(stats.leads.byStatus).map(([status, total]) => ({
         status: status.replace(/_/g, " "),
         total,
@@ -594,12 +598,12 @@ export default function Dashboard() {
                   </div>
                 )}
 
-                {rankingAba === "analistas" && (stats.rankingAnalistas ?? []).filter(r => (r.empresasAtendidas ?? 0) > 0 || r.totalLeads > 0).length > 0 && (
+                {rankingAba === "analistas" && (stats.rankingAnalistas ?? []).filter(r => r.empresasAtendidas! > 0 || r.totalLeads > 0).length > 0 && (
                   <div className="p-5 border-t">
                     <p className="text-xs text-gray-500 mb-3 font-medium">Comparativo visual — Empresas atendidas</p>
                     <ResponsiveContainer width="100%" height={180}>
                       <BarChart
-                        data={(stats.rankingAnalistas ?? []).filter(r => (r.empresasAtendidas ?? 0) > 0 || r.totalLeads > 0).slice(0, 10)}
+                        data={(stats.rankingAnalistas ?? []).filter(r => r.empresasAtendidas! > 0 || r.totalLeads > 0).slice(0, 10)}
                         margin={{ top: 5, right: 10, left: 0, bottom: 30 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -722,4 +726,70 @@ export default function Dashboard() {
               </div>
               <div className="flex items-center gap-2">
                 <Link href="/colaborador/calculadora">
-                  <button className="flex items
+                  <button className="flex items-center gap-1 text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium">
+                    <Plus className="w-3 h-3" /> Nova
+                  </button>
+                </Link>
+                <Link href="/colaborador/simulacoes">
+                  <button className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                    Ver todas <ArrowRight className="w-3 h-3" />
+                  </button>
+                </Link>
+              </div>
+            </div>
+            <div className="divide-y overflow-y-auto" style={{ maxHeight: "280px" }}>
+              {loading ? (
+                <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 text-blue-600 animate-spin" /></div>
+              ) : simulacoesRecentes.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  <Calculator className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-xs">Nenhuma simulação ainda</p>
+                </div>
+              ) : simulacoesRecentes.slice(0, 5).map(sim => (
+                <div key={sim.id} className="flex items-center gap-3 p-3 hover:bg-gray-50">
+                  <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                    <Calculator className="w-4 h-4 text-green-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{sim.cliente_nome}</p>
+                    <p className="text-xs text-gray-500 truncate">{sim.linha_credito || sim.banco || "—"}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-semibold text-gray-900">{fmt(sim.valor_solicitado ?? 0)}</p>
+                    <p className="text-xs text-gray-400">{fmtDate(sim.criado_em)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Leads por produto (gestores — barra de progresso clássica) ── */}
+        {isGestor && stats && stats.leads.total > 0 && (
+          <div className="bg-white rounded-xl border shadow-sm p-5">
+            <h3 className="font-semibold text-gray-900 mb-4">Leads por Produto — Detalhamento</h3>
+            <div className="space-y-3">
+              {Object.entries(stats.leads.byProduto)
+                .sort(([, a], [, b]) => b - a)
+                .map(([produto, count]) => {
+                  const pct = Math.round((count / stats.leads.total) * 100);
+                  return (
+                    <div key={produto}>
+                      <div className="flex items-center justify-between text-sm mb-1">
+                        <span className="text-gray-700">{produto || "Não informado"}</span>
+                        <span className="text-gray-500 font-medium">{count} ({pct}%)</span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-2">
+                        <div className="bg-blue-600 h-2 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+
+      </div>
+    </ColaboradorLayout>
+  );
+}
