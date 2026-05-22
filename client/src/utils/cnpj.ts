@@ -1,93 +1,46 @@
-// ─── Formatadores ────────────────────────────────────────────────────────────
+import { Router, Request, Response } from 'express';
 
-export function formatCNPJ(value: string): string {
-  return value
-    .replace(/\D/g, '')
-    .replace(/^(\d{2})(\d)/, '$1.$2')
-    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
-    .replace(/\.(\d{3})(\d)/, '.$1/$2')
-    .replace(/(\d{4})(\d)/, '$1-$2')
-    .slice(0, 18);
-}
+const router = Router();
 
-export function formatCPF(value: string): string {
-  return value
-    .replace(/\D/g, '')
-    .replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
-    .replace(/\.(\d{3})(\d)/, '.$1-$2')
-    .slice(0, 14);
-}
+/**
+ * GET /api/cnpj/:cnpj
+ *
+ * Proxy para a BrasilAPI — mantém a chamada externa no backend,
+ * evita exposição de origin no frontend e permite adicionar cache futuro.
+ */
+router.get('/:cnpj', async (req: Request, res: Response) => {
+  const raw = req.params.cnpj.replace(/\D/g, '');
 
-export function formatPhone(value: string): string {
-  const d = value.replace(/\D/g, '').slice(0, 11);
-  if (d.length <= 10)
-    return d.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3');
-  return d.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3');
-}
+  if (raw.length !== 14) {
+    return res.status(400).json({ error: 'CNPJ deve ter 14 dígitos.' });
+  }
 
-export function formatCEP(value: string): string {
-  return value
-    .replace(/\D/g, '')
-    .replace(/(\d{5})(\d)/, '$1-$2')
-    .slice(0, 9);
-}
+  try {
+    const upstream = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${raw}`, {
+      headers: { 'User-Agent': 'destrava-credito/1.0' },
+      // 8 segundos de timeout
+      signal: AbortSignal.timeout(8_000),
+    });
 
-export function cleanDigits(value: string): string {
-  return value.replace(/\D/g, '');
-}
+    if (upstream.status === 404) {
+      return res.status(404).json({ error: 'CNPJ não encontrado na Receita Federal.' });
+    }
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
+    if (!upstream.ok) {
+      return res.status(502).json({ error: 'BrasilAPI retornou erro. Tente novamente.' });
+    }
 
-export interface CNPJSocio {
-  nome_socio: string;
-  cnpj_cpf_do_socio: string;
-  qualificacao_socio: string;
-  descricao_qualificacao_socio?: string;
-  data_entrada_sociedade: string;
-  pais?: string;
-  representante_legal?: string;
-  nome_do_representante?: string;
-  qualificacao_representante_legal?: string;
-}
+    const data = await upstream.json();
+    return res.json(data);
 
-export interface CNPJData {
-  cnpj: string;
-  razao_social: string;
-  nome_fantasia: string;
-  email: string;
-  ddd_telefone_1: string;
-  ddd_telefone_2?: string;
-  cep: string;
-  logradouro: string;
-  numero: string;
-  complemento: string;
-  bairro: string;
-  municipio: string;
-  uf: string;
-  descricao_situacao_cadastral: string;
-  natureza_juridica: string;
-  porte: string;
-  descricao_porte: string;
-  data_inicio_atividade: string;
-  capital_social: number;
-  cnae_fiscal: number;
-  cnae_fiscal_descricao: string;
-  qsa: CNPJSocio[];
-}
+  } catch (err: unknown) {
+    const isTimeout = err instanceof Error && err.name === 'TimeoutError';
+    return res.status(502).json({
+      error: isTimeout
+        ? 'Tempo esgotado ao consultar a Receita Federal.'
+        : 'Erro ao consultar CNPJ.',
+    });
+  }
+});
 
-// ─── Fetch via backend (proxy) ────────────────────────────────────────────────
-
-export async function fetchCNPJData(cnpj: string): Promise<CNPJData> {
-  const clean = cleanDigits(cnpj);
-  if (clean.length !== 14) throw new Error('CNPJ inválido');
-
-  // Passa pelo backend Express — não expõe chamada externa no frontend
-  const res = await fetch(`/api/cnpj/${clean}`);
-
-  if (res.status === 404) throw new Error('CNPJ não encontrado na Receita Federal');
-  if (res.status === 400) throw new Error('CNPJ inválido');
-  if (!res.ok) throw new Error('Erro ao consultar CNPJ. Tente novamente.');
-
-  return res.json();
-}
+export default router;
