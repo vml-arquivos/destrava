@@ -22,6 +22,9 @@ import {
   Paperclip, Upload, MessageSquare, History, Bell, Send, PlusCircle,
 } from "lucide-react";
 
+// Importa tipo de sócio para manter lista de todos os sócios retornados pela Receita.
+import type { CNPJSocio } from "../../utils/cnpj";
+
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface Empresa {
@@ -241,6 +244,41 @@ function calcularScore(e: Empresa): { score: number; risco: "baixo" | "medio" | 
   return { score: scoreNorm, risco, indicadores };
 }
 
+// ─── Componente para exibir cada sócio no modal ───────────────────────────
+// Este componente é semelhante ao SocioCard usado em CadastroEmpresa. Ele
+// recebe um sócio e exibe seu nome, qualificação e CPF mascarado, além da
+// data de entrada. Usado na seção "Sócio / Responsável" para listar todos
+// os sócios retornados pela consulta de CNPJ.
+function SocioCard({ socio }: { socio: CNPJSocio }) {
+  const initial = socio.nome_socio?.charAt(0) ?? "?";
+  const qual = socio.descricao_qualificacao_socio || socio.qualificacao_socio;
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 bg-slate-50">
+      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-sm shrink-0">
+        {initial}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-slate-800 truncate">{socio.nome_socio}</p>
+        <div className="flex flex-wrap items-center gap-2 mt-1">
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+            {qual}
+          </span>
+          {socio.cnpj_cpf_do_socio && (
+            <span className="text-xs text-slate-400 font-mono">
+              CPF: {socio.cnpj_cpf_do_socio.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.***.***-$4")}
+            </span>
+          )}
+        </div>
+        {socio.data_entrada_sociedade && (
+          <p className="text-xs text-slate-400 mt-0.5">
+            Entrada: {new Date(socio.data_entrada_sociedade).toLocaleDateString("pt-BR")}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Tipos para Followup e Histórico ────────────────────────────────────────
 interface EmpresaFollowup {
   id: string;
@@ -297,6 +335,12 @@ export default function Empresas() {
   const [atendimento, setAtendimento] = useState<{ id: string; nome: string; cargo: string }[]>([]);
   const captadores = captacao;
   const analistas = atendimento;
+
+  // ─── Sócios ─────────────────────────────────────────────────────────────
+  // Armazena a lista completa de sócios retornada pela consulta de CNPJ.
+  // Essa lista é exibida na seção "Sócio / Responsável" quando cadastrando
+  // uma nova empresa e redefinida ao abrir/fechar o modal.
+  const [socios, setSocios] = useState<CNPJSocio[]>([]);
 
   // ─── CNPJ Lookup ─────────────────────────────────────────────────────────
   // Estado que controla a etapa atual do modal de cadastro. Etapas possíveis:
@@ -418,6 +462,8 @@ export default function Empresas() {
     setEtapaModal("cnpj");
     setCnpjInput("");
     cnpjReset();
+    // Limpa lista de sócios para não reutilizar dados de consultas anteriores
+    setSocios([]);
     setModalAberto(true);
   }
 
@@ -465,6 +511,9 @@ export default function Empresas() {
     setSecaoAberta("basico");
     setTagInput("");
     setModalAberto(true);
+    // Em modo de edição, não há busca de CNPJ; limpa lista de sócios para
+    // evitar mostrar dados antigos em cadastros subsequentes.
+    setSocios([]);
   }
 
   function fecharModal() {
@@ -477,6 +526,8 @@ export default function Empresas() {
     setEtapaModal("cnpj");
     setCnpjInput("");
     cnpjReset();
+    // Limpar lista de sócios ao fechar o modal
+    setSocios([]);
   }
 
   function set(k: keyof FormEmpresa, v: any) {
@@ -1246,8 +1297,27 @@ export default function Empresas() {
                         const digits = cleanDigits(formatted);
                         if (digits.length < 14) { cnpjReset(); return; }
                         cnpjLookup(formatted, (data) => {
-                          // Preencher form com dados da Receita Federal
-                          const socio = data.qsa?.[0];
+                          // Preencher form com dados completos da Receita Federal
+                          // e salvar lista de todos os sócios. O primeiro sócio
+                          // é usado como responsável padrão, mas todos são exibidos.
+                          // Lista completa de sócios retornada pela Receita Federal. Guardamos
+                          // no estado para exibição e usamos o primeiro sócio como responsável
+                          // padrão. Caso não exista, campos de responsável ficam em branco.
+                          const sociosList = data.qsa ?? [];
+                          setSocios(sociosList);
+                          const socio = sociosList[0];
+
+                          // Mapeia porte (tamanho da empresa) retornado pela API para
+                          // nossas opções internas (mei, me, epp, medio, grande). Caso não seja
+                          // reconhecido, mantém o valor atual do formulário.
+                          const porteRaw = (data.porte || data.descricao_porte || "").toLowerCase();
+                          let porteMap: FormEmpresa["porte"] = form.porte || "mei";
+                          if (porteRaw.includes("mei")) porteMap = "mei";
+                          else if (porteRaw.includes("micro") || porteRaw === "me" || porteRaw.includes("me ")) porteMap = "me";
+                          else if (porteRaw.includes("pequeno") || porteRaw.includes("epp")) porteMap = "epp";
+                          else if (porteRaw.includes("medio") || porteRaw.includes("médio")) porteMap = "medio";
+                          else if (porteRaw.includes("grande")) porteMap = "grande";
+
                           setForm(f => ({
                             ...f,
                             cnpj: formatted,
@@ -1255,19 +1325,25 @@ export default function Empresas() {
                             nome_fantasia: data.nome_fantasia ?? "",
                             email: data.email ?? "",
                             telefone: data.ddd_telefone_1
-                              ? data.ddd_telefone_1.replace(/\D/g,"").replace(/(\d{2})(\d{4,5})(\d{4})/,"($1) $2-$3")
+                              ? data.ddd_telefone_1.replace(/\D/g, "").replace(/(\d{2})(\d{4,5})(\d{4})/, "($1) $2-$3")
                               : "",
-                            cep: data.cep?.replace(/\D/g,"").replace(/(\d{5})(\d)/,"$1-$2") ?? "",
+                            cep: data.cep?.replace(/\D/g, "").replace(/(\d{5})(\d)/, "$1-$2") ?? "",
                             logradouro: data.logradouro ?? "",
                             numero: data.numero ?? "",
                             complemento: data.complemento ?? "",
                             bairro: data.bairro ?? "",
                             cidade: data.municipio ?? "",
                             estado: data.uf ?? "",
+                            // Usa o primeiro sócio como responsável padrão se existir
                             responsavel_nome: socio?.nome_socio ?? "",
                             responsavel_cpf: socio?.cnpj_cpf_do_socio ?? "",
                             responsavel_cargo: socio?.descricao_qualificacao_socio ?? "",
+                            // Preenche porte e segmento com dados da Receita quando disponíveis
+                            porte: porteMap,
+                            segmento: data.cnae_fiscal_descricao ?? f.segmento,
                           }));
+                          // Avança para a segunda etapa após pequeno delay para dar tempo de
+                          // preencher o formulário com as informações retornadas.
                           setTimeout(() => setEtapaModal("form"), 600);
                         });
                       }}
@@ -1587,6 +1663,14 @@ export default function Empresas() {
                     />
                   </div>
                 </div>
+                {/* Lista de sócios retornados da Receita Federal. Exibido após os campos do responsável. */}
+                {socios.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {socios.map((socio, idx) => (
+                      <SocioCard key={idx} socio={socio} />
+                    ))}
+                  </div>
+                )}
               </Secao>
 
               <Secao id="financeiro" titulo="Dados Financeiros" icon={<DollarSign className="w-4 h-4 text-emerald-600" />} secaoAberta={secaoAberta} setSecaoAberta={setSecaoAberta}>
