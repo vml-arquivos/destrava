@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pkg from 'pg';
-import { auth } from '../middleware/auth.ts';
+import { auth } from '../middleware/auth';
 
 const { Pool } = pkg;
 const pool = new Pool({
