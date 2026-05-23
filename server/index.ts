@@ -10,8 +10,8 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { auth } from "./middleware/auth.ts";
 import { authorize } from "./middleware/authorize.ts";
-import cnpjRouter from './routes/cnpj.ts';
-import sociosDocumentosRouter from './routes/socios_documentos.ts';
+import cnpjRouter from './routes/cnpj';
+import sociosDocumentosRouter from './routes/socios_documentos';
 import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
 import { gerarHtmlTimbrado, getPuppeteerHeaderTemplate, getPuppeteerFooterTemplate, getDocumentStyles, CONTRATADA_DADOS, getHtmlHeaderEmbutido, getHtmlFooterEmbutido } from "./letterhead.ts";
 import {
