@@ -315,10 +315,14 @@ export default function Empresas() {
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [empresaSelecionada, setEmpresaSelecionada] = useState<Empresa | null>(null);
-  const [abaAtiva, setAbaAtiva] = useState<"dados" | "documentos" | "followup" | "historico">("dados");
+  const [abaAtiva, setAbaAtiva] = useState<"dados" | "documentos" | "followup" | "historico" | "socios" | "ged">("dados");
   const [followups, setFollowups] = useState<EmpresaFollowup[]>([]);
   const [historico, setHistorico] = useState<EmpresaHistorico[]>([]);
   const [documentos, setDocumentos] = useState<EmpresaDocumento[]>([]);
+  const [sociosEmpresa, setSociosEmpresa] = useState<any[]>([]);
+  const [gedDocs, setGedDocs] = useState<any[]>([]);
+  const [gedDragOver, setGedDragOver] = useState<string | null>(null);
+  const [gedUploading, setGedUploading] = useState(false);
   const [loadingDetalhe, setLoadingDetalhe] = useState(false);
   const [novaObs, setNovaObs] = useState("");
   const [novoFollowup, setNovoFollowup] = useState({ titulo: "", tipo: "ligacao", data_agendada: "", descricao: "" });
@@ -401,15 +405,21 @@ export default function Empresas() {
     setFollowups([]);
     setHistorico([]);
     setDocumentos([]);
+    setSociosEmpresa([]);
+    setGedDocs([]);
     setLoadingDetalhe(true);
     Promise.all([
       apiFetch(`/api/empresas/${empresaSelecionada.id}/followups`).catch(() => []),
       apiFetch(`/api/empresas/${empresaSelecionada.id}/historico`).catch(() => []),
       apiFetch(`/api/empresas/${empresaSelecionada.id}/documentos`).catch(() => []),
-    ]).then(([fups, hist, docs]) => {
+      apiFetch(`/api/empresas/${empresaSelecionada.id}/socios`).catch(() => []),
+      apiFetch(`/api/empresas/${empresaSelecionada.id}/ged`).catch(() => []),
+    ]).then(([fups, hist, docs, socs, ged]) => {
       setFollowups(Array.isArray(fups) ? fups : []);
       setHistorico(Array.isArray(hist) ? hist : []);
       setDocumentos(Array.isArray(docs) ? docs : []);
+      setSociosEmpresa(Array.isArray(socs) ? socs : []);
+      setGedDocs(Array.isArray(ged) ? ged : []);
     }).finally(() => setLoadingDetalhe(false));
   }, [empresaSelecionada?.id]);
 
@@ -858,6 +868,8 @@ export default function Empresas() {
                 <div className="flex border-b border-gray-200 px-4 gap-1 bg-gray-50">
                   {([
                     { id: "dados",      label: "Dados",       icon: <Building2 className="w-3.5 h-3.5" /> },
+                    { id: "socios",     label: "Sócios",      icon: <User className="w-3.5 h-3.5" />, badge: sociosEmpresa.length },
+                    { id: "ged",        label: "GED",         icon: <FileText className="w-3.5 h-3.5" />, badge: gedDocs.length },
                     { id: "documentos", label: "Documentos",  icon: <Paperclip className="w-3.5 h-3.5" />, badge: documentos.length },
                     { id: "followup",   label: "Follow-up",   icon: <Bell className="w-3.5 h-3.5" />, badge: followups.filter(f => !f.concluido).length },
                     { id: "historico",  label: "Histórico",   icon: <History className="w-3.5 h-3.5" />, badge: historico.length },
@@ -1239,6 +1251,213 @@ export default function Empresas() {
                             </div>
                           </div>
                         ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              {/* ─── ABA: SÓCIOS ──────────────────────────────────────── */}
+                {!loadingDetalhe && abaAtiva === "socios" && (
+                  <div className="p-5 space-y-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 380px)" }}>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-bold text-slate-700">Quadro de Sócios e Administradores</p>
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
+                        {sociosEmpresa.length} sócio(s)
+                      </span>
+                    </div>
+                    {sociosEmpresa.length === 0 ? (
+                      <div className="text-center py-10 text-gray-400">
+                        <User className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                        <p className="text-sm">Nenhum sócio cadastrado</p>
+                        <p className="text-xs mt-1">Os sócios são importados automaticamente no Smart Onboarding</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {sociosEmpresa.map((s: any) => (
+                          <div key={s.id} className="flex items-start gap-3 p-4 rounded-xl border border-slate-200 bg-white shadow-sm">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-base shrink-0">
+                              {s.nome?.charAt(0) ?? '?'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-slate-800 truncate">{s.nome}</p>
+                              {s.qualificacao_socio && (
+                                <span className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 mt-1">
+                                  {s.qualificacao_socio}
+                                </span>
+                              )}
+                              {s.cpf_cnpj && (
+                                <p className="text-xs text-slate-400 font-mono mt-1">CPF: {s.cpf_cnpj}</p>
+                              )}
+                              {s.percentual_capital && (
+                                <p className="text-xs text-slate-500 mt-0.5">Participação: {s.percentual_capital}%</p>
+                              )}
+                              {s.representante_legal && (
+                                <span className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 mt-1 ml-1">
+                                  Rep. Legal
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ─── ABA: GED (Gerenciador Eletrônico de Documentos) ──── */}
+                {!loadingDetalhe && abaAtiva === "ged" && (
+                  <div className="p-5 space-y-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 380px)" }}>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-bold text-slate-700">Gerenciador de Documentos (GED)</p>
+                      <label
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
+                          gedUploading ? 'bg-blue-100 text-blue-500' : 'bg-blue-600 text-white hover:bg-blue-700'
+                        }`}
+                        onDragOver={e => { e.preventDefault(); setGedDragOver('zone'); }}
+                        onDragLeave={() => setGedDragOver(null)}
+                        onDrop={async e => {
+                          e.preventDefault();
+                          setGedDragOver(null);
+                          const file = e.dataTransfer.files[0];
+                          if (!file || !empresaSelecionada) return;
+                          setGedUploading(true);
+                          try {
+                            const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+                            const res = await fetch(`/api/empresas/${empresaSelecionada.id}/ged`, {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                              },
+                              body: JSON.stringify({
+                                nome_arquivo: file.name,
+                                tipo_documento: 'outro',
+                                url_arquivo: `/uploads/empresas/${empresaSelecionada.id}/${file.name}`,
+                                tamanho_bytes: file.size,
+                                status_validacao: 'em_analise',
+                              }),
+                            });
+                            if (res.ok) {
+                              const doc = await res.json();
+                              setGedDocs(prev => [doc, ...prev]);
+                              toast.success('Documento registrado no GED');
+                            }
+                          } catch { toast.error('Erro ao registrar documento'); }
+                          finally { setGedUploading(false); }
+                        }}
+                      >
+                        {gedUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                        {gedUploading ? 'Enviando...' : 'Adicionar'}
+                        <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onChange={async e => {
+                          const file = e.target.files?.[0];
+                          if (!file || !empresaSelecionada) return;
+                          setGedUploading(true);
+                          try {
+                            const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+                            const res = await fetch(`/api/empresas/${empresaSelecionada.id}/ged`, {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                              },
+                              body: JSON.stringify({
+                                nome_arquivo: file.name,
+                                tipo_documento: 'outro',
+                                url_arquivo: `/uploads/empresas/${empresaSelecionada.id}/${file.name}`,
+                                tamanho_bytes: file.size,
+                                status_validacao: 'em_analise',
+                              }),
+                            });
+                            if (res.ok) {
+                              const doc = await res.json();
+                              setGedDocs(prev => [doc, ...prev]);
+                              toast.success('Documento registrado no GED');
+                            }
+                          } catch { toast.error('Erro ao registrar documento'); }
+                          finally { setGedUploading(false); e.target.value = ''; }
+                        }} />
+                      </label>
+                    </div>
+
+                    {gedDragOver === 'zone' && (
+                      <div className="border-2 border-dashed border-blue-400 bg-blue-50 rounded-xl p-6 text-center text-blue-600 text-sm font-semibold">
+                        Solte o arquivo aqui
+                      </div>
+                    )}
+
+                    {gedDocs.length === 0 ? (
+                      <div className="text-center py-10 text-gray-400">
+                        <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                        <p className="text-sm">Nenhum documento no GED</p>
+                        <p className="text-xs mt-1">Arraste arquivos ou clique em Adicionar</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {gedDocs.map((doc: any) => {
+                          const statusCor: Record<string, string> = {
+                            aprovado: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+                            em_analise: 'bg-amber-100 text-amber-700 border-amber-200',
+                            reprovado: 'bg-red-100 text-red-700 border-red-200',
+                            vencido: 'bg-gray-100 text-gray-500 border-gray-200',
+                          };
+                          const statusLabel: Record<string, string> = {
+                            aprovado: 'Aprovado', em_analise: 'Em Análise',
+                            reprovado: 'Reprovado', vencido: 'Vencido',
+                          };
+                          const cor = statusCor[doc.status_validacao] || statusCor.em_analise;
+                          const label = statusLabel[doc.status_validacao] || 'Em Análise';
+                          const tamanho = doc.tamanho_bytes
+                            ? doc.tamanho_bytes < 1024 * 1024
+                              ? `${(doc.tamanho_bytes / 1024).toFixed(1)} KB`
+                              : `${(doc.tamanho_bytes / (1024 * 1024)).toFixed(1)} MB`
+                            : null;
+                          return (
+                            <div key={doc.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors">
+                              <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                                <FileText className="w-4 h-4 text-blue-600" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-slate-800 truncate">{doc.nome_arquivo}</p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${cor}`}>{label}</span>
+                                  {tamanho && <span className="text-xs text-slate-400">{tamanho}</span>}
+                                  <span className="text-xs text-slate-400">{new Date(doc.created_at).toLocaleDateString('pt-BR')}</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {doc.url_arquivo && (
+                                  <a
+                                    href={doc.url_arquivo}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors"
+                                    title="Baixar"
+                                  >
+                                    <Upload className="w-3.5 h-3.5 rotate-180" />
+                                  </a>
+                                )}
+                                <button
+                                  onClick={async () => {
+                                    if (!empresaSelecionada) return;
+                                    try {
+                                      const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+                                      await fetch(`/api/empresas/${empresaSelecionada.id}/ged/${doc.id}`, {
+                                        method: 'DELETE',
+                                        headers: token ? { Authorization: `Bearer ${token}` } : {},
+                                      });
+                                      setGedDocs(prev => prev.filter((d: any) => d.id !== doc.id));
+                                      toast.success('Documento removido');
+                                    } catch { toast.error('Erro ao remover documento'); }
+                                  }}
+                                  className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
+                                  title="Remover"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

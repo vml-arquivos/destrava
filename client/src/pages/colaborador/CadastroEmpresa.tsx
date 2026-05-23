@@ -1,4 +1,11 @@
-import { useState, useCallback } from 'react';
+/**
+ * CadastroEmpresa.tsx — Smart Onboarding (Wizard 3 passos)
+ *
+ * Passo 1: Usuário digita o CNPJ → sistema preenche todos os dados fiscais e de endereço automaticamente.
+ * Passo 2: Exibe os sócios (QSA) retornados pela API em Cards, prontos para salvar em socios_empresa.
+ * Passo 3: Área de drag & drop para upload inicial de Contrato Social e Cartão CNPJ.
+ */
+import { useState, useCallback, useRef } from 'react';
 import {
   formatCNPJ,
   formatCPF,
@@ -9,9 +16,13 @@ import {
   type CNPJSocio,
 } from '../../utils/cnpj';
 import { useCNPJLookup } from '../../hooks/useCNPJLookup';
+import {
+  Building2, Search, CheckCircle, ChevronRight, ChevronLeft,
+  Loader2, FileText, X, User, AlertCircle, Check,
+  MapPin, Phone, Briefcase,
+} from 'lucide-react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
-
 interface FormState {
   cnpj: string;
   razao_social: string;
@@ -38,6 +49,11 @@ interface FormState {
   responsavel_cargo: string;
 }
 
+interface UploadFile {
+  file: File;
+  tipo: 'contrato_social' | 'cartao_cnpj';
+}
+
 const INITIAL_FORM: FormState = {
   cnpj: '', razao_social: '', nome_fantasia: '', email: '', telefone: '',
   cep: '', logradouro: '', numero: '', complemento: '', bairro: '',
@@ -47,20 +63,9 @@ const INITIAL_FORM: FormState = {
   responsavel_telefone: '', responsavel_cargo: '',
 };
 
-const UF_LIST = [
-  'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA',
-  'MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN',
-  'RS','RO','RR','SC','SP','SE','TO',
-];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function situacaoCor(s: string): string {
-  const u = s.toUpperCase();
-  if (u.includes('ATIVA')) return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-  if (u.includes('SUSPENSA') || u.includes('INAPTA')) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-  if (u.includes('BAIXADA') || u.includes('CANCELADA')) return 'bg-red-100 text-red-800 border-red-200';
-  return 'bg-blue-100 text-blue-800 border-blue-200';
+function formatCapital(value: number): string {
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 function qualificacaoLabel(code: string | number): string {
@@ -72,83 +77,87 @@ function qualificacaoLabel(code: string | number): string {
   return map[String(code).padStart(2, '0')] ?? 'Sócio';
 }
 
-function formatCapital(value: number): string {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+function situacaoCor(s: string): string {
+  const u = s.toUpperCase();
+  if (u.includes('ATIVA')) return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+  if (u.includes('SUSPENSA') || u.includes('INAPTA')) return 'bg-amber-100 text-amber-700 border-amber-200';
+  if (u.includes('BAIXADA') || u.includes('CANCELADA')) return 'bg-red-100 text-red-700 border-red-200';
+  return 'bg-blue-100 text-blue-700 border-blue-200';
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // ─── Sub-componentes ──────────────────────────────────────────────────────────
+const inputClass =
+  'h-10 px-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 ' +
+  'focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 ' +
+  'transition-all placeholder:text-slate-400 shadow-sm';
 
-function Field({ label, required, error, children }: {
-  label: string; required?: boolean; error?: string; children: React.ReactNode;
+function Field({ label, required, children }: {
+  label: string; required?: boolean; children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs font-semibold text-slate-600 tracking-wide">
+    <div className="flex flex-col gap-1.5">
+      <label className="text-xs font-semibold text-slate-500 tracking-wide uppercase">
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       {children}
-      {error && <span className="text-xs text-red-500 font-medium">{error}</span>}
     </div>
   );
 }
 
-const inputClass =
-  'h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-900 ' +
-  'focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 ' +
-  'transition-all placeholder:text-slate-400';
-
-function TextInput({ error, className = '', ...props }: React.InputHTMLAttributes<HTMLInputElement> & { error?: string }) {
+function StepIndicator({ step, current }: { step: number; current: number }) {
+  const done = current > step;
+  const active = current === step;
   return (
-    <input
-      className={`${inputClass} ${error ? 'border-red-300 bg-red-50' : ''} ${className}`}
-      {...props}
-    />
-  );
-}
-
-function SelectInput({ children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select className={inputClass + ' cursor-pointer'} {...props}>
-      {children}
-    </select>
-  );
-}
-
-function SectionHeader({ icon, title, subtitle }: { icon: string; title: string; subtitle?: string }) {
-  return (
-    <div className="flex items-center gap-3 mb-5">
-      <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-lg shrink-0">
-        {icon}
-      </div>
-      <div>
-        <p className="text-sm font-bold text-slate-800">{title}</p>
-        {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
-      </div>
+    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all ${
+      done ? 'bg-blue-600 border-blue-600 text-white' :
+      active ? 'bg-white border-blue-600 text-blue-600' :
+      'bg-white border-slate-200 text-slate-400'
+    }`}>
+      {done ? <Check className="w-4 h-4" /> : step}
     </div>
   );
 }
 
-function SocioCard({ socio }: { socio: CNPJSocio }) {
+function SocioCard({ socio, selected, onToggle }: {
+  socio: CNPJSocio;
+  selected: boolean;
+  onToggle: () => void;
+}) {
   const initial = socio.nome_socio?.charAt(0) ?? '?';
   const qual = socio.descricao_qualificacao_socio || qualificacaoLabel(socio.qualificacao_socio);
-
   return (
-    <div className="flex items-center gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-200 transition-colors">
+    <div
+      onClick={onToggle}
+      className={`relative flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all select-none ${
+        selected
+          ? 'border-blue-500 bg-blue-50 shadow-sm'
+          : 'border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50'
+      }`}
+    >
+      {selected && (
+        <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center">
+          <Check className="w-3 h-3 text-white" />
+        </div>
+      )}
       <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-base shrink-0">
         {initial}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-bold text-slate-800 truncate">{socio.nome_socio}</p>
-        <div className="flex flex-wrap items-center gap-2 mt-1">
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
-            {qual}
-          </span>
-          {socio.cnpj_cpf_do_socio && (
-            <span className="text-xs text-slate-400 font-mono">
-              CPF: {socio.cnpj_cpf_do_socio.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.***.***-$4')}
-            </span>
-          )}
-        </div>
+        <span className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200 mt-1">
+          {qual}
+        </span>
+        {socio.cnpj_cpf_do_socio && (
+          <p className="text-xs text-slate-400 font-mono mt-1">
+            CPF: {socio.cnpj_cpf_do_socio.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.***.***-$4')}
+          </p>
+        )}
         {socio.data_entrada_sociedade && (
           <p className="text-xs text-slate-400 mt-0.5">
             Entrada: {new Date(socio.data_entrada_sociedade).toLocaleDateString('pt-BR')}
@@ -160,31 +169,32 @@ function SocioCard({ socio }: { socio: CNPJSocio }) {
 }
 
 // ─── Página Principal ─────────────────────────────────────────────────────────
-
-type Tab = 'empresa' | 'socios' | 'responsavel';
-
 export default function CadastroEmpresa() {
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [socios, setSocios] = useState<CNPJSocio[]>([]);
-  const [tab, setTab] = useState<Tab>('empresa');
+  const [sociosSelecionados, setSociosSelecionados] = useState<Set<number>>(new Set());
+  const [uploads, setUploads] = useState<UploadFile[]>([]);
   const [cepLoading, setCepLoading] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [empresaId, setEmpresaId] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState<'contrato_social' | 'cartao_cnpj' | null>(null);
+  const _dropRef = useRef<HTMLDivElement>(null);
+
   const { status: cnpjStatus, error: cnpjError, lookup, reset: resetCNPJ } = useCNPJLookup();
 
   const set = (field: keyof FormState, value: string) =>
     setForm(f => ({ ...f, [field]: value }));
 
   // ── CNPJ ──────────────────────────────────────────────────────────────────
-
   const handleCNPJ = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatCNPJ(e.target.value);
     set('cnpj', formatted);
-
     if (cleanDigits(formatted).length < 14) {
       resetCNPJ();
       return;
     }
-
     lookup(formatted, (data: CNPJData) => {
       setForm(f => ({
         ...f,
@@ -204,14 +214,16 @@ export default function CadastroEmpresa() {
         porte: data.descricao_porte ?? '',
         data_abertura: data.data_inicio_atividade ?? '',
         capital_social: data.capital_social ? formatCapital(data.capital_social) : '',
-        cnae: data.cnae_fiscal_descricao ?? '',
+        cnae: data.cnae_fiscal_descricao
+          ? `${data.cnae_fiscal} — ${data.cnae_fiscal_descricao}`
+          : '',
       }));
       setSocios(data.qsa ?? []);
+      setSociosSelecionados(new Set((data.qsa ?? []).map((_, i) => i)));
     });
   };
 
   // ── CEP ───────────────────────────────────────────────────────────────────
-
   const handleCep = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatCEP(e.target.value);
     set('cep', formatted);
@@ -235,309 +247,600 @@ export default function CadastroEmpresa() {
     }
   };
 
-  // ── Manipulação dos sócios ───────────────────────────────────────────────
+  // ── Upload ─────────────────────────────────────────────────────────────────
+  const handleFileAdd = useCallback((file: File, tipo: 'contrato_social' | 'cartao_cnpj') => {
+    setUploads(prev => {
+      const filtered = prev.filter(u => u.tipo !== tipo);
+      return [...filtered, { file, tipo }];
+    });
+  }, []);
 
-  const handleAddSocio = () => {
-    setSocios(prev => [...prev, {
-      nome_socio: '',
-      cnpj_cpf_do_socio: '',
-      qualificacao_socio: '',
-      descricao_qualificacao_socio: '',
-      data_entrada_sociedade: new Date().toISOString().split('T')[0],
-    }]);
+  const handleDrop = useCallback((e: React.DragEvent, tipo: 'contrato_social' | 'cartao_cnpj') => {
+    e.preventDefault();
+    setDragOver(null);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileAdd(file, tipo);
+  }, [handleFileAdd]);
+
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>, tipo: 'contrato_social' | 'cartao_cnpj') => {
+    const file = e.target.files?.[0];
+    if (file) handleFileAdd(file, tipo);
+  }, [handleFileAdd]);
+
+  const removeUpload = (tipo: 'contrato_social' | 'cartao_cnpj') => {
+    setUploads(prev => prev.filter(u => u.tipo !== tipo));
   };
 
-  const handleSocioChange = (index: number, field: keyof CNPJSocio, value: string) => {
-    setSocios(prev => prev.map((s, i) => (i === index ? { ...s, [field]: value } : s)));
+  // ── Avançar passos ────────────────────────────────────────────────────────
+  const goToStep2 = () => {
+    if (!cleanDigits(form.cnpj) || cnpjStatus !== 'found') return;
+    setStep(2);
   };
 
-  const removeSocio = (index: number) => {
-    setSocios(prev => prev.filter((_, i) => i !== index));
-  };
+  const goToStep3 = () => setStep(3);
 
-  // ── Validação e envio do formulário ──────────────────────────────────────
+  // ── Salvar empresa + sócios + documentos ──────────────────────────────────
+  const handleSalvar = async () => {
+    setSaving(true);
+    try {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
 
-  const validar = (): Record<keyof FormState, string> => {
-    const errors: Record<keyof FormState, string> = {} as any;
-    if (!cleanDigits(form.cnpj)) errors.cnpj = 'Informe o CNPJ';
-    if (!form.razao_social.trim()) errors.razao_social = 'Informe a razão social';
-    if (!form.email.trim() || !form.email.includes('@')) errors.email = 'E-mail inválido';
-    if (!cleanDigits(form.telefone)) errors.telefone = 'Informe o telefone';
-    if (!cleanDigits(form.cep)) errors.cep = 'Informe o CEP';
-    if (!form.logradouro.trim()) errors.logradouro = 'Informe o logradouro';
-    if (!form.numero.trim()) errors.numero = 'Informe o número';
-    if (!form.bairro.trim()) errors.bairro = 'Informe o bairro';
-    if (!form.cidade.trim()) errors.cidade = 'Informe a cidade';
-    if (!form.uf.trim()) errors.uf = 'Informe a UF';
-    if (!form.responsavel_nome.trim()) errors.responsavel_nome = 'Informe o nome do responsável';
-    if (!cleanDigits(form.responsavel_cpf)) errors.responsavel_cpf = 'Informe o CPF do responsável';
-    if (!form.responsavel_email.trim() || !form.responsavel_email.includes('@')) errors.responsavel_email = 'E-mail inválido';
-    if (!cleanDigits(form.responsavel_telefone)) errors.responsavel_telefone = 'Informe o telefone do responsável';
-    return errors;
-  };
+      const empresaPayload = {
+        razao_social: form.razao_social,
+        nome_fantasia: form.nome_fantasia || null,
+        cnpj: form.cnpj,
+        email: form.email || null,
+        telefone: form.telefone || null,
+        cep: form.cep || null,
+        logradouro: form.logradouro || null,
+        numero: form.numero || null,
+        complemento: form.complemento || null,
+        bairro: form.bairro || null,
+        cidade: form.cidade || null,
+        estado: form.uf || null,
+        natureza_juridica: form.natureza_juridica || null,
+        cnae_principal: form.cnae || null,
+        data_abertura: form.data_abertura || null,
+        responsavel_nome: form.responsavel_nome || null,
+        responsavel_cpf: form.responsavel_cpf || null,
+        responsavel_email: form.responsavel_email || null,
+        responsavel_telefone: form.responsavel_telefone || null,
+        responsavel_cargo: form.responsavel_cargo || null,
+        status: 'ativo',
+        origem: 'smart_onboarding',
+      };
 
-  const handleSubmit = async () => {
-    const err = validar();
-    if (Object.keys(err).length > 0) {
-      setForm(f => ({ ...f }));
-      return;
+      const empresaRes = await fetch('/api/empresas', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(empresaPayload),
+      });
+
+      if (!empresaRes.ok) {
+        const err = await empresaRes.json();
+        throw new Error(err.error || 'Erro ao salvar empresa');
+      }
+
+      const empresa = await empresaRes.json();
+      const eid = empresa.id;
+      setEmpresaId(eid);
+
+      // 2. Salvar sócios selecionados
+      const sociosSel = socios.filter((_, i) => sociosSelecionados.has(i));
+      if (sociosSel.length > 0) {
+        await fetch(`/api/empresas/${eid}/socios/bulk`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            socios: sociosSel.map(s => ({
+              nome: s.nome_socio,
+              cpf_cnpj: s.cnpj_cpf_do_socio || null,
+              qualificacao_socio: s.descricao_qualificacao_socio || qualificacaoLabel(s.qualificacao_socio),
+              representante_legal: Boolean(s.representante_legal),
+            })),
+          }),
+        });
+      }
+
+      // 3. Registrar documentos via upload
+      for (const up of uploads) {
+        try {
+          const uploadRes = await fetch(`/api/empresas/${eid}/documentos`, {
+            method: 'POST',
+            headers: {
+              'Content-Disposition': `attachment; filename="${up.file.name}"`,
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: up.file,
+          });
+          if (uploadRes.ok) {
+            const doc = await uploadRes.json();
+            await fetch(`/api/empresas/${eid}/ged`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                nome_arquivo: up.file.name,
+                tipo_documento: up.tipo,
+                url_arquivo: doc.url || doc.url_arquivo || `/uploads/empresas/${eid}/${up.file.name}`,
+                tamanho_bytes: up.file.size,
+                status_validacao: 'em_analise',
+              }),
+            });
+          }
+        } catch {
+          // Ignora erros de upload — não bloqueia o fluxo
+        }
+      }
+
+      setSaved(true);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro ao salvar empresa');
+    } finally {
+      setSaving(false);
     }
-    // Aqui você enviaria os dados para a API do backend. Por ora, apenas simula.
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
   };
+
+  const handleReset = () => {
+    setForm(INITIAL_FORM);
+    setSocios([]);
+    setSociosSelecionados(new Set());
+    setUploads([]);
+    setStep(1);
+    setSaved(false);
+    setEmpresaId(null);
+    resetCNPJ();
+  };
+
+  // ─── Renderização ──────────────────────────────────────────────────────────
+  if (saved) {
+    return (
+      <div className="max-w-2xl mx-auto p-8 text-center space-y-6">
+        <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">
+          <CheckCircle className="w-10 h-10 text-emerald-600" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Empresa cadastrada!</h2>
+          <p className="text-slate-500 mt-2">
+            <strong>{form.razao_social}</strong> foi salva com sucesso.
+            {socios.filter((_, i) => sociosSelecionados.has(i)).length > 0 && (
+              <> {socios.filter((_, i) => sociosSelecionados.has(i)).length} sócio(s) importado(s).</>
+            )}
+            {uploads.length > 0 && (
+              <> {uploads.length} documento(s) enviado(s).</>
+            )}
+          </p>
+        </div>
+        <div className="flex gap-3 justify-center">
+          <button
+            onClick={handleReset}
+            className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors"
+          >
+            Cadastrar outra empresa
+          </button>
+          {empresaId && (
+            <a
+              href={`/colaborador/empresas`}
+              className="px-5 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors"
+            >
+              Ver empresas
+            </a>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold text-slate-800">Cadastro de Empresa</h1>
-      {/* Tabs */}
-      <div className="flex border-b border-slate-200 mb-4">
-        <button
-          className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab === 'empresa' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-blue-600'}`}
-          onClick={() => setTab('empresa')}
-        >Empresa</button>
-        <button
-          className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab === 'socios' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-blue-600'}`}
-          onClick={() => setTab('socios')}
-        >Sócios</button>
-        <button
-          className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${tab === 'responsavel' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-blue-600'}`}
-          onClick={() => setTab('responsavel')}
-        >Responsável</button>
+    <div className="max-w-3xl mx-auto p-6 space-y-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+          <Building2 className="w-6 h-6 text-blue-600" />
+          Smart Onboarding
+        </h1>
+        <p className="text-sm text-slate-500 mt-1">
+          Cadastro inteligente de empresa com preenchimento automático via CNPJ
+        </p>
       </div>
 
-      {/* Conteúdo das abas */}
-      {tab === 'empresa' && (
+      {/* Indicador de passos */}
+      <div className="flex items-center">
+        {[
+          { n: 1, label: 'Dados da Empresa' },
+          { n: 2, label: 'Sócios (QSA)' },
+          { n: 3, label: 'Documentos' },
+        ].map(({ n, label }, idx) => (
+          <div key={n} className="flex items-center flex-1">
+            <div className="flex flex-col items-center gap-1">
+              <StepIndicator step={n} current={step} />
+              <span className={`text-xs font-medium ${step === n ? 'text-blue-600' : 'text-slate-400'}`}>
+                {label}
+              </span>
+            </div>
+            {idx < 2 && (
+              <div className={`flex-1 h-0.5 mx-2 mb-4 ${step > n ? 'bg-blue-600' : 'bg-slate-200'}`} />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* ─── PASSO 1: Dados da Empresa ──────────────────────────────────────── */}
+      {step === 1 && (
         <div className="space-y-6">
-          <SectionHeader icon="🏢" title="Dados da Empresa" subtitle="Informações básicas sobre a empresa" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="CNPJ" required error={''}>
-              <TextInput
-                value={form.cnpj}
-                onChange={handleCNPJ}
-                placeholder="00.000.000/0001-00"
-                maxLength={18}
-                inputMode="numeric"
-              />
-            </Field>
-            <Field label="Razão Social" required error={''}>
-              <TextInput
-                value={form.razao_social}
-                onChange={e => set('razao_social', e.target.value)}
-                placeholder="Razão Social Ltda."
-              />
-            </Field>
-            <Field label="Nome Fantasia" error={''}>
-              <TextInput
-                value={form.nome_fantasia}
-                onChange={e => set('nome_fantasia', e.target.value)}
-                placeholder="Nome comercial"
-              />
-            </Field>
-            <Field label="E-mail" required error={''}>
-              <TextInput
-                type="email"
-                value={form.email}
-                onChange={e => set('email', e.target.value)}
-                placeholder="email@empresa.com"
-              />
-            </Field>
-            <Field label="Telefone" required error={''}>
-              <TextInput
-                value={form.telefone}
-                onChange={e => set('telefone', formatPhone(e.target.value))}
-                placeholder="(00) 00000-0000"
-                inputMode="tel"
-              />
-            </Field>
-            <Field label="CEP" required error={''}>
-              <TextInput
-                value={form.cep}
-                onChange={handleCep}
-                placeholder="00000-000"
-                inputMode="numeric"
-              />
-            </Field>
-            <Field label="Logradouro" required error={''}>
-              <TextInput
-                value={form.logradouro}
-                onChange={e => set('logradouro', e.target.value)}
-                placeholder="Rua, Avenida..."
-              />
-            </Field>
-            <Field label="Número" required error={''}>
-              <TextInput
-                value={form.numero}
-                onChange={e => set('numero', e.target.value)}
-                placeholder="123"
-              />
-            </Field>
-            <Field label="Complemento" error={''}>
-              <TextInput
-                value={form.complemento}
-                onChange={e => set('complemento', e.target.value)}
-                placeholder="Sala, Bloco..."
-              />
-            </Field>
-            <Field label="Bairro" required error={''}>
-              <TextInput
-                value={form.bairro}
-                onChange={e => set('bairro', e.target.value)}
-                placeholder="Bairro"
-              />
-            </Field>
-            <Field label="Cidade" required error={''}>
-              <TextInput
-                value={form.cidade}
-                onChange={e => set('cidade', e.target.value)}
-                placeholder="Cidade"
-              />
-            </Field>
-            <Field label="UF" required error={''}>
-              <SelectInput
-                value={form.uf}
-                onChange={e => set('uf', e.target.value)}
-              >
-                <option value="">Selecione</option>
-                {UF_LIST.map(uf => <option key={uf} value={uf}>{uf}</option>)}
-              </SelectInput>
-            </Field>
-            <Field label="Situação Cadastral" error={''}>
-              <TextInput
-                value={form.situacao}
-                readOnly
-                className="opacity-75 cursor-not-allowed"
-              />
-            </Field>
-            <Field label="Natureza Jurídica" error={''}>
-              <TextInput
-                value={form.natureza_juridica}
-                readOnly
-                className="opacity-75 cursor-not-allowed"
-              />
-            </Field>
-            <Field label="Porte" error={''}>
-              <TextInput
-                value={form.porte}
-                readOnly
-                className="opacity-75 cursor-not-allowed"
-              />
-            </Field>
-            <Field label="Data de Abertura" error={''}>
-              <TextInput
-                value={form.data_abertura}
-                readOnly
-                className="opacity-75 cursor-not-allowed"
-              />
-            </Field>
-            <Field label="Capital Social" error={''}>
-              <TextInput
-                value={form.capital_social}
-                readOnly
-                className="opacity-75 cursor-not-allowed"
-              />
-            </Field>
-            <Field label="CNAE" error={''}>
-              <TextInput
-                value={form.cnae}
-                readOnly
-                className="opacity-75 cursor-not-allowed"
-              />
+          {/* CNPJ */}
+          <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Search className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-bold text-slate-700">Consulta de CNPJ</span>
+            </div>
+            <Field label="CNPJ" required>
+              <div className="relative">
+                <input
+                  className={`${inputClass} w-full pr-10`}
+                  value={form.cnpj}
+                  onChange={handleCNPJ}
+                  placeholder="00.000.000/0001-00"
+                  inputMode="numeric"
+                  maxLength={18}
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {cnpjStatus === 'loading' && <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />}
+                  {cnpjStatus === 'found' && <CheckCircle className="w-4 h-4 text-emerald-500" />}
+                  {cnpjStatus === 'error' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                </div>
+              </div>
+              {cnpjError && <p className="text-xs text-red-500 mt-1">{cnpjError}</p>}
+              {cnpjStatus === 'found' && (
+                <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
+                  <CheckCircle className="w-3 h-3" /> Dados preenchidos automaticamente
+                </p>
+              )}
             </Field>
           </div>
-        </div>
-      )}
 
-      {tab === 'socios' && (
-        <div className="space-y-6">
-          <SectionHeader icon="👥" title="Sócios" subtitle="Informações dos sócios da empresa" />
-          {socios.length === 0 && (
-            <p className="text-sm text-slate-500">Nenhum sócio cadastrado automaticamente. Adicione manualmente se necessário.</p>
+          {/* Dados preenchidos automaticamente */}
+          {cnpjStatus === 'found' && (
+            <>
+              {form.situacao && (
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-semibold px-3 py-1 rounded-full border ${situacaoCor(form.situacao)}`}>
+                    {form.situacao}
+                  </span>
+                  {form.porte && (
+                    <span className="text-xs font-semibold px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-600">
+                      {form.porte}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Dados Fiscais */}
+              <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Briefcase className="w-4 h-4 text-blue-600" />
+                  <span className="text-sm font-bold text-slate-700">Dados Fiscais</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="Razão Social" required>
+                    <input className={inputClass} value={form.razao_social}
+                      onChange={e => set('razao_social', e.target.value)} placeholder="Razão Social" />
+                  </Field>
+                  <Field label="Nome Fantasia">
+                    <input className={inputClass} value={form.nome_fantasia}
+                      onChange={e => set('nome_fantasia', e.target.value)} placeholder="Nome Fantasia" />
+                  </Field>
+                  <Field label="Natureza Jurídica">
+                    <input className={`${inputClass} opacity-75 cursor-not-allowed`} value={form.natureza_juridica} readOnly />
+                  </Field>
+                  <Field label="Data de Abertura">
+                    <input className={`${inputClass} opacity-75 cursor-not-allowed`} value={form.data_abertura} readOnly />
+                  </Field>
+                  <Field label="Capital Social">
+                    <input className={`${inputClass} opacity-75 cursor-not-allowed`} value={form.capital_social} readOnly />
+                  </Field>
+                  <Field label="CNAE Principal">
+                    <input className={`${inputClass} opacity-75 cursor-not-allowed`} value={form.cnae} readOnly />
+                  </Field>
+                </div>
+              </div>
+
+              {/* Contato */}
+              <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Phone className="w-4 h-4 text-blue-600" />
+                  <span className="text-sm font-bold text-slate-700">Contato</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="E-mail">
+                    <input className={inputClass} type="email" value={form.email}
+                      onChange={e => set('email', e.target.value)} placeholder="email@empresa.com.br" />
+                  </Field>
+                  <Field label="Telefone">
+                    <input className={inputClass} value={form.telefone}
+                      onChange={e => set('telefone', formatPhone(e.target.value))}
+                      placeholder="(00) 00000-0000" inputMode="tel" />
+                  </Field>
+                </div>
+              </div>
+
+              {/* Endereço */}
+              <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <MapPin className="w-4 h-4 text-blue-600" />
+                  <span className="text-sm font-bold text-slate-700">Endereço</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="CEP">
+                    <div className="relative">
+                      <input className={`${inputClass} w-full`} value={form.cep}
+                        onChange={handleCep} placeholder="00000-000" inputMode="numeric" maxLength={9} />
+                      {cepLoading && (
+                        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500 animate-spin" />
+                      )}
+                    </div>
+                  </Field>
+                  <Field label="Logradouro">
+                    <input className={inputClass} value={form.logradouro}
+                      onChange={e => set('logradouro', e.target.value)} placeholder="Rua, Avenida..." />
+                  </Field>
+                  <Field label="Número">
+                    <input className={inputClass} value={form.numero}
+                      onChange={e => set('numero', e.target.value)} placeholder="Nº" />
+                  </Field>
+                  <Field label="Complemento">
+                    <input className={inputClass} value={form.complemento}
+                      onChange={e => set('complemento', e.target.value)} placeholder="Sala, Andar..." />
+                  </Field>
+                  <Field label="Bairro">
+                    <input className={inputClass} value={form.bairro}
+                      onChange={e => set('bairro', e.target.value)} placeholder="Bairro" />
+                  </Field>
+                  <Field label="Cidade">
+                    <input className={inputClass} value={form.cidade}
+                      onChange={e => set('cidade', e.target.value)} placeholder="Cidade" />
+                  </Field>
+                  <Field label="UF">
+                    <input className={inputClass} value={form.uf}
+                      onChange={e => set('uf', e.target.value.toUpperCase().slice(0, 2))}
+                      placeholder="UF" maxLength={2} />
+                  </Field>
+                </div>
+              </div>
+
+              {/* Responsável */}
+              <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <User className="w-4 h-4 text-blue-600" />
+                  <span className="text-sm font-bold text-slate-700">Responsável Legal</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="Nome">
+                    <input className={inputClass} value={form.responsavel_nome}
+                      onChange={e => set('responsavel_nome', e.target.value)} placeholder="Nome completo" />
+                  </Field>
+                  <Field label="CPF">
+                    <input className={inputClass} value={form.responsavel_cpf}
+                      onChange={e => set('responsavel_cpf', formatCPF(e.target.value))}
+                      placeholder="000.000.000-00" inputMode="numeric" maxLength={14} />
+                  </Field>
+                  <Field label="E-mail">
+                    <input className={inputClass} type="email" value={form.responsavel_email}
+                      onChange={e => set('responsavel_email', e.target.value)} placeholder="email@responsavel.com" />
+                  </Field>
+                  <Field label="Telefone">
+                    <input className={inputClass} value={form.responsavel_telefone}
+                      onChange={e => set('responsavel_telefone', formatPhone(e.target.value))}
+                      placeholder="(00) 00000-0000" inputMode="tel" />
+                  </Field>
+                  <Field label="Cargo/Função">
+                    <input className={inputClass} value={form.responsavel_cargo}
+                      onChange={e => set('responsavel_cargo', e.target.value)} placeholder="Cargo do responsável" />
+                  </Field>
+                </div>
+              </div>
+            </>
           )}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {socios.map((socio, idx) => (
-              <SocioCard key={idx} socio={socio} />
-            ))}
+
+          {/* Botão avançar */}
+          <div className="flex justify-end pt-2">
+            <button
+              onClick={goToStep2}
+              disabled={cnpjStatus !== 'found'}
+              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+            >
+              Próximo: Sócios
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleAddSocio}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
-          >Adicionar sócio</button>
         </div>
       )}
 
-      {tab === 'responsavel' && (
+      {/* ─── PASSO 2: Sócios (QSA) ──────────────────────────────────────────── */}
+      {step === 2 && (
         <div className="space-y-6">
-          <SectionHeader icon="🧑‍💼" title="Responsável" subtitle="Dados do responsável legal pela empresa" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="Nome" required error={''}>
-              <TextInput
-                value={form.responsavel_nome}
-                onChange={e => set('responsavel_nome', e.target.value)}
-                placeholder="Nome completo"
-              />
-            </Field>
-            <Field label="CPF" required error={''}>
-              <TextInput
-                value={form.responsavel_cpf}
-                onChange={e => set('responsavel_cpf', formatCPF(e.target.value))}
-                placeholder="000.000.000-00"
-                maxLength={14}
-                inputMode="numeric"
-              />
-            </Field>
-            <Field label="E-mail" required error={''}>
-              <TextInput
-                type="email"
-                value={form.responsavel_email}
-                onChange={e => set('responsavel_email', e.target.value)}
-                placeholder="email@responsavel.com"
-              />
-            </Field>
-            <Field label="Telefone" required error={''}>
-              <TextInput
-                value={form.responsavel_telefone}
-                onChange={e => set('responsavel_telefone', formatPhone(e.target.value))}
-                placeholder="(00) 00000-0000"
-                inputMode="tel"
-              />
-            </Field>
-            <Field label="Cargo/Função" error={''}>
-              <TextInput
-                value={form.responsavel_cargo}
-                onChange={e => set('responsavel_cargo', e.target.value)}
-                placeholder="Cargo do responsável"
-              />
-            </Field>
+          <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">Quadro de Sócios e Administradores</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Selecione os sócios que deseja importar para o sistema
+                </p>
+              </div>
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
+                {sociosSelecionados.size}/{socios.length} selecionados
+              </span>
+            </div>
+
+            {socios.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <User className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                <p className="text-sm">Nenhum sócio retornado pela Receita Federal</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {socios.map((socio, idx) => (
+                  <SocioCard
+                    key={idx}
+                    socio={socio}
+                    selected={sociosSelecionados.has(idx)}
+                    onToggle={() => {
+                      setSociosSelecionados(prev => {
+                        const next = new Set(prev);
+                        if (next.has(idx)) next.delete(idx);
+                        else next.add(idx);
+                        return next;
+                      });
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100">
+              <button
+                onClick={() => setSociosSelecionados(new Set(socios.map((_, i) => i)))}
+                className="text-xs text-blue-600 hover:underline font-medium"
+              >
+                Selecionar todos
+              </button>
+              <span className="text-slate-300">|</span>
+              <button
+                onClick={() => setSociosSelecionados(new Set())}
+                className="text-xs text-slate-500 hover:underline font-medium"
+              >
+                Desmarcar todos
+              </button>
+            </div>
+          </div>
+
+          <div className="flex justify-between pt-2">
+            <button
+              onClick={() => setStep(1)}
+              className="flex items-center gap-2 px-5 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Voltar
+            </button>
+            <button
+              onClick={goToStep3}
+              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
+            >
+              Próximo: Documentos
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}
 
-      {/* Mensagem de sucesso */}
-      {saved && (
-        <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700">
-          Empresa salva com sucesso!
+      {/* ─── PASSO 3: Upload de Documentos ──────────────────────────────────── */}
+      {step === 3 && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-sm space-y-5">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800">Upload de Documentos</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Envie o Contrato Social e o Cartão CNPJ para iniciar o processo de análise
+              </p>
+            </div>
+
+            {(
+              [
+                { tipo: 'contrato_social' as const, label: 'Contrato Social', desc: 'Documento de constituição da empresa' },
+                { tipo: 'cartao_cnpj' as const, label: 'Cartão CNPJ', desc: 'Comprovante de inscrição no CNPJ' },
+              ]
+            ).map(({ tipo, label, desc }) => {
+              const uploaded = uploads.find(u => u.tipo === tipo);
+              return (
+                <div key={tipo}>
+                  <p className="text-xs font-semibold text-slate-600 mb-2">{label}</p>
+                  {uploaded ? (
+                    <div className="flex items-center gap-3 p-4 rounded-xl border border-emerald-200 bg-emerald-50">
+                      <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+                        <FileText className="w-5 h-5 text-emerald-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-800 truncate">{uploaded.file.name}</p>
+                        <p className="text-xs text-slate-500">{formatFileSize(uploaded.file.size)}</p>
+                      </div>
+                      <button
+                        onClick={() => removeUpload(tipo)}
+                        className="p-1.5 rounded-lg hover:bg-emerald-100 text-slate-400 hover:text-red-500 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label
+                      onDragOver={e => { e.preventDefault(); setDragOver(tipo); }}
+                      onDragLeave={() => setDragOver(null)}
+                      onDrop={e => handleDrop(e, tipo)}
+                      className={`flex flex-col items-center justify-center gap-2 p-8 rounded-xl border-2 border-dashed cursor-pointer transition-all ${
+                        dragOver === tipo
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={e => handleFileInput(e, tipo)}
+                      />
+                      <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center">
+                        <FileText className="w-6 h-6 text-slate-400" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-semibold text-slate-700">
+                          Arraste o arquivo ou{' '}
+                          <span className="text-blue-600">clique para selecionar</span>
+                        </p>
+                        <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
+                        <p className="text-xs text-slate-400">PDF, JPG ou PNG</p>
+                      </div>
+                    </label>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Resumo */}
+          <div className="p-4 rounded-xl border border-blue-100 bg-blue-50 space-y-1">
+            <p className="text-xs font-bold text-blue-800">Resumo do cadastro</p>
+            <p className="text-xs text-blue-700">
+              Empresa: <strong>{form.razao_social}</strong>
+            </p>
+            <p className="text-xs text-blue-700">
+              Sócios: <strong>{sociosSelecionados.size} selecionado(s)</strong>
+            </p>
+            <p className="text-xs text-blue-700">
+              Documentos: <strong>{uploads.length} arquivo(s)</strong>
+            </p>
+          </div>
+
+          <div className="flex justify-between pt-2">
+            <button
+              onClick={() => setStep(2)}
+              className="flex items-center gap-2 px-5 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold hover:bg-slate-50 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Voltar
+            </button>
+            <button
+              onClick={handleSalvar}
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 transition-colors shadow-sm"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+              {saving ? 'Salvando...' : 'Concluir Cadastro'}
+            </button>
+          </div>
         </div>
       )}
-
-      {/* Botão de salvar */}
-      <div className="pt-4 border-t border-slate-200 mt-6 flex items-center gap-3">
-        <button
-          onClick={handleSubmit}
-          className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
-        >Salvar</button>
-        <button
-          type="button"
-          onClick={() => {
-            setForm(INITIAL_FORM);
-            setSocios([]);
-            setTab('empresa');
-            resetCNPJ();
-          }}
-          className="px-5 py-2 text-sm border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100"
-        >Limpar</button>
-      </div>
     </div>
   );
 }

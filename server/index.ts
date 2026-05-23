@@ -11,6 +11,7 @@ import bcrypt from "bcryptjs";
 import { auth } from "./middleware/auth.ts";
 import { authorize } from "./middleware/authorize.ts";
 import cnpjRouter from './routes/cnpj.ts';
+import sociosDocumentosRouter from './routes/socios_documentos.ts';
 import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
 import { gerarHtmlTimbrado, getPuppeteerHeaderTemplate, getPuppeteerFooterTemplate, getDocumentStyles, CONTRATADA_DADOS, getHtmlHeaderEmbutido, getHtmlFooterEmbutido } from "./letterhead.ts";
 import {
@@ -671,6 +672,7 @@ async function startServer() {
   const app = express();
   // Rota para consulta de CNPJ (proxy para BrasilAPI)
   app.use('/api/cnpj', cnpjRouter);
+  app.use('/api/empresas', sociosDocumentosRouter);
   const server = createServer(app);
 
   // ─── AUTO-CREATE: Módulos de Faturamento e Contratos ─────────────────────────
