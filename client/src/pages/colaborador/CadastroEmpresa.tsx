@@ -16,6 +16,7 @@ import {
   type CNPJSocio,
 } from '../../utils/cnpj';
 import { useCNPJLookup } from '../../hooks/useCNPJLookup';
+import { apiFetch } from '@/lib/api';
 import {
   Building2, Search, CheckCircle, ChevronRight, ChevronLeft,
   Loader2, FileText, X, User, AlertCircle, Check,
@@ -283,58 +284,38 @@ export default function CadastroEmpresa() {
   const handleSalvar = async () => {
     setSaving(true);
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token') || '';
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
-
-      const empresaPayload = {
-        razao_social: form.razao_social,
-        nome_fantasia: form.nome_fantasia || null,
-        cnpj: form.cnpj,
-        email: form.email || null,
-        telefone: form.telefone || null,
-        cep: form.cep || null,
-        logradouro: form.logradouro || null,
-        numero: form.numero || null,
-        complemento: form.complemento || null,
-        bairro: form.bairro || null,
-        cidade: form.cidade || null,
-        estado: form.uf || null,
-        natureza_juridica: form.natureza_juridica || null,
-        cnae_principal: form.cnae || null,
-        data_abertura: form.data_abertura || null,
-        responsavel_nome: form.responsavel_nome || null,
-        responsavel_cpf: form.responsavel_cpf || null,
-        responsavel_email: form.responsavel_email || null,
-        responsavel_telefone: form.responsavel_telefone || null,
-        responsavel_cargo: form.responsavel_cargo || null,
-        status: 'ativo',
-        origem: 'smart_onboarding',
-      };
-
-      const empresaRes = await fetch('/api/empresas', {
+      const empresa = await apiFetch('/api/empresas', {
         method: 'POST',
-        headers,
-        body: JSON.stringify(empresaPayload),
+        body: JSON.stringify({
+          razao_social: form.razao_social,
+          nome_fantasia: form.nome_fantasia || null,
+          cnpj: form.cnpj,
+          email: form.email || null,
+          telefone: form.telefone || null,
+          cep: form.cep || null,
+          logradouro: form.logradouro || null,
+          numero: form.numero || null,
+          complemento: form.complemento || null,
+          bairro: form.bairro || null,
+          cidade: form.cidade || null,
+          estado: form.uf || null,
+          natureza_juridica: form.natureza_juridica || null,
+          cnae_principal: form.cnae || null,
+          data_abertura: form.data_abertura || null,
+          responsavel_nome: form.responsavel_nome || null,
+          responsavel_cpf: form.responsavel_cpf || null,
+          responsavel_email: form.responsavel_email || null,
+          responsavel_telefone: form.responsavel_telefone || null,
+          responsavel_cargo: form.responsavel_cargo || null,
+          status: 'ativo',
+          origem: 'smart_onboarding',
+        }),
       });
-
-      if (!empresaRes.ok) {
-        const err = await empresaRes.json();
-        throw new Error(err.error || 'Erro ao salvar empresa');
-      }
-
-      const empresa = await empresaRes.json();
-      const eid = empresa.id;
-      setEmpresaId(eid);
-
-      // 2. Salvar sócios selecionados
+      setEmpresaId(empresa.id);
       const sociosSel = socios.filter((_, i) => sociosSelecionados.has(i));
       if (sociosSel.length > 0) {
-        await fetch(`/api/empresas/${eid}/socios/bulk`, {
+        await apiFetch(`/api/empresas/${empresa.id}/socios/bulk`, {
           method: 'POST',
-          headers,
           body: JSON.stringify({
             socios: sociosSel.map(s => ({
               nome: s.nome_socio,
@@ -345,37 +326,6 @@ export default function CadastroEmpresa() {
           }),
         });
       }
-
-      // 3. Registrar documentos via upload
-      for (const up of uploads) {
-        try {
-          const uploadRes = await fetch(`/api/empresas/${eid}/documentos`, {
-            method: 'POST',
-            headers: {
-              'Content-Disposition': `attachment; filename="${up.file.name}"`,
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: up.file,
-          });
-          if (uploadRes.ok) {
-            const doc = await uploadRes.json();
-            await fetch(`/api/empresas/${eid}/ged`, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({
-                nome_arquivo: up.file.name,
-                tipo_documento: up.tipo,
-                url_arquivo: doc.url || doc.url_arquivo || `/uploads/empresas/${eid}/${up.file.name}`,
-                tamanho_bytes: up.file.size,
-                status_validacao: 'em_analise',
-              }),
-            });
-          }
-        } catch {
-          // Ignora erros de upload — não bloqueia o fluxo
-        }
-      }
-
       setSaved(true);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Erro ao salvar empresa');
