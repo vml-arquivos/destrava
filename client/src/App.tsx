@@ -243,7 +243,9 @@ function Router() {
         )}
       </Route>
       {/* Cadastro de Empresas */}
-      <Route path="/colaborador/cadastro-empresa">
+
+      {/* Cadastro de Empresas */}
+      <Route path="/colaborador/empresas/novo">
         {() => (
           <ProtectedRoute>
             <CadastroEmpresa />
