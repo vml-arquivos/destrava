@@ -314,17 +314,22 @@ export default function CadastroEmpresa() {
       setEmpresaId(empresa.id);
       const sociosSel = socios.filter((_, i) => sociosSelecionados.has(i));
       if (sociosSel.length > 0) {
-        await apiFetch(`/api/empresas/${empresa.id}/socios/bulk`, {
-          method: 'POST',
-          body: JSON.stringify({
-            socios: sociosSel.map(s => ({
-              nome: s.nome_socio,
-              cpf_cnpj: s.cnpj_cpf_do_socio || null,
-              qualificacao_socio: s.descricao_qualificacao_socio || qualificacaoLabel(s.qualificacao_socio),
-              representante_legal: Boolean(s.representante_legal),
-            })),
-          }),
-        });
+        try {
+          await apiFetch(`/api/empresas/${empresa.id}/socios/bulk`, {
+            method: 'POST',
+            body: JSON.stringify({
+              socios: sociosSel.map(s => ({
+                nome: s.nome_socio,
+                cpf_cnpj: s.cnpj_cpf_do_socio || null,
+                qualificacao_socio: s.descricao_qualificacao_socio || qualificacaoLabel(s.qualificacao_socio),
+                representante_legal: Boolean(s.representante_legal),
+              })),
+            }),
+          });
+        } catch (bulkErr) {
+          console.error('[CadastroEmpresa] Empresa salva, mas falhou importação de sócios:', bulkErr);
+          alert('Empresa cadastrada com sucesso, mas os sócios não foram importados. Verifique a estrutura da tabela socios_empresa na VPS e tente importar novamente.');
+        }
       }
       setSaved(true);
     } catch (err) {
