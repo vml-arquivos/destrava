@@ -644,7 +644,7 @@ export default function Empresas() {
             </p>
           </div>
           <button
-            onClick={abrirNova}
+            onClick={() => setLocation("/colaborador/empresas/novo")}
             className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 font-medium text-sm"
           >
             <Plus className="w-4 h-4" /> Nova Empresa
