@@ -275,12 +275,12 @@ function getToken(): string {
   }
 }
 
-function authHeaders(extra?: HeadersInit): HeadersInit {
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const token = getToken();
   return {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(extra || {}),
+    ...extra,
   };
 }
 

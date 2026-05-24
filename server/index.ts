@@ -4450,14 +4450,6 @@ tr:nth-child(even) td { background: #f4f7ff; }
     return rows[0] || null;
   }
 
-  function escapeHtmlContrato(value: any): string {
-    return String(value ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
 
   function corContrato(value: any, fallback: string): string {
     const cor = String(value || '').trim();
