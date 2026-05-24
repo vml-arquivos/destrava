@@ -27,6 +27,14 @@ interface Empresa {
   nome_fantasia?: string;
   cnpj?: string;
   inscricao_estadual?: string;
+  natureza_juridica?: string;
+  capital_social?: number;
+  cnae_principal?: string;
+  cnaes_secundarios?: string[];
+  data_abertura?: string;
+  situacao_cadastral?: string;
+  matriz_filial?: string;
+  ultima_sincronizacao_receita?: string;
   email?: string;
   telefone?: string;
   whatsapp?: string;
@@ -69,6 +77,8 @@ type FormEmpresa = Omit<Empresa, "id" | "created_at" | "updated_at">;
 
 const FORM_VAZIO: FormEmpresa = {
   razao_social: "", nome_fantasia: "", cnpj: "", inscricao_estadual: "",
+  natureza_juridica: "", capital_social: undefined, cnae_principal: "", cnaes_secundarios: [],
+  data_abertura: "", situacao_cadastral: "", matriz_filial: "", ultima_sincronizacao_receita: "",
   email: "", telefone: "", whatsapp: "", site: "", segmento: "", porte: "mei",
   faturamento_anual: undefined, numero_funcionarios: undefined,
   cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "",
@@ -200,6 +210,32 @@ function FieldRow({ label, value, icon, mono }: { label: string; value?: string 
       </div>
     </div>
   );
+}
+
+function InfoTile({ label, value, icon, tone = "slate", mono = false }: { label: string; value?: string | number | null; icon?: React.ReactNode; tone?: "slate" | "blue" | "emerald" | "amber" | "violet"; mono?: boolean }) {
+  if (value === undefined || value === null || value === "") return null;
+  const palette = {
+    slate: "bg-white border-slate-200 text-slate-700",
+    blue: "bg-blue-50 border-blue-100 text-blue-800",
+    emerald: "bg-emerald-50 border-emerald-100 text-emerald-800",
+    amber: "bg-amber-50 border-amber-100 text-amber-800",
+    violet: "bg-violet-50 border-violet-100 text-violet-800",
+  }[tone];
+  return (
+    <div className={`rounded-2xl border p-4 ${palette}`}>
+      <div className="flex items-center gap-2 mb-2 text-slate-400">
+        {icon}
+        <p className="text-[10px] font-black uppercase tracking-widest">{label}</p>
+      </div>
+      <p className={`text-sm font-black leading-snug break-words ${mono ? "font-mono" : ""}`}>{value}</p>
+    </div>
+  );
+}
+
+function normalizarCapitalSocial(valor?: number | string | null) {
+  if (valor === undefined || valor === null || valor === "") return "—";
+  const n = typeof valor === "number" ? valor : Number(String(valor).replace(/[^0-9,.-]/g, "").replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(n) ? fmt(n) : String(valor);
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -432,6 +468,18 @@ export default function Empresas() {
         estado: res.uf || empresa.estado,
         porte: porteMap,
         segmento: empresa.segmento || res.cnae_fiscal_descricao || "",
+        natureza_juridica: res.natureza_juridica || empresa.natureza_juridica || null,
+        capital_social: res.capital_social ?? empresa.capital_social ?? null,
+        cnae_principal: res.cnae_fiscal_descricao
+          ? `${res.cnae_fiscal || ""} — ${res.cnae_fiscal_descricao}`.trim()
+          : empresa.cnae_principal || null,
+        cnaes_secundarios: Array.isArray(res.cnaes_secundarios)
+          ? res.cnaes_secundarios.map((c: any) => c.descricao ? `${c.codigo || ""} — ${c.descricao}`.trim() : String(c)).filter(Boolean)
+          : empresa.cnaes_secundarios || [],
+        data_abertura: res.data_inicio_atividade || empresa.data_abertura || null,
+        situacao_cadastral: res.descricao_situacao_cadastral || empresa.situacao_cadastral || null,
+        matriz_filial: res.identificador_matriz_filial === 1 ? "Matriz" : res.identificador_matriz_filial === 2 ? "Filial" : empresa.matriz_filial || null,
+        ultima_sincronizacao_receita: new Date().toISOString(),
         // Responsável — só preenche se estiver vazio
         responsavel_nome: empresa.responsavel_nome || socio?.nome_socio || "",
         responsavel_cpf: empresa.responsavel_cpf || socio?.cnpj_cpf_do_socio || "",
@@ -487,7 +535,10 @@ export default function Empresas() {
     setEditando(emp);
     setForm({
       razao_social: emp.razao_social, nome_fantasia: emp.nome_fantasia || "", cnpj: emp.cnpj || "",
-      inscricao_estadual: emp.inscricao_estadual || "", email: emp.email || "", telefone: emp.telefone || "",
+      inscricao_estadual: emp.inscricao_estadual || "", natureza_juridica: emp.natureza_juridica || "",
+      capital_social: emp.capital_social, cnae_principal: emp.cnae_principal || "", cnaes_secundarios: emp.cnaes_secundarios || [],
+      data_abertura: emp.data_abertura || "", situacao_cadastral: emp.situacao_cadastral || "", matriz_filial: emp.matriz_filial || "",
+      ultima_sincronizacao_receita: emp.ultima_sincronizacao_receita || "", email: emp.email || "", telefone: emp.telefone || "",
       whatsapp: emp.whatsapp || "", site: emp.site || "", segmento: emp.segmento || "",
       porte: emp.porte || "mei", faturamento_anual: emp.faturamento_anual,
       numero_funcionarios: emp.numero_funcionarios, cep: emp.cep || "", logradouro: emp.logradouro || "",
@@ -529,6 +580,8 @@ export default function Empresas() {
       const payload = {
         ...form,
         faturamento_anual: form.faturamento_anual || null,
+        capital_social: form.capital_social || null,
+        cnaes_secundarios: Array.isArray(form.cnaes_secundarios) ? form.cnaes_secundarios : [],
         numero_funcionarios: form.numero_funcionarios || null,
         limite_credito_atual: form.limite_credito_atual || null,
         score_serasa: form.score_serasa || null,
@@ -617,7 +670,7 @@ export default function Empresas() {
         </div>
 
         {/* ── Stats Row ── */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 grid grid-cols-3 gap-3">
+        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-4 grid grid-cols-3 gap-3">
           {[
             { label: "Ativos", value: totalAtivo, color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100" },
             { label: "Clientes", value: totalCliente, color: "text-violet-600", bg: "bg-violet-50 border-violet-100" },
@@ -631,11 +684,11 @@ export default function Empresas() {
         </div>
 
         {/* ── Layout 2 colunas ── */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-8">
+        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 pb-8">
           <div className="flex gap-5">
 
             {/* ── COLUNA ESQUERDA: Lista ── */}
-            <div className={`flex-shrink-0 w-full sm:w-80 lg:w-96 ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
+            <div className={`flex-shrink-0 w-full sm:w-72 lg:w-80 ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
               {/* Filtros */}
               <div className="mb-3 space-y-2">
                 <div className="relative">
@@ -788,6 +841,16 @@ export default function Empresas() {
                                   {PORTE_CFG[selecionada.porte]?.label}
                                 </span>
                               )}
+                              {selecionada.natureza_juridica && (
+                                <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">
+                                  {selecionada.natureza_juridica}
+                                </span>
+                              )}
+                              {selecionada.situacao_cadastral && (
+                                <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700">
+                                  Receita: {selecionada.situacao_cadastral}
+                                </span>
+                              )}
                               {selecionada.segmento && (
                                 <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
                                   {selecionada.segmento}
@@ -922,7 +985,7 @@ export default function Empresas() {
                   </div>
 
                   {/* ── Conteúdo das abas ── */}
-                  <div className="scroll-area overflow-y-auto" style={{ maxHeight: "calc(100vh - 560px)", minHeight: 200 }}>
+                  <div className="scroll-area overflow-y-auto" style={{ maxHeight: "calc(100vh - 355px)", minHeight: 420 }}>
                     {loadingDetalhe ? (
                       <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
                     ) : (
@@ -931,43 +994,49 @@ export default function Empresas() {
                     abaAtiva === "visao_geral" ? (
                       <div className="p-5 space-y-4 fade-in">
 
-                        {/* Grid de KPIs */}
-                        {(selecionada.faturamento_anual || selecionada.limite_credito_atual || selecionada.score_serasa || selecionada.score_spc) && (
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            {selecionada.faturamento_anual && (
-                              <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3">
-                                <p className="text-[11px] font-medium text-emerald-600 mb-1 flex items-center gap-1"><Banknote className="w-3 h-3" /> Faturamento</p>
-                                <p className="text-sm font-black text-emerald-800">{fmt(selecionada.faturamento_anual)}</p>
-                                <p className="text-[10px] text-emerald-500 mt-0.5">anual</p>
-                              </div>
-                            )}
-                            {selecionada.limite_credito_atual && (
-                              <div className="rounded-xl bg-blue-50 border border-blue-100 p-3">
-                                <p className="text-[11px] font-medium text-blue-600 mb-1 flex items-center gap-1"><CreditCard className="w-3 h-3" /> Limite</p>
-                                <p className="text-sm font-black text-blue-800">{fmt(selecionada.limite_credito_atual)}</p>
-                                <p className="text-[10px] text-blue-500 mt-0.5">crédito ativo</p>
-                              </div>
-                            )}
-                            {selecionada.score_serasa && (
-                              <div className={`rounded-xl border p-3 ${selecionada.score_serasa >= 700 ? "bg-emerald-50 border-emerald-100" : selecionada.score_serasa >= 500 ? "bg-amber-50 border-amber-100" : "bg-red-50 border-red-100"}`}>
-                                <p className={`text-[11px] font-medium mb-1 flex items-center gap-1 ${selecionada.score_serasa >= 700 ? "text-emerald-600" : selecionada.score_serasa >= 500 ? "text-amber-600" : "text-red-600"}`}><BarChart3 className="w-3 h-3" /> Serasa</p>
-                                <p className={`text-sm font-black ${selecionada.score_serasa >= 700 ? "text-emerald-800" : selecionada.score_serasa >= 500 ? "text-amber-800" : "text-red-800"}`}>{selecionada.score_serasa}</p>
-                                <p className={`text-[10px] mt-0.5 ${selecionada.score_serasa >= 700 ? "text-emerald-500" : selecionada.score_serasa >= 500 ? "text-amber-500" : "text-red-500"}`}>
-                                  {selecionada.score_serasa >= 700 ? "Bom" : selecionada.score_serasa >= 500 ? "Regular" : "Baixo"}
-                                </p>
-                              </div>
-                            )}
-                            {selecionada.score_spc && (
-                              <div className={`rounded-xl border p-3 ${selecionada.score_spc >= 700 ? "bg-emerald-50 border-emerald-100" : selecionada.score_spc >= 400 ? "bg-amber-50 border-amber-100" : "bg-red-50 border-red-100"}`}>
-                                <p className={`text-[11px] font-medium mb-1 flex items-center gap-1 ${selecionada.score_spc >= 700 ? "text-emerald-600" : selecionada.score_spc >= 400 ? "text-amber-600" : "text-red-600"}`}><BarChart3 className="w-3 h-3" /> SPC</p>
-                                <p className={`text-sm font-black ${selecionada.score_spc >= 700 ? "text-emerald-800" : selecionada.score_spc >= 400 ? "text-amber-800" : "text-red-800"}`}>{selecionada.score_spc}</p>
-                                <p className={`text-[10px] mt-0.5 ${selecionada.score_spc >= 700 ? "text-emerald-500" : selecionada.score_spc >= 400 ? "text-amber-500" : "text-red-500"}`}>
-                                  {selecionada.score_spc >= 700 ? "Bom" : selecionada.score_spc >= 400 ? "Regular" : "Baixo"}
-                                </p>
-                              </div>
-                            )}
+                        {/* Painel executivo ampliado para análise de crédito */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                          <InfoTile label="Capital Social" value={normalizarCapitalSocial(selecionada.capital_social)} icon={<Banknote className="w-3.5 h-3.5" />} tone="emerald" />
+                          <InfoTile label="Natureza Jurídica" value={selecionada.natureza_juridica || "Não informado"} icon={<Briefcase className="w-3.5 h-3.5" />} tone="blue" />
+                          <InfoTile label="CNAE Principal" value={selecionada.cnae_principal || selecionada.segmento || "Não informado"} icon={<Tag className="w-3.5 h-3.5" />} tone="violet" />
+                          <InfoTile label="Abertura" value={selecionada.data_abertura ? fmtDate(selecionada.data_abertura) : "Não informado"} icon={<Calendar className="w-3.5 h-3.5" />} tone="amber" />
+                          <InfoTile label="Faturamento Anual" value={selecionada.faturamento_anual ? fmt(selecionada.faturamento_anual) : "Não informado"} icon={<Banknote className="w-3.5 h-3.5" />} />
+                          <InfoTile label="Limite Atual" value={selecionada.limite_credito_atual ? fmt(selecionada.limite_credito_atual) : "R$ 0,00"} icon={<CreditCard className="w-3.5 h-3.5" />} />
+                          <InfoTile label="Serasa" value={selecionada.score_serasa || "Não informado"} icon={<BarChart3 className="w-3.5 h-3.5" />} />
+                          <InfoTile label="SPC" value={selecionada.score_spc || "Não informado"} icon={<BarChart3 className="w-3.5 h-3.5" />} />
+                        </div>
+
+                        {/* Receita Federal / Junta Comercial */}
+                        <SectionCard title="Receita Federal e Junta Comercial" icon={<Briefcase className="w-4 h-4" />}>
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 py-2">
+                            <InfoTile label="Razão Social" value={selecionada.razao_social} icon={<Building2 className="w-3.5 h-3.5" />} />
+                            <InfoTile label="Nome Fantasia" value={selecionada.nome_fantasia || "Não informado"} icon={<Star className="w-3.5 h-3.5" />} />
+                            <InfoTile label="Natureza Jurídica" value={selecionada.natureza_juridica || "Não sincronizada"} icon={<Briefcase className="w-3.5 h-3.5" />} tone="blue" />
+                            <InfoTile label="Capital Social" value={normalizarCapitalSocial(selecionada.capital_social)} icon={<Banknote className="w-3.5 h-3.5" />} tone="emerald" />
+                            <InfoTile label="CNAE Principal" value={selecionada.cnae_principal || selecionada.segmento || "Não informado"} icon={<Tag className="w-3.5 h-3.5" />} tone="violet" />
+                            <InfoTile label="Data de Abertura" value={selecionada.data_abertura ? fmtDate(selecionada.data_abertura) : "Não informado"} icon={<Calendar className="w-3.5 h-3.5" />} />
+                            <InfoTile label="Situação Cadastral" value={selecionada.situacao_cadastral || "Não informado"} icon={<CheckCircle className="w-3.5 h-3.5" />} tone="emerald" />
+                            <InfoTile label="Matriz / Filial" value={selecionada.matriz_filial || "Não informado"} icon={<Building className="w-3.5 h-3.5" />} />
                           </div>
-                        )}
+                          {selecionada.cnaes_secundarios && selecionada.cnaes_secundarios.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-slate-100">
+                              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">CNAEs secundários</p>
+                              <div className="flex flex-wrap gap-2">
+                                {selecionada.cnaes_secundarios.map((cnae, idx) => (
+                                  <span key={idx} className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">{cnae}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          <button
+                            onClick={() => sincronizarDados(selecionada)}
+                            disabled={!selecionada.cnpj || sincronizando}
+                            className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 text-white py-2.5 text-sm font-bold hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            <RotateCw className={`w-4 h-4 ${sincronizando ? "animate-spin" : ""}`} />
+                            Atualizar dados da Receita Federal
+                          </button>
+                        </SectionCard>
 
                         {/* Dados Cadastrais */}
                         <SectionCard title="Dados Cadastrais" icon={<Building className="w-4 h-4" />}>
@@ -1341,10 +1410,13 @@ export default function Empresas() {
                     : abaAtiva === "documentos" ? (
                       <div className="p-5 fade-in">
                         <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-sm font-bold text-slate-700">Documentos</h3>
+                          <div>
+                            <h3 className="text-sm font-bold text-slate-700">Documentos, fotos e evidências</h3>
+                            <p className="text-xs text-slate-400 mt-0.5">Fachada, interior, contrato social, alterações, cartão CNPJ e arquivos de análise de crédito.</p>
+                          </div>
                           <label className="flex items-center gap-1.5 text-xs font-semibold bg-blue-600 text-white px-3 py-1.5 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors">
                             <Upload className="w-3.5 h-3.5" /> Enviar
-                            <input type="file" className="hidden" onChange={async (e) => {
+                            <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden" onChange={async (e) => {
                               const file = e.target.files?.[0];
                               if (!file || !selecionada) return;
                               const fd = new FormData(); fd.append("file", file);
@@ -1360,7 +1432,7 @@ export default function Empresas() {
                         {documentos.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
                             <Paperclip className="w-10 h-10 text-slate-200" />
-                            <p className="text-sm text-slate-500">Nenhum documento enviado</p>
+                            <p className="text-sm text-slate-500">Nenhum documento, foto ou evidência enviado</p>
                           </div>
                         ) : (
                           <div className="space-y-2">
@@ -1371,7 +1443,7 @@ export default function Empresas() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-medium text-slate-800 truncate">{doc.nome}</p>
-                                  <p className="text-xs text-slate-400 mt-0.5">{doc.tipo} · {fmtDate(doc.created_at)}</p>
+                                  <p className="text-xs text-slate-400 mt-0.5">{doc.tipo || "arquivo"} · {fmtDate(doc.created_at)}</p>
                                 </div>
                                 {doc.url && (
                                   <a href={doc.url} target="_blank" rel="noreferrer" className="shrink-0 p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
@@ -1474,6 +1546,18 @@ export default function Empresas() {
                             responsavel_cargo: socio?.descricao_qualificacao_socio ?? "",
                             porte: porteMap,
                             segmento: data.cnae_fiscal_descricao ?? prev.segmento,
+                            natureza_juridica: data.natureza_juridica ?? prev.natureza_juridica,
+                            capital_social: data.capital_social ?? prev.capital_social,
+                            cnae_principal: data.cnae_fiscal_descricao
+                              ? `${data.cnae_fiscal || ""} — ${data.cnae_fiscal_descricao}`.trim()
+                              : prev.cnae_principal,
+                            cnaes_secundarios: Array.isArray((data as any).cnaes_secundarios)
+                              ? (data as any).cnaes_secundarios.map((c: any) => c.descricao ? `${c.codigo || ""} — ${c.descricao}`.trim() : String(c)).filter(Boolean)
+                              : prev.cnaes_secundarios,
+                            data_abertura: data.data_inicio_atividade ?? prev.data_abertura,
+                            situacao_cadastral: data.descricao_situacao_cadastral ?? prev.situacao_cadastral,
+                            matriz_filial: (data as any).identificador_matriz_filial === 1 ? "Matriz" : (data as any).identificador_matriz_filial === 2 ? "Filial" : prev.matriz_filial,
+                            ultima_sincronizacao_receita: new Date().toISOString(),
                           }));
                           setTimeout(() => setEtapaModal("form"), 500);
                         });
@@ -1515,6 +1599,29 @@ export default function Empresas() {
                       </MField>
                       <MField label="Inscrição Estadual">
                         <input value={form.inscricao_estadual || ""} onChange={e => set("inscricao_estadual", e.target.value)} placeholder="000.000.000.000" className={inputCls} />
+                      </MField>
+                      <MField label="Natureza Jurídica">
+                        <input value={form.natureza_juridica || ""} onChange={e => set("natureza_juridica", e.target.value)} placeholder="LTDA, Empresário Individual, SA..." className={inputCls} />
+                      </MField>
+                      <MField label="Capital Social (R$)">
+                        <input
+                          type="text" inputMode="numeric"
+                          value={form.capital_social ? formatBRLCurrency(form.capital_social) : ""}
+                          onChange={e => { const f = maskCurrencyInput(e.target.value); set("capital_social", unmaskCurrencyInput(f) || undefined); }}
+                          placeholder="0,00" autoComplete="off"
+                          className={inputCls + " text-right font-mono"}
+                        />
+                      </MField>
+                      <div className="sm:col-span-2">
+                        <MField label="CNAE Principal">
+                          <input value={form.cnae_principal || ""} onChange={e => set("cnae_principal", e.target.value)} placeholder="Código — atividade principal" className={inputCls} />
+                        </MField>
+                      </div>
+                      <MField label="Data de Abertura">
+                        <input type="date" value={form.data_abertura ? String(form.data_abertura).slice(0, 10) : ""} onChange={e => set("data_abertura", e.target.value)} className={inputCls} />
+                      </MField>
+                      <MField label="Situação Cadastral">
+                        <input value={form.situacao_cadastral || ""} onChange={e => set("situacao_cadastral", e.target.value)} placeholder="ATIVA, BAIXADA, INAPTA..." className={inputCls} />
                       </MField>
                       <MField label="Porte">
                         <select value={form.porte || "mei"} onChange={e => set("porte", e.target.value)} className={selectCls}>
