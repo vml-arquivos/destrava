@@ -69,6 +69,15 @@ function formatCapital(value: number): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function parseBRL(value: string): number | null {
+  const clean = String(value || '')
+    .replace(/[^0-9,.-]/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.');
+  const n = Number(clean);
+  return Number.isFinite(n) ? n : null;
+}
+
 function qualificacaoLabel(code: string | number): string {
   const map: Record<string, string> = {
     '49': 'Sócio-Administrador', '05': 'Administrador',
@@ -300,8 +309,12 @@ export default function CadastroEmpresa() {
           cidade: form.cidade || null,
           estado: form.uf || null,
           natureza_juridica: form.natureza_juridica || null,
+          capital_social: parseBRL(form.capital_social),
           cnae_principal: form.cnae || null,
+          cnaes_secundarios: [],
           data_abertura: form.data_abertura || null,
+          situacao_cadastral: form.situacao || null,
+          ultima_sincronizacao_receita: new Date().toISOString(),
           responsavel_nome: form.responsavel_nome || null,
           responsavel_cpf: form.responsavel_cpf || null,
           responsavel_email: form.responsavel_email || null,
