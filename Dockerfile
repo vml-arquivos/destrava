@@ -13,10 +13,8 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
 
 COPY . .
 
-# Build do frontend
 RUN pnpm exec vite build
 
-# Build do backend
 RUN pnpm exec esbuild server/index.ts \
     --platform=node \
     --packages=external \
@@ -27,6 +25,7 @@ RUN pnpm exec esbuild server/index.ts \
 # ─── Stage 2: Production ─────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 
+# Instala Chromium e limpa cache na mesma layer para não inflar a imagem
 RUN apk add --no-cache \
     chromium \
     nss \
@@ -35,7 +34,8 @@ RUN apk add --no-cache \
     ca-certificates \
     ttf-freefont \
     wget \
-    && npm install -g pnpm@10.4.1
+    && npm install -g pnpm@10.4.1 \
+    && rm -rf /root/.npm /tmp/*
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
@@ -43,19 +43,23 @@ ENV CHROMIUM_PATH=/usr/bin/chromium-browser
 
 WORKDIR /app
 
-RUN mkdir -p /var/data/destrava /var/log/destrava && \
-    chown -R node:node /var/data/destrava /var/log/destrava /app
+RUN mkdir -p /var/data/destrava /var/log/destrava \
+    && chown -R node:node /var/data/destrava /var/log/destrava /app
 
 COPY package.json pnpm-lock.yaml .npmrc ./
 COPY patches/ ./patches/
 
-# Instala apenas dependências de produção direto no runner
-# (elimina a cópia massiva de node_modules entre stages)
+# Instala prod deps como root, depois passa para node
 RUN --mount=type=cache,id=pnpm-store-prod,target=/root/.local/share/pnpm/store \
-    pnpm install --prod --frozen-lockfile
+    pnpm install --prod --frozen-lockfile \
+    && pnpm store prune \
+    && rm -rf /root/.local/share/pnpm/store /tmp/*
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/scripts ./scripts
+
+# Corrige ownership de tudo de uma vez só
+RUN chown -R node:node /app
 
 USER node
 
