@@ -675,6 +675,35 @@ async function startServer() {
   app.use('/api/empresas', sociosDocumentosRouter);
   const server = createServer(app);
 
+  // ─── AUTO-CREATE: Company Hub / Empresas enriquecidas ──────────────────────
+  // Mantém produção resiliente mesmo quando a migration ainda não foi aplicada manualmente.
+  try {
+    await pool.query(`
+      ALTER TABLE public.empresas
+        ADD COLUMN IF NOT EXISTS natureza_juridica TEXT,
+        ADD COLUMN IF NOT EXISTS capital_social NUMERIC(15,2),
+        ADD COLUMN IF NOT EXISTS cnae_principal TEXT,
+        ADD COLUMN IF NOT EXISTS cnaes_secundarios TEXT[] DEFAULT '{}',
+        ADD COLUMN IF NOT EXISTS data_abertura DATE,
+        ADD COLUMN IF NOT EXISTS situacao_cadastral TEXT,
+        ADD COLUMN IF NOT EXISTS matriz_filial TEXT,
+        ADD COLUMN IF NOT EXISTS ultima_sincronizacao_receita TIMESTAMPTZ;
+
+      CREATE TABLE IF NOT EXISTS public.empresa_documentos (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        empresa_id UUID NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
+        nome TEXT NOT NULL,
+        tipo TEXT,
+        tamanho INTEGER,
+        url TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_empresa_documentos_empresa_id ON public.empresa_documentos(empresa_id);
+    `);
+  } catch (err) {
+    console.error('[AUTO-CREATE Company Hub]', err);
+  }
+
   // ─── AUTO-CREATE: Módulos de Faturamento e Contratos ─────────────────────────
   // Garante que as tabelas existam mesmo sem executar a migration manual.
   // Idempotente: usa CREATE TABLE IF NOT EXISTS e ADD COLUMN IF NOT EXISTS.
@@ -2791,6 +2820,8 @@ async function startServer() {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const {
         razao_social, nome_fantasia, cnpj, inscricao_estadual,
+        natureza_juridica, capital_social, cnae_principal, cnaes_secundarios,
+        data_abertura, situacao_cadastral, matriz_filial, ultima_sincronizacao_receita,
         email, telefone, whatsapp, site,
         segmento, porte, faturamento_anual, numero_funcionarios,
         cep, logradouro, numero, complemento, bairro, cidade, estado,
@@ -2805,6 +2836,8 @@ async function startServer() {
       const { rows } = await pool.query(
         `INSERT INTO empresas (
           razao_social, nome_fantasia, cnpj, inscricao_estadual,
+          natureza_juridica, capital_social, cnae_principal, cnaes_secundarios,
+          data_abertura, situacao_cadastral, matriz_filial, ultima_sincronizacao_receita,
           email, telefone, whatsapp, site,
           segmento, porte, faturamento_anual, numero_funcionarios,
           cep, logradouro, numero, complemento, bairro, cidade, estado,
@@ -2812,11 +2845,14 @@ async function startServer() {
           banco_principal, agencia, conta, limite_credito_atual, score_serasa, score_spc,
           responsavel_id, status, origem, tags, observacoes, captador_id, analista_id
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
-          $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
+          $13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,
+          $28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45
         ) RETURNING *`,
         [
           razao_social.trim(), nome_fantasia || null, cnpj || null, inscricao_estadual || null,
+          natureza_juridica || null, capital_social || null, cnae_principal || null, Array.isArray(cnaes_secundarios) ? cnaes_secundarios : [],
+          data_abertura || null, situacao_cadastral || null, matriz_filial || null, ultima_sincronizacao_receita || null,
           email || null, telefone || null, whatsapp || null, site || null,
           segmento || null, porte || 'mei', faturamento_anual || null, numero_funcionarios || null,
           cep || null, logradouro || null, numero || null, complemento || null, bairro || null, cidade || null, estado || null,
@@ -3033,30 +3069,43 @@ async function startServer() {
     } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
   });
 
-  app.post("/api/empresas/:id/documentos", auth, async (req: Request, res: Response) => {
+  const uploadEmpresaDocumento = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 25 * 1024 * 1024 },
+  });
+
+  app.post("/api/empresas/:id/documentos", auth, uploadEmpresaDocumento.single("file"), async (req: Request, res: Response) => {
     try {
+      const file = req.file;
+      if (!file) {
+        res.status(400).json({ error: "Arquivo é obrigatório" });
+        return;
+      }
+
       const dataDir = process.env.DATA_DIR || "/data";
       const uploadDir = path.join(dataDir, "uploads", "empresas", req.params.id);
       await fs.promises.mkdir(uploadDir, { recursive: true });
 
-      const chunks: Buffer[] = [];
-      req.on("data", (chunk: Buffer) => chunks.push(chunk));
-      await new Promise(r => req.on("end", r));
-      const buf = Buffer.concat(chunks);
-
-      const contentDisp = req.headers["content-disposition"] || "";
-      const match = contentDisp.match(/filename="?([^"\n]+)"?/);
-      const nomeArq = match?.[1] || `doc_${Date.now()}`;
+      const ext = path.extname(file.originalname || "");
+      const base = path.basename(file.originalname || `doc_${Date.now()}`, ext).replace(/[^a-zA-Z0-9_.-]+/g, "_").slice(0, 90);
+      const nomeArq = `${Date.now()}_${base}${ext || ""}`;
       const filePath = path.join(uploadDir, nomeArq);
-      await fs.promises.writeFile(filePath, buf);
+      await fs.promises.writeFile(filePath, file.buffer);
+
+      const tipoInformado = typeof req.body?.tipo === "string" ? req.body.tipo : "";
+      const tipo = tipoInformado || (file.mimetype?.startsWith("image/") ? "foto_empresa" : (ext.replace(".", "") || "arquivo"));
+      const url = `/uploads/empresas/${req.params.id}/${nomeArq}`;
 
       const r = await pool.query(
         `INSERT INTO empresa_documentos (empresa_id, nome, tipo, tamanho, url)
          VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-        [req.params.id, nomeArq, path.extname(nomeArq).replace(".", "") || "arquivo", buf.length, `/uploads/empresas/${req.params.id}/${nomeArq}`]
+        [req.params.id, file.originalname || nomeArq, tipo, file.size, url]
       );
-      res.json(r.rows[0]);
-    } catch (err) { console.error(err); res.status(500).json({ error: "Erro ao salvar documento" }); }
+      res.status(201).json(r.rows[0]);
+    } catch (err) {
+      console.error("[POST /api/empresas/:id/documentos]", err);
+      res.status(500).json({ error: "Erro ao salvar documento" });
+    }
   });
 
   // ─── Triagem: Qualificação por IA ────────────────────────────────────────
