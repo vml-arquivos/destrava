@@ -1,4 +1,4 @@
-# ─── Stage 1: Build ──────────────────────────────────────────────────────────
+# ─── Stage 1: Build ───────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 
 RUN npm install -g pnpm@10.4.1
@@ -22,23 +22,27 @@ RUN pnpm exec esbuild server/index.ts \
     --format=esm \
     --outdir=dist
 
-# ─── Stage 2: Production ─────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+# ─── Stage 2: Production ──────────────────────────────────────────────────────
+# Usando node:20-slim (Debian) em vez de Alpine para evitar o problema do
+# Chromium no Alpine que puxa ~189 dependências pesadas (Mesa, LLVM, FFmpeg)
+# causando timeout no build.
+FROM node:20-slim AS runner
 
-RUN apk add --no-cache \
+# Instala Chromium e dependências mínimas via apt (muito mais leve no Debian)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
-    nss \
-    freetype \
-    harfbuzz \
+    fonts-freefont-ttf \
     ca-certificates \
-    ttf-freefont \
     wget \
-    && npm install -g pnpm@10.4.1 \
-    && rm -rf /root/.npm /tmp/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Instala pnpm globalmente
+RUN npm install -g pnpm@10.4.1 && npm cache clean --force
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
-ENV CHROMIUM_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV CHROMIUM_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
