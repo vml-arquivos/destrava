@@ -2296,6 +2296,103 @@ async function startServer() {
     }
   });
 
+  // ─── PDFs armazenados de simulações ───────────────────────────────────────
+  app.post("/api/simulacoes/:id/pdf", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const { id } = req.params;
+      const { nome_arquivo, pdf_base64, metadata } = req.body || {};
+
+      if (!pdf_base64 || typeof pdf_base64 !== "string") {
+        return res.status(400).json({ error: "PDF em base64 é obrigatório" });
+      }
+
+      const isGestor = isGestorCargo(colaborador?.cargo || "");
+      const acesso = await pool.query(
+        isGestor
+          ? "SELECT id, colaborador_id FROM simulacoes_colaborador WHERE id = $1"
+          : "SELECT id, colaborador_id FROM simulacoes_colaborador WHERE id = $1 AND colaborador_id = $2",
+        isGestor ? [id] : [id, colaborador.id]
+      );
+
+      if (!acesso.rows.length) {
+        return res.status(404).json({ error: "Simulação não encontrada" });
+      }
+
+      const base64Limpo = pdf_base64.includes(",") ? pdf_base64.split(",").pop() : pdf_base64;
+      const { rows } = await pool.query(
+        `INSERT INTO simulacao_pdfs
+          (simulacao_id, colaborador_id, nome_arquivo, pdf_base64, metadata)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, nome_arquivo, criado_em`,
+        [
+          id,
+          colaborador.id,
+          nome_arquivo || `simulacao_${id}.pdf`,
+          base64Limpo,
+          metadata || {},
+        ]
+      );
+
+      res.status(201).json({ success: true, pdf: rows[0] });
+    } catch (err: any) {
+      console.error("[POST /api/simulacoes/:id/pdf]", err);
+      res.status(500).json({ error: "Erro ao armazenar PDF da simulação" });
+    }
+  });
+
+  app.get("/api/simulacoes/:id/pdfs", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const { id } = req.params;
+      const isGestor = isGestorCargo(colaborador?.cargo || "");
+      const { rows } = await pool.query(
+        `SELECT p.id, p.nome_arquivo, p.mime_type, p.criado_em
+           FROM simulacao_pdfs p
+           JOIN simulacoes_colaborador s ON s.id = p.simulacao_id
+          WHERE p.simulacao_id = $1
+            AND ($2::boolean = true OR s.colaborador_id = $3)
+          ORDER BY p.criado_em DESC`,
+        [id, isGestor, colaborador.id]
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error("[GET /api/simulacoes/:id/pdfs]", err);
+      res.status(500).json({ error: "Erro ao listar PDFs da simulação" });
+    }
+  });
+
+  app.get("/api/simulacoes/:id/pdf/latest", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const { id } = req.params;
+      const isGestor = isGestorCargo(colaborador?.cargo || "");
+      const { rows } = await pool.query(
+        `SELECT p.nome_arquivo, p.mime_type, p.pdf_base64
+           FROM simulacao_pdfs p
+           JOIN simulacoes_colaborador s ON s.id = p.simulacao_id
+          WHERE p.simulacao_id = $1
+            AND ($2::boolean = true OR s.colaborador_id = $3)
+          ORDER BY p.criado_em DESC
+          LIMIT 1`,
+        [id, isGestor, colaborador.id]
+      );
+
+      if (!rows.length) {
+        return res.status(404).json({ error: "Nenhum PDF armazenado para esta simulação" });
+      }
+
+      const pdf = rows[0];
+      const buffer = Buffer.from(String(pdf.pdf_base64 || ""), "base64");
+      res.setHeader("Content-Type", pdf.mime_type || "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="${String(pdf.nome_arquivo || "simulacao.pdf").replace(/"/g, "")}"`);
+      res.send(buffer);
+    } catch (err) {
+      console.error("[GET /api/simulacoes/:id/pdf/latest]", err);
+      res.status(500).json({ error: "Erro ao recuperar PDF da simulação" });
+    }
+  });
+
   // ─── GET /api/simulacoes ──────────────────────────────────────────────────
   app.get("/api/simulacoes", auth, async (req: Request, res: Response) => {
     try {
@@ -6191,20 +6288,10 @@ ${(temTest1 || temTest2) ? `
 
   app.get('/api/clientes-pf', auth, async (_req: Request, res: Response) => {
     try {
-      const columns = await getTableColumns('clientes_pf');
-      const baseCols = [
-        'id', 'nome', 'cpf', 'rg', 'data_nascimento', 'email', 'telefone',
-        'endereco', 'cidade', 'uf', 'cep', 'profissao', 'estado_civil',
-        'observacoes', 'ativo', 'created_at', 'updated_at',
-      ];
-      const extraCols = [
-        'origem', 'canal', 'campanha', 'utm_source', 'utm_medium', 'utm_campaign',
-        'landing_page', 'produto_interesse', 'status', 'ultima_interacao',
-        'proxima_acao', 'responsavel_id', 'empresa_id', 'tipo_cliente',
-      ].filter((col) => columns.has(col));
-      const selectCols = [...baseCols.filter((col) => columns.has(col)), ...extraCols];
       const { rows } = await pool.query(
-        `SELECT ${selectCols.join(', ')}
+        `SELECT id, nome, cpf, rg, data_nascimento, email, telefone,
+                endereco, cidade, uf, cep, profissao, estado_civil,
+                observacoes, ativo, created_at, updated_at
            FROM clientes_pf
           WHERE ativo = true
           ORDER BY nome`
@@ -6219,17 +6306,11 @@ ${(temTest1 || temTest2) ? `
   app.get('/api/clientes-pf/buscar', auth, async (req: Request, res: Response) => {
     try {
       const { q = '' } = req.query as { q?: string };
-      const columns = await getTableColumns('clientes_pf');
-      const selectCols = ['id', 'nome', 'cpf', 'rg', 'email', 'telefone', 'cidade', 'uf']
-        .filter((col) => columns.has(col));
-      for (const extra of ['origem', 'produto_interesse', 'status', 'proxima_acao']) {
-        if (columns.has(extra)) selectCols.push(extra);
-      }
       const { rows } = await pool.query(
-        `SELECT ${selectCols.join(', ')}
+        `SELECT id, nome, cpf, rg, email, telefone, cidade, uf
            FROM clientes_pf
           WHERE ativo = true
-            AND (nome ILIKE $1 OR cpf ILIKE $1 OR COALESCE(email, '') ILIKE $1 OR COALESCE(telefone, '') ILIKE $1)
+            AND (nome ILIKE $1 OR cpf ILIKE $1 OR email ILIKE $1)
           ORDER BY nome
           LIMIT 30`,
         [`%${q}%`]
@@ -6254,54 +6335,29 @@ ${(temTest1 || temTest2) ? `
 
   app.post('/api/clientes-pf', auth, async (req: Request, res: Response) => {
     try {
-      const columns = await getTableColumns('clientes_pf');
       const {
         nome, cpf, rg, data_nascimento, email, telefone,
-        endereco, cidade, uf, cep, profissao, estado_civil, observacoes,
-        origem, canal, campanha, utm_source, utm_medium, utm_campaign,
-        landing_page, produto_interesse, status, ultima_interacao, proxima_acao,
-        empresa_id, tipo_cliente,
+        endereco, cidade, uf, cep, profissao, estado_civil, observacoes
       } = req.body;
       if (!nome || !cpf) {
         res.status(400).json({ error: 'nome e cpf são obrigatórios' });
         return;
       }
-      const colaborador = (req as Request & { colaborador?: any }).colaborador;
-      const valuesByColumn: Record<string, any> = {
-        nome,
-        cpf,
-        rg: rg || null,
-        data_nascimento: normalizeDate(data_nascimento),
-        email: email || null,
-        telefone: telefone || null,
-        endereco: endereco || null,
-        cidade: cidade || null,
-        uf: uf || null,
-        cep: cep || null,
-        profissao: profissao || null,
-        estado_civil: estado_civil || null,
-        observacoes: observacoes || null,
-        origem: origem || 'manual',
-        canal: canal || null,
-        campanha: campanha || null,
-        utm_source: utm_source || null,
-        utm_medium: utm_medium || null,
-        utm_campaign: utm_campaign || null,
-        landing_page: landing_page || null,
-        produto_interesse: produto_interesse || null,
-        status: status || 'ativo',
-        ultima_interacao: normalizeTimestamp(ultima_interacao),
-        proxima_acao: proxima_acao || null,
-        empresa_id: empresa_id || null,
-        tipo_cliente: tipo_cliente || 'pf',
-        responsavel_id: colaborador?.id || null,
-      };
-      const insertCols = Object.keys(valuesByColumn).filter((col) => columns.has(col));
-      const params = insertCols.map((col) => valuesByColumn[col]);
-      const placeholders = insertCols.map((_, i) => `$${i + 1}`);
       const { rows } = await pool.query(
-        `INSERT INTO clientes_pf (${insertCols.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`,
-        params
+        `INSERT INTO clientes_pf
+           (nome, cpf, rg, data_nascimento, email, telefone,
+            endereco, cidade, uf, cep, profissao, estado_civil, observacoes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         RETURNING *`,
+        [
+          nome, cpf,
+          rg || null, data_nascimento || null,
+          email || null, telefone || null,
+          endereco || null, cidade || null,
+          uf || null, cep || null,
+          profissao || null, estado_civil || null,
+          observacoes || null,
+        ]
       );
       res.status(201).json(rows[0]);
     } catch (err: any) {
@@ -6314,51 +6370,26 @@ ${(temTest1 || temTest2) ? `
   app.put('/api/clientes-pf/:id', auth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const columns = await getTableColumns('clientes_pf');
       const {
         nome, cpf, rg, data_nascimento, email, telefone,
-        endereco, cidade, uf, cep, profissao, estado_civil, observacoes, ativo,
-        origem, canal, campanha, utm_source, utm_medium, utm_campaign,
-        landing_page, produto_interesse, status, ultima_interacao, proxima_acao,
-        empresa_id, tipo_cliente,
+        endereco, cidade, uf, cep, profissao, estado_civil, observacoes, ativo
       } = req.body;
-      const valuesByColumn: Record<string, any> = {
-        nome,
-        cpf,
-        rg: rg || null,
-        data_nascimento: normalizeDate(data_nascimento),
-        email: email || null,
-        telefone: telefone || null,
-        endereco: endereco || null,
-        cidade: cidade || null,
-        uf: uf || null,
-        cep: cep || null,
-        profissao: profissao || null,
-        estado_civil: estado_civil || null,
-        observacoes: observacoes || null,
-        ativo: ativo !== false,
-        origem: origem || 'manual',
-        canal: canal || null,
-        campanha: campanha || null,
-        utm_source: utm_source || null,
-        utm_medium: utm_medium || null,
-        utm_campaign: utm_campaign || null,
-        landing_page: landing_page || null,
-        produto_interesse: produto_interesse || null,
-        status: status || 'ativo',
-        ultima_interacao: normalizeTimestamp(ultima_interacao),
-        proxima_acao: proxima_acao || null,
-        empresa_id: empresa_id || null,
-        tipo_cliente: tipo_cliente || 'pf',
-      };
-      const updateCols = Object.keys(valuesByColumn).filter((col) => columns.has(col));
-      const sets = updateCols.map((col, i) => `${col}=$${i + 1}`);
-      const params = updateCols.map((col) => valuesByColumn[col]);
-      if (columns.has('updated_at')) sets.push(`updated_at=NOW()`);
-      params.push(id);
       const { rows } = await pool.query(
-        `UPDATE clientes_pf SET ${sets.join(', ')} WHERE id=$${params.length} RETURNING *`,
-        params
+        `UPDATE clientes_pf SET
+           nome=$1, cpf=$2, rg=$3, data_nascimento=$4, email=$5, telefone=$6,
+           endereco=$7, cidade=$8, uf=$9, cep=$10, profissao=$11,
+           estado_civil=$12, observacoes=$13, ativo=$14, updated_at=NOW()
+         WHERE id=$15 RETURNING *`,
+        [
+          nome, cpf,
+          rg || null, data_nascimento || null,
+          email || null, telefone || null,
+          endereco || null, cidade || null,
+          uf || null, cep || null,
+          profissao || null, estado_civil || null,
+          observacoes || null, ativo !== false,
+          id
+        ]
       );
       if (!rows.length) { res.status(404).json({ error: 'Cliente não encontrado' }); return; }
       res.json(rows[0]);
@@ -6374,7 +6405,7 @@ ${(temTest1 || temTest2) ? `
       await pool.query('UPDATE clientes_pf SET ativo=false, updated_at=NOW() WHERE id=$1', [req.params.id]);
       res.json({ ok: true });
     } catch (err: any) {
-      console.error('[DELETE /api/clientes-pf]', err);
+      console.error('[DELETE /api/clientes-pf/:id]', err);
       res.status(500).json({ error: 'Erro ao desativar cliente' });
     }
   });

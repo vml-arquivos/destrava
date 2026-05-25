@@ -292,46 +292,6 @@ function ScoreBar({ score, risco }: { score: number; risco: string }) {
   );
 }
 
-function CompactMetric({ label, value, tone = "slate" }: { label: string; value: string | number; tone?: "slate" | "blue" | "emerald" | "amber" | "rose" | "violet" }) {
-  const palette = {
-    slate: "bg-white text-slate-700 border-slate-200",
-    blue: "bg-blue-50 text-blue-700 border-blue-100",
-    emerald: "bg-emerald-50 text-emerald-700 border-emerald-100",
-    amber: "bg-amber-50 text-amber-700 border-amber-100",
-    rose: "bg-rose-50 text-rose-700 border-rose-100",
-    violet: "bg-violet-50 text-violet-700 border-violet-100",
-  }[tone];
-  return (
-    <div className={`rounded-xl border px-3 py-2 ${palette}`}>
-      <p className="text-[10px] font-black uppercase tracking-wider opacity-70">{label}</p>
-      <p className="text-lg font-black leading-none mt-1">{value}</p>
-    </div>
-  );
-}
-
-function ActionPill({ children, tone = "slate" }: { children: React.ReactNode; tone?: "slate" | "blue" | "emerald" | "amber" | "rose" | "violet" }) {
-  const palette = {
-    slate: "bg-slate-50 text-slate-600 border-slate-200",
-    blue: "bg-blue-50 text-blue-700 border-blue-200",
-    emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    amber: "bg-amber-50 text-amber-700 border-amber-200",
-    rose: "bg-rose-50 text-rose-700 border-rose-200",
-    violet: "bg-violet-50 text-violet-700 border-violet-200",
-  }[tone];
-  return <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${palette}`}>{children}</span>;
-}
-
-function EmptyPanel({ icon, title, description, action }: { icon: React.ReactNode; title: string; description: string; action?: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-6 text-center">
-      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm">{icon}</div>
-      <p className="text-sm font-black text-slate-700">{title}</p>
-      <p className="mx-auto mt-1 max-w-xl text-xs leading-5 text-slate-500">{description}</p>
-      {action && <div className="mt-4 flex justify-center">{action}</div>}
-    </div>
-  );
-}
-
 // ─── Modal Field ──────────────────────────────────────────────────────────────
 
 function MField({ label, required, error, children }: {
@@ -360,7 +320,7 @@ export default function Empresas() {
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [selecionada, setSelecionada] = useState<Empresa | null>(null);
   const [showDetail, setShowDetail] = useState(false); // mobile toggle
-  const [abaAtiva, setAbaAtiva] = useState<"resumo" | "credito" | "documentos" | "socios" | "atendimento" | "contratos" | "faturamento" | "historico" | "ia">("resumo");
+  const [abaAtiva, setAbaAtiva] = useState<"visao_geral" | "socios" | "followup" | "historico" | "documentos">("visao_geral");
   const [followups, setFollowups] = useState<EmpresaFollowup[]>([]);
   const [historico, setHistorico] = useState<EmpresaHistorico[]>([]);
   const [documentos, setDocumentos] = useState<EmpresaDocumento[]>([]);
@@ -419,7 +379,7 @@ export default function Empresas() {
   // ── Carregar detalhe ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!selecionada) return;
-    setAbaAtiva("resumo");
+    setAbaAtiva("visao_geral");
     setFollowups([]); setHistorico([]); setDocumentos([]); setSociosEmpresa([]);
     setLoadingDetalhe(true);
     Promise.all([
@@ -666,9 +626,6 @@ export default function Empresas() {
   const totalAtivo = empresas.filter(e => e.status === "ativo").length;
   const totalCliente = empresas.filter(e => e.status === "cliente").length;
   const totalProspecto = empresas.filter(e => e.status === "prospecto").length;
-  const totalSemProximaAcao = empresas.filter(e => !e.observacoes && !e.responsavel_nome).length;
-  const totalCadastroIncompleto = empresas.filter(e => !e.faturamento_anual || !e.email || !e.telefone).length;
-  const totalOrigemCampanha = empresas.filter(e => e.origem && e.origem !== "manual").length;
 
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
@@ -692,39 +649,46 @@ export default function Empresas() {
 
       <div className="emp-page min-h-screen bg-[#f8f9fc]">
 
-        {/* ── Header compacto ── */}
-        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3">
-          <div className="max-w-[1600px] mx-auto flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0">
-              <h1 className="text-xl font-black text-slate-900 tracking-tight">Empresas</h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {loading ? "Carregando..." : `${empresas.length} empresa${empresas.length !== 1 ? "s" : ""} cadastrada${empresas.length !== 1 ? "s" : ""}`} · Company Hub de crédito, documentos e atendimento
+        {/* ── Top Bar ── */}
+        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight">Empresas</h1>
+              <p className="text-sm text-slate-500 mt-0.5">
+                {loading ? "Carregando..." : `${empresas.length} empresa${empresas.length !== 1 ? "s" : ""} cadastrada${empresas.length !== 1 ? "s" : ""}`}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <CompactMetric label="Ativas" value={totalAtivo} tone="emerald" />
-              <CompactMetric label="Clientes" value={totalCliente} tone="violet" />
-              <CompactMetric label="Prospectos" value={totalProspecto} tone="blue" />
-              <CompactMetric label="Incompletas" value={totalCadastroIncompleto} tone="amber" />
-              <CompactMetric label="Campanhas" value={totalOrigemCampanha} tone="slate" />
-              <button
-                onClick={abrirNova}
-                className="ml-0 lg:ml-2 flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white shadow-sm shadow-blue-200 transition-colors hover:bg-blue-700"
-              >
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">Nova Empresa</span>
-                <span className="sm:hidden">Nova</span>
-              </button>
-            </div>
+            <button
+              onClick={abrirNova}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition-colors shadow-sm shadow-blue-200"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Nova Empresa</span>
+              <span className="sm:hidden">Nova</span>
+            </button>
           </div>
         </div>
 
+        {/* ── Stats Row ── */}
+        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-4 grid grid-cols-3 gap-3">
+          {[
+            { label: "Ativos", value: totalAtivo, color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100" },
+            { label: "Clientes", value: totalCliente, color: "text-violet-600", bg: "bg-violet-50 border-violet-100" },
+            { label: "Prospectos", value: totalProspecto, color: "text-blue-600", bg: "bg-blue-50 border-blue-100" },
+          ].map(s => (
+            <div key={s.label} className={`rounded-xl border p-3 ${s.bg}`}>
+              <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
+              <p className="text-xs font-medium text-slate-500 mt-0.5">{s.label}</p>
+            </div>
+          ))}
+        </div>
+
         {/* ── Layout 2 colunas ── */}
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-5 py-3 pb-6">
-          <div className="flex gap-3">
+        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 pb-8">
+          <div className="flex gap-5">
 
             {/* ── COLUNA ESQUERDA: Lista ── */}
-            <div className={`flex-shrink-0 w-full sm:w-[300px] lg:w-[320px] ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
+            <div className={`flex-shrink-0 w-full sm:w-72 lg:w-80 ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
               {/* Filtros */}
               <div className="mb-3 space-y-2">
                 <div className="relative">
@@ -764,7 +728,7 @@ export default function Empresas() {
               </div>
 
               {/* Lista */}
-              <div className="scroll-area overflow-y-auto space-y-1.5" style={{ maxHeight: "calc(100vh - 225px)" }}>
+              <div className="scroll-area overflow-y-auto space-y-1.5" style={{ maxHeight: "calc(100vh - 280px)" }}>
                 {loading ? (
                   <div className="flex flex-col items-center justify-center py-20 gap-3">
                     <Loader2 className="w-7 h-7 text-blue-500 animate-spin" />
@@ -785,7 +749,7 @@ export default function Empresas() {
                     <button
                       key={emp.id}
                       onClick={() => selecionar(emp)}
-                      className={`list-item w-full text-left p-3 rounded-xl border transition-all ${
+                      className={`list-item w-full text-left p-3.5 rounded-xl border transition-all ${
                         ativa
                           ? "border-blue-200 bg-blue-50 shadow-sm shadow-blue-100"
                           : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
@@ -850,7 +814,7 @@ export default function Empresas() {
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden slide-up">
 
                   {/* ── Header detalhe ── */}
-                  <div className="px-4 py-3 border-b border-slate-100">
+                  <div className="px-5 py-4 border-b border-slate-100">
                     <div className="flex items-start gap-4">
                       {/* Botão voltar mobile */}
                       <button
@@ -860,19 +824,16 @@ export default function Empresas() {
                         <ArrowLeft className="w-4 h-4" />
                       </button>
                       {/* Avatar grande */}
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white text-lg font-black shrink-0 shadow-md shadow-blue-100">
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white text-lg font-black shrink-0 shadow-md shadow-blue-100">
                         {getInitials(selecionada.razao_social)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <h2 className="text-base font-black text-slate-900 leading-tight truncate">{selecionada.razao_social}</h2>
+                            <h2 className="text-lg font-bold text-slate-900 leading-tight truncate">{selecionada.razao_social}</h2>
                             {selecionada.nome_fantasia && (
                               <p className="text-sm text-slate-500 mt-0.5">{selecionada.nome_fantasia}</p>
                             )}
-                            <p className="mt-1 text-[11px] font-medium text-slate-400 truncate">
-                              {[selecionada.cnpj, [selecionada.cidade, selecionada.estado].filter(Boolean).join("/"), selecionada.origem ? `Origem: ${selecionada.origem}` : null, selecionada.analista_nome || selecionada.captador_nome ? `Resp.: ${selecionada.analista_nome || selecionada.captador_nome}` : null].filter(Boolean).join(" · ")}
-                            </p>
                             <div className="flex flex-wrap items-center gap-2 mt-2">
                               <StatusBadge status={selecionada.status} />
                               {selecionada.porte && (
@@ -944,7 +905,7 @@ export default function Empresas() {
                       critico: { label: "Risco Crítico", cls: "bg-red-50 border-red-200",         Icon: ShieldOff,    ic: "text-red-600" },
                     }[risco] || { label: "—", cls: "", Icon: ShieldCheck, ic: "" };
                     return (
-                      <div className={`mx-4 mt-3 rounded-xl border p-3 ${rCfg.cls}`}>
+                      <div className={`mx-5 mt-4 rounded-xl border p-4 ${rCfg.cls}`}>
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <rCfg.Icon className={`w-4 h-4 ${rCfg.ic}`} />
@@ -957,12 +918,6 @@ export default function Empresas() {
                           }`}>{rCfg.label}</span>
                         </div>
                         <ScoreBar score={score} risco={risco} />
-                        <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
-                          <div className="rounded-lg border border-white/70 bg-white/70 px-3 py-2"><p className="text-[10px] font-black uppercase text-slate-400">Cadastro</p><p className="text-xs font-bold text-slate-700">{selecionada.cnpj && selecionada.cidade && selecionada.telefone ? "Em avanço" : "Incompleto"}</p></div>
-                          <div className="rounded-lg border border-white/70 bg-white/70 px-3 py-2"><p className="text-[10px] font-black uppercase text-slate-400">Documentos</p><p className="text-xs font-bold text-slate-700">{documentos.length} enviados</p></div>
-                          <div className="rounded-lg border border-white/70 bg-white/70 px-3 py-2"><p className="text-[10px] font-black uppercase text-slate-400">Atendimento</p><p className="text-xs font-bold text-slate-700">{followups.filter(f=>!f.concluido).length || "Sem"} pendente</p></div>
-                          <div className="rounded-lg border border-white/70 bg-white/70 px-3 py-2"><p className="text-[10px] font-black uppercase text-slate-400">Próxima ação</p><p className="text-xs font-bold text-slate-700">{!selecionada.faturamento_anual ? "Pedir faturamento" : documentos.length === 0 ? "Pedir documentos" : "Simular crédito"}</p></div>
-                        </div>
                         <div className="flex flex-wrap gap-1.5 mt-2.5">
                           {tags.slice(0, 4).map((t, i) => (
                             <span key={i} className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${t.ok ? "bg-white/80 text-slate-600 border border-slate-200" : "bg-white/80 text-rose-600 border border-rose-200"}`}>
@@ -982,27 +937,19 @@ export default function Empresas() {
                             <RotateCw className={`w-3.5 h-3.5 shrink-0 ${sincronizando ? "animate-spin" : ""}`} />
                           </button>
                         )}
-                        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                          <button
-                            onClick={() => {
-                              sessionStorage.setItem("calculadora_empresa", JSON.stringify({
-                                nome: selecionada.responsavel_nome || selecionada.razao_social,
-                                empresa: selecionada.razao_social, telefone: selecionada.telefone || selecionada.whatsapp || "",
-                                cpf_cnpj: selecionada.cnpj || "",
-                              }));
-                            }}
-                            className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 py-2 text-sm font-bold text-white transition-colors hover:bg-blue-700"
-                          >
-                            <Calculator className="w-4 h-4" />
-                            Nova Simulação
-                          </button>
-                          <button onClick={() => setAbaAtiva("documentos")} className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white/80 py-2 text-sm font-bold text-slate-700 hover:bg-white">
-                            <Paperclip className="w-4 h-4" /> Documentos
-                          </button>
-                          <button onClick={() => setAbaAtiva("atendimento")} className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white/80 py-2 text-sm font-bold text-slate-700 hover:bg-white">
-                            <Bell className="w-4 h-4" /> Próxima ação
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => {
+                            sessionStorage.setItem("calculadora_empresa", JSON.stringify({
+                              nome: selecionada.responsavel_nome || selecionada.razao_social,
+                              empresa: selecionada.razao_social, telefone: selecionada.telefone || selecionada.whatsapp || "",
+                              cpf_cnpj: selecionada.cnpj || "",
+                            }));
+                          }}
+                          className="mt-3 w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors"
+                        >
+                          <Calculator className="w-4 h-4" />
+                          Nova Simulação
+                        </button>
                       </div>
                     );
                   })()}
@@ -1011,15 +958,11 @@ export default function Empresas() {
                   <div className="mt-4 border-b border-slate-200 px-5 overflow-x-auto">
                     <div className="flex gap-0 min-w-max">
                       {([
-                        { id: "resumo",      label: "Resumo" },
-                        { id: "credito",     label: "Crédito" },
-                        { id: "documentos",  label: "Documentos", badge: documentos.length },
+                        { id: "visao_geral", label: "Visão Geral" },
                         { id: "socios",      label: "Sócios",     badge: sociosEmpresa.length },
-                        { id: "atendimento", label: "Atendimento", badge: followups.filter(f=>!f.concluido).length },
-                        { id: "contratos",   label: "Contratos" },
-                        { id: "faturamento", label: "Faturamento" },
+                        { id: "followup",    label: "Follow-up",  badge: followups.filter(f=>!f.concluido).length },
                         { id: "historico",   label: "Histórico",  badge: historico.length },
-                        { id: "ia",          label: "IA" },
+                        { id: "documentos",  label: "Documentos", badge: documentos.length },
                       ] as const).map(aba => (
                         <button
                           key={aba.id}
@@ -1042,13 +985,13 @@ export default function Empresas() {
                   </div>
 
                   {/* ── Conteúdo das abas ── */}
-                  <div className="scroll-area overflow-y-auto" style={{ maxHeight: "calc(100vh - 330px)", minHeight: 420 }}>
+                  <div className="scroll-area overflow-y-auto" style={{ maxHeight: "calc(100vh - 355px)", minHeight: 420 }}>
                     {loadingDetalhe ? (
                       <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
                     ) : (
 
-                    /* ── RESUMO ── */
-                    abaAtiva === "resumo" ? (
+                    /* ── VISÃO GERAL ── */
+                    abaAtiva === "visao_geral" ? (
                       <div className="p-5 space-y-4 fade-in">
 
                         {/* Painel executivo ampliado para análise de crédito */}
@@ -1322,7 +1265,7 @@ export default function Empresas() {
                         </div>
                         {sociosEmpresa.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
-                            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
+                            <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center">
                               <Users className="w-6 h-6 text-slate-300" />
                             </div>
                             <p className="text-sm text-slate-500 font-medium">Nenhum sócio cadastrado</p>
@@ -1362,10 +1305,10 @@ export default function Empresas() {
                     )
 
                     /* ── FOLLOW-UP ── */
-                    : abaAtiva === "atendimento" ? (
+                    : abaAtiva === "followup" ? (
                       <div className="p-5 fade-in">
                         <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-sm font-bold text-slate-700">Atendimento e próximas ações</h3>
+                          <h3 className="text-sm font-bold text-slate-700">Follow-ups</h3>
                           <button onClick={() => setShowFollowupForm(true)} className="flex items-center gap-1.5 text-xs font-semibold bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors">
                             <PlusCircle className="w-3.5 h-3.5" /> Novo
                           </button>
@@ -1419,89 +1362,6 @@ export default function Empresas() {
                             ))}
                           </div>
                         )}
-                      </div>
-                    )
-
-                    /* ── CRÉDITO ── */
-                    : abaAtiva === "credito" ? (
-                      <div className="p-5 space-y-4 fade-in">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <InfoTile label="Score Destrava" value={`${calcularScore(selecionada).score}/100`} icon={<ShieldCheck className="w-3.5 h-3.5" />} tone="blue" />
-                          <InfoTile label="Faturamento usado" value={selecionada.faturamento_anual ? fmt(selecionada.faturamento_anual) : "Pendente"} icon={<Banknote className="w-3.5 h-3.5" />} tone="emerald" />
-                          <InfoTile label="Limite atual" value={selecionada.limite_credito_atual ? fmt(selecionada.limite_credito_atual) : "Não informado"} icon={<CreditCard className="w-3.5 h-3.5" />} tone="violet" />
-                        </div>
-                        <SectionCard title="Diagnóstico de crédito" icon={<BarChart3 className="w-4 h-4" />}>
-                          <div className="py-3 space-y-3 text-sm text-slate-600">
-                            <p>Esta guia concentra a leitura comercial e financeira da empresa: simulações, potencial de crédito, faturamento, score externo e restrições.</p>
-                            <div className="flex flex-wrap gap-2">
-                              <ActionPill tone={selecionada.faturamento_anual ? "emerald" : "amber"}>{selecionada.faturamento_anual ? "Faturamento informado" : "Faturamento pendente"}</ActionPill>
-                              <ActionPill tone={selecionada.score_serasa ? "emerald" : "amber"}>{selecionada.score_serasa ? `Serasa ${selecionada.score_serasa}` : "Serasa pendente"}</ActionPill>
-                              <ActionPill tone={selecionada.score_spc ? "emerald" : "amber"}>{selecionada.score_spc ? `SPC ${selecionada.score_spc}` : "SPC pendente"}</ActionPill>
-                              <ActionPill tone={selecionada.cnae_principal ? "emerald" : "amber"}>{selecionada.cnae_principal ? "CNAE identificado" : "CNAE pendente"}</ActionPill>
-                            </div>
-                            <button
-                              onClick={() => {
-                                sessionStorage.setItem("calculadora_empresa", JSON.stringify({
-                                  nome: selecionada.responsavel_nome || selecionada.razao_social,
-                                  empresa: selecionada.razao_social,
-                                  telefone: selecionada.telefone || selecionada.whatsapp || "",
-                                  cpf_cnpj: selecionada.cnpj || "",
-                                }));
-                                window.location.href = "/colaborador/calculadora";
-                              }}
-                              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
-                            >
-                              <Calculator className="w-4 h-4" /> Abrir calculadora com esta empresa
-                            </button>
-                          </div>
-                        </SectionCard>
-                      </div>
-                    )
-
-                    /* ── CONTRATOS ── */
-                    : abaAtiva === "contratos" ? (
-                      <div className="p-5 fade-in">
-                        <EmptyPanel
-                          icon={<FileText className="w-6 h-6" />}
-                          title="Contratos vinculados à empresa"
-                          description="Use esta área como atalho operacional para gerar, consultar e anexar contratos desta empresa. A listagem completa continua no módulo Contratos, sem quebrar o fluxo atual."
-                          action={<button onClick={() => { window.location.href = "/colaborador/contratos"; }} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">Abrir contratos</button>}
-                        />
-                      </div>
-                    )
-
-                    /* ── FATURAMENTO ── */
-                    : abaAtiva === "faturamento" ? (
-                      <div className="p-5 space-y-4 fade-in">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <InfoTile label="Faturamento anual" value={selecionada.faturamento_anual ? fmt(selecionada.faturamento_anual) : "Não informado"} icon={<Banknote className="w-3.5 h-3.5" />} tone="emerald" />
-                          <InfoTile label="Capital social" value={normalizarCapitalSocial(selecionada.capital_social)} icon={<DollarSign className="w-3.5 h-3.5" />} tone="blue" />
-                          <InfoTile label="Potencial atual" value={!selecionada.faturamento_anual ? "Pendente" : selecionada.faturamento_anual >= 1000000 ? "Alto" : "Em análise"} icon={<TrendingUp className="w-3.5 h-3.5" />} tone="violet" />
-                        </div>
-                        <EmptyPanel
-                          icon={<TrendingUp className="w-6 h-6" />}
-                          title="Faturamento e previsão"
-                          description="Concentre aqui o faturamento bruto, previsão, capacidade de pagamento e receita potencial por consultor. O módulo de Faturamento continua preservado e pode ser aberto por este atalho."
-                          action={<button onClick={() => { window.location.href = "/colaborador/previsao-faturamento"; }} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">Abrir faturamento</button>}
-                        />
-                      </div>
-                    )
-
-                    /* ── IA ── */
-                    : abaAtiva === "ia" ? (
-                      <div className="p-5 fade-in">
-                        <div className="rounded-2xl border border-violet-100 bg-violet-50 p-5">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-violet-600 shadow-sm"><Zap className="w-5 h-5" /></div>
-                            <div>
-                              <h3 className="text-sm font-black text-violet-900">Resumo inteligente da empresa</h3>
-                              <p className="text-xs text-violet-700/80">Baseado nos dados já disponíveis nesta empresa.</p>
-                            </div>
-                          </div>
-                          <div className="mt-4 rounded-xl bg-white/80 p-4 text-sm leading-6 text-slate-700">
-                            A empresa está com status <b>{STATUS_CFG[selecionada.status]?.label || selecionada.status}</b>, {selecionada.situacao_cadastral ? `situação cadastral ${selecionada.situacao_cadastral}` : "situação cadastral não informada"}. {selecionada.faturamento_anual ? `Faturamento anual informado: ${fmt(selecionada.faturamento_anual)}.` : "Falta informar faturamento anual para melhorar a análise de crédito."} {documentos.length === 0 ? "Nenhum documento foi anexado ainda." : `${documentos.length} documento(s) anexado(s).`} Próxima ação recomendada: {!selecionada.faturamento_anual ? "solicitar faturamento dos últimos 12 meses." : documentos.length === 0 ? "solicitar documentos obrigatórios." : "gerar ou atualizar simulação de crédito."}
-                          </div>
-                        </div>
                       </div>
                     )
 
