@@ -6191,10 +6191,20 @@ ${(temTest1 || temTest2) ? `
 
   app.get('/api/clientes-pf', auth, async (_req: Request, res: Response) => {
     try {
+      const columns = await getTableColumns('clientes_pf');
+      const baseCols = [
+        'id', 'nome', 'cpf', 'rg', 'data_nascimento', 'email', 'telefone',
+        'endereco', 'cidade', 'uf', 'cep', 'profissao', 'estado_civil',
+        'observacoes', 'ativo', 'created_at', 'updated_at',
+      ];
+      const extraCols = [
+        'origem', 'canal', 'campanha', 'utm_source', 'utm_medium', 'utm_campaign',
+        'landing_page', 'produto_interesse', 'status', 'ultima_interacao',
+        'proxima_acao', 'responsavel_id', 'empresa_id', 'tipo_cliente',
+      ].filter((col) => columns.has(col));
+      const selectCols = [...baseCols.filter((col) => columns.has(col)), ...extraCols];
       const { rows } = await pool.query(
-        `SELECT id, nome, cpf, rg, data_nascimento, email, telefone,
-                endereco, cidade, uf, cep, profissao, estado_civil,
-                observacoes, ativo, created_at, updated_at
+        `SELECT ${selectCols.join(', ')}
            FROM clientes_pf
           WHERE ativo = true
           ORDER BY nome`
@@ -6209,11 +6219,17 @@ ${(temTest1 || temTest2) ? `
   app.get('/api/clientes-pf/buscar', auth, async (req: Request, res: Response) => {
     try {
       const { q = '' } = req.query as { q?: string };
+      const columns = await getTableColumns('clientes_pf');
+      const selectCols = ['id', 'nome', 'cpf', 'rg', 'email', 'telefone', 'cidade', 'uf']
+        .filter((col) => columns.has(col));
+      for (const extra of ['origem', 'produto_interesse', 'status', 'proxima_acao']) {
+        if (columns.has(extra)) selectCols.push(extra);
+      }
       const { rows } = await pool.query(
-        `SELECT id, nome, cpf, rg, email, telefone, cidade, uf
+        `SELECT ${selectCols.join(', ')}
            FROM clientes_pf
           WHERE ativo = true
-            AND (nome ILIKE $1 OR cpf ILIKE $1 OR email ILIKE $1)
+            AND (nome ILIKE $1 OR cpf ILIKE $1 OR COALESCE(email, '') ILIKE $1 OR COALESCE(telefone, '') ILIKE $1)
           ORDER BY nome
           LIMIT 30`,
         [`%${q}%`]
@@ -6238,29 +6254,54 @@ ${(temTest1 || temTest2) ? `
 
   app.post('/api/clientes-pf', auth, async (req: Request, res: Response) => {
     try {
+      const columns = await getTableColumns('clientes_pf');
       const {
         nome, cpf, rg, data_nascimento, email, telefone,
-        endereco, cidade, uf, cep, profissao, estado_civil, observacoes
+        endereco, cidade, uf, cep, profissao, estado_civil, observacoes,
+        origem, canal, campanha, utm_source, utm_medium, utm_campaign,
+        landing_page, produto_interesse, status, ultima_interacao, proxima_acao,
+        empresa_id, tipo_cliente,
       } = req.body;
       if (!nome || !cpf) {
         res.status(400).json({ error: 'nome e cpf são obrigatórios' });
         return;
       }
+      const colaborador = (req as Request & { colaborador?: any }).colaborador;
+      const valuesByColumn: Record<string, any> = {
+        nome,
+        cpf,
+        rg: rg || null,
+        data_nascimento: normalizeDate(data_nascimento),
+        email: email || null,
+        telefone: telefone || null,
+        endereco: endereco || null,
+        cidade: cidade || null,
+        uf: uf || null,
+        cep: cep || null,
+        profissao: profissao || null,
+        estado_civil: estado_civil || null,
+        observacoes: observacoes || null,
+        origem: origem || 'manual',
+        canal: canal || null,
+        campanha: campanha || null,
+        utm_source: utm_source || null,
+        utm_medium: utm_medium || null,
+        utm_campaign: utm_campaign || null,
+        landing_page: landing_page || null,
+        produto_interesse: produto_interesse || null,
+        status: status || 'ativo',
+        ultima_interacao: normalizeTimestamp(ultima_interacao),
+        proxima_acao: proxima_acao || null,
+        empresa_id: empresa_id || null,
+        tipo_cliente: tipo_cliente || 'pf',
+        responsavel_id: colaborador?.id || null,
+      };
+      const insertCols = Object.keys(valuesByColumn).filter((col) => columns.has(col));
+      const params = insertCols.map((col) => valuesByColumn[col]);
+      const placeholders = insertCols.map((_, i) => `$${i + 1}`);
       const { rows } = await pool.query(
-        `INSERT INTO clientes_pf
-           (nome, cpf, rg, data_nascimento, email, telefone,
-            endereco, cidade, uf, cep, profissao, estado_civil, observacoes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-         RETURNING *`,
-        [
-          nome, cpf,
-          rg || null, data_nascimento || null,
-          email || null, telefone || null,
-          endereco || null, cidade || null,
-          uf || null, cep || null,
-          profissao || null, estado_civil || null,
-          observacoes || null,
-        ]
+        `INSERT INTO clientes_pf (${insertCols.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`,
+        params
       );
       res.status(201).json(rows[0]);
     } catch (err: any) {
@@ -6273,26 +6314,51 @@ ${(temTest1 || temTest2) ? `
   app.put('/api/clientes-pf/:id', auth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
+      const columns = await getTableColumns('clientes_pf');
       const {
         nome, cpf, rg, data_nascimento, email, telefone,
-        endereco, cidade, uf, cep, profissao, estado_civil, observacoes, ativo
+        endereco, cidade, uf, cep, profissao, estado_civil, observacoes, ativo,
+        origem, canal, campanha, utm_source, utm_medium, utm_campaign,
+        landing_page, produto_interesse, status, ultima_interacao, proxima_acao,
+        empresa_id, tipo_cliente,
       } = req.body;
+      const valuesByColumn: Record<string, any> = {
+        nome,
+        cpf,
+        rg: rg || null,
+        data_nascimento: normalizeDate(data_nascimento),
+        email: email || null,
+        telefone: telefone || null,
+        endereco: endereco || null,
+        cidade: cidade || null,
+        uf: uf || null,
+        cep: cep || null,
+        profissao: profissao || null,
+        estado_civil: estado_civil || null,
+        observacoes: observacoes || null,
+        ativo: ativo !== false,
+        origem: origem || 'manual',
+        canal: canal || null,
+        campanha: campanha || null,
+        utm_source: utm_source || null,
+        utm_medium: utm_medium || null,
+        utm_campaign: utm_campaign || null,
+        landing_page: landing_page || null,
+        produto_interesse: produto_interesse || null,
+        status: status || 'ativo',
+        ultima_interacao: normalizeTimestamp(ultima_interacao),
+        proxima_acao: proxima_acao || null,
+        empresa_id: empresa_id || null,
+        tipo_cliente: tipo_cliente || 'pf',
+      };
+      const updateCols = Object.keys(valuesByColumn).filter((col) => columns.has(col));
+      const sets = updateCols.map((col, i) => `${col}=$${i + 1}`);
+      const params = updateCols.map((col) => valuesByColumn[col]);
+      if (columns.has('updated_at')) sets.push(`updated_at=NOW()`);
+      params.push(id);
       const { rows } = await pool.query(
-        `UPDATE clientes_pf SET
-           nome=$1, cpf=$2, rg=$3, data_nascimento=$4, email=$5, telefone=$6,
-           endereco=$7, cidade=$8, uf=$9, cep=$10, profissao=$11,
-           estado_civil=$12, observacoes=$13, ativo=$14, updated_at=NOW()
-         WHERE id=$15 RETURNING *`,
-        [
-          nome, cpf,
-          rg || null, data_nascimento || null,
-          email || null, telefone || null,
-          endereco || null, cidade || null,
-          uf || null, cep || null,
-          profissao || null, estado_civil || null,
-          observacoes || null, ativo !== false,
-          id
-        ]
+        `UPDATE clientes_pf SET ${sets.join(', ')} WHERE id=$${params.length} RETURNING *`,
+        params
       );
       if (!rows.length) { res.status(404).json({ error: 'Cliente não encontrado' }); return; }
       res.json(rows[0]);
@@ -6308,7 +6374,7 @@ ${(temTest1 || temTest2) ? `
       await pool.query('UPDATE clientes_pf SET ativo=false, updated_at=NOW() WHERE id=$1', [req.params.id]);
       res.json({ ok: true });
     } catch (err: any) {
-      console.error('[DELETE /api/clientes-pf/:id]', err);
+      console.error('[DELETE /api/clientes-pf]', err);
       res.status(500).json({ error: 'Erro ao desativar cliente' });
     }
   });
