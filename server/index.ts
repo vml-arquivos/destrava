@@ -405,35 +405,69 @@ function etapaFunilPermitida(value: string | null | undefined): boolean {
   return ETAPAS_FUNIL_VALIDAS.includes(validarEtapaFunil(value) as (typeof ETAPAS_FUNIL_VALIDAS)[number]);
 }
 
+// O frontend usa o funil novo (novo_lead, tentando_contato, ...), mas a
+// base em produção pode estar em uma das duas taxonomias legadas:
+// 1) schema_crm antigo: novo, contato_feito, qualificado, documentacao...
+// 2) migration 009: enum etapa_funil_enum com entrada, contato, qualificacao...
+// A migration 009 é a mais provável em produção; por isso persistimos nela.
+// Isso evita o erro 500 em /api/crm/mover-funil por tentativa de gravar "novo"
+// ou "novo_lead" em coluna enum que aceita apenas "entrada", "contato" etc.
 const MAPA_ETAPA_UI_PARA_LEGADA: Record<string, string> = {
-  entrada: "novo",
-  triagem: "novo",
-  contato: "contato_feito",
-  qualificacao: "qualificado",
-  documentos: "documentacao",
-  analise: "negociacao",
-  proposta: "proposta_enviada",
+  // Funil novo exibido no CRM
+  novo_lead: "entrada",
+  tentando_contato: "contato",
+  em_atendimento: "contato",
+  qualificado: "qualificacao",
+  proposta_enviada: "proposta",
+  documentos_pendentes: "documentos",
+  contrato_gerado: "analise",
+  aguardando_pagamento: "negociacao",
+  fechado: "ganho",
+  em_execucao: "carteira",
+  pos_venda: "carteira",
+  reativacao: "reativacao",
+  perdido: "perdido",
+
+  // Compatibilidade com rótulos/ids antigos ainda aceitos pelo backend
+  entrada: "entrada",
+  triagem: "entrada",
+  contato: "contato",
+  qualificacao: "qualificacao",
+  documentos: "documentos",
+  analise: "analise",
+  proposta: "proposta",
   negociacao: "negociacao",
   ganho: "ganho",
-  perdido: "perdido",
-  reativacao: "novo",
-  carteira: "ganho",
+  carteira: "carteira",
 };
 
 const MAPA_ETAPA_LEGADA_PARA_UI: Record<string, string> = {
-  novo: "entrada",
-  contato_feito: "contato",
-  qualificado: "qualificacao",
-  documentacao: "documentos",
-  proposta_enviada: "analise",
-  negociacao: "analise",
-  ganho: "ganho",
+  // Valores da migration 009 / enum etapa_funil_enum
+  entrada: "novo_lead",
+  triagem: "novo_lead",
+  contato: "tentando_contato",
+  qualificacao: "qualificado",
+  documentos: "documentos_pendentes",
+  analise: "contrato_gerado",
+  proposta: "proposta_enviada",
+  negociacao: "aguardando_pagamento",
+  ganho: "fechado",
+  carteira: "em_execucao",
+  reativacao: "reativacao",
   perdido: "perdido",
+
+  // Valores do schema CRM antigo
+  novo: "novo_lead",
+  contato_feito: "tentando_contato",
+  qualificado: "qualificado",
+  documentacao: "documentos_pendentes",
+  proposta_enviada: "proposta_enviada",
+  inativo: "reativacao",
 };
 
 function etapaUiParaLegada(value: string | null | undefined): string {
   const etapaUi = validarEtapaFunil(value);
-  return MAPA_ETAPA_UI_PARA_LEGADA[etapaUi] || "novo";
+  return MAPA_ETAPA_UI_PARA_LEGADA[etapaUi] || "entrada";
 }
 
 function etapaLegadaParaUi(value: string | null | undefined): string {
