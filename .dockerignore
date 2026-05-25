@@ -26,28 +26,17 @@ logs/
 .vscode/
 .idea/
 .DS_Store
-Thumbbs.db
+Thumbs.db
 
-# Documentação / análises (não necessários no container)
+# Arquivos de documentação e análise
 ANALISE_*.md
 PESQUISA_*.md
 PLANEJAMENTO_*.md
 IMPLANTACAO.md
-ENTREGA_*.md
-VALIDACAO_*.md
 todo.md
-README.md
-*.md
 
 # Scripts de deploy manual (não necessários no container)
 deploy.sh
 nginx-setup.sh
 nginx.conf
-nginx.conf
 install.sh
-
-# Scripts SQL e diagnóstico (executados manualmente via psql)
-db/
-
-# Arquivos de configuração de outros ambientes
-ecosystem.config.js
