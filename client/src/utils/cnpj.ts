@@ -93,6 +93,9 @@ export interface CNPJData {
   municipio: string;
   uf: string;
   descricao_situacao_cadastral: string;
+  data_situacao_cadastral?: string;
+  motivo_situacao_cadastral?: string;
+  ente_federativo_responsavel?: string;
   natureza_juridica: string;
   porte: string;
   descricao_porte: string;
@@ -100,7 +103,19 @@ export interface CNPJData {
   capital_social: number;
   cnae_fiscal: number;
   cnae_fiscal_descricao: string;
+  cnaes_secundarios?: Array<{
+    codigo?: number | string;
+    descricao?: string;
+    cnae_fiscal?: number | string;
+    cnae_fiscal_descricao?: string;
+  }>;
+  identificador_matriz_filial?: number | string;
+  descricao_identificador_matriz_filial?: string;
+  opcao_pelo_simples?: boolean | string | null;
+  opcao_pelo_mei?: boolean | string | null;
+  descricao_tipo_de_logradouro?: string;
   qsa: CNPJSocio[];
+  [key: string]: unknown;
 }
 
 // ─── API de consulta via backend ───────────────────────────────────────────

@@ -206,6 +206,120 @@ function colaboradorPodeVerTudo(colaborador: any): boolean {
   );
 }
 
+
+function emptyToNull(value: unknown): unknown {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed === "" ? null : trimmed;
+  }
+  return value;
+}
+
+function normalizeNumeric(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string") return null;
+  const cleaned = value
+    .replace(/R\$/g, "")
+    .replace(/\s/g, "")
+    .replace(/\./g, "")
+    .replace(/,/g, ".")
+    .replace(/[^0-9.-]/g, "");
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeInteger(value: unknown): number | null {
+  const n = normalizeNumeric(value);
+  return n === null ? null : Math.trunc(n);
+}
+
+function normalizeDate(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const br = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+  const iso = trimmed.match(/^\d{4}-\d{2}-\d{2}/);
+  return iso ? trimmed.slice(0, 10) : null;
+}
+
+function normalizeTimestamp(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString();
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const d = new Date(trimmed);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+function normalizeTextArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((v) => String(v || "").trim()).filter(Boolean);
+  if (typeof value === "string" && value.trim()) return [value.trim()];
+  return [];
+}
+
+async function getTableColumns(tableName: string): Promise<Set<string>> {
+  const { rows } = await pool.query(
+    `SELECT column_name
+       FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = $1`,
+    [tableName]
+  );
+  return new Set(rows.map((r: { column_name: string }) => r.column_name));
+}
+
+async function empresaExiste(empresaId: string): Promise<boolean> {
+  const { rows } = await pool.query("SELECT 1 FROM empresas WHERE id=$1 LIMIT 1", [empresaId]);
+  return rows.length > 0;
+}
+
+async function canAccessEmpresa(colaborador: any, empresaId: string): Promise<boolean> {
+  if (!empresaId) return false;
+  if (colaboradorPodeVerTudo(colaborador)) return await empresaExiste(empresaId);
+  if (!colaborador?.id) return false;
+  const columns = await getTableColumns("empresas");
+  const conds: string[] = [];
+  const params: any[] = [empresaId, colaborador.id];
+  if (columns.has("responsavel_id")) conds.push("responsavel_id = $2");
+  if (columns.has("analista_id")) conds.push("analista_id = $2");
+  if (columns.has("captador_id")) conds.push("captador_id = $2");
+  if (!conds.length) return false;
+  const { rows } = await pool.query(`SELECT 1 FROM empresas WHERE id=$1 AND (${conds.join(" OR ")}) LIMIT 1`, params);
+  return rows.length > 0;
+}
+
+async function requireEmpresaAccess(req: Request, res: Response, empresaId: string): Promise<boolean> {
+  const colaborador = (req as Request & { colaborador: any }).colaborador;
+  const allowed = await canAccessEmpresa(colaborador, empresaId);
+  if (!allowed) {
+    res.status(403).json({ error: "Acesso negado à empresa" });
+    return false;
+  }
+  return true;
+}
+
+async function registrarHistoricoEmpresaSeguro(empresaId: string, tipo: string, descricao: string, autor?: string | null): Promise<void> {
+  try {
+    const columns = await getTableColumns("empresa_historico");
+    if (!columns.has("empresa_id") || !columns.has("descricao")) return;
+    const payload: Record<string, unknown> = { empresa_id: empresaId, tipo, descricao, autor: autor || "Sistema" };
+    const safeEntries = Object.entries(payload).filter(([k]) => columns.has(k));
+    const keys = safeEntries.map(([k]) => k);
+    const values = safeEntries.map(([, v]) => v);
+    const placeholders = values.map((_, i) => `$${i + 1}`).join(",");
+    await pool.query(`INSERT INTO empresa_historico (${keys.join(",")}) VALUES (${placeholders})`, values);
+  } catch (err) {
+    console.warn("[historico empresa] falha ao registrar evento:", err instanceof Error ? err.message : err);
+  }
+}
+
 function aplicarFiltroVisibilidadeLead({
   conditions,
   params,
@@ -2806,6 +2920,7 @@ async function startServer() {
 
   app.get("/api/empresas/:id", auth, async (req: Request, res: Response) => {
     try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
       const { rows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [req.params.id]);
       if (rows.length === 0) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
       res.json(rows[0]);
@@ -2818,78 +2933,160 @@ async function startServer() {
   app.post("/api/empresas", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const {
-        razao_social, nome_fantasia, cnpj, inscricao_estadual,
-        natureza_juridica, capital_social, cnae_principal, cnaes_secundarios,
-        data_abertura, situacao_cadastral, matriz_filial, ultima_sincronizacao_receita,
-        email, telefone, whatsapp, site,
-        segmento, porte, faturamento_anual, numero_funcionarios,
-        cep, logradouro, numero, complemento, bairro, cidade, estado,
-        responsavel_nome, responsavel_cpf, responsavel_cargo, responsavel_telefone, responsavel_email,
-        banco_principal, agencia, conta, limite_credito_atual, score_serasa, score_spc,
-        status, origem, tags, observacoes, captador_id, analista_id,
-      } = req.body;
-      if (!razao_social || !razao_social.trim()) {
+      const body = req.body || {};
+      const razaoSocial = typeof body.razao_social === "string" ? body.razao_social.trim() : "";
+
+      if (!razaoSocial) {
         res.status(400).json({ error: "Razão social é obrigatória" });
         return;
       }
+
+      const columns = await getTableColumns("empresas");
+      const payload: Record<string, unknown> = {
+        razao_social: razaoSocial,
+        nome_fantasia: emptyToNull(body.nome_fantasia),
+        cnpj: emptyToNull(body.cnpj),
+        inscricao_estadual: emptyToNull(body.inscricao_estadual),
+        inscricao_municipal: emptyToNull(body.inscricao_municipal),
+        natureza_juridica: emptyToNull(body.natureza_juridica),
+        capital_social: normalizeNumeric(body.capital_social),
+        cnae_principal: emptyToNull(body.cnae_principal),
+        cnaes_secundarios: normalizeTextArray(body.cnaes_secundarios),
+        data_abertura: normalizeDate(body.data_abertura),
+        situacao_cadastral: emptyToNull(body.situacao_cadastral),
+        matriz_filial: emptyToNull(body.matriz_filial),
+        ultima_sincronizacao_receita: normalizeTimestamp(body.ultima_sincronizacao_receita) || new Date().toISOString(),
+        data_situacao_cadastral: normalizeDate(body.data_situacao_cadastral),
+        motivo_situacao_cadastral: emptyToNull(body.motivo_situacao_cadastral),
+        regime_tributario: emptyToNull(body.regime_tributario),
+        telefone_2: emptyToNull(body.telefone_2),
+        dados_extra_receita: body.dados_extra_receita && typeof body.dados_extra_receita === "object" ? JSON.stringify(body.dados_extra_receita) : emptyToNull(body.dados_extra_receita),
+        email: emptyToNull(body.email),
+        telefone: emptyToNull(body.telefone),
+        whatsapp: emptyToNull(body.whatsapp),
+        site: emptyToNull(body.site),
+        segmento: emptyToNull(body.segmento),
+        porte: emptyToNull(body.porte) || "mei",
+        faturamento_anual: normalizeNumeric(body.faturamento_anual),
+        numero_funcionarios: normalizeInteger(body.numero_funcionarios),
+        cep: emptyToNull(body.cep),
+        logradouro: emptyToNull(body.logradouro),
+        numero: emptyToNull(body.numero),
+        complemento: emptyToNull(body.complemento),
+        bairro: emptyToNull(body.bairro),
+        cidade: emptyToNull(body.cidade),
+        estado: emptyToNull(body.estado),
+        responsavel_nome: emptyToNull(body.responsavel_nome),
+        responsavel_cpf: emptyToNull(body.responsavel_cpf),
+        responsavel_cargo: emptyToNull(body.responsavel_cargo),
+        responsavel_telefone: emptyToNull(body.responsavel_telefone),
+        responsavel_email: emptyToNull(body.responsavel_email),
+        banco_principal: emptyToNull(body.banco_principal),
+        agencia: emptyToNull(body.agencia),
+        conta: emptyToNull(body.conta),
+        limite_credito_atual: normalizeNumeric(body.limite_credito_atual),
+        score_serasa: normalizeInteger(body.score_serasa),
+        score_spc: normalizeInteger(body.score_spc),
+        score_cnpj: normalizeInteger(body.score_cnpj),
+        restricoes_cnpj: emptyToNull(body.restricoes_cnpj),
+        observacoes_credito: emptyToNull(body.observacoes_credito),
+        responsavel_id: colaborador?.id || null,
+        status: emptyToNull(body.status) || "ativo",
+        origem: emptyToNull(body.origem) || "manual",
+        tags: normalizeTextArray(body.tags),
+        observacoes: emptyToNull(body.observacoes),
+        captador_id: emptyToNull(body.captador_id),
+        analista_id: emptyToNull(body.analista_id),
+      };
+
+      // Compatibilidade: se a migration nova ainda não rodou, a API não quebra.
+      const safeEntries = Object.entries(payload).filter(([key]) => columns.has(key));
+      const insertColumns = safeEntries.map(([key]) => key);
+      const values = safeEntries.map(([, value]) => value);
+      const placeholders = values.map((_, index) => `$${index + 1}`).join(",");
+
       const { rows } = await pool.query(
-        `INSERT INTO empresas (
-          razao_social, nome_fantasia, cnpj, inscricao_estadual,
-          natureza_juridica, capital_social, cnae_principal, cnaes_secundarios,
-          data_abertura, situacao_cadastral, matriz_filial, ultima_sincronizacao_receita,
-          email, telefone, whatsapp, site,
-          segmento, porte, faturamento_anual, numero_funcionarios,
-          cep, logradouro, numero, complemento, bairro, cidade, estado,
-          responsavel_nome, responsavel_cpf, responsavel_cargo, responsavel_telefone, responsavel_email,
-          banco_principal, agencia, conta, limite_credito_atual, score_serasa, score_spc,
-          responsavel_id, status, origem, tags, observacoes, captador_id, analista_id
-        ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-          $13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,
-          $28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45
-        ) RETURNING *`,
-        [
-          razao_social.trim(), nome_fantasia || null, cnpj || null, inscricao_estadual || null,
-          natureza_juridica || null, capital_social || null, cnae_principal || null, Array.isArray(cnaes_secundarios) ? cnaes_secundarios : [],
-          data_abertura || null, situacao_cadastral || null, matriz_filial || null, ultima_sincronizacao_receita || null,
-          email || null, telefone || null, whatsapp || null, site || null,
-          segmento || null, porte || 'mei', faturamento_anual || null, numero_funcionarios || null,
-          cep || null, logradouro || null, numero || null, complemento || null, bairro || null, cidade || null, estado || null,
-          responsavel_nome || null, responsavel_cpf || null, responsavel_cargo || null, responsavel_telefone || null, responsavel_email || null,
-          banco_principal || null, agencia || null, conta || null, limite_credito_atual || null, score_serasa || null, score_spc || null,
-          colaborador.id, status || 'ativo', origem || 'manual', tags || [], observacoes || null, captador_id || null, analista_id || null,
-        ]
+        `INSERT INTO empresas (${insertColumns.map((c) => `"${c}"`).join(",")})
+         VALUES (${placeholders})
+         RETURNING *`,
+        values
       );
-      res.status(201).json(rows[0]);
-    } catch (err) {
-      console.error("[POST /api/empresas]", err);
-      res.status(500).json({ error: "Erro ao criar empresa" });
+
+      const empresa = rows[0];
+      await registrarHistoricoEmpresaSeguro(
+        empresa.id,
+        "empresa_criada",
+        `Empresa cadastrada${payload.origem ? ` via ${payload.origem}` : ""}. Dados principais salvos no cadastro.`,
+        colaborador?.nome || "Sistema"
+      );
+
+      res.status(201).json(empresa);
+    } catch (err: any) {
+      console.error("[POST /api/empresas]", {
+        message: err?.message,
+        code: err?.code,
+        detail: err?.detail,
+        table: err?.table,
+        column: err?.column,
+        constraint: err?.constraint,
+      });
+      res.status(500).json({ error: "Erro ao criar empresa", details: process.env.NODE_ENV === "production" ? undefined : err?.message });
     }
   });
 
   app.patch("/api/empresas/:id", auth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const updates = { ...req.body, updated_at: new Date().toISOString() };
-      delete updates.id;
+      if (!(await requireEmpresaAccess(req, res, id))) return;
+      const columns = await getTableColumns("empresas");
+      const allowed = new Set([
+        "razao_social", "nome_fantasia", "cnpj", "inscricao_estadual", "inscricao_municipal",
+        "natureza_juridica", "capital_social", "cnae_principal", "cnaes_secundarios", "data_abertura",
+        "situacao_cadastral", "matriz_filial", "ultima_sincronizacao_receita", "data_situacao_cadastral",
+        "motivo_situacao_cadastral", "regime_tributario", "telefone_2", "dados_extra_receita",
+        "email", "telefone", "whatsapp", "site", "segmento", "porte", "faturamento_anual", "numero_funcionarios",
+        "cep", "logradouro", "numero", "complemento", "bairro", "cidade", "estado",
+        "responsavel_nome", "responsavel_cpf", "responsavel_cargo", "responsavel_telefone", "responsavel_email",
+        "banco_principal", "agencia", "conta", "limite_credito_atual", "score_serasa", "score_spc",
+        "score_cnpj", "restricoes_cnpj", "observacoes_credito", "status", "origem", "tags", "observacoes",
+        "captador_id", "analista_id", "responsavel_id"
+      ]);
+      const updates: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(req.body || {})) {
+        if (!allowed.has(key) || !columns.has(key)) continue;
+        if (["capital_social", "faturamento_anual", "limite_credito_atual"].includes(key)) updates[key] = normalizeNumeric(value);
+        else if (["numero_funcionarios", "score_serasa", "score_spc", "score_cnpj"].includes(key)) updates[key] = normalizeInteger(value);
+        else if (["cnaes_secundarios", "tags"].includes(key)) updates[key] = normalizeTextArray(value);
+        else if (["data_abertura", "data_situacao_cadastral"].includes(key)) updates[key] = normalizeDate(value);
+        else if (key === "ultima_sincronizacao_receita") updates[key] = normalizeTimestamp(value);
+        else if (key === "dados_extra_receita" && value && typeof value === "object") updates[key] = JSON.stringify(value);
+        else updates[key] = emptyToNull(value);
+      }
+      if (columns.has("updated_at")) updates.updated_at = new Date().toISOString();
       const keys = Object.keys(updates);
-      const values = Object.values(updates);
+      if (!keys.length) { res.status(400).json({ error: "Nenhum campo válido para atualizar" }); return; }
+      const values = keys.map((k) => updates[k]);
       const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
       const { rows } = await pool.query(
         `UPDATE empresas SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
         [...values, id]
       );
       if (rows.length === 0) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
+      await registrarHistoricoEmpresaSeguro(id, "empresa_atualizada", "Dados da empresa atualizados.", (req as any).colaborador?.nome || "Sistema");
       res.json(rows[0]);
-    } catch (err) {
-      console.error("[PATCH /api/empresas/:id]", err);
+    } catch (err: any) {
+      console.error("[PATCH /api/empresas/:id]", { message: err?.message, code: err?.code, detail: err?.detail, column: err?.column });
       res.status(500).json({ error: "Erro ao atualizar empresa" });
     }
   });
 
   app.delete("/api/empresas/:id", auth, async (req: Request, res: Response) => {
     try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      if (!colaboradorPodeVerTudo(colaborador)) {
+        res.status(403).json({ error: "Somente gestor/admin pode excluir empresa" });
+        return;
+      }
       await pool.query("DELETE FROM empresas WHERE id = $1", [req.params.id]);
       res.json({ success: true });
     } catch (err) {
@@ -3006,6 +3203,7 @@ async function startServer() {
   // ─── Empresas: Followup, Histórico, Documentos ───────────────────────────
   app.get("/api/empresas/:id/followups", auth, async (req: Request, res: Response) => {
     try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
       const r = await pool.query(
         "SELECT * FROM empresa_followups WHERE empresa_id=$1 ORDER BY data_agendada ASC NULLS LAST, created_at DESC",
         [req.params.id]
@@ -3017,6 +3215,7 @@ async function startServer() {
   app.post("/api/empresas/:id/followups", auth, async (req: Request, res: Response) => {
     const { titulo, tipo = "ligacao", data_agendada, descricao } = req.body;
     try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
       const r = await pool.query(
         `INSERT INTO empresa_followups (empresa_id, titulo, tipo, data_agendada, descricao)
          VALUES ($1,$2,$3,$4,$5) RETURNING *`,
@@ -3028,6 +3227,7 @@ async function startServer() {
 
   app.patch("/api/empresas/:id/followups/:fid/concluir", auth, async (req: Request, res: Response) => {
     try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
       await pool.query(
         "UPDATE empresa_followups SET concluido=true, concluido_em=NOW() WHERE id=$1 AND empresa_id=$2",
         [req.params.fid, req.params.id]
@@ -3038,6 +3238,7 @@ async function startServer() {
 
   app.get("/api/empresas/:id/historico", auth, async (req: Request, res: Response) => {
     try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
       const r = await pool.query(
         "SELECT * FROM empresa_historico WHERE empresa_id=$1 ORDER BY created_at DESC",
         [req.params.id]
@@ -3050,6 +3251,7 @@ async function startServer() {
     const { tipo = "nota", descricao } = req.body;
     const colab = (req as any).colaborador;
     try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
       const r = await pool.query(
         `INSERT INTO empresa_historico (empresa_id, tipo, descricao, autor)
          VALUES ($1,$2,$3,$4) RETURNING *`,
@@ -3061,6 +3263,7 @@ async function startServer() {
 
   app.get("/api/empresas/:id/documentos", auth, async (req: Request, res: Response) => {
     try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
       const r = await pool.query(
         "SELECT * FROM empresa_documentos WHERE empresa_id=$1 ORDER BY created_at DESC",
         [req.params.id]
@@ -3076,6 +3279,7 @@ async function startServer() {
 
   app.post("/api/empresas/:id/documentos", auth, uploadEmpresaDocumento.single("file"), async (req: Request, res: Response) => {
     try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
       const file = req.file;
       if (!file) {
         res.status(400).json({ error: "Arquivo é obrigatório" });
@@ -3101,6 +3305,7 @@ async function startServer() {
          VALUES ($1,$2,$3,$4,$5) RETURNING *`,
         [req.params.id, file.originalname || nomeArq, tipo, file.size, url]
       );
+      await registrarHistoricoEmpresaSeguro(req.params.id, "documento_enviado", `Documento enviado: ${file.originalname || nomeArq}`, (req as any).colaborador?.nome || "Sistema");
       res.status(201).json(r.rows[0]);
     } catch (err) {
       console.error("[POST /api/empresas/:id/documentos]", err);

@@ -30,6 +30,7 @@ interface FormState {
   nome_fantasia: string;
   email: string;
   telefone: string;
+  telefone_2: string;
   cep: string;
   logradouro: string;
   numero: string;
@@ -43,6 +44,12 @@ interface FormState {
   data_abertura: string;
   capital_social: string;
   cnae: string;
+  cnaes_secundarios: string[];
+  matriz_filial: string;
+  data_situacao_cadastral: string;
+  motivo_situacao_cadastral: string;
+  regime_tributario: string;
+  dados_extra_receita?: Record<string, unknown> | null;
   responsavel_nome: string;
   responsavel_cpf: string;
   responsavel_email: string;
@@ -50,16 +57,19 @@ interface FormState {
   responsavel_cargo: string;
 }
 
+type TipoUploadInicial = 'contrato_social' | 'cartao_cnpj';
+
 interface UploadFile {
   file: File;
-  tipo: 'contrato_social' | 'cartao_cnpj';
+  tipo: TipoUploadInicial;
 }
 
 const INITIAL_FORM: FormState = {
-  cnpj: '', razao_social: '', nome_fantasia: '', email: '', telefone: '',
+  cnpj: '', razao_social: '', nome_fantasia: '', email: '', telefone: '', telefone_2: '',
   cep: '', logradouro: '', numero: '', complemento: '', bairro: '',
   cidade: '', uf: '', situacao: '', natureza_juridica: '', porte: '',
-  data_abertura: '', capital_social: '', cnae: '',
+  data_abertura: '', capital_social: '', cnae: '', cnaes_secundarios: [], matriz_filial: '',
+  data_situacao_cadastral: '', motivo_situacao_cadastral: '', regime_tributario: '', dados_extra_receita: null,
   responsavel_nome: '', responsavel_cpf: '', responsavel_email: '',
   responsavel_telefone: '', responsavel_cargo: '',
 };
@@ -189,7 +199,7 @@ export default function CadastroEmpresa() {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [empresaId, setEmpresaId] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState<'contrato_social' | 'cartao_cnpj' | null>(null);
+  const [dragOver, setDragOver] = useState<TipoUploadInicial | null>(null);
   const _dropRef = useRef<HTMLDivElement>(null);
 
   const { status: cnpjStatus, error: cnpjError, lookup, reset: resetCNPJ } = useCNPJLookup();
@@ -206,12 +216,21 @@ export default function CadastroEmpresa() {
       return;
     }
     lookup(formatted, (data: CNPJData) => {
+      const cnaesSecundarios = Array.isArray(data.cnaes_secundarios)
+        ? data.cnaes_secundarios
+            .map((c: any) => c?.descricao ? `${c.codigo || c.cnae_fiscal || ''} — ${c.descricao || c.cnae_fiscal_descricao || ''}`.trim() : String(c || '').trim())
+            .filter(Boolean)
+        : [];
+      const regimeTributario = data.opcao_pelo_simples === true || data.opcao_pelo_simples === 'true'
+        ? (data.opcao_pelo_mei === true || data.opcao_pelo_mei === 'true' ? 'MEI' : 'Simples Nacional')
+        : '';
       setForm(f => ({
         ...f,
         razao_social: data.razao_social ?? '',
         nome_fantasia: data.nome_fantasia ?? '',
         email: data.email ?? '',
         telefone: formatPhone((data.ddd_telefone_1 ?? '').replace(/\D/g, '')),
+        telefone_2: formatPhone((data.ddd_telefone_2 ?? '').replace(/\D/g, '')),
         cep: formatCEP(data.cep ?? ''),
         logradouro: data.logradouro ?? '',
         numero: data.numero ?? '',
@@ -223,10 +242,16 @@ export default function CadastroEmpresa() {
         natureza_juridica: data.natureza_juridica ?? '',
         porte: data.descricao_porte ?? '',
         data_abertura: data.data_inicio_atividade ?? '',
+        data_situacao_cadastral: data.data_situacao_cadastral ?? '',
+        motivo_situacao_cadastral: data.motivo_situacao_cadastral ?? '',
+        matriz_filial: data.descricao_identificador_matriz_filial ?? String(data.identificador_matriz_filial ?? ''),
+        regime_tributario: regimeTributario,
         capital_social: data.capital_social ? formatCapital(data.capital_social) : '',
         cnae: data.cnae_fiscal_descricao
           ? `${data.cnae_fiscal} — ${data.cnae_fiscal_descricao}`
           : '',
+        cnaes_secundarios: cnaesSecundarios,
+        dados_extra_receita: data,
       }));
       setSocios(data.qsa ?? []);
       setSociosSelecionados(new Set((data.qsa ?? []).map((_, i) => i)));
@@ -258,26 +283,26 @@ export default function CadastroEmpresa() {
   };
 
   // ── Upload ─────────────────────────────────────────────────────────────────
-  const handleFileAdd = useCallback((file: File, tipo: 'contrato_social' | 'cartao_cnpj') => {
+  const handleFileAdd = useCallback((file: File, tipo: TipoUploadInicial) => {
     setUploads(prev => {
       const filtered = prev.filter(u => u.tipo !== tipo);
       return [...filtered, { file, tipo }];
     });
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent, tipo: 'contrato_social' | 'cartao_cnpj') => {
+  const handleDrop = useCallback((e: React.DragEvent, tipo: TipoUploadInicial) => {
     e.preventDefault();
     setDragOver(null);
     const file = e.dataTransfer.files[0];
     if (file) handleFileAdd(file, tipo);
   }, [handleFileAdd]);
 
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>, tipo: 'contrato_social' | 'cartao_cnpj') => {
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>, tipo: TipoUploadInicial) => {
     const file = e.target.files?.[0];
     if (file) handleFileAdd(file, tipo);
   }, [handleFileAdd]);
 
-  const removeUpload = (tipo: 'contrato_social' | 'cartao_cnpj') => {
+  const removeUpload = (tipo: TipoUploadInicial) => {
     setUploads(prev => prev.filter(u => u.tipo !== tipo));
   };
 
@@ -301,6 +326,7 @@ export default function CadastroEmpresa() {
           cnpj: form.cnpj,
           email: form.email || null,
           telefone: form.telefone || null,
+          telefone_2: form.telefone_2 || null,
           cep: form.cep || null,
           logradouro: form.logradouro || null,
           numero: form.numero || null,
@@ -311,9 +337,14 @@ export default function CadastroEmpresa() {
           natureza_juridica: form.natureza_juridica || null,
           capital_social: parseBRL(form.capital_social),
           cnae_principal: form.cnae || null,
-          cnaes_secundarios: [],
+          cnaes_secundarios: form.cnaes_secundarios || [],
           data_abertura: form.data_abertura || null,
           situacao_cadastral: form.situacao || null,
+          matriz_filial: form.matriz_filial || null,
+          data_situacao_cadastral: form.data_situacao_cadastral || null,
+          motivo_situacao_cadastral: form.motivo_situacao_cadastral || null,
+          regime_tributario: form.regime_tributario || null,
+          dados_extra_receita: form.dados_extra_receita || null,
           ultima_sincronizacao_receita: new Date().toISOString(),
           responsavel_nome: form.responsavel_nome || null,
           responsavel_cpf: form.responsavel_cpf || null,
@@ -336,6 +367,11 @@ export default function CadastroEmpresa() {
                 cpf_cnpj: s.cnpj_cpf_do_socio || null,
                 qualificacao_socio: s.descricao_qualificacao_socio || qualificacaoLabel(s.qualificacao_socio),
                 representante_legal: Boolean(s.representante_legal),
+                nome_representante: s.nome_do_representante || null,
+                qualificacao_representante: s.qualificacao_representante_legal || null,
+                data_entrada_sociedade: s.data_entrada_sociedade || null,
+                pais: s.pais || null,
+                dados_extra: s as any,
               })),
             }),
           });
@@ -344,6 +380,29 @@ export default function CadastroEmpresa() {
           alert('Empresa cadastrada com sucesso, mas os sócios não foram importados. Verifique a estrutura da tabela socios_empresa na VPS e tente importar novamente.');
         }
       }
+      try {
+        await apiFetch(`/api/empresas/${empresa.id}/checklist/gerar`, { method: 'POST' });
+      } catch (checklistErr) {
+        console.error('[CadastroEmpresa] Empresa salva, mas falhou geração do checklist:', checklistErr);
+      }
+
+      const failedUploads: string[] = [];
+      for (const upload of uploads) {
+        try {
+          const fd = new FormData();
+          fd.append('file', upload.file);
+          fd.append('tipo', upload.tipo);
+          await apiFetch(`/api/empresas/${empresa.id}/documentos`, { method: 'POST', body: fd, headers: {} });
+        } catch (uploadErr) {
+          console.error('[CadastroEmpresa] Falha ao enviar documento:', upload.tipo, uploadErr);
+          failedUploads.push(upload.tipo);
+        }
+      }
+
+      if (failedUploads.length > 0) {
+        alert(`Empresa cadastrada, mas ${failedUploads.length} documento(s) não foram enviados. Você poderá anexar depois na aba Documentos.`);
+      }
+
       setSaved(true);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Erro ao salvar empresa');

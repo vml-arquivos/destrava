@@ -13,12 +13,84 @@ const pool = new Pool({
 
 const router = Router();
 
+
+function isGestorCargo(cargo: string | null | undefined): boolean {
+  return ['administrador', 'admin', 'diretor', 'gerente comercial', 'gerente', 'gestor'].includes((cargo || '').toLowerCase());
+}
+
+function colaboradorPodeVerTudo(colaborador: any): boolean {
+  return Boolean(colaborador?.pode_ver_todos_leads || ['admin', 'gestor'].includes((colaborador?.perfil || '').toLowerCase()) || isGestorCargo(colaborador?.cargo));
+}
+
+async function getTableColumns(tableName: string): Promise<Set<string>> {
+  const { rows } = await pool.query(
+    `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1`,
+    [tableName]
+  );
+  return new Set(rows.map((r: { column_name: string }) => r.column_name));
+}
+
+async function empresaExiste(empresaId: string): Promise<boolean> {
+  const { rows } = await pool.query('SELECT 1 FROM empresas WHERE id=$1 LIMIT 1', [empresaId]);
+  return rows.length > 0;
+}
+
+async function canAccessEmpresa(colaborador: any, empresaId: string): Promise<boolean> {
+  if (!empresaId) return false;
+  if (colaboradorPodeVerTudo(colaborador)) return await empresaExiste(empresaId);
+  if (!colaborador?.id) return false;
+  const columns = await getTableColumns('empresas');
+  const conds: string[] = [];
+  if (columns.has('responsavel_id')) conds.push('responsavel_id=$2');
+  if (columns.has('analista_id')) conds.push('analista_id=$2');
+  if (columns.has('captador_id')) conds.push('captador_id=$2');
+  if (!conds.length) return false;
+  const { rows } = await pool.query(`SELECT 1 FROM empresas WHERE id=$1 AND (${conds.join(' OR ')}) LIMIT 1`, [empresaId, colaborador.id]);
+  return rows.length > 0;
+}
+
+async function requireEmpresaAccess(req: Request, res: Response): Promise<boolean> {
+  const allowed = await canAccessEmpresa((req as any).colaborador || (req as any).user, req.params.id);
+  if (!allowed) {
+    res.status(403).json({ error: 'Acesso negado à empresa' });
+    return false;
+  }
+  return true;
+}
+
+async function registrarHistoricoEmpresa(empresaId: string, tipo: string, descricao: string, autor?: string | null): Promise<void> {
+  try {
+    const columns = await getTableColumns('empresa_historico');
+    if (!columns.has('empresa_id') || !columns.has('descricao')) return;
+    const payload: Record<string, unknown> = { empresa_id: empresaId, tipo, descricao, autor: autor || 'Sistema' };
+    const entries = Object.entries(payload).filter(([k]) => columns.has(k));
+    const cols = entries.map(([k]) => k);
+    const vals = entries.map(([, v]) => v);
+    await pool.query(`INSERT INTO empresa_historico (${cols.join(',')}) VALUES (${vals.map((_, i) => `$${i + 1}`).join(',')})`, vals);
+  } catch (err) {
+    console.warn('[empresa_historico]', err instanceof Error ? err.message : err);
+  }
+}
+
+function toNullableNumeric(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const n = Number(value.replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
 type SocioInput = {
   nome?: string;
   cpf_cnpj?: string | null;
   qualificacao_socio?: string | null;
   percentual_capital?: number | string | null;
   representante_legal?: boolean | null;
+  nome_representante?: string | null;
+  qualificacao_representante?: string | null;
+  data_entrada_sociedade?: string | null;
+  pais?: string | null;
+  dados_extra?: Record<string, unknown> | string | null;
 };
 
 const SOCIOS_BASE_COLUMNS = new Set([
@@ -28,6 +100,11 @@ const SOCIOS_BASE_COLUMNS = new Set([
   'qualificacao_socio',
   'percentual_capital',
   'representante_legal',
+  'nome_representante',
+  'qualificacao_representante',
+  'data_entrada_sociedade',
+  'pais',
+  'dados_extra',
 ]);
 
 let sociosSchemaReady = false;
@@ -50,6 +127,12 @@ async function ensureSociosEmpresaSchema(): Promise<Set<string>> {
       )
     `);
     await pool.query('CREATE INDEX IF NOT EXISTS idx_socios_empresa_empresa_id ON public.socios_empresa(empresa_id)');
+    await pool.query(`ALTER TABLE public.socios_empresa
+      ADD COLUMN IF NOT EXISTS nome_representante TEXT,
+      ADD COLUMN IF NOT EXISTS qualificacao_representante TEXT,
+      ADD COLUMN IF NOT EXISTS data_entrada_sociedade DATE,
+      ADD COLUMN IF NOT EXISTS pais TEXT,
+      ADD COLUMN IF NOT EXISTS dados_extra JSONB DEFAULT '{}'::jsonb`);
     sociosSchemaReady = true;
   }
 
@@ -76,8 +159,13 @@ async function insertSocioEmpresa(empresaId: string, socio: SocioInput) {
     nome,
     cpf_cnpj: socio.cpf_cnpj || null,
     qualificacao_socio: socio.qualificacao_socio || null,
-    percentual_capital: socio.percentual_capital === '' || socio.percentual_capital == null ? null : Number(socio.percentual_capital),
+    percentual_capital: toNullableNumeric(socio.percentual_capital),
     representante_legal: socio.representante_legal ?? false,
+    nome_representante: socio.nome_representante || null,
+    qualificacao_representante: socio.qualificacao_representante || null,
+    data_entrada_sociedade: socio.data_entrada_sociedade || null,
+    pais: socio.pais || null,
+    dados_extra: typeof socio.dados_extra === 'string' ? socio.dados_extra : JSON.stringify(socio.dados_extra || {}),
   };
 
   const safeEntries = Object.entries(payload).filter(([key]) => SOCIOS_BASE_COLUMNS.has(key) && columns.has(key));
@@ -112,6 +200,7 @@ function pgErrorDetails(err: unknown) {
 // GET /api/empresas/:id/socios
 router.get('/:id/socios', auth, async (req: Request, res: Response) => {
   try {
+    if (!(await requireEmpresaAccess(req, res))) return;
     await ensureSociosEmpresaSchema();
     const { rows } = await pool.query(
       'SELECT * FROM socios_empresa WHERE empresa_id = $1 ORDER BY nome ASC',
@@ -127,11 +216,13 @@ router.get('/:id/socios', auth, async (req: Request, res: Response) => {
 // POST /api/empresas/:id/socios
 router.post('/:id/socios', auth, async (req: Request, res: Response) => {
   try {
+    if (!(await requireEmpresaAccess(req, res))) return;
     const inserted = await insertSocioEmpresa(req.params.id, req.body as SocioInput);
     if (!inserted) {
       res.status(400).json({ error: 'Nome do sócio é obrigatório' });
       return;
     }
+    await registrarHistoricoEmpresa(req.params.id, 'socio_adicionado', `Sócio adicionado: ${inserted.nome}`, (req as any).colaborador?.nome || 'Sistema');
     res.status(201).json(inserted);
   } catch (err) {
     console.error('[POST /api/empresas/:id/socios]', pgErrorDetails(err));
@@ -142,6 +233,7 @@ router.post('/:id/socios', auth, async (req: Request, res: Response) => {
 // POST /api/empresas/:id/socios/bulk
 router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
   try {
+    if (!(await requireEmpresaAccess(req, res))) return;
     const { socios } = req.body as { socios: SocioInput[] };
     if (!Array.isArray(socios) || socios.length === 0) {
       res.status(200).json({ inserted: 0, socios: [], warning: 'Nenhum sócio enviado para importação' });
@@ -163,6 +255,9 @@ router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
 
     // Não quebrar o cadastro principal da empresa se algum sócio falhar.
     // Retorna 207 quando houve falha parcial e 201 quando tudo foi importado.
+    if (inserted.length > 0) {
+      await registrarHistoricoEmpresa(req.params.id, 'socios_importados', `${inserted.length} sócio(s) importado(s) para a empresa.`, (req as any).colaborador?.nome || 'Sistema');
+    }
     const status = failed.length > 0 ? 207 : 201;
     res.status(status).json({ inserted: inserted.length, socios: inserted, failed });
   } catch (err) {
@@ -174,6 +269,7 @@ router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
 // PUT /api/empresas/:id/socios/:sid
 router.put('/:id/socios/:sid', auth, async (req: Request, res: Response) => {
   try {
+    if (!(await requireEmpresaAccess(req, res))) return;
     await ensureSociosEmpresaSchema();
     const { nome, cpf_cnpj, qualificacao_socio, percentual_capital, representante_legal } = req.body;
     if (!nome?.trim()) { res.status(400).json({ error: 'Nome do sócio é obrigatório' }); return; }
@@ -200,6 +296,7 @@ router.put('/:id/socios/:sid', auth, async (req: Request, res: Response) => {
 // DELETE /api/empresas/:id/socios/:sid
 router.delete('/:id/socios/:sid', auth, async (req: Request, res: Response) => {
   try {
+    if (!(await requireEmpresaAccess(req, res))) return;
     await pool.query('DELETE FROM socios_empresa WHERE id=$1 AND empresa_id=$2', [req.params.sid, req.params.id]);
     res.json({ success: true });
   } catch (err) {
@@ -210,11 +307,19 @@ router.delete('/:id/socios/:sid', auth, async (req: Request, res: Response) => {
 
 // ─── DOCUMENTOS_EMPRESA (GED) ─────────────────────────────────────────────────
 
-const TIPOS_VALIDOS_DOC = ['contrato_social', 'alteracao_contratual', 'cartao_cnpj', 'cnh_socio', 'comprovante_residencia', 'faturamento', 'imposto_renda', 'outro'];
+const TIPOS_VALIDOS_DOC = [
+  'contrato_social','alteracao_contratual','estatuto','cartao_cnpj','nire',
+  'balanco_patrimonial','dre','declaracao_faturamento','irpj','defis','ecf','extrato_bancario',
+  'cnd_receita_inss','cndt_trabalhista','fgts','certidao_estadual','certidao_municipal',
+  'rg_socio','cpf_socio','cnh_socio','certidao_casamento','certidao_nascimento',
+  'comprovante_residencia_socio','irpf_socio','documento_bem_garantia',
+  'score_serasa','score_boavista','restricoes_cnpj','restricoes_cpf_socio','outro',
+];
 
 // GET /api/empresas/:id/ged
 router.get('/:id/ged', auth, async (req: Request, res: Response) => {
   try {
+    if (!(await requireEmpresaAccess(req, res))) return;
     const { rows } = await pool.query(
       'SELECT * FROM documentos_empresa WHERE empresa_id = $1 ORDER BY created_at DESC',
       [req.params.id]
@@ -229,6 +334,7 @@ router.get('/:id/ged', auth, async (req: Request, res: Response) => {
 // POST /api/empresas/:id/ged
 router.post('/:id/ged', auth, async (req: Request, res: Response) => {
   try {
+    if (!(await requireEmpresaAccess(req, res))) return;
     const { nome_arquivo, tipo_documento, url_arquivo, tamanho_bytes, status_validacao, data_vencimento } = req.body;
     if (!nome_arquivo || !url_arquivo) {
       res.status(400).json({ error: 'nome_arquivo e url_arquivo são obrigatórios' });
@@ -240,6 +346,7 @@ router.post('/:id/ged', auth, async (req: Request, res: Response) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
       [req.params.id, nome_arquivo, tipo, url_arquivo, tamanho_bytes || null, status_validacao || 'em_analise', data_vencimento || null]
     );
+    await registrarHistoricoEmpresa(req.params.id, 'documento_enviado', `Documento GED registrado: ${nome_arquivo}`, (req as any).colaborador?.nome || 'Sistema');
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error('[POST /api/empresas/:id/ged]', err);
@@ -250,6 +357,7 @@ router.post('/:id/ged', auth, async (req: Request, res: Response) => {
 // PATCH /api/empresas/:id/ged/:did
 router.patch('/:id/ged/:did', auth, async (req: Request, res: Response) => {
   try {
+    if (!(await requireEmpresaAccess(req, res))) return;
     const { status_validacao, data_vencimento } = req.body;
     const updates: string[] = [];
     const values: unknown[] = [];
@@ -273,11 +381,118 @@ router.patch('/:id/ged/:did', auth, async (req: Request, res: Response) => {
 // DELETE /api/empresas/:id/ged/:did
 router.delete('/:id/ged/:did', auth, async (req: Request, res: Response) => {
   try {
+    if (!(await requireEmpresaAccess(req, res))) return;
     await pool.query('DELETE FROM documentos_empresa WHERE id=$1 AND empresa_id=$2', [req.params.did, req.params.id]);
     res.json({ success: true });
   } catch (err) {
     console.error('[DELETE /api/empresas/:id/ged/:did]', err);
     res.status(500).json({ error: 'Erro ao remover documento' });
+  }
+});
+
+
+const CHECKLIST_BASE = [
+  ['cadastral', 'cartao_cnpj', 'Cartão CNPJ', true],
+  ['cadastral', 'contrato_social', 'Contrato Social', true],
+  ['cadastral', 'alteracao_contratual', 'Alterações Contratuais', false],
+  ['cadastral', 'nire', 'NIRE / Registro na Junta Comercial', false],
+  ['financeiro', 'balanco_patrimonial', 'Balanço Patrimonial', true],
+  ['financeiro', 'dre', 'DRE - Demonstração do Resultado do Exercício', true],
+  ['financeiro', 'declaracao_faturamento', 'Declaração de faturamento dos últimos 12 meses', true],
+  ['financeiro', 'extrato_bancario', 'Extratos bancários PJ dos últimos 3 a 6 meses', true],
+  ['fiscal', 'irpj', 'IRPJ', false],
+  ['fiscal', 'defis', 'DEFIS, se optante pelo Simples Nacional', false],
+  ['fiscal', 'ecf', 'ECF, se Lucro Real/Presumido', false],
+  ['regularidade', 'cnd_receita_inss', 'CND Receita Federal/INSS', true],
+  ['regularidade', 'fgts', 'Certidão de Regularidade do FGTS', true],
+  ['regularidade', 'cndt_trabalhista', 'CNDT Trabalhista', true],
+  ['regularidade', 'certidao_estadual', 'Certidão estadual', false],
+  ['regularidade', 'certidao_municipal', 'Certidão municipal', false],
+  ['credito', 'score_serasa', 'Score CNPJ Serasa', false],
+  ['credito', 'score_boavista', 'Score CNPJ Boa Vista', false],
+  ['credito', 'restricoes_cnpj', 'Restrições no CNPJ', true],
+] as const;
+
+async function ensureChecklistSchema(): Promise<void> {
+  await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+  await pool.query(`CREATE TABLE IF NOT EXISTS public.empresa_checklist_documentos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id UUID NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
+    socio_id UUID NULL REFERENCES public.socios_empresa(id) ON DELETE CASCADE,
+    categoria TEXT NOT NULL,
+    tipo_documento TEXT NOT NULL,
+    nome TEXT NOT NULL,
+    obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
+    status TEXT NOT NULL DEFAULT 'pendente',
+    origem TEXT NOT NULL DEFAULT 'automatico',
+    observacao TEXT,
+    arquivo_id UUID NULL,
+    data_vencimento DATE NULL,
+    criado_por UUID NULL REFERENCES public.colaboradores(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (empresa_id, socio_id, tipo_documento)
+  )`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_empresa_checklist_empresa_id ON public.empresa_checklist_documentos(empresa_id)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_empresa_checklist_status ON public.empresa_checklist_documentos(status)');
+}
+
+async function inserirChecklistItem(args: { empresaId: string; socioId?: string | null; categoria: string; tipo: string; nome: string; obrigatorio: boolean; observacao?: string | null; criadoPor?: string | null }) {
+  await pool.query(
+    `INSERT INTO public.empresa_checklist_documentos
+      (empresa_id, socio_id, categoria, tipo_documento, nome, obrigatorio, observacao, criado_por)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (empresa_id, socio_id, tipo_documento) DO NOTHING`,
+    [args.empresaId, args.socioId || null, args.categoria, args.tipo, args.nome, args.obrigatorio, args.observacao || null, args.criadoPor || null]
+  );
+}
+
+router.post('/:id/checklist/gerar', auth, async (req: Request, res: Response) => {
+  try {
+    if (!(await requireEmpresaAccess(req, res))) return;
+    await ensureSociosEmpresaSchema();
+    await ensureChecklistSchema();
+    const colab = (req as any).colaborador || (req as any).user;
+    let criadosAntes = 0;
+    const before = await pool.query('SELECT COUNT(*)::int AS total FROM empresa_checklist_documentos WHERE empresa_id=$1', [req.params.id]);
+    criadosAntes = before.rows[0]?.total || 0;
+
+    for (const item of CHECKLIST_BASE) {
+      await inserirChecklistItem({ empresaId: req.params.id, categoria: item[0], tipo: item[1], nome: item[2], obrigatorio: item[3], criadoPor: colab?.id || null });
+    }
+
+    const socios = await pool.query('SELECT id, nome, percentual_capital FROM socios_empresa WHERE empresa_id=$1 ORDER BY nome ASC', [req.params.id]);
+    for (const socio of socios.rows) {
+      await inserirChecklistItem({ empresaId: req.params.id, socioId: socio.id, categoria: 'socios', tipo: 'rg_socio', nome: `RG/CPF ou CNH - ${socio.nome}`, obrigatorio: true, criadoPor: colab?.id || null });
+      await inserirChecklistItem({ empresaId: req.params.id, socioId: socio.id, categoria: 'socios', tipo: 'comprovante_residencia_socio', nome: `Comprovante de residência - ${socio.nome}`, obrigatorio: true, criadoPor: colab?.id || null });
+      await inserirChecklistItem({ empresaId: req.params.id, socioId: socio.id, categoria: 'socios', tipo: 'certidao_casamento', nome: `Certidão de casamento/nascimento - ${socio.nome}`, obrigatorio: false, criadoPor: colab?.id || null });
+      await inserirChecklistItem({ empresaId: req.params.id, socioId: socio.id, categoria: 'socios', tipo: 'irpf_socio', nome: `IRPF do sócio - ${socio.nome}`, obrigatorio: false, criadoPor: colab?.id || null });
+      await inserirChecklistItem({ empresaId: req.params.id, socioId: socio.id, categoria: 'credito', tipo: 'restricoes_cpf_socio', nome: `Restrições CPF do sócio - ${socio.nome}`, obrigatorio: true, criadoPor: colab?.id || null });
+      if (socio.percentual_capital === null || socio.percentual_capital === undefined) {
+        await inserirChecklistItem({ empresaId: req.params.id, socioId: socio.id, categoria: 'socios', tipo: 'percentual_participacao', nome: `Preencher percentual de participação - ${socio.nome}`, obrigatorio: true, observacao: 'A consulta automática normalmente não retorna o percentual de participação.', criadoPor: colab?.id || null });
+      }
+    }
+
+    const after = await pool.query('SELECT COUNT(*)::int AS total FROM empresa_checklist_documentos WHERE empresa_id=$1', [req.params.id]);
+    const total = after.rows[0]?.total || 0;
+    const criados = Math.max(0, total - criadosAntes);
+    await registrarHistoricoEmpresa(req.params.id, 'checklist_documentos_criado', `${criados} pendência(s)/checklist(s) criada(s) automaticamente para análise de crédito.`, colab?.nome || 'Sistema');
+    res.status(201).json({ success: true, criados, total });
+  } catch (err) {
+    console.error('[POST /api/empresas/:id/checklist/gerar]', pgErrorDetails(err));
+    res.status(500).json({ error: 'Erro ao gerar checklist', details: pgErrorDetails(err) });
+  }
+});
+
+router.get('/:id/checklist', auth, async (req: Request, res: Response) => {
+  try {
+    if (!(await requireEmpresaAccess(req, res))) return;
+    await ensureChecklistSchema();
+    const { rows } = await pool.query('SELECT * FROM empresa_checklist_documentos WHERE empresa_id=$1 ORDER BY categoria, created_at DESC', [req.params.id]);
+    res.json(rows);
+  } catch (err) {
+    console.error('[GET /api/empresas/:id/checklist]', pgErrorDetails(err));
+    res.status(500).json({ error: 'Erro ao listar checklist' });
   }
 });
 
