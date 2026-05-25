@@ -46,6 +46,17 @@ pool.query("SELECT 1").then(() => {
   console.error("🗄️  PostgreSQL: ❌ Falha na conexão —", e.message);
 });
 
+
+// ─── Diretório de uploads ─────────────────────────────────────────────────────
+// Usa DATA_DIR (configurada no Coolify/Docker) como raiz de todos os uploads.
+// path.resolve('uploads/...') foi substituído por esta função para garantir que
+// arquivos gerados (contratos, previsões, declarações) persistam no volume montado
+// em /var/data/destrava, não em /app/uploads (que some ao recriar o container).
+function getUploadsDir(subdir: string = ''): string {
+  const base = path.join(process.env.DATA_DIR || '/var/data/destrava', 'uploads');
+  return subdir ? path.join(base, subdir) : base;
+}
+
 // ─── n8n Webhook helper ──────────────────────────────────────────────────────
 async function dispararN8n(evento: string, payload: Record<string, unknown>): Promise<boolean> {
   const webhookUrl = process.env.N8N_WEBHOOK_URL;
@@ -3106,8 +3117,7 @@ async function startServer() {
 
   app.post("/api/empresas/:id/documentos", auth, async (req: Request, res: Response) => {
     try {
-      const dataDir = process.env.DATA_DIR || "/data";
-      const uploadDir = path.join(dataDir, "uploads", "empresas", req.params.id);
+      const uploadDir = getUploadsDir(path.join('empresas', req.params.id));
       await fs.promises.mkdir(uploadDir, { recursive: true });
 
       const chunks: Buffer[] = [];
@@ -5204,7 +5214,7 @@ ${(temTest1 || temTest2) ? `
   }
 
     async function gerarPdfContrato(payload: any): Promise<string> {
-    const uploadsDir = path.resolve('uploads', 'contratos');
+    const uploadsDir = getUploadsDir('contratos');
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
     const html = await gerarHtmlContrato(payload);
@@ -5561,7 +5571,7 @@ ${(temTest1 || temTest2) ? `
       const html = gerarHtmlPrevisaoFaturamento(htmlPayload);
 
       // Gerar PDF via Puppeteer
-      const uploadsDir = path.resolve('uploads', 'previsoes');
+      const uploadsDir = getUploadsDir('previsoes');
       if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
       const fileName = `previsao-${id}-${Date.now()}.pdf`;
       const filePath = path.join(uploadsDir, fileName);
@@ -5951,7 +5961,7 @@ ${(temTest1 || temTest2) ? `
       });
 
       const fileName = `declaracao-${crypto.randomUUID()}.pdf`;
-      const uploadsDir = path.resolve('uploads', 'declaracoes');
+      const uploadsDir = getUploadsDir('declaracoes');
       if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
       const filePath = path.join(uploadsDir, fileName);
 
@@ -6656,7 +6666,7 @@ ${(temTest1 || temTest2) ? `
 
         aplicarIdentificacaoContrato(payloadLN, await gerarIdentificacaoContrato('limpa_nome', payloadLN));
         const htmlLN = await gerarHtmlContratoLimpaNome(payloadLN);
-        const uploadsDir2 = path.resolve('uploads', 'contratos');
+        const uploadsDir2 = getUploadsDir('contratos');
         if (!fs.existsSync(uploadsDir2)) fs.mkdirSync(uploadsDir2, { recursive: true });
         const fileNameLN = `${nomeArquivoSeguroContrato(payloadLN.contrato?.protocolo_contrato, 'contrato-limpa-nome')}.pdf`;
         const filePathLN = path.join(uploadsDir2, fileNameLN);
@@ -6830,7 +6840,7 @@ ${(temTest1 || temTest2) ? `
         };
         aplicarIdentificacaoContrato(payloadBacen, await gerarIdentificacaoContrato('limpa_bacen', payloadBacen));
         const htmlBacen = await gerarHtmlContratoBacen(payloadBacen);
-        const uploadsDir3 = path.resolve('uploads', 'contratos');
+        const uploadsDir3 = getUploadsDir('contratos');
         if (!fs.existsSync(uploadsDir3)) fs.mkdirSync(uploadsDir3, { recursive: true });
         const fileNameBacen = `${nomeArquivoSeguroContrato(payloadBacen.contrato?.protocolo_contrato, 'contrato-limpa-bacen')}.pdf`;
         const filePathBacen = path.join(uploadsDir3, fileNameBacen);
@@ -6937,7 +6947,7 @@ ${(temTest1 || temTest2) ? `
         };
         aplicarIdentificacaoContrato(payloadRating, await gerarIdentificacaoContrato('rating', payloadRating));
         const htmlRating = await gerarHtmlContratoRating(payloadRating);
-        const uploadsDir4 = path.resolve('uploads', 'contratos');
+        const uploadsDir4 = getUploadsDir('contratos');
         if (!fs.existsSync(uploadsDir4)) fs.mkdirSync(uploadsDir4, { recursive: true });
         const fileNameRating = `${nomeArquivoSeguroContrato(payloadRating.contrato?.protocolo_contrato, 'contrato-rating')}.pdf`;
         const filePathRating = path.join(uploadsDir4, fileNameRating);
@@ -7027,7 +7037,7 @@ ${(temTest1 || temTest2) ? `
         };
         aplicarIdentificacaoContrato(payloadParceria, await gerarIdentificacaoContrato('parceria_comercial', payloadParceria));
         const htmlParceria = await gerarHtmlContratoParceriaComercial(payloadParceria);
-        const uploadsDir5 = path.resolve('uploads', 'contratos');
+        const uploadsDir5 = getUploadsDir('contratos');
         if (!fs.existsSync(uploadsDir5)) fs.mkdirSync(uploadsDir5, { recursive: true });
         const fileNameParceria = `${nomeArquivoSeguroContrato(payloadParceria.contrato?.protocolo_contrato, 'contrato-parceria')}.pdf`;
         const filePathParceria = path.join(uploadsDir5, fileNameParceria);
@@ -7298,7 +7308,7 @@ ${(temTest1 || temTest2) ? `
           candidatos.push(path.join(process.env.DATA_DIR, path.basename(contrato.pdf_path)));
         }
       }
-      candidatos.push(path.join(path.resolve('uploads', 'contratos'), `contrato-${req.params.id}.pdf`));
+      candidatos.push(path.join(getUploadsDir('contratos'), `contrato-${req.params.id}.pdf`));
 
       let filePath: string | null = null;
       for (const c of candidatos) {
@@ -7490,7 +7500,7 @@ ${(temTest1 || temTest2) ? `
       case 'parceria_comercial': html = await gerarHtmlContratoParceriaComercial(payload); break;
       default: html = await gerarHtmlContrato(payload); break;
     }
-    const uploadsDir = path.resolve('uploads', 'contratos');
+    const uploadsDir = getUploadsDir('contratos');
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
     const fileName = `${nomeArquivoSeguroContrato(payload?.contrato?.protocolo_contrato, `contrato-${contrato.tipo_contrato || 'gerado'}`)}.pdf`;
     const pdfPath = path.join(uploadsDir, fileName);
@@ -7585,7 +7595,7 @@ ${(temTest1 || temTest2) ? `
       const conteudo = arquivo_base64 || pdf_base64;
       if (!conteudo) { res.status(400).json({ error: 'Informe o PDF assinado em base64.' }); return; }
       const base64 = String(conteudo).includes(',') ? String(conteudo).split(',').pop()! : String(conteudo);
-      const uploadsDir = path.resolve('uploads', 'contratos', 'assinados');
+      const uploadsDir = getUploadsDir('contratos/assinados');
       if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
       const fileName = `${crypto.randomUUID()}-${String(nome_arquivo || 'contrato-assinado.pdf').replace(/[^a-zA-Z0-9_.-]/g, '-')}`;
       const pdfPath = path.join(uploadsDir, fileName);
@@ -7638,7 +7648,7 @@ ${(temTest1 || temTest2) ? `
   });
 
   // Servir arquivos de contratos gerados
-  app.use('/uploads/contratos', express.static(path.resolve('uploads', 'contratos')));
+  app.use('/uploads/contratos', express.static(getUploadsDir('contratos')));
 
   app.patch('/api/me', auth, async (req: Request, res: Response) => {
     try {
@@ -10251,7 +10261,7 @@ ${(temTest1 || temTest2) ? `
         saldosDiarios: saldos,
         geradoPor,
       });
-      const uploadsDir = path.resolve('uploads', 'acompanhamento-financeiro');
+      const uploadsDir = getUploadsDir('acompanhamento-financeiro');
       if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
       const fileName = `acomp-financeiro-${id}-${Date.now()}.pdf`;
       const filePath = path.join(uploadsDir, fileName);
