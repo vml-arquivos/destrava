@@ -50,7 +50,7 @@ const BRANCO = [255, 255, 255] as [number, number, number];
 const PRETO = [0, 0, 0] as [number, number, number];
 
 // ─── Gerador principal ────────────────────────────────────────────────────────
-function criarDocumentoPdfSimulacao(dados: DadosPdf): { doc: jsPDF; nomeArquivo: string } {
+export function gerarPdfSimulacao(dados: DadosPdf): void {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const W = 210;
   const MARGIN = 15;
@@ -166,9 +166,9 @@ function criarDocumentoPdfSimulacao(dados: DadosPdf): { doc: jsPDF; nomeArquivo:
       linhas.push(["Imposto (IOF/IR)", fmt(res.impostoValor)]);
     }
     if (res.comissaoValor && res.comissaoValor > 0) {
-      linhas.push(["Comissão (não soma no total)", fmt(res.comissaoValor)]);
+      linhas.push(["Comissão", fmt(res.comissaoValor)]);
     }
-    linhas.push(["CUSTO TOTAL DA OPERAÇÃO (SEM COMISSÃO)", fmt(res.custoTotalOperacao), true]);
+    linhas.push(["CUSTO TOTAL DA OPERAÇÃO", fmt(res.custoTotalOperacao), true]);
 
     linhas.forEach(([label, valor, destaque], idx) => {
       const bg = idx % 2 === 0 ? CINZA_CLARO : BRANCO;
@@ -283,19 +283,5 @@ function criarDocumentoPdfSimulacao(dados: DadosPdf): { doc: jsPDF; nomeArquivo:
 
   // ── Salvar ─────────────────────────────────────────────────────────────────
   const nomeArquivo = `Proposta_Destrava_${(dados.cliente.nome || "cliente").replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`;
-  return { doc, nomeArquivo };
-}
-
-export function gerarArquivoPdfSimulacao(dados: DadosPdf): { blob: Blob; base64: string; nomeArquivo: string } {
-  const { doc, nomeArquivo } = criarDocumentoPdfSimulacao(dados);
-  const blob = doc.output("blob");
-  const dataUri = doc.output("datauristring");
-  const base64 = String(dataUri).split(",")[1] || "";
-  return { blob, base64, nomeArquivo };
-}
-
-export function gerarPdfSimulacao(dados: DadosPdf): void {
-  const { doc, nomeArquivo } = criarDocumentoPdfSimulacao(dados);
   doc.save(nomeArquivo);
 }
-

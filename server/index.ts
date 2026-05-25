@@ -10,8 +10,6 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { auth } from "./middleware/auth.ts";
 import { authorize } from "./middleware/authorize.ts";
-import cnpjRouter from './routes/cnpj';
-import sociosDocumentosRouter from './routes/socios_documentos';
 import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
 import { gerarHtmlTimbrado, getPuppeteerHeaderTemplate, getPuppeteerFooterTemplate, getDocumentStyles, CONTRATADA_DADOS, getHtmlHeaderEmbutido, getHtmlFooterEmbutido } from "./letterhead.ts";
 import {
@@ -204,120 +202,6 @@ function colaboradorPodeVerTudo(colaborador: any): boolean {
     colaborador?.pode_ver_todos_leads
     || podeVerTodosLeadsPorPerfilOuCargo(colaborador?.perfil, colaborador?.cargo)
   );
-}
-
-
-function emptyToNull(value: unknown): unknown {
-  if (value === undefined || value === null) return null;
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed === "" ? null : trimmed;
-  }
-  return value;
-}
-
-function normalizeNumeric(value: unknown): number | null {
-  if (value === undefined || value === null || value === "") return null;
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value !== "string") return null;
-  const cleaned = value
-    .replace(/R\$/g, "")
-    .replace(/\s/g, "")
-    .replace(/\./g, "")
-    .replace(/,/g, ".")
-    .replace(/[^0-9.-]/g, "");
-  if (!cleaned) return null;
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : null;
-}
-
-function normalizeInteger(value: unknown): number | null {
-  const n = normalizeNumeric(value);
-  return n === null ? null : Math.trunc(n);
-}
-
-function normalizeDate(value: unknown): string | null {
-  if (value === undefined || value === null || value === "") return null;
-  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const br = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (br) return `${br[3]}-${br[2]}-${br[1]}`;
-  const iso = trimmed.match(/^\d{4}-\d{2}-\d{2}/);
-  return iso ? trimmed.slice(0, 10) : null;
-}
-
-function normalizeTimestamp(value: unknown): string | null {
-  if (value === undefined || value === null || value === "") return null;
-  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString();
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const d = new Date(trimmed);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
-
-function normalizeTextArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map((v) => String(v || "").trim()).filter(Boolean);
-  if (typeof value === "string" && value.trim()) return [value.trim()];
-  return [];
-}
-
-async function getTableColumns(tableName: string): Promise<Set<string>> {
-  const { rows } = await pool.query(
-    `SELECT column_name
-       FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND table_name = $1`,
-    [tableName]
-  );
-  return new Set(rows.map((r: { column_name: string }) => r.column_name));
-}
-
-async function empresaExiste(empresaId: string): Promise<boolean> {
-  const { rows } = await pool.query("SELECT 1 FROM empresas WHERE id=$1 LIMIT 1", [empresaId]);
-  return rows.length > 0;
-}
-
-async function canAccessEmpresa(colaborador: any, empresaId: string): Promise<boolean> {
-  if (!empresaId) return false;
-  if (colaboradorPodeVerTudo(colaborador)) return await empresaExiste(empresaId);
-  if (!colaborador?.id) return false;
-  const columns = await getTableColumns("empresas");
-  const conds: string[] = [];
-  const params: any[] = [empresaId, colaborador.id];
-  if (columns.has("responsavel_id")) conds.push("responsavel_id = $2");
-  if (columns.has("analista_id")) conds.push("analista_id = $2");
-  if (columns.has("captador_id")) conds.push("captador_id = $2");
-  if (!conds.length) return false;
-  const { rows } = await pool.query(`SELECT 1 FROM empresas WHERE id=$1 AND (${conds.join(" OR ")}) LIMIT 1`, params);
-  return rows.length > 0;
-}
-
-async function requireEmpresaAccess(req: Request, res: Response, empresaId: string): Promise<boolean> {
-  const colaborador = (req as Request & { colaborador: any }).colaborador;
-  const allowed = await canAccessEmpresa(colaborador, empresaId);
-  if (!allowed) {
-    res.status(403).json({ error: "Acesso negado à empresa" });
-    return false;
-  }
-  return true;
-}
-
-async function registrarHistoricoEmpresaSeguro(empresaId: string, tipo: string, descricao: string, autor?: string | null): Promise<void> {
-  try {
-    const columns = await getTableColumns("empresa_historico");
-    if (!columns.has("empresa_id") || !columns.has("descricao")) return;
-    const payload: Record<string, unknown> = { empresa_id: empresaId, tipo, descricao, autor: autor || "Sistema" };
-    const safeEntries = Object.entries(payload).filter(([k]) => columns.has(k));
-    const keys = safeEntries.map(([k]) => k);
-    const values = safeEntries.map(([, v]) => v);
-    const placeholders = values.map((_, i) => `$${i + 1}`).join(",");
-    await pool.query(`INSERT INTO empresa_historico (${keys.join(",")}) VALUES (${placeholders})`, values);
-  } catch (err) {
-    console.warn("[historico empresa] falha ao registrar evento:", err instanceof Error ? err.message : err);
-  }
 }
 
 function aplicarFiltroVisibilidadeLead({
@@ -784,39 +668,7 @@ async function listarConversasChatwoot({
 // ─── App ─────────────────────────────────────────────────────────────────────
 async function startServer() {
   const app = express();
-  // Rota para consulta de CNPJ (proxy para BrasilAPI)
-  app.use('/api/cnpj', cnpjRouter);
-  app.use('/api/empresas', sociosDocumentosRouter);
   const server = createServer(app);
-
-  // ─── AUTO-CREATE: Company Hub / Empresas enriquecidas ──────────────────────
-  // Mantém produção resiliente mesmo quando a migration ainda não foi aplicada manualmente.
-  try {
-    await pool.query(`
-      ALTER TABLE public.empresas
-        ADD COLUMN IF NOT EXISTS natureza_juridica TEXT,
-        ADD COLUMN IF NOT EXISTS capital_social NUMERIC(15,2),
-        ADD COLUMN IF NOT EXISTS cnae_principal TEXT,
-        ADD COLUMN IF NOT EXISTS cnaes_secundarios TEXT[] DEFAULT '{}',
-        ADD COLUMN IF NOT EXISTS data_abertura DATE,
-        ADD COLUMN IF NOT EXISTS situacao_cadastral TEXT,
-        ADD COLUMN IF NOT EXISTS matriz_filial TEXT,
-        ADD COLUMN IF NOT EXISTS ultima_sincronizacao_receita TIMESTAMPTZ;
-
-      CREATE TABLE IF NOT EXISTS public.empresa_documentos (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        empresa_id UUID NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
-        nome TEXT NOT NULL,
-        tipo TEXT,
-        tamanho INTEGER,
-        url TEXT,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS idx_empresa_documentos_empresa_id ON public.empresa_documentos(empresa_id);
-    `);
-  } catch (err) {
-    console.error('[AUTO-CREATE Company Hub]', err);
-  }
 
   // ─── AUTO-CREATE: Módulos de Faturamento e Contratos ─────────────────────────
   // Garante que as tabelas existam mesmo sem executar a migration manual.
@@ -1302,6 +1154,36 @@ async function startServer() {
     res.setHeader("Surrogate-Control", "no-store");
     next();
   });
+  // GET /api/cnpj/:cnpj — proxy seguro para BrasilAPI.
+  // Não exige chave, mas centraliza tratamento de erro e evita depender de CORS no frontend.
+  app.get("/api/cnpj/:cnpj", async (req: Request, res: Response) => {
+    const cnpj = String(req.params.cnpj || "").replace(/\D/g, "");
+    if (cnpj.length !== 14) {
+      res.status(400).json({ error: "CNPJ deve ter 14 dígitos." });
+      return;
+    }
+    try {
+      const upstream = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
+        headers: { "User-Agent": "destrava-credito/1.0" },
+        signal: AbortSignal.timeout(10000),
+      });
+      const payload = await upstream.json().catch(() => ({}));
+      if (upstream.status === 404) {
+        res.status(404).json({ error: "CNPJ não encontrado na Receita Federal." });
+        return;
+      }
+      if (!upstream.ok) {
+        res.status(502).json({ error: payload?.message || payload?.error || "Erro ao consultar BrasilAPI." });
+        return;
+      }
+      res.json(payload);
+    } catch (err: unknown) {
+      console.error("[GET /api/cnpj/:cnpj]", err);
+      const isTimeout = err instanceof Error && err.name === "TimeoutError";
+      res.status(502).json({ error: isTimeout ? "Tempo esgotado ao consultar CNPJ." : "Erro ao consultar CNPJ." });
+    }
+  });
+
 
   // ─── Health check ──────────────────────────────────────────────────────────
   app.get("/api/health", async (_req: Request, res: Response) => {
@@ -1743,7 +1625,10 @@ async function startServer() {
 
       const keys = Object.keys(fields);
       const values = Object.values(fields);
-      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+      const set = keys.map((k, i) => {
+        const cast = ["cnaes_secundarios", "dados_receita", "qsa"].includes(k) ? "::jsonb" : "";
+        return `"${k}" = $${i + 1}${cast}`;
+      }).join(", ");
       const { rows } = await pool.query(
         `UPDATE leads SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
         [...values, req.params.id]
@@ -2147,7 +2032,10 @@ async function startServer() {
       else if (cargo !== undefined || perfil !== undefined) updates.pode_ver_todos_leads = podeVerTodosLeadsPorPerfilOuCargo(String(updates.perfil || perfil || ''), cargoFinal);
       const keys = Object.keys(updates);
       const values = Object.values(updates);
-      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+      const set = keys.map((k, i) => {
+        const cast = ["cnaes_secundarios", "dados_receita", "qsa"].includes(k) ? "::jsonb" : "";
+        return `"${k}" = $${i + 1}${cast}`;
+      }).join(", ");
       const { rows } = await pool.query(
         `UPDATE colaboradores SET ${set} WHERE id = $${keys.length + 1} RETURNING id, nome, email, cargo, telefone, ativo, perfil, pode_atender_leads, pode_ver_todos_leads, chatwoot_agente_id`,
         [...values, req.params.id]
@@ -2293,103 +2181,6 @@ async function startServer() {
     } catch (err) {
       console.error("[POST /api/simulacoes]", err);
       res.status(500).json({ error: "Erro ao salvar simulação" });
-    }
-  });
-
-  // ─── PDFs armazenados de simulações ───────────────────────────────────────
-  app.post("/api/simulacoes/:id/pdf", auth, async (req: Request, res: Response) => {
-    try {
-      const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const { id } = req.params;
-      const { nome_arquivo, pdf_base64, metadata } = req.body || {};
-
-      if (!pdf_base64 || typeof pdf_base64 !== "string") {
-        return res.status(400).json({ error: "PDF em base64 é obrigatório" });
-      }
-
-      const isGestor = isGestorCargo(colaborador?.cargo || "");
-      const acesso = await pool.query(
-        isGestor
-          ? "SELECT id, colaborador_id FROM simulacoes_colaborador WHERE id = $1"
-          : "SELECT id, colaborador_id FROM simulacoes_colaborador WHERE id = $1 AND colaborador_id = $2",
-        isGestor ? [id] : [id, colaborador.id]
-      );
-
-      if (!acesso.rows.length) {
-        return res.status(404).json({ error: "Simulação não encontrada" });
-      }
-
-      const base64Limpo = pdf_base64.includes(",") ? pdf_base64.split(",").pop() : pdf_base64;
-      const { rows } = await pool.query(
-        `INSERT INTO simulacao_pdfs
-          (simulacao_id, colaborador_id, nome_arquivo, pdf_base64, metadata)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, nome_arquivo, criado_em`,
-        [
-          id,
-          colaborador.id,
-          nome_arquivo || `simulacao_${id}.pdf`,
-          base64Limpo,
-          metadata || {},
-        ]
-      );
-
-      res.status(201).json({ success: true, pdf: rows[0] });
-    } catch (err: any) {
-      console.error("[POST /api/simulacoes/:id/pdf]", err);
-      res.status(500).json({ error: "Erro ao armazenar PDF da simulação" });
-    }
-  });
-
-  app.get("/api/simulacoes/:id/pdfs", auth, async (req: Request, res: Response) => {
-    try {
-      const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const { id } = req.params;
-      const isGestor = isGestorCargo(colaborador?.cargo || "");
-      const { rows } = await pool.query(
-        `SELECT p.id, p.nome_arquivo, p.mime_type, p.criado_em
-           FROM simulacao_pdfs p
-           JOIN simulacoes_colaborador s ON s.id = p.simulacao_id
-          WHERE p.simulacao_id = $1
-            AND ($2::boolean = true OR s.colaborador_id = $3)
-          ORDER BY p.criado_em DESC`,
-        [id, isGestor, colaborador.id]
-      );
-      res.json(rows);
-    } catch (err) {
-      console.error("[GET /api/simulacoes/:id/pdfs]", err);
-      res.status(500).json({ error: "Erro ao listar PDFs da simulação" });
-    }
-  });
-
-  app.get("/api/simulacoes/:id/pdf/latest", auth, async (req: Request, res: Response) => {
-    try {
-      const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const { id } = req.params;
-      const isGestor = isGestorCargo(colaborador?.cargo || "");
-      const { rows } = await pool.query(
-        `SELECT p.nome_arquivo, p.mime_type, p.pdf_base64
-           FROM simulacao_pdfs p
-           JOIN simulacoes_colaborador s ON s.id = p.simulacao_id
-          WHERE p.simulacao_id = $1
-            AND ($2::boolean = true OR s.colaborador_id = $3)
-          ORDER BY p.criado_em DESC
-          LIMIT 1`,
-        [id, isGestor, colaborador.id]
-      );
-
-      if (!rows.length) {
-        return res.status(404).json({ error: "Nenhum PDF armazenado para esta simulação" });
-      }
-
-      const pdf = rows[0];
-      const buffer = Buffer.from(String(pdf.pdf_base64 || ""), "base64");
-      res.setHeader("Content-Type", pdf.mime_type || "application/pdf");
-      res.setHeader("Content-Disposition", `inline; filename="${String(pdf.nome_arquivo || "simulacao.pdf").replace(/"/g, "")}"`);
-      res.send(buffer);
-    } catch (err) {
-      console.error("[GET /api/simulacoes/:id/pdf/latest]", err);
-      res.status(500).json({ error: "Erro ao recuperar PDF da simulação" });
     }
   });
 
@@ -2564,7 +2355,10 @@ async function startServer() {
       const updates = { ...req.body, updated_at: new Date().toISOString() };
       const keys = Object.keys(updates);
       const values = Object.values(updates);
-      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+      const set = keys.map((k, i) => {
+        const cast = ["cnaes_secundarios", "dados_receita", "qsa"].includes(k) ? "::jsonb" : "";
+        return `"${k}" = $${i + 1}${cast}`;
+      }).join(", ");
       const result = await pool.query(
         `UPDATE crm_documentos SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
         [...values, id]
@@ -2930,7 +2724,10 @@ async function startServer() {
 
       const keys = Object.keys(updates);
       const values = Object.values(updates);
-      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+      const set = keys.map((k, i) => {
+        const cast = ["cnaes_secundarios", "dados_receita", "qsa"].includes(k) ? "::jsonb" : "";
+        return `"${k}" = $${i + 1}${cast}`;
+      }).join(", ");
 
       const { rows } = await pool.query(
         `UPDATE leads SET ${set} WHERE id = $${keys.length + 1} RETURNING id, nome, score_ia, temperatura, proxima_acao_ia, linha_recomendada`,
@@ -3017,7 +2814,6 @@ async function startServer() {
 
   app.get("/api/empresas/:id", auth, async (req: Request, res: Response) => {
     try {
-      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
       const { rows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [req.params.id]);
       if (rows.length === 0) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
       res.json(rows[0]);
@@ -3030,160 +2826,105 @@ async function startServer() {
   app.post("/api/empresas", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const body = req.body || {};
-      const razaoSocial = typeof body.razao_social === "string" ? body.razao_social.trim() : "";
+      const {
+        razao_social, nome_fantasia, cnpj, inscricao_estadual,
+        email, telefone, whatsapp, site,
+        segmento, porte, faturamento_anual, numero_funcionarios,
+        cep, logradouro, numero, complemento, bairro, cidade, estado,
+        responsavel_nome, responsavel_cpf, responsavel_cargo, responsavel_telefone, responsavel_email,
+        banco_principal, agencia, conta, limite_credito_atual, score_serasa, score_spc,
+        status, origem, tags, observacoes, captador_id, analista_id,
+        natureza_juridica, cnae_principal, cnae_descricao, cnaes_secundarios,
+        descricao_situacao_cadastral, data_situacao_cadastral, motivo_situacao_cadastral,
+        data_inicio_atividade, capital_social, matriz_filial, dados_receita, qsa,
+      } = req.body || {};
 
-      if (!razaoSocial) {
+      if (!razao_social || !String(razao_social).trim()) {
         res.status(400).json({ error: "Razão social é obrigatória" });
         return;
       }
 
-      const columns = await getTableColumns("empresas");
-      const payload: Record<string, unknown> = {
-        razao_social: razaoSocial,
-        nome_fantasia: emptyToNull(body.nome_fantasia),
-        cnpj: emptyToNull(body.cnpj),
-        inscricao_estadual: emptyToNull(body.inscricao_estadual),
-        inscricao_municipal: emptyToNull(body.inscricao_municipal),
-        natureza_juridica: emptyToNull(body.natureza_juridica),
-        capital_social: normalizeNumeric(body.capital_social),
-        cnae_principal: emptyToNull(body.cnae_principal),
-        cnaes_secundarios: normalizeTextArray(body.cnaes_secundarios),
-        data_abertura: normalizeDate(body.data_abertura),
-        situacao_cadastral: emptyToNull(body.situacao_cadastral),
-        matriz_filial: emptyToNull(body.matriz_filial),
-        ultima_sincronizacao_receita: normalizeTimestamp(body.ultima_sincronizacao_receita) || new Date().toISOString(),
-        data_situacao_cadastral: normalizeDate(body.data_situacao_cadastral),
-        motivo_situacao_cadastral: emptyToNull(body.motivo_situacao_cadastral),
-        regime_tributario: emptyToNull(body.regime_tributario),
-        telefone_2: emptyToNull(body.telefone_2),
-        dados_extra_receita: body.dados_extra_receita && typeof body.dados_extra_receita === "object" ? JSON.stringify(body.dados_extra_receita) : emptyToNull(body.dados_extra_receita),
-        email: emptyToNull(body.email),
-        telefone: emptyToNull(body.telefone),
-        whatsapp: emptyToNull(body.whatsapp),
-        site: emptyToNull(body.site),
-        segmento: emptyToNull(body.segmento),
-        porte: emptyToNull(body.porte) || "mei",
-        faturamento_anual: normalizeNumeric(body.faturamento_anual),
-        numero_funcionarios: normalizeInteger(body.numero_funcionarios),
-        cep: emptyToNull(body.cep),
-        logradouro: emptyToNull(body.logradouro),
-        numero: emptyToNull(body.numero),
-        complemento: emptyToNull(body.complemento),
-        bairro: emptyToNull(body.bairro),
-        cidade: emptyToNull(body.cidade),
-        estado: emptyToNull(body.estado),
-        responsavel_nome: emptyToNull(body.responsavel_nome),
-        responsavel_cpf: emptyToNull(body.responsavel_cpf),
-        responsavel_cargo: emptyToNull(body.responsavel_cargo),
-        responsavel_telefone: emptyToNull(body.responsavel_telefone),
-        responsavel_email: emptyToNull(body.responsavel_email),
-        banco_principal: emptyToNull(body.banco_principal),
-        agencia: emptyToNull(body.agencia),
-        conta: emptyToNull(body.conta),
-        limite_credito_atual: normalizeNumeric(body.limite_credito_atual),
-        score_serasa: normalizeInteger(body.score_serasa),
-        score_spc: normalizeInteger(body.score_spc),
-        score_cnpj: normalizeInteger(body.score_cnpj),
-        restricoes_cnpj: emptyToNull(body.restricoes_cnpj),
-        observacoes_credito: emptyToNull(body.observacoes_credito),
-        responsavel_id: colaborador?.id || null,
-        status: emptyToNull(body.status) || "ativo",
-        origem: emptyToNull(body.origem) || "manual",
-        tags: normalizeTextArray(body.tags),
-        observacoes: emptyToNull(body.observacoes),
-        captador_id: emptyToNull(body.captador_id),
-        analista_id: emptyToNull(body.analista_id),
-      };
-
-      // Compatibilidade: se a migration nova ainda não rodou, a API não quebra.
-      const safeEntries = Object.entries(payload).filter(([key]) => columns.has(key));
-      const insertColumns = safeEntries.map(([key]) => key);
-      const values = safeEntries.map(([, value]) => value);
-      const placeholders = values.map((_, index) => `$${index + 1}`).join(",");
-
       const { rows } = await pool.query(
-        `INSERT INTO empresas (${insertColumns.map((c) => `"${c}"`).join(",")})
-         VALUES (${placeholders})
-         RETURNING *`,
-        values
+        `INSERT INTO empresas (
+          razao_social, nome_fantasia, cnpj, inscricao_estadual,
+          email, telefone, whatsapp, site,
+          segmento, porte, faturamento_anual, numero_funcionarios,
+          cep, logradouro, numero, complemento, bairro, cidade, estado,
+          responsavel_nome, responsavel_cpf, responsavel_cargo, responsavel_telefone, responsavel_email,
+          banco_principal, agencia, conta, limite_credito_atual, score_serasa, score_spc,
+          responsavel_id, status, origem, tags, observacoes, captador_id, analista_id,
+          natureza_juridica, cnae_principal, cnae_descricao, cnaes_secundarios,
+          descricao_situacao_cadastral, data_situacao_cadastral, motivo_situacao_cadastral,
+          data_inicio_atividade, capital_social, matriz_filial, dados_receita, qsa
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
+          $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,
+          $38,$39,$40,$41::jsonb,$42,$43,$44,$45,$46,$47,$48::jsonb,$49::jsonb
+        ) RETURNING *`,
+        [
+          String(razao_social).trim(), nome_fantasia || null, cnpj || null, inscricao_estadual || null,
+          email || null, telefone || null, whatsapp || null, site || null,
+          segmento || null, porte || 'mei', faturamento_anual || null, numero_funcionarios || null,
+          cep || null, logradouro || null, numero || null, complemento || null, bairro || null, cidade || null, estado || null,
+          responsavel_nome || null, responsavel_cpf || null, responsavel_cargo || null, responsavel_telefone || null, responsavel_email || null,
+          banco_principal || null, agencia || null, conta || null, limite_credito_atual || null, score_serasa || null, score_spc || null,
+          colaborador.id, status || 'ativo', origem || 'manual', Array.isArray(tags) ? tags : [], observacoes || null, captador_id || null, analista_id || null,
+          natureza_juridica || null, cnae_principal || null, cnae_descricao || null, JSON.stringify(Array.isArray(cnaes_secundarios) ? cnaes_secundarios : []),
+          descricao_situacao_cadastral || null, data_situacao_cadastral || null, motivo_situacao_cadastral || null,
+          data_inicio_atividade || null, capital_social || null, matriz_filial || null, JSON.stringify(dados_receita || {}), JSON.stringify(Array.isArray(qsa) ? qsa : []),
+        ]
       );
-
-      const empresa = rows[0];
-      await registrarHistoricoEmpresaSeguro(
-        empresa.id,
-        "empresa_criada",
-        `Empresa cadastrada${payload.origem ? ` via ${payload.origem}` : ""}. Dados principais salvos no cadastro.`,
-        colaborador?.nome || "Sistema"
-      );
-
-      res.status(201).json(empresa);
-    } catch (err: any) {
-      console.error("[POST /api/empresas]", {
-        message: err?.message,
-        code: err?.code,
-        detail: err?.detail,
-        table: err?.table,
-        column: err?.column,
-        constraint: err?.constraint,
-      });
-      res.status(500).json({ error: "Erro ao criar empresa", details: process.env.NODE_ENV === "production" ? undefined : err?.message });
+      res.status(201).json(rows[0]);
+    } catch (err) {
+      console.error("[POST /api/empresas]", err);
+      res.status(500).json({ error: "Erro ao criar empresa" });
     }
   });
 
   app.patch("/api/empresas/:id", auth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      if (!(await requireEmpresaAccess(req, res, id))) return;
-      const columns = await getTableColumns("empresas");
-      const allowed = new Set([
-        "razao_social", "nome_fantasia", "cnpj", "inscricao_estadual", "inscricao_municipal",
-        "natureza_juridica", "capital_social", "cnae_principal", "cnaes_secundarios", "data_abertura",
-        "situacao_cadastral", "matriz_filial", "ultima_sincronizacao_receita", "data_situacao_cadastral",
-        "motivo_situacao_cadastral", "regime_tributario", "telefone_2", "dados_extra_receita",
-        "email", "telefone", "whatsapp", "site", "segmento", "porte", "faturamento_anual", "numero_funcionarios",
-        "cep", "logradouro", "numero", "complemento", "bairro", "cidade", "estado",
+      const permitidos = new Set([
+        "razao_social", "nome_fantasia", "cnpj", "inscricao_estadual",
+        "email", "telefone", "whatsapp", "site", "segmento", "porte",
+        "faturamento_anual", "numero_funcionarios", "cep", "logradouro", "numero", "complemento", "bairro", "cidade", "estado",
         "responsavel_nome", "responsavel_cpf", "responsavel_cargo", "responsavel_telefone", "responsavel_email",
         "banco_principal", "agencia", "conta", "limite_credito_atual", "score_serasa", "score_spc",
-        "score_cnpj", "restricoes_cnpj", "observacoes_credito", "status", "origem", "tags", "observacoes",
-        "captador_id", "analista_id", "responsavel_id"
+        "status", "origem", "tags", "observacoes", "captador_id", "analista_id",
+        "natureza_juridica", "cnae_principal", "cnae_descricao", "cnaes_secundarios",
+        "descricao_situacao_cadastral", "data_situacao_cadastral", "motivo_situacao_cadastral",
+        "data_inicio_atividade", "capital_social", "matriz_filial", "dados_receita", "qsa"
       ]);
-      const updates: Record<string, unknown> = {};
+      const updates: Record<string, any> = {};
       for (const [key, value] of Object.entries(req.body || {})) {
-        if (!allowed.has(key) || !columns.has(key)) continue;
-        if (["capital_social", "faturamento_anual", "limite_credito_atual"].includes(key)) updates[key] = normalizeNumeric(value);
-        else if (["numero_funcionarios", "score_serasa", "score_spc", "score_cnpj"].includes(key)) updates[key] = normalizeInteger(value);
-        else if (["cnaes_secundarios", "tags"].includes(key)) updates[key] = normalizeTextArray(value);
-        else if (["data_abertura", "data_situacao_cadastral"].includes(key)) updates[key] = normalizeDate(value);
-        else if (key === "ultima_sincronizacao_receita") updates[key] = normalizeTimestamp(value);
-        else if (key === "dados_extra_receita" && value && typeof value === "object") updates[key] = JSON.stringify(value);
-        else updates[key] = emptyToNull(value);
+        if (!permitidos.has(key)) continue;
+        updates[key] = value;
       }
-      if (columns.has("updated_at")) updates.updated_at = new Date().toISOString();
+      updates.updated_at = new Date().toISOString();
+      for (const key of ["cnaes_secundarios", "dados_receita", "qsa"]) {
+        if (key in updates) updates[key] = JSON.stringify(updates[key] ?? (key === "dados_receita" ? {} : []));
+      }
       const keys = Object.keys(updates);
-      if (!keys.length) { res.status(400).json({ error: "Nenhum campo válido para atualizar" }); return; }
-      const values = keys.map((k) => updates[k]);
-      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+      if (keys.length === 0) { res.status(400).json({ error: "Nenhum campo válido para atualizar" }); return; }
+      const values = Object.values(updates);
+      const set = keys.map((k, i) => {
+        const cast = ["cnaes_secundarios", "dados_receita", "qsa"].includes(k) ? "::jsonb" : "";
+        return `"${k}" = $${i + 1}${cast}`;
+      }).join(", ");
       const { rows } = await pool.query(
         `UPDATE empresas SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
         [...values, id]
       );
       if (rows.length === 0) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
-      await registrarHistoricoEmpresaSeguro(id, "empresa_atualizada", "Dados da empresa atualizados.", (req as any).colaborador?.nome || "Sistema");
       res.json(rows[0]);
-    } catch (err: any) {
-      console.error("[PATCH /api/empresas/:id]", { message: err?.message, code: err?.code, detail: err?.detail, column: err?.column });
+    } catch (err) {
+      console.error("[PATCH /api/empresas/:id]", err);
       res.status(500).json({ error: "Erro ao atualizar empresa" });
     }
   });
 
   app.delete("/api/empresas/:id", auth, async (req: Request, res: Response) => {
     try {
-      const colaborador = (req as Request & { colaborador: any }).colaborador;
-      if (!colaboradorPodeVerTudo(colaborador)) {
-        res.status(403).json({ error: "Somente gestor/admin pode excluir empresa" });
-        return;
-      }
       await pool.query("DELETE FROM empresas WHERE id = $1", [req.params.id]);
       res.json({ success: true });
     } catch (err) {
@@ -3300,7 +3041,6 @@ async function startServer() {
   // ─── Empresas: Followup, Histórico, Documentos ───────────────────────────
   app.get("/api/empresas/:id/followups", auth, async (req: Request, res: Response) => {
     try {
-      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
       const r = await pool.query(
         "SELECT * FROM empresa_followups WHERE empresa_id=$1 ORDER BY data_agendada ASC NULLS LAST, created_at DESC",
         [req.params.id]
@@ -3312,7 +3052,6 @@ async function startServer() {
   app.post("/api/empresas/:id/followups", auth, async (req: Request, res: Response) => {
     const { titulo, tipo = "ligacao", data_agendada, descricao } = req.body;
     try {
-      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
       const r = await pool.query(
         `INSERT INTO empresa_followups (empresa_id, titulo, tipo, data_agendada, descricao)
          VALUES ($1,$2,$3,$4,$5) RETURNING *`,
@@ -3324,7 +3063,6 @@ async function startServer() {
 
   app.patch("/api/empresas/:id/followups/:fid/concluir", auth, async (req: Request, res: Response) => {
     try {
-      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
       await pool.query(
         "UPDATE empresa_followups SET concluido=true, concluido_em=NOW() WHERE id=$1 AND empresa_id=$2",
         [req.params.fid, req.params.id]
@@ -3335,7 +3073,6 @@ async function startServer() {
 
   app.get("/api/empresas/:id/historico", auth, async (req: Request, res: Response) => {
     try {
-      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
       const r = await pool.query(
         "SELECT * FROM empresa_historico WHERE empresa_id=$1 ORDER BY created_at DESC",
         [req.params.id]
@@ -3348,7 +3085,6 @@ async function startServer() {
     const { tipo = "nota", descricao } = req.body;
     const colab = (req as any).colaborador;
     try {
-      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
       const r = await pool.query(
         `INSERT INTO empresa_historico (empresa_id, tipo, descricao, autor)
          VALUES ($1,$2,$3,$4) RETURNING *`,
@@ -3360,7 +3096,6 @@ async function startServer() {
 
   app.get("/api/empresas/:id/documentos", auth, async (req: Request, res: Response) => {
     try {
-      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
       const r = await pool.query(
         "SELECT * FROM empresa_documentos WHERE empresa_id=$1 ORDER BY created_at DESC",
         [req.params.id]
@@ -3369,45 +3104,30 @@ async function startServer() {
     } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
   });
 
-  const uploadEmpresaDocumento = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 25 * 1024 * 1024 },
-  });
-
-  app.post("/api/empresas/:id/documentos", auth, uploadEmpresaDocumento.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/empresas/:id/documentos", auth, async (req: Request, res: Response) => {
     try {
-      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
-      const file = req.file;
-      if (!file) {
-        res.status(400).json({ error: "Arquivo é obrigatório" });
-        return;
-      }
-
       const dataDir = process.env.DATA_DIR || "/data";
       const uploadDir = path.join(dataDir, "uploads", "empresas", req.params.id);
       await fs.promises.mkdir(uploadDir, { recursive: true });
 
-      const ext = path.extname(file.originalname || "");
-      const base = path.basename(file.originalname || `doc_${Date.now()}`, ext).replace(/[^a-zA-Z0-9_.-]+/g, "_").slice(0, 90);
-      const nomeArq = `${Date.now()}_${base}${ext || ""}`;
-      const filePath = path.join(uploadDir, nomeArq);
-      await fs.promises.writeFile(filePath, file.buffer);
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      await new Promise(r => req.on("end", r));
+      const buf = Buffer.concat(chunks);
 
-      const tipoInformado = typeof req.body?.tipo === "string" ? req.body.tipo : "";
-      const tipo = tipoInformado || (file.mimetype?.startsWith("image/") ? "foto_empresa" : (ext.replace(".", "") || "arquivo"));
-      const url = `/uploads/empresas/${req.params.id}/${nomeArq}`;
+      const contentDisp = req.headers["content-disposition"] || "";
+      const match = contentDisp.match(/filename="?([^"\n]+)"?/);
+      const nomeArq = match?.[1] || `doc_${Date.now()}`;
+      const filePath = path.join(uploadDir, nomeArq);
+      await fs.promises.writeFile(filePath, buf);
 
       const r = await pool.query(
         `INSERT INTO empresa_documentos (empresa_id, nome, tipo, tamanho, url)
          VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-        [req.params.id, file.originalname || nomeArq, tipo, file.size, url]
+        [req.params.id, nomeArq, path.extname(nomeArq).replace(".", "") || "arquivo", buf.length, `/uploads/empresas/${req.params.id}/${nomeArq}`]
       );
-      await registrarHistoricoEmpresaSeguro(req.params.id, "documento_enviado", `Documento enviado: ${file.originalname || nomeArq}`, (req as any).colaborador?.nome || "Sistema");
-      res.status(201).json(r.rows[0]);
-    } catch (err) {
-      console.error("[POST /api/empresas/:id/documentos]", err);
-      res.status(500).json({ error: "Erro ao salvar documento" });
-    }
+      res.json(r.rows[0]);
+    } catch (err) { console.error(err); res.status(500).json({ error: "Erro ao salvar documento" }); }
   });
 
   // ─── Triagem: Qualificação por IA ────────────────────────────────────────
@@ -4751,7 +4471,6 @@ tr:nth-child(even) td { background: #f4f7ff; }
     );
     return rows[0] || null;
   }
-
 
   function corContrato(value: any, fallback: string): string {
     const cor = String(value || '').trim();
@@ -9123,7 +8842,10 @@ ${(temTest1 || temTest2) ? `
       }
 
       const values = Object.values(updates);
-      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+      const set = keys.map((k, i) => {
+        const cast = ["cnaes_secundarios", "dados_receita", "qsa"].includes(k) ? "::jsonb" : "";
+        return `"${k}" = $${i + 1}${cast}`;
+      }).join(", ");
 
       const { rows } = await pool.query(
         `UPDATE acompanhamentos_bancarios

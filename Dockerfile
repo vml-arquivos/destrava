@@ -1,4 +1,4 @@
-# ─── Stage 1: Build ───────────────────────────────────────────────────────────
+# ─── Stage 1: Build ──────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 
 RUN npm install -g pnpm@10.4.1
@@ -13,8 +13,10 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
 
 COPY . .
 
+# Build do frontend
 RUN pnpm exec vite build
 
+# Build do backend
 RUN pnpm exec esbuild server/index.ts \
     --platform=node \
     --packages=external \
@@ -22,43 +24,38 @@ RUN pnpm exec esbuild server/index.ts \
     --format=esm \
     --outdir=dist
 
-# ─── Stage 2: Production ──────────────────────────────────────────────────────
-# Usando node:20-slim (Debian) em vez de Alpine para evitar o problema do
-# Chromium no Alpine que puxa ~189 dependências pesadas (Mesa, LLVM, FFmpeg)
-# causando timeout no build.
-FROM node:20-slim AS runner
+# ─── Stage 2: Production ─────────────────────────────────────────────────────
+FROM node:20-alpine AS runner
 
-# Instala Chromium e dependências mínimas via apt (muito mais leve no Debian)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apk add --no-cache \
     chromium \
-    fonts-freefont-ttf \
+    nss \
+    freetype \
+    harfbuzz \
     ca-certificates \
+    ttf-freefont \
     wget \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Instala pnpm globalmente
-RUN npm install -g pnpm@10.4.1 && npm cache clean --force
+    && npm install -g pnpm@10.4.1
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-ENV CHROMIUM_PATH=/usr/bin/chromium
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV CHROMIUM_PATH=/usr/bin/chromium-browser
 
 WORKDIR /app
 
-RUN mkdir -p /var/data/destrava /var/log/destrava \
-    && chown -R node:node /var/data/destrava /var/log/destrava /app
+RUN mkdir -p /var/data/destrava /var/log/destrava && \
+    chown -R node:node /var/data/destrava /var/log/destrava /app
 
 COPY package.json pnpm-lock.yaml .npmrc ./
 COPY patches/ ./patches/
 
+# Instala apenas dependências de produção direto no runner
+# (elimina a cópia massiva de node_modules entre stages)
 RUN --mount=type=cache,id=pnpm-store-prod,target=/root/.local/share/pnpm/store \
     pnpm install --prod --frozen-lockfile
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/scripts ./scripts
-
-RUN chown -R node:node /app
 
 USER node
 

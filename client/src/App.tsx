@@ -55,7 +55,6 @@ import ClientesPF from "./pages/colaborador/ClientesPF";
 import AcompanhamentoBancario from "./pages/colaborador/AcompanhamentoBancario";
 import AcompanhamentoFinanceiro from "./pages/colaborador/AcompanhamentoFinanceiro";
 import WeeklyMonitorPage from "./pages/colaborador/WeeklyMonitorPage";
-import CadastroEmpresa from "./pages/colaborador/CadastroEmpresa";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CargoRoute from "./components/CargoRoute";
 
@@ -239,16 +238,6 @@ function Router() {
             <CargoRoute allowedCargos={['administrador', 'diretor']}>
               <Contadores />
             </CargoRoute>
-          </ProtectedRoute>
-        )}
-      </Route>
-      {/* Cadastro de Empresas */}
-
-      {/* Cadastro de Empresas */}
-      <Route path="/colaborador/empresas/novo">
-        {() => (
-          <ProtectedRoute>
-            <CadastroEmpresa />
           </ProtectedRoute>
         )}
       </Route>

@@ -1,11 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
-import { fetchCNPJData, cleanDigits, type CNPJData } from '../utils/cnpj';
-
-// Este hook fornece uma API simples para consulta de CNPJ. Ele mantém
-// internamente o status da consulta (idle, loading, found, error) e
-// permite debouncing das requisições. Utilização típica:
-// const { status, error, lookup, reset } = useCNPJLookup();
-// lookup('00.000.000/0001-00', data => {/* ... preencher formulário ... */});
+import { useCallback, useRef, useState } from 'react';
+import { cleanDigits, fetchCNPJData, type CNPJData } from '../utils/cnpj';
 
 type Status = 'idle' | 'loading' | 'found' | 'error';
 
@@ -21,30 +15,25 @@ export function useCNPJLookup(): UseCNPJLookupReturn {
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const lookup = useCallback(
-    (cnpj: string, onSuccess: (data: CNPJData) => void) => {
-      const clean = cleanDigits(cnpj);
-      // Só consulta quando houver 14 dígitos válidos
-      if (clean.length !== 14) return;
-      // Cancela qualquer consulta pendente
-      if (timerRef.current) clearTimeout(timerRef.current);
-      setStatus('loading');
-      setError(null);
-      // Debounce de 600ms para evitar múltiplas requisições em sequência
-      timerRef.current = setTimeout(async () => {
-        try {
-          const data = await fetchCNPJData(cnpj);
-          onSuccess(data);
-          setStatus('found');
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : 'Erro ao buscar CNPJ';
-          setError(msg);
-          setStatus('error');
-        }
-      }, 600);
-    },
-    [],
-  );
+  const lookup = useCallback((cnpj: string, onSuccess: (data: CNPJData) => void) => {
+    const clean = cleanDigits(cnpj);
+    if (clean.length !== 14) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    setStatus('loading');
+    setError(null);
+
+    timerRef.current = setTimeout(async () => {
+      try {
+        const data = await fetchCNPJData(clean);
+        onSuccess(data);
+        setStatus('found');
+      } catch (err: unknown) {
+        setStatus('error');
+        setError(err instanceof Error ? err.message : 'Erro ao consultar CNPJ');
+      }
+    }, 450);
+  }, []);
 
   const reset = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);

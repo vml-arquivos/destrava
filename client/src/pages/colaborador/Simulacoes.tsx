@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiFetch, getToken } from "@/lib/api";
-import { toast } from "sonner";
+import { apiFetch } from "@/lib/api";
 
 type SimulacaoColaborador = {
   id: string;
@@ -53,7 +52,6 @@ import {
   XCircle,
   Clock,
   Send,
-  Printer,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -122,31 +120,6 @@ export default function Simulacoes() {
       if (selecionada?.id === id) setSelecionada(null);
     } catch (err) {
       console.error(err);
-    }
-  }
-
-  async function reimprimirPdf(id: string) {
-    try {
-      const token = getToken();
-      const res = await fetch(`/api/simulacoes/${id}/pdf/latest`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-
-      if (!res.ok) {
-        const msg = res.status === 404
-          ? "Esta simulação ainda não possui PDF armazenado. Salve novamente pela Calculadora para gerar o PDF permanente."
-          : "Não foi possível recuperar o PDF desta simulação.";
-        toast.error(msg);
-        return;
-      }
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank", "noopener,noreferrer");
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (err) {
-      console.error(err);
-      toast.error("Erro ao abrir PDF da simulação.");
     }
   }
 
@@ -287,15 +260,6 @@ export default function Simulacoes() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-blue-700 hover:text-blue-800 hover:bg-blue-50"
-                              onClick={() => reimprimirPdf(sim.id)}
-                              title="Reimprimir PDF armazenado"
-                            >
-                              <Printer className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
                               className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                               onClick={() => excluir(sim.id)}
                               title="Excluir"
@@ -373,15 +337,6 @@ export default function Simulacoes() {
                   <p className="text-muted-foreground">{selecionada.observacoes}</p>
                 </div>
               )}
-
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => reimprimirPdf(selecionada.id)}
-              >
-                <Printer className="h-4 w-4 mr-2" />
-                Reimprimir PDF armazenado
-              </Button>
 
               {/* Alterar status */}
               <div className="space-y-2">
