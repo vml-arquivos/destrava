@@ -1,5 +1,5 @@
 import { toast } from "sonner";
-import { gerarPdfSimulacao } from "@/lib/gerarPdfSimulacao";
+import { gerarArquivoPdfSimulacao, gerarPdfSimulacao } from "@/lib/gerarPdfSimulacao";
 import { useState, useCallback, useEffect } from "react";
 import Layout from "./Layout";
 import { Button } from "@/components/ui/button";
@@ -73,6 +73,30 @@ function formatarTelefone(v: string): string {
   return `(${n.slice(0, 2)}) ${n.slice(2, 7)}-${n.slice(7)}`;
 }
 
+async function armazenarPdfSimulacao(
+  simulacaoId: string | undefined,
+  dadosPdf: Parameters<typeof gerarArquivoPdfSimulacao>[0]
+): Promise<boolean> {
+  if (!simulacaoId) return false;
+  try {
+    const { base64, nomeArquivo } = gerarArquivoPdfSimulacao(dadosPdf);
+    if (!base64) return false;
+    await apiFetch(`/api/simulacoes/${simulacaoId}/pdf`, {
+      method: "POST",
+      body: JSON.stringify({
+        nome_arquivo: nomeArquivo,
+        pdf_base64: base64,
+        metadata: { modo: dadosPdf.modo, cliente: dadosPdf.cliente?.nome || null },
+      }),
+    });
+    return true;
+  } catch (err) {
+    console.warn("[PDF_SIMULACAO] Não foi possível armazenar o PDF", err);
+    toast.warning("Simulação salva, mas o PDF não foi armazenado para reimpressão.");
+    return false;
+  }
+}
+
 // ─── Cálculos ─────────────────────────────────────────────────────────────────
 
 interface ResultadoCalculo {
@@ -130,22 +154,14 @@ function calcular(
     ? (valorCredito * pctComissao) / 100
     : 0;
 
-  const custoTotalOperacao = totalFinanciamento + impostoValor + comissaoValor;
+  // Comissão Destrava é exibida e salva separadamente, mas NÃO compõe o custo/despesa total do cliente.
+  const custoTotalOperacao = totalFinanciamento + impostoValor;
 
   const taxaAnualEquiv = (Math.pow(1 + taxa, 12) - 1) * 100;
   
-  // Valor liberado líquido para o cliente = Valor do Crédito - Custos que ele paga à vista
-  // O imposto pode estar incluso no valor ou não. Aqui, o fluxo de caixa é:
-  // Recebe Valor do Crédito (líquido de comissão/imposto se descontados na fonte)
-  // Ou: o custo total operação reflete o valor financiado real.
-  // Pela instrução: encontrar a TIR que iguala o valor liberado ao fluxo de pagamentos (parcelas).
-  // O valor liberado real (que o cliente põe no bolso) é o Valor do Crédito - comissãoValor - impostoValor (se ele paga à vista)
-  // Como o usuário informa "Valor do Crédito", assumimos que é o principal. 
-  // O valor da parcela é sobre o principal.
-  // Então o cliente recebe "Valor do Crédito", mas se ele pagar imposto e comissão, o que ele efetivamente leva é Valor do Crédito - custos.
-  // Vamos usar a fórmula simples pedida: calcularCET(valorCreditoLiberado, prazo, parcelaMensal)
-  // Se o cliente paga imposto e comissão do próprio bolso, o valor efetivo recebido é (valorCredito - impostoValor - comissaoValor).
-  const valorLiberado = valorCredito - impostoValor - comissaoValor;
+  // CET considera apenas o valor líquido afetado por imposto/despesas financeiras da operação.
+  // A comissão fica destacada separadamente e não reduz o valor liberado nesta simulação.
+  const valorLiberado = Math.max(valorCredito - impostoValor, 1);
   const cetMensalDecimal = calcularCET(valorLiberado, prazo, parcelaMensal);
   const cetMensal = cetMensalDecimal * 100;
   const cetAnual = (Math.pow(1 + cetMensalDecimal, 12) - 1) * 100;
@@ -350,7 +366,7 @@ function PainelResultado({
       </div>
 
       <div className="rounded-xl border-2 border-red-200 bg-red-50 p-4">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Custo Total da Operação</p>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Custo Total da Operação <span className="normal-case font-normal">(sem comissão)</span></p>
         <div className="space-y-0">
           <div className="flex justify-between items-center py-2 border-b border-red-100 text-sm">
             <span className="text-muted-foreground">Total do Financiamento</span>
@@ -358,7 +374,7 @@ function PainelResultado({
           </div>
           {resultado.comissaoValor > 0 && (
             <div className="flex justify-between items-center py-2 border-b border-red-100 text-sm">
-              <span className="text-muted-foreground">Comissão Destrava <span className="text-xs">(1x)</span></span>
+              <span className="text-muted-foreground">Comissão Destrava <span className="text-xs">(informativa, não soma)</span></span>
               <span className="font-semibold text-orange-600">{fmtBRL.format(resultado.comissaoValor)}</span>
             </div>
           )}
@@ -371,7 +387,7 @@ function PainelResultado({
             </div>
           )}
           <div className="flex justify-between items-center pt-3 text-sm">
-            <span className="font-bold text-base">Total Gasto pelo Cliente</span>
+            <span className="font-bold text-base">Total da Operação <span className="text-xs font-normal">(sem comissão)</span></span>
             <span className="font-bold text-xl text-red-700">{fmtBRL.format(resultado.custoTotalOperacao)}</span>
           </div>
         </div>
@@ -641,12 +657,13 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
     if (!resultado) return;
     setSalvando(true);
     try {
-      await apiFetch("/api/simulacoes", {
+      const saved = await apiFetch("/api/simulacoes", {
         method: "POST",
         body: JSON.stringify({
           cliente_nome: form.nome,
           cliente_telefone: form.telefone,
           cliente_cpf_cnpj: form.cpfCnpj || null,
+          cliente_empresa: form.empresa || null,
           valor_solicitado: parseBRL(form.valorCredito),
           quantidade_parcelas: parseInt(form.prazo),
           taxa_juros_mensal: parseFloat(form.taxaJuros),
@@ -663,8 +680,13 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
           observacoes: form.observacoes ? `[com_imposto] ${form.observacoes}` : "[com_imposto]",
         }),
       });
+      await armazenarPdfSimulacao(saved?.id, {
+        cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
+        cenarioA: { taxa: parseFloat(form.taxaJuros), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, impostoValor: resultado.impostoValor, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "com_imposto", taxaAnualEquiv: resultado.taxaAnualEquiv, cetMensal: resultado.cetMensal, cetAnual: resultado.cetAnual },
+        modo: "simples"
+      });
       setSalvo(true);
-      toast.success("Simulação salva com sucesso!");
+      toast.success("Simulação salva com PDF armazenado para reimpressão!");
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || "Erro ao salvar simulação. Verifique a conexão e tente novamente.");
@@ -866,13 +888,14 @@ function CenarioSemImposto({ initialData }: { initialData?: { nome: string; empr
         setSalvando(false);
         return;
       }
-      await apiFetch("/api/simulacoes", {
+      const saved = await apiFetch("/api/simulacoes", {
         method: "POST",
         body: JSON.stringify({
           colaborador_id: user?.id,
           cliente_nome: form.nome,
           cliente_telefone: form.telefone,
           cliente_cpf_cnpj: form.cpfCnpj || null,
+          cliente_empresa: form.empresa || null,
           valor_solicitado: parseBRL(form.valorCredito),
           quantidade_parcelas: parseInt(form.prazo),
           taxa_juros_mensal: parseFloat(form.taxaJuros),
@@ -887,8 +910,13 @@ function CenarioSemImposto({ initialData }: { initialData?: { nome: string; empr
           observacoes: form.observacoes ? `[sem_imposto] ${form.observacoes}` : "[sem_imposto]",
         }),
       });
+      await armazenarPdfSimulacao(saved?.id, {
+        cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
+        cenarioA: { taxa: parseFloat(form.taxaJuros), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "sem_imposto", taxaAnualEquiv: resultado.taxaAnualEquiv, cetMensal: resultado.cetMensal, cetAnual: resultado.cetAnual },
+        modo: "simples"
+      });
       setSalvo(true);
-      toast.success("Simulação salva com sucesso!");
+      toast.success("Simulação salva com PDF armazenado para reimpressão!");
     } catch (err) {
       console.error(err);
       toast.error("Erro ao salvar simulação. Verifique a conexão e tente novamente.");
@@ -1092,9 +1120,8 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
         banco: form.banco || null,
         linha_credito: form.linhaCredito || null,
       };
-      let hasError = false;
       if (resA) {
-        await apiFetch("/api/simulacoes", {
+        const savedA = await apiFetch("/api/simulacoes", {
           method: "POST",
           body: JSON.stringify({
             ...base,
@@ -1109,9 +1136,14 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
             observacoes: form.observacoes ? `[com_imposto] ${form.observacoes}` : "[com_imposto]",
           }),
         });
+        await armazenarPdfSimulacao(savedA?.id, {
+          cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
+          cenarioA: { taxa: parseFloat(form.taxaA), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resA.parcelaMensal, totalFinanciamento: resA.totalFinanciamento, totalJuros: resA.totalJuros, impostoValor: resA.impostoValor, comissaoValor: resA.comissaoValor, custoTotalOperacao: resA.custoTotalOperacao, cenario: "com_imposto", taxaAnualEquiv: resA.taxaAnualEquiv, cetMensal: resA.cetMensal, cetAnual: resA.cetAnual },
+          modo: "simples"
+        });
       }
       if (resB) {
-        await apiFetch("/api/simulacoes", {
+        const savedB = await apiFetch("/api/simulacoes", {
           method: "POST",
           body: JSON.stringify({
             ...base,
@@ -1124,9 +1156,14 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
             observacoes: form.observacoes ? `[sem_imposto] ${form.observacoes}` : "[sem_imposto]",
           }),
         });
+        await armazenarPdfSimulacao(savedB?.id, {
+          cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
+          cenarioA: { taxa: parseFloat(form.taxaB), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resB.parcelaMensal, totalFinanciamento: resB.totalFinanciamento, totalJuros: resB.totalJuros, comissaoValor: resB.comissaoValor, custoTotalOperacao: resB.custoTotalOperacao, cenario: "sem_imposto", taxaAnualEquiv: resB.taxaAnualEquiv, cetMensal: resB.cetMensal, cetAnual: resB.cetAnual },
+          modo: "simples"
+        });
       }
       setSalvo(true);
-        toast.success("Simulações salvas com sucesso!");
+      toast.success("Simulações salvas com PDFs armazenados para reimpressão!");
     } catch (err) {
       console.error(err);
       toast.error("Erro ao salvar simulação. Verifique a conexão e tente novamente.");
@@ -1420,7 +1457,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
                     bNum: resB?.totalFinanciamento ?? null,
                   },
                   {
-                    label: "Comissão Destrava (1x)",
+                    label: "Comissão Destrava (informativa, não soma)",
                     a: resA ? fmtBRL.format(resA.comissaoValor) : "—",
                     b: resB ? fmtBRL.format(resB.comissaoValor) : "—",
                     aNum: null, bNum: null,
@@ -1448,7 +1485,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
 
                 {/* Linha de total */}
                 <tr className="bg-gray-900 text-white">
-                  <td className="px-4 py-4 font-bold text-base">Total Gasto pelo Cliente</td>
+                  <td className="px-4 py-4 font-bold text-base">Total da Operação <span className="text-xs font-normal">(sem comissão)</span></td>
                   <td className="px-4 py-4 text-right font-bold text-lg text-blue-300">
                     {resA ? fmtBRL.format(resA.custoTotalOperacao) : "—"}
                   </td>
@@ -1475,7 +1512,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
                 ? "bg-gradient-to-r from-blue-900 to-blue-700"
                 : "bg-gradient-to-r from-green-900 to-green-700"
             } text-white`}>
-              <p className="text-white/70 text-sm mb-1">Diferença Total entre os Cenários</p>
+              <p className="text-white/70 text-sm mb-1">Diferença Total entre os Cenários (sem comissão)</p>
               <p className="text-4xl font-bold">{fmtBRL.format(Math.abs(resA.custoTotalOperacao - resB.custoTotalOperacao))}</p>
               <p className="text-white/70 text-sm mt-2">
                 {resA.custoTotalOperacao > resB.custoTotalOperacao

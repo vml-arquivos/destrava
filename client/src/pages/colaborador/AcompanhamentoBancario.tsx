@@ -275,12 +275,12 @@ function getToken(): string {
   }
 }
 
-function authHeaders(extra?: HeadersInit): HeadersInit {
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const token = getToken();
   return {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(extra || {}),
+    ...extra,
   };
 }
 
@@ -663,7 +663,7 @@ function exportarCSV(row: Acompanhamento, prestadoraKey: PrestadoraKey = "destra
   URL.revokeObjectURL(url);
 }
 
-async function exportarRelatorioMensalPDF(row: Acompanhamento, authHeaders: () => HeadersInit) {
+async function exportarRelatorioMensalPDF(row: Acompanhamento, authHeaders: () => Record<string, string>) {
   if (!row?.id) return;
   const hoje = new Date();
   const ano = hoje.getFullYear();
@@ -941,7 +941,14 @@ export default function AcompanhamentoBancario() {
       /* usa row original */
     }
 
-    const numeroSemana = Number(semana.numero_semana || 1);
+    // Normalizar o número da semana: alguns registros legados podem ter "0" ou valor falsy
+    // O back-end só aceita semanas >= 1, portanto convertemos qualquer valor 0, "0", null ou undefined para 1.
+    let numeroSemana: number;
+    {
+      const raw = (semana as any).numero_semana;
+      const parsed = raw !== null && raw !== undefined && raw !== "" ? Number(raw) : NaN;
+      numeroSemana = !isNaN(parsed) && parsed > 0 ? parsed : 1;
+    }
     const dataFim = String(semana.data_referencia_fim || semana.data_atualizacao || rowCompleto.proxima_atualizacao || hojeISO()).slice(0, 10);
     const proxima = semana.proxima_atualizacao_apos_salvar || proximaQuartaFeira(dataFim);
 
@@ -1035,12 +1042,14 @@ export default function AcompanhamentoBancario() {
     if (!updOpen?.id) return;
     setSaving(true);
     try {
+      // Monta o payload apenas com os campos aceitos pela API.  
+      // Desestruturamos o objeto `upd` para remover propriedades internas
+      // que não são reconhecidas pelo backend (por exemplo,
+      // `proxima_atualizacao_apos_salvar`) e evitamos enviar a string
+      // formatada de período, que causava falhas na atualização.  
+      const { proxima_atualizacao_apos_salvar, ...updData } = upd;
       const payload = {
-        ...upd,
-        periodo:
-          upd.data_referencia_inicio && upd.data_referencia_fim
-            ? `${formatDateBR(upd.data_referencia_inicio)} a ${formatDateBR(upd.data_referencia_fim)}`
-            : undefined,
+        ...updData,
         total_entradas: totalEntradas,
         saldo_semanal: saldoSemanal,
         status_semana: statusSemanaCalculado,
@@ -1083,9 +1092,16 @@ export default function AcompanhamentoBancario() {
   const apagarSemana = async (row: Acompanhamento, semana: any) => {
     if (!row?.id || !semana) return;
 
-    // Usa nullish coalescing (??) para que numero_semana = 0 não seja tratado como falsy
-    // e caia indevidamente no semana.id (UUID), causando 400 no servidor.
-    const semanaRef = semana.numero_semana ?? semana.id;
+    // Normaliza a referência da semana a ser apagada. Existem registros legados onde
+    // `numero_semana` é "0" ou 0. O back-end rejeita número 0, portanto, quando
+    // o valor for 0 ou inválido, usamos o UUID (semana.id) como referência.
+    let semanaRef: any;
+    {
+      const raw = (semana as any).numero_semana;
+      const parsed = raw !== null && raw !== undefined && raw !== "" ? Number(raw) : NaN;
+      // Se parsed for um número >= 1 usamos esse número; caso contrário, use o id (UUID) da semana.
+      semanaRef = !isNaN(parsed) && parsed > 0 ? parsed : (semana as any).id;
+    }
 
     if (semanaRef === null || semanaRef === undefined) {
       alert("Não foi possível identificar a semana para apagar.");

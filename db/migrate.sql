@@ -367,21 +367,6 @@ CREATE TABLE IF NOT EXISTS public.empresas (
   origem               TEXT         DEFAULT 'manual',
   tags                 TEXT[]       DEFAULT '{}',
   observacoes          TEXT,
-  captador_id          UUID REFERENCES public.colaboradores(id) ON DELETE SET NULL,
-  analista_id          UUID REFERENCES public.colaboradores(id) ON DELETE SET NULL,
-  -- Dados fiscais / Receita Federal
-  natureza_juridica TEXT,
-  cnae_principal TEXT,
-  cnae_descricao TEXT,
-  cnaes_secundarios JSONB NOT NULL DEFAULT '[]'::jsonb,
-  descricao_situacao_cadastral TEXT,
-  data_situacao_cadastral DATE,
-  motivo_situacao_cadastral TEXT,
-  data_inicio_atividade DATE,
-  capital_social NUMERIC(15,2),
-  matriz_filial TEXT,
-  dados_receita JSONB NOT NULL DEFAULT '{}'::jsonb,
-  qsa JSONB NOT NULL DEFAULT '[]'::jsonb,
   -- Controle
   created_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW()
