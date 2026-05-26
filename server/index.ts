@@ -1596,15 +1596,33 @@ async function startServer() {
       const responsavelId = req.query.responsavel_id as string | undefined;
       const scope = (req.query.scope as string | undefined)?.toLowerCase();
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const origem = req.query.origem as string | undefined;
+      const etapa = req.query.etapa_funil as string | undefined;
       const params: any[] = [];
       const conditions: string[] = [];
       aplicarFiltroVisibilidadeLead({ conditions, params, colaborador, scope, responsavelId });
       if (status) { params.push(status); conditions.push(`status = $${params.length}`); }
+      if (origem && origem !== "todos") {
+        if (origem === "campanha") {
+          conditions.push(`(origem ILIKE '%campanha%' OR canal_origem ILIKE '%campanha%' OR utm_source IS NOT NULL)`);
+        } else if (origem === "site") {
+          conditions.push(`(origem ILIKE '%site%' OR origem ILIKE '%formulario%' OR origem ILIKE '%landing%')`);
+        } else if (origem === "manual") {
+          conditions.push(`(origem = 'painel_interno' OR origem = 'manual' OR origem IS NULL)`);
+        } else {
+          params.push(`%${origem}%`);
+          conditions.push(`origem ILIKE $${params.length}`);
+        }
+      }
+      if (etapa && etapa !== "todos") {
+        params.push(etapa);
+        conditions.push(`etapa_funil = $${params.length}`);
+      }
       if (busca && busca.trim()) {
         const term = `%${busca.trim()}%`;
         params.push(term);
         const idx = params.length;
-        conditions.push(`(nome ILIKE $${idx} OR empresa ILIKE $${idx} OR telefone ILIKE $${idx})`);
+        conditions.push(`(nome ILIKE $${idx} OR empresa ILIKE $${idx} OR telefone ILIKE $${idx} OR email ILIKE $${idx} OR cpf_cnpj ILIKE $${idx})`);
       }
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
       const limitClause = limit ? `LIMIT ${limit}` : "";
@@ -3015,21 +3033,46 @@ async function startServer() {
       const isGestor = isGestorCargo(colaborador?.cargo || '');
       const busca = req.query.busca as string | undefined;
       const status = req.query.status as string | undefined;
+      const origem = req.query.origem as string | undefined;
+      const porte = req.query.porte as string | undefined;
+      const responsavelId = req.query.responsavel_id as string | undefined;
+      const cidade = req.query.cidade as string | undefined;
+      const estado = req.query.estado as string | undefined;
       const params: any[] = [];
       const conditions: string[] = [];
       if (!isGestor && colaborador?.id) {
         params.push(colaborador.id);
-        conditions.push(`(responsavel_id = $${params.length} OR analista_id = $${params.length})`);
+        conditions.push(`(e.responsavel_id = $${params.length} OR e.analista_id = $${params.length})`);
       }
       if (status && status !== "todos") {
         params.push(status);
         conditions.push(`e.status = $${params.length}`);
       }
+      if (origem && origem !== "todos") {
+        params.push(`%${origem}%`);
+        conditions.push(`COALESCE(e.origem, '') ILIKE $${params.length}`);
+      }
+      if (porte && porte !== "todos") {
+        params.push(porte);
+        conditions.push(`e.porte = $${params.length}`);
+      }
+      if (responsavelId) {
+        params.push(responsavelId);
+        conditions.push(`e.responsavel_id = $${params.length}`);
+      }
+      if (cidade && cidade.trim()) {
+        params.push(`%${cidade.trim()}%`);
+        conditions.push(`e.cidade ILIKE $${params.length}`);
+      }
+      if (estado && estado.trim()) {
+        params.push(estado.trim().toUpperCase());
+        conditions.push(`UPPER(e.estado) = $${params.length}`);
+      }
       if (busca && busca.trim()) {
         const term = `%${busca.trim()}%`;
         params.push(term);
         const idx = params.length;
-        conditions.push(`(e.razao_social ILIKE $${idx} OR e.nome_fantasia ILIKE $${idx} OR e.cnpj ILIKE $${idx} OR e.responsavel_nome ILIKE $${idx})`);
+        conditions.push(`(e.razao_social ILIKE $${idx} OR e.nome_fantasia ILIKE $${idx} OR e.cnpj ILIKE $${idx} OR e.responsavel_nome ILIKE $${idx} OR e.telefone ILIKE $${idx})`);
       }
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
       const { rows } = await pool.query(
@@ -3441,6 +3484,91 @@ async function startServer() {
     } catch (err) {
       console.error("[POST /api/empresas/:id/documentos]", err);
       res.status(500).json({ error: "Erro ao salvar documento" });
+    }
+  });
+
+  // ─── GET /api/empresas/:id/simulacoes ────────────────────────────────────
+  app.get("/api/empresas/:id/simulacoes", auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT
+           s.id,
+           s.nome_empresa,
+           s.produto,
+           s.valor_solicitado,
+           s.prazo_meses,
+           s.taxa_juros,
+           s.valor_parcela,
+           s.status,
+           s.criado_em,
+           s.atualizado_em,
+           c.nome AS colaborador_nome
+         FROM simulacoes_colaborador s
+         LEFT JOIN colaboradores c ON c.id = s.colaborador_id
+         WHERE s.empresa_id = $1
+         ORDER BY s.criado_em DESC`,
+        [req.params.id]
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error("[GET /api/empresas/:id/simulacoes]", err);
+      res.status(500).json({ error: "Erro ao listar simulações da empresa" });
+    }
+  });
+
+  // ─── GET /api/empresas/:id/contratos ─────────────────────────────────────
+  app.get("/api/empresas/:id/contratos", auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT
+           cg.id,
+           cg.numero_contrato,
+           cg.protocolo_contrato,
+           cg.tipo_contrato,
+           cg.status,
+           cg.valor_contrato,
+           cg.data_assinatura,
+           cg.pdf_path,
+           cg.created_at,
+           cg.updated_at,
+           col_resp.nome AS responsavel_nome
+         FROM contratos_gerados cg
+         LEFT JOIN colaboradores col_resp ON col_resp.id = cg.responsavel_contrato_id
+         WHERE cg.empresa_id = $1
+         ORDER BY cg.created_at DESC`,
+        [req.params.id]
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error("[GET /api/empresas/:id/contratos]", err);
+      res.status(500).json({ error: "Erro ao listar contratos da empresa" });
+    }
+  });
+
+  // ─── GET /api/empresas/:id/acompanhamento ────────────────────────────────
+  app.get("/api/empresas/:id/acompanhamento", auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT
+           a.id,
+           a.nome_empresa,
+           a.banco_observado,
+           a.status,
+           a.proxima_atualizacao,
+           a.created_at,
+           a.updated_at,
+           c.nome AS responsavel_nome
+         FROM acompanhamentos_bancarios a
+         LEFT JOIN colaboradores c ON c.id = a.responsavel_id
+         WHERE a.empresa_id = $1
+         ORDER BY a.created_at DESC
+         LIMIT 10`,
+        [req.params.id]
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error("[GET /api/empresas/:id/acompanhamento]", err);
+      res.status(500).json({ error: "Erro ao listar acompanhamentos da empresa" });
     }
   });
 

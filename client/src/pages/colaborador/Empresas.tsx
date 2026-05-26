@@ -320,11 +320,13 @@ export default function Empresas() {
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [selecionada, setSelecionada] = useState<Empresa | null>(null);
   const [showDetail, setShowDetail] = useState(false); // mobile toggle
-  const [abaAtiva, setAbaAtiva] = useState<"visao_geral" | "socios" | "followup" | "historico" | "documentos">("visao_geral");
+  const [abaAtiva, setAbaAtiva] = useState<"visao_geral" | "socios" | "followup" | "historico" | "documentos" | "simulacoes" | "contratos">("visao_geral");
   const [followups, setFollowups] = useState<EmpresaFollowup[]>([]);
   const [historico, setHistorico] = useState<EmpresaHistorico[]>([]);
   const [documentos, setDocumentos] = useState<EmpresaDocumento[]>([]);
   const [sociosEmpresa, setSociosEmpresa] = useState<any[]>([]);
+  const [simulacoesEmpresa, setSimulacoesEmpresa] = useState<any[]>([]);
+  const [contratosEmpresa, setContratosEmpresa] = useState<any[]>([]);
   const [loadingDetalhe, setLoadingDetalhe] = useState(false);
   const [novaObs, setNovaObs] = useState("");
   const [novoFollowup, setNovoFollowup] = useState({ titulo: "", tipo: "ligacao", data_agendada: "", descricao: "" });
@@ -359,17 +361,22 @@ export default function Empresas() {
   }, []);
 
   // ── Carregar empresas ──────────────────────────────────────────────────────
+  const [filtroOrigem, setFiltroOrigem] = useState("todos");
+  const [filtroPorte, setFiltroPorte] = useState("todos");
+
   const carregarEmpresas = useCallback(async () => {
     setLoading(true);
     try {
       const p = new URLSearchParams();
       if (busca.trim()) p.set("busca", busca.trim());
       if (filtroStatus !== "todos") p.set("status", filtroStatus);
+      if (filtroOrigem !== "todos") p.set("origem", filtroOrigem);
+      if (filtroPorte !== "todos") p.set("porte", filtroPorte);
       const data = await apiFetch(`/api/empresas?${p.toString()}`);
       setEmpresas(Array.isArray(data) ? data : []);
     } catch { toast.error("Erro ao carregar empresas."); }
     setLoading(false);
-  }, [busca, filtroStatus]);
+  }, [busca, filtroStatus, filtroOrigem, filtroPorte]);
 
   useEffect(() => {
     const t = setTimeout(carregarEmpresas, busca ? 400 : 0);
@@ -381,17 +388,22 @@ export default function Empresas() {
     if (!selecionada) return;
     setAbaAtiva("visao_geral");
     setFollowups([]); setHistorico([]); setDocumentos([]); setSociosEmpresa([]);
+    setSimulacoesEmpresa([]); setContratosEmpresa([]);
     setLoadingDetalhe(true);
     Promise.all([
       apiFetch(`/api/empresas/${selecionada.id}/followups`).catch(() => []),
       apiFetch(`/api/empresas/${selecionada.id}/historico`).catch(() => []),
       apiFetch(`/api/empresas/${selecionada.id}/documentos`).catch(() => []),
       apiFetch(`/api/empresas/${selecionada.id}/socios`).catch(() => []),
-    ]).then(([f, h, d, s]) => {
+      apiFetch(`/api/empresas/${selecionada.id}/simulacoes`).catch(() => []),
+      apiFetch(`/api/empresas/${selecionada.id}/contratos`).catch(() => []),
+    ]).then(([f, h, d, s, sim, cont]) => {
       setFollowups(Array.isArray(f) ? f : []);
       setHistorico(Array.isArray(h) ? h : []);
       setDocumentos(Array.isArray(d) ? d : []);
       setSociosEmpresa(Array.isArray(s) ? s : []);
+      setSimulacoesEmpresa(Array.isArray(sim) ? sim : []);
+      setContratosEmpresa(Array.isArray(cont) ? cont : []);
     }).finally(() => setLoadingDetalhe(false));
   }, [selecionada?.id]);
 
@@ -706,7 +718,7 @@ export default function Empresas() {
                     </button>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <select
                     value={filtroStatus}
                     onChange={e => setFiltroStatus(e.target.value)}
@@ -716,6 +728,30 @@ export default function Empresas() {
                     {Object.entries(STATUS_CFG).map(([k, v]) => (
                       <option key={k} value={k}>{v.label}</option>
                     ))}
+                  </select>
+                  <select
+                    value={filtroPorte}
+                    onChange={e => setFiltroPorte(e.target.value)}
+                    className="h-9 border border-slate-200 rounded-xl px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="todos">Todos os portes</option>
+                    <option value="MEI">MEI</option>
+                    <option value="ME">ME</option>
+                    <option value="EPP">EPP</option>
+                    <option value="Médio">Médio</option>
+                    <option value="Grande">Grande</option>
+                  </select>
+                  <select
+                    value={filtroOrigem}
+                    onChange={e => setFiltroOrigem(e.target.value)}
+                    className="h-9 border border-slate-200 rounded-xl px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="todos">Todas as origens</option>
+                    <option value="simulador">Simulador</option>
+                    <option value="indicacao">Indicação</option>
+                    <option value="campanha">Campanha</option>
+                    <option value="site">Site</option>
+                    <option value="manual">Manual</option>
                   </select>
                   <button
                     onClick={carregarEmpresas}
@@ -958,11 +994,13 @@ export default function Empresas() {
                   <div className="mt-4 border-b border-slate-200 px-5 overflow-x-auto">
                     <div className="flex gap-0 min-w-max">
                       {([
-                        { id: "visao_geral", label: "Visão Geral" },
-                        { id: "socios",      label: "Sócios",     badge: sociosEmpresa.length },
-                        { id: "followup",    label: "Follow-up",  badge: followups.filter(f=>!f.concluido).length },
-                        { id: "historico",   label: "Histórico",  badge: historico.length },
-                        { id: "documentos",  label: "Documentos", badge: documentos.length },
+                        { id: "visao_geral",  label: "Visão Geral" },
+                        { id: "socios",       label: "Sócios",      badge: sociosEmpresa.length },
+                        { id: "followup",     label: "Follow-up",   badge: followups.filter(f=>!f.concluido).length },
+                        { id: "simulacoes",   label: "Simulações",  badge: simulacoesEmpresa.length },
+                        { id: "contratos",    label: "Contratos",   badge: contratosEmpresa.length },
+                        { id: "historico",    label: "Histórico",   badge: historico.length },
+                        { id: "documentos",   label: "Documentos",  badge: documentos.length },
                       ] as const).map(aba => (
                         <button
                           key={aba.id}
@@ -1447,6 +1485,139 @@ export default function Empresas() {
                                 </div>
                                 {doc.url && (
                                   <a href={doc.url} target="_blank" rel="noreferrer" className="shrink-0 p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </a>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : abaAtiva === "simulacoes" ? (
+                      <div className="p-4 space-y-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-sm font-semibold text-slate-700">Simulações vinculadas</h3>
+                          <span className="text-xs text-slate-400">{simulacoesEmpresa.length} registro(s)</span>
+                        </div>
+                        {simulacoesEmpresa.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
+                            <span className="text-4xl">🧮</span>
+                            <p className="text-sm text-slate-500">Nenhuma simulação vinculada a esta empresa</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {simulacoesEmpresa.map((sim: any) => (
+                              <div key={sim.id} className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors">
+                                <div className="w-8 h-8 rounded-lg bg-yellow-50 flex items-center justify-center shrink-0">
+                                  <span className="text-base">🧮</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="text-sm font-medium text-slate-800">{sim.produto || "Simulação"}</p>
+                                    {sim.status && (
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                                        sim.status === "aprovado" ? "bg-green-100 text-green-700" :
+                                        sim.status === "reprovado" ? "bg-red-100 text-red-700" :
+                                        "bg-slate-100 text-slate-600"
+                                      }`}>{sim.status}</span>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                                    {sim.valor_solicitado && (
+                                      <span className="text-xs text-slate-500">
+                                        💰 {Number(sim.valor_solicitado).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                                      </span>
+                                    )}
+                                    {sim.prazo_meses && (
+                                      <span className="text-xs text-slate-500">📅 {sim.prazo_meses}x</span>
+                                    )}
+                                    {sim.taxa_juros && (
+                                      <span className="text-xs text-slate-500">📈 {sim.taxa_juros}% a.m.</span>
+                                    )}
+                                    {sim.valor_parcela && (
+                                      <span className="text-xs text-slate-500">
+                                        💳 {Number(sim.valor_parcela).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/mês
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    {sim.colaborador_nome && (
+                                      <span className="text-xs text-slate-400">👤 {sim.colaborador_nome}</span>
+                                    )}
+                                    <span className="text-xs text-slate-400">
+                                      {sim.criado_em ? new Date(sim.criado_em).toLocaleDateString("pt-BR") : "—"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : abaAtiva === "contratos" ? (
+                      <div className="p-4 space-y-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-sm font-semibold text-slate-700">Contratos vinculados</h3>
+                          <span className="text-xs text-slate-400">{contratosEmpresa.length} registro(s)</span>
+                        </div>
+                        {contratosEmpresa.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
+                            <span className="text-4xl">📄</span>
+                            <p className="text-sm text-slate-500">Nenhum contrato vinculado a esta empresa</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {contratosEmpresa.map((cont: any) => (
+                              <div key={cont.id} className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors">
+                                <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center shrink-0">
+                                  <span className="text-base">📄</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="text-sm font-medium text-slate-800">
+                                      {cont.numero_contrato || cont.protocolo_contrato || `Contrato #${cont.id?.slice(0,8)}`}
+                                    </p>
+                                    {cont.status && (
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                                        cont.status === "ativo" || cont.status === "assinado" ? "bg-green-100 text-green-700" :
+                                        cont.status === "cancelado" ? "bg-red-100 text-red-700" :
+                                        cont.status === "pendente" ? "bg-yellow-100 text-yellow-700" :
+                                        "bg-slate-100 text-slate-600"
+                                      }`}>{cont.status}</span>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                                    {cont.tipo_contrato && (
+                                      <span className="text-xs text-slate-500">📋 {cont.tipo_contrato}</span>
+                                    )}
+                                    {cont.valor_contrato && (
+                                      <span className="text-xs text-slate-500">
+                                        💰 {Number(cont.valor_contrato).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                                      </span>
+                                    )}
+                                    {cont.data_assinatura && (
+                                      <span className="text-xs text-slate-500">
+                                        ✍️ {new Date(cont.data_assinatura).toLocaleDateString("pt-BR")}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    {cont.responsavel_nome && (
+                                      <span className="text-xs text-slate-400">👤 {cont.responsavel_nome}</span>
+                                    )}
+                                    <span className="text-xs text-slate-400">
+                                      {cont.created_at ? new Date(cont.created_at).toLocaleDateString("pt-BR") : "—"}
+                                    </span>
+                                  </div>
+                                </div>
+                                {cont.pdf_path && (
+                                  <a
+                                    href={cont.pdf_path}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="shrink-0 p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                    title="Ver PDF"
+                                  >
                                     <ExternalLink className="w-3.5 h-3.5" />
                                   </a>
                                 )}

@@ -76,6 +76,8 @@ export default function Clientes() {
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [filtroPrioridade, setFiltroPrioridade] = useState("todos");
+  const [filtroOrigem, setFiltroOrigem] = useState("todos");
+  const [filtroEtapa, setFiltroEtapa] = useState("todos");
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
   const [atividades, setAtividades] = useState<Atividade[]>([]);
   const [loadingAtividades, setLoadingAtividades] = useState(false);
@@ -237,15 +239,34 @@ export default function Clientes() {
     }
   }
 
+  // Detecta cadastro incompleto: sem email OU sem cpf_cnpj
+  function cadastroIncompleto(c: Cliente): boolean {
+    return !c.email || !c.cpf_cnpj;
+  }
+
+  // Normaliza origem para agrupamento
+  function normalizarOrigem(origem: string): string {
+    const o = (origem || "").toLowerCase();
+    if (o.includes("campanha") || o.includes("utm") || o.includes("ads")) return "campanha";
+    if (o.includes("site") || o.includes("formulario") || o.includes("landing") || o.includes("form")) return "site";
+    if (o.includes("whatsapp") || o.includes("zap")) return "whatsapp";
+    if (o.includes("indicacao") || o.includes("indicação") || o.includes("referral")) return "indicacao";
+    if (o.includes("painel") || o.includes("manual") || o === "") return "manual";
+    return o || "manual";
+  }
+
   const clientesFiltrados = clientes.filter(c => {
-    const matchBusca = !busca || 
+    const matchBusca = !busca ||
       c.nome.toLowerCase().includes(busca.toLowerCase()) ||
       c.empresa?.toLowerCase().includes(busca.toLowerCase()) ||
       c.telefone.includes(busca) ||
-      c.email?.toLowerCase().includes(busca.toLowerCase());
+      c.email?.toLowerCase().includes(busca.toLowerCase()) ||
+      c.cpf_cnpj?.replace(/\D/g, "").includes(busca.replace(/\D/g, ""));
     const matchStatus = filtroStatus === "todos" || c.status === filtroStatus;
     const matchPrioridade = filtroPrioridade === "todos" || c.prioridade === filtroPrioridade;
-    return matchBusca && matchStatus && matchPrioridade;
+    const matchOrigem = filtroOrigem === "todos" || normalizarOrigem(c.origem) === filtroOrigem;
+    const matchEtapa = filtroEtapa === "todos" || (c as any).etapa_funil === filtroEtapa;
+    return matchBusca && matchStatus && matchPrioridade && matchOrigem && matchEtapa;
   });
 
   // Estatísticas
@@ -255,6 +276,7 @@ export default function Clientes() {
     analise: clientes.filter(c => c.status === "analise").length,
     aprovados: clientes.filter(c => c.status === "aprovado" || c.status === "convertido").length,
     alta: clientes.filter(c => c.prioridade === "alta").length,
+    incompletos: clientes.filter(c => !c.email || !c.cpf_cnpj).length,
   };
 
   return (
@@ -297,13 +319,14 @@ export default function Clientes() {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-5 gap-3 p-4 bg-gray-50 border-b">
+          <div className="grid grid-cols-6 gap-3 p-4 bg-gray-50 border-b">
             {[
               { label: "Total", value: stats.total, color: "text-gray-700" },
               { label: "Leads", value: stats.leads, color: "text-gray-600" },
               { label: "Em Análise", value: stats.analise, color: "text-yellow-600" },
               { label: "Aprovados", value: stats.aprovados, color: "text-green-600" },
               { label: "Alta Prioridade", value: stats.alta, color: "text-red-600" },
+              { label: "Incompletos", value: stats.incompletos, color: "text-orange-600" },
             ].map(s => (
               <div key={s.label} className="bg-white rounded-lg p-3 text-center shadow-sm">
                 <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
@@ -344,6 +367,18 @@ export default function Clientes() {
               <option value="media">🟡 Média</option>
               <option value="baixa">🟢 Baixa</option>
             </select>
+            <select
+              value={filtroOrigem}
+              onChange={e => setFiltroOrigem(e.target.value)}
+              className="px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="todos">Todas as origens</option>
+              <option value="campanha">📢 Campanha</option>
+              <option value="site">🌐 Site / Formulário</option>
+              <option value="whatsapp">💬 WhatsApp</option>
+              <option value="indicacao">🤝 Indicação</option>
+              <option value="manual">✏️ Manual / Painel</option>
+            </select>
           </div>
 
           {/* Lista de Clientes */}
@@ -380,15 +415,29 @@ export default function Clientes() {
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-gray-900 truncate">{cliente.nome}</span>
                         <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${PRIORIDADE_CONFIG[cliente.prioridade]?.color} ${PRIORIDADE_CONFIG[cliente.prioridade]?.bg}`}>
                           {cliente.prioridade === "alta" ? "🔴" : cliente.prioridade === "media" ? "🟡" : "🟢"}
                         </span>
+                        {cadastroIncompleto(cliente) && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-medium" title="Cadastro incompleto: falta email ou CPF/CNPJ">
+                            ⚠️ Incompleto
+                          </span>
+                        )}
                       </div>
-                      <div className="text-sm text-gray-500 truncate">
+                      <div className="text-sm text-gray-500 truncate flex items-center gap-1">
                         {cliente.empresa && <span>{cliente.empresa} · </span>}
                         {cliente.telefone}
+                        {cliente.origem && cliente.origem !== "painel_interno" && (
+                          <span className="ml-1 text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded capitalize">
+                            {normalizarOrigem(cliente.origem) === "campanha" ? "📢" :
+                             normalizarOrigem(cliente.origem) === "site" ? "🌐" :
+                             normalizarOrigem(cliente.origem) === "whatsapp" ? "💬" :
+                             normalizarOrigem(cliente.origem) === "indicacao" ? "🤝" : "✏️"}{" "}
+                            {normalizarOrigem(cliente.origem)}
+                          </span>
+                        )}
                       </div>
                     </div>
 
