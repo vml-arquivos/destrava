@@ -5871,6 +5871,74 @@ ${(temTest1 || temTest2) ? `
     return renderContratoPdfHtml('CONTRATO DE PARCERIA COMERCIAL', body, contratada);
   }
 
+  // ── Utilitário: gera PDF com cabeçalho na pág 1 e rodapé na última ──────────
+  // Usa a técnica de dois PDFs + merge com pdf-lib para contornar a limitação
+  // do Puppeteer que NÃO executa JavaScript em headerTemplate/footerTemplate.
+  async function gerarPdfComLayout(html: string, payload: any, filePath: string): Promise<void> {
+    const puppeteerL = await import('puppeteer-core');
+    let executablePathL: string;
+    if (process.env.CHROMIUM_PATH) {
+      executablePathL = process.env.CHROMIUM_PATH;
+    } else {
+      try {
+        const chromiumL = await import('@sparticuz/chromium');
+        executablePathL = await chromiumL.default.executablePath();
+      } catch { executablePathL = '/usr/bin/chromium-browser'; }
+    }
+    let browserL: any;
+    try {
+      browserL = await puppeteerL.default.launch({
+        executablePath: executablePathL,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process'],
+        headless: true,
+      });
+      const pageL = await browserL.newPage();
+      await pageL.setContent(html, { waitUntil: 'networkidle0' });
+      // Detectar contratada para escolher logo e cor
+      const nomeContratadaL = String(payload?.contratada?.nome_fantasia || payload?.contratada?.razao_social || '').toLowerCase();
+      const isPermuPayL = nomeContratadaL.includes('permupay') || nomeContratadaL.includes('permu pay');
+      const logoB64L    = isPermuPayL ? PERMUPAY_LOGO_B64 : DESTRAVA_LOGO_B64;
+      const corBordaL   = isPermuPayL ? '#0066CC' : '#1B3A8C';
+      const altLogoL    = isPermuPayL ? 'PermuPay' : 'Destrava Crédito';
+      const headerTemplateL = `<style>* { margin: 0; padding: 0; box-sizing: border-box; } #hw { width: 100%; padding: 6px 22mm 8px; border-bottom: 2px solid ${corBordaL}; display: flex; align-items: center; justify-content: center; } img { height: 40px; max-width: 160px; object-fit: contain; display: block; }</style><div id="hw"><img src="${logoB64L}" alt="${altLogoL}"/></div>`;
+      const emptyHeaderL    = '<style>* { margin: 0; padding: 0; }</style><div></div>';
+      const footerTemplateL = `<style>* { margin: 0; padding: 0; box-sizing: border-box; } #fw { width: 100%; padding: 8px 22mm 6px; border-top: 1px solid #e2e8f0; text-align: center; font-family: Arial, sans-serif; font-size: 7.5pt; color: #64748b; line-height: 1.5; }</style><div id="fw"><strong>BRASÍLIA - SEDE</strong><br/>St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250<br/><strong>GOIÂNIA - FILIAL</strong><br/>Avenida Afonso Pena, qd-25 Alt. 05, S/N sala-02 setor Goiânia 2 CEP: 74665555 Goiânia-GO</div>`;
+      const emptyFooterL    = '<style>* { margin: 0; padding: 0; }</style><div></div>';
+      const pdfOptsL = { format: 'A4' as const, printBackground: true, displayHeaderFooter: true, margin: { top: '28mm', bottom: '28mm', left: '22mm', right: '22mm' } };
+      const bufAllL = await pageL.pdf({ ...pdfOptsL, headerTemplate: emptyHeaderL, footerTemplate: emptyFooterL });
+      const { PDFDocument: PDFDocL } = await import('pdf-lib');
+      const docAllL = await PDFDocL.load(bufAllL);
+      const totalPagesL = docAllL.getPageCount();
+      let finalBufL: Uint8Array;
+      if (totalPagesL === 1) {
+        finalBufL = await pageL.pdf({ ...pdfOptsL, headerTemplate: headerTemplateL, footerTemplate: footerTemplateL });
+      } else {
+        const buf1L    = await pageL.pdf({ ...pdfOptsL, headerTemplate: headerTemplateL, footerTemplate: emptyFooterL, pageRanges: '1' });
+        const bufLastL = await pageL.pdf({ ...pdfOptsL, headerTemplate: emptyHeaderL, footerTemplate: footerTemplateL, pageRanges: String(totalPagesL) });
+        let bufMiddleL: Uint8Array | null = null;
+        if (totalPagesL > 2) {
+          bufMiddleL = await pageL.pdf({ ...pdfOptsL, headerTemplate: emptyHeaderL, footerTemplate: emptyFooterL, pageRanges: `2-${totalPagesL - 1}` });
+        }
+        const mergedL = await PDFDocL.create();
+        const doc1L   = await PDFDocL.load(buf1L);
+        const [p1L]   = await mergedL.copyPages(doc1L, [0]);
+        mergedL.addPage(p1L);
+        if (bufMiddleL) {
+          const docMidL = await PDFDocL.load(bufMiddleL);
+          const midPgsL = await mergedL.copyPages(docMidL, docMidL.getPageIndices());
+          midPgsL.forEach((p: any) => mergedL.addPage(p));
+        }
+        const docLastL = await PDFDocL.load(bufLastL);
+        const [pLastL] = await mergedL.copyPages(docLastL, [0]);
+        mergedL.addPage(pLastL);
+        finalBufL = await mergedL.save();
+      }
+      fs.writeFileSync(filePath, finalBufL);
+    } finally {
+      if (browserL) await browserL.close();
+    }
+  }
+
     async function gerarPdfContrato(payload: any): Promise<string> {
     const uploadsDir = path.resolve('uploads', 'contratos');
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -5879,96 +5947,7 @@ ${(temTest1 || temTest2) ? `
     const fileName = `${nomeArquivoSeguroContrato(payload?.contrato?.protocolo_contrato, 'contrato-assessoria')}.pdf`;
     const filePath = path.join(uploadsDir, fileName);
 
-    let browser;
-    try {
-      const puppeteer = await import('puppeteer-core');
-      let executablePath: string;
-      if (process.env.CHROMIUM_PATH) {
-        executablePath = process.env.CHROMIUM_PATH;
-      } else {
-        try {
-          const chromium = await import('@sparticuz/chromium');
-          executablePath = await chromium.default.executablePath();
-        } catch {
-          executablePath = '/usr/bin/chromium-browser';
-        }
-      }
-      browser = await puppeteer.default.launch({
-        executablePath,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process'],
-        headless: true,
-      });
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
-
-      // ── Técnica: dois PDFs + merge com pdf-lib ──────────────────────────────
-      // Puppeteer NÃO executa JavaScript em headerTemplate/footerTemplate.
-      // A única forma de ter cabeçalho só na pág 1 e rodapé só na última é
-      // gerar PDFs separados por intervalo de páginas e mesclar com pdf-lib.
-      const nomeContratadaPayload = String(payload?.contratada?.nome_fantasia || payload?.contratada?.razao_social || '').toLowerCase();
-      const isPermuPayContrato = nomeContratadaPayload.includes('permupay') || nomeContratadaPayload.includes('permu pay');
-      const logoB64Header = isPermuPayContrato ? PERMUPAY_LOGO_B64 : DESTRAVA_LOGO_B64;
-      const corBordaHeader = isPermuPayContrato ? '#0066CC' : '#1B3A8C';
-      const altLogoHeader  = isPermuPayContrato ? 'PermuPay' : 'Destrava Crédito';
-
-      // Templates compactos (sem quebras de linha para evitar problemas de parsing)
-      const headerTemplate = `<style>* { margin: 0; padding: 0; box-sizing: border-box; } #hw { width: 100%; padding: 6px 22mm 8px; border-bottom: 2px solid ${corBordaHeader}; display: flex; align-items: center; justify-content: center; } img { height: 40px; max-width: 160px; object-fit: contain; display: block; }</style><div id="hw"><img src="${logoB64Header}" alt="${altLogoHeader}"/></div>`;
-      const emptyHeader    = '<style>* { margin: 0; padding: 0; }</style><div></div>';
-      const footerTemplate = `<style>* { margin: 0; padding: 0; box-sizing: border-box; } #fw { width: 100%; padding: 8px 22mm 6px; border-top: 1px solid #e2e8f0; text-align: center; font-family: Arial, sans-serif; font-size: 7.5pt; color: #64748b; line-height: 1.5; }</style><div id="fw"><strong>BRASÍLIA - SEDE</strong><br/>St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250<br/><strong>GOIÂNIA - FILIAL</strong><br/>Avenida Afonso Pena, qd-25 Alt. 05, S/N sala-02 setor Goiânia 2 CEP: 74665555 Goiânia-GO</div>`;
-      const emptyFooter    = '<style>* { margin: 0; padding: 0; }</style><div></div>';
-
-      const pdfOpts = {
-        format: 'A4' as const,
-        printBackground: true,
-        displayHeaderFooter: true,
-        margin: { top: '28mm', bottom: '28mm', left: '22mm', right: '22mm' },
-      };
-
-      // 1. Gerar PDF completo sem header/footer para contar páginas
-      const bufAll = await page.pdf({ ...pdfOpts, headerTemplate: emptyHeader, footerTemplate: emptyFooter });
-      const { PDFDocument: PDFDoc } = await import('pdf-lib');
-      const docAll = await PDFDoc.load(bufAll);
-      const totalPages = docAll.getPageCount();
-
-            let finalBuf: Uint8Array;
-      if (totalPages === 1) {
-        // Documento de uma página: cabeçalho + rodapé juntos
-        finalBuf = await page.pdf({ ...pdfOpts, headerTemplate, footerTemplate });
-      } else {
-        // Página 1: com cabeçalho, sem rodapé
-        const buf1    = await page.pdf({ ...pdfOpts, headerTemplate, footerTemplate: emptyFooter, pageRanges: '1' });
-        // Última página: sem cabeçalho, com rodapé
-        const bufLast = await page.pdf({ ...pdfOpts, headerTemplate: emptyHeader, footerTemplate, pageRanges: String(totalPages) });
-        // Páginas intermediárias (se existirem): sem cabeçalho, sem rodapé
-        let bufMiddle: Uint8Array | null = null;
-        if (totalPages > 2) {
-          bufMiddle = await page.pdf({ ...pdfOpts, headerTemplate: emptyHeader, footerTemplate: emptyFooter, pageRanges: `2-${totalPages - 1}` });
-        }
-
-        // Mesclar com pdf-lib
-        const merged = await PDFDoc.create();
-
-        const doc1 = await PDFDoc.load(buf1);
-        const [p1] = await merged.copyPages(doc1, [0]);
-        merged.addPage(p1);
-
-        if (bufMiddle) {
-          const docMid  = await PDFDoc.load(bufMiddle);
-          const midPgs  = await merged.copyPages(docMid, docMid.getPageIndices());
-          midPgs.forEach((p: any) => merged.addPage(p));
-        }
-
-        const docLast = await PDFDoc.load(bufLast);
-        const [pLast] = await merged.copyPages(docLast, [0]);
-        merged.addPage(pLast);
-
-        finalBuf = await merged.save();
-      }
-
-      fs.writeFileSync(filePath, finalBuf);
-    } finally {
-      if (browser) await browser.close();
-    }
+    await gerarPdfComLayout(html, payload, filePath);
     return filePath;
   }
 
@@ -7387,23 +7366,7 @@ ${(temTest1 || temTest2) ? `
         if (!fs.existsSync(uploadsDir2)) fs.mkdirSync(uploadsDir2, { recursive: true });
         const fileNameLN = `${nomeArquivoSeguroContrato(payloadLN.contrato?.protocolo_contrato, 'contrato-limpa-nome')}.pdf`;
         const filePathLN = path.join(uploadsDir2, fileNameLN);
-        let browser2;
-        try {
-          const puppeteer2 = await import('puppeteer-core');
-          let executablePath2: string;
-          if (process.env.CHROMIUM_PATH) {
-            executablePath2 = process.env.CHROMIUM_PATH;
-          } else {
-            const chromium2 = await import('@sparticuz/chromium');
-            executablePath2 = await chromium2.default.executablePath();
-          }
-          browser2 = await puppeteer2.default.launch({ executablePath: executablePath2, args: ['--no-sandbox','--disable-setuid-sandbox'], headless: true });
-          const page2 = await browser2.newPage();
-          await page2.setContent(htmlLN, { waitUntil: 'networkidle0' });
-          await page2.pdf({ path: filePathLN, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '20mm', bottom: '20mm', left: '22mm', right: '22mm' } });
-        } finally {
-          if (browser2) await (browser2 as any).close();
-        }
+        await gerarPdfComLayout(htmlLN, payloadLN, filePathLN);
         pdfPath = filePathLN;
         if (arquivosMultipart.length > 0) {
           pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart, payloadLN.contrato?.numero_contrato);
@@ -7561,17 +7524,7 @@ ${(temTest1 || temTest2) ? `
         if (!fs.existsSync(uploadsDir3)) fs.mkdirSync(uploadsDir3, { recursive: true });
         const fileNameBacen = `${nomeArquivoSeguroContrato(payloadBacen.contrato?.protocolo_contrato, 'contrato-limpa-bacen')}.pdf`;
         const filePathBacen = path.join(uploadsDir3, fileNameBacen);
-        let browserBacen;
-        try {
-          const puppeteerB = await import('puppeteer-core');
-          let execPathB: string;
-          if (process.env.CHROMIUM_PATH) { execPathB = process.env.CHROMIUM_PATH; }
-          else { try { const chromB = await import('@sparticuz/chromium'); execPathB = await chromB.default.executablePath(); } catch { execPathB = '/usr/bin/chromium-browser'; } }
-          browserBacen = await puppeteerB.default.launch({ executablePath: execPathB, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu','--single-process'], headless: true });
-          const pageB = await browserBacen.newPage();
-          await pageB.setContent(htmlBacen, { waitUntil: 'networkidle0' });
-          await pageB.pdf({ path: filePathBacen, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '20mm', bottom: '20mm', left: '22mm', right: '22mm' } });
-        } finally { if (browserBacen) await (browserBacen as any).close(); }
+        await gerarPdfComLayout(htmlBacen, payloadBacen, filePathBacen);
         pdfPath = filePathBacen;
         if (arquivosMultipart.length > 0) {
           pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart, payloadBacen.contrato?.numero_contrato);
@@ -7668,17 +7621,7 @@ ${(temTest1 || temTest2) ? `
         if (!fs.existsSync(uploadsDir4)) fs.mkdirSync(uploadsDir4, { recursive: true });
         const fileNameRating = `${nomeArquivoSeguroContrato(payloadRating.contrato?.protocolo_contrato, 'contrato-rating')}.pdf`;
         const filePathRating = path.join(uploadsDir4, fileNameRating);
-        let browserRating;
-        try {
-          const puppeteerR = await import('puppeteer-core');
-          let execPathR: string;
-          if (process.env.CHROMIUM_PATH) { execPathR = process.env.CHROMIUM_PATH; }
-          else { try { const chromR = await import('@sparticuz/chromium'); execPathR = await chromR.default.executablePath(); } catch { execPathR = '/usr/bin/chromium-browser'; } }
-          browserRating = await puppeteerR.default.launch({ executablePath: execPathR, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu','--single-process'], headless: true });
-          const pageR = await browserRating.newPage();
-          await pageR.setContent(htmlRating, { waitUntil: 'networkidle0' });
-          await pageR.pdf({ path: filePathRating, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '18mm', bottom: '18mm', left: '22mm', right: '22mm' } });
-        } finally { if (browserRating) await (browserRating as any).close(); }
+        await gerarPdfComLayout(htmlRating, payloadRating, filePathRating);
         pdfPath = filePathRating;
         if (arquivosMultipart.length > 0) {
           pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart, payloadRating.contrato?.numero_contrato);
@@ -7758,17 +7701,7 @@ ${(temTest1 || temTest2) ? `
         if (!fs.existsSync(uploadsDir5)) fs.mkdirSync(uploadsDir5, { recursive: true });
         const fileNameParceria = `${nomeArquivoSeguroContrato(payloadParceria.contrato?.protocolo_contrato, 'contrato-parceria')}.pdf`;
         const filePathParceria = path.join(uploadsDir5, fileNameParceria);
-        let browserParceria;
-        try {
-          const puppeteerP = await import('puppeteer-core');
-          let execPathP: string;
-          if (process.env.CHROMIUM_PATH) { execPathP = process.env.CHROMIUM_PATH; }
-          else { try { const chromP = await import('@sparticuz/chromium'); execPathP = await chromP.default.executablePath(); } catch { execPathP = '/usr/bin/chromium-browser'; } }
-          browserParceria = await puppeteerP.default.launch({ executablePath: execPathP, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage','--disable-gpu','--single-process'], headless: true });
-          const pageP = await browserParceria.newPage();
-          await pageP.setContent(htmlParceria, { waitUntil: 'networkidle0' });
-          await pageP.pdf({ path: filePathParceria, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '18mm', bottom: '18mm', left: '22mm', right: '22mm' } });
-        } finally { if (browserParceria) await (browserParceria as any).close(); }
+        await gerarPdfComLayout(htmlParceria, payloadParceria, filePathParceria);
         pdfPath = filePathParceria;
         if (arquivosMultipart.length > 0) {
           pdfPath = await mergeAnexosNoPdf(pdfPath, arquivosMultipart, payloadParceria.contrato?.numero_contrato);
@@ -7864,13 +7797,26 @@ ${(temTest1 || temTest2) ? `
         };
       }
 
+      // Resolver contratada: usa prestador selecionado ou fallback CONTRATADA padrão
+      let contratadaAssessoria: any = CONTRATADA;
+      let contratadaAssessoriaId: string | null = null;
+      if (contratada_id) {
+        const contratadaSel = await buscarPrestadorServicoAtivo(contratada_id);
+        if (contratadaSel) {
+          contratadaAssessoria = contratadaSel;
+          contratadaAssessoriaId = contratada_id;
+        }
+      }
+      const responsavelContratoAssessoria = responsavel_contrato_id
+        ? await buscarResponsavelContrato(responsavel_contrato_id)
+        : null;
       const enderecoEmpresaBanco = empresa
         ? [empresa.logradouro, empresa.numero, empresa.bairro, empresa.cidade, empresa.estado || empresa.uf]
             .filter(Boolean).join(', ')
         : '';
 
       const payload: any = {
-        contratada: CONTRATADA,
+        contratada: contratadaAssessoria,
         contratante: {
           razao_social: empresa_razao_social || empresa?.razao_social || '',
           cnpj: empresa_cnpj || empresa?.cnpj || '',
@@ -7878,6 +7824,7 @@ ${(temTest1 || temTest2) ? `
           representante: empresa_representante || empresa?.responsavel_nome || empresa?.representante_nome || '',
           cpf_representante: empresa_cpf_representante || empresa?.responsavel_cpf || empresa?.representante_cpf || '',
         },
+        responsavel_contrato: responsavelContratoAssessoria,
         parceiro: parceiro && parceiro.nome ? { nome: parceiro.nome, cpf: parceiro.cpf || '' } : null,
         contrato: {
           valor_referencia: valorReferenciaNum,
@@ -7909,11 +7856,12 @@ ${(temTest1 || temTest2) ? `
       const { rows: contratoRows } = await pool.query(
         `INSERT INTO contratos_gerados
            (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id,
+            contratada_id, responsavel_contrato_id,
             valor_referencia, valor_contrato, condicao_pagamento, taxa_comissao,
             taxa_desistencia, custeio_mensal,
             honorario_minimo_mes, honorario_minimo_total, data_assinatura,
             foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
          RETURNING id, created_at`,
         [
           'assessoria',
@@ -7921,6 +7869,8 @@ ${(temTest1 || temTest2) ? `
           empresa_id || null,
           parceiro_id || null,
           lead_id || null,
+          contratadaAssessoriaId,
+          responsavel_contrato_id || null,
           valorReferenciaNum,
           null,
           null,
@@ -8221,22 +8171,7 @@ ${(temTest1 || temTest2) ? `
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
     const fileName = `${nomeArquivoSeguroContrato(payload?.contrato?.protocolo_contrato, `contrato-${contrato.tipo_contrato || 'gerado'}`)}.pdf`;
     const pdfPath = path.join(uploadsDir, fileName);
-    let browser: any;
-    try {
-      const puppeteer = await import('puppeteer-core');
-      let executablePath: string;
-      if (process.env.CHROMIUM_PATH) executablePath = process.env.CHROMIUM_PATH;
-      else {
-        const chromium = await import('@sparticuz/chromium');
-        executablePath = await chromium.default.executablePath();
-      }
-      browser = await puppeteer.default.launch({ executablePath, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage'], headless: true });
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
-      await page.pdf({ path: pdfPath, format: 'A4', printBackground: true, displayHeaderFooter: false, margin: { top: '20mm', bottom: '20mm', left: '22mm', right: '22mm' } });
-    } finally {
-      if (browser) await browser.close();
-    }
+    await gerarPdfComLayout(html, payload, pdfPath);
     const hash = await calcularHashArquivo(pdfPath);
     return { pdfPath, hash };
   }

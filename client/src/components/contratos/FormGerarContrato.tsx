@@ -147,6 +147,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   // ── Assessoria ──
   const [empresaId, setEmpresaId]             = useState('');
   const [parceiroIdAssessoria, setParceiroIdAssessoria] = useState('');
+  const [contratadaIdAssessoria, setContratadaIdAssessoria] = useState('');
+  const [responsavelContratoIdAssessoria, setResponsavelContratoIdAssessoria] = useState('');
   const [valorReferencia, setValorReferencia] = useState('');
   const [taxaComissao, setTaxaComissao]       = useState('10');
   const [taxaDesistencia, setTaxaDesistencia] = useState('5');
@@ -360,6 +362,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         tipo_contrato: 'assessoria',
         empresa_id: empresaId,
         parceiro_id: parceiroIdAssessoria || undefined,
+        contratada_id: contratadaIdAssessoria || undefined,
+        responsavel_contrato_id: responsavelContratoIdAssessoria || undefined,
         valor_referencia: unmaskCurrencyInput(valorReferencia),
         taxa_comissao: Number(taxaComissao),
         taxa_desistencia: Number(taxaDesistencia),
@@ -476,7 +480,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     onContratadaChange: (v: string) => void;
     responsavelId: string;
     onResponsavelChange: (v: string) => void;
-    errorKey: 'contratadaIdLimpaNome' | 'contratadaIdBacen' | 'contratadaIdRating';
+    errorKey: 'contratadaIdAssessoria' | 'contratadaIdLimpaNome' | 'contratadaIdBacen' | 'contratadaIdRating';
     obrigatoria?: boolean;
   }) => (
     <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 space-y-3">
@@ -578,6 +582,14 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
             {errors.empresaId && <p className="text-red-500 text-xs mt-1">{errors.empresaId}</p>}
           </div>
           <SelectParceiro value={parceiroIdAssessoria} onChange={setParceiroIdAssessoria} />
+          <SelectContratadaResponsavel
+            contratadaId={contratadaIdAssessoria}
+            onContratadaChange={setContratadaIdAssessoria}
+            responsavelId={responsavelContratoIdAssessoria}
+            onResponsavelChange={setResponsavelContratoIdAssessoria}
+            errorKey="contratadaIdAssessoria"
+            obrigatoria={false}
+          />
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Valor de Referência (R$) *</label>
