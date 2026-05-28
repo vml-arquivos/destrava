@@ -201,7 +201,9 @@ export default function GeradorContratos() {
           taxa_desistencia:           formData.taxa_desistencia ?? 5,
           custeio_mensal:             formData.custeio_mensal ?? 250,
           data_assinatura:            formData.data_assinatura,
-          cidade_assinatura:          formData.cidade_assinatura || empresa?.cidade || 'Brasília',
+          // Local de assinatura = sede da CONTRATADA (Destrava Crédito — Brasília/DF)
+          // Nunca usar a cidade do cliente/contratante para este campo
+          cidade_assinatura:          'BRASÍLIA – DF',
           foro_eleito:                formData.foro_eleito,
         };
 

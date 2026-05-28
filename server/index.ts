@@ -2729,13 +2729,16 @@ async function startServer() {
         return;
       }
 
+      // Cast explícito para TEXT garante compatibilidade tanto com coluna TEXT
+      // quanto com coluna do tipo enum etapa_funil_enum (migration 009).
+      // Após a migration 040, a coluna é TEXT; o cast é inofensivo.
       await pool.query(
         `UPDATE leads
-            SET etapa_funil = $1,
-                responsavel_id = COALESCE(responsavel_id, $2),
+            SET etapa_funil = $1::text,
+                responsavel_id = COALESCE(responsavel_id, $2::uuid),
                 ultimo_contato_em = NOW(),
                 updated_at = NOW()
-          WHERE id = $3`,
+          WHERE id = $3::uuid`,
         [etapaPersistencia, responsavelFinal, lead_id]
       );
 
@@ -4292,6 +4295,7 @@ Responda APENAS com um JSON válido no seguinte formato:
       return mapa[pct] || String(pct);
     };
     const brl = (valor: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number.isFinite(valor) ? valor : 0);
+    const vigenciaExtenso = pctExtenso(vigenciaMeses);
 
     const body = `
 <h1 class="doc-title">CONTRATO DE ANÁLISE DOCUMENTAL PARA ACESSO A LINHA DE CRÉDITO</h1>
@@ -4328,9 +4332,14 @@ ${temParceiro ? `<p class="clause"><strong>PARCEIRO COMERCIAL:</strong> ${parcei
 
 ${temParceiro ? `<p class="clause"><strong>2.3</strong> - O PARCEIRO COMERCIAL poderá acompanhar o desenvolvimento dos serviços e ter acesso às informações pertinentes, mediante autorização expressa da CONTRATANTE, ficando igualmente sujeito às cláusulas de confidencialidade deste contrato.</p>` : ''}
 
+<p class="clause"><strong>CLÁUSULA 2.4 – DOS CANAIS DE COMUNICAÇÃO OFICIAIS</strong><br>
+As comunicações, notificações, envio de relatórios e solicitações entre as PARTES serão realizados exclusivamente através dos canais eletrônicos fornecidos pela CONTRATANTE no ato da assinatura deste instrumento, quais sejam: <strong>e-mail institucional</strong> e/ou <strong>aplicativo de mensagens instantâneas (WhatsApp)</strong>.</p>
+
+<p class="clause"><strong>Parágrafo Único:</strong> Presumir-se-ão recebidas e lidas todas as comunicações enviadas aos endereços e números indicados, cabendo à CONTRATANTE a responsabilidade por manter tais dados atualizados e garantir a segurança e o acesso a esses meios.</p>
+
 <h2 class="section-title">IV – DA VIGÊNCIA E RENOVAÇÃO</h2>
 
-<p class="clause"><strong>Cláusula 3</strong> - Este contrato terá vigência de <strong>${vigenciaMeses} (doze) meses</strong> a contar da data de sua assinatura, sendo automaticamente renovado por igual período, caso não haja manifestação contrária de qualquer das partes, comunicada com no mínimo 30 (trinta) dias de antecedência do vencimento, por meio de e-mail enviado ao endereço: fernandoelipro@gmail.com.</p>
+<p class="clause"><strong>Cláusula 3</strong> - Este contrato terá vigência de <strong>${vigenciaMeses} (${vigenciaExtenso}) meses</strong> a contar da data de sua assinatura, sendo automaticamente renovado por igual período, caso não haja manifestação contrária de qualquer das partes, comunicada com no mínimo 30 (trinta) dias de antecedência do vencimento, por meio de e-mail enviado ao endereço: fernandoelipro@gmail.com.</p>
 
 <h2 class="section-title">V - DA REMUNERAÇÃO POR COMISSÃO E HONORÁRIO MÍNIMO</h2>
 
@@ -4351,29 +4360,57 @@ As causas de impedimento a crédito por parte da CONTRATANTE são: 1 – Apontam
 
 <p class="clause"><strong>4.6</strong> - Caso o Rating Bancário interno, no ato da abertura da conta ou após o término do primeiro ciclo de validação, seja inferior a <strong>"C"</strong>, será cobrado o valor mensal de <strong>${brl(custeioMensal)}</strong> a título de custeio do acompanhamento intensivo de extratos bancários, certidões fiscais e restrições comerciais ou bancárias, enquanto o Rating permanecer abaixo do nível "C".</p>
 
-<h2 class="section-title">VI – CONFIDENCIALIDADE</h2>
+<h2 class="section-title">VI – DO FLUXO OPERACIONAL E PROCEDIMENTOS TÉCNICOS</h2>
 
-<p class="clause"><strong>Cláusula 5</strong> - A CONTRATADA compromete-se a manter em absoluto sigilo todas as informações e documentos recebidos da CONTRATANTE, não os utilizando para qualquer outro fim que não a execução do presente contrato, exceto quando exigido por lei ou ordem judicial.</p>
+<p class="clause"><strong>Cláusula 5</strong> - A execução dos serviços de assessoria para obtenção de crédito obedecerá ao rigoroso fluxo operacional descrito nos itens abaixo:</p>
 
-${temParceiro ? `<p class="clause"><strong>5.1</strong> - O PARCEIRO COMERCIAL, quando autorizado pela CONTRATANTE a ter acesso às informações, compromete-se igualmente a manter sigilo absoluto sobre todos os dados e documentos relacionados ao presente contrato.</p>` : ''}
+<p class="clause"><strong>5.1. Diagnóstico Inicial de Risco (Rating Bacen):</strong> No ato da assinatura deste contrato, a CONTRATADA realizará a consulta de classificação de risco da CONTRATANTE junto ao Sistema de Informações de Crédito (SCR) do Banco Central do Brasil.</p>
 
-<h2 class="section-title">VII – RESCISÃO</h2>
+<p class="clause"><strong>5.2. Formalização:</strong> O início efetivo dos trabalhos técnicos está condicionado à assinatura do presente Instrumento Particular de Prestação de Serviços por ambas as partes.</p>
 
-<p class="clause"><strong>Cláusula 6</strong> - A CONTRATANTE poderá rescindir este contrato até a entrega pela CONTRATADA do relatório de análise dos documentos apresentados, mediante pagamento de 1% (um por cento) do valor informado na Cláusula 1.1, pelos serviços de análise documental, já prestados.</p>
+<p class="clause"><strong>5.3. Instrução Processual:</strong> Após a formalização, a CONTRATADA enviará à CONTRATANTE uma lista de verificação (<em>checklist</em>) contendo os documentos e acessos necessários para a análise técnica. O prazo para entrega integral dessa documentação é de inteira responsabilidade da CONTRATANTE.</p>
 
-<p class="clause"><strong>6.1</strong> - Na ausência do pagamento pelos serviços já prestados pela CONTRATADA à CONTRATANTE, deve a CONTRATADA entender automaticamente, que é o interesse da CONTRATANTE, seguir de forma IRREVOGÁVEL e IRRETRATÁVEL as cláusulas deste contrato, sob a isenção de cobrança do pagamento de 1% (um por cento), referente ao relatório de análise dos documentos apresentados.</p>
+<p class="clause"><strong>5.4. Análise Técnica e Relatórios:</strong> Recebida a documentação integral, a CONTRATADA terá o prazo de até <strong>72 (setenta e duas) horas</strong> para realizar a análise documental e emitir o relatório técnico de viabilidade, que será encaminhado pelos canais oficiais estabelecidos na Cláusula 2.4.</p>
 
-<h2 class="section-title">VIII – CLÁUSULA PENAL POR INADIMPLÊNCIA</h2>
+<p class="clause"><strong>5.5. Deferimento Interno e Abertura de Conta:</strong> Mediante parecer favorável da Diretoria Técnica da DESTRAVA CRÉDITO, os documentos serão processados e encaminhados para os trâmites de abertura de conta corrente de pessoa jurídica junto às instituições parceiras.</p>
 
-<p class="clause"><strong>Cláusula 7</strong> - Fica estabelecida uma Cláusula Penal em favor da CONTRATADA, aplicável na hipótese de inadimplência da CONTRATANTE em relação aos contratos de crédito obtidos com o suporte dos serviços objeto deste instrumento.</p>
+<p class="clause"><strong>5.6. Validação de Rating Bancário e Faturamento:</strong><br>
+&nbsp;&nbsp;&nbsp;I. Concluída a abertura da conta, será procedida a avaliação do <em>Rating</em> Bancário interno, cujo nível de elegibilidade para prosseguimento deve ser, obrigatoriamente, <strong>"A"</strong> ou <strong>"B"</strong>.<br>
+&nbsp;&nbsp;&nbsp;II. Atendido o critério de <em>Rating</em>, iniciar-se-á o ciclo de validação de faturamento pelo período de 30 (trinta) dias, encerrando-se sempre no último dia útil de cada mês.<br>
+&nbsp;&nbsp;&nbsp;III. Somente após a validação do fluxo financeiro, a CONTRATADA formalizará a proposta de interesse em crédito perante a instituição financeira.<br>
+&nbsp;&nbsp;&nbsp;IV. Caso o <em>Rating</em> Bancário inicial seja inferior aos níveis exigidos, a CONTRATANTE deverá manter o relacionamento e a movimentação bancária sob orientação da CONTRATADA até que o nível de elegibilidade seja alcançado.</p>
 
-<p class="clause"><strong>7.1</strong> - A Cláusula Penal será acionada caso a CONTRATANTE atrase o pagamento de 3 (três) parcelas consecutivas ou 5 (cinco) parcelas alternadas do contrato de crédito obtido junto à instituição financeira.</p>
+<p class="clause"><strong>5.7. Monitoramento de Compliance e Prevenção à Lavagem de Dinheiro (PLD):</strong><br>
+&nbsp;&nbsp;&nbsp;I. É obrigação da CONTRATANTE o envio semanal do extrato bancário da conta corrente PJ aberta para este fim, impreterivelmente às quartas-feiras (ou no primeiro dia útil subsequente).<br>
+&nbsp;&nbsp;&nbsp;II. Tal monitoramento visa analisar o perfil de movimentação financeira e mitigar riscos de apontamentos junto ao COAF (Conselho de Controle de Atividades Financeiras), em estrita observância à Lei nº 9.613/1998 (Lei de Lavagem de Dinheiro).<br>
+&nbsp;&nbsp;&nbsp;III. A CONTRATADA emitirá relatório mensal de movimentação e atualização de <em>Rating</em> até o 5º (quinto) dia útil após o fechamento do ciclo de validação.<br>
+&nbsp;&nbsp;&nbsp;IV. Caso ocorra degradação do <em>Rating</em> Bancário por culpa ou omissão da CONTRATANTE, esta deverá arcar com as taxas de serviço adicionais para novas consultas, sendo: <strong>R$ 100,00</strong> para reconsulta de Rating Bacen (SCR) e <strong>R$ 70,00</strong> para reconsulta de restrições comerciais.<br>
+&nbsp;&nbsp;&nbsp;V. Adicionalmente, caso o <em>Rating</em> Bancário interno, no ato da abertura da conta ou após o término do primeiro ciclo de validação, seja inferior a <strong>"C"</strong>, será cobrado um valor mensal de <strong>${brl(custeioMensal)}</strong> a título de custeio do acompanhamento intensivo de extratos bancários, certidões fiscais e restrições comerciais ou bancárias. Este valor será devido enquanto o <em>Rating</em> permanecer abaixo do nível "C".<br>
+&nbsp;&nbsp;&nbsp;VI. O relatório técnico atualizado será emitido e enviado somente após a confirmação do pagamento das devidas taxas adicionais e/ou da taxa mensal de acompanhamento, conforme o caso.</p>
 
-<p class="clause"><strong>7.2</strong> - O valor da multa será de ${taxaDesistenciaPct}% (${pctExtenso(taxaDesistenciaPct)} por cento) sobre o valor total do crédito contratado pela CONTRATANTE junto à instituição financeira, a ser pago à CONTRATADA no prazo de 10 (dez) dias úteis após a notificação da inadimplência.</p>
+<h2 class="section-title">VII – CONFIDENCIALIDADE</h2>
 
-<p class="clause"><strong>7.3</strong> - A aplicação desta Cláusula Penal não impede a CONTRATADA de buscar outras medidas legais cabíveis para a recuperação de quaisquer valores devidos, incluindo, mas não se limitando, aos honorários e comissões previstos na Cláusula 4.</p>
+<p class="clause"><strong>Cláusula 6</strong> - A CONTRATADA compromete-se a manter em absoluto sigilo todas as informações e documentos recebidos da CONTRATANTE, não os utilizando para qualquer outro fim que não a execução do presente contrato, exceto quando exigido por lei ou ordem judicial.</p>
 
-<h2 class="section-title">IX – DO FORO E CONDIÇÕES GERAIS</h2>
+${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, quando autorizado pela CONTRATANTE a ter acesso às informações, compromete-se igualmente a manter sigilo absoluto sobre todos os dados e documentos relacionados ao presente contrato.</p>` : ''}
+
+<h2 class="section-title">VIII – RESCISÃO</h2>
+
+<p class="clause"><strong>Cláusula 7</strong> - A CONTRATANTE poderá rescindir este contrato até a entrega pela CONTRATADA do relatório de análise dos documentos apresentados, mediante pagamento de 1% (um por cento) do valor informado na Cláusula 1.1, pelos serviços de análise documental, já prestados.</p>
+
+<p class="clause"><strong>7.1</strong> - Na ausência do pagamento pelos serviços já prestados pela CONTRATADA à CONTRATANTE, deve a CONTRATADA entender automaticamente, que é o interesse da CONTRATANTE, seguir de forma IRREVOGÁVEL e IRRETRATÁVEL as cláusulas deste contrato, sob a isenção de cobrança do pagamento de 1% (um por cento), referente ao relatório de análise dos documentos apresentados.</p>
+
+<h2 class="section-title">IX – CLÁUSULA PENAL POR INADIMPLÊNCIA</h2>
+
+<p class="clause"><strong>Cláusula 8</strong> - Fica estabelecida uma Cláusula Penal em favor da CONTRATADA, aplicável na hipótese de inadimplência da CONTRATANTE em relação aos contratos de crédito obtidos com o suporte dos serviços objeto deste instrumento.</p>
+
+<p class="clause"><strong>8.1</strong> - A Cláusula Penal será acionada caso a CONTRATANTE atrase o pagamento de 3 (três) parcelas consecutivas ou 5 (cinco) parcelas alternadas do contrato de crédito obtido junto à instituição financeira.</p>
+
+<p class="clause"><strong>8.2</strong> - O valor da multa será de ${taxaDesistenciaPct}% (${pctExtenso(taxaDesistenciaPct)} por cento) sobre o valor total do crédito contratado pela CONTRATANTE junto à instituição financeira, a ser pago à CONTRATADA no prazo de 10 (dez) dias úteis após a notificação da inadimplência.</p>
+
+<p class="clause"><strong>8.3</strong> - A aplicação desta Cláusula Penal não impede a CONTRATADA de buscar outras medidas legais cabíveis para a recuperação de quaisquer valores devidos, incluindo, mas não se limitando, aos honorários e comissões previstos na Cláusula 4.</p>
+
+<h2 class="section-title">X – DO FORO E CONDIÇÕES GERAIS</h2>
 
 <p class="clause">Para dirimir quaisquer controvérsias oriundas do CONTRATO, as partes elegem o foro da Circunscrição Judiciária de <strong>${foro}</strong>.</p>
 
