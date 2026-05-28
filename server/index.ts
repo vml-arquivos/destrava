@@ -5956,17 +5956,16 @@ ${(temTest1 || temTest2) ? `
           if (pg !== total) document.getElementById('footer-wrap').style.display = 'none';
         </script>`;
 
-      // Logo e rodapé são embutidos diretamente no HTML (base64 inline):
-      // - <header class="page-header"> com logo base64 → aparece só na 1ª página (fluxo normal)
-      // - <footer class="page-footer"> com endereços → aparece só na última página (fluxo normal)
-      // Não usar displayHeaderFooter: o mecanismo do Puppeteer bloqueia URLs externas
-      // e não executa JavaScript nos templates.
+      // displayHeaderFooter: true → Puppeteer injeta headerTemplate e footerTemplate
+      // (os templates usam logo base64 inline — URLs externas são bloqueadas pelo Puppeteer)
       await page.pdf({
         path: filePath,
         format: 'A4',
         printBackground: true,
-        displayHeaderFooter: false,
-        margin: { top: '14mm', bottom: '14mm', left: '22mm', right: '22mm' },
+        displayHeaderFooter: true,
+        headerTemplate,
+        footerTemplate,
+        margin: { top: '28mm', bottom: '28mm', left: '22mm', right: '22mm' },
       });
     } finally {
       if (browser) await browser.close();
