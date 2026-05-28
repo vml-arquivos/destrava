@@ -33,14 +33,63 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
-    chunkSizeWarningLimit: 15000,
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
-      // NENHUMA configuração de external — tudo deve ser bundlizado.
-      // O manualChunks foi removido pois causava o scheduler ser
-      // extraído como chunk separado sem ser resolvido corretamente.
       output: {
-        // Sem manualChunks: o Rollup decide a divisão automaticamente.
-        // Isso garante que scheduler, react e react-dom ficam no mesmo chunk.
+        // manualChunks seguro: agrupa vendors pesados sem separar react/scheduler.
+        // react, react-dom e scheduler ficam JUNTOS no chunk "react-vendor"
+        // para evitar o erro "Failed to resolve module specifier scheduler".
+        manualChunks(id) {
+          // React runtime (scheduler deve ficar junto com react-dom)
+          if (
+            id.includes("node_modules/react/") ||
+            id.includes("node_modules/react-dom/") ||
+            id.includes("node_modules/scheduler/") ||
+            id.includes("node_modules/react/jsx-runtime") ||
+            id.includes("node_modules/react/jsx-dev-runtime")
+          ) {
+            return "react-vendor";
+          }
+          // Radix UI — muitos pacotes pequenos, agrupar reduz overhead de chunks
+          if (id.includes("node_modules/@radix-ui/")) {
+            return "radix-vendor";
+          }
+          // Gráficos e visualização
+          if (
+            id.includes("node_modules/recharts/") ||
+            id.includes("node_modules/d3") ||
+            id.includes("node_modules/victory")
+          ) {
+            return "charts-vendor";
+          }
+          // PDF e geração de documentos
+          if (
+            id.includes("node_modules/jspdf/") ||
+            id.includes("node_modules/pdf-lib/") ||
+            id.includes("node_modules/html2canvas/")
+          ) {
+            return "pdf-vendor";
+          }
+          // Animações
+          if (id.includes("node_modules/framer-motion/")) {
+            return "motion-vendor";
+          }
+          // Markdown
+          if (
+            id.includes("node_modules/react-markdown/") ||
+            id.includes("node_modules/remark") ||
+            id.includes("node_modules/unified") ||
+            id.includes("node_modules/hast") ||
+            id.includes("node_modules/mdast") ||
+            id.includes("node_modules/micromark")
+          ) {
+            return "markdown-vendor";
+          }
+          // Demais node_modules em um chunk genérico
+          if (id.includes("node_modules/")) {
+            return "vendor";
+          }
+        },
       },
     },
   },
