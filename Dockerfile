@@ -44,23 +44,24 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV CHROMIUM_PATH=/usr/bin/chromium
 
+# Criar diretórios de dados com dono correto ANTES de qualquer COPY/RUN
+RUN mkdir -p /var/data/destrava /var/log/destrava \
+    && chown -R node:node /var/data/destrava /var/log/destrava
+
+# Mudar para node ANTES de instalar dependências — elimina o chown -R /app
+# final que levava ~260s sobre node_modules e causava timeout no Coolify.
+USER node
+
 WORKDIR /app
 
-RUN mkdir -p /var/data/destrava /var/log/destrava \
-    && chown -R node:node /var/data/destrava /var/log/destrava /app
+COPY --chown=node:node package.json pnpm-lock.yaml .npmrc ./
+COPY --chown=node:node patches/ ./patches/
 
-COPY package.json pnpm-lock.yaml .npmrc ./
-COPY patches/ ./patches/
-
-RUN --mount=type=cache,id=pnpm-store-prod,target=/root/.local/share/pnpm/store \
+RUN --mount=type=cache,id=pnpm-store-prod,uid=1000,target=/home/node/.local/share/pnpm/store \
     pnpm install --prod --frozen-lockfile
 
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/scripts ./scripts
-
-RUN chown -R node:node /app
-
-USER node
+COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --from=builder --chown=node:node /app/scripts ./scripts
 
 ENV NODE_ENV=production
 ENV PORT=4000
