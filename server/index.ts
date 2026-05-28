@@ -5901,72 +5901,71 @@ ${(temTest1 || temTest2) ? `
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
 
-      // ── Cabeçalho: logo da contratada (base64 inline) só na página 1
-      // ── Rodapé: endereços só na última página
-      // Nota: no headerTemplate/footerTemplate do Puppeteer:
-      //   - URLs externas são BLOQUEADAS → usar base64 inline obrigatoriamente
-      //   - JavaScript NÃO é executado → usar CSS counter para controle de página
+      // ── Técnica: dois PDFs + merge com pdf-lib ──────────────────────────────
+      // Puppeteer NÃO executa JavaScript em headerTemplate/footerTemplate.
+      // A única forma de ter cabeçalho só na pág 1 e rodapé só na última é
+      // gerar PDFs separados por intervalo de páginas e mesclar com pdf-lib.
       const nomeContratadaPayload = String(payload?.contratada?.nome_fantasia || payload?.contratada?.razao_social || '').toLowerCase();
       const isPermuPayContrato = nomeContratadaPayload.includes('permupay') || nomeContratadaPayload.includes('permu pay');
       const logoB64Header = isPermuPayContrato ? PERMUPAY_LOGO_B64 : DESTRAVA_LOGO_B64;
       const corBordaHeader = isPermuPayContrato ? '#0066CC' : '#1B3A8C';
-      const altLogoHeader = isPermuPayContrato ? 'PermuPay' : 'Destrava Crédito';
+      const altLogoHeader  = isPermuPayContrato ? 'PermuPay' : 'Destrava Crédito';
 
-      // Técnica: CSS counter-based page detection
-      // O Puppeteer injeta .pageNumber e .totalPages como spans com texto numérico.
-      // Usamos visibility:hidden no wrapper e o tornamos visível apenas via
-      // CSS :has() quando .pageNumber contém "1" — não funciona em todos os casos.
-      // Solução robusta: sempre mostrar o cabeçalho (Puppeteer não tem JS no template)
-      // e usar margem top generosa apenas na página 1 via @page :first no body.
-      const headerTemplate = `
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          #header-wrap {
-            width: 100%; padding: 6px 22mm 8px;
-            border-bottom: 2px solid ${corBordaHeader};
-            display: flex; align-items: center; justify-content: center;
-          }
-          img { height: 40px; max-width: 160px; object-fit: contain; display: block; }
-        </style>
-        <div id="header-wrap">
-          <img src="${logoB64Header}" alt="${altLogoHeader}"/>
-        </div>`;
+      // Templates compactos (sem quebras de linha para evitar problemas de parsing)
+      const headerTemplate = `<style>* { margin: 0; padding: 0; box-sizing: border-box; } #hw { width: 100%; padding: 6px 22mm 8px; border-bottom: 2px solid ${corBordaHeader}; display: flex; align-items: center; justify-content: center; } img { height: 40px; max-width: 160px; object-fit: contain; display: block; }</style><div id="hw"><img src="${logoB64Header}" alt="${altLogoHeader}"/></div>`;
+      const emptyHeader    = '<style>* { margin: 0; padding: 0; }</style><div></div>';
+      const footerTemplate = `<style>* { margin: 0; padding: 0; box-sizing: border-box; } #fw { width: 100%; padding: 8px 22mm 6px; border-top: 1px solid #e2e8f0; text-align: center; font-family: Arial, sans-serif; font-size: 7.5pt; color: #64748b; line-height: 1.5; }</style><div id="fw"><strong>BRASÍLIA - SEDE</strong><br/>St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250<br/><strong>GOIÂNIA - FILIAL</strong><br/>Avenida Afonso Pena, qd-25 Alt. 05, S/N sala-02 setor Goiânia 2 CEP: 74665555 Goiânia-GO</div>`;
+      const emptyFooter    = '<style>* { margin: 0; padding: 0; }</style><div></div>';
 
-      const footerTemplate = `
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          #footer-wrap {
-            width: 100%; padding: 8px 22mm 6px;
-            border-top: 1px solid #e2e8f0;
-            text-align: center;
-            font-family: Arial, sans-serif;
-            font-size: 7.5pt; color: #64748b; line-height: 1.5;
-          }
-        </style>
-        <div id="footer-wrap">
-          <strong>BRASÍLIA - SEDE</strong><br/>
-          St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250<br/>
-          <strong>GOIÂNIA - FILIAL</strong><br/>
-          Avenida Afonso Pena, qd-25 Alt. 05, S/N sala-02 setor Goiânia 2 CEP: 74665555 Goiânia-GO
-        </div>
-        <script>
-          // Mostrar rodapé apenas na última página
-          var pg = parseInt(document.querySelector('.pageNumber').textContent);
-          var total = parseInt(document.querySelector('.totalPages').textContent);
-          if (pg !== total) document.getElementById('footer-wrap').style.display = 'none';
-        </script>`;
-
-      // displayHeaderFooter: true → Puppeteer injeta headerTemplate e footerTemplate
-      // (os templates usam logo base64 inline — URLs externas são bloqueadas pelo Puppeteer)
-      await page.pdf({
-        path: filePath,
-        format: 'A4',
+      const pdfOpts = {
+        format: 'A4' as const,
         printBackground: true,
         displayHeaderFooter: true,
-        headerTemplate,
-        footerTemplate,
         margin: { top: '28mm', bottom: '28mm', left: '22mm', right: '22mm' },
-      });
+      };
+
+      // 1. Gerar PDF completo sem header/footer para contar páginas
+      const bufAll = await page.pdf({ ...pdfOpts, headerTemplate: emptyHeader, footerTemplate: emptyFooter });
+      const { PDFDocument: PDFDoc } = await import('pdf-lib');
+      const docAll = await PDFDoc.load(bufAll);
+      const totalPages = docAll.getPageCount();
+
+            let finalBuf: Uint8Array;
+      if (totalPages === 1) {
+        // Documento de uma página: cabeçalho + rodapé juntos
+        finalBuf = await page.pdf({ ...pdfOpts, headerTemplate, footerTemplate });
+      } else {
+        // Página 1: com cabeçalho, sem rodapé
+        const buf1    = await page.pdf({ ...pdfOpts, headerTemplate, footerTemplate: emptyFooter, pageRanges: '1' });
+        // Última página: sem cabeçalho, com rodapé
+        const bufLast = await page.pdf({ ...pdfOpts, headerTemplate: emptyHeader, footerTemplate, pageRanges: String(totalPages) });
+        // Páginas intermediárias (se existirem): sem cabeçalho, sem rodapé
+        let bufMiddle: Uint8Array | null = null;
+        if (totalPages > 2) {
+          bufMiddle = await page.pdf({ ...pdfOpts, headerTemplate: emptyHeader, footerTemplate: emptyFooter, pageRanges: `2-${totalPages - 1}` });
+        }
+
+        // Mesclar com pdf-lib
+        const merged = await PDFDoc.create();
+
+        const doc1 = await PDFDoc.load(buf1);
+        const [p1] = await merged.copyPages(doc1, [0]);
+        merged.addPage(p1);
+
+        if (bufMiddle) {
+          const docMid  = await PDFDoc.load(bufMiddle);
+          const midPgs  = await merged.copyPages(docMid, docMid.getPageIndices());
+          midPgs.forEach((p: any) => merged.addPage(p));
+        }
+
+        const docLast = await PDFDoc.load(bufLast);
+        const [pLast] = await merged.copyPages(docLast, [0]);
+        merged.addPage(pLast);
+
+        finalBuf = await merged.save();
+      }
+
+      fs.writeFileSync(filePath, finalBuf);
     } finally {
       if (browser) await browser.close();
     }
