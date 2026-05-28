@@ -339,19 +339,24 @@ export default function Clientes() {
 
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
                 <Users className="w-5 h-5 text-blue-600" />
-                Gestão de Clientes
-              </h1>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {clientesFiltrados.length} de {clientes.length} clientes
-                {totalDuplicatas > 0 && (
-                  <span className="ml-2 text-orange-600 font-medium">
-                    · {totalDuplicatas} telefones duplicados
-                  </span>
-                )}
-              </p>
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  Clientes
+                  <span className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">PJ / PF</span>
+                </h1>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {clientesFiltrados.length} de {clientes.length} clientes
+                  {totalDuplicatas > 0 && (
+                    <span className="ml-2 text-orange-600 font-medium">
+                      · {totalDuplicatas} telefones duplicados
+                    </span>
+                  )}
+                </p>
+              </div>
             </div>
             <div className="flex gap-2">
               <button
