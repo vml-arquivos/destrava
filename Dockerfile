@@ -1,4 +1,4 @@
-# ─── Stage 1: Build ───────────────────────────────────────────────────────────
+# ─── Stage 1: Build ────────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 
 RUN npm install -g pnpm@10.4.1
@@ -22,13 +22,12 @@ RUN pnpm exec esbuild server/index.ts \
     --format=esm \
     --outdir=dist
 
-# ─── Stage 2: Production ──────────────────────────────────────────────────────
-# Usando node:20-slim (Debian) em vez de Alpine para evitar o problema do
-# Chromium no Alpine que puxa ~189 dependências pesadas (Mesa, LLVM, FFmpeg)
-# causando timeout no build.
+# ─── Stage 2: Production ───────────────────────────────────────────────────────
+# node:20-slim (Debian) — Chromium via apt é muito mais leve que Alpine
+# (Alpine puxa Mesa, LLVM, FFmpeg → ~189 dependências extras → timeout no build)
 FROM node:20-slim AS runner
 
-# Instala Chromium e dependências mínimas via apt (muito mais leve no Debian)
+# Chromium + dependências mínimas
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     fonts-freefont-ttf \
@@ -37,19 +36,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Instala pnpm globalmente
+# pnpm para instalar prod deps
 RUN npm install -g pnpm@10.4.1 && npm cache clean --force
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV CHROMIUM_PATH=/usr/bin/chromium
 
-# Criar diretórios de dados com dono correto ANTES de qualquer COPY/RUN
+# Diretórios de dados com permissões corretas ANTES de qualquer COPY
 RUN mkdir -p /var/data/destrava /var/log/destrava \
     && chown -R node:node /var/data/destrava /var/log/destrava
 
-# Mudar para node ANTES de instalar dependências — elimina o chown -R /app
-# final que levava ~260s sobre node_modules e causava timeout no Coolify.
+# USER node ANTES do pnpm install → elimina o chown -R /app final
+# que causava timeout de ~260s sobre node_modules no Coolify
 USER node
 
 WORKDIR /app
