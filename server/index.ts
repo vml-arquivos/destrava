@@ -1432,7 +1432,14 @@ async function startServer() {
       const now = new Date().toISOString();
       const nome         = b.nome || "";
       const email        = b.email || null;
-      const telefone     = b.telefone || "";
+      const telefoneRaw  = b.telefone || "";
+      // Normaliza telefone: remove não-dígitos, remove DDI 55 se resultar em 13 dígitos
+      const telefone = (() => {
+        let d = telefoneRaw.replace(/[^0-9]/g, "");
+        if (d.startsWith("0")) d = d.slice(1);
+        if (d.length === 13 && d.startsWith("55")) d = d.slice(2);
+        return d || telefoneRaw;
+      })();
       const empresa      = b.empresa || null;
       const cpf_cnpj     = b.cpf_cnpj || b.cpfCnpj || null;
       const rawTipo      = b.tipo_pessoa || b.tipoPessoa || "pf";
@@ -1624,16 +1631,63 @@ async function startServer() {
         const idx = params.length;
         conditions.push(`(nome ILIKE $${idx} OR empresa ILIKE $${idx} OR telefone ILIKE $${idx} OR email ILIKE $${idx} OR cpf_cnpj ILIKE $${idx})`);
       }
+      // Filtro por tipo_pessoa (pf/pj)
+      const tipoPessoa = req.query.tipo_pessoa as string | undefined;
+      if (tipoPessoa && tipoPessoa !== "todos") {
+        params.push(tipoPessoa);
+        conditions.push(`tipo_pessoa = $${params.length}`);
+      }
+      // Filtro por cadastro incompleto
+      const incompleto = req.query.incompleto as string | undefined;
+      if (incompleto === "1" || incompleto === "true") {
+        conditions.push(`(email IS NULL OR cpf_cnpj IS NULL)`);
+      }
+      // Filtro por prioridade
+      const prioridade = req.query.prioridade as string | undefined;
+      if (prioridade && prioridade !== "todos") {
+        params.push(prioridade);
+        conditions.push(`prioridade = $${params.length}`);
+      }
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
       const limitClause = limit ? `LIMIT ${limit}` : "";
       const { rows } = await pool.query(
-        `SELECT * FROM leads ${where} ORDER BY created_at DESC ${limitClause}`,
+        `SELECT
+           *,
+           COALESCE(tipo_pessoa, 'pj') AS tipo,
+           COALESCE(prioridade, 'media') AS prioridade,
+           (email IS NULL OR cpf_cnpj IS NULL) AS cadastro_incompleto,
+           CASE
+             WHEN origem ILIKE '%campanha%' OR utm_source IS NOT NULL THEN 'campanha'
+             WHEN origem ILIKE '%site%' OR origem ILIKE '%formulario%'
+               OR origem ILIKE '%simulador%' OR origem ILIKE '%landing%' THEN 'site'
+             WHEN origem ILIKE '%whatsapp%' OR origem ILIKE '%zap%'
+               OR canal_origem ILIKE '%whatsapp%' THEN 'whatsapp'
+             WHEN origem ILIKE '%indicac%' OR origem ILIKE '%referral%' THEN 'indicacao'
+             WHEN origem = 'painel_interno' OR origem = 'manual' OR origem IS NULL THEN 'manual'
+             ELSE LOWER(COALESCE(origem, 'manual'))
+           END AS origem_normalizada
+         FROM leads ${where} ORDER BY created_at DESC ${limitClause}`,
         params
       );
       res.json(rows);
     } catch (err) {
       console.error("[LEADS GET ERROR]", err);
       res.status(500).json({ error: "Erro ao buscar leads." });
+    }
+  });
+
+  // ─── Deduplicar leads por telefone normalizado ───────────────────────────
+  app.post("/api/leads/deduplicar", auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(`SELECT * FROM deduplicar_leads_por_telefone()`);
+      res.json({
+        success: true,
+        mesclados: rows.length,
+        detalhes: rows,
+      });
+    } catch (err) {
+      console.error("[DEDUP ERROR]", err);
+      res.status(500).json({ error: "Erro ao deduplicar leads." });
     }
   });
 
