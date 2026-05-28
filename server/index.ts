@@ -4418,67 +4418,70 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, 
 
 <p class="city-date"><strong>${cidadeAss}, ${dataAss}.</strong></p>
 
-<div class="signature-section" style="page-break-inside: avoid; break-inside: avoid;">
+<div class="sig-final-block">
 
-  <!-- Bloco de assinaturas principais -->
+  <!-- ── Assinaturas principais ── -->
   ${temParceiro ? `
-  <div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr; max-width: 190mm; gap: 10mm;">
-    <div class="signature-party" style="min-height: 90px;">
-      <div style="height: 56px;"></div>
-      <div class="sig-line"></div>
-      <p class="sig-name">${contratante.razao_social}</p>
-      <p class="sig-sub">CNPJ: ${contratante.cnpj}</p>
-      <p class="sig-sub" style="font-weight:700; color:#1e3a5f; letter-spacing:0.04em; text-transform:uppercase;">CONTRATANTE</p>
+  <div class="sig-main-grid sig-main-grid--3">
+    <div class="sig-card">
+      <div class="sig-space"></div>
+      <div class="sig-line-bar"></div>
+      <p class="sig-name-label">${contratante.razao_social}</p>
+      <p class="sig-detail">CNPJ: ${contratante.cnpj}</p>
+      <p class="sig-role">CONTRATANTE</p>
     </div>
-    <div class="signature-party" style="min-height: 90px;">
-      <div style="height: 56px;"></div>
-      <div class="sig-line"></div>
-      <p class="sig-name">${parceiro.nome}</p>
-      <p class="sig-sub">CPF: ${parceiro.cpf}</p>
-      <p class="sig-sub" style="font-weight:700; color:#1e3a5f; letter-spacing:0.04em; text-transform:uppercase;">PARCEIRO COMERCIAL</p>
+    <div class="sig-card">
+      <div class="sig-space"></div>
+      <div class="sig-line-bar"></div>
+      <p class="sig-name-label">${parceiro.nome}</p>
+      <p class="sig-detail">CPF: ${parceiro.cpf}</p>
+      <p class="sig-role">PARCEIRO COMERCIAL</p>
     </div>
-    <div class="signature-party" style="min-height: 90px;">
-      <div style="height: 56px;"></div>
-      <div class="sig-line"></div>
-      <p class="sig-name">DESTRAVA CRÉDITO LTDA</p>
-      <p class="sig-sub">CNPJ: ${contratada.cnpj}</p>
-      <p class="sig-sub" style="font-weight:700; color:#1e3a5f; letter-spacing:0.04em; text-transform:uppercase;">CONTRATADA</p>
+    <div class="sig-card">
+      <div class="sig-space"></div>
+      <div class="sig-line-bar"></div>
+      <p class="sig-name-label">DESTRAVA CRÉDITO LTDA</p>
+      <p class="sig-detail">CNPJ: ${contratada.cnpj}</p>
+      <p class="sig-role">CONTRATADA</p>
     </div>
   </div>
   ` : `
-  <div class="signature-grid" style="max-width: 160mm; gap: 20mm;">
-    <div class="signature-party" style="min-height: 90px;">
-      <div style="height: 56px;"></div>
-      <div class="sig-line"></div>
-      <p class="sig-name">${contratante.razao_social}</p>
-      <p class="sig-sub">CNPJ: ${contratante.cnpj}</p>
-      <p class="sig-sub" style="font-weight:700; color:#1e3a5f; letter-spacing:0.04em; text-transform:uppercase;">CONTRATANTE</p>
+  <div class="sig-main-grid sig-main-grid--2">
+    <div class="sig-card">
+      <div class="sig-space"></div>
+      <div class="sig-line-bar"></div>
+      <p class="sig-name-label">${contratante.razao_social}</p>
+      <p class="sig-detail">CNPJ: ${contratante.cnpj}</p>
+      <p class="sig-role">CONTRATANTE</p>
     </div>
-    <div class="signature-party" style="min-height: 90px;">
-      <div style="height: 56px;"></div>
-      <div class="sig-line"></div>
-      <p class="sig-name">DESTRAVA CRÉDITO LTDA</p>
-      <p class="sig-sub">CNPJ: ${contratada.cnpj}</p>
-      <p class="sig-sub" style="font-weight:700; color:#1e3a5f; letter-spacing:0.04em; text-transform:uppercase;">CONTRATADA</p>
+    <div class="sig-card">
+      <div class="sig-space"></div>
+      <div class="sig-line-bar"></div>
+      <p class="sig-name-label">DESTRAVA CRÉDITO LTDA</p>
+      <p class="sig-detail">CNPJ: ${contratada.cnpj}</p>
+      <p class="sig-role">CONTRATADA</p>
     </div>
   </div>
   `}
 
-  <!-- Testemunhas — na mesma página, abaixo das assinaturas -->
-  <div class="witness-grid" style="max-width: 160mm; margin: 28px auto 0; page-break-inside: avoid; break-inside: avoid;">
-    <div class="witness-box" style="min-height: 80px;">
-      <p style="font-size:8pt; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#1e3a5f; margin:0 0 6px;">Testemunha 1</p>
-      <div style="height: 36px;"></div>
-      <div class="sig-line"></div>
-      <p class="sig-sub">Nome: ___________________________________</p>
-      <p class="sig-sub">CPF: ____________________________________</p>
+  <!-- ── Divisor entre assinaturas e testemunhas ── -->
+  <div class="sig-divider"></div>
+
+  <!-- ── Testemunhas ── -->
+  <div class="sig-witness-grid">
+    <div class="sig-witness-card">
+      <p class="sig-witness-label">TESTEMUNHA 1</p>
+      <div class="sig-witness-space"></div>
+      <div class="sig-line-bar"></div>
+      <p class="sig-detail">Nome: _______________________________</p>
+      <p class="sig-detail">CPF: ________________________________</p>
     </div>
-    <div class="witness-box" style="min-height: 80px;">
-      <p style="font-size:8pt; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#1e3a5f; margin:0 0 6px;">Testemunha 2</p>
-      <div style="height: 36px;"></div>
-      <div class="sig-line"></div>
-      <p class="sig-sub">Nome: ___________________________________</p>
-      <p class="sig-sub">CPF: ____________________________________</p>
+    <div class="sig-witness-card">
+      <p class="sig-witness-label">TESTEMUNHA 2</p>
+      <div class="sig-witness-space"></div>
+      <div class="sig-line-bar"></div>
+      <p class="sig-detail">Nome: _______________________________</p>
+      <p class="sig-detail">CPF: ________________________________</p>
     </div>
   </div>
 
@@ -4494,6 +4497,139 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, 
     ${getDocumentStyles()}
     body { padding: 0; background: #fff; }
     .contract-content { width: 100%; }
+
+    /* ── Bloco final de assinaturas + testemunhas ── */
+    .sig-final-block {
+      margin-top: 36px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    /* Grade principal: 3 colunas (com parceiro) ou 2 colunas */
+    .sig-main-grid {
+      display: grid;
+      gap: 8mm;
+      margin: 0 auto;
+      align-items: end;
+    }
+    .sig-main-grid--3 { grid-template-columns: 1fr 1fr 1fr; max-width: 185mm; }
+    .sig-main-grid--2 { grid-template-columns: 1fr 1fr; max-width: 150mm; }
+
+    /* Card individual de assinatura */
+    .sig-card {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Espaço generoso para assinatura digital/manuscrita */
+    .sig-space {
+      height: 72px;
+      width: 100%;
+    }
+
+    /* Linha de assinatura */
+    .sig-line-bar {
+      width: 100%;
+      max-width: 58mm;
+      height: 0;
+      border-top: 1.4px solid #1e293b;
+      margin: 0 auto 7px;
+    }
+
+    /* Nome do assinante */
+    .sig-name-label {
+      font-size: 8.5pt;
+      font-weight: 800;
+      color: #111827;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      line-height: 1.25;
+      margin: 0 0 3px;
+      word-break: break-word;
+    }
+
+    /* Detalhe (CNPJ/CPF) */
+    .sig-detail {
+      font-size: 7.8pt;
+      color: #475569;
+      margin: 0 0 2px;
+      line-height: 1.3;
+    }
+
+    /* Papel (CONTRATANTE / PARCEIRO / CONTRATADA) */
+    .sig-role {
+      font-size: 7.8pt;
+      font-weight: 700;
+      color: #1e3a5f;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin: 4px 0 0;
+      padding-top: 4px;
+      border-top: 1px dashed #cbd5e1;
+      width: 100%;
+      text-align: center;
+    }
+
+    /* Divisor visual entre assinaturas e testemunhas */
+    .sig-divider {
+      width: 100%;
+      max-width: 185mm;
+      margin: 32px auto 28px;
+      border: none;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    /* Grade de testemunhas: 2 colunas centradas */
+    .sig-witness-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20mm;
+      max-width: 150mm;
+      margin: 0 auto;
+    }
+
+    .sig-witness-card {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Label da testemunha */
+    .sig-witness-label {
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #1e3a5f;
+      margin: 0 0 4px;
+    }
+
+    /* Espaço para assinatura da testemunha */
+    .sig-witness-space {
+      height: 52px;
+      width: 100%;
+    }
+
+    /* Rodapé fixo no final da página via Puppeteer */
+    .contract-footer-final {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 10px 22mm 8px;
+      border-top: 1px solid #e2e8f0;
+      background: #ffffff;
+      text-align: center;
+      font-size: 7.5pt;
+      color: #64748b;
+      line-height: 1.5;
+    }
+
+    /* Garante que o conteúdo não fique atrás do rodapé fixo */
+    body { padding-bottom: 28mm; }
   </style>
 </head>
 <body>
