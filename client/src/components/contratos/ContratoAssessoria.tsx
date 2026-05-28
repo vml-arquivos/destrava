@@ -7,6 +7,13 @@ import type { DocumentoAnexo } from './UploadDocumentos';
 // TIPOS EXPORTADOS — usados pelo GeradorContratos para montar as props
 // ─────────────────────────────────────────────────────────────────────────────
 
+export interface SignatarioContratanteAssessoria {
+  nome: string;
+  cpf?: string;
+  cargo?: string;
+  qualificacao?: string;
+}
+
 export interface DadosContratoAssessoria {
   // IDs para manter vínculo com PostgreSQL e contratos_gerados
   empresa_id?: string;
@@ -18,6 +25,9 @@ export interface DadosContratoAssessoria {
   empresa_representante: string;
   empresa_cpf_representante: string;
   empresa_nacionalidade?: string;
+  socios_assinantes?: SignatarioContratanteAssessoria[];
+  modo_assinatura_contratante?: 'responsavel' | 'socios';
+  prazo_contrato_meses: number;
   // Parceiro comercial (opcional)
   parceiro_nome?: string;
   parceiro_cpf?: string;
@@ -74,6 +84,18 @@ const pctExtensoMap: Record<number, string> = {
 
 function pctExtenso(v: number): string {
   return pctExtensoMap[v] || String(v);
+}
+
+function mesesExtenso(v: number): string {
+  return pctExtensoMap[v] || String(v);
+}
+
+function nomeSignatario(s: SignatarioContratanteAssessoria): string {
+  return (s.nome || '').trim();
+}
+
+function docSignatario(s: SignatarioContratanteAssessoria): string {
+  return (s.cpf || '').trim();
 }
 
 const extensoMap: Record<number, string> = {
@@ -304,6 +326,13 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
   );
 
   const temParceiro = !!(d.parceiro_nome && d.parceiro_nome.trim());
+  const prazoContratoMeses = Number.isFinite(Number(d.prazo_contrato_meses)) && Number(d.prazo_contrato_meses) > 0
+    ? Number(d.prazo_contrato_meses)
+    : 12;
+  const sociosAssinantes = Array.isArray(d.socios_assinantes) ? d.socios_assinantes.filter(s => nomeSignatario(s)) : [];
+  const signatariosContratante = d.modo_assinatura_contratante === 'socios' && sociosAssinantes.length > 0
+    ? sociosAssinantes
+    : [{ nome: d.empresa_representante || d.empresa_razao_social || 'CONTRATANTE', cpf: d.empresa_cpf_representante, cargo: 'Representante legal' }];
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -314,7 +343,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
         <div className="flex items-center gap-3">
           <FileDown className="w-5 h-5 text-amber-400 flex-shrink-0" />
           <div>
-            <p className="font-bold text-sm leading-tight">Contrato de Análise Documental</p>
+            <p className="font-bold text-sm leading-tight">Contrato de Assessoria Empresarial</p>
             <p className="text-xs text-blue-200">
               Textos sublinhados são editáveis · Configure valores no painel
               {documentosAnexos.length > 0 && (
@@ -366,7 +395,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
             onClick={() => setPainelAberto(p => !p)}
             className="flex items-center justify-between px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wide hover:bg-gray-50 border-b border-gray-200"
           >
-            <span className="flex items-center gap-2"><Settings2 className="w-3.5 h-3.5" />Configurar valores</span>
+            <span className="flex items-center gap-2"><Settings2 className="w-3.5 h-3.5" />Configurar contrato</span>
             {painelAberto ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
 
@@ -416,6 +445,20 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
                   className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm text-right font-mono"
                 />
               </div>
+              {/* Prazo do contrato */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Prazo do Contrato (meses)</label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={prazoContratoMeses}
+                  onChange={e => set('prazo_contrato_meses', Math.max(1, Number.parseInt(e.target.value || '1', 10)))}
+                  className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                />
+                <p className="text-[10px] text-gray-500 mt-0.5">O prazo informado será aplicado nas cláusulas de vigência e remuneração.</p>
+              </div>
+
               {/* Data de assinatura */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Data de Assinatura</label>
@@ -435,6 +478,17 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
                   onChange={e => set('foro_eleito', e.target.value)}
                   className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
                 />
+              </div>
+
+              {/* Assinaturas da contratante */}
+              <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs text-slate-700">
+                <p className="font-semibold text-slate-800 mb-1">Assinantes da CONTRATANTE</p>
+                <p>{d.modo_assinatura_contratante === 'socios' && sociosAssinantes.length > 0 ? 'Sócios selecionados' : 'Responsável principal'}</p>
+                <ul className="mt-2 space-y-1 list-disc list-inside">
+                  {signatariosContratante.map((s, i) => (
+                    <li key={`${s.nome}-${i}`}>{s.nome}{s.cpf ? ` — CPF: ${s.cpf}` : ''}</li>
+                  ))}
+                </ul>
               </div>
 
               {/* Resumo financeiro */}
@@ -492,7 +546,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
             </div>
 
             {/* Título */}
-            <p style={S.title}>CONTRATO DE ANÁLISE DOCUMENTAL PARA ACESSO A LINHA DE CRÉDITO</p>
+            <p style={S.title}>CONTRATO DE ASSESSORIA EMPRESARIAL PARA ACESSO A LINHAS DE CRÉDITO</p>
 
             {/* I – IDENTIFICAÇÃO DAS PARTES */}
             <p style={S.sectionTitle}>I – IDENTIFICAÇÃO DAS PARTES</p>
@@ -523,21 +577,15 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
                 style={S.editableSpan}
                 onBlur={e => set('empresa_endereco', e.currentTarget.textContent || '')}
               >{d.empresa_endereco}</span>,
-              {' '}neste ato representada por seu representante legal{' '}
-              <span
-                contentEditable
-                suppressContentEditableWarning
-                style={S.editableSpan}
-                onBlur={e => set('empresa_representante', e.currentTarget.textContent || '')}
-              >{d.empresa_representante}</span>,
-              {' '}{d.empresa_nacionalidade || 'brasileiro(a)'}, portador(a) do CPF n°{' '}
-              <span
-                contentEditable
-                suppressContentEditableWarning
-                style={S.editableSpan}
-                onBlur={e => set('empresa_cpf_representante', e.currentTarget.textContent || '')}
-              >{d.empresa_cpf_representante}</span>,
-              {' '}conforme poderes que lhe são conferidos pelo contrato social e/ou procuração.
+              {' '}neste ato representada por{' '}
+              <strong>
+                {signatariosContratante.map((s, i) => (
+                  <span key={`${s.nome}-${i}`}>
+                    {i > 0 ? '; ' : ''}{s.nome}{s.cpf ? `, CPF n° ${s.cpf}` : ''}{s.cargo || s.qualificacao ? `, ${s.cargo || s.qualificacao}` : ''}
+                  </span>
+                ))}
+              </strong>,
+              {' '}conforme poderes que lhes são conferidos pelo contrato social e/ou procuração.
             </p>
 
             {temParceiro && (
@@ -608,14 +656,14 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
             <p style={S.sectionTitle}>IV – DA VIGÊNCIA E RENOVAÇÃO</p>
 
             <p style={S.p}>
-              <strong>Cláusula 3</strong> - Este contrato terá vigência de <strong>12 (doze) meses</strong> a contar da data de sua assinatura, sendo automaticamente renovado por igual período, caso não haja manifestação contrária de qualquer das partes, comunicada com no mínimo 30 (trinta) dias de antecedência do vencimento, por meio de e-mail enviado ao endereço: fernandoelipro@gmail.com.
+              <strong>Cláusula 3</strong> - Este contrato terá vigência de <strong>{prazoContratoMeses} ({mesesExtenso(prazoContratoMeses)}) meses</strong> a contar da data de sua assinatura, sendo automaticamente renovado por igual período, caso não haja manifestação contrária de qualquer das partes, comunicada com no mínimo 30 (trinta) dias de antecedência do vencimento, por meio de e-mail enviado ao endereço: fernandoelipro@gmail.com.
             </p>
 
             {/* V – REMUNERAÇÃO */}
             <p style={S.sectionTitle}>V - DA REMUNERAÇÃO POR COMISSÃO E HONORÁRIO MÍNIMO</p>
 
             <p style={S.p}>
-              <strong>Cláusula 4</strong> - A CONTRATADA fará jus a comissão de <strong>{d.taxa_comissao}% ({pctExtenso(d.taxa_comissao)} por cento)</strong> sobre qualquer valor efetivamente liberado em favor da CONTRATANTE, no prazo de até 12 meses da entrega do relatório inicial. A CONTRATANTE compromete-se a comunicar qualquer operação de crédito aprovada e contratada dentro do período de vigência deste contrato e a fornecer cópia do contrato, comprovante de liberação e/ou extrato bancário correspondente.
+              <strong>Cláusula 4</strong> - A CONTRATADA fará jus a comissão de <strong>{d.taxa_comissao}% ({pctExtenso(d.taxa_comissao)} por cento)</strong> sobre qualquer valor efetivamente liberado em favor da CONTRATANTE, no prazo de até {prazoContratoMeses} ({mesesExtenso(prazoContratoMeses)}) meses da entrega do relatório inicial. A CONTRATANTE compromete-se a comunicar qualquer operação de crédito aprovada e contratada dentro do período de vigência deste contrato e a fornecer cópia do contrato, comprovante de liberação e/ou extrato bancário correspondente.
             </p>
             <p style={S.p}>
               <strong>4.1</strong> - A comissão deverá ser paga pela CONTRATANTE à CONTRATADA no prazo máximo de 1 (um) dia útil após a liberação do crédito, mediante transferência bancária para conta informada pela CONTRATADA.
@@ -624,7 +672,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               <strong>4.2</strong> - A CONTRATADA declara, que não realiza, direta ou indiretamente, qualquer tipo de pagamento, vantagem indevida, comissão oculta ou propina, seja a servidores públicos, agentes privados ou terceiros, sendo vedada qualquer prática que contrarie a legislação anticorrupção vigente (Lei nº 12.846/2013 e demais normas aplicáveis).
             </p>
             <p style={S.p}>
-              <strong>4.3</strong> - Fica estabelecido que, caso a CONTRATANTE não contrate operações de crédito em valor igual ou superior a <strong>{brl(d.valor_contrato)}</strong> no período de vigência do contrato (12 meses), por motivos a ela atribuíveis, será devido à CONTRATADA, a título de honorário mínimo garantido, o valor correspondente a <strong>{d.taxa_desistencia}% ({pctExtenso(d.taxa_desistencia)} por cento)</strong> sobre o valor de referência pretendido inicialmente (Cláusula 1.1), totalizando <strong>{brl(valorDesistencia)} ({valorPorExtenso(valorDesistencia)})</strong>.
+              <strong>4.3</strong> - Fica estabelecido que, caso a CONTRATANTE não contrate operações de crédito em valor igual ou superior a <strong>{brl(d.valor_contrato)}</strong> no período de vigência do contrato ({prazoContratoMeses} meses), por motivos a ela atribuíveis, será devido à CONTRATADA, a título de honorário mínimo garantido, o valor correspondente a <strong>{d.taxa_desistencia}% ({pctExtenso(d.taxa_desistencia)} por cento)</strong> sobre o valor de referência pretendido inicialmente (Cláusula 1.1), totalizando <strong>{brl(valorDesistencia)} ({valorPorExtenso(valorDesistencia)})</strong>.
             </p>
             <p style={S.pBold}>
               PARÁGRAFO ÚNICO - CAUSAS DE IMPEDIMENTO A CRÉDITO POR PARTE DA CONTRATANTE
@@ -636,7 +684,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               <strong>4.4</strong> - O valor do honorário mínimo poderá ser cobrado integralmente ao final do contrato, ou em parcelas mensais, conforme acordo entre as partes.
             </p>
             <p style={S.p}>
-              <strong>4.5</strong> - Caso a CONTRATANTE venha a contratar operações de crédito que, somadas, ultrapassem o valor de <strong>{brl(d.valor_contrato)}</strong> durante a vigência do contrato, 12 (doze) meses, a CONTRATADA renunciará ao recebimento do honorário mínimo, mantendo-se exclusivamente o direito à comissão de {d.taxa_comissao}% sobre o valor contratado.
+              <strong>4.5</strong> - Caso a CONTRATANTE venha a contratar operações de crédito que, somadas, ultrapassem o valor de <strong>{brl(d.valor_contrato)}</strong> durante a vigência do contrato, {prazoContratoMeses} ({mesesExtenso(prazoContratoMeses)}) meses, a CONTRATADA renunciará ao recebimento do honorário mínimo, mantendo-se exclusivamente o direito à comissão de {d.taxa_comissao}% sobre o valor contratado.
             </p>
 
             {/* VI – FLUXO OPERACIONAL */}
@@ -751,43 +799,41 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
             </p>
 
             {/* Assinaturas */}
-            {temParceiro ? (
-              <div style={S.sigGrid3}>
-                <div style={S.sigBox}>
-                  <div style={S.sigLine} />
-                  <p style={S.sigName}>{d.empresa_razao_social || 'CONTRATANTE'}</p>
-                  {d.empresa_cnpj && <p style={S.sigSub}>CNPJ: {d.empresa_cnpj}</p>}
-                  <p style={S.sigSub}>CONTRATANTE</p>
-                </div>
+            <div style={{ ...(temParceiro ? S.sigGrid3 : S.sigGrid), gridTemplateColumns: temParceiro ? '1fr 1fr 1fr' : '1fr 1fr' }}>
+              <div style={S.sigBox}>
+                <div style={S.sigLine} />
+                <p style={S.sigName}>{d.empresa_razao_social || 'CONTRATANTE'}</p>
+                {d.empresa_cnpj && <p style={S.sigSub}>CNPJ: {d.empresa_cnpj}</p>}
+                <p style={S.sigSub}>CONTRATANTE</p>
+              </div>
+              {temParceiro && (
                 <div style={S.sigBox}>
                   <div style={S.sigLine} />
                   <p style={S.sigName}>{d.parceiro_nome}</p>
                   {d.parceiro_cpf && <p style={S.sigSub}>CPF: {d.parceiro_cpf}</p>}
                   <p style={S.sigSub}>PARCEIRO COMERCIAL</p>
                 </div>
-                <div style={S.sigBox}>
-                  <div style={S.sigLine} />
-                  <p style={S.sigName}>DESTRAVA CRÉDITO LTDA</p>
-                  <p style={S.sigSub}>CNPJ: 35.427.182/0001-66</p>
-                  <p style={S.sigSub}>CONTRATADA</p>
-                </div>
+              )}
+              <div style={S.sigBox}>
+                <div style={S.sigLine} />
+                <p style={S.sigName}>DESTRAVA CRÉDITO LTDA</p>
+                <p style={S.sigSub}>CNPJ: 35.427.182/0001-66</p>
+                <p style={S.sigSub}>CONTRATADA</p>
               </div>
-            ) : (
-              <div style={S.sigGrid}>
-                <div style={S.sigBox}>
-                  <div style={S.sigLine} />
-                  <p style={S.sigName}>{d.empresa_razao_social || 'CONTRATANTE'}</p>
-                  {d.empresa_cnpj && <p style={S.sigSub}>CNPJ: {d.empresa_cnpj}</p>}
-                  {d.empresa_representante && <p style={S.sigSub}>{d.empresa_representante}</p>}
-                  {d.empresa_cpf_representante && <p style={S.sigSub}>CPF: {d.empresa_cpf_representante}</p>}
-                  <p style={S.sigSub}>CONTRATANTE</p>
-                </div>
-                <div style={S.sigBox}>
-                  <div style={S.sigLine} />
-                  <p style={S.sigName}>DESTRAVA CRÉDITO LTDA</p>
-                  <p style={S.sigSub}>CNPJ: 35.427.182/0001-66</p>
-                  <p style={S.sigSub}>CONTRATADA</p>
-                </div>
+            </div>
+
+            {/* Assinatura(s) do(s) representante(s)/sócio(s) da contratante */}
+            {signatariosContratante.length > 0 && (
+              <div style={{ ...S.sigGrid, marginTop: '24px' }}>
+                {signatariosContratante.map((s, i) => (
+                  <div key={`${s.nome}-${i}`} style={S.sigBox}>
+                    <div style={S.sigLine} />
+                    <p style={S.sigName}>{s.nome}</p>
+                    {docSignatario(s) && <p style={S.sigSub}>CPF: {docSignatario(s)}</p>}
+                    {(s.cargo || s.qualificacao) && <p style={S.sigSub}>{s.cargo || s.qualificacao}</p>}
+                    <p style={S.sigSub}>ASSINANTE DA CONTRATANTE</p>
+                  </div>
+                ))}
               </div>
             )}
 

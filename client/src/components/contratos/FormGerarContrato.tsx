@@ -5,6 +5,17 @@ import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from '../..
 import { UploadDocumentos, type DocumentoAnexo } from './UploadDocumentos';
 
 interface Empresa  { id: string; razao_social: string; cnpj?: string; }
+interface SocioEmpresaContrato {
+  id?: string;
+  nome?: string;
+  cpf?: string;
+  documento?: string;
+  qualificacao?: string;
+  cargo?: string;
+  email?: string;
+  telefone?: string;
+  data_entrada?: string;
+}
 interface Lead     { id: string; nome?: string; razao_social?: string; cpf?: string; cnpj?: string; }
 interface ClientePF { id: string; nome: string; cpf?: string; telefone?: string; cidade?: string; uf?: string; }
 interface Parceiro { id: string; nome: string; cpf?: string; }
@@ -153,6 +164,11 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [taxaComissao, setTaxaComissao]       = useState('10');
   const [taxaDesistencia, setTaxaDesistencia] = useState('5');
   const [custeioMensal, setCusteioMensal]     = useState(formatBRLCurrency(250));
+  const [prazoContratoAssessoria, setPrazoContratoAssessoria] = useState('12');
+  const [modoAssinaturaContratante, setModoAssinaturaContratante] = useState<'responsavel' | 'socios'>('responsavel');
+  const [sociosEmpresaAssessoria, setSociosEmpresaAssessoria] = useState<SocioEmpresaContrato[]>([]);
+  const [sociosAssinantesIds, setSociosAssinantesIds] = useState<string[]>([]);
+  const [carregandoSociosAssessoria, setCarregandoSociosAssessoria] = useState(false);
 
   // ── Limpa Nome ──
   const [clienteTipo, setClienteTipo]         = useState<'empresa' | 'lead' | 'pf'>('lead');
@@ -301,6 +317,40 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
 
   useEffect(() => { void carregarListas(); }, []);
 
+  useEffect(() => {
+    const carregarSociosAssessoria = async () => {
+      if (tipoContrato !== 'assessoria' || !empresaId) {
+        setSociosEmpresaAssessoria([]);
+        setSociosAssinantesIds([]);
+        return;
+      }
+      const token = getToken() || '';
+      if (!token) return;
+      setCarregandoSociosAssessoria(true);
+      try {
+        const payload = await fetchJsonApi(`/api/empresas/${empresaId}/socios`, token);
+        const socios = extractArray<SocioEmpresaContrato>(payload, ['socios']);
+        setSociosEmpresaAssessoria(socios);
+        setSociosAssinantesIds(socios
+          .map((s, idx) => s.id || `idx-${idx}`)
+          .filter(Boolean));
+      } catch (error) {
+        console.warn('[FormGerarContrato] Sócios da empresa não carregados:', error);
+        setSociosEmpresaAssessoria([]);
+        setSociosAssinantesIds([]);
+      } finally {
+        setCarregandoSociosAssessoria(false);
+      }
+    };
+
+    void carregarSociosAssessoria();
+  }, [tipoContrato, empresaId]);
+
+  const sociosAssinantesAssessoria = sociosEmpresaAssessoria
+    .map((s, idx) => ({ ...s, _key: s.id || `idx-${idx}` }))
+    .filter(s => sociosAssinantesIds.includes(s._key))
+    .map(({ _key, ...s }) => s);
+
   const cls = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
   const lbl = 'block text-sm font-medium text-gray-700 mb-1';
 
@@ -312,6 +362,10 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     if (tipoContrato === 'assessoria') {
       if (!empresaId) errs.empresaId = 'Selecione uma empresa';
       if (!valorReferencia || Number(valorReferencia) < 1000) errs.valorReferencia = 'Valor mínimo: R$ 1.000,00';
+      if (!prazoContratoAssessoria || Number.parseInt(prazoContratoAssessoria, 10) <= 0) errs.prazoContratoAssessoria = 'Informe o prazo do contrato';
+      if (modoAssinaturaContratante === 'socios' && sociosEmpresaAssessoria.length > 0 && sociosAssinantesAssessoria.length === 0) {
+        errs.sociosAssinantesAssessoria = 'Selecione ao menos um sócio assinante';
+      }
     }
 
     if (tipoContrato === 'limpa_nome') {
@@ -368,6 +422,9 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         taxa_comissao: Number(taxaComissao),
         taxa_desistencia: Number(taxaDesistencia),
         custeio_mensal: unmaskCurrencyInput(custeioMensal),
+        prazo_contrato_meses: Number.parseInt(prazoContratoAssessoria, 10),
+        modo_assinatura_contratante: modoAssinaturaContratante,
+        socios_assinantes: modoAssinaturaContratante === 'socios' ? sociosAssinantesAssessoria : [],
         _documentosAnexos: documentosAnexos,
         data_assinatura: dataAssinatura,
         foro_eleito: foroEleito,
@@ -590,6 +647,77 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
             errorKey="contratadaIdAssessoria"
             obrigatoria={false}
           />
+
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>Prazo do contrato de assessoria *</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={prazoContratoAssessoria}
+                    onChange={e => setPrazoContratoAssessoria(e.target.value)}
+                    className={cls}
+                    placeholder="Ex: 12"
+                  />
+                  <span className="text-sm text-gray-600 whitespace-nowrap">meses</span>
+                </div>
+                {errors.prazoContratoAssessoria && <p className="text-red-500 text-xs mt-1">{errors.prazoContratoAssessoria}</p>}
+                <p className="text-[11px] text-gray-500 mt-1">Este prazo será inserido nas cláusulas de vigência e remuneração do contrato.</p>
+              </div>
+              <div>
+                <label className={lbl}>Quem assina pela contratante?</label>
+                <select value={modoAssinaturaContratante} onChange={e => setModoAssinaturaContratante(e.target.value as 'responsavel' | 'socios')} className={cls}>
+                  <option value="responsavel">Somente responsável principal</option>
+                  <option value="socios">Sócio(s) selecionado(s)</option>
+                </select>
+                <p className="text-[11px] text-gray-500 mt-1">Use sócios quando o contrato social exigir múltiplas assinaturas.</p>
+              </div>
+            </div>
+
+            {modoAssinaturaContratante === 'socios' && (
+              <div className="rounded-lg border border-blue-100 bg-white p-3">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <p className="text-sm font-semibold text-gray-700">Sócios assinantes da contratante</p>
+                  {carregandoSociosAssessoria && <span className="text-xs text-blue-600">Carregando sócios...</span>}
+                </div>
+                {sociosEmpresaAssessoria.length === 0 ? (
+                  <p className="text-xs text-amber-700">Nenhum sócio cadastrado para esta empresa. O contrato usará o responsável principal como assinante.</p>
+                ) : (
+                  <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                    {sociosEmpresaAssessoria.map((socio, idx) => {
+                      const key = socio.id || `idx-${idx}`;
+                      const checked = sociosAssinantesIds.includes(key);
+                      return (
+                        <label key={key} className="flex items-start gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-blue-50">
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={checked}
+                            onChange={e => {
+                              setSociosAssinantesIds(prev => e.target.checked
+                                ? Array.from(new Set([...prev, key]))
+                                : prev.filter(id => id !== key));
+                            }}
+                          />
+                          <span>
+                            <span className="font-semibold text-gray-800">{socio.nome || 'Sócio sem nome'}</span>
+                            <span className="block text-xs text-gray-500">
+                              {[socio.cpf || socio.documento, socio.qualificacao || socio.cargo].filter(Boolean).join(' • ') || 'Sem documento/qualificação'}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                {errors.sociosAssinantesAssessoria && <p className="text-red-500 text-xs mt-1">{errors.sociosAssinantesAssessoria}</p>}
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Valor de Referência (R$) *</label>

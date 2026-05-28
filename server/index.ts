@@ -4351,9 +4351,29 @@ Responda APENAS com um JSON válido no seguinte formato:
     };
     const brl = (valor: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number.isFinite(valor) ? valor : 0);
     const vigenciaExtenso = pctExtenso(vigenciaMeses);
+    const sociosAssinantes = Array.isArray(contratante.socios_assinantes)
+      ? contratante.socios_assinantes.filter((s: any) => String(s?.nome || '').trim())
+      : [];
+    const signatariosContratante = contratante.modo_assinatura === 'socios' && sociosAssinantes.length > 0
+      ? sociosAssinantes
+      : [{ nome: contratante.representante || contratante.razao_social, cpf: contratante.cpf_representante, cargo: 'Representante legal' }];
+    const assinaturaContratanteHtml = signatariosContratante.map((s: any) => `
+      <div class="sig-card">
+        <div class="sig-space"></div>
+        <div class="sig-line-bar"></div>
+        <p class="sig-name-label">${escapeHtmlContrato(s.nome || 'CONTRATANTE')}</p>
+        ${s.cpf ? `<p class="sig-detail">CPF: ${escapeHtmlContrato(s.cpf)}</p>` : ''}
+        ${s.cargo || s.qualificacao ? `<p class="sig-detail">${escapeHtmlContrato(s.cargo || s.qualificacao)}</p>` : ''}
+        <p class="sig-role">ASSINANTE DA CONTRATANTE</p>
+      </div>
+    `).join('');
+    const representantesTexto = signatariosContratante
+      .map((s: any) => `${s.nome || ''}${s.cpf ? `, CPF n° ${s.cpf}` : ''}${s.cargo || s.qualificacao ? `, ${s.cargo || s.qualificacao}` : ''}`)
+      .filter(Boolean)
+      .join('; ');
 
     const body = `
-<h1 class="doc-title">CONTRATO DE ANÁLISE DOCUMENTAL PARA ACESSO A LINHA DE CRÉDITO</h1>
+<h1 class="doc-title">CONTRATO DE ASSESSORIA EMPRESARIAL PARA ACESSO A LINHAS DE CRÉDITO</h1>
 
 ${blocoIdentificacaoContrato(contrato)}
 
@@ -4361,7 +4381,7 @@ ${blocoIdentificacaoContrato(contrato)}
 
 <p class="clause"><strong>CONTRATADA:</strong> denominada ${contratada.razao_social}, com sede na ${contratada.endereco_sede}, inscrita no CNPJ n° ${contratada.cnpj}, devidamente representada por: ${contratada.representante}, identificado como, ${contratada.cargo_representante} nesta data através da consulta do Quadro de Sócios e Administradores – QSA, disponibilizado pela República Federativa do Brasil – RFB, CPF n° ${contratada.cpf_representante}.</p>
 
-<p class="clause"><strong>CONTRATANTE:</strong> ${contratante.razao_social}, pessoa jurídica de direito privado, inscrita no CNPJ n° ${contratante.cnpj}, com sede em ${contratante.endereco}, neste ato representada por seu representante legal ${contratante.representante}, ${contratante.nacionalidade || 'brasileiro(a)'}, portador(a) do CPF n° ${contratante.cpf_representante}, conforme poderes que lhe são conferidos pelo contrato social e/ou procuração.</p>
+<p class="clause"><strong>CONTRATANTE:</strong> ${contratante.razao_social}, pessoa jurídica de direito privado, inscrita no CNPJ n° ${contratante.cnpj}, com sede em ${contratante.endereco}, neste ato representada por ${representantesTexto || contratante.representante || 'seu representante legal'}, conforme poderes que lhe são conferidos pelo contrato social e/ou procuração.</p>
 
 ${temParceiro ? `<p class="clause"><strong>PARCEIRO COMERCIAL:</strong> ${parceiro.nome}, pessoa física, inscrita no CPF n° ${parceiro.cpf}, indicada pela CONTRATANTE como parceira comercial para fins de acompanhamento e suporte nas atividades relacionadas ao presente contrato.</p>` : ''}
 
@@ -4398,20 +4418,20 @@ As comunicações, notificações, envio de relatórios e solicitações entre a
 
 <h2 class="section-title">V - DA REMUNERAÇÃO POR COMISSÃO E HONORÁRIO MÍNIMO</h2>
 
-<p class="clause"><strong>Cláusula 4</strong> - A CONTRATADA fará jus a comissão de <strong>${comissaoPct}% (${pctExtenso(comissaoPct)} por cento)</strong> sobre qualquer valor efetivamente liberado em favor da CONTRATANTE, no prazo de até 12 meses da entrega do relatório inicial. A CONTRATANTE compromete-se a comunicar qualquer operação de crédito aprovada e contratada dentro do período de vigência deste contrato e a fornecer cópia do contrato, comprovante de liberação e/ou extrato bancário correspondente.</p>
+<p class="clause"><strong>Cláusula 4</strong> - A CONTRATADA fará jus a comissão de <strong>${comissaoPct}% (${pctExtenso(comissaoPct)} por cento)</strong> sobre qualquer valor efetivamente liberado em favor da CONTRATANTE, no prazo de até ${vigenciaMeses} (${vigenciaExtenso}) meses da entrega do relatório inicial. A CONTRATANTE compromete-se a comunicar qualquer operação de crédito aprovada e contratada dentro do período de vigência deste contrato e a fornecer cópia do contrato, comprovante de liberação e/ou extrato bancário correspondente.</p>
 
 <p class="clause"><strong>4.1</strong> - A comissão deverá ser paga pela CONTRATANTE à CONTRATADA no prazo máximo de 1 (um) dia útil após a liberação do crédito, mediante transferência bancária para conta informada pela CONTRATADA.</p>
 
 <p class="clause"><strong>4.2</strong> - A CONTRATADA declara, que não realiza, direta ou indiretamente, qualquer tipo de pagamento, vantagem indevida, comissão oculta ou propina, seja a servidores públicos, agentes privados ou terceiros, sendo vedada qualquer prática que contrarie a legislação anticorrupção vigente (Lei nº 12.846/2013 e demais normas aplicáveis).</p>
 
-<p class="clause"><strong>4.3</strong> - Fica estabelecido que, caso a CONTRATANTE não contrate operações de crédito em valor igual ou superior a <strong>${valorRef}</strong> no período de vigência do contrato, 12 (doze) meses, por motivos causados por ela, será devido à CONTRATADA, a título de honorário mínimo garantido, o valor correspondente a <strong>${taxaDesistenciaPct}% (${pctExtenso(taxaDesistenciaPct)} por cento)</strong> sobre o valor de referência pretendido inicialmente, totalizando <strong>${brl(valorDesistencia)}</strong>.</p>
+<p class="clause"><strong>4.3</strong> - Fica estabelecido que, caso a CONTRATANTE não contrate operações de crédito em valor igual ou superior a <strong>${valorRef}</strong> no período de vigência do contrato, ${vigenciaMeses} (${vigenciaExtenso}) meses, por motivos causados por ela, será devido à CONTRATADA, a título de honorário mínimo garantido, o valor correspondente a <strong>${taxaDesistenciaPct}% (${pctExtenso(taxaDesistenciaPct)} por cento)</strong> sobre o valor de referência pretendido inicialmente, totalizando <strong>${brl(valorDesistencia)}</strong>.</p>
 
 <p class="clause"><strong>PARÁGRAFO ÚNICO - CAUSAS DE IMPEDIMENTO A CRÉDITO POR PARTE DA CONTRATANTE</strong><br>
 As causas de impedimento a crédito por parte da CONTRATANTE são: 1 – Apontamento, direto ou indireto (replicação) de restrição financeira, fiscal ou de simples protesto, inclusive em grupo econômico e cônjuge. 2 – Rating Bacen diferente de C, B ou A. 3 – Movimentação bancária inferior à declarada no faturamento bruto e quando exigido na declaração de imposto de renda. 4 – Anotação de apontamento de fraude documental ou ideológica no Banco Central. 5 – Mudança de endereço da sede empresarial sem comunicação prévia. 6 – Falta de comprovação de endereço da sede ou endereço divergente ao registrado nos órgãos competentes.</p>
 
 <p class="clause"><strong>4.4</strong> - O valor do honorário mínimo poderá ser cobrado integralmente ao final do contrato, ou em parcelas mensais, conforme acordo entre as partes.</p>
 
-<p class="clause"><strong>4.5</strong> - Caso a CONTRATANTE venha a contratar operações de crédito que, somadas, ultrapassem o valor de <strong>${valorRef}</strong> durante a vigência do contrato, 12 (doze) meses, a CONTRATADA renunciará ao recebimento do honorário mínimo, mantendo-se exclusivamente o direito à comissão de ${comissaoPct}% sobre o valor contratado.</p>
+<p class="clause"><strong>4.5</strong> - Caso a CONTRATANTE venha a contratar operações de crédito que, somadas, ultrapassem o valor de <strong>${valorRef}</strong> durante a vigência do contrato, ${vigenciaMeses} (${vigenciaExtenso}) meses, a CONTRATADA renunciará ao recebimento do honorário mínimo, mantendo-se exclusivamente o direito à comissão de ${comissaoPct}% sobre o valor contratado.</p>
 
 <p class="clause"><strong>4.6</strong> - Caso o Rating Bancário interno, no ato da abertura da conta ou após o término do primeiro ciclo de validação, seja inferior a <strong>"C"</strong>, será cobrado o valor mensal de <strong>${brl(custeioMensal)}</strong> a título de custeio do acompanhamento intensivo de extratos bancários, certidões fiscais e restrições comerciais ou bancárias, enquanto o Rating permanecer abaixo do nível "C".</p>
 
@@ -4481,22 +4501,22 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, 
     <div class="sig-card">
       <div class="sig-space"></div>
       <div class="sig-line-bar"></div>
-      <p class="sig-name-label">${contratante.razao_social}</p>
-      <p class="sig-detail">CNPJ: ${contratante.cnpj}</p>
+      <p class="sig-name-label">${escapeHtmlContrato(contratante.razao_social || 'CONTRATANTE')}</p>
+      <p class="sig-detail">CNPJ: ${escapeHtmlContrato(contratante.cnpj || '')}</p>
       <p class="sig-role">CONTRATANTE</p>
     </div>
     <div class="sig-card">
       <div class="sig-space"></div>
       <div class="sig-line-bar"></div>
-      <p class="sig-name-label">${parceiro.nome}</p>
-      <p class="sig-detail">CPF: ${parceiro.cpf}</p>
+      <p class="sig-name-label">${escapeHtmlContrato(parceiro.nome || '')}</p>
+      <p class="sig-detail">CPF: ${escapeHtmlContrato(parceiro.cpf || '')}</p>
       <p class="sig-role">PARCEIRO COMERCIAL</p>
     </div>
     <div class="sig-card">
       <div class="sig-space"></div>
       <div class="sig-line-bar"></div>
-      <p class="sig-name-label">DESTRAVA CRÉDITO LTDA</p>
-      <p class="sig-detail">CNPJ: ${contratada.cnpj}</p>
+      <p class="sig-name-label">${escapeHtmlContrato(contratada.razao_social || 'CONTRATADA')}</p>
+      <p class="sig-detail">CNPJ: ${escapeHtmlContrato(contratada.cnpj || '')}</p>
       <p class="sig-role">CONTRATADA</p>
     </div>
   </div>
@@ -4505,19 +4525,23 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, 
     <div class="sig-card">
       <div class="sig-space"></div>
       <div class="sig-line-bar"></div>
-      <p class="sig-name-label">${contratante.razao_social}</p>
-      <p class="sig-detail">CNPJ: ${contratante.cnpj}</p>
+      <p class="sig-name-label">${escapeHtmlContrato(contratante.razao_social || 'CONTRATANTE')}</p>
+      <p class="sig-detail">CNPJ: ${escapeHtmlContrato(contratante.cnpj || '')}</p>
       <p class="sig-role">CONTRATANTE</p>
     </div>
     <div class="sig-card">
       <div class="sig-space"></div>
       <div class="sig-line-bar"></div>
-      <p class="sig-name-label">DESTRAVA CRÉDITO LTDA</p>
-      <p class="sig-detail">CNPJ: ${contratada.cnpj}</p>
+      <p class="sig-name-label">${escapeHtmlContrato(contratada.razao_social || 'CONTRATADA')}</p>
+      <p class="sig-detail">CNPJ: ${escapeHtmlContrato(contratada.cnpj || '')}</p>
       <p class="sig-role">CONTRATADA</p>
     </div>
   </div>
   `}
+
+  <div class="sig-main-grid sig-main-grid--2" style="margin-top:28px;">
+    ${assinaturaContratanteHtml}
+  </div>
 
   <!-- ── Divisor entre assinaturas e testemunhas ── -->
   <div class="sig-divider"></div>
@@ -7239,6 +7263,7 @@ ${(temTest1 || temTest2) ? `
         contratada_id, responsavel_contrato_id,
         // campos contrato assessoria
         valor_referencia, taxa_comissao = 10, taxa_desistencia = 5, custeio_mensal = 250, percentual_multa,
+        prazo_contrato_meses = 12, modo_assinatura_contratante = 'responsavel', socios_assinantes = [],
         empresa_razao_social, empresa_cnpj, empresa_endereco,
         empresa_representante, empresa_cpf_representante,
         // campos contrato limpa nome
@@ -7757,6 +7782,7 @@ ${(temTest1 || temTest2) ? `
         5,
       );
       const custeioMensalNum = parseNumeroContrato(custeio_mensal, 250);
+      const prazoContratoMesesNum = Math.max(1, Math.trunc(parseNumeroContrato(prazo_contrato_meses, 12)) || 12);
 
       if (!valorReferenciaNum) {
         res.status(400).json({ error: 'Campos obrigatórios: valor_referencia, data_assinatura, foro_eleito' });
@@ -7823,6 +7849,8 @@ ${(temTest1 || temTest2) ? `
           endereco: empresa_endereco || enderecoEmpresaBanco,
           representante: empresa_representante || empresa?.responsavel_nome || empresa?.representante_nome || '',
           cpf_representante: empresa_cpf_representante || empresa?.responsavel_cpf || empresa?.representante_cpf || '',
+          socios_assinantes: Array.isArray(socios_assinantes) ? socios_assinantes : [],
+          modo_assinatura: modo_assinatura_contratante || 'responsavel',
         },
         responsavel_contrato: responsavelContratoAssessoria,
         parceiro: parceiro && parceiro.nome ? { nome: parceiro.nome, cpf: parceiro.cpf || '' } : null,
@@ -7841,7 +7869,7 @@ ${(temTest1 || temTest2) ? `
           }),
           cidade_assinatura: cidade_assinatura || empresa?.cidade || 'BRASÍLIA – DF',
           foro_eleito,
-          vigencia_meses: 12,
+          vigencia_meses: prazoContratoMesesNum,
         },
       };
 
