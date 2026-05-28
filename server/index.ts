@@ -14,6 +14,7 @@ import cnpjRouter from './routes/cnpj';
 import sociosDocumentosRouter from './routes/socios_documentos';
 import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
 import { gerarHtmlTimbrado, getPuppeteerHeaderTemplate, getPuppeteerFooterTemplate, getDocumentStyles, CONTRATADA_DADOS, getHtmlHeaderEmbutido, getHtmlFooterEmbutido } from "./letterhead.ts";
+import { DESTRAVA_LOGO_B64, PERMUPAY_LOGO_B64 } from "./logo_constants.ts";
 import {
   calcularReferenciasAcompanhamento,
   calcularTotaisSemana as calcTotaisSem,
@@ -5176,11 +5177,16 @@ tr:nth-child(even) td { background: #f4f7ff; }
     const endereco = contratada?.endereco || '';
     const corPrimaria = corContrato(contratada?.cor_primaria, '#1e3a8a');
     const corSecundaria = corContrato(contratada?.cor_secundaria, '#334155');
-    const logo = contratada?.mostrar_logo_contrato !== false ? (contratada?.logo_url || contratada?.logo_path || '') : '';
     const nomeNormalizado = String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const isPermuPay = nomeNormalizado.includes('permupay') || nomeNormalizado.includes('permu pay');
-    const logoHtml = logo
-      ? `<img class="brand-logo" src="${escapeHtmlContrato(logo)}" alt="${escapeHtmlContrato(nome)}" />`
+    const isDestrava = nomeNormalizado.includes('destrava');
+    // Usar base64 inline para logos conhecidas (URLs externas são bloqueadas pelo Puppeteer)
+    // Para outras contratadas, usar logo_url/logo_path normalmente (funciona no preview HTML)
+    let logoSrc = contratada?.mostrar_logo_contrato !== false ? (contratada?.logo_url || contratada?.logo_path || '') : '';
+    if (isDestrava) logoSrc = DESTRAVA_LOGO_B64;
+    else if (isPermuPay) logoSrc = PERMUPAY_LOGO_B64;
+    const logoHtml = logoSrc
+      ? `<img class="brand-logo" src="${logoSrc}" alt="${escapeHtmlContrato(nome)}" />`
       : isPermuPay
         ? `<div class="brand-wordmark brand-wordmark-permupay"><span>Permu</span><strong>Pay</strong></div>`
         : `<div class="brand-mark">${escapeHtmlContrato((nome || 'D').trim().charAt(0).toUpperCase())}</div>`;
@@ -5895,27 +5901,36 @@ ${(temTest1 || temTest2) ? `
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
 
-      // ── Cabeçalho: logo Destrava só na página 1
+      // ── Cabeçalho: logo da contratada (base64 inline) só na página 1
       // ── Rodapé: endereços só na última página
-      // Puppeteer substitui automaticamente as classes pageNumber e totalPages
+      // Nota: no headerTemplate/footerTemplate do Puppeteer:
+      //   - URLs externas são BLOQUEADAS → usar base64 inline obrigatoriamente
+      //   - JavaScript NÃO é executado → usar CSS counter para controle de página
+      const nomeContratadaPayload = String(payload?.contratada?.nome_fantasia || payload?.contratada?.razao_social || '').toLowerCase();
+      const isPermuPayContrato = nomeContratadaPayload.includes('permupay') || nomeContratadaPayload.includes('permu pay');
+      const logoB64Header = isPermuPayContrato ? PERMUPAY_LOGO_B64 : DESTRAVA_LOGO_B64;
+      const corBordaHeader = isPermuPayContrato ? '#0066CC' : '#1B3A8C';
+      const altLogoHeader = isPermuPayContrato ? 'PermuPay' : 'Destrava Crédito';
+
+      // Técnica: CSS counter-based page detection
+      // O Puppeteer injeta .pageNumber e .totalPages como spans com texto numérico.
+      // Usamos visibility:hidden no wrapper e o tornamos visível apenas via
+      // CSS :has() quando .pageNumber contém "1" — não funciona em todos os casos.
+      // Solução robusta: sempre mostrar o cabeçalho (Puppeteer não tem JS no template)
+      // e usar margem top generosa apenas na página 1 via @page :first no body.
       const headerTemplate = `
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           #header-wrap {
             width: 100%; padding: 6px 22mm 8px;
-            border-bottom: 2px solid #1B3A8C;
+            border-bottom: 2px solid ${corBordaHeader};
             display: flex; align-items: center; justify-content: center;
           }
-          img { height: 40px; max-width: 150px; object-fit: contain; }
+          img { height: 40px; max-width: 160px; object-fit: contain; display: block; }
         </style>
         <div id="header-wrap">
-          <img src="https://destravacredito.com/logo-destrava.png" alt="Destrava Crédito"/>
-        </div>
-        <script>
-          // Mostrar cabeçalho apenas na página 1
-          var pg = parseInt(document.querySelector('.pageNumber').textContent);
-          if (pg !== 1) document.getElementById('header-wrap').style.display = 'none';
-        </script>`;
+          <img src="${logoB64Header}" alt="${altLogoHeader}"/>
+        </div>`;
 
       const footerTemplate = `
         <style>
@@ -5941,16 +5956,17 @@ ${(temTest1 || temTest2) ? `
           if (pg !== total) document.getElementById('footer-wrap').style.display = 'none';
         </script>`;
 
+      // Logo e rodapé são embutidos diretamente no HTML (base64 inline):
+      // - <header class="page-header"> com logo base64 → aparece só na 1ª página (fluxo normal)
+      // - <footer class="page-footer"> com endereços → aparece só na última página (fluxo normal)
+      // Não usar displayHeaderFooter: o mecanismo do Puppeteer bloqueia URLs externas
+      // e não executa JavaScript nos templates.
       await page.pdf({
         path: filePath,
         format: 'A4',
         printBackground: true,
-        displayHeaderFooter: true,
-        headerTemplate,
-        footerTemplate,
-        // top: espaço para o cabeçalho (logo ~48px + padding)
-        // bottom: espaço para o rodapé (4 linhas ~52px)
-        margin: { top: '28mm', bottom: '30mm', left: '22mm', right: '22mm' },
+        displayHeaderFooter: false,
+        margin: { top: '14mm', bottom: '14mm', left: '22mm', right: '22mm' },
       });
     } finally {
       if (browser) await browser.close();
