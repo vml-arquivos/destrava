@@ -4667,31 +4667,14 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, 
       width: 100%;
     }
 
-    /* Rodapé fixo no final da página via Puppeteer */
-    .contract-footer-final {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      padding: 10px 22mm 8px;
-      border-top: 1px solid #e2e8f0;
-      background: #ffffff;
-      text-align: center;
-      font-size: 7.5pt;
-      color: #64748b;
-      line-height: 1.5;
-    }
-
-    /* Garante que o conteúdo não fique atrás do rodapé fixo */
-    body { padding-bottom: 28mm; }
+    /* Rodapé e cabeçalho são injetados via Puppeteer displayHeaderFooter */
+    /* Não usar position:fixed aqui — controlado pelo Puppeteer template */
   </style>
 </head>
 <body>
-  ${getHtmlHeaderEmbutido()}
   <main class="contract-content">
     ${body}
   </main>
-  ${getHtmlFooterEmbutido()}
 </body>
 </html>`;
   }
@@ -5911,12 +5894,63 @@ ${(temTest1 || temTest2) ? `
       });
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
+
+      // ── Cabeçalho: logo Destrava só na página 1
+      // ── Rodapé: endereços só na última página
+      // Puppeteer substitui automaticamente as classes pageNumber e totalPages
+      const headerTemplate = `
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          #header-wrap {
+            width: 100%; padding: 6px 22mm 8px;
+            border-bottom: 2px solid #1B3A8C;
+            display: flex; align-items: center; justify-content: center;
+          }
+          img { height: 40px; max-width: 150px; object-fit: contain; }
+        </style>
+        <div id="header-wrap">
+          <img src="https://destravacredito.com/logo-destrava.png" alt="Destrava Crédito"/>
+        </div>
+        <script>
+          // Mostrar cabeçalho apenas na página 1
+          var pg = parseInt(document.querySelector('.pageNumber').textContent);
+          if (pg !== 1) document.getElementById('header-wrap').style.display = 'none';
+        </script>`;
+
+      const footerTemplate = `
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          #footer-wrap {
+            width: 100%; padding: 8px 22mm 6px;
+            border-top: 1px solid #e2e8f0;
+            text-align: center;
+            font-family: Arial, sans-serif;
+            font-size: 7.5pt; color: #64748b; line-height: 1.5;
+          }
+        </style>
+        <div id="footer-wrap">
+          <strong>BRASÍLIA - SEDE</strong><br/>
+          St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250<br/>
+          <strong>GOIÂNIA - FILIAL</strong><br/>
+          Avenida Afonso Pena, qd-25 Alt. 05, S/N sala-02 setor Goiânia 2 CEP: 74665555 Goiânia-GO
+        </div>
+        <script>
+          // Mostrar rodapé apenas na última página
+          var pg = parseInt(document.querySelector('.pageNumber').textContent);
+          var total = parseInt(document.querySelector('.totalPages').textContent);
+          if (pg !== total) document.getElementById('footer-wrap').style.display = 'none';
+        </script>`;
+
       await page.pdf({
         path: filePath,
         format: 'A4',
         printBackground: true,
-        displayHeaderFooter: false,
-        margin: { top: '18mm', bottom: '18mm', left: '22mm', right: '22mm' },
+        displayHeaderFooter: true,
+        headerTemplate,
+        footerTemplate,
+        // top: espaço para o cabeçalho (logo ~48px + padding)
+        // bottom: espaço para o rodapé (4 linhas ~52px)
+        margin: { top: '28mm', bottom: '30mm', left: '22mm', right: '22mm' },
       });
     } finally {
       if (browser) await browser.close();
