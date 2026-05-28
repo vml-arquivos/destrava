@@ -1,5 +1,5 @@
 # ─── Stage 1: Build ────────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 RUN npm install -g pnpm@10.4.1
 
@@ -21,6 +21,9 @@ RUN pnpm exec esbuild server/index.ts \
     --bundle \
     --format=esm \
     --outdir=dist
+
+# Copiar assets de logos para dist/assets (lidos em runtime pelo logo_constants.ts)
+RUN mkdir -p dist/assets && cp -r server/assets/. dist/assets/
 
 # ─── Stage 2: Production ───────────────────────────────────────────────────────
 # node:20-slim (Debian) — Chromium via apt é muito mais leve que Alpine
