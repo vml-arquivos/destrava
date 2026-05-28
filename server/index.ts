@@ -4418,61 +4418,70 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, 
 
 <p class="city-date"><strong>${cidadeAss}, ${dataAss}.</strong></p>
 
-<div class="signature-section">
+<div class="signature-section" style="page-break-inside: avoid; break-inside: avoid;">
+
+  <!-- Bloco de assinaturas principais -->
   ${temParceiro ? `
-  <div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr; max-width: 180mm;">
-    <div class="signature-party">
+  <div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr; max-width: 190mm; gap: 10mm;">
+    <div class="signature-party" style="min-height: 90px;">
+      <div style="height: 56px;"></div>
       <div class="sig-line"></div>
       <p class="sig-name">${contratante.razao_social}</p>
       <p class="sig-sub">CNPJ: ${contratante.cnpj}</p>
-      <p class="sig-sub">CONTRATANTE</p>
+      <p class="sig-sub" style="font-weight:700; color:#1e3a5f; letter-spacing:0.04em; text-transform:uppercase;">CONTRATANTE</p>
     </div>
-    <div class="signature-party">
+    <div class="signature-party" style="min-height: 90px;">
+      <div style="height: 56px;"></div>
       <div class="sig-line"></div>
       <p class="sig-name">${parceiro.nome}</p>
       <p class="sig-sub">CPF: ${parceiro.cpf}</p>
-      <p class="sig-sub">PARCEIRO COMERCIAL</p>
+      <p class="sig-sub" style="font-weight:700; color:#1e3a5f; letter-spacing:0.04em; text-transform:uppercase;">PARCEIRO COMERCIAL</p>
     </div>
-    <div class="signature-party">
+    <div class="signature-party" style="min-height: 90px;">
+      <div style="height: 56px;"></div>
       <div class="sig-line"></div>
       <p class="sig-name">DESTRAVA CRÉDITO LTDA</p>
       <p class="sig-sub">CNPJ: ${contratada.cnpj}</p>
-      <p class="sig-sub">CONTRATADA</p>
+      <p class="sig-sub" style="font-weight:700; color:#1e3a5f; letter-spacing:0.04em; text-transform:uppercase;">CONTRATADA</p>
     </div>
   </div>
   ` : `
-  <div class="signature-grid">
-    <div class="signature-party">
+  <div class="signature-grid" style="max-width: 160mm; gap: 20mm;">
+    <div class="signature-party" style="min-height: 90px;">
+      <div style="height: 56px;"></div>
       <div class="sig-line"></div>
       <p class="sig-name">${contratante.razao_social}</p>
       <p class="sig-sub">CNPJ: ${contratante.cnpj}</p>
-      <p class="sig-sub">CONTRATANTE</p>
+      <p class="sig-sub" style="font-weight:700; color:#1e3a5f; letter-spacing:0.04em; text-transform:uppercase;">CONTRATANTE</p>
     </div>
-    <div class="signature-party">
+    <div class="signature-party" style="min-height: 90px;">
+      <div style="height: 56px;"></div>
       <div class="sig-line"></div>
       <p class="sig-name">DESTRAVA CRÉDITO LTDA</p>
       <p class="sig-sub">CNPJ: ${contratada.cnpj}</p>
-      <p class="sig-sub">CONTRATADA</p>
+      <p class="sig-sub" style="font-weight:700; color:#1e3a5f; letter-spacing:0.04em; text-transform:uppercase;">CONTRATADA</p>
     </div>
   </div>
   `}
-</div>
 
-<div class="page-break"></div>
+  <!-- Testemunhas — na mesma página, abaixo das assinaturas -->
+  <div class="witness-grid" style="max-width: 160mm; margin: 28px auto 0; page-break-inside: avoid; break-inside: avoid;">
+    <div class="witness-box" style="min-height: 80px;">
+      <p style="font-size:8pt; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#1e3a5f; margin:0 0 6px;">Testemunha 1</p>
+      <div style="height: 36px;"></div>
+      <div class="sig-line"></div>
+      <p class="sig-sub">Nome: ___________________________________</p>
+      <p class="sig-sub">CPF: ____________________________________</p>
+    </div>
+    <div class="witness-box" style="min-height: 80px;">
+      <p style="font-size:8pt; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#1e3a5f; margin:0 0 6px;">Testemunha 2</p>
+      <div style="height: 36px;"></div>
+      <div class="sig-line"></div>
+      <p class="sig-sub">Nome: ___________________________________</p>
+      <p class="sig-sub">CPF: ____________________________________</p>
+    </div>
+  </div>
 
-<div class="witness-grid" style="max-width: 160mm; margin: 40px auto 0;">
-  <div class="witness-box">
-    <p style="font-size:8pt; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#1e3a5f; margin:0 0 8px;">Testemunha 1</p>
-    <div class="sig-line"></div>
-    <p class="sig-sub">Nome: ___________________________________</p>
-    <p class="sig-sub">CPF: ____________________________________</p>
-  </div>
-  <div class="witness-box">
-    <p style="font-size:8pt; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:#1e3a5f; margin:0 0 8px;">Testemunha 2</p>
-    <div class="sig-line"></div>
-    <p class="sig-sub">Nome: ___________________________________</p>
-    <p class="sig-sub">CPF: ____________________________________</p>
-  </div>
 </div>
 `;
 
