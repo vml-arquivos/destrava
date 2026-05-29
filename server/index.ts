@@ -10,6 +10,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { auth } from "./middleware/auth.ts";
 import { authorize, requirePermissao } from "./middleware/authorize.ts";
+import { setAuditoriaPool, registrarAuditoria, rotaAuditLogs } from "./middleware/auditoria.ts";
 import { getPermissoes, temPermissao, LISTA_CARGOS_VALIDOS, nivelHierarquico, podeGerenciar as _podeGerenciar, cargosGerenciaveis as _cargosGerenciaveis } from "../shared/cargos.ts";
 import cnpjRouter from './routes/cnpj';
 import sociosDocumentosRouter from './routes/socios_documentos';
@@ -41,6 +42,7 @@ const pool = new Pool({
 pool.on("error", (err) => {
   console.error("[DB] Erro inesperado no pool:", err.message);
 });
+setAuditoriaPool(pool);
 
 // Testa a conexão ao iniciar
 pool.query("SELECT 1").then(() => {
@@ -2850,6 +2852,13 @@ async function startServer() {
         });
       }
 
+      await registrarAuditoria(req, {
+        acao: 'lead.etapa_alterada',
+        entidade: 'lead',
+        entidade_id: Number(lead_id) || null,
+        dados_antes: { etapa_funil: atuais[0]?.etapa_funil },
+        dados_depois: { etapa_funil: etapaNormalizada },
+      });
       res.json({ success: true, etapa_funil: etapaNormalizada, responsavel_id: responsavelFinal });
     } catch (err: any) {
       console.error("[POST /api/crm/mover-funil] erro", {
@@ -3009,6 +3018,10 @@ async function startServer() {
   });
 
   // ─── POST /api/admin/sql ──────────────────────────────────────────────────────────────────────────────────────
+
+  // ─── Logs de Auditoria ───────────────────────────────────────────────────────
+  app.get("/api/admin/audit-logs", auth, authorize(["Administrador", "Diretor"]), rotaAuditLogs(pool));
+
   app.post("/api/admin/sql", auth, authorize(["Administrador"]), async (req: Request, res: Response) => {
     try {
       const { query } = req.body;
@@ -7962,15 +7975,21 @@ ${(temTest1 || temTest2) ? `
         contrato_id: contrato.id,
         numero_contrato: payload.contrato.numero_contrato,
         protocolo_contrato: payload.contrato.protocolo_contrato,
-        pdf_url: pdfUrl,
+                pdf_url: pdfUrl,
         hash_documento: hash,
         created_at: contrato.created_at,
       });
+      dispararN8n('contrato.gerado', {
+        contrato_id: contrato.id,
+        tipo: 'assessoria',
+        empresa_id: empresa_id || null,
+        lead_id: lead_id || null,
+        pdf_url: pdfUrl,
+      }).catch(() => {});
     } catch (err: any) {
       const message = err?.message || 'Erro desconhecido';
       const code = err?.code || undefined;
       const detail = err?.detail || undefined;
-
       console.error('[POST /api/contratos/gerar]', {
         message,
         code,
@@ -11023,6 +11042,222 @@ ${(temTest1 || temTest2) ? `
   });
 
   // ── FIM DO MÓDULO: ACOMPANHAMENTO FINANCEIRO SEMANAL ────────────────────────
+
+
+  // ─── Analytics: Funil de Conversão ──────────────────────────────────────────
+  /**
+   * GET /api/stats/funil
+   * Retorna contagem e taxa de conversão entre etapas do funil.
+   */
+  app.get("/api/stats/funil", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const periodo = (req.query.periodo as string) || '30d';
+      let dataInicio: string | null = null;
+      if (periodo === '7d')  dataInicio = new Date(Date.now() - 7  * 86400000).toISOString();
+      if (periodo === '30d') dataInicio = new Date(Date.now() - 30 * 86400000).toISOString();
+      if (periodo === '90d') dataInicio = new Date(Date.now() - 90 * 86400000).toISOString();
+
+      const params: any[] = [];
+      const conds: string[] = [];
+      if (dataInicio) { params.push(dataInicio); conds.push(`created_at >= $${params.length}`); }
+      if (!colaboradorPodeVerTudo(colaborador) && colaborador?.id) {
+        params.push(colaborador.id); conds.push(`responsavel_id = $${params.length}`);
+      }
+      const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+
+      const { rows } = await pool.query(
+        `SELECT
+           COALESCE(NULLIF(TRIM(etapa_funil), ''), 'novo') AS etapa,
+           COUNT(*) AS total
+         FROM leads ${where}
+         GROUP BY 1
+         ORDER BY 1`,
+        params
+      );
+
+      // Ordem canônica das etapas
+      const ORDEM = [
+        'novo', 'contato', 'qualificado', 'proposta', 'negociacao',
+        'documentacao', 'analise', 'aprovado', 'ganho', 'perdido'
+      ];
+
+      const mapa: Record<string, number> = {};
+      rows.forEach((r: any) => { mapa[r.etapa] = Number(r.total); });
+
+      const etapas = ORDEM.map((etapa, i) => {
+        const total = mapa[etapa] || 0;
+        const anterior = i > 0 ? (mapa[ORDEM[i - 1]] || 0) : null;
+        const taxa_conversao = anterior && anterior > 0 ? Math.round((total / anterior) * 100) : null;
+        return { etapa, total, taxa_conversao };
+      });
+
+      // Adicionar etapas não mapeadas na ordem canônica
+      Object.keys(mapa).forEach(etapa => {
+        if (!ORDEM.includes(etapa)) {
+          etapas.push({ etapa, total: mapa[etapa], taxa_conversao: null });
+        }
+      });
+
+      const totalAtivos = etapas
+        .filter(e => !['ganho', 'perdido'].includes(e.etapa))
+        .reduce((s, e) => s + e.total, 0);
+
+      const totalGanho = mapa['ganho'] || 0;
+      const totalPerdido = mapa['perdido'] || 0;
+      const taxaFechamento = totalAtivos + totalGanho + totalPerdido > 0
+        ? Math.round((totalGanho / (totalAtivos + totalGanho + totalPerdido)) * 100)
+        : 0;
+
+      res.json({
+        etapas: etapas.filter(e => e.total > 0),
+        total_ativos: totalAtivos,
+        total_ganho: totalGanho,
+        total_perdido: totalPerdido,
+        taxa_fechamento: taxaFechamento,
+        periodo,
+      });
+    } catch (err: any) {
+      console.error("[GET /api/stats/funil]", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── FIM DO MÓDULO: Analytics ─────────────────────────────────────────────────
+
+
+  // ─── MÓDULO: IA / RECOMENDAÇÕES ─────────────────────────────────────────────
+
+  /**
+   * POST /api/ia/recomendacoes
+   * Gera recomendações de ações para um lead com base nos dados do CRM.
+   * Body: { lead_id: number }
+   */
+  app.post("/api/ia/recomendacoes", auth, async (req: Request, res: Response) => {
+    try {
+      const { lead_id } = req.body;
+      if (!lead_id) return res.status(400).json({ error: "lead_id obrigatório" });
+
+      const leadResult = await pool.query(
+        `SELECT l.*, e.razao_social, e.cnpj, e.score_interno, e.risco_classificacao
+         FROM leads l
+         LEFT JOIN empresas e ON l.empresa_id = e.id
+         WHERE l.id = $1`,
+        [lead_id]
+      );
+      if (leadResult.rows.length === 0) return res.status(404).json({ error: "Lead não encontrado" });
+      const lead = leadResult.rows[0];
+
+      // Buscar histórico de interações
+      const historico = await pool.query(
+        `SELECT tipo, descricao, criado_em FROM interacoes WHERE lead_id = $1 ORDER BY criado_em DESC LIMIT 10`,
+        [lead_id]
+      ).catch(() => ({ rows: [] }));
+
+      const prompt = `Você é um consultor de crédito empresarial da Destrava Crédito.
+Analise os dados do lead abaixo e gere 3 a 5 recomendações práticas de ações para avançar na negociação.
+Responda em JSON com o campo "recomendacoes" (array de objetos com "titulo", "descricao", "prioridade": "alta"|"media"|"baixa", "tipo": "contato"|"documento"|"proposta"|"followup"|"alerta").
+
+Dados do lead:
+- Nome: ${lead.nome_completo || lead.nome}
+- Empresa: ${lead.razao_social || "Pessoa Física"}
+- CNPJ: ${lead.cnpj || "N/A"}
+- Etapa do funil: ${lead.etapa_funil}
+- Valor solicitado: R$ ${lead.valor_solicitado || 0}
+- Temperatura: ${lead.temperatura || "morno"}
+- Score: ${lead.score_efetivo || lead.score_ia || "N/A"}
+- Risco: ${lead.risco_classificacao || lead.risco || "N/A"}
+- Próximo follow-up: ${lead.proximo_followup || "não agendado"}
+- Histórico recente: ${historico.rows.map((h: any) => `${h.tipo}: ${h.descricao}`).join("; ") || "sem histórico"}`;
+
+      const { OpenAI } = await import("openai");
+      const openai = new OpenAI();
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        max_tokens: 800,
+        temperature: 0.4,
+      });
+
+      const resposta = JSON.parse(completion.choices[0].message.content || "{}");
+      res.json({
+        lead_id,
+        recomendacoes: resposta.recomendacoes || [],
+        gerado_em: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error("[POST /api/ia/recomendacoes]", err);
+      res.status(500).json({ error: err.message || "Erro ao gerar recomendações" });
+    }
+  });
+
+  /**
+   * GET /api/ia/resumo/:leadId
+   * Gera um resumo executivo do histórico e situação atual do lead.
+   */
+  app.get("/api/ia/resumo/:leadId", auth, async (req: Request, res: Response) => {
+    try {
+      const { leadId } = req.params;
+
+      const leadResult = await pool.query(
+        `SELECT l.*, e.razao_social, e.cnpj, e.score_interno, e.risco_classificacao
+         FROM leads l
+         LEFT JOIN empresas e ON l.empresa_id = e.id
+         WHERE l.id = $1`,
+        [leadId]
+      );
+      if (leadResult.rows.length === 0) return res.status(404).json({ error: "Lead não encontrado" });
+      const lead = leadResult.rows[0];
+
+      const historico = await pool.query(
+        `SELECT tipo, descricao, criado_em FROM interacoes WHERE lead_id = $1 ORDER BY criado_em DESC LIMIT 20`,
+        [leadId]
+      ).catch(() => ({ rows: [] }));
+
+      const contratos = await pool.query(
+        `SELECT tipo_contrato, status, criado_em FROM contratos_gerados WHERE lead_id = $1 ORDER BY criado_em DESC LIMIT 5`,
+        [leadId]
+      ).catch(() => ({ rows: [] }));
+
+      const prompt = `Você é um consultor de crédito empresarial da Destrava Crédito.
+Gere um resumo executivo conciso (máximo 200 palavras) sobre o lead abaixo, destacando:
+1. Situação atual no funil
+2. Principais pontos de atenção
+3. Próximos passos sugeridos
+Responda em JSON com "resumo" (texto) e "pontos_atencao" (array de strings).
+
+Lead: ${lead.nome_completo || lead.nome} | ${lead.razao_social || "PF"} | Etapa: ${lead.etapa_funil}
+Valor: R$ ${lead.valor_solicitado || 0} | Score: ${lead.score_efetivo || lead.score_ia || "N/A"} | Risco: ${lead.risco_classificacao || "N/A"}
+Contratos: ${contratos.rows.map((c: any) => c.tipo_contrato).join(", ") || "nenhum"}
+Histórico: ${historico.rows.slice(0, 10).map((h: any) => `${h.tipo}: ${h.descricao}`).join("; ") || "sem histórico"}`;
+
+      const { OpenAI } = await import("openai");
+      const openai = new OpenAI();
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        max_tokens: 500,
+        temperature: 0.3,
+      });
+
+      const resposta = JSON.parse(completion.choices[0].message.content || "{}");
+      res.json({
+        lead_id: Number(leadId),
+        resumo: resposta.resumo || "",
+        pontos_atencao: resposta.pontos_atencao || [],
+        gerado_em: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error("[GET /api/ia/resumo/:leadId]", err);
+      res.status(500).json({ error: err.message || "Erro ao gerar resumo" });
+    }
+  });
+
+  // ── FIM DO MÓDULO: IA / RECOMENDAÇÕES ────────────────────────────────────────
+
+
 
 
 

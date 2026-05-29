@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import FAQSchema from "@/components/FAQSchema";
+import SEO from "@/components/SEO";
 
 import { faqData, FAQItem } from "@/data/faqData";
 import { Input } from "@/components/ui/input";
@@ -77,6 +78,11 @@ export default function FAQ() {
     <div className="min-h-screen flex flex-col">
       <FAQSchema />
       <Header />
+      <SEO
+        title="FAQ — Perguntas Frequentes sobre Crédito Empresarial"
+        description="Tire suas dúvidas sobre crédito empresarial, PRONAMPE, FAMPE, FCO, Giro CAIXA Fácil e outros produtos da Destrava Crédito."
+        keywords="FAQ, crédito empresarial, dúvidas, PRONAMPE, FAMPE, FCO"
+      />
 
       {/* Hero Section */}
       <section className="bg-gradient-to-r from-[var(--color-caixa-blue)] to-[var(--color-caixa-blue-dark)] py-8 md:py-16 text-white">

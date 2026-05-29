@@ -1,10 +1,16 @@
 import Header from "@/components/Header";
+import SEO from "@/components/SEO";
 import Footer from "@/components/Footer";
 
 export default function PoliticaPrivacidade() {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
+      <SEO
+        title="Política de Privacidade — Destrava Crédito"
+        description="Leia a política de privacidade da Destrava Crédito e saiba como seus dados são tratados."
+        keywords="política de privacidade, LGPD, dados pessoais"
+      />
 
       <section className="py-20">
         <div className="container">

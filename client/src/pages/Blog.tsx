@@ -5,10 +5,17 @@ import { Link } from "wouter";
 import { Calendar, Clock, ArrowRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import SEO from "@/components/SEO";
 
 export default function Blog() {
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO
+        title="Blog — Crédito Empresarial e Gestão Financeira"
+        description="Artigos sobre crédito empresarial, PRONAMPE, FAMPE, FCO, gestão financeira e dicas para pequenos e médios negócios."
+        keywords="crédito empresarial, PRONAMPE, FAMPE, FCO, gestão financeira, PME, blog"
+        type="website"
+      />
       <Header />
 
       {/* Hero */}

@@ -1,10 +1,16 @@
 import Header from "@/components/Header";
+import SEO from "@/components/SEO";
 import Footer from "@/components/Footer";
 
 export default function TermosUso() {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
+      <SEO
+        title="Termos de Uso — Destrava Crédito"
+        description="Leia os termos de uso da plataforma Destrava Crédito."
+        keywords="termos de uso, condições, Destrava Crédito"
+      />
 
       <section className="py-20">
         <div className="container">

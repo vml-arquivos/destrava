@@ -45,6 +45,14 @@ interface EmpresaRow {
 }
 interface Colaborador { id: string; nome: string; cargo: string; }
 interface ColaboradoresFiltro { captacao: Colaborador[]; atendimento: Colaborador[]; }
+interface FunilEtapa { etapa: string; total: number; taxa_conversao: number | null; }
+interface FunilStats {
+  etapas: FunilEtapa[];
+  total_ativos: number;
+  total_ganho: number;
+  total_perdido: number;
+  taxa_fechamento: number;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmt = (v: number) => v?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) ?? "R$ 0,00";
@@ -91,6 +99,7 @@ export default function Dashboard() {
 
   // Aba ativa do ranking
   const [rankingAba, setRankingAba] = useState<"captadores" | "analistas">("captadores");
+  const [funilStats, setFunilStats] = useState<FunilStats | null>(null);
 
   const cargo = (colaborador?.cargo || "").toLowerCase();
   const isGestor  = CARGOS_GESTOR.includes(cargo);
@@ -139,15 +148,17 @@ export default function Dashboard() {
         apiFetch("/api/leads").catch(() => []),
         apiFetch("/api/simulacoes").catch(() => []),
         apiFetch("/api/triagem/stats").catch(() => ({})),
+        apiFetch(`/api/stats/funil?${params}`).catch(() => null),
       ];
       if (isCaptador || isAnalista) {
         promises.push(apiFetch("/api/empresas").catch(() => []));
       }
 
       const results = await Promise.all(promises);
-      const [statsData, leadsData, simsData, triagemData, empresasData] = results;
+      const [statsData, leadsData, simsData, triagemData, funilData, empresasData] = results;
 
       if (statsData) setStats(statsData);
+      if (funilData) setFunilStats(funilData);
 
       const leadsArr: LeadRow[] = Array.isArray(leadsData) ? leadsData : (leadsData?.leads ?? []);
       setLeadsRecentes(leadsArr.slice(0, 5));
@@ -454,6 +465,58 @@ export default function Dashboard() {
                       <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Funil de Conversão */}
+              {funilStats && funilStats.etapas.length > 0 && (
+                <div className="bg-white rounded-xl border shadow-sm p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">Funil de Conversão</h3>
+                      <p className="text-xs text-gray-500 mt-0.5">Taxa de passagem entre etapas</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-emerald-600">{funilStats.taxa_fechamento}%</p>
+                      <p className="text-xs text-gray-400">taxa de fechamento</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {funilStats.etapas.map((etapa, i) => {
+                      const maxTotal = Math.max(...funilStats.etapas.map(e => e.total));
+                      const pct = maxTotal > 0 ? Math.round((etapa.total / maxTotal) * 100) : 0;
+                      const colors = ['ganho','aprovado'].includes(etapa.etapa)
+                        ? 'bg-emerald-500' : etapa.etapa === 'perdido'
+                        ? 'bg-red-400' : 'bg-blue-500';
+                      return (
+                        <div key={etapa.etapa} className="flex items-center gap-3">
+                          <div className="w-24 text-xs text-gray-500 capitalize text-right shrink-0">
+                            {etapa.etapa.replace(/_/g, ' ')}
+                          </div>
+                          <div className="flex-1 h-6 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${colors} transition-all duration-700 flex items-center justify-end pr-2`}
+                              style={{ width: `${Math.max(pct, 4)}%` }}
+                            >
+                              <span className="text-[10px] text-white font-bold">{etapa.total}</span>
+                            </div>
+                          </div>
+                          {etapa.taxa_conversao !== null && i > 0 && (
+                            <div className="w-12 text-xs text-right shrink-0">
+                              <span className={etapa.taxa_conversao >= 50 ? 'text-emerald-600 font-semibold' : 'text-amber-600'}>
+                                {etapa.taxa_conversao}%
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-4 pt-3 border-t flex gap-4 text-xs text-gray-500">
+                    <span><span className="font-semibold text-gray-800">{funilStats.total_ativos}</span> ativos</span>
+                    <span><span className="font-semibold text-emerald-600">{funilStats.total_ganho}</span> ganhos</span>
+                    <span><span className="font-semibold text-red-500">{funilStats.total_perdido}</span> perdidos</span>
+                  </div>
                 </div>
               )}
             </div>

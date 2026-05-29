@@ -1,4 +1,5 @@
 import Header from "@/components/Header";
+import SEO, { serviceStructuredData } from "@/components/SEO";
 import Footer from "@/components/Footer";
 import CTAButton from "@/components/CTAButton";
 import {
@@ -16,6 +17,12 @@ export default function GiroCaixaFacil() {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
+      <SEO
+        title="Giro CAIXA Fácil — Crédito para Capital de Giro"
+        description="Linha de crédito Giro CAIXA Fácil para capital de giro empresarial. Taxas competitivas, processo simplificado. Simule agora."
+        keywords="Giro CAIXA Fácil, capital de giro, crédito empresarial, CAIXA"
+        structuredData={serviceStructuredData("Giro CAIXA Fácil", "Linha de crédito para capital de giro empresarial com taxas competitivas e processo simplificado.")}
+      />
 
       {/* Hero */}
       <section className="bg-gradient-to-br from-primary to-[var(--color-caixa-blue-dark)] text-white py-20">

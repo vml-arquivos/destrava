@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import NotificacoesFollowup from "@/components/NotificacoesFollowup";
 import {
   LayoutDashboard,
   Calculator,
@@ -295,6 +296,7 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
                 {colaborador?.nome?.split(" ")[0] || "Colaborador"}
               </strong>
             </span>
+            <NotificacoesFollowup />
             <Link href="/colaborador/meu-perfil">
               <a className="inline-flex items-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
                 <User className="h-4 w-4 mr-1" />
