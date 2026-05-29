@@ -11255,6 +11255,283 @@ Histórico: ${historico.rows.slice(0, 10).map((h: any) => `${h.tipo}: ${h.descri
     }
   });
 
+
+  // ─── MÓDULO: IA / CLASSIFICAÇÃO DE DOCUMENTOS ────────────────────────────────
+  /**
+   * POST /api/ia/classificar-documento
+   * Classifica um documento enviado (base64 ou URL) usando visão do GPT-4.1-mini.
+   * Body: { documento_id, empresa_id?, lead_id?, consentimento: true }
+   * Retorna: { tipo, descricao, confianca }
+   */
+  app.post("/api/ia/classificar-documento", auth, async (req: Request, res: Response) => {
+    try {
+      const { documento_id, empresa_id, lead_id, consentimento } = req.body;
+      if (!consentimento) {
+        return res.status(400).json({ error: "Consentimento do cliente é obrigatório (LGPD)" });
+      }
+      if (!documento_id) {
+        return res.status(400).json({ error: "documento_id é obrigatório" });
+      }
+
+      // Buscar documento no banco
+      let docRow: any = null;
+      if (empresa_id) {
+        const r = await pool.query(
+          "SELECT * FROM empresa_documentos WHERE id = $1 AND empresa_id = $2",
+          [documento_id, empresa_id]
+        );
+        docRow = r.rows[0];
+      } else if (lead_id) {
+        const r = await pool.query(
+          "SELECT * FROM documentos_leads WHERE id = $1 AND lead_id = $2",
+          [documento_id, lead_id]
+        ).catch(() => ({ rows: [] }));
+        docRow = r.rows[0];
+      }
+
+      if (!docRow) {
+        return res.status(404).json({ error: "Documento não encontrado" });
+      }
+
+      const nomeArquivo = docRow.nome || docRow.url || "";
+      const ext = nomeArquivo.split(".").pop()?.toLowerCase() || "";
+      const isPdf = ext === "pdf";
+      const isImage = ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
+
+      const { OpenAI } = await import("openai");
+      const openai = new OpenAI();
+
+      let classificacao: any;
+
+      if (isImage && docRow.url) {
+        // Usar vision para imagens
+        const dataDir = process.env.DATA_DIR || "/data";
+        const filePath = path.join(dataDir, docRow.url.replace(/^\//, ""));
+        let imageContent: any;
+
+        if (fs.existsSync(filePath)) {
+          const buffer = fs.readFileSync(filePath);
+          const base64 = buffer.toString("base64");
+          const mimeType = ext === "png" ? "image/png" : "image/jpeg";
+          imageContent = {
+            type: "image_url" as const,
+            image_url: { url: `data:${mimeType};base64,${base64}` },
+          };
+        } else {
+          imageContent = { type: "text" as const, content: `Arquivo: ${nomeArquivo}` };
+        }
+
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4.1-mini",
+          messages: [{
+            role: "user",
+            content: [
+              imageContent,
+              {
+                type: "text",
+                text: `Classifique este documento empresarial. Responda em JSON com:
+"tipo": um dos valores ["rg", "cnh", "cpf", "cnpj_cartao", "contrato_social", "balanco", "dre", "extrato_bancario", "comprovante_residencia", "procuracao", "certidao_negativa", "nota_fiscal", "contrato_credito", "outro"]
+"descricao": breve descrição do que é o documento (máx 80 chars)
+"confianca": número de 0 a 1 indicando certeza da classificação`,
+              },
+            ],
+          }],
+          response_format: { type: "json_object" },
+          max_tokens: 200,
+        });
+        classificacao = JSON.parse(completion.choices[0].message.content || "{}");
+      } else {
+        // Para PDFs e outros, classificar pelo nome do arquivo
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4.1-mini",
+          messages: [{
+            role: "user",
+            content: `Classifique o documento pelo nome do arquivo: "${nomeArquivo}".
+Responda em JSON com:
+"tipo": um dos valores ["rg", "cnh", "cpf", "cnpj_cartao", "contrato_social", "balanco", "dre", "extrato_bancario", "comprovante_residencia", "procuracao", "certidao_negativa", "nota_fiscal", "contrato_credito", "outro"]
+"descricao": breve descrição do que é o documento (máx 80 chars)
+"confianca": número de 0 a 1 indicando certeza da classificação`,
+          }],
+          response_format: { type: "json_object" },
+          max_tokens: 200,
+          temperature: 0.2,
+        });
+        classificacao = JSON.parse(completion.choices[0].message.content || "{}");
+      }
+
+      const tipo = classificacao.tipo || "outro";
+      const descricao = classificacao.descricao || "";
+      const confianca = classificacao.confianca || 0;
+
+      // Atualizar tipo no banco
+      if (empresa_id) {
+        await pool.query(
+          "UPDATE empresa_documentos SET tipo = $1 WHERE id = $2",
+          [tipo, documento_id]
+        ).catch(() => {});
+      }
+
+      // Registrar auditoria
+      await registrarAuditoria(req, {
+        acao: "documento.classificado",
+        entidade: empresa_id ? "empresa_documento" : "lead_documento",
+        entidade_id: documento_id,
+        dados_depois: { tipo, confianca },
+      }).catch(() => {});
+
+      res.json({ documento_id, tipo, descricao, confianca, classificado_em: new Date().toISOString() });
+    } catch (err: any) {
+      console.error("[POST /api/ia/classificar-documento]", err);
+      res.status(500).json({ error: err.message || "Erro ao classificar documento" });
+    }
+  });
+
+  // ─── MÓDULO: IA / MENSAGENS DE FOLLOW-UP ─────────────────────────────────────
+  /**
+   * POST /api/ia/mensagem-followup
+   * Gera mensagem de follow-up personalizada para um lead em determinada etapa.
+   * Body: { lead_id, tipo: "primeiro_contato"|"proposta_enviada"|"reativacao"|"pos_aprovacao", canal: "whatsapp"|"email" }
+   */
+  app.post("/api/ia/mensagem-followup", auth, async (req: Request, res: Response) => {
+    try {
+      const { lead_id, tipo = "primeiro_contato", canal = "whatsapp" } = req.body;
+      if (!lead_id) return res.status(400).json({ error: "lead_id é obrigatório" });
+
+      const leadResult = await pool.query(
+        `SELECT l.*, e.razao_social, e.cnpj, e.segmento
+         FROM leads l
+         LEFT JOIN empresas e ON l.empresa_id = e.id
+         WHERE l.id = $1`,
+        [lead_id]
+      );
+      if (leadResult.rows.length === 0) return res.status(404).json({ error: "Lead não encontrado" });
+      const lead = leadResult.rows[0];
+
+      const colaborador = (req as any).colaborador;
+      const nomeConsultor = colaborador?.nome || "Consultor";
+
+      const contextos: Record<string, string> = {
+        primeiro_contato: "É o primeiro contato com o lead. Seja cordial, apresente a Destrava Crédito e pergunte sobre a necessidade de crédito.",
+        proposta_enviada: "Uma proposta de crédito já foi enviada. Faça follow-up para verificar se o lead analisou a proposta e se tem dúvidas.",
+        reativacao: "O lead ficou inativo por um tempo. Reative o interesse com uma abordagem personalizada e oferta relevante.",
+        pos_aprovacao: "O crédito foi aprovado. Parabenize e oriente sobre os próximos passos para liberação.",
+      };
+
+      const formatoCanal = canal === "whatsapp"
+        ? "Mensagem curta para WhatsApp (máx 3 parágrafos, tom informal mas profissional, sem markdown)"
+        : "E-mail profissional com assunto, saudação, corpo e assinatura";
+
+      const prompt = `Você é ${nomeConsultor}, consultor da Destrava Crédito.
+Gere uma mensagem de follow-up para o lead abaixo.
+Contexto: ${contextos[tipo] || contextos.primeiro_contato}
+Formato: ${formatoCanal}
+
+Lead: ${lead.nome_completo || lead.nome}
+Empresa: ${lead.razao_social || "Pessoa Física"}
+Segmento: ${lead.segmento || "N/A"}
+Valor solicitado: R$ ${lead.valor_solicitado || 0}
+Produto: ${lead.produto_interesse || "crédito empresarial"}
+Etapa: ${lead.etapa_funil}
+
+Responda em JSON com:
+${canal === "whatsapp"
+  ? '"mensagem": texto da mensagem, "link_whatsapp": URL wa.me com a mensagem codificada para o número ' + (lead.telefone || "")
+  : '"assunto": assunto do email, "mensagem": corpo completo do email'
+}`;
+
+      const { OpenAI } = await import("openai");
+      const openai = new OpenAI();
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4.1-mini",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        max_tokens: 600,
+        temperature: 0.6,
+      });
+      const resposta = JSON.parse(completion.choices[0].message.content || "{}");
+
+      // Montar link WhatsApp se canal for whatsapp
+      if (canal === "whatsapp" && lead.telefone) {
+        const tel = lead.telefone.replace(/\D/g, "");
+        const telBr = tel.startsWith("55") ? tel : `55${tel}`;
+        const msg = encodeURIComponent(resposta.mensagem || "");
+        resposta.link_whatsapp = `https://wa.me/${telBr}?text=${msg}`;
+      }
+
+      res.json({
+        lead_id,
+        tipo,
+        canal,
+        ...resposta,
+        gerado_em: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error("[POST /api/ia/mensagem-followup]", err);
+      res.status(500).json({ error: err.message || "Erro ao gerar mensagem" });
+    }
+  });
+
+  /**
+   * POST /api/ia/disparar-followup
+   * Dispara mensagem de follow-up via n8n/WhatsApp para um lead.
+   * Body: { lead_id, mensagem, tipo, canal }
+   */
+  app.post("/api/ia/disparar-followup", auth, async (req: Request, res: Response) => {
+    try {
+      const { lead_id, mensagem, tipo = "followup", canal = "whatsapp" } = req.body;
+      if (!lead_id || !mensagem) {
+        return res.status(400).json({ error: "lead_id e mensagem são obrigatórios" });
+      }
+
+      const leadResult = await pool.query(
+        "SELECT id, nome_completo, nome, telefone, email FROM leads WHERE id = $1",
+        [lead_id]
+      );
+      if (leadResult.rows.length === 0) return res.status(404).json({ error: "Lead não encontrado" });
+      const lead = leadResult.rows[0];
+
+      // Disparar via n8n
+      const n8nResult = await dispararN8n("followup.disparado", {
+        lead_id,
+        nome: lead.nome_completo || lead.nome,
+        telefone: lead.telefone,
+        email: lead.email,
+        mensagem,
+        tipo,
+        canal,
+        disparado_por: (req as any).colaborador?.nome || "Sistema",
+      }).catch((err: any) => ({ error: err.message }));
+
+      // Registrar no histórico do lead
+      await pool.query(
+        `INSERT INTO interacoes (lead_id, tipo, descricao, criado_por)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT DO NOTHING`,
+        [lead_id, `followup_${canal}`, `Follow-up enviado via ${canal}: ${mensagem.slice(0, 100)}`, (req as any).colaborador?.id]
+      ).catch(() => {});
+
+      await registrarAuditoria(req, {
+        acao: "followup.disparado",
+        entidade: "lead",
+        entidade_id: lead_id,
+        dados_depois: { tipo, canal, n8n: n8nResult },
+      }).catch(() => {});
+
+      res.json({
+        ok: true,
+        lead_id,
+        canal,
+        n8n_resultado: n8nResult,
+        disparado_em: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error("[POST /api/ia/disparar-followup]", err);
+      res.status(500).json({ error: err.message || "Erro ao disparar follow-up" });
+    }
+  });
+
+  // ── FIM DO MÓDULO: IA / AUTOMAÇÕES ───────────────────────────────────────────
+
   // ── FIM DO MÓDULO: IA / RECOMENDAÇÕES ────────────────────────────────────────
 
 

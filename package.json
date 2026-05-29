@@ -12,7 +12,10 @@
     "format": "prettier --write .",
     "migrate": "node scripts/migrate-db.mjs",
     "create-user": "node scripts/create-user.mjs",
-    "db:inspect": "node scripts/db-inspect.mjs"
+    "db:inspect": "node scripts/db-inspect.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

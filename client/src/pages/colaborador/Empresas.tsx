@@ -1511,7 +1511,22 @@ export default function Empresas() {
                               if (!file || !selecionada) return;
                               const fd = new FormData(); fd.append("file", file);
                               try {
-                                await apiFetch(`/api/empresas/${selecionada.id}/documentos`, { method:"POST", body:fd, headers:{} });
+                                const docSalvo = await apiFetch(`/api/empresas/${selecionada.id}/documentos`, { method:"POST", body:fd, headers:{} });
+                                // Classificar automaticamente com IA (com consentimento implícito do operador)
+                                if (docSalvo?.id) {
+                                  apiFetch("/api/ia/classificar-documento", {
+                                    method: "POST",
+                                    body: JSON.stringify({
+                                      documento_id: docSalvo.id,
+                                      empresa_id: selecionada.id,
+                                      consentimento: true,
+                                    }),
+                                  }).then(cls => {
+                                    if (cls?.tipo && cls.tipo !== "outro") {
+                                      toast.info(`Documento classificado como: ${cls.tipo.replace(/_/g, " ")} (${Math.round((cls.confianca || 0) * 100)}% confiança)`);
+                                    }
+                                  }).catch(() => {});
+                                }
                                 const docs = await apiFetch(`/api/empresas/${selecionada.id}/documentos`).catch(() => []);
                                 setDocumentos(Array.isArray(docs) ? docs : []);
                                 toast.success("Documento enviado.");

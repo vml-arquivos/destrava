@@ -366,6 +366,75 @@ function FichaLead({
   const [novaEtapa, setNovaEtapa] = useState<string>(normalizarEtapaFunil(lead.etapa_funil));
   const [novaTemp, setNovaTemp] = useState(lead.temperatura ?? "frio");
 
+  // IA state
+  const [iaResumo, setIaResumo] = useState<{ resumo: string; pontos_atencao: string[]; gerado_em: string } | null>(null);
+  const [iaRecomendacoes, setIaRecomendacoes] = useState<Array<{ titulo: string; descricao: string; prioridade: string; tipo: string }>>([]);
+  const [iaFollowup, setIaFollowup] = useState<{ mensagem: string; link_whatsapp?: string; assunto?: string } | null>(null);
+  const [iaLoading, setIaLoading] = useState<"resumo" | "recomendacoes" | "followup" | null>(null);
+  const [showIaModal, setShowIaModal] = useState<"resumo" | "recomendacoes" | "followup" | null>(null);
+  const [followupTipo, setFollowupTipo] = useState<"primeiro_contato" | "proposta_enviada" | "reativacao" | "pos_aprovacao">("primeiro_contato");
+  const [followupCanal, setFollowupCanal] = useState<"whatsapp" | "email">("whatsapp");
+
+  async function gerarResumoIA() {
+    setIaLoading("resumo");
+    try {
+      const data = await apiFetch(`/api/ia/resumo/${lead.id}`);
+      setIaResumo(data);
+      setShowIaModal("resumo");
+    } catch {
+      toast.error("Erro ao gerar resumo. Tente novamente.");
+    } finally {
+      setIaLoading(null);
+    }
+  }
+
+  async function gerarRecomendacoesIA() {
+    setIaLoading("recomendacoes");
+    try {
+      const data = await apiFetch("/api/ia/recomendacoes", {
+        method: "POST",
+        body: JSON.stringify({ lead_id: lead.id }),
+      });
+      setIaRecomendacoes(data.recomendacoes || []);
+      setShowIaModal("recomendacoes");
+    } catch {
+      toast.error("Erro ao gerar recomendações. Tente novamente.");
+    } finally {
+      setIaLoading(null);
+    }
+  }
+
+  async function gerarMensagemFollowup() {
+    setIaLoading("followup");
+    try {
+      const data = await apiFetch("/api/ia/mensagem-followup", {
+        method: "POST",
+        body: JSON.stringify({ lead_id: lead.id, tipo: followupTipo, canal: followupCanal }),
+      });
+      setIaFollowup(data);
+      setShowIaModal("followup");
+    } catch {
+      toast.error("Erro ao gerar mensagem. Tente novamente.");
+    } finally {
+      setIaLoading(null);
+    }
+  }
+
+  async function dispararFollowup() {
+    if (!iaFollowup?.mensagem) return;
+    try {
+      await apiFetch("/api/ia/disparar-followup", {
+        method: "POST",
+        body: JSON.stringify({ lead_id: lead.id, mensagem: iaFollowup.mensagem, tipo: followupTipo, canal: followupCanal }),
+      });
+      toast.success("Follow-up disparado com sucesso!");
+      setShowIaModal(null);
+      onUpdate();
+    } catch {
+      toast.error("Erro ao disparar follow-up.");
+    }
+  }
+
   useEffect(() => {
     carregarDados();
   }, [lead.id]);
@@ -789,21 +858,200 @@ function FichaLead({
                   )}
                 </div>
 
-                {/* Resumo IA */}
-                {lead.resumo_ia && (
-                  <div className="bg-blue-50 rounded-xl border border-blue-200 p-4">
-                    <h3 className="text-sm font-semibold text-blue-800 mb-2 flex items-center gap-2">
-                      <Brain className="h-4 w-4" />
-                      Análise da IA
-                    </h3>
-                    <p className="text-sm text-blue-700">{lead.resumo_ia}</p>
-                    {lead.observacoes_ia && (
-                      <p className="text-xs text-blue-600 mt-2 border-t border-blue-200 pt-2">
-                        <strong>Próxima ação:</strong> {lead.observacoes_ia}
-                      </p>
-                    )}
+                {/* IA Actions */}
+                <div className="bg-gradient-to-br from-violet-50 to-blue-50 rounded-xl border border-violet-200 p-4">
+                  <h3 className="text-sm font-semibold text-violet-800 mb-3 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4" />
+                    Assistente IA
+                  </h3>
+                  <div className="grid grid-cols-1 gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="justify-start gap-2 bg-white border-violet-200 hover:bg-violet-50 text-violet-700"
+                      onClick={gerarResumoIA}
+                      disabled={iaLoading !== null}
+                    >
+                      {iaLoading === "resumo" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+                      Gerar Resumo do Lead
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="justify-start gap-2 bg-white border-violet-200 hover:bg-violet-50 text-violet-700"
+                      onClick={gerarRecomendacoesIA}
+                      disabled={iaLoading !== null}
+                    >
+                      {iaLoading === "recomendacoes" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Target className="h-4 w-4" />}
+                      Obter Recomendações
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="justify-start gap-2 bg-white border-violet-200 hover:bg-violet-50 text-violet-700"
+                      onClick={() => setShowIaModal("followup")}
+                      disabled={iaLoading !== null}
+                    >
+                      {iaLoading === "followup" ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
+                      Gerar Mensagem Follow-up
+                    </Button>
                   </div>
-                )}
+                  {lead.resumo_ia && (
+                    <div className="mt-3 pt-3 border-t border-violet-200">
+                      <p className="text-xs text-violet-600 font-medium mb-1">Análise anterior:</p>
+                      <p className="text-xs text-violet-700">{lead.resumo_ia}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Modal: Resumo IA */}
+                <Dialog open={showIaModal === "resumo"} onOpenChange={o => !o && setShowIaModal(null)}>
+                  <DialogContent className="max-w-lg w-[95vw]">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <Brain className="h-5 w-5 text-violet-600" />
+                        Resumo do Lead — IA
+                      </DialogTitle>
+                    </DialogHeader>
+                    {iaResumo && (
+                      <div className="space-y-4">
+                        <div className="bg-violet-50 rounded-lg p-4">
+                          <p className="text-sm text-gray-800 leading-relaxed">{iaResumo.resumo}</p>
+                        </div>
+                        {iaResumo.pontos_atencao?.length > 0 && (
+                          <div>
+                            <p className="text-xs font-semibold text-orange-700 mb-2">Pontos de Atenção:</p>
+                            <ul className="space-y-1">
+                              {iaResumo.pontos_atencao.map((p, i) => (
+                                <li key={i} className="text-xs text-orange-600 flex items-start gap-1.5">
+                                  <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />{p}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        <p className="text-xs text-gray-400">Gerado em {new Date(iaResumo.gerado_em).toLocaleString("pt-BR")}</p>
+                      </div>
+                    )}
+                    <DialogFooter>
+                      <Button variant="outline" size="sm" onClick={() => setShowIaModal(null)}>Fechar</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Modal: Recomendações IA */}
+                <Dialog open={showIaModal === "recomendacoes"} onOpenChange={o => !o && setShowIaModal(null)}>
+                  <DialogContent className="max-w-lg w-[95vw]">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <Target className="h-5 w-5 text-violet-600" />
+                        Recomendações — IA
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {iaRecomendacoes.map((r, i) => {
+                        const prioColor = r.prioridade === "alta" ? "border-red-300 bg-red-50" : r.prioridade === "media" ? "border-yellow-300 bg-yellow-50" : "border-green-300 bg-green-50";
+                        const prioText = r.prioridade === "alta" ? "text-red-700" : r.prioridade === "media" ? "text-yellow-700" : "text-green-700";
+                        return (
+                          <div key={i} className={`rounded-lg border p-3 ${prioColor}`}>
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="text-sm font-semibold text-gray-800">{r.titulo}</p>
+                              <span className={`text-xs font-bold uppercase ${prioText}`}>{r.prioridade}</span>
+                            </div>
+                            <p className="text-xs text-gray-600">{r.descricao}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" size="sm" onClick={() => setShowIaModal(null)}>Fechar</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Modal: Follow-up IA */}
+                <Dialog open={showIaModal === "followup"} onOpenChange={o => !o && setShowIaModal(null)}>
+                  <DialogContent className="max-w-lg w-[95vw]">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <MessageSquare className="h-5 w-5 text-violet-600" />
+                        Mensagem de Follow-up — IA
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-gray-500 mb-1 block">Tipo</label>
+                          <Select value={followupTipo} onValueChange={v => setFollowupTipo(v as any)}>
+                            <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="primeiro_contato">Primeiro Contato</SelectItem>
+                              <SelectItem value="proposta_enviada">Proposta Enviada</SelectItem>
+                              <SelectItem value="reativacao">Reativação</SelectItem>
+                              <SelectItem value="pos_aprovacao">Pós-Aprovação</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 mb-1 block">Canal</label>
+                          <Select value={followupCanal} onValueChange={v => setFollowupCanal(v as any)}>
+                            <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                              <SelectItem value="email">E-mail</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      {!iaFollowup ? (
+                        <Button className="w-full" size="sm" onClick={gerarMensagemFollowup} disabled={iaLoading === "followup"}>
+                          {iaLoading === "followup" ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                          Gerar Mensagem
+                        </Button>
+                      ) : (
+                        <div className="space-y-3">
+                          {iaFollowup.assunto && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Assunto:</p>
+                              <p className="text-sm font-medium text-gray-800">{iaFollowup.assunto}</p>
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Mensagem:</p>
+                            <Textarea
+                              className="text-sm resize-none"
+                              rows={6}
+                              value={iaFollowup.mensagem}
+                              onChange={e => setIaFollowup(p => p ? { ...p, mensagem: e.target.value } : null)}
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            {iaFollowup.link_whatsapp && (
+                              <a
+                                href={iaFollowup.link_whatsapp}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1"
+                              >
+                                <Button size="sm" className="w-full bg-green-600 hover:bg-green-700 gap-2">
+                                  <Phone className="h-4 w-4" /> Abrir WhatsApp
+                                </Button>
+                              </a>
+                            )}
+                            <Button size="sm" className="flex-1 gap-2" onClick={dispararFollowup}>
+                              <Send className="h-4 w-4" /> Disparar via n8n
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setIaFollowup(null)}>Regerar</Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" size="sm" onClick={() => { setShowIaModal(null); setIaFollowup(null); }}>Fechar</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
               </TabsContent>
 
               {/* ── Atividades ── */}
