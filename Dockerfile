@@ -13,6 +13,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
 
 COPY . .
 
+ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN pnpm exec vite build
 
 RUN pnpm exec esbuild server/index.ts \
