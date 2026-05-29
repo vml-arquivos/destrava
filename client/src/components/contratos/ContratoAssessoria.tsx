@@ -26,7 +26,7 @@ export interface DadosContratoAssessoria {
   empresa_cpf_representante: string;
   empresa_nacionalidade?: string;
   socios_assinantes?: SignatarioContratanteAssessoria[];
-  modo_assinatura_contratante?: 'responsavel' | 'socios';
+  modo_assinatura_contratante?: 'empresa' | 'responsavel' | 'socios';
   prazo_contrato_meses: number;
   // Parceiro comercial (opcional)
   parceiro_nome?: string;
@@ -330,9 +330,13 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
     ? Number(d.prazo_contrato_meses)
     : 12;
   const sociosAssinantes = Array.isArray(d.socios_assinantes) ? d.socios_assinantes.filter(s => nomeSignatario(s)) : [];
-  const signatariosContratante = d.modo_assinatura_contratante === 'socios' && sociosAssinantes.length > 0
+  const representantesContratante = d.modo_assinatura_contratante === 'socios' && sociosAssinantes.length > 0
     ? sociosAssinantes
-    : [{ nome: d.empresa_representante || d.empresa_razao_social || 'CONTRATANTE', cpf: d.empresa_cpf_representante, cargo: 'Representante legal' }];
+    : [{ nome: d.empresa_representante || 'seu representante legal', cpf: d.empresa_cpf_representante, cargo: 'Representante legal' }];
+  const assinantesContratante = d.modo_assinatura_contratante === 'socios' && sociosAssinantes.length > 0
+    ? sociosAssinantes
+    : [];
+  const representanteContratada = 'FERNANDO ELI OLIVEIRA MARQUES';
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -483,9 +487,9 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               {/* Assinaturas da contratante */}
               <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs text-slate-700">
                 <p className="font-semibold text-slate-800 mb-1">Assinantes da CONTRATANTE</p>
-                <p>{d.modo_assinatura_contratante === 'socios' && sociosAssinantes.length > 0 ? 'Sócios selecionados' : 'Responsável principal'}</p>
+                <p>{d.modo_assinatura_contratante === 'socios' && sociosAssinantes.length > 0 ? 'Sócio(s) selecionado(s)' : 'Somente razão social e CNPJ da empresa'}</p>
                 <ul className="mt-2 space-y-1 list-disc list-inside">
-                  {signatariosContratante.map((s, i) => (
+                  {representantesContratante.map((s, i) => (
                     <li key={`${s.nome}-${i}`}>{s.nome}{s.cpf ? ` — CPF: ${s.cpf}` : ''}</li>
                   ))}
                 </ul>
@@ -579,7 +583,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               >{d.empresa_endereco}</span>,
               {' '}neste ato representada por{' '}
               <strong>
-                {signatariosContratante.map((s, i) => (
+                {representantesContratante.map((s, i) => (
                   <span key={`${s.nome}-${i}`}>
                     {i > 0 ? '; ' : ''}{s.nome}{s.cpf ? `, CPF n° ${s.cpf}` : ''}{s.cargo || s.qualificacao ? `, ${s.cargo || s.qualificacao}` : ''}
                   </span>
@@ -802,6 +806,9 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
             <div style={{ ...(temParceiro ? S.sigGrid3 : S.sigGrid), gridTemplateColumns: temParceiro ? '1fr 1fr 1fr' : '1fr 1fr' }}>
               <div style={S.sigBox}>
                 <div style={S.sigLine} />
+                {assinantesContratante.map((s, i) => (
+                  <p key={`${s.nome}-${i}`} style={S.sigName}>{s.nome}</p>
+                ))}
                 <p style={S.sigName}>{d.empresa_razao_social || 'CONTRATANTE'}</p>
                 {d.empresa_cnpj && <p style={S.sigSub}>CNPJ: {d.empresa_cnpj}</p>}
                 <p style={S.sigSub}>CONTRATANTE</p>
@@ -816,26 +823,13 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               )}
               <div style={S.sigBox}>
                 <div style={S.sigLine} />
+                <p style={S.sigName}>{representanteContratada}</p>
                 <p style={S.sigName}>DESTRAVA CRÉDITO LTDA</p>
                 <p style={S.sigSub}>CNPJ: 35.427.182/0001-66</p>
                 <p style={S.sigSub}>CONTRATADA</p>
               </div>
             </div>
 
-            {/* Assinatura(s) do(s) representante(s)/sócio(s) da contratante */}
-            {signatariosContratante.length > 0 && (
-              <div style={{ ...S.sigGrid, marginTop: '24px' }}>
-                {signatariosContratante.map((s, i) => (
-                  <div key={`${s.nome}-${i}`} style={S.sigBox}>
-                    <div style={S.sigLine} />
-                    <p style={S.sigName}>{s.nome}</p>
-                    {docSignatario(s) && <p style={S.sigSub}>CPF: {docSignatario(s)}</p>}
-                    {(s.cargo || s.qualificacao) && <p style={S.sigSub}>{s.cargo || s.qualificacao}</p>}
-                    <p style={S.sigSub}>ASSINANTE DA CONTRATANTE</p>
-                  </div>
-                ))}
-              </div>
-            )}
 
             {/* Testemunhas */}
             <div style={S.witnessGrid}>

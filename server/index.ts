@@ -4404,20 +4404,17 @@ Responda APENAS com um JSON válido no seguinte formato:
     const sociosAssinantes = Array.isArray(contratante.socios_assinantes)
       ? contratante.socios_assinantes.filter((s: any) => String(s?.nome || '').trim())
       : [];
-    const signatariosContratante = contratante.modo_assinatura === 'socios' && sociosAssinantes.length > 0
+    const representantesContratante = contratante.modo_assinatura === 'socios' && sociosAssinantes.length > 0
       ? sociosAssinantes
-      : [{ nome: contratante.representante || contratante.razao_social, cpf: contratante.cpf_representante, cargo: 'Representante legal' }];
-    const assinaturaContratanteHtml = signatariosContratante.map((s: any) => `
-      <div class="sig-card">
-        <div class="sig-space"></div>
-        <div class="sig-line-bar"></div>
-        <p class="sig-name-label">${escapeHtmlContrato(s.nome || 'CONTRATANTE')}</p>
-        ${s.cpf ? `<p class="sig-detail">CPF: ${escapeHtmlContrato(s.cpf)}</p>` : ''}
-        ${s.cargo || s.qualificacao ? `<p class="sig-detail">${escapeHtmlContrato(s.cargo || s.qualificacao)}</p>` : ''}
-        <p class="sig-role">ASSINANTE DA CONTRATANTE</p>
-      </div>
+      : [{ nome: contratante.representante || 'seu representante legal', cpf: contratante.cpf_representante, cargo: 'Representante legal' }];
+    const assinantesContratante = contratante.modo_assinatura === 'socios' && sociosAssinantes.length > 0
+      ? sociosAssinantes
+      : [];
+    const linhasAssinantesContratanteHtml = assinantesContratante.map((s: any) => `
+      <p class="sig-name-label">${escapeHtmlContrato(s.nome || '')}</p>
     `).join('');
-    const representantesTexto = signatariosContratante
+    const representanteContratadaNome = contratada.representante || 'FERNANDO ELI OLIVEIRA MARQUES';
+    const representantesTexto = representantesContratante
       .map((s: any) => `${s.nome || ''}${s.cpf ? `, CPF n° ${s.cpf}` : ''}${s.cargo || s.qualificacao ? `, ${s.cargo || s.qualificacao}` : ''}`)
       .filter(Boolean)
       .join('; ');
@@ -4551,6 +4548,7 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, 
     <div class="sig-card">
       <div class="sig-space"></div>
       <div class="sig-line-bar"></div>
+      ${linhasAssinantesContratanteHtml}
       <p class="sig-name-label">${escapeHtmlContrato(contratante.razao_social || 'CONTRATANTE')}</p>
       <p class="sig-detail">CNPJ: ${escapeHtmlContrato(contratante.cnpj || '')}</p>
       <p class="sig-role">CONTRATANTE</p>
@@ -4565,6 +4563,7 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, 
     <div class="sig-card">
       <div class="sig-space"></div>
       <div class="sig-line-bar"></div>
+      <p class="sig-name-label">${escapeHtmlContrato(representanteContratadaNome)}</p>
       <p class="sig-name-label">${escapeHtmlContrato(contratada.razao_social || 'CONTRATADA')}</p>
       <p class="sig-detail">CNPJ: ${escapeHtmlContrato(contratada.cnpj || '')}</p>
       <p class="sig-role">CONTRATADA</p>
@@ -4575,6 +4574,7 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, 
     <div class="sig-card">
       <div class="sig-space"></div>
       <div class="sig-line-bar"></div>
+      ${linhasAssinantesContratanteHtml}
       <p class="sig-name-label">${escapeHtmlContrato(contratante.razao_social || 'CONTRATANTE')}</p>
       <p class="sig-detail">CNPJ: ${escapeHtmlContrato(contratante.cnpj || '')}</p>
       <p class="sig-role">CONTRATANTE</p>
@@ -4582,17 +4582,13 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, 
     <div class="sig-card">
       <div class="sig-space"></div>
       <div class="sig-line-bar"></div>
+      <p class="sig-name-label">${escapeHtmlContrato(representanteContratadaNome)}</p>
       <p class="sig-name-label">${escapeHtmlContrato(contratada.razao_social || 'CONTRATADA')}</p>
       <p class="sig-detail">CNPJ: ${escapeHtmlContrato(contratada.cnpj || '')}</p>
       <p class="sig-role">CONTRATADA</p>
     </div>
   </div>
   `}
-
-  <div class="sig-main-grid sig-main-grid--2" style="margin-top:28px;">
-    ${assinaturaContratanteHtml}
-  </div>
-
   <!-- ── Divisor entre assinaturas e testemunhas ── -->
   <div class="sig-divider"></div>
 
@@ -7313,7 +7309,7 @@ ${(temTest1 || temTest2) ? `
         contratada_id, responsavel_contrato_id,
         // campos contrato assessoria
         valor_referencia, taxa_comissao = 10, taxa_desistencia = 5, custeio_mensal = 250, percentual_multa,
-        prazo_contrato_meses = 12, modo_assinatura_contratante = 'responsavel', socios_assinantes = [],
+        prazo_contrato_meses = 12, modo_assinatura_contratante = 'empresa', socios_assinantes = [],
         empresa_razao_social, empresa_cnpj, empresa_endereco,
         empresa_representante, empresa_cpf_representante,
         // campos contrato limpa nome
@@ -7900,7 +7896,7 @@ ${(temTest1 || temTest2) ? `
           representante: empresa_representante || empresa?.responsavel_nome || empresa?.representante_nome || '',
           cpf_representante: empresa_cpf_representante || empresa?.responsavel_cpf || empresa?.representante_cpf || '',
           socios_assinantes: Array.isArray(socios_assinantes) ? socios_assinantes : [],
-          modo_assinatura: modo_assinatura_contratante || 'responsavel',
+          modo_assinatura: modo_assinatura_contratante || 'empresa',
         },
         responsavel_contrato: responsavelContratoAssessoria,
         parceiro: parceiro && parceiro.nome ? { nome: parceiro.nome, cpf: parceiro.cpf || '' } : null,

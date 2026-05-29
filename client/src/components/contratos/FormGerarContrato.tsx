@@ -8,13 +8,19 @@ interface Empresa  { id: string; razao_social: string; cnpj?: string; }
 interface SocioEmpresaContrato {
   id?: string;
   nome?: string;
+  nome_socio?: string;
   cpf?: string;
+  cpf_cnpj?: string;
   documento?: string;
+  cnpj_cpf_do_socio?: string;
   qualificacao?: string;
+  qualificacao_socio?: string;
+  descricao_qualificacao_socio?: string;
   cargo?: string;
   email?: string;
   telefone?: string;
   data_entrada?: string;
+  data_entrada_sociedade?: string;
 }
 interface Lead     { id: string; nome?: string; razao_social?: string; cpf?: string; cnpj?: string; }
 interface ClientePF { id: string; nome: string; cpf?: string; telefone?: string; cidade?: string; uf?: string; }
@@ -142,6 +148,17 @@ function podeVerParceriaComercial(cargo: string | undefined | null): boolean {
   return ['administrador', 'admin', 'diretor', 'gerente', 'gerente comercial', 'gestor'].includes(c);
 }
 
+function normalizarSocioContrato(socio: SocioEmpresaContrato): SocioEmpresaContrato {
+  const raw: any = socio || {};
+  return {
+    ...raw,
+    nome: String(raw.nome || raw.nome_socio || raw.razao_social || '').trim(),
+    cpf: String(raw.cpf || raw.cpf_cnpj || raw.documento || raw.cnpj_cpf_do_socio || '').trim(),
+    qualificacao: String(raw.qualificacao || raw.cargo || raw.descricao_qualificacao_socio || raw.qualificacao_socio || '').trim(),
+    data_entrada: raw.data_entrada || raw.data_entrada_sociedade,
+  };
+}
+
 export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const tiposDisponiveis: { value: TipoContrato; label: string }[] = [
     { value: 'assessoria',         label: 'Contrato de Assessoria Empresarial' },
@@ -165,7 +182,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [taxaDesistencia, setTaxaDesistencia] = useState('5');
   const [custeioMensal, setCusteioMensal]     = useState(formatBRLCurrency(250));
   const [prazoContratoAssessoria, setPrazoContratoAssessoria] = useState('12');
-  const [modoAssinaturaContratante, setModoAssinaturaContratante] = useState<'responsavel' | 'socios'>('responsavel');
+  const [modoAssinaturaContratante, setModoAssinaturaContratante] = useState<'empresa' | 'socios'>('empresa');
   const [sociosEmpresaAssessoria, setSociosEmpresaAssessoria] = useState<SocioEmpresaContrato[]>([]);
   const [sociosAssinantesIds, setSociosAssinantesIds] = useState<string[]>([]);
   const [carregandoSociosAssessoria, setCarregandoSociosAssessoria] = useState(false);
@@ -329,7 +346,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
       setCarregandoSociosAssessoria(true);
       try {
         const payload = await fetchJsonApi(`/api/empresas/${empresaId}/socios`, token);
-        const socios = extractArray<SocioEmpresaContrato>(payload, ['socios']);
+        const socios = extractArray<SocioEmpresaContrato>(payload, ['socios']).map(normalizarSocioContrato);
         setSociosEmpresaAssessoria(socios);
         setSociosAssinantesIds(socios
           .map((s, idx) => s.id || `idx-${idx}`)
@@ -669,11 +686,11 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               </div>
               <div>
                 <label className={lbl}>Quem assina pela contratante?</label>
-                <select value={modoAssinaturaContratante} onChange={e => setModoAssinaturaContratante(e.target.value as 'responsavel' | 'socios')} className={cls}>
-                  <option value="responsavel">Somente responsável principal</option>
-                  <option value="socios">Sócio(s) selecionado(s)</option>
+                <select value={modoAssinaturaContratante} onChange={e => setModoAssinaturaContratante(e.target.value as 'empresa' | 'socios')} className={cls}>
+                  <option value="empresa">Somente empresa (razão social e CNPJ)</option>
+                  <option value="socios">Sócio(s) da empresa + razão social</option>
                 </select>
-                <p className="text-[11px] text-gray-500 mt-1">Use sócios quando o contrato social exigir múltiplas assinaturas.</p>
+                <p className="text-[11px] text-gray-500 mt-1">No modo sócio(s), os nomes selecionados aparecem no mesmo bloco de assinatura, acima da razão social e CNPJ da empresa. Não cria campo extra de responsável.</p>
               </div>
             </div>
 
@@ -684,7 +701,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                   {carregandoSociosAssessoria && <span className="text-xs text-blue-600">Carregando sócios...</span>}
                 </div>
                 {sociosEmpresaAssessoria.length === 0 ? (
-                  <p className="text-xs text-amber-700">Nenhum sócio cadastrado para esta empresa. O contrato usará o responsável principal como assinante.</p>
+                  <p className="text-xs text-amber-700">Nenhum sócio cadastrado para esta empresa. O contrato usará apenas a razão social e CNPJ da empresa como assinante.</p>
                 ) : (
                   <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
                     {sociosEmpresaAssessoria.map((socio, idx) => {
