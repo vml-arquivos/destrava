@@ -47,7 +47,7 @@ export default function RatingBancoCentral() {
               Entenda como o rating da sua empresa é calculado, o que ele significa para o acesso ao crédito e como melhorá-lo para obter melhores condições de financiamento.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link href="/simular">
+              <Link href="/captura?produto=rating-banco-central">
                 <Button size="lg" className="bg-yellow-400 hover:bg-yellow-500 text-black font-bold px-8">
                   Consultar Meu Rating
                   <ArrowRight className="ml-2 h-5 w-5" />
@@ -272,7 +272,7 @@ export default function RatingBancoCentral() {
               Nossa equipe analisa seu perfil, identifica oportunidades de melhoria e orienta o caminho para melhores condições de crédito.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/simular">
+              <Link href="/captura?produto=rating-banco-central">
                 <Button size="lg" className="bg-yellow-400 hover:bg-yellow-500 text-black font-bold px-8">
                   Solicitar Análise Gratuita
                   <ArrowRight className="ml-2 h-5 w-5" />

@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_LABELS, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil, type EtapaFunil } from "@shared/funnel";
+import { EmptyState, LoadingState, ErrorState } from "@/components/ui/states";
+import { RiscoBadge, ScoreIndicator, StatusCadastroBadge } from "@/components/ui/risco-badge";
 
 // ─── Tipos ────────────────────────────────────────────────────
 interface Lead {
@@ -328,7 +330,7 @@ function KanbanColuna({
           <KanbanCard key={lead.id} lead={lead} onClick={() => onCardClick(lead)} onDragStart={onDragStart} />
         ))}
         {leads.length === 0 && (
-          <div className="text-center py-4 text-xs text-gray-400">Nenhum lead</div>
+          <EmptyState preset="leads" title="Nenhum lead" description="Arraste leads para esta etapa." className="py-4" />
         )}
       </div>
     </div>
@@ -1451,7 +1453,7 @@ export default function CRM() {
           /* ── Lista ── */
           <div className="flex-1 overflow-y-auto p-4">
             {loading ? (
-              <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /></div>
+              <LoadingState message="Carregando leads…" size="lg" className="py-16" />
             ) : (
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <table className="w-full text-sm">
@@ -1513,7 +1515,7 @@ export default function CRM() {
                   </tbody>
                 </table>
                 {leadsFiltrados.length === 0 && (
-                  <div className="text-center py-12 text-gray-400">Nenhum lead encontrado.</div>
+                  <EmptyState preset="busca" title="Nenhum lead encontrado" description="Tente ajustar os filtros ou adicione um novo lead." className="py-12" />
                 )}
               </div>
             )}
@@ -1533,14 +1535,14 @@ export default function CRM() {
 
       {/* ── Modal Novo Lead ── */}
       <Dialog open={showNovoLead} onOpenChange={setShowNovoLead}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-md w-[calc(100vw-2rem)] sm:w-full mx-auto max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Plus className="h-5 w-5 text-blue-600" />
               Novo Lead
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 overflow-y-auto flex-1 pr-1">
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Etapa inicial</label>
               <Select value={etapaNovoLead} onValueChange={(value) => setEtapaNovoLead(value as EtapaFunil)}>
@@ -1573,9 +1575,9 @@ export default function CRM() {
               </div>
             ))}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNovoLead(false)}>Cancelar</Button>
-            <Button onClick={criarLead} disabled={salvando} className="bg-blue-600 hover:bg-blue-700">
+          <DialogFooter className="flex-shrink-0 flex-col-reverse sm:flex-row gap-2 pt-2">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setShowNovoLead(false)}>Cancelar</Button>
+            <Button onClick={criarLead} disabled={salvando} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700">
               {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
               Criar Lead
             </Button>

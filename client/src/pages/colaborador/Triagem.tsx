@@ -116,8 +116,8 @@ function ModalQualificacao({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg max-h-[92vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-start justify-between p-5 border-b">
           <div>
@@ -130,8 +130,8 @@ function ModalQualificacao({
         </div>
 
         {/* Dados da simulação */}
-        <div className="p-5 space-y-4">
-          <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="p-4 sm:p-5 space-y-4">
+          <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2 text-sm">
             {item.telefone && (
               <a href={`tel:${item.telefone}`} className="flex items-center gap-2 p-2.5 bg-gray-50 rounded-xl hover:bg-blue-50 transition-colors">
                 <Phone className="w-4 h-4 text-blue-500 flex-shrink-0" />
@@ -161,7 +161,7 @@ function ModalQualificacao({
           {item.produto && (
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
               <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-2">Produto de Interesse</p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-3 text-sm">
                 <div><p className="text-xs text-gray-400">Produto</p><p className="font-semibold text-gray-800">{item.produto}</p></div>
                 {item.prazo && <div><p className="text-xs text-gray-400">Prazo desejado</p><p className="font-semibold text-gray-800">{item.prazo} meses</p></div>}
               </div>
@@ -270,7 +270,7 @@ function ModalQualificacao({
         </div>
 
         {/* Ações */}
-        <div className="p-5 border-t flex gap-3">
+        <div className="p-4 border-t flex flex-col sm:flex-row gap-2">
           <button
             onClick={handleSalvar}
             disabled={salvando}

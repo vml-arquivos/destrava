@@ -18,6 +18,8 @@ import {
   ArrowLeft, MoreVertical, ExternalLink, Copy, CheckCheck,
   BarChart3, Banknote, AlertCircle, Info, RotateCw, Zap,
 } from "lucide-react";
+import { EmptyState, LoadingState, ErrorState } from "@/components/ui/states";
+import { RiscoBadge, ScoreIndicator, StatusCadastroBadge } from "@/components/ui/risco-badge";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -61,6 +63,9 @@ interface Empresa {
   limite_credito_atual?: number;
   score_serasa?: number;
   score_spc?: number;
+  score_interno?: number;
+  risco_classificacao?: "critico" | "alto" | "medio" | "baixo";
+  status_cadastro?: "incompleto" | "basico" | "completo" | "verificado";
   status: "ativo" | "inativo" | "prospecto" | "cliente" | "ex_cliente";
   origem?: string;
   tags?: string[];
@@ -766,18 +771,19 @@ export default function Empresas() {
               {/* Lista */}
               <div className="scroll-area overflow-y-auto space-y-1.5" style={{ maxHeight: "calc(100vh - 280px)" }}>
                 {loading ? (
-                  <div className="flex flex-col items-center justify-center py-20 gap-3">
-                    <Loader2 className="w-7 h-7 text-blue-500 animate-spin" />
-                    <p className="text-sm text-slate-400">Carregando empresas...</p>
-                  </div>
+                  <LoadingState message="Carregando empresas…" className="py-20" />
                 ) : empresas.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 gap-3">
-                    <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
-                      <Building2 className="w-8 h-8 text-slate-300" />
-                    </div>
-                    <p className="text-sm font-semibold text-slate-500">Nenhuma empresa encontrada</p>
-                    <button onClick={abrirNova} className="text-xs text-blue-600 hover:underline">+ Cadastrar primeira empresa</button>
-                  </div>
+                  <EmptyState
+                    preset="empresas"
+                    title="Nenhuma empresa encontrada"
+                    description="Cadastre a primeira empresa para começar."
+                    action={
+                      <button onClick={abrirNova} className="text-xs text-blue-600 hover:underline">
+                        + Cadastrar primeira empresa
+                      </button>
+                    }
+                    className="py-20"
+                  />
                 ) : empresas.map(emp => {
                   const sc = STATUS_CFG[emp.status] || STATUS_CFG.ativo;
                   const ativa = selecionada?.id === emp.id;
@@ -928,6 +934,52 @@ export default function Empresas() {
                           </div>
                         </div>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* ── Quick Actions ── */}
+                  <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => {
+                          sessionStorage.setItem("calculadora_empresa", JSON.stringify({
+                            nome: selecionada.responsavel_nome || selecionada.razao_social,
+                            empresa: selecionada.razao_social,
+                            telefone: selecionada.telefone || selecionada.whatsapp || "",
+                            cpf_cnpj: selecionada.cnpj || "",
+                          }));
+                          window.location.href = "/colaborador/calculadora";
+                        }}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+                        title="Nova Simulação"
+                      >
+                        <Calculator className="w-3.5 h-3.5" />
+                        <span>Nova Simulação</span>
+                      </button>
+                      <button
+                        onClick={() => window.location.href = "/colaborador/gerador-contratos"}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-3 py-1.5 rounded-lg hover:bg-violet-100 transition-colors"
+                        title="Novo Contrato"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Novo Contrato</span>
+                      </button>
+                      <button
+                        onClick={() => { setAbaAtiva("documentos"); }}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors"
+                        title="Adicionar Documento"
+                      >
+                        <Paperclip className="w-3.5 h-3.5" />
+                        <span>Adicionar Doc.</span>
+                      </button>
+                      <button
+                        onClick={() => { setAbaAtiva("followup"); setShowFollowupForm(true); }}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors"
+                        title="Criar Follow-up"
+                      >
+                        <Bell className="w-3.5 h-3.5" />
+                        <span>Criar Follow-up</span>
+                      </button>
                     </div>
                   </div>
 

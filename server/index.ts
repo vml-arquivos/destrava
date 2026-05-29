@@ -9,7 +9,8 @@ import pkg from "pg";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { auth } from "./middleware/auth.ts";
-import { authorize } from "./middleware/authorize.ts";
+import { authorize, requirePermissao } from "./middleware/authorize.ts";
+import { getPermissoes, temPermissao, LISTA_CARGOS_VALIDOS, nivelHierarquico, podeGerenciar as _podeGerenciar, cargosGerenciaveis as _cargosGerenciaveis } from "../shared/cargos.ts";
 import cnpjRouter from './routes/cnpj';
 import sociosDocumentosRouter from './routes/socios_documentos';
 import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
@@ -133,51 +134,28 @@ async function processarEmpresaDaSimulacao(
 }
 
 // ─── Cargos e hierarquia de permissões ──────────────────────────────────────
-const CARGOS_VALIDOS = [
-  'Administrador',
-  'Diretor',
-  'Gerente Comercial',
-  'Analista de Crédito',
-  'Consultor de Crédito',
-  'Captador Externo',
-  'Estagiário',
-] as const;
-
+// Cargos e hierarquia agora centralizados em shared/cargos.ts
+// Aliases locais para retrocompatibilidade com código legado neste arquivo
+const CARGOS_VALIDOS = LISTA_CARGOS_VALIDOS;
 const CARGOS_GESTAO = ['administrador', 'diretor', 'gerente comercial', 'admin', 'gerente', 'gestor'];
 const CARGOS_PODEM_CRIAR_USUARIOS = ['administrador', 'diretor', 'gerente comercial', 'admin'];
 const CARGOS_BLOQUEADOS_ATENDIMENTO = ['captador externo', 'estagiário', 'estagiario'];
 const CARGOS_CAPTACAO = ['captador externo', 'gerente comercial', 'diretor', 'consultor de crédito', 'consultor de credito', 'administrador', 'admin'];
 
-// ─── Hierarquia de cargos (nível 0 = mais alto) ───────────────────────────────
-// Regra: cada cargo só pode ver/criar/editar cargos com nível ESTRITAMENTE MAIOR
-const HIERARQUIA_CARGOS: Record<string, number> = {
-  'administrador': 0,
-  'admin':         0,
-  'diretor':       1,
-  'gerente comercial': 2,
-  'analista de crédito':  3,
-  'analista de credito':  3,
-  'consultor de crédito': 4,
-  'consultor de credito': 4,
-  'captador externo': 5,
-  'estagiário': 6,
-  'estagiario': 6,
-};
 
 /** Retorna o nível numérico do cargo (menor = mais alto na hierarquia) */
 function nivelCargo(cargo: string): number {
-  return HIERARQUIA_CARGOS[(cargo || '').toLowerCase()] ?? 99;
+  return nivelHierarquico(cargo);
 }
 
 /** Retorna true se o solicitante pode gerenciar o alvo (nível do alvo > nível do solicitante) */
 function podeGerenciarCargo(solicitanteCargo: string, alvoCargo: string): boolean {
-  return nivelCargo(alvoCargo) > nivelCargo(solicitanteCargo);
+  return _podeGerenciar(solicitanteCargo, alvoCargo);
 }
 
 /** Retorna os cargos que o solicitante pode criar/atribuir */
 function cargosGerenciaveis(solicitanteCargo: string): string[] {
-  const nivel = nivelCargo(solicitanteCargo);
-  return CARGOS_VALIDOS.filter(c => nivelCargo(c) > nivel);
+  return _cargosGerenciaveis(solicitanteCargo);
 }
 
 function isGestorCargo(cargo: string): boolean {
@@ -404,6 +382,48 @@ function validarEtapaFunil(value: string | null | undefined): string {
 
 function etapaFunilPermitida(value: string | null | undefined): boolean {
   return ETAPAS_FUNIL_VALIDAS.includes(validarEtapaFunil(value) as (typeof ETAPAS_FUNIL_VALIDAS)[number]);
+}
+
+/**
+ * Scoring básico automático (sem IA) — 0 a 100.
+ * Critérios:
+ *  - Valor solicitado: até 30 pts (escala log)
+ *  - Prazo em meses: até 20 pts
+ *  - Completude dos dados: até 30 pts (5 campos x 6 pts)
+ *  - Temperatura: até 20 pts
+ */
+function calcularScoreBasico(lead: {
+  valor_solicitado?: number | null;
+  prazo_meses?: number | null;
+  nome?: string | null;
+  telefone?: string | null;
+  email?: string | null;
+  empresa?: string | null;
+  cpf_cnpj?: string | null;
+  temperatura?: string | null;
+}): number {
+  let score = 0;
+  // Valor solicitado (0-30)
+  const valor = Number(lead.valor_solicitado) || 0;
+  if (valor > 0) {
+    const logScore = Math.min(30, Math.round((Math.log10(valor) / Math.log10(5_000_000)) * 30));
+    score += Math.max(0, logScore);
+  }
+  // Prazo (0-20)
+  const prazo = Number(lead.prazo_meses) || 0;
+  if (prazo >= 60) score += 20;
+  else if (prazo >= 36) score += 15;
+  else if (prazo >= 24) score += 10;
+  else if (prazo >= 12) score += 5;
+  else if (prazo > 0) score += 2;
+  // Completude (0-30)
+  const campos = [lead.nome, lead.telefone, lead.email, lead.empresa, lead.cpf_cnpj];
+  const preenchidos = campos.filter(c => c && String(c).trim().length > 0).length;
+  score += preenchidos * 6;
+  // Temperatura (0-20)
+  const tempMap: Record<string, number> = { frio: 0, morno: 8, quente: 15, urgente: 20 };
+  score += tempMap[lead.temperatura ?? 'frio'] ?? 0;
+  return Math.min(100, Math.max(0, score));
 }
 
 // O frontend usa o funil novo (novo_lead, tentando_contato, ...), mas a
@@ -1462,6 +1482,7 @@ async function startServer() {
       const status_lead  = b.status || etapa_funil;
       const temperatura  = b.temperatura || "frio";
       const score_ia     = Number(b.score_ia) || 0;
+      const score_basico = calcularScoreBasico({ valor_solicitado: valor, prazo_meses: prazo, nome, telefone, email, empresa, cpf_cnpj, temperatura });
       const cidade       = b.cidade || null;
       const estado       = b.estado || null;
       const observacoes_ia    = b.observacoes_ia || null;
@@ -1651,7 +1672,7 @@ async function startServer() {
       }
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
       const limitClause = limit ? `LIMIT ${limit}` : "";
-      const { rows } = await pool.query(
+      const { rows: rawRows } = await pool.query(
         `SELECT
            *,
            COALESCE(tipo_pessoa, 'pj') AS tipo,
@@ -1670,6 +1691,22 @@ async function startServer() {
          FROM leads ${where} ORDER BY created_at DESC ${limitClause}`,
         params
       );
+      // Enriquecer com score_efetivo = score_ia (IA) ou score_basico (calculado)
+      const rows = rawRows.map((r: any) => ({
+        ...r,
+        score_efetivo: r.score_ia && r.score_ia > 0
+          ? r.score_ia
+          : calcularScoreBasico({
+              valor_solicitado: r.valor_solicitado,
+              prazo_meses: r.prazo_meses,
+              nome: r.nome,
+              telefone: r.telefone,
+              email: r.email,
+              empresa: r.empresa,
+              cpf_cnpj: r.cpf_cnpj,
+              temperatura: r.temperatura,
+            }),
+      }));
       res.json(rows);
     } catch (err) {
       console.error("[LEADS GET ERROR]", err);
