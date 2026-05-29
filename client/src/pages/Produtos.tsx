@@ -1,4 +1,5 @@
 import Header from "@/components/Header";
+import SEO from "@/components/SEO";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
@@ -8,6 +9,11 @@ export default function Produtos() {
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <Header />
+      <SEO
+        title="Produtos — Soluções de Crédito Empresarial e Pessoal"
+        description="Conheça todas as soluções de crédito da Destrava: PRONAMPE, FAMPE, FCO, Giro CAIXA Fácil, crédito pessoal e muito mais."
+        keywords="produtos crédito, PRONAMPE, FAMPE, FCO, crédito empresarial, crédito pessoal"
+      />
 
       {/* HERO SECTION */}
       <section className="bg-gradient-to-br from-[var(--color-caixa-blue)] via-[var(--color-caixa-blue-dark)] to-[#001a4d] text-white py-12 md:py-20 relative overflow-hidden">

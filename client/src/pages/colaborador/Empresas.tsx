@@ -702,7 +702,7 @@ export default function Empresas() {
 
         {/* ── Layout 2 colunas ── */}
         <div className="max-w-[1500px] mx-auto px-4 sm:px-6 pb-8">
-          <div className="flex gap-5">
+          <div className="flex gap-5" style={{ minHeight: 'calc(100vh - 200px)' }}>
 
             {/* ── COLUNA ESQUERDA: Lista ── */}
             <div className={`flex-shrink-0 w-full sm:w-72 lg:w-80 ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
@@ -769,7 +769,7 @@ export default function Empresas() {
               </div>
 
               {/* Lista */}
-              <div className="scroll-area overflow-y-auto space-y-1.5" style={{ maxHeight: "calc(100vh - 280px)" }}>
+              <div className="scroll-area overflow-y-auto space-y-1.5 flex-1" style={{ maxHeight: "calc(100vh - 260px)" }}>
                 {loading ? (
                   <LoadingState message="Carregando empresas…" className="py-20" />
                 ) : empresas.length === 0 ? (
@@ -1075,7 +1075,7 @@ export default function Empresas() {
                   </div>
 
                   {/* ── Conteúdo das abas ── */}
-                  <div className="scroll-area overflow-y-auto" style={{ maxHeight: "calc(100vh - 355px)", minHeight: 420 }}>
+                  <div className="scroll-area overflow-y-auto" style={{ maxHeight: "calc(100vh - 320px)", minHeight: 400 }}>
                     {loadingDetalhe ? (
                       <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
                     ) : (
