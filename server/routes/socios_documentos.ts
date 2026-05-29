@@ -93,6 +93,34 @@ type SocioInput = {
   dados_extra?: Record<string, unknown> | string | null;
 };
 
+
+function normalizeSocioInput(input: any): SocioInput {
+  const nome = String(input?.nome || input?.nome_socio || input?.nome_do_socio || '').trim();
+  const cpfCnpj = input?.cpf_cnpj ?? input?.cpf ?? input?.documento ?? input?.cnpj_cpf_do_socio ?? input?.cnpj_cpf ?? null;
+  const qualificacao = input?.qualificacao_socio ?? input?.descricao_qualificacao_socio ?? input?.qualificacao ?? input?.cargo ?? null;
+  const representanteRaw = input?.representante_legal;
+  const representanteLegal =
+    representanteRaw === true ||
+    representanteRaw === 1 ||
+    representanteRaw === '1' ||
+    String(representanteRaw || '').toLowerCase() === 'true' ||
+    String(representanteRaw || '').toLowerCase() === 'sim' ||
+    String(representanteRaw || '').toLowerCase() === 's';
+
+  return {
+    nome,
+    cpf_cnpj: cpfCnpj ? String(cpfCnpj) : null,
+    qualificacao_socio: qualificacao ? String(qualificacao) : null,
+    percentual_capital: input?.percentual_capital ?? input?.percentual ?? null,
+    representante_legal: representanteLegal,
+    nome_representante: input?.nome_representante ?? input?.nome_do_representante ?? null,
+    qualificacao_representante: input?.qualificacao_representante ?? input?.qualificacao_representante_legal ?? null,
+    data_entrada_sociedade: input?.data_entrada_sociedade ?? input?.data_entrada ?? null,
+    pais: input?.pais ?? null,
+    dados_extra: input?.dados_extra ?? input,
+  };
+}
+
 const SOCIOS_BASE_COLUMNS = new Set([
   'empresa_id',
   'nome',
@@ -151,21 +179,22 @@ async function ensureSociosEmpresaSchema(): Promise<Set<string>> {
 
 async function insertSocioEmpresa(empresaId: string, socio: SocioInput) {
   const columns = await ensureSociosEmpresaSchema();
-  const nome = socio.nome?.trim();
+  const normalized = normalizeSocioInput(socio);
+  const nome = normalized.nome?.trim();
   if (!nome) return null;
 
   const payload: Record<string, unknown> = {
     empresa_id: empresaId,
     nome,
-    cpf_cnpj: socio.cpf_cnpj || null,
-    qualificacao_socio: socio.qualificacao_socio || null,
-    percentual_capital: toNullableNumeric(socio.percentual_capital),
-    representante_legal: socio.representante_legal ?? false,
-    nome_representante: socio.nome_representante || null,
-    qualificacao_representante: socio.qualificacao_representante || null,
-    data_entrada_sociedade: socio.data_entrada_sociedade || null,
-    pais: socio.pais || null,
-    dados_extra: typeof socio.dados_extra === 'string' ? socio.dados_extra : JSON.stringify(socio.dados_extra || {}),
+    cpf_cnpj: normalized.cpf_cnpj || null,
+    qualificacao_socio: normalized.qualificacao_socio || null,
+    percentual_capital: toNullableNumeric(normalized.percentual_capital),
+    representante_legal: normalized.representante_legal ?? false,
+    nome_representante: normalized.nome_representante || null,
+    qualificacao_representante: normalized.qualificacao_representante || null,
+    data_entrada_sociedade: normalized.data_entrada_sociedade || null,
+    pais: normalized.pais || null,
+    dados_extra: typeof normalized.dados_extra === 'string' ? normalized.dados_extra : JSON.stringify(normalized.dados_extra || {}),
   };
 
   const safeEntries = Object.entries(payload).filter(([key]) => SOCIOS_BASE_COLUMNS.has(key) && columns.has(key));
@@ -234,16 +263,26 @@ router.post('/:id/socios', auth, async (req: Request, res: Response) => {
 router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
   try {
     if (!(await requireEmpresaAccess(req, res))) return;
-    const { socios } = req.body as { socios: SocioInput[] };
+    await ensureSociosEmpresaSchema();
+    const { socios, replace } = req.body as { socios: SocioInput[]; replace?: boolean };
     if (!Array.isArray(socios) || socios.length === 0) {
       res.status(200).json({ inserted: 0, socios: [], warning: 'Nenhum sócio enviado para importação' });
       return;
     }
 
+    if (replace === true) {
+      await pool.query('DELETE FROM public.socios_empresa WHERE empresa_id = $1', [req.params.id]);
+    }
+
     const inserted = [];
     const failed: Array<{ nome?: string; error: unknown }> = [];
+    const seen = new Set<string>();
 
-    for (const socio of socios) {
+    for (const rawSocio of socios) {
+      const socio = normalizeSocioInput(rawSocio);
+      const key = `${(socio.nome || '').trim().toLowerCase()}|${String(socio.cpf_cnpj || '').replace(/\D/g, '')}`;
+      if (!socio.nome || seen.has(key)) continue;
+      seen.add(key);
       try {
         const row = await insertSocioEmpresa(req.params.id, socio);
         if (row) inserted.push(row);
@@ -253,12 +292,10 @@ router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
       }
     }
 
-    // Não quebrar o cadastro principal da empresa se algum sócio falhar.
-    // Retorna 207 quando houve falha parcial e 201 quando tudo foi importado.
     if (inserted.length > 0) {
-      await registrarHistoricoEmpresa(req.params.id, 'socios_importados', `${inserted.length} sócio(s) importado(s) para a empresa.`, (req as any).colaborador?.nome || 'Sistema');
+      await registrarHistoricoEmpresa(req.params.id, 'socios_importados', `${inserted.length} sócio(s) sincronizado(s) com a Receita Federal.`, (req as any).colaborador?.nome || 'Sistema');
     }
-    const status = failed.length > 0 ? 207 : 201;
+    const status = failed.length > 0 ? 207 : 200;
     res.status(status).json({ inserted: inserted.length, socios: inserted, failed });
   } catch (err) {
     console.error('[POST /api/empresas/:id/socios/bulk]', pgErrorDetails(err));

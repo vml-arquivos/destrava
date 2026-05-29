@@ -158,6 +158,39 @@ function getInitials(name: string): string {
   return name.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 }
 
+
+function boolReceita(value: unknown): boolean {
+  if (value === true || value === 1 || value === "1") return true;
+  const v = String(value || "").trim().toLowerCase();
+  return ["true", "sim", "s", "representante", "representante legal"].includes(v);
+}
+
+function normalizarSociosReceita(qsa: any[] | undefined | null) {
+  if (!Array.isArray(qsa)) return [];
+  const vistos = new Set<string>();
+  return qsa
+    .map((s) => {
+      const nome = String(s?.nome || s?.nome_socio || s?.nome_do_socio || "").trim();
+      const cpf_cnpj = s?.cpf_cnpj || s?.cpf || s?.documento || s?.cnpj_cpf_do_socio || s?.cnpj_cpf || null;
+      const qualificacao_socio = s?.qualificacao_socio || s?.descricao_qualificacao_socio || s?.qualificacao || s?.cargo || "Sócio";
+      const key = `${nome.toLowerCase()}|${String(cpf_cnpj || "").replace(/\D/g, "")}`;
+      if (!nome || vistos.has(key)) return null;
+      vistos.add(key);
+      return {
+        nome,
+        cpf_cnpj,
+        qualificacao_socio,
+        representante_legal: boolReceita(s?.representante_legal),
+        nome_representante: s?.nome_representante || s?.nome_do_representante || null,
+        qualificacao_representante: s?.qualificacao_representante || s?.qualificacao_representante_legal || null,
+        data_entrada_sociedade: s?.data_entrada_sociedade || s?.data_entrada || null,
+        pais: s?.pais || null,
+        dados_extra: s,
+      };
+    })
+    .filter(Boolean) as any[];
+}
+
 function calcularScore(e: Empresa) {
   let pontos = 0;
   const tags: { text: string; ok: boolean }[] = [];
@@ -468,7 +501,8 @@ export default function Empresas() {
       else if (porteRaw.includes("medio") || porteRaw.includes("médio")) porteMap = "medio";
       else if (porteRaw.includes("grande")) porteMap = "grande";
 
-      const socio = res.qsa?.[0];
+      const sociosReceita = normalizarSociosReceita(res.qsa);
+      const socio = sociosReceita[0];
       const payload: Record<string, any> = {
         razao_social: res.razao_social || empresa.razao_social,
         nome_fantasia: res.nome_fantasia || empresa.nome_fantasia,
@@ -498,9 +532,9 @@ export default function Empresas() {
         matriz_filial: res.identificador_matriz_filial === 1 ? "Matriz" : res.identificador_matriz_filial === 2 ? "Filial" : empresa.matriz_filial || null,
         ultima_sincronizacao_receita: new Date().toISOString(),
         // Responsável — só preenche se estiver vazio
-        responsavel_nome: empresa.responsavel_nome || socio?.nome_socio || "",
-        responsavel_cpf: empresa.responsavel_cpf || socio?.cnpj_cpf_do_socio || "",
-        responsavel_cargo: empresa.responsavel_cargo || socio?.descricao_qualificacao_socio || "",
+        responsavel_nome: empresa.responsavel_nome || socio?.nome || "",
+        responsavel_cpf: empresa.responsavel_cpf || socio?.cpf_cnpj || "",
+        responsavel_cargo: empresa.responsavel_cargo || socio?.qualificacao_socio || "",
       };
 
       await apiFetch(`/api/empresas/${empresa.id}`, {
@@ -508,31 +542,33 @@ export default function Empresas() {
         body: JSON.stringify(payload),
       });
 
-      // Importar sócios novos (bulk — ON CONFLICT DO NOTHING)
-      if (res.qsa && res.qsa.length > 0) {
-        await apiFetch(`/api/empresas/${empresa.id}/socios/bulk`, {
+      let sociosAtualizados = sociosReceita;
+      if (sociosReceita.length > 0) {
+        const bulk = await apiFetch(`/api/empresas/${empresa.id}/socios/bulk`, {
           method: "POST",
-          body: JSON.stringify({
-            socios: res.qsa.map((s: any) => ({
-              nome: s.nome_socio,
-              cpf_cnpj: s.cnpj_cpf_do_socio || null,
-              qualificacao_socio: s.descricao_qualificacao_socio || s.qualificacao_socio,
-              representante_legal: Boolean(s.representante_legal),
-            })),
-          }),
-        }).catch(() => {}); // não bloqueia se bulk falhar
+          body: JSON.stringify({ socios: sociosReceita, replace: true }),
+        }).catch((err: any) => {
+          console.error("[socios/bulk]", err);
+          return null;
+        });
+        if (Array.isArray(bulk?.socios)) sociosAtualizados = bulk.socios;
       }
 
-      // Atualizar estado local
+      // Atualizar estado local e recarregar os dados da aba ativa imediatamente.
       const atualizada = await apiFetch(`/api/empresas/${empresa.id}`);
       setSelecionada(atualizada);
       setEmpresas(prev => prev.map(e => e.id === empresa.id ? atualizada : e));
 
-      // Recarregar sócios
-      const socios = await apiFetch(`/api/empresas/${empresa.id}/socios`).catch(() => []);
-      setSociosEmpresa(Array.isArray(socios) ? socios : []);
+      const sociosReload = await apiFetch(`/api/empresas/${empresa.id}/socios`).catch(() => []);
+      const sociosFinal = Array.isArray(sociosReload) && sociosReload.length > 0 ? sociosReload : sociosAtualizados;
+      setSociosEmpresa(sociosFinal);
 
-      toast.success("Dados sincronizados com a Receita Federal!", { id: "sync" });
+      toast.success(
+        sociosFinal.length > 0
+          ? `Dados sincronizados. ${sociosFinal.length} sócio(s) carregado(s).`
+          : "Dados sincronizados. A Receita Federal não retornou sócios para este CNPJ.",
+        { id: "sync" }
+      );
     } catch (err: any) {
       toast.error(err?.message || "Erro ao sincronizar", { id: "sync" });
     } finally {
@@ -606,9 +642,21 @@ export default function Empresas() {
       };
       if (editando) {
         await apiFetch(`/api/empresas/${editando.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+        if (socios.length > 0) {
+          await apiFetch(`/api/empresas/${editando.id}/socios/bulk`, {
+            method: "POST",
+            body: JSON.stringify({ socios: normalizarSociosReceita(socios as any[]), replace: true }),
+          }).catch(() => null);
+        }
         toast.success("Empresa atualizada!");
       } else {
-        await apiFetch("/api/empresas", { method: "POST", body: JSON.stringify(payload) });
+        const criada = await apiFetch("/api/empresas", { method: "POST", body: JSON.stringify(payload) });
+        if (criada?.id && socios.length > 0) {
+          await apiFetch(`/api/empresas/${criada.id}/socios/bulk`, {
+            method: "POST",
+            body: JSON.stringify({ socios: normalizarSociosReceita(socios as any[]), replace: true }),
+          }).catch(() => null);
+        }
         toast.success("Empresa cadastrada!");
       }
       fecharModal(); carregarEmpresas();
@@ -1359,7 +1407,7 @@ export default function Empresas() {
                               <Users className="w-6 h-6 text-slate-300" />
                             </div>
                             <p className="text-sm text-slate-500 font-medium">Nenhum sócio cadastrado</p>
-                            <p className="text-xs text-slate-400">Os sócios são importados via Smart Onboarding</p>
+                            <p className="text-xs text-slate-400">Clique em Atualizar para buscar/importar os sócios retornados pela Receita Federal</p>
                           </div>
                         ) : (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
