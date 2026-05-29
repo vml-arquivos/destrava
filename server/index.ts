@@ -9707,20 +9707,27 @@ ${(temTest1 || temTest2) ? `
           diagnostico,
         ]
       );
-      await registrarAlertasAcompanhamentoBancario(client, {
-        acompanhamentoId: req.params.id,
-        atualizacaoId: rows[0]?.id || null,
-        numeroSemana,
-        nomeEmpresa: acomp.nome_empresa || null,
-        banco: acomp.banco_observado || null,
-        responsavelId: acomp.responsavel_id || colaborador?.id || null,
-        totalEntradas,
-        refs,
-        comp,
-        dadosSemana: { ...semanaExistente.rows[0], ...b },
-      });
-      // Salvar histórico de compensação
-      await client.query(
+      await client.query("SAVEPOINT sp_acomp_alertas_historico");
+      try {
+        await registrarAlertasAcompanhamentoBancario(client, {
+          acompanhamentoId: req.params.id,
+          atualizacaoId: rows[0]?.id || null,
+          numeroSemana,
+          nomeEmpresa: acomp.nome_empresa || null,
+          banco: acomp.banco_observado || null,
+          responsavelId: acomp.responsavel_id || colaborador?.id || null,
+          totalEntradas,
+          refs,
+          comp,
+          dadosSemana: { ...semanaExistente.rows[0], ...b },
+        });
+      } catch (alertErr) {
+        console.warn("[acompanhamento] Semana salva, mas não foi possível registrar alertas.", alertErr);
+      }
+      // Salvar histórico de compensação. Este bloco é auxiliar e não pode impedir
+      // o botão de atualização semanal de salvar os valores principais.
+      try {
+        await client.query(
         `INSERT INTO acompanhamento_compensacoes_historico (
           acompanhamento_id, numero_semana, data_referencia_inicio, data_referencia_fim,
           entrada_realizada, faturamento_anual_ref, teto_anual_movimentacao,
@@ -9746,7 +9753,13 @@ ${(temTest1 || temTest2) ? `
           comp.status_aderencia, comp.alerta_aderencia, comp.motivo_alerta_aderencia, diagnostico,
           colaborador?.id || null,
         ]
-      );
+        );
+        await client.query("RELEASE SAVEPOINT sp_acomp_alertas_historico");
+      } catch (histErr) {
+        console.warn("[acompanhamento] Semana salva, mas histórico/alertas auxiliares falharam.", histErr);
+        await client.query("ROLLBACK TO SAVEPOINT sp_acomp_alertas_historico").catch(() => null);
+        await client.query("RELEASE SAVEPOINT sp_acomp_alertas_historico").catch(() => null);
+      }
       // Atualizar acompanhamento principal
       const baseDataAtualizacao = b.data_atualizacao ? new Date(String(b.data_atualizacao) + 'T00:00:00Z') : new Date();
       await client.query(
@@ -9901,20 +9914,26 @@ ${(temTest1 || temTest2) ? `
           comp.status_aderencia, comp.alerta_aderencia, comp.motivo_alerta_aderencia, diagnostico,
         ]
       );
-      await registrarAlertasAcompanhamentoBancario(pool, {
-        acompanhamentoId: req.params.id,
-        atualizacaoId: rows[0]?.id || null,
-        numeroSemana,
-        nomeEmpresa: acomp.nome_empresa || null,
-        banco: acomp.banco_observado || null,
-        responsavelId: acomp.responsavel_id || colaborador?.id || null,
-        totalEntradas,
-        refs,
-        comp,
-        dadosSemana: b,
-      });
-      // Salvar histórico de compensação
-      await pool.query(
+      try {
+        await registrarAlertasAcompanhamentoBancario(pool, {
+          acompanhamentoId: req.params.id,
+          atualizacaoId: rows[0]?.id || null,
+          numeroSemana,
+          nomeEmpresa: acomp.nome_empresa || null,
+          banco: acomp.banco_observado || null,
+          responsavelId: acomp.responsavel_id || colaborador?.id || null,
+          totalEntradas,
+          refs,
+          comp,
+          dadosSemana: b,
+        });
+      } catch (alertErr) {
+        console.warn("[acompanhamento] Atualização semanal salva, mas não foi possível registrar alertas.", alertErr);
+      }
+      // Salvar histórico de compensação. Este bloco é auxiliar e não pode impedir
+      // o salvamento da atualização semanal se houver diferença de schema legado.
+      try {
+        await pool.query(
         `INSERT INTO acompanhamento_compensacoes_historico (
           acompanhamento_id, numero_semana, data_referencia_inicio, data_referencia_fim,
           entrada_realizada, faturamento_anual_ref, teto_anual_movimentacao,
@@ -9940,7 +9959,10 @@ ${(temTest1 || temTest2) ? `
           comp.status_aderencia, comp.alerta_aderencia, comp.motivo_alerta_aderencia, diagnostico,
           colaborador?.id || null,
         ]
-      );
+        );
+      } catch (histErr) {
+        console.warn("[acompanhamento] Atualização semanal salva, mas histórico auxiliar não foi registrado.", histErr);
+      }
       // Calcula próxima atualização a partir da data de atualização enviada (ou hoje)
       const baseDataAtualizacao = b.data_atualizacao
         ? new Date(String(b.data_atualizacao) + 'T00:00:00Z')
