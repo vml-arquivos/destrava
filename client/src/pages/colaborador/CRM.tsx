@@ -1533,14 +1533,14 @@ export default function CRM() {
 
       {/* ── Modal Novo Lead ── */}
       <Dialog open={showNovoLead} onOpenChange={setShowNovoLead}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-md w-[calc(100vw-2rem)] sm:w-full mx-auto max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Plus className="h-5 w-5 text-blue-600" />
               Novo Lead
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 overflow-y-auto flex-1 pr-1">
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Etapa inicial</label>
               <Select value={etapaNovoLead} onValueChange={(value) => setEtapaNovoLead(value as EtapaFunil)}>
@@ -1573,9 +1573,9 @@ export default function CRM() {
               </div>
             ))}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNovoLead(false)}>Cancelar</Button>
-            <Button onClick={criarLead} disabled={salvando} className="bg-blue-600 hover:bg-blue-700">
+          <DialogFooter className="flex-shrink-0 flex-col-reverse sm:flex-row gap-2 pt-2">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setShowNovoLead(false)}>Cancelar</Button>
+            <Button onClick={criarLead} disabled={salvando} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700">
               {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
               Criar Lead
             </Button>

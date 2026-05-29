@@ -338,7 +338,7 @@ export default function UsuariosPage() {
 
   return (
     <Layout title="Usuários e Perfis">
-      <div className="max-w-6xl mx-auto space-y-6 p-6">
+      <div className="max-w-6xl mx-auto space-y-6 p-3 sm:p-6">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-primary/10 rounded-xl">
             <Users className="h-6 w-6 text-primary" />
@@ -351,7 +351,7 @@ export default function UsuariosPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Card>
             <CardContent className="pt-5">
               <p className="text-xs text-muted-foreground">Total</p>
@@ -394,7 +394,7 @@ export default function UsuariosPage() {
           </Card>
         )}
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <Card className={!podeGerenciar ? "opacity-60 pointer-events-none" : ""}>
             <CardHeader className="border-b pb-4">
               <CardTitle className="text-base flex items-center gap-2">
@@ -422,7 +422,7 @@ export default function UsuariosPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label>Cargo <span className="text-destructive">*</span></Label>
                     <Select value={cargo} onValueChange={setCargo}>
@@ -453,7 +453,7 @@ export default function UsuariosPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="telefone-user">Telefone WhatsApp</Label>
                     <div className="relative">
@@ -467,7 +467,7 @@ export default function UsuariosPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-xl border bg-muted/20 p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border bg-muted/20 p-3">
                   <label className="flex items-center gap-3 text-sm">
                     <input type="checkbox" checked={podeAtenderLeads} onChange={(e) => setPodeAtenderLeads(e.target.checked)} />
                     <span>Pode atender leads</span>
@@ -563,7 +563,7 @@ export default function UsuariosPage() {
                     <div key={col.id} className="rounded-xl border bg-muted/20 hover:bg-muted/30 transition-colors">
                       {editandoId === col.id ? (
                         <div className="p-4 space-y-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1">
                               <Label className="text-xs">Nome</Label>
                               <Input value={editNome} onChange={(e) => setEditNome(e.target.value)} className="h-9 text-sm" />
@@ -597,7 +597,7 @@ export default function UsuariosPage() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div className="space-y-1">
                               <Label className="text-xs">Telefone</Label>
                               <Input value={editTelefone} onChange={(e) => setEditTelefone(e.target.value)} className="h-9 text-sm" />
@@ -619,7 +619,7 @@ export default function UsuariosPage() {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-xl border bg-white p-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl border bg-white p-3">
                             <label className="flex items-center gap-3 text-sm">
                               <input type="checkbox" checked={editPodeAtenderLeads} onChange={(e) => setEditPodeAtenderLeads(e.target.checked)} />
                               <span>Pode atender leads</span>
@@ -665,14 +665,14 @@ export default function UsuariosPage() {
                                 <span>Chatwoot agente: {col.chatwoot_agente_id ?? "—"}</span>
                               </p>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
                               {podeGerenciar && (
                                 <Button size="sm" variant="outline" onClick={() => abrirEdicao(col)}>
                                   <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
                                 </Button>
                               )}
                               {podeGerenciar && (
-                                <Button size="sm" variant="ghost" onClick={() => resetarSenha(col)}>
+                                <Button size="sm" variant="ghost" onClick={() => resetarSenha(col)} className="hidden sm:inline-flex">
                                   <Lock className="h-3.5 w-3.5 mr-1" /> Resetar senha
                                 </Button>
                               )}

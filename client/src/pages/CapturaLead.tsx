@@ -1,4 +1,4 @@
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import { Link } from "wouter";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -36,7 +36,49 @@ import {
   Clock,
   Star,
   Loader2,
+  FileText,
 } from "lucide-react";
+
+// Mapa produto (query param) → label amigável e mensagem WhatsApp
+const PRODUTO_META: Record<string, { label: string; whatsappMsg: string; titulo: string; subtitulo: string }> = {
+  "rating-banco-central": {
+    label: "Rating Banco Central",
+    whatsappMsg: "Olá! Quero consultar o rating da minha empresa no Banco Central.",
+    titulo: "Solicite sua Consulta de Rating",
+    subtitulo: "Preencha seus dados e um especialista entrará em contato para iniciar a análise do seu rating no Banco Central.",
+  },
+  "certificado-digital": {
+    label: "Certificado Digital",
+    whatsappMsg: "Olá! Tenho interesse em adquirir um Certificado Digital.",
+    titulo: "Solicite seu Certificado Digital",
+    subtitulo: "Preencha seus dados e nossa equipe entrará em contato para orientar sobre o melhor tipo de certificado para você.",
+  },
+  "consulta-spc-serasa": {
+    label: "Consulta SPC/Serasa",
+    whatsappMsg: "Olá! Quero realizar uma consulta de CPF/CNPJ no SPC/Serasa.",
+    titulo: "Solicite sua Consulta SPC/Serasa",
+    subtitulo: "Preencha seus dados e um especialista entrará em contato para realizar a consulta e apresentar o relatório completo.",
+  },
+  "pronampe": {
+    label: "PRONAMPE",
+    whatsappMsg: "Olá! Tenho interesse no PRONAMPE para minha empresa.",
+    titulo: "Simule seu Crédito via PRONAMPE",
+    subtitulo: "Preencha seus dados e descubra se sua empresa se qualifica para o PRONAMPE.",
+  },
+  "giro-caixa-facil": {
+    label: "Giro CAIXA Fácil",
+    whatsappMsg: "Olá! Tenho interesse no Giro CAIXA Fácil.",
+    titulo: "Simule o Giro CAIXA Fácil",
+    subtitulo: "Capital de giro pela CAIXA Econômica Federal. Preencha seus dados para uma análise gratuita.",
+  },
+};
+
+const PRODUTO_META_DEFAULT = {
+  label: "",
+  whatsappMsg: "Olá! Fiz uma simulação no site da Destrava Crédito e gostaria de conversar com um especialista.",
+  titulo: "Simule seu Empréstimo e Descubra as Melhores Condições",
+  subtitulo: "Preencha seus dados e receba uma estimativa personalizada. Um especialista da Destrava Crédito entrará em contato com as melhores opções para você.",
+};
 
 interface LeadForm {
   nome: string;
@@ -107,7 +149,20 @@ function formatarTelefone(v: string): string {
   return `(${nums.slice(0, 2)}) ${nums.slice(2, 7)}-${nums.slice(7)}`;
 }
 
+// Produtos que são serviços (não crédito) — não mostram simulador de parcelas
+const PRODUTOS_SERVICO = ["rating-banco-central", "certificado-digital", "consulta-spc-serasa"];
+
 export default function CapturaLead() {
+  // Ler query param ?produto= da URL
+  const [produtoParam, setProdutoParam] = useState<string>("");
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setProdutoParam(params.get("produto") || "");
+  }, []);
+
+  const meta = PRODUTO_META[produtoParam] ?? PRODUTO_META_DEFAULT;
+  const isServico = PRODUTOS_SERVICO.includes(produtoParam);
+
   const [etapa, setEtapa] = useState<"formulario" | "resultado">("formulario");
   const [form, setForm] = useState<LeadForm>({
     nome: "",
@@ -143,7 +198,7 @@ export default function CapturaLead() {
     e.preventDefault();
     if (!validar()) return;
     setEnviando(true);
-    const res = calcularEstimativa(form.valorDesejado, parseInt(parcelas));
+    const res = isServico ? null : calcularEstimativa(form.valorDesejado, parseInt(parcelas));
     setResultado(res);
     try {
       await fetch("/api/leads", {
@@ -158,11 +213,13 @@ export default function CapturaLead() {
           finalidade: form.finalidade || null,
           tipoCliente: form.tipoCliente,
           parcelas: parseInt(parcelas),
-          origem: "simulador-publico",
+          // Rastreamento de origem por produto
+          origem: produtoParam ? `landing_${produtoParam}` : "simulador-publico",
+          produto_interesse: meta.label || null,
+          pagina: produtoParam ? `/${produtoParam}` : "/captura",
         }),
       });
     } catch (err) {
-      // Falha não bloqueia o fluxo do usuário, mas registra para monitoramento
       console.error("[CapturaLead] Falha ao registrar lead na API:", err);
     }
     setEnviando(false);
@@ -170,36 +227,52 @@ export default function CapturaLead() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  const whatsappUrl = `https://wa.me/556135268355?text=${encodeURIComponent(
-    `Olá! Me chamo ${form.nome} e fiz uma simulação no site da Destrava Crédito.\n\n` +
+  const whatsappMsg = encodeURIComponent(
+    `Olá! Me chamo ${form.nome}. ${meta.whatsappMsg}\n\n` +
       (form.empresa ? `Empresa: ${form.empresa}\n` : "") +
-      (form.valorDesejado ? `Valor desejado: ${fmt.format(parseFloat(form.valorDesejado))}\n` : "") +
+      (form.valorDesejado && !isServico ? `Valor desejado: ${fmt.format(parseFloat(form.valorDesejado))}\n` : "") +
       (form.finalidade ? `Finalidade: ${form.finalidade}\n` : "") +
-      `Prazo: ${parcelas} meses\n\nGostaria de conversar com um especialista.`
-  )}`;
+      (!isServico ? `Prazo: ${parcelas} meses\n` : "") +
+      `\nGostaria de conversar com um especialista.`
+  );
+  const whatsappUrl = `https://wa.me/556135268355?text=${whatsappMsg}`;
+
+  const seoTitle = isServico
+    ? `${meta.label} | Destrava Crédito`
+    : "Simule seu Empréstimo Grátis | Destrava Crédito";
+  const seoDesc = isServico
+    ? `Solicite ${meta.label} com a Destrava Crédito. Atendimento especializado em Brasília e Goiânia.`
+    : "Simule agora seu empréstimo empresarial ou pessoal. Preencha seus dados e receba uma estimativa personalizada.";
 
   return (
     <>
       <SEO
-        title="Simule seu Empréstimo Grátis | Destrava Crédito"
-        description="Simule agora seu empréstimo empresarial ou pessoal. Preencha seus dados e receba uma estimativa personalizada. Atendimento por especialistas."
-        keywords="simular empréstimo, simulador crédito empresarial, simulação PRONAMPE, capital de giro"
+        title={seoTitle}
+        description={seoDesc}
+        keywords={`${meta.label || "simular empréstimo"}, crédito empresarial, Destrava Crédito`}
       />
       <Header />
 
       <main className="min-h-screen bg-gradient-to-b from-[#001f6b]/5 to-white">
         <section className="bg-gradient-to-br from-[#001f6b] via-[#002d8a] to-[#003db5] text-white py-14 px-4">
           <div className="max-w-3xl mx-auto text-center">
-            <Badge className="bg-white/20 text-white border-white/30 mb-4">
-              <Calculator className="h-3.5 w-3.5 mr-1.5" />
-              Simulação 100% Gratuita
-            </Badge>
+            {meta.label && (
+              <Badge className="bg-white/20 text-white border-white/30 mb-4">
+                <FileText className="h-3.5 w-3.5 mr-1.5" />
+                {meta.label}
+              </Badge>
+            )}
+            {!meta.label && (
+              <Badge className="bg-white/20 text-white border-white/30 mb-4">
+                <Calculator className="h-3.5 w-3.5 mr-1.5" />
+                Simulação 100% Gratuita
+              </Badge>
+            )}
             <h1 className="text-3xl md:text-4xl font-bold mb-4 leading-tight">
-              Simule seu Empréstimo e Descubra as Melhores Condições
+              {meta.titulo}
             </h1>
             <p className="text-white/80 text-lg mb-6">
-              Preencha seus dados e receba uma estimativa personalizada.
-              Um especialista da Destrava Crédito entrará em contato com as melhores opções para você.
+              {meta.subtitulo}
             </p>
             <div className="flex flex-wrap justify-center gap-5 text-sm text-white/70">
               <span className="flex items-center gap-1.5">
@@ -225,8 +298,10 @@ export default function CapturaLead() {
               <Card className="shadow-xl border-0">
                 <CardHeader className="pb-4 border-b">
                   <CardTitle className="text-xl flex items-center gap-2">
-                    <Calculator className="h-5 w-5 text-primary" />
-                    Preencha seus dados para simular
+                    {isServico
+                      ? <><FileText className="h-5 w-5 text-primary" />Preencha seus dados para solicitar</>
+                      : <><Calculator className="h-5 w-5 text-primary" />Preencha seus dados para simular</>
+                    }
                   </CardTitle>
                   <p className="text-sm text-muted-foreground mt-1">
                     Campos com <span className="text-destructive font-semibold">*</span> são obrigatórios
@@ -335,57 +410,60 @@ export default function CapturaLead() {
                       </div>
                     </div>
 
-                    <div className="space-y-4">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                        Sobre o Empréstimo
-                        <span className="text-muted-foreground text-xs ml-1.5 font-normal normal-case">(todos opcionais)</span>
-                      </p>
+                    {/* Seção de crédito — oculta para produtos de serviço */}
+                    {!isServico && (
+                      <div className="space-y-4">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Sobre o Empréstimo
+                          <span className="text-muted-foreground text-xs ml-1.5 font-normal normal-case">(todos opcionais)</span>
+                        </p>
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <Label>Valor Desejado</Label>
-                          <Select value={form.valorDesejado} onValueChange={(v) => set("valorDesejado", v)}>
-                            <SelectTrigger>
-                              <DollarSign className="h-4 w-4 text-muted-foreground mr-1 flex-shrink-0" />
-                              <SelectValue placeholder="Selecione..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {FAIXAS_VALOR.map((f) => (
-                                <SelectItem key={f.valor} value={f.valor}>{f.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <Label>Valor Desejado</Label>
+                            <Select value={form.valorDesejado} onValueChange={(v) => set("valorDesejado", v)}>
+                              <SelectTrigger>
+                                <DollarSign className="h-4 w-4 text-muted-foreground mr-1 flex-shrink-0" />
+                                <SelectValue placeholder="Selecione..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {FAIXAS_VALOR.map((f) => (
+                                  <SelectItem key={f.valor} value={f.valor}>{f.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <Label>Prazo Desejado</Label>
+                            <Select value={parcelas} onValueChange={setParcelas}>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {[6, 12, 18, 24, 36, 48, 60, 72, 84].map((p) => (
+                                  <SelectItem key={p} value={String(p)}>{p} meses</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
 
                         <div className="space-y-1.5">
-                          <Label>Prazo Desejado</Label>
-                          <Select value={parcelas} onValueChange={setParcelas}>
+                          <Label>Finalidade do Crédito</Label>
+                          <Select value={form.finalidade} onValueChange={(v) => set("finalidade", v)}>
                             <SelectTrigger>
-                              <SelectValue />
+                              <SelectValue placeholder="Para que você precisa do crédito?" />
                             </SelectTrigger>
                             <SelectContent>
-                              {[6, 12, 18, 24, 36, 48, 60, 72, 84].map((p) => (
-                                <SelectItem key={p} value={String(p)}>{p} meses</SelectItem>
+                              {FINALIDADES.map((f) => (
+                                <SelectItem key={f} value={f}>{f}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         </div>
                       </div>
-
-                      <div className="space-y-1.5">
-                        <Label>Finalidade do Crédito</Label>
-                        <Select value={form.finalidade} onValueChange={(v) => set("finalidade", v)}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Para que você precisa do crédito?" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {FINALIDADES.map((f) => (
-                              <SelectItem key={f} value={f}>{f}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
+                    )}
 
                     <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
                       <Shield className="h-3.5 w-3.5 inline mr-1 text-green-600" />
@@ -402,7 +480,12 @@ export default function CapturaLead() {
                       {enviando ? (
                         <>
                           <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                          Calculando...
+                          Enviando...
+                        </>
+                      ) : isServico ? (
+                        <>
+                          <ArrowRight className="mr-2 h-5 w-5" />
+                          Solicitar {meta.label} — É Grátis
                         </>
                       ) : (
                         <>
@@ -425,15 +508,17 @@ export default function CapturaLead() {
                       <CheckCircle2 className="h-8 w-8 text-green-400" />
                     </div>
                     <h2 className="text-2xl font-bold mb-1">
-                      Simulação Concluída, {form.nome.split(" ")[0]}!
+                      {isServico ? `Solicitação Recebida, ${form.nome.split(" ")[0]}!` : `Simulação Concluída, ${form.nome.split(" ")[0]}!`}
                     </h2>
                     <p className="text-white/80 text-sm">
-                      Veja abaixo uma estimativa baseada nas condições de mercado
+                      {isServico
+                        ? "Nossa equipe entrará em contato em breve para dar continuidade ao seu pedido."
+                        : "Veja abaixo uma estimativa baseada nas condições de mercado"}
                     </p>
                   </div>
 
                   <CardContent className="p-6 space-y-5">
-                    {resultado && form.valorDesejado ? (
+                    {!isServico && resultado && form.valorDesejado ? (
                       <>
                         <div className="bg-gradient-to-br from-primary/5 to-transparent rounded-xl p-5 border border-primary/20">
                           <p className="text-sm text-muted-foreground text-center mb-2">
@@ -478,6 +563,12 @@ export default function CapturaLead() {
                           </div>
                         )}
                       </>
+                    ) : isServico ? (
+                      <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center text-sm text-green-800">
+                        <CheckCircle2 className="h-6 w-6 text-green-600 mx-auto mb-2" />
+                        <p className="font-semibold">Pedido registrado com sucesso!</p>
+                        <p className="mt-1 text-green-700">Um especialista em <strong>{meta.label}</strong> entrará em contato em até 2 horas úteis.</p>
+                      </div>
                     ) : (
                       <div className="text-center py-4 text-muted-foreground text-sm">
                         Para ver a estimativa de parcelas, informe o valor desejado na próxima simulação.
@@ -491,6 +582,7 @@ export default function CapturaLead() {
                         <div><span className="text-muted-foreground block text-xs">Telefone</span><p className="font-medium">{form.telefone}</p></div>
                         {form.empresa && <div><span className="text-muted-foreground block text-xs">Empresa</span><p className="font-medium">{form.empresa}</p></div>}
                         {form.finalidade && <div><span className="text-muted-foreground block text-xs">Finalidade</span><p className="font-medium">{form.finalidade}</p></div>}
+                        {meta.label && <div className="col-span-2"><span className="text-muted-foreground block text-xs">Produto de interesse</span><p className="font-medium">{meta.label}</p></div>}
                       </div>
                     </div>
 
@@ -512,7 +604,7 @@ export default function CapturaLead() {
                       className="w-full text-muted-foreground"
                       onClick={() => { setEtapa("formulario"); setResultado(null); }}
                     >
-                      Fazer nova simulação
+                      {isServico ? "Fazer nova solicitação" : "Fazer nova simulação"}
                     </Button>
                   </CardContent>
                 </Card>
@@ -521,7 +613,7 @@ export default function CapturaLead() {
                   {[
                     { href: "/credito-empresas", titulo: "Crédito Empresarial", icon: Building2 },
                     { href: "/credito-pessoal", titulo: "Crédito Pessoal", icon: User },
-                    { href: "/simulador", titulo: "Simulador Completo", icon: Calculator },
+                    { href: "/simular", titulo: "Simulador Completo", icon: Calculator },
                   ].map((item) => (
                     <Link key={item.href} href={item.href}>
                       <a className="block p-3 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-all text-center">

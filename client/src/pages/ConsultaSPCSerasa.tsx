@@ -48,7 +48,7 @@ export default function ConsultaSPCSerasa() {
               Saiba se há restrições, negativações ou pendências no seu CPF ou CNPJ. Análise completa com relatório detalhado e orientação especializada para regularização.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link href="/simular">
+              <Link href="/captura?produto=consulta-spc-serasa">
                 <Button size="lg" className="bg-orange-400 hover:bg-orange-500 text-black font-bold px-8">
                   Consultar Agora
                   <ArrowRight className="ml-2 h-5 w-5" />
@@ -95,7 +95,7 @@ export default function ConsultaSPCSerasa() {
                     </div>
                   ))}
                 </div>
-                <Link href="/simular">
+                <Link href="/captura?produto=consulta-spc-serasa">
                   <Button className="w-full mt-6 bg-red-500 hover:bg-red-600 text-white font-bold">
                     Consultar CPF
                     <ArrowRight className="ml-2 h-4 w-4" />
@@ -125,7 +125,7 @@ export default function ConsultaSPCSerasa() {
                     </div>
                   ))}
                 </div>
-                <Link href="/simular">
+                <Link href="/captura?produto=consulta-spc-serasa">
                   <Button className="w-full mt-6 bg-orange-500 hover:bg-orange-600 text-white font-bold">
                     Consultar CNPJ
                     <ArrowRight className="ml-2 h-4 w-4" />
@@ -255,7 +255,7 @@ export default function ConsultaSPCSerasa() {
               Saiba exatamente sua situação financeira e tome as melhores decisões com base em informações precisas.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/simular">
+              <Link href="/captura?produto=consulta-spc-serasa">
                 <Button size="lg" className="bg-orange-400 hover:bg-orange-500 text-black font-bold px-8">
                   Solicitar Consulta
                   <ArrowRight className="ml-2 h-5 w-5" />
