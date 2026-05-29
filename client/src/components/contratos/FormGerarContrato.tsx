@@ -182,7 +182,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [taxaDesistencia, setTaxaDesistencia] = useState('5');
   const [custeioMensal, setCusteioMensal]     = useState(formatBRLCurrency(250));
   const [prazoContratoAssessoria, setPrazoContratoAssessoria] = useState('12');
-  const [modoAssinaturaContratante, setModoAssinaturaContratante] = useState<'empresa' | 'socios'>('empresa');
+  const [modoAssinaturaContratante, setModoAssinaturaContratante] = useState<'empresa' | 'responsavel' | 'socios'>('responsavel');
   const [sociosEmpresaAssessoria, setSociosEmpresaAssessoria] = useState<SocioEmpresaContrato[]>([]);
   const [sociosAssinantesIds, setSociosAssinantesIds] = useState<string[]>([]);
   const [carregandoSociosAssessoria, setCarregandoSociosAssessoria] = useState(false);
@@ -686,11 +686,12 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               </div>
               <div>
                 <label className={lbl}>Quem assina pela contratante?</label>
-                <select value={modoAssinaturaContratante} onChange={e => setModoAssinaturaContratante(e.target.value as 'empresa' | 'socios')} className={cls}>
+                <select value={modoAssinaturaContratante} onChange={e => setModoAssinaturaContratante(e.target.value as 'empresa' | 'responsavel' | 'socios')} className={cls}>
                   <option value="empresa">Somente empresa (razão social e CNPJ)</option>
+                  <option value="responsavel">Responsável da empresa + razão social</option>
                   <option value="socios">Sócio(s) da empresa + razão social</option>
                 </select>
-                <p className="text-[11px] text-gray-500 mt-1">No modo sócio(s), os nomes selecionados aparecem no mesmo bloco de assinatura, acima da razão social e CNPJ da empresa. Não cria campo extra de responsável.</p>
+                <p className="text-[11px] text-gray-500 mt-1">A assinatura da CONTRATANTE fica no mesmo bloco: nome(s) escolhido(s) acima da razão social e CNPJ. Não cria assinatura extra separada.</p>
               </div>
             </div>
 

@@ -330,12 +330,19 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
     ? Number(d.prazo_contrato_meses)
     : 12;
   const sociosAssinantes = Array.isArray(d.socios_assinantes) ? d.socios_assinantes.filter(s => nomeSignatario(s)) : [];
+  const representantePrincipalContratante = {
+    nome: d.empresa_representante || '',
+    cpf: d.empresa_cpf_representante,
+    cargo: 'Representante legal',
+  };
   const representantesContratante = d.modo_assinatura_contratante === 'socios' && sociosAssinantes.length > 0
     ? sociosAssinantes
-    : [{ nome: d.empresa_representante || 'seu representante legal', cpf: d.empresa_cpf_representante, cargo: 'Representante legal' }];
+    : [representantePrincipalContratante].filter(s => s.nome);
   const assinantesContratante = d.modo_assinatura_contratante === 'socios' && sociosAssinantes.length > 0
     ? sociosAssinantes
-    : [];
+    : d.modo_assinatura_contratante === 'responsavel' && representantePrincipalContratante.nome
+      ? [representantePrincipalContratante]
+      : [];
   const representanteContratada = 'FERNANDO ELI OLIVEIRA MARQUES';
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -487,7 +494,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               {/* Assinaturas da contratante */}
               <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs text-slate-700">
                 <p className="font-semibold text-slate-800 mb-1">Assinantes da CONTRATANTE</p>
-                <p>{d.modo_assinatura_contratante === 'socios' && sociosAssinantes.length > 0 ? 'Sócio(s) selecionado(s)' : 'Somente razão social e CNPJ da empresa'}</p>
+                <p>{d.modo_assinatura_contratante === 'socios' && sociosAssinantes.length > 0 ? 'Sócio(s) selecionado(s) + razão social' : d.modo_assinatura_contratante === 'responsavel' ? 'Responsável principal + razão social' : 'Somente razão social e CNPJ da empresa'}</p>
                 <ul className="mt-2 space-y-1 list-disc list-inside">
                   {representantesContratante.map((s, i) => (
                     <li key={`${s.nome}-${i}`}>{s.nome}{s.cpf ? ` — CPF: ${s.cpf}` : ''}</li>
@@ -802,8 +809,8 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               <strong>{d.cidade_assinatura || 'BRASÍLIA – DF'}, {formatDate(d.data_assinatura)}.</strong>
             </p>
 
-            {/* Assinaturas */}
-            <div style={{ ...(temParceiro ? S.sigGrid3 : S.sigGrid), gridTemplateColumns: temParceiro ? '1fr 1fr 1fr' : '1fr 1fr' }}>
+            {/* Assinaturas — 1ª linha: CONTRATANTE e CONTRATADA */}
+            <div style={S.sigGrid}>
               <div style={S.sigBox}>
                 <div style={S.sigLine} />
                 {assinantesContratante.map((s, i) => (
@@ -813,14 +820,6 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
                 {d.empresa_cnpj && <p style={S.sigSub}>CNPJ: {d.empresa_cnpj}</p>}
                 <p style={S.sigSub}>CONTRATANTE</p>
               </div>
-              {temParceiro && (
-                <div style={S.sigBox}>
-                  <div style={S.sigLine} />
-                  <p style={S.sigName}>{d.parceiro_nome}</p>
-                  {d.parceiro_cpf && <p style={S.sigSub}>CPF: {d.parceiro_cpf}</p>}
-                  <p style={S.sigSub}>PARCEIRO COMERCIAL</p>
-                </div>
-              )}
               <div style={S.sigBox}>
                 <div style={S.sigLine} />
                 <p style={S.sigName}>{representanteContratada}</p>
@@ -830,21 +829,24 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               </div>
             </div>
 
-
-            {/* Testemunhas */}
+            {/* 2ª linha: UMA TESTEMUNHA à esquerda e PARCEIRO COMERCIAL à direita */}
             <div style={S.witnessGrid}>
               <div style={S.witnessBox}>
                 <div style={S.sigLine} />
-                <p style={{ ...S.sigName, fontSize: '8pt', textTransform: 'uppercase', color: '#1e3a5f' }}>Testemunha 1</p>
+                <p style={{ ...S.sigName, fontSize: '8pt', textTransform: 'uppercase', color: '#1e3a5f' }}>Testemunha</p>
                 <p style={S.sigSub}>Nome: ___________________________________</p>
                 <p style={S.sigSub}>CPF: ____________________________________</p>
               </div>
-              <div style={S.witnessBox}>
-                <div style={S.sigLine} />
-                <p style={{ ...S.sigName, fontSize: '8pt', textTransform: 'uppercase', color: '#1e3a5f' }}>Testemunha 2</p>
-                <p style={S.sigSub}>Nome: ___________________________________</p>
-                <p style={S.sigSub}>CPF: ____________________________________</p>
-              </div>
+              {temParceiro ? (
+                <div style={S.witnessBox}>
+                  <div style={S.sigLine} />
+                  <p style={S.sigName}>{d.parceiro_nome}</p>
+                  {d.parceiro_cpf && <p style={S.sigSub}>CPF: {d.parceiro_cpf}</p>}
+                  <p style={S.sigSub}>PARCEIRO COMERCIAL</p>
+                </div>
+              ) : (
+                <div style={S.witnessBox} />
+              )}
             </div>
 
             <div style={S.footer}>

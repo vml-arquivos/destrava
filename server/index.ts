@@ -4404,12 +4404,19 @@ Responda APENAS com um JSON válido no seguinte formato:
     const sociosAssinantes = Array.isArray(contratante.socios_assinantes)
       ? contratante.socios_assinantes.filter((s: any) => String(s?.nome || '').trim())
       : [];
+    const representantePrincipalContratante = {
+      nome: contratante.representante || '',
+      cpf: contratante.cpf_representante,
+      cargo: 'Representante legal',
+    };
     const representantesContratante = contratante.modo_assinatura === 'socios' && sociosAssinantes.length > 0
       ? sociosAssinantes
-      : [{ nome: contratante.representante || 'seu representante legal', cpf: contratante.cpf_representante, cargo: 'Representante legal' }];
+      : [representantePrincipalContratante].filter((s: any) => String(s?.nome || '').trim());
     const assinantesContratante = contratante.modo_assinatura === 'socios' && sociosAssinantes.length > 0
       ? sociosAssinantes
-      : [];
+      : contratante.modo_assinatura === 'responsavel' && representantePrincipalContratante.nome
+        ? [representantePrincipalContratante]
+        : [];
     const linhasAssinantesContratanteHtml = assinantesContratante.map((s: any) => `
       <p class="sig-name-label">${escapeHtmlContrato(s.nome || '')}</p>
     `).join('');
@@ -4542,34 +4549,7 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, 
 
 <div class="sig-final-block">
 
-  <!-- ── Assinaturas principais ── -->
-  ${temParceiro ? `
-  <div class="sig-main-grid sig-main-grid--3">
-    <div class="sig-card">
-      <div class="sig-space"></div>
-      <div class="sig-line-bar"></div>
-      ${linhasAssinantesContratanteHtml}
-      <p class="sig-name-label">${escapeHtmlContrato(contratante.razao_social || 'CONTRATANTE')}</p>
-      <p class="sig-detail">CNPJ: ${escapeHtmlContrato(contratante.cnpj || '')}</p>
-      <p class="sig-role">CONTRATANTE</p>
-    </div>
-    <div class="sig-card">
-      <div class="sig-space"></div>
-      <div class="sig-line-bar"></div>
-      <p class="sig-name-label">${escapeHtmlContrato(parceiro.nome || '')}</p>
-      <p class="sig-detail">CPF: ${escapeHtmlContrato(parceiro.cpf || '')}</p>
-      <p class="sig-role">PARCEIRO COMERCIAL</p>
-    </div>
-    <div class="sig-card">
-      <div class="sig-space"></div>
-      <div class="sig-line-bar"></div>
-      <p class="sig-name-label">${escapeHtmlContrato(representanteContratadaNome)}</p>
-      <p class="sig-name-label">${escapeHtmlContrato(contratada.razao_social || 'CONTRATADA')}</p>
-      <p class="sig-detail">CNPJ: ${escapeHtmlContrato(contratada.cnpj || '')}</p>
-      <p class="sig-role">CONTRATADA</p>
-    </div>
-  </div>
-  ` : `
+  <!-- ── 1ª linha: CONTRATANTE e CONTRATADA ── -->
   <div class="sig-main-grid sig-main-grid--2">
     <div class="sig-card">
       <div class="sig-space"></div>
@@ -4588,26 +4568,27 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, 
       <p class="sig-role">CONTRATADA</p>
     </div>
   </div>
-  `}
-  <!-- ── Divisor entre assinaturas e testemunhas ── -->
+
   <div class="sig-divider"></div>
 
-  <!-- ── Testemunhas ── -->
+  <!-- ── 2ª linha: UMA TESTEMUNHA à esquerda e PARCEIRO COMERCIAL à direita ── -->
   <div class="sig-witness-grid">
     <div class="sig-witness-card">
-      <p class="sig-witness-label">TESTEMUNHA 1</p>
       <div class="sig-witness-space"></div>
       <div class="sig-line-bar"></div>
+      <p class="sig-witness-label">TESTEMUNHA</p>
       <p class="sig-detail">Nome: _______________________________</p>
       <p class="sig-detail">CPF: ________________________________</p>
     </div>
+    ${temParceiro ? `
     <div class="sig-witness-card">
-      <p class="sig-witness-label">TESTEMUNHA 2</p>
       <div class="sig-witness-space"></div>
       <div class="sig-line-bar"></div>
-      <p class="sig-detail">Nome: _______________________________</p>
-      <p class="sig-detail">CPF: ________________________________</p>
+      <p class="sig-name-label">${escapeHtmlContrato(parceiro.nome || '')}</p>
+      <p class="sig-detail">CPF: ${escapeHtmlContrato(parceiro.cpf || '')}</p>
+      <p class="sig-role">PARCEIRO COMERCIAL</p>
     </div>
+    ` : `<div class="sig-witness-card"></div>`}
   </div>
 
 </div>
@@ -7309,7 +7290,7 @@ ${(temTest1 || temTest2) ? `
         contratada_id, responsavel_contrato_id,
         // campos contrato assessoria
         valor_referencia, taxa_comissao = 10, taxa_desistencia = 5, custeio_mensal = 250, percentual_multa,
-        prazo_contrato_meses = 12, modo_assinatura_contratante = 'empresa', socios_assinantes = [],
+        prazo_contrato_meses = 12, modo_assinatura_contratante = 'responsavel', socios_assinantes = [],
         empresa_razao_social, empresa_cnpj, empresa_endereco,
         empresa_representante, empresa_cpf_representante,
         // campos contrato limpa nome
@@ -7896,7 +7877,7 @@ ${(temTest1 || temTest2) ? `
           representante: empresa_representante || empresa?.responsavel_nome || empresa?.representante_nome || '',
           cpf_representante: empresa_cpf_representante || empresa?.responsavel_cpf || empresa?.representante_cpf || '',
           socios_assinantes: Array.isArray(socios_assinantes) ? socios_assinantes : [],
-          modo_assinatura: modo_assinatura_contratante || 'empresa',
+          modo_assinatura: modo_assinatura_contratante || 'responsavel',
         },
         responsavel_contrato: responsavelContratoAssessoria,
         parceiro: parceiro && parceiro.nome ? { nome: parceiro.nome, cpf: parceiro.cpf || '' } : null,
