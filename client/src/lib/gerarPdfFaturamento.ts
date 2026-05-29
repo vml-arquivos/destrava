@@ -194,6 +194,33 @@ function desenharCabecalho(
   return y;
 }
 
+
+// ─── Cabeçalho compacto para páginas de continuação ─────────────────────────
+function desenharCabecalhoContinuacao(
+  doc: jsPDF,
+  tituloDoc: string,
+  periodoTexto: string,
+): number {
+  doc.setFillColor(...AZUL_ESCURO);
+  doc.rect(0, 0, W, 18, 'F');
+
+  doc.setTextColor(...BRANCO);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.text(tituloDoc, ML, 7);
+
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.text(periodoTexto, ML, 12.5);
+  doc.text('Continuação', W - MR, 12.5, { align: 'right' });
+
+  doc.setDrawColor(180, 160, 90);
+  doc.setLineWidth(0.6);
+  doc.line(0, 18, W, 18);
+
+  return 26;
+}
+
 // ─── Bloco: Tabela de dados financeiros ──────────────────────────────────────
 function desenharTabelaFaturamento(
   doc: jsPDF,
@@ -201,67 +228,90 @@ function desenharTabelaFaturamento(
   registros: RegistroFaturamento[],
   colunas: string[],
   titulo: string,
+  tituloDoc = 'DECLARAÇÃO DE FATURAMENTO',
+  periodoTexto = '',
 ): number {
-  const ROW_H = 7.2;
-  const HEAD_H = 8.5;
+  // Layout compacto e paginado: evita sobreposição com assinaturas/rodapé
+  // em declarações longas, especialmente 24/36 meses.
+  const ROW_H = 5.45;
+  const HEAD_H = 7.1;
+  const TITLE_H = 6.5;
+  const GAP = 2.2;
+  const BOTTOM_LIMIT = H - 22;
 
-  // Título da tabela
-  doc.setFillColor(...AZUL_CLARO);
-  doc.roundedRect(ML, y, CW, 7, 1.5, 1.5, 'F');
-  doc.setTextColor(...AZUL_ESCURO);
-  doc.setFontSize(8.5);
-  doc.setFont('helvetica', 'bold');
-  doc.text(titulo, ML + 4, y + 5);
-  y += 10;
-
-  // Cabeçalho da tabela
-  doc.setFillColor(...AZUL_ESCURO);
-  doc.rect(ML, y, CW, HEAD_H, 'F');
-  doc.setTextColor(...BRANCO);
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'bold');
-
-  // Col widths: Mês/Ano | Faturamento
   const col1W = CW * 0.45;
   const col2W = CW * 0.55;
-  doc.text(colunas[0], ML + 4, y + 5.8);
-  doc.text(colunas[1], ML + col1W + col2W - 4, y + 5.8, { align: 'right' });
-  y += HEAD_H;
 
-  // Linhas de dados
+  const drawSectionTitle = (label: string) => {
+    doc.setFillColor(...AZUL_CLARO);
+    doc.roundedRect(ML, y, CW, TITLE_H, 1.2, 1.2, 'F');
+    doc.setTextColor(...AZUL_ESCURO);
+    doc.setFontSize(7.7);
+    doc.setFont('helvetica', 'bold');
+    doc.text(label, ML + 4, y + 4.6);
+    y += TITLE_H + GAP;
+  };
+
+  const drawColumnHeader = () => {
+    doc.setFillColor(...AZUL_ESCURO);
+    doc.rect(ML, y, CW, HEAD_H, 'F');
+    doc.setTextColor(...BRANCO);
+    doc.setFontSize(7.2);
+    doc.setFont('helvetica', 'bold');
+    doc.text(colunas[0], ML + 4, y + 4.8);
+    doc.text(colunas[1], ML + col1W + col2W - 4, y + 4.8, { align: 'right' });
+    y += HEAD_H;
+  };
+
+  const newContinuationPage = () => {
+    doc.addPage();
+    y = desenharCabecalhoContinuacao(doc, tituloDoc, periodoTexto);
+    drawSectionTitle(`${titulo} — CONTINUAÇÃO`);
+    drawColumnHeader();
+  };
+
+  drawSectionTitle(titulo);
+  drawColumnHeader();
+
   let total = 0;
   registros.forEach((reg, idx) => {
+    if (y + ROW_H > BOTTOM_LIMIT) {
+      newContinuationPage();
+    }
+
     const bg: [number, number, number] = idx % 2 === 0 ? BRANCO : ZEBRA;
     doc.setFillColor(...bg);
     doc.rect(ML, y, CW, ROW_H, 'F');
 
-    // Borda inferior fina
     doc.setDrawColor(...CINZA_LINHA);
-    doc.setLineWidth(0.1);
+    doc.setLineWidth(0.08);
     doc.line(ML, y + ROW_H, ML + CW, y + ROW_H);
 
     doc.setTextColor(...CINZA_ESCURO);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.text(fmtMesAno(reg.competencia), ML + 4, y + 5);
+    doc.setFontSize(7.2);
+    doc.text(fmtMesAno(reg.competencia), ML + 4, y + 3.8);
 
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...PRETO);
-    doc.text(fmtBRL(reg.valor), ML + col1W + col2W - 4, y + 5, { align: 'right' });
+    doc.text(fmtBRL(reg.valor), ML + col1W + col2W - 4, y + 3.8, { align: 'right' });
 
     total += reg.valor;
     y += ROW_H;
   });
 
-  // Linha de total
+  if (y + 8.5 > BOTTOM_LIMIT) {
+    newContinuationPage();
+  }
+
   doc.setFillColor(...AZUL_ESCURO);
-  doc.rect(ML, y, CW, 9, 'F');
+  doc.rect(ML, y, CW, 8.5, 'F');
   doc.setTextColor(...BRANCO);
-  doc.setFontSize(9);
+  doc.setFontSize(8.1);
   doc.setFont('helvetica', 'bold');
-  doc.text('TOTAL DO PERÍODO', ML + 4, y + 6);
-  doc.text(fmtBRL(total), ML + CW - 4, y + 6, { align: 'right' });
-  y += 12;
+  doc.text('TOTAL DO PERÍODO', ML + 4, y + 5.7);
+  doc.text(fmtBRL(total), ML + CW - 4, y + 5.7, { align: 'right' });
+  y += 11;
 
   return y;
 }
@@ -272,69 +322,84 @@ function desenharTabelaPrevisao(
   y: number,
   pontos: PontoPrevisao[],
 ): number {
-  const ROW_H = 7.2;
-  const HEAD_H = 8.5;
+  const ROW_H = 5.45;
+  const HEAD_H = 7.1;
+  const TITLE_H = 6.5;
+  const BOTTOM_LIMIT = H - 22;
 
-  // Título
-  doc.setFillColor(...AZUL_CLARO);
-  doc.roundedRect(ML, y, CW, 7, 1.5, 1.5, 'F');
-  doc.setTextColor(...AZUL_ESCURO);
-  doc.setFontSize(8.5);
-  doc.setFont('helvetica', 'bold');
-  doc.text('DEMONSTRATIVO MENSAL — VALORES PROJETADOS', ML + 4, y + 5);
-  y += 10;
-
-  // Cabeçalho
   const c1 = CW * 0.32;
   const c2 = CW * 0.32;
-  const c3 = CW * 0.36;
 
-  doc.setFillColor(...AZUL_ESCURO);
-  doc.rect(ML, y, CW, HEAD_H, 'F');
-  doc.setTextColor(...BRANCO);
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Mês/Ano', ML + 4, y + 5.8);
-  doc.text('Receita Bruta (R$)', ML + c1 + c2 - 4, y + 5.8, { align: 'right' });
-  doc.text('Faturamento Total (R$)', ML + CW - 4, y + 5.8, { align: 'right' });
-  y += HEAD_H;
+  const drawTitle = (label: string) => {
+    doc.setFillColor(...AZUL_CLARO);
+    doc.roundedRect(ML, y, CW, TITLE_H, 1.2, 1.2, 'F');
+    doc.setTextColor(...AZUL_ESCURO);
+    doc.setFontSize(7.7);
+    doc.setFont('helvetica', 'bold');
+    doc.text(label, ML + 4, y + 4.6);
+    y += TITLE_H + 2.2;
+  };
+
+  const drawHeader = () => {
+    doc.setFillColor(...AZUL_ESCURO);
+    doc.rect(ML, y, CW, HEAD_H, 'F');
+    doc.setTextColor(...BRANCO);
+    doc.setFontSize(7.2);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Mês/Ano', ML + 4, y + 4.8);
+    doc.text('Receita Bruta (R$)', ML + c1 + c2 - 4, y + 4.8, { align: 'right' });
+    doc.text('Faturamento Total (R$)', ML + CW - 4, y + 4.8, { align: 'right' });
+    y += HEAD_H;
+  };
+
+  const newContinuationPage = () => {
+    doc.addPage();
+    y = desenharCabecalhoContinuacao(doc, 'DEMONSTRATIVO DE PREVISÃO DE FATURAMENTO', 'Continuação dos valores projetados');
+    drawTitle('DEMONSTRATIVO MENSAL — VALORES PROJETADOS — CONTINUAÇÃO');
+    drawHeader();
+  };
+
+  drawTitle('DEMONSTRATIVO MENSAL — VALORES PROJETADOS');
+  drawHeader();
 
   let totalPrev = 0;
   pontos.forEach((p, idx) => {
+    if (y + ROW_H > BOTTOM_LIMIT) newContinuationPage();
+
     const bg: [number, number, number] = idx % 2 === 0 ? BRANCO : ZEBRA;
     doc.setFillColor(...bg);
     doc.rect(ML, y, CW, ROW_H, 'F');
 
     doc.setDrawColor(...CINZA_LINHA);
-    doc.setLineWidth(0.1);
+    doc.setLineWidth(0.08);
     doc.line(ML, y + ROW_H, ML + CW, y + ROW_H);
 
     doc.setTextColor(...CINZA_ESCURO);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.text(fmtMesAno(p.ds), ML + 4, y + 5);
+    doc.setFontSize(7.2);
+    doc.text(fmtMesAno(p.ds), ML + 4, y + 3.8);
 
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...PRETO);
-    doc.text(fmtBRL(p.yhat), ML + c1 + c2 - 4, y + 5, { align: 'right' });
+    doc.text(fmtBRL(p.yhat), ML + c1 + c2 - 4, y + 3.8, { align: 'right' });
 
-    // Coluna Faturamento Total = yhat (sem receita de serviços)
     doc.setTextColor(...VERDE);
-    doc.text(fmtBRL(p.yhat), ML + CW - 4, y + 5, { align: 'right' });
+    doc.text(fmtBRL(p.yhat), ML + CW - 4, y + 3.8, { align: 'right' });
 
     totalPrev += p.yhat;
     y += ROW_H;
   });
 
-  // Total
+  if (y + 8.5 > BOTTOM_LIMIT) newContinuationPage();
+
   doc.setFillColor(...AZUL_ESCURO);
-  doc.rect(ML, y, CW, 9, 'F');
+  doc.rect(ML, y, CW, 8.5, 'F');
   doc.setTextColor(...BRANCO);
-  doc.setFontSize(9);
+  doc.setFontSize(8.1);
   doc.setFont('helvetica', 'bold');
-  doc.text('TOTAL PREVISTO', ML + 4, y + 6);
-  doc.text(fmtBRL(totalPrev), ML + CW - 4, y + 6, { align: 'right' });
-  y += 12;
+  doc.text('TOTAL PREVISTO', ML + 4, y + 5.7);
+  doc.text(fmtBRL(totalPrev), ML + CW - 4, y + 5.7, { align: 'right' });
+  y += 11;
 
   return y;
 }
@@ -345,54 +410,55 @@ function desenharAssinaturas(
   empresa: DadosEmpresa,
   contabilidade: DadosContabilidade,
   cidade: string,
-  yForce?: number, // Se fornecido, pula para essa posição (área garantida no fim da página)
+  yForce?: number,
 ): void {
-  const ASSIN_Y = yForce ?? 240;
-  const HALF = (CW - 10) / 2;
+  const ASSIN_Y = yForce ?? 232;
+  const HALF = (CW - 12) / 2;
 
-  // Data/Cidade
   doc.setTextColor(...CINZA_ESCURO);
-  doc.setFontSize(8.5);
+  doc.setFontSize(8.2);
   doc.setFont('helvetica', 'normal');
   const dataHoje = new Date().toLocaleDateString('pt-BR', {
     day: '2-digit', month: 'long', year: 'numeric',
   });
   doc.text(`${cidade}, ${dataHoje}.`, ML, ASSIN_Y);
 
-  const lineY = ASSIN_Y + 22;
+  const lineY = ASSIN_Y + 18;
 
-  // ── Assinatura Esquerda — Contador ────────────────────────────────────────
   doc.setDrawColor(...CINZA_ESCURO);
-  doc.setLineWidth(0.4);
+  doc.setLineWidth(0.35);
   doc.line(ML, lineY, ML + HALF, lineY);
 
   doc.setTextColor(...PRETO);
-  doc.setFontSize(8.5);
+  doc.setFontSize(8.1);
   doc.setFont('helvetica', 'bold');
-  doc.text(contabilidade.nomeContador, ML + HALF / 2, lineY + 5, { align: 'center' });
+  const contadorLinhas = doc.splitTextToSize(contabilidade.nomeContador, HALF - 4).slice(0, 2);
+  doc.text(contadorLinhas, ML + HALF / 2, lineY + 4.5, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...CINZA_ESCURO);
-  doc.setFontSize(7.5);
-  doc.text('Contador Responsável', ML + HALF / 2, lineY + 9.5, { align: 'center' });
-  doc.text(`CRC: ${contabilidade.crc}`, ML + HALF / 2, lineY + 13.5, { align: 'center' });
+  doc.setFontSize(7.2);
+  const contadorLabelY = lineY + 4.5 + (contadorLinhas.length * 3.7);
+  doc.text('Contador Responsável', ML + HALF / 2, contadorLabelY + 3.5, { align: 'center' });
+  doc.text(`CRC: ${contabilidade.crc}`, ML + HALF / 2, contadorLabelY + 7.3, { align: 'center' });
 
-  // ── Assinatura Direita — Representante Legal ──────────────────────────────
-  const xRight = ML + HALF + 10;
+  const xRight = ML + HALF + 12;
   doc.setDrawColor(...CINZA_ESCURO);
   doc.line(xRight, lineY, xRight + HALF, lineY);
 
   doc.setTextColor(...PRETO);
-  doc.setFontSize(8.5);
+  doc.setFontSize(8.1);
   doc.setFont('helvetica', 'bold');
-  doc.text(empresa.razaoSocial, xRight + HALF / 2, lineY + 5, { align: 'center' });
+  const empresaLinhas = doc.splitTextToSize(empresa.razaoSocial, HALF - 4).slice(0, 2);
+  doc.text(empresaLinhas, xRight + HALF / 2, lineY + 4.5, { align: 'center' });
 
+  const labelY = lineY + 4.5 + (empresaLinhas.length * 3.7);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...CINZA_ESCURO);
-  doc.setFontSize(7.5);
-  doc.text('Representante Legal', xRight + HALF / 2, lineY + 9.5, { align: 'center' });
+  doc.setFontSize(7.2);
+  doc.text('Representante Legal', xRight + HALF / 2, labelY + 3.5, { align: 'center' });
   if (empresa.cnpj) {
-    doc.text(`CNPJ: ${empresa.cnpj}`, xRight + HALF / 2, lineY + 13.5, { align: 'center' });
+    doc.text(`CNPJ: ${empresa.cnpj}`, xRight + HALF / 2, labelY + 7.3, { align: 'center' });
   }
 }
 
@@ -457,10 +523,15 @@ export function gerarPdfFaturamento(dados: DadosPdfFaturamento): void {
       periodo,
     );
 
-    y = desenharTabelaFaturamento(doc, y, meses, ['Mês/Ano', 'Faturamento Total (R$)'], 'FATURAMENTO MENSAL');
+    y = desenharTabelaFaturamento(doc, y, meses, ['Mês/Ano', 'Faturamento Total (R$)'], 'FATURAMENTO MENSAL', tituloPdf, periodo);
 
-    // Linha de total com label dinâmico
-    desenharAssinaturas(doc, dados.empresa, dados.contabilidade, cidade);
+    // Assinaturas e rodapé ficam apenas na última página. Se a tabela terminar
+    // muito próxima do fim, abrimos uma página final exclusiva para assinaturas.
+    if (y > 226) {
+      doc.addPage();
+      y = 34;
+    }
+    desenharAssinaturas(doc, dados.empresa, dados.contabilidade, cidade, Math.max(y + 7, 226));
     desenharRodape(doc);
 
     const nome = `declaracao-faturamento-${dados.empresa.razaoSocial.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`;
@@ -494,7 +565,11 @@ export function gerarPdfFaturamento(dados: DadosPdfFaturamento): void {
 
     y = desenharTabelaPrevisao(doc, y, pontosFuturos);
 
-    desenharAssinaturas(doc, dados.empresa, dados.contabilidade, cidade);
+    if (y > 226) {
+      doc.addPage();
+      y = 34;
+    }
+    desenharAssinaturas(doc, dados.empresa, dados.contabilidade, cidade, Math.max(y + 7, 226));
     desenharRodape(doc);
 
     const nome = `previsao-faturamento-${dados.empresa.razaoSocial.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`;
