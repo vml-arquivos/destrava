@@ -9,7 +9,8 @@ import pkg from "pg";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { auth } from "./middleware/auth.ts";
-import { authorize } from "./middleware/authorize.ts";
+import { authorize, requirePermissao } from "./middleware/authorize.ts";
+import { getPermissoes, temPermissao, LISTA_CARGOS_VALIDOS, nivelHierarquico, podeGerenciar as _podeGerenciar, cargosGerenciaveis as _cargosGerenciaveis } from "../shared/cargos.ts";
 import cnpjRouter from './routes/cnpj';
 import sociosDocumentosRouter from './routes/socios_documentos';
 import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
@@ -133,51 +134,28 @@ async function processarEmpresaDaSimulacao(
 }
 
 // ─── Cargos e hierarquia de permissões ──────────────────────────────────────
-const CARGOS_VALIDOS = [
-  'Administrador',
-  'Diretor',
-  'Gerente Comercial',
-  'Analista de Crédito',
-  'Consultor de Crédito',
-  'Captador Externo',
-  'Estagiário',
-] as const;
-
+// Cargos e hierarquia agora centralizados em shared/cargos.ts
+// Aliases locais para retrocompatibilidade com código legado neste arquivo
+const CARGOS_VALIDOS = LISTA_CARGOS_VALIDOS;
 const CARGOS_GESTAO = ['administrador', 'diretor', 'gerente comercial', 'admin', 'gerente', 'gestor'];
 const CARGOS_PODEM_CRIAR_USUARIOS = ['administrador', 'diretor', 'gerente comercial', 'admin'];
 const CARGOS_BLOQUEADOS_ATENDIMENTO = ['captador externo', 'estagiário', 'estagiario'];
 const CARGOS_CAPTACAO = ['captador externo', 'gerente comercial', 'diretor', 'consultor de crédito', 'consultor de credito', 'administrador', 'admin'];
 
-// ─── Hierarquia de cargos (nível 0 = mais alto) ───────────────────────────────
-// Regra: cada cargo só pode ver/criar/editar cargos com nível ESTRITAMENTE MAIOR
-const HIERARQUIA_CARGOS: Record<string, number> = {
-  'administrador': 0,
-  'admin':         0,
-  'diretor':       1,
-  'gerente comercial': 2,
-  'analista de crédito':  3,
-  'analista de credito':  3,
-  'consultor de crédito': 4,
-  'consultor de credito': 4,
-  'captador externo': 5,
-  'estagiário': 6,
-  'estagiario': 6,
-};
 
 /** Retorna o nível numérico do cargo (menor = mais alto na hierarquia) */
 function nivelCargo(cargo: string): number {
-  return HIERARQUIA_CARGOS[(cargo || '').toLowerCase()] ?? 99;
+  return nivelHierarquico(cargo);
 }
 
 /** Retorna true se o solicitante pode gerenciar o alvo (nível do alvo > nível do solicitante) */
 function podeGerenciarCargo(solicitanteCargo: string, alvoCargo: string): boolean {
-  return nivelCargo(alvoCargo) > nivelCargo(solicitanteCargo);
+  return _podeGerenciar(solicitanteCargo, alvoCargo);
 }
 
 /** Retorna os cargos que o solicitante pode criar/atribuir */
 function cargosGerenciaveis(solicitanteCargo: string): string[] {
-  const nivel = nivelCargo(solicitanteCargo);
-  return CARGOS_VALIDOS.filter(c => nivelCargo(c) > nivel);
+  return _cargosGerenciaveis(solicitanteCargo);
 }
 
 function isGestorCargo(cargo: string): boolean {
