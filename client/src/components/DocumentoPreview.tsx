@@ -170,7 +170,7 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
           <div className="h-[3px] bg-gradient-to-r from-[#b4a05a] via-[#d4c070] to-[#b4a05a]" />
 
           {/* Corpo do documento */}
-          <div className="px-8 py-6 space-y-5">
+          <div className="px-8 py-4 space-y-3">
 
             {/* Título + período */}
             <div className="text-center space-y-1">
@@ -180,7 +180,7 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
             </div>
 
             {/* Texto declaratório */}
-            <p className="text-gray-600 text-[11px] leading-relaxed">
+            <p className="text-gray-600 text-[10px] leading-snug">
               Declaramos para os devidos fins, a pedido da empresa supra qualificada, e sob as penas da lei,
               que o faturamento {isDeclaracao ? 'realizado' : 'previsto'} no período apresentou os seguintes valores:
             </p>
@@ -188,7 +188,7 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
             {/* Tabela */}
             <div className="rounded-lg overflow-hidden border border-gray-200">
               {/* Cabeçalho da tabela */}
-              <div className="bg-[#1B3A6B] grid grid-cols-2 px-4 py-2.5">
+              <div className="bg-[#1B3A6B] grid grid-cols-2 px-4 py-1.5">
                 <span className="text-white text-xs font-semibold">Mês/Ano</span>
                 <span className="text-white text-xs font-semibold text-right">
                   {isDeclaracao ? 'Faturamento Total (R$)' : 'Faturamento Previsto (R$)'}
@@ -199,17 +199,17 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
               {linhasTabela.map((linha, idx) => (
                 <div
                   key={idx}
-                  className={`grid grid-cols-2 px-4 py-2 border-b border-gray-100 ${
+                  className={`grid grid-cols-2 px-4 py-1 border-b border-gray-100 ${
                     idx % 2 === 0 ? 'bg-white' : 'bg-[#F6F8FC]'
                   }`}
                 >
-                  <span className="text-gray-700 text-xs capitalize">{linha.mes}</span>
-                  <span className="text-gray-900 text-xs font-semibold text-right">{linha.valor}</span>
+                  <span className="text-gray-700 text-[10px] capitalize">{linha.mes}</span>
+                  <span className="text-gray-900 text-[10px] font-semibold text-right">{linha.valor}</span>
                 </div>
               ))}
 
               {/* Total */}
-              <div className="bg-[#1B3A6B] grid grid-cols-2 px-4 py-3">
+              <div className="bg-[#1B3A6B] grid grid-cols-2 px-4 py-2">
                 <span className="text-white text-xs font-bold uppercase">
                   {isDeclaracao
                     ? `Total do Período (${qtdMesesDeclaracao} ${qtdMesesDeclaracao === 1 ? 'Mês' : 'Meses'})`
@@ -228,10 +228,10 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
             )}
 
             {/* ── Área de assinaturas ──────────────────────────────────────── */}
-            <div className="pt-4 mt-6 space-y-2">
+            <div className="pt-3 mt-4 space-y-2">
               <p className="text-gray-600 text-xs">{cidade}, {dataHoje()}.</p>
 
-              <div className="grid grid-cols-2 gap-8 pt-8">
+              <div className="grid grid-cols-2 gap-8 pt-6">
                 {/* Contador */}
                 <div className="text-center space-y-1">
                   <div className="border-t border-gray-400 pt-2">
