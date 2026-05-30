@@ -4404,9 +4404,10 @@ Responda APENAS com um JSON válido no seguinte formato:
     const sociosAssinantes = Array.isArray(contratante.socios_assinantes)
       ? contratante.socios_assinantes.filter((s: any) => String(s?.nome || '').trim())
       : [];
+    const primeiroSocioAssinante = sociosAssinantes[0] || null;
     const representantePrincipalContratante = {
-      nome: contratante.representante || '',
-      cpf: contratante.cpf_representante,
+      nome: contratante.representante || primeiroSocioAssinante?.nome || '',
+      cpf: contratante.cpf_representante || primeiroSocioAssinante?.cpf || primeiroSocioAssinante?.documento || '',
       cargo: 'Representante legal',
     };
     const representantesContratante = contratante.modo_assinatura === 'socios' && sociosAssinantes.length > 0
@@ -4414,7 +4415,7 @@ Responda APENAS com um JSON válido no seguinte formato:
       : [representantePrincipalContratante].filter((s: any) => String(s?.nome || '').trim());
     const assinantesContratante = contratante.modo_assinatura === 'socios' && sociosAssinantes.length > 0
       ? sociosAssinantes
-      : contratante.modo_assinatura === 'responsavel' && representantePrincipalContratante.nome
+      : representantePrincipalContratante.nome
         ? [representantePrincipalContratante]
         : [];
     const linhasAssinantesContratanteHtml = assinantesContratante.map((s: any) => `
@@ -7874,8 +7875,8 @@ ${(temTest1 || temTest2) ? `
           razao_social: empresa_razao_social || empresa?.razao_social || '',
           cnpj: empresa_cnpj || empresa?.cnpj || '',
           endereco: empresa_endereco || enderecoEmpresaBanco,
-          representante: empresa_representante || empresa?.responsavel_nome || empresa?.representante_nome || '',
-          cpf_representante: empresa_cpf_representante || empresa?.responsavel_cpf || empresa?.representante_cpf || '',
+          representante: empresa_representante || empresa?.responsavel_nome || empresa?.representante_nome || socios_assinantes?.[0]?.nome || '',
+          cpf_representante: empresa_cpf_representante || empresa?.responsavel_cpf || empresa?.representante_cpf || socios_assinantes?.[0]?.cpf || socios_assinantes?.[0]?.documento || '',
           socios_assinantes: Array.isArray(socios_assinantes) ? socios_assinantes : [],
           modo_assinatura: modo_assinatura_contratante || 'responsavel',
         },
