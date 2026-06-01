@@ -169,6 +169,13 @@ function Router() {
           </ProtectedRoute>
         )}
       </Route>
+      <Route path="/colaborador/cadastros-incompletos">
+        {() => (
+          <ProtectedRoute>
+            <DadosIncompletos />
+          </ProtectedRoute>
+        )}
+      </Route>
       <Route path="/colaborador/dados-incompletos">
         {() => (
           <ProtectedRoute>

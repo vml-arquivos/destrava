@@ -19,7 +19,7 @@ ALTER TABLE empresas
 
 UPDATE empresas
 SET cadastro_pendencias = array_remove(ARRAY[
-      CASE WHEN length(regexp_replace(COALESCE(cnpj,''), '\\D', '', 'g')) <> 14 THEN 'CNPJ obrigatório/ inválido' END,
+      CASE WHEN length(regexp_replace(COALESCE(cnpj,''), '\D', '', 'g')) <> 14 THEN 'CNPJ obrigatório/ inválido' END,
       CASE WHEN trim(COALESCE(razao_social,'')) = '' THEN 'Razão social obrigatória' END,
       CASE WHEN trim(COALESCE(cnae_principal,'')) = '' THEN 'CNAE principal não sincronizado' END,
       CASE WHEN trim(COALESCE(natureza_juridica,'')) = '' THEN 'Natureza jurídica não sincronizada' END,
@@ -27,7 +27,7 @@ SET cadastro_pendencias = array_remove(ARRAY[
       CASE WHEN trim(COALESCE(situacao_cadastral,'')) = '' THEN 'Situação cadastral não sincronizada' END
     ]::TEXT[], NULL),
     cadastro_completo = (
-      length(regexp_replace(COALESCE(cnpj,''), '\\D', '', 'g')) = 14
+      length(regexp_replace(COALESCE(cnpj,''), '\D', '', 'g')) = 14
       AND trim(COALESCE(razao_social,'')) <> ''
       AND trim(COALESCE(cnae_principal,'')) <> ''
       AND trim(COALESCE(natureza_juridica,'')) <> ''
@@ -35,7 +35,7 @@ SET cadastro_pendencias = array_remove(ARRAY[
       AND trim(COALESCE(situacao_cadastral,'')) <> ''
     ),
     cadastro_status = CASE WHEN (
-      length(regexp_replace(COALESCE(cnpj,''), '\\D', '', 'g')) = 14
+      length(regexp_replace(COALESCE(cnpj,''), '\D', '', 'g')) = 14
       AND trim(COALESCE(razao_social,'')) <> ''
       AND trim(COALESCE(cnae_principal,'')) <> ''
       AND trim(COALESCE(natureza_juridica,'')) <> ''
@@ -43,7 +43,7 @@ SET cadastro_pendencias = array_remove(ARRAY[
       AND trim(COALESCE(situacao_cadastral,'')) <> ''
     ) THEN 'completo' ELSE 'incompleto' END,
     bloqueado_operacional = NOT (
-      length(regexp_replace(COALESCE(cnpj,''), '\\D', '', 'g')) = 14
+      length(regexp_replace(COALESCE(cnpj,''), '\D', '', 'g')) = 14
       AND trim(COALESCE(razao_social,'')) <> ''
       AND trim(COALESCE(cnae_principal,'')) <> ''
       AND trim(COALESCE(natureza_juridica,'')) <> ''
@@ -51,7 +51,7 @@ SET cadastro_pendencias = array_remove(ARRAY[
       AND trim(COALESCE(situacao_cadastral,'')) <> ''
     ),
     saneado_em = CASE WHEN (
-      length(regexp_replace(COALESCE(cnpj,''), '\\D', '', 'g')) = 14
+      length(regexp_replace(COALESCE(cnpj,''), '\D', '', 'g')) = 14
       AND trim(COALESCE(razao_social,'')) <> ''
       AND trim(COALESCE(cnae_principal,'')) <> ''
       AND trim(COALESCE(natureza_juridica,'')) <> ''
@@ -64,15 +64,15 @@ CREATE TEMP TABLE tmp_empresas_duplicadas_046 AS
 WITH ranked AS (
   SELECT id,
          FIRST_VALUE(id) OVER (
-           PARTITION BY regexp_replace(COALESCE(cnpj,''), '\\D', '', 'g')
+           PARTITION BY regexp_replace(COALESCE(cnpj,''), '\D', '', 'g')
            ORDER BY COALESCE(ultima_sincronizacao_receita, updated_at, created_at) DESC NULLS LAST, created_at ASC NULLS LAST, id
          ) AS master_id,
          ROW_NUMBER() OVER (
-           PARTITION BY regexp_replace(COALESCE(cnpj,''), '\\D', '', 'g')
+           PARTITION BY regexp_replace(COALESCE(cnpj,''), '\D', '', 'g')
            ORDER BY COALESCE(ultima_sincronizacao_receita, updated_at, created_at) DESC NULLS LAST, created_at ASC NULLS LAST, id
          ) AS rn
     FROM empresas
-   WHERE length(regexp_replace(COALESCE(cnpj,''), '\\D', '', 'g')) = 14
+   WHERE length(regexp_replace(COALESCE(cnpj,''), '\D', '', 'g')) = 14
 )
 SELECT id AS duplicado_id, master_id
 FROM ranked
@@ -100,9 +100,20 @@ SET arquivado_por_duplicidade = true,
 FROM tmp_empresas_duplicadas_046 d
 WHERE e.id = d.duplicado_id;
 
+-- Remove automaticamente duplicados totais após redirecionar referências conhecidas.
+-- Se alguma FK externa bloquear, o registro segue arquivado e fica disponível para apagar na tela Cadastros Incompletos.
+DO $$
+BEGIN
+  DELETE FROM empresas e
+  USING tmp_empresas_duplicadas_046 d
+  WHERE e.id = d.duplicado_id;
+EXCEPTION WHEN foreign_key_violation THEN
+  RAISE NOTICE 'Algumas empresas duplicadas não puderam ser apagadas por vínculo externo; permaneceram arquivadas para revisão.';
+END $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS ux_empresas_cnpj_unico_ativo
-ON empresas ((regexp_replace(COALESCE(cnpj,''), '\\D', '', 'g')))
-WHERE length(regexp_replace(COALESCE(cnpj,''), '\\D', '', 'g')) = 14
+ON empresas ((regexp_replace(COALESCE(cnpj,''), '\D', '', 'g')))
+WHERE length(regexp_replace(COALESCE(cnpj,''), '\D', '', 'g')) = 14
   AND COALESCE(arquivado_por_duplicidade, false) = false;
 
 CREATE INDEX IF NOT EXISTS idx_empresas_cadastro_status ON empresas (cadastro_status);
@@ -123,22 +134,22 @@ ALTER TABLE clientes_pf
 
 UPDATE clientes_pf
 SET cadastro_pendencias = array_remove(ARRAY[
-      CASE WHEN length(regexp_replace(COALESCE(cpf,''), '\\D', '', 'g')) <> 11 THEN 'CPF obrigatório/ inválido' END,
+      CASE WHEN length(regexp_replace(COALESCE(cpf,''), '\D', '', 'g')) <> 11 THEN 'CPF obrigatório/ inválido' END,
       CASE WHEN trim(COALESCE(nome,'')) = '' THEN 'Nome obrigatório' END
     ]::TEXT[], NULL),
-    cadastro_completo = (length(regexp_replace(COALESCE(cpf,''), '\\D', '', 'g')) = 11 AND trim(COALESCE(nome,'')) <> ''),
-    cadastro_status = CASE WHEN (length(regexp_replace(COALESCE(cpf,''), '\\D', '', 'g')) = 11 AND trim(COALESCE(nome,'')) <> '') THEN 'completo' ELSE 'incompleto' END,
-    bloqueado_operacional = NOT (length(regexp_replace(COALESCE(cpf,''), '\\D', '', 'g')) = 11 AND trim(COALESCE(nome,'')) <> ''),
-    saneado_em = CASE WHEN (length(regexp_replace(COALESCE(cpf,''), '\\D', '', 'g')) = 11 AND trim(COALESCE(nome,'')) <> '') THEN COALESCE(saneado_em, NOW()) ELSE saneado_em END;
+    cadastro_completo = (length(regexp_replace(COALESCE(cpf,''), '\D', '', 'g')) = 11 AND trim(COALESCE(nome,'')) <> ''),
+    cadastro_status = CASE WHEN (length(regexp_replace(COALESCE(cpf,''), '\D', '', 'g')) = 11 AND trim(COALESCE(nome,'')) <> '') THEN 'completo' ELSE 'incompleto' END,
+    bloqueado_operacional = NOT (length(regexp_replace(COALESCE(cpf,''), '\D', '', 'g')) = 11 AND trim(COALESCE(nome,'')) <> ''),
+    saneado_em = CASE WHEN (length(regexp_replace(COALESCE(cpf,''), '\D', '', 'g')) = 11 AND trim(COALESCE(nome,'')) <> '') THEN COALESCE(saneado_em, NOW()) ELSE saneado_em END;
 
 DROP TABLE IF EXISTS tmp_clientes_pf_duplicados_046;
 CREATE TEMP TABLE tmp_clientes_pf_duplicados_046 AS
 WITH ranked AS (
   SELECT id,
-         FIRST_VALUE(id) OVER (PARTITION BY regexp_replace(COALESCE(cpf,''), '\\D', '', 'g') ORDER BY COALESCE(updated_at, created_at) DESC NULLS LAST, created_at ASC NULLS LAST, id) AS master_id,
-         ROW_NUMBER() OVER (PARTITION BY regexp_replace(COALESCE(cpf,''), '\\D', '', 'g') ORDER BY COALESCE(updated_at, created_at) DESC NULLS LAST, created_at ASC NULLS LAST, id) AS rn
+         FIRST_VALUE(id) OVER (PARTITION BY regexp_replace(COALESCE(cpf,''), '\D', '', 'g') ORDER BY COALESCE(updated_at, created_at) DESC NULLS LAST, created_at ASC NULLS LAST, id) AS master_id,
+         ROW_NUMBER() OVER (PARTITION BY regexp_replace(COALESCE(cpf,''), '\D', '', 'g') ORDER BY COALESCE(updated_at, created_at) DESC NULLS LAST, created_at ASC NULLS LAST, id) AS rn
     FROM clientes_pf
-   WHERE length(regexp_replace(COALESCE(cpf,''), '\\D', '', 'g')) = 11
+   WHERE length(regexp_replace(COALESCE(cpf,''), '\D', '', 'g')) = 11
 )
 SELECT id AS duplicado_id, master_id
 FROM ranked
@@ -164,9 +175,19 @@ SET arquivado_por_duplicidade = true,
 FROM tmp_clientes_pf_duplicados_046 d
 WHERE c.id = d.duplicado_id;
 
+-- Remove automaticamente duplicados totais após redirecionar referências conhecidas.
+DO $$
+BEGIN
+  DELETE FROM clientes_pf c
+  USING tmp_clientes_pf_duplicados_046 d
+  WHERE c.id = d.duplicado_id;
+EXCEPTION WHEN foreign_key_violation THEN
+  RAISE NOTICE 'Alguns clientes PF duplicados não puderam ser apagados por vínculo externo; permaneceram inativos/arquivados para revisão.';
+END $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS ux_clientes_pf_cpf_unico_ativo
-ON clientes_pf ((regexp_replace(COALESCE(cpf,''), '\\D', '', 'g')))
-WHERE length(regexp_replace(COALESCE(cpf,''), '\\D', '', 'g')) = 11
+ON clientes_pf ((regexp_replace(COALESCE(cpf,''), '\D', '', 'g')))
+WHERE length(regexp_replace(COALESCE(cpf,''), '\D', '', 'g')) = 11
   AND COALESCE(arquivado_por_duplicidade, false) = false;
 
 CREATE INDEX IF NOT EXISTS idx_clientes_pf_cadastro_status ON clientes_pf (cadastro_status);
@@ -187,31 +208,31 @@ ALTER TABLE leads
 UPDATE leads
 SET cadastro_pendencias = array_remove(ARRAY[
       CASE WHEN trim(COALESCE(nome,'')) = '' THEN 'Nome obrigatório' END,
-      CASE WHEN COALESCE(tipo_pessoa,'pf') = 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')) <> 14 THEN 'CNPJ obrigatório/ inválido' END,
-      CASE WHEN COALESCE(tipo_pessoa,'pf') <> 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')) <> 11 THEN 'CPF obrigatório/ inválido' END
+      CASE WHEN COALESCE(tipo_pessoa,'pf') = 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\D', '', 'g')) <> 14 THEN 'CNPJ obrigatório/ inválido' END,
+      CASE WHEN COALESCE(tipo_pessoa,'pf') <> 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\D', '', 'g')) <> 11 THEN 'CPF obrigatório/ inválido' END
     ]::TEXT[], NULL),
     cadastro_completo = (
       trim(COALESCE(nome,'')) <> '' AND (
-        (COALESCE(tipo_pessoa,'pf') = 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')) = 14)
-        OR (COALESCE(tipo_pessoa,'pf') <> 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')) = 11)
+        (COALESCE(tipo_pessoa,'pf') = 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\D', '', 'g')) = 14)
+        OR (COALESCE(tipo_pessoa,'pf') <> 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\D', '', 'g')) = 11)
       )
     ),
     cadastro_status = CASE WHEN (
       trim(COALESCE(nome,'')) <> '' AND (
-        (COALESCE(tipo_pessoa,'pf') = 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')) = 14)
-        OR (COALESCE(tipo_pessoa,'pf') <> 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')) = 11)
+        (COALESCE(tipo_pessoa,'pf') = 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\D', '', 'g')) = 14)
+        OR (COALESCE(tipo_pessoa,'pf') <> 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\D', '', 'g')) = 11)
       )
     ) THEN 'completo' ELSE 'incompleto' END,
     bloqueado_operacional = NOT (
       trim(COALESCE(nome,'')) <> '' AND (
-        (COALESCE(tipo_pessoa,'pf') = 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')) = 14)
-        OR (COALESCE(tipo_pessoa,'pf') <> 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')) = 11)
+        (COALESCE(tipo_pessoa,'pf') = 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\D', '', 'g')) = 14)
+        OR (COALESCE(tipo_pessoa,'pf') <> 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\D', '', 'g')) = 11)
       )
     ),
     saneado_em = CASE WHEN (
       trim(COALESCE(nome,'')) <> '' AND (
-        (COALESCE(tipo_pessoa,'pf') = 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')) = 14)
-        OR (COALESCE(tipo_pessoa,'pf') <> 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')) = 11)
+        (COALESCE(tipo_pessoa,'pf') = 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\D', '', 'g')) = 14)
+        OR (COALESCE(tipo_pessoa,'pf') <> 'pj' AND length(regexp_replace(COALESCE(cpf_cnpj,''), '\D', '', 'g')) = 11)
       )
     ) THEN COALESCE(saneado_em, NOW()) ELSE saneado_em END;
 
@@ -219,10 +240,10 @@ DROP TABLE IF EXISTS tmp_leads_duplicados_046;
 CREATE TEMP TABLE tmp_leads_duplicados_046 AS
 WITH ranked AS (
   SELECT id,
-         FIRST_VALUE(id) OVER (PARTITION BY regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g') ORDER BY COALESCE(updated_at, created_at) DESC NULLS LAST, created_at ASC NULLS LAST, id) AS master_id,
-         ROW_NUMBER() OVER (PARTITION BY regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g') ORDER BY COALESCE(updated_at, created_at) DESC NULLS LAST, created_at ASC NULLS LAST, id) AS rn
+         FIRST_VALUE(id) OVER (PARTITION BY regexp_replace(COALESCE(cpf_cnpj,''), '\D', '', 'g') ORDER BY COALESCE(updated_at, created_at) DESC NULLS LAST, created_at ASC NULLS LAST, id) AS master_id,
+         ROW_NUMBER() OVER (PARTITION BY regexp_replace(COALESCE(cpf_cnpj,''), '\D', '', 'g') ORDER BY COALESCE(updated_at, created_at) DESC NULLS LAST, created_at ASC NULLS LAST, id) AS rn
     FROM leads
-   WHERE length(regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')) IN (11,14)
+   WHERE length(regexp_replace(COALESCE(cpf_cnpj,''), '\D', '', 'g')) IN (11,14)
 )
 SELECT id AS duplicado_id, master_id
 FROM ranked
@@ -253,9 +274,19 @@ SET arquivado_por_duplicidade = true,
 FROM tmp_leads_duplicados_046 d
 WHERE l.id = d.duplicado_id;
 
+-- Remove automaticamente duplicados totais após redirecionar referências conhecidas.
+DO $$
+BEGIN
+  DELETE FROM leads l
+  USING tmp_leads_duplicados_046 d
+  WHERE l.id = d.duplicado_id;
+EXCEPTION WHEN foreign_key_violation THEN
+  RAISE NOTICE 'Alguns leads duplicados não puderam ser apagados por vínculo externo; permaneceram arquivados para revisão.';
+END $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS ux_leads_documento_unico_ativo
-ON leads ((regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')))
-WHERE length(regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')) IN (11,14)
+ON leads ((regexp_replace(COALESCE(cpf_cnpj,''), '\D', '', 'g')))
+WHERE length(regexp_replace(COALESCE(cpf_cnpj,''), '\D', '', 'g')) IN (11,14)
   AND COALESCE(arquivado_por_duplicidade, false) = false;
 
 CREATE INDEX IF NOT EXISTS idx_leads_cadastro_status ON leads (cadastro_status);

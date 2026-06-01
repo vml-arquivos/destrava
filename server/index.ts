@@ -3339,7 +3339,7 @@ async function startServer() {
                   cadastro_status, cadastro_pendencias, cadastro_completo, bloqueado_operacional,
                   arquivado_por_duplicidade, duplicado_de, updated_at, created_at
              FROM clientes_pf
-            WHERE ativo = true AND ${conds.join(' AND ')}
+            WHERE ${conds.join(' AND ')}
             ORDER BY COALESCE(updated_at, created_at) DESC
             LIMIT 300`, params);
         result.clientes_pf = rows;
@@ -3369,6 +3369,149 @@ async function startServer() {
     } catch (err) {
       console.error("[GET /api/cadastros-incompletos]", err);
       res.status(500).json({ error: "Erro ao listar cadastros incompletos" });
+    }
+  });
+
+
+
+  // ─── AÇÕES DA ÁREA DE CADASTROS INCOMPLETOS ──────────────────────────────
+  app.patch("/api/cadastros-incompletos/:tipo/:id/reprocessar", auth, async (req: Request, res: Response) => {
+    try {
+      const { tipo, id } = req.params;
+
+      if (tipo === "empresa") {
+        const { rows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [id]);
+        if (!rows.length) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
+        const pendencias = pendenciasEmpresa(rows[0]);
+        const { rows: updated } = await pool.query(
+          `UPDATE empresas
+              SET cadastro_pendencias = $1,
+                  cadastro_status = $2,
+                  cadastro_completo = $3,
+                  bloqueado_operacional = $4,
+                  updated_at = NOW()
+            WHERE id = $5 RETURNING *`,
+          [pendencias, statusCadastroFromPendencias(pendencias), pendencias.length === 0, pendencias.length > 0, id]
+        );
+        res.json(updated[0]);
+        return;
+      }
+
+      if (tipo === "cliente_pf") {
+        const { rows } = await pool.query("SELECT * FROM clientes_pf WHERE id = $1", [id]);
+        if (!rows.length) { res.status(404).json({ error: "Cliente PF não encontrado" }); return; }
+        const pendencias = pendenciasClientePF(rows[0]);
+        const { rows: updated } = await pool.query(
+          `UPDATE clientes_pf
+              SET cadastro_pendencias = $1,
+                  cadastro_status = $2,
+                  cadastro_completo = $3,
+                  bloqueado_operacional = $4,
+                  ativo = true,
+                  updated_at = NOW()
+            WHERE id = $5 RETURNING *`,
+          [pendencias, statusCadastroFromPendencias(pendencias), pendencias.length === 0, pendencias.length > 0, id]
+        );
+        res.json(updated[0]);
+        return;
+      }
+
+      if (tipo === "lead") {
+        const { rows } = await pool.query("SELECT * FROM leads WHERE id = $1", [id]);
+        if (!rows.length) { res.status(404).json({ error: "Lead/cliente não encontrado" }); return; }
+        const lead = rows[0];
+        const doc = String(lead.cpf_cnpj || "").replace(/\D/g, "");
+        const tipoPessoa = String(lead.tipo_pessoa || (doc.length === 14 ? "pj" : "pf")).toLowerCase();
+        const pendencias = [
+          !String(lead.nome || "").trim() ? "Nome obrigatório" : null,
+          tipoPessoa === "pj" && doc.length !== 14 ? "CNPJ obrigatório/ inválido" : null,
+          tipoPessoa !== "pj" && doc.length !== 11 ? "CPF obrigatório/ inválido" : null,
+        ].filter(Boolean) as string[];
+        const { rows: updated } = await pool.query(
+          `UPDATE leads
+              SET cadastro_pendencias = $1,
+                  cadastro_status = $2,
+                  cadastro_completo = $3,
+                  bloqueado_operacional = $4,
+                  updated_at = NOW()
+            WHERE id = $5 RETURNING *`,
+          [pendencias, statusCadastroFromPendencias(pendencias), pendencias.length === 0, pendencias.length > 0, id]
+        );
+        res.json(updated[0]);
+        return;
+      }
+
+      res.status(400).json({ error: "Tipo de cadastro inválido" });
+    } catch (err: any) {
+      console.error("[PATCH /api/cadastros-incompletos/:tipo/:id/reprocessar]", err);
+      res.status(500).json({ error: err?.message || "Erro ao reprocessar cadastro" });
+    }
+  });
+
+  app.delete("/api/cadastros-incompletos/:tipo/:id", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      if (!colaboradorPodeVerTudo(colaborador)) {
+        res.status(403).json({ error: "Somente gestor/admin pode apagar cadastros incompletos" });
+        return;
+      }
+      const { tipo, id } = req.params;
+      let removido = false;
+
+      if (tipo === "empresa") {
+        try { await pool.query("DELETE FROM empresas WHERE id = $1", [id]); removido = true; }
+        catch {
+          await pool.query(
+            `UPDATE empresas
+                SET arquivado_por_duplicidade = true,
+                    bloqueado_operacional = true,
+                    cadastro_completo = false,
+                    cadastro_status = 'removido',
+                    cadastro_pendencias = ARRAY['Cadastro removido/ocultado por saneamento'],
+                    updated_at = NOW()
+              WHERE id = $1`, [id]
+          );
+        }
+      } else if (tipo === "cliente_pf") {
+        try { await pool.query("DELETE FROM clientes_pf WHERE id = $1", [id]); removido = true; }
+        catch { await pool.query("UPDATE clientes_pf SET ativo=false, cadastro_status='removido', bloqueado_operacional=true, updated_at=NOW() WHERE id=$1", [id]); }
+      } else if (tipo === "lead") {
+        try { await pool.query("DELETE FROM leads WHERE id = $1", [id]); removido = true; }
+        catch { await pool.query("UPDATE leads SET arquivado_por_duplicidade=true, cadastro_status='removido', bloqueado_operacional=true, updated_at=NOW() WHERE id=$1", [id]); }
+      } else {
+        res.status(400).json({ error: "Tipo de cadastro inválido" });
+        return;
+      }
+
+      res.json({ success: true, removido_definitivo: removido });
+    } catch (err: any) {
+      console.error("[DELETE /api/cadastros-incompletos/:tipo/:id]", err);
+      res.status(500).json({ error: err?.message || "Erro ao apagar cadastro" });
+    }
+  });
+
+  app.post("/api/cadastros-incompletos/remover-duplicados", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      if (!colaboradorPodeVerTudo(colaborador)) {
+        res.status(403).json({ error: "Somente gestor/admin pode remover duplicados" });
+        return;
+      }
+
+      let empresas = 0, clientes_pf = 0, leads = 0;
+      try { const r = await pool.query("DELETE FROM empresas WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); empresas = r.rowCount || 0; }
+      catch { const r = await pool.query("UPDATE empresas SET cadastro_status='removido', bloqueado_operacional=true WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); empresas = r.rowCount || 0; }
+
+      try { const r = await pool.query("DELETE FROM clientes_pf WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); clientes_pf = r.rowCount || 0; }
+      catch { const r = await pool.query("UPDATE clientes_pf SET ativo=false, cadastro_status='removido', bloqueado_operacional=true WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); clientes_pf = r.rowCount || 0; }
+
+      try { const r = await pool.query("DELETE FROM leads WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); leads = r.rowCount || 0; }
+      catch { const r = await pool.query("UPDATE leads SET cadastro_status='removido', bloqueado_operacional=true WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); leads = r.rowCount || 0; }
+
+      res.json({ success: true, empresas, clientes_pf, leads, total_removidos: empresas + clientes_pf + leads });
+    } catch (err: any) {
+      console.error("[POST /api/cadastros-incompletos/remover-duplicados]", err);
+      res.status(500).json({ error: err?.message || "Erro ao remover duplicados" });
     }
   });
 
