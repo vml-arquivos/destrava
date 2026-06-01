@@ -90,6 +90,35 @@ type SocioInput = {
   qualificacao_representante?: string | null;
   data_entrada_sociedade?: string | null;
   pais?: string | null;
+  rg?: string | null;
+  rg_orgao_emissor?: string | null;
+  rg_uf_emissao?: string | null;
+  rg_data_emissao?: string | null;
+  data_nascimento?: string | null;
+  nacionalidade?: string | null;
+  estado_civil?: string | null;
+  profissao?: string | null;
+  email?: string | null;
+  telefone?: string | null;
+  whatsapp?: string | null;
+  cep?: string | null;
+  logradouro?: string | null;
+  numero?: string | null;
+  complemento?: string | null;
+  bairro?: string | null;
+  cidade?: string | null;
+  uf?: string | null;
+  conjuge_nome?: string | null;
+  conjuge_cpf?: string | null;
+  conjuge_rg?: string | null;
+  conjuge_data_nasc?: string | null;
+  conjuge_profissao?: string | null;
+  conjuge_email?: string | null;
+  conjuge_telefone?: string | null;
+  regime_bens?: string | null;
+  pep?: boolean | null;
+  ativo?: boolean | null;
+  fonte_dados?: string | null;
   dados_extra?: Record<string, unknown> | string | null;
 };
 
@@ -117,6 +146,35 @@ function normalizeSocioInput(input: any): SocioInput {
     qualificacao_representante: input?.qualificacao_representante ?? input?.qualificacao_representante_legal ?? null,
     data_entrada_sociedade: input?.data_entrada_sociedade ?? input?.data_entrada ?? null,
     pais: input?.pais ?? null,
+    rg: input?.rg ?? null,
+    rg_orgao_emissor: input?.rg_orgao_emissor ?? input?.orgao_emissor ?? null,
+    rg_uf_emissao: input?.rg_uf_emissao ?? null,
+    rg_data_emissao: input?.rg_data_emissao ?? null,
+    data_nascimento: input?.data_nascimento ?? input?.nascimento ?? null,
+    nacionalidade: input?.nacionalidade ?? null,
+    estado_civil: input?.estado_civil ?? null,
+    profissao: input?.profissao ?? null,
+    email: input?.email ?? null,
+    telefone: input?.telefone ?? null,
+    whatsapp: input?.whatsapp ?? null,
+    cep: input?.cep ?? null,
+    logradouro: input?.logradouro ?? null,
+    numero: input?.numero ?? null,
+    complemento: input?.complemento ?? null,
+    bairro: input?.bairro ?? null,
+    cidade: input?.cidade ?? null,
+    uf: input?.uf ?? null,
+    conjuge_nome: input?.conjuge_nome ?? null,
+    conjuge_cpf: input?.conjuge_cpf ?? null,
+    conjuge_rg: input?.conjuge_rg ?? null,
+    conjuge_data_nasc: input?.conjuge_data_nasc ?? null,
+    conjuge_profissao: input?.conjuge_profissao ?? null,
+    conjuge_email: input?.conjuge_email ?? null,
+    conjuge_telefone: input?.conjuge_telefone ?? null,
+    regime_bens: input?.regime_bens ?? null,
+    pep: input?.pep ?? false,
+    ativo: input?.ativo ?? true,
+    fonte_dados: input?.fonte_dados ?? input?.fonte ?? 'api_publica_cnpj',
     dados_extra: input?.dados_extra ?? input,
   };
 }
@@ -132,6 +190,35 @@ const SOCIOS_BASE_COLUMNS = new Set([
   'qualificacao_representante',
   'data_entrada_sociedade',
   'pais',
+  'rg',
+  'rg_orgao_emissor',
+  'rg_uf_emissao',
+  'rg_data_emissao',
+  'data_nascimento',
+  'nacionalidade',
+  'estado_civil',
+  'profissao',
+  'email',
+  'telefone',
+  'whatsapp',
+  'cep',
+  'logradouro',
+  'numero',
+  'complemento',
+  'bairro',
+  'cidade',
+  'uf',
+  'conjuge_nome',
+  'conjuge_cpf',
+  'conjuge_rg',
+  'conjuge_data_nasc',
+  'conjuge_profissao',
+  'conjuge_email',
+  'conjuge_telefone',
+  'regime_bens',
+  'pep',
+  'ativo',
+  'fonte_dados',
   'dados_extra',
 ]);
 
@@ -160,7 +247,37 @@ async function ensureSociosEmpresaSchema(): Promise<Set<string>> {
       ADD COLUMN IF NOT EXISTS qualificacao_representante TEXT,
       ADD COLUMN IF NOT EXISTS data_entrada_sociedade DATE,
       ADD COLUMN IF NOT EXISTS pais TEXT,
+      ADD COLUMN IF NOT EXISTS rg TEXT,
+      ADD COLUMN IF NOT EXISTS rg_orgao_emissor TEXT,
+      ADD COLUMN IF NOT EXISTS rg_uf_emissao CHAR(2),
+      ADD COLUMN IF NOT EXISTS rg_data_emissao DATE,
+      ADD COLUMN IF NOT EXISTS data_nascimento DATE,
+      ADD COLUMN IF NOT EXISTS nacionalidade TEXT,
+      ADD COLUMN IF NOT EXISTS estado_civil TEXT,
+      ADD COLUMN IF NOT EXISTS profissao TEXT,
+      ADD COLUMN IF NOT EXISTS email TEXT,
+      ADD COLUMN IF NOT EXISTS telefone TEXT,
+      ADD COLUMN IF NOT EXISTS whatsapp TEXT,
+      ADD COLUMN IF NOT EXISTS cep TEXT,
+      ADD COLUMN IF NOT EXISTS logradouro TEXT,
+      ADD COLUMN IF NOT EXISTS numero TEXT,
+      ADD COLUMN IF NOT EXISTS complemento TEXT,
+      ADD COLUMN IF NOT EXISTS bairro TEXT,
+      ADD COLUMN IF NOT EXISTS cidade TEXT,
+      ADD COLUMN IF NOT EXISTS uf CHAR(2),
+      ADD COLUMN IF NOT EXISTS conjuge_nome TEXT,
+      ADD COLUMN IF NOT EXISTS conjuge_cpf TEXT,
+      ADD COLUMN IF NOT EXISTS conjuge_rg TEXT,
+      ADD COLUMN IF NOT EXISTS conjuge_data_nasc DATE,
+      ADD COLUMN IF NOT EXISTS conjuge_profissao TEXT,
+      ADD COLUMN IF NOT EXISTS conjuge_email TEXT,
+      ADD COLUMN IF NOT EXISTS conjuge_telefone TEXT,
+      ADD COLUMN IF NOT EXISTS regime_bens TEXT,
+      ADD COLUMN IF NOT EXISTS pep BOOLEAN DEFAULT false,
+      ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true,
+      ADD COLUMN IF NOT EXISTS fonte_dados TEXT,
       ADD COLUMN IF NOT EXISTS dados_extra JSONB DEFAULT '{}'::jsonb`);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_socios_empresa_cpf ON public.socios_empresa(cpf_cnpj)');
     sociosSchemaReady = true;
   }
 
@@ -175,6 +292,121 @@ async function ensureSociosEmpresaSchema(): Promise<Set<string>> {
   }
 
   return sociosColumnsCache;
+}
+
+
+function sociosPendenciasContrato(s: any): string[] {
+  const pendencias: string[] = [];
+  const doc = String(s?.cpf_cnpj || '').replace(/\D/g, '');
+  if (!s?.nome) pendencias.push('Nome do sócio obrigatório');
+  if (doc.length !== 11 && doc.length !== 14) pendencias.push('CPF/CNPJ completo do sócio obrigatório');
+  if (!s?.qualificacao_socio) pendencias.push('Qualificação societária obrigatória');
+  if (!s?.estado_civil) pendencias.push('Estado civil obrigatório para contratos');
+  if (!s?.profissao) pendencias.push('Profissão obrigatória para contratos');
+  if (!s?.nacionalidade) pendencias.push('Nacionalidade obrigatória');
+  if (!s?.rg) pendencias.push('RG/documento pessoal obrigatório');
+  if (!s?.telefone && !s?.whatsapp) pendencias.push('Telefone/WhatsApp obrigatório');
+  if (!s?.email) pendencias.push('E-mail obrigatório');
+  if (!s?.cep || !s?.logradouro || !s?.cidade || !s?.uf) pendencias.push('Endereço residencial completo obrigatório');
+  const estadoCivil = String(s?.estado_civil || '').toLowerCase();
+  if (estadoCivil.includes('casad') || estadoCivil.includes('união') || estadoCivil.includes('uniao')) {
+    if (!s?.conjuge_nome) pendencias.push('Nome do cônjuge obrigatório');
+    const cpfConjuge = String(s?.conjuge_cpf || '').replace(/\D/g, '');
+    if (cpfConjuge.length !== 11) pendencias.push('CPF do cônjuge obrigatório');
+    if (!s?.regime_bens) pendencias.push('Regime de bens obrigatório');
+  }
+  return pendencias;
+}
+
+function enrichSocioRow(s: any) {
+  const pendencias = sociosPendenciasContrato(s);
+  return {
+    ...s,
+    pendencias_contrato: pendencias,
+    cadastro_completo_contrato: pendencias.length === 0,
+    origem_dados: s?.fonte_dados || 'manual/api_publica',
+  };
+}
+
+function buildSocioPayload(empresaId: string, socio: SocioInput): Record<string, unknown> | null {
+  const normalized = normalizeSocioInput(socio);
+  const nome = normalized.nome?.trim();
+  if (!nome) return null;
+  return {
+    empresa_id: empresaId,
+    nome,
+    cpf_cnpj: normalized.cpf_cnpj || null,
+    qualificacao_socio: normalized.qualificacao_socio || null,
+    percentual_capital: toNullableNumeric(normalized.percentual_capital),
+    representante_legal: normalized.representante_legal ?? false,
+    nome_representante: normalized.nome_representante || null,
+    qualificacao_representante: normalized.qualificacao_representante || null,
+    data_entrada_sociedade: normalized.data_entrada_sociedade || null,
+    pais: normalized.pais || null,
+    rg: normalized.rg || null,
+    rg_orgao_emissor: normalized.rg_orgao_emissor || null,
+    rg_uf_emissao: normalized.rg_uf_emissao || null,
+    rg_data_emissao: normalized.rg_data_emissao || null,
+    data_nascimento: normalized.data_nascimento || null,
+    nacionalidade: normalized.nacionalidade || null,
+    estado_civil: normalized.estado_civil || null,
+    profissao: normalized.profissao || null,
+    email: normalized.email || null,
+    telefone: normalized.telefone || null,
+    whatsapp: normalized.whatsapp || null,
+    cep: normalized.cep || null,
+    logradouro: normalized.logradouro || null,
+    numero: normalized.numero || null,
+    complemento: normalized.complemento || null,
+    bairro: normalized.bairro || null,
+    cidade: normalized.cidade || null,
+    uf: normalized.uf || null,
+    conjuge_nome: normalized.conjuge_nome || null,
+    conjuge_cpf: normalized.conjuge_cpf || null,
+    conjuge_rg: normalized.conjuge_rg || null,
+    conjuge_data_nasc: normalized.conjuge_data_nasc || null,
+    conjuge_profissao: normalized.conjuge_profissao || null,
+    conjuge_email: normalized.conjuge_email || null,
+    conjuge_telefone: normalized.conjuge_telefone || null,
+    regime_bens: normalized.regime_bens || null,
+    pep: normalized.pep ?? false,
+    ativo: normalized.ativo ?? true,
+    fonte_dados: normalized.fonte_dados || 'api_publica_cnpj',
+    dados_extra: typeof normalized.dados_extra === 'string' ? normalized.dados_extra : JSON.stringify(normalized.dados_extra || {}),
+  };
+}
+
+async function upsertSocioEmpresa(empresaId: string, socio: SocioInput) {
+  const columns = await ensureSociosEmpresaSchema();
+  const payload = buildSocioPayload(empresaId, socio);
+  if (!payload) return null;
+  const nome = String(payload.nome || '').trim();
+  const documento = String(payload.cpf_cnpj || '').replace(/\D/g, '');
+  const existing = documento
+    ? await pool.query("SELECT * FROM public.socios_empresa WHERE empresa_id=$1 AND regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')=$2 LIMIT 1", [empresaId, documento])
+    : await pool.query('SELECT * FROM public.socios_empresa WHERE empresa_id=$1 AND lower(nome)=lower($2) LIMIT 1', [empresaId, nome]);
+
+  if (existing.rows.length === 0) return insertSocioEmpresa(empresaId, socio);
+
+  const current = existing.rows[0];
+  const updatePayload: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (key === 'empresa_id') continue;
+    if (!SOCIOS_BASE_COLUMNS.has(key) || !columns.has(key)) continue;
+    // Campos importados por API atualizam apenas quando vierem preenchidos ou quando o campo atual estiver vazio.
+    if (value !== null && value !== undefined && value !== '') updatePayload[key] = value;
+    else if (current[key] === null || current[key] === undefined) updatePayload[key] = value;
+  }
+  const entries = Object.entries(updatePayload);
+  if (!entries.length) return current;
+  const sets = entries.map(([key], index) => `${key}=$${index + 1}`);
+  const values = entries.map(([, value]) => value);
+  values.push(current.id, empresaId);
+  const { rows } = await pool.query(
+    `UPDATE public.socios_empresa SET ${sets.join(', ')}, updated_at=NOW() WHERE id=$${values.length - 1} AND empresa_id=$${values.length} RETURNING *`,
+    values
+  );
+  return rows[0] || current;
 }
 
 async function insertSocioEmpresa(empresaId: string, socio: SocioInput) {
@@ -194,6 +426,35 @@ async function insertSocioEmpresa(empresaId: string, socio: SocioInput) {
     qualificacao_representante: normalized.qualificacao_representante || null,
     data_entrada_sociedade: normalized.data_entrada_sociedade || null,
     pais: normalized.pais || null,
+    rg: normalized.rg || null,
+    rg_orgao_emissor: normalized.rg_orgao_emissor || null,
+    rg_uf_emissao: normalized.rg_uf_emissao || null,
+    rg_data_emissao: normalized.rg_data_emissao || null,
+    data_nascimento: normalized.data_nascimento || null,
+    nacionalidade: normalized.nacionalidade || null,
+    estado_civil: normalized.estado_civil || null,
+    profissao: normalized.profissao || null,
+    email: normalized.email || null,
+    telefone: normalized.telefone || null,
+    whatsapp: normalized.whatsapp || null,
+    cep: normalized.cep || null,
+    logradouro: normalized.logradouro || null,
+    numero: normalized.numero || null,
+    complemento: normalized.complemento || null,
+    bairro: normalized.bairro || null,
+    cidade: normalized.cidade || null,
+    uf: normalized.uf || null,
+    conjuge_nome: normalized.conjuge_nome || null,
+    conjuge_cpf: normalized.conjuge_cpf || null,
+    conjuge_rg: normalized.conjuge_rg || null,
+    conjuge_data_nasc: normalized.conjuge_data_nasc || null,
+    conjuge_profissao: normalized.conjuge_profissao || null,
+    conjuge_email: normalized.conjuge_email || null,
+    conjuge_telefone: normalized.conjuge_telefone || null,
+    regime_bens: normalized.regime_bens || null,
+    pep: normalized.pep ?? false,
+    ativo: normalized.ativo ?? true,
+    fonte_dados: normalized.fonte_dados || 'api_publica_cnpj',
     dados_extra: typeof normalized.dados_extra === 'string' ? normalized.dados_extra : JSON.stringify(normalized.dados_extra || {}),
   };
 
@@ -232,10 +493,10 @@ router.get('/:id/socios', auth, async (req: Request, res: Response) => {
     if (!(await requireEmpresaAccess(req, res))) return;
     await ensureSociosEmpresaSchema();
     const { rows } = await pool.query(
-      'SELECT * FROM socios_empresa WHERE empresa_id = $1 ORDER BY nome ASC',
+      'SELECT * FROM socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true ORDER BY nome ASC',
       [req.params.id]
     );
-    res.json(rows);
+    res.json(rows.map(enrichSocioRow));
   } catch (err) {
     console.error('[GET /api/empresas/:id/socios]', err);
     res.status(500).json({ error: 'Erro ao listar sócios' });
@@ -270,9 +531,8 @@ router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
       return;
     }
 
-    if (replace === true) {
-      await pool.query('DELETE FROM public.socios_empresa WHERE empresa_id = $1', [req.params.id]);
-    }
+    // Não apagamos mais dados manuais sensíveis (estado civil, cônjuge, RG, endereço etc.)
+    // durante sincronização pública. A importação faz merge/upsert e preserva campos preenchidos manualmente.
 
     const inserted = [];
     const failed: Array<{ nome?: string; error: unknown }> = [];
@@ -284,8 +544,8 @@ router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
       if (!socio.nome || seen.has(key)) continue;
       seen.add(key);
       try {
-        const row = await insertSocioEmpresa(req.params.id, socio);
-        if (row) inserted.push(row);
+        const row = await upsertSocioEmpresa(req.params.id, socio);
+        if (row) inserted.push(enrichSocioRow(row));
       } catch (err) {
         failed.push({ nome: socio?.nome, error: pgErrorDetails(err) });
         console.error('[POST /api/empresas/:id/socios/bulk] item', socio?.nome, pgErrorDetails(err));
@@ -308,22 +568,23 @@ router.put('/:id/socios/:sid', auth, async (req: Request, res: Response) => {
   try {
     if (!(await requireEmpresaAccess(req, res))) return;
     await ensureSociosEmpresaSchema();
-    const { nome, cpf_cnpj, qualificacao_socio, percentual_capital, representante_legal } = req.body;
-    if (!nome?.trim()) { res.status(400).json({ error: 'Nome do sócio é obrigatório' }); return; }
+    const payload = buildSocioPayload(req.params.id, req.body as SocioInput);
+    if (!payload?.nome) { res.status(400).json({ error: 'Nome do sócio é obrigatório' }); return; }
+    const columns = await ensureSociosEmpresaSchema();
+    const entries = Object.entries(payload).filter(([key]) => key !== 'empresa_id' && SOCIOS_BASE_COLUMNS.has(key) && columns.has(key));
+    const sets = entries.map(([key], index) => `${key}=$${index + 1}`);
+    const values = entries.map(([, value]) => value);
+    values.push(req.params.sid, req.params.id);
     const { rows } = await pool.query(
       `UPDATE public.socios_empresa
-          SET nome=$1,
-              cpf_cnpj=$2,
-              qualificacao_socio=$3,
-              percentual_capital=$4,
-              representante_legal=$5,
-              updated_at=NOW()
-        WHERE id=$6 AND empresa_id=$7
+          SET ${sets.join(', ')}, updated_at=NOW()
+        WHERE id=$${values.length - 1} AND empresa_id=$${values.length}
         RETURNING *`,
-      [nome.trim(), cpf_cnpj || null, qualificacao_socio || null, percentual_capital || null, representante_legal ?? false, req.params.sid, req.params.id]
+      values
     );
     if (rows.length === 0) { res.status(404).json({ error: 'Sócio não encontrado' }); return; }
-    res.json(rows[0]);
+    await registrarHistoricoEmpresa(req.params.id, 'socio_atualizado', `Dados cadastrais do sócio ${payload.nome} atualizados.`, (req as any).colaborador?.nome || 'Sistema');
+    res.json(enrichSocioRow(rows[0]));
   } catch (err) {
     console.error('[PUT /api/empresas/:id/socios/:sid]', pgErrorDetails(err));
     res.status(500).json({ error: 'Erro ao atualizar sócio', details: pgErrorDetails(err) });

@@ -190,6 +190,25 @@ function normalizarSociosReceita(qsa: any[] | undefined | null) {
         qualificacao_representante: s?.qualificacao_representante || s?.qualificacao_representante_legal || null,
         data_entrada_sociedade: s?.data_entrada_sociedade || s?.data_entrada || null,
         pais: s?.pais || null,
+        rg: s?.rg || null,
+        data_nascimento: s?.data_nascimento || null,
+        nacionalidade: s?.nacionalidade || null,
+        estado_civil: s?.estado_civil || null,
+        profissao: s?.profissao || null,
+        email: s?.email || null,
+        telefone: s?.telefone || null,
+        whatsapp: s?.whatsapp || null,
+        cep: s?.cep || null,
+        logradouro: s?.logradouro || null,
+        numero: s?.numero || null,
+        complemento: s?.complemento || null,
+        bairro: s?.bairro || null,
+        cidade: s?.cidade || null,
+        uf: s?.uf || null,
+        conjuge_nome: s?.conjuge_nome || null,
+        conjuge_cpf: s?.conjuge_cpf || null,
+        regime_bens: s?.regime_bens || null,
+        fonte_dados: s?.fonte_dados || 'api_publica_cnpj',
         dados_extra: s,
       };
     })
@@ -395,6 +414,45 @@ function MField({ label, required, error, children }: {
 const inputCls = "h-9 px-3 border border-slate-200 rounded-lg text-sm bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all placeholder:text-slate-300 w-full";
 const selectCls = inputCls + " cursor-pointer";
 
+
+const ESTADOS_CIVIS_SOCIO = ["Solteiro(a)", "Casado(a)", "Divorciado(a)", "Viúvo(a)", "União estável", "Separado(a)"];
+const REGIMES_BENS = ["Comunhão parcial de bens", "Comunhão universal de bens", "Separação total de bens", "Participação final nos aquestos", "Não se aplica"];
+const SOCIO_FORM_VAZIO: any = {
+  nome: "", cpf_cnpj: "", qualificacao_socio: "", percentual_capital: "", representante_legal: false,
+  data_entrada_sociedade: "", pais: "", rg: "", rg_orgao_emissor: "", rg_uf_emissao: "",
+  rg_data_emissao: "", data_nascimento: "", nacionalidade: "Brasileiro(a)", estado_civil: "", profissao: "",
+  email: "", telefone: "", whatsapp: "", cep: "", logradouro: "", numero: "", complemento: "",
+  bairro: "", cidade: "", uf: "", conjuge_nome: "", conjuge_cpf: "", conjuge_rg: "",
+  conjuge_data_nasc: "", conjuge_profissao: "", conjuge_email: "", conjuge_telefone: "", regime_bens: "",
+  pep: false, observacoes: "", fonte_dados: "manual",
+};
+
+function pendenciasSocioContrato(s: any): string[] {
+  const pendencias: string[] = [];
+  const doc = String(s?.cpf_cnpj || "").replace(/\D/g, "");
+  if (!s?.nome) pendencias.push("Nome");
+  if (doc.length !== 11 && doc.length !== 14) pendencias.push("CPF/CNPJ completo");
+  if (!s?.qualificacao_socio) pendencias.push("Qualificação");
+  if (!s?.rg) pendencias.push("RG/documento");
+  if (!s?.estado_civil) pendencias.push("Estado civil");
+  if (!s?.profissao) pendencias.push("Profissão");
+  if (!s?.nacionalidade) pendencias.push("Nacionalidade");
+  if (!s?.email) pendencias.push("E-mail");
+  if (!s?.telefone && !s?.whatsapp) pendencias.push("Telefone/WhatsApp");
+  if (!s?.cep || !s?.logradouro || !s?.cidade || !s?.uf) pendencias.push("Endereço residencial");
+  const civil = String(s?.estado_civil || "").toLowerCase();
+  if (civil.includes("casad") || civil.includes("união") || civil.includes("uniao")) {
+    if (!s?.conjuge_nome) pendencias.push("Cônjuge");
+    if (String(s?.conjuge_cpf || "").replace(/\D/g, "").length !== 11) pendencias.push("CPF do cônjuge");
+    if (!s?.regime_bens) pendencias.push("Regime de bens");
+  }
+  return pendencias;
+}
+
+function pickSocioForm(s: any) {
+  return { ...SOCIO_FORM_VAZIO, ...(s || {}) };
+}
+
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
 export default function Empresas() {
@@ -431,6 +489,41 @@ export default function Empresas() {
   const { lookup: cnpjLookup, status: cnpjStatus, error: cnpjError, reset: cnpjReset } = useCNPJLookup();
   const searchRef = useRef<HTMLInputElement>(null);
   const [sincronizando, setSincronizando] = useState(false);
+  const [socioEditando, setSocioEditando] = useState<any | null>(null);
+  const [socioForm, setSocioForm] = useState<any>({ ...SOCIO_FORM_VAZIO });
+  const [salvandoSocio, setSalvandoSocio] = useState(false);
+
+
+  const abrirEdicaoSocio = (socio: any) => {
+    setSocioEditando(socio);
+    setSocioForm(pickSocioForm(socio));
+  };
+
+  const setSocioCampo = (campo: string, valor: any) => {
+    setSocioForm((prev: any) => ({ ...prev, [campo]: valor }));
+  };
+
+  const salvarSocio = async () => {
+    if (!selecionada?.id || !socioEditando?.id) return;
+    if (!String(socioForm.nome || '').trim()) {
+      toast.error('Nome do sócio é obrigatório');
+      return;
+    }
+    try {
+      setSalvandoSocio(true);
+      const atualizado = await apiFetch(`/api/empresas/${selecionada.id}/socios/${socioEditando.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ ...socioForm, fonte_dados: 'manual_validado' }),
+      });
+      setSociosEmpresa(prev => prev.map((s: any) => s.id === atualizado.id ? atualizado : s));
+      setSocioEditando(null);
+      toast.success('Dados do sócio/representante salvos');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao salvar dados do sócio');
+    } finally {
+      setSalvandoSocio(false);
+    }
+  };
 
   // ── Colaboradores ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1442,11 +1535,13 @@ export default function Empresas() {
 
                     /* ── SÓCIOS ── */
                     : abaAtiva === "socios" ? (
-                      <div className="p-5 fade-in">
-                        <div className="flex items-center justify-between mb-4">
+                      <div className="p-5 fade-in space-y-4">
+                        <div className="flex items-center justify-between mb-1">
                           <div>
-                            <h3 className="text-sm font-bold text-slate-700">Quadro Societário</h3>
-                            <p className="text-xs text-slate-400 mt-0.5">Importados via Receita Federal</p>
+                            <h3 className="text-sm font-bold text-slate-700">Sócios e Representantes</h3>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              Dados públicos importados automaticamente; CPF completo, RG, estado civil, cônjuge e endereço devem ser conferidos/preenchidos para contratos.
+                            </p>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
@@ -1457,50 +1552,73 @@ export default function Empresas() {
                                 onClick={() => sincronizarDados(selecionada)}
                                 disabled={sincronizando}
                                 className="flex items-center gap-1 text-xs font-semibold text-emerald-700 border border-emerald-200 bg-emerald-50 px-2.5 py-1 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50"
-                                title="Re-importar sócios da Receita Federal"
+                                title="Re-importar sócios das fontes públicas de CNPJ sem apagar dados manuais já preenchidos"
                               >
                                 <RotateCw className={`w-3 h-3 ${sincronizando ? "animate-spin" : ""}`} />
-                                Atualizar
+                                Atualizar dados societários
                               </button>
                             )}
                           </div>
                         </div>
+
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 leading-relaxed">
+                          <b>Importante:</b> APIs públicas gratuitas normalmente retornam nome, qualificação, entrada na sociedade e documento mascarado. Dados sensíveis como estado civil, cônjuge, RG, CPF completo e endereço residencial ficam como pendência manual ou devem vir de documentos anexados/integrações pagas futuras.
+                        </div>
+
                         {sociosEmpresa.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
                             <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center">
                               <Users className="w-6 h-6 text-slate-300" />
                             </div>
                             <p className="text-sm text-slate-500 font-medium">Nenhum sócio cadastrado</p>
-                            <p className="text-xs text-slate-400">Clique em Atualizar para buscar/importar os sócios retornados pela Receita Federal</p>
+                            <p className="text-xs text-slate-400">Clique em Atualizar dados societários para buscar/importar os sócios retornados pelas fontes de CNPJ.</p>
                           </div>
                         ) : (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {sociosEmpresa.map((s: any) => (
-                              <div key={s.id} className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center font-bold text-sm shrink-0">
-                                    {(s.nome?.charAt(0) ?? "?").toUpperCase()}
+                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                            {sociosEmpresa.map((s: any) => {
+                              const pendencias = Array.isArray(s.pendencias_contrato) ? s.pendencias_contrato : pendenciasSocioContrato(s);
+                              const completo = pendencias.length === 0;
+                              return (
+                                <div key={s.id} className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow space-y-3">
+                                  <div className="flex items-start gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                                      {(s.nome?.charAt(0) ?? "?").toUpperCase()}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-bold text-slate-800 truncate">{s.nome}</p>
+                                      <div className="flex flex-wrap gap-1.5 mt-1">
+                                        {s.qualificacao_socio && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{s.qualificacao_socio}</span>}
+                                        {s.representante_legal && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Representante legal</span>}
+                                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${completo ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                          {completo ? 'Completo para contrato' : `${pendencias.length} pendência(s)`}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <button onClick={() => abrirEdicaoSocio(s)} className="shrink-0 flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
+                                      <Edit2 className="w-3 h-3" /> Editar
+                                    </button>
                                   </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-bold text-slate-800 truncate">{s.nome}</p>
-                                    {s.qualificacao_socio && (
-                                      <span className="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 mt-1">
-                                        {s.qualificacao_socio}
-                                      </span>
-                                    )}
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Documento</span><b className="text-slate-700 font-mono">{s.cpf_cnpj || 'Não informado'}</b></div>
+                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Entrada na sociedade</span><b className="text-slate-700">{s.data_entrada_sociedade ? new Date(s.data_entrada_sociedade).toLocaleDateString('pt-BR') : 'Não informado'}</b></div>
+                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Estado civil</span><b className="text-slate-700">{s.estado_civil || 'Pendente'}</b></div>
+                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Profissão</span><b className="text-slate-700">{s.profissao || 'Pendente'}</b></div>
+                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">E-mail</span><b className="text-slate-700 truncate block">{s.email || 'Pendente'}</b></div>
+                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Telefone/WhatsApp</span><b className="text-slate-700">{s.whatsapp || s.telefone || 'Pendente'}</b></div>
                                   </div>
-                                  {s.representante_legal && (
-                                    <span className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Rep. Legal</span>
+
+                                  {pendencias.length > 0 && (
+                                    <div className="rounded-lg bg-amber-50 border border-amber-100 p-2">
+                                      <p className="text-[11px] font-bold text-amber-700 mb-1">Pendências para contratos/análises</p>
+                                      <div className="flex flex-wrap gap-1">
+                                        {pendencias.slice(0, 8).map((p: string) => <span key={p} className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-amber-200 text-amber-700">{p}</span>)}
+                                      </div>
+                                    </div>
                                   )}
                                 </div>
-                                {(s.cpf_cnpj || s.percentual_capital) && (
-                                  <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
-                                    {s.cpf_cnpj && <span className="text-xs text-slate-400 font-mono">{s.cpf_cnpj}</span>}
-                                    {s.percentual_capital && <span className="text-xs font-semibold text-slate-600">{s.percentual_capital}%</span>}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -1818,6 +1936,81 @@ export default function Empresas() {
       {/* ═══════════════════════════════════════════════════════════════════
           MODAL DE CADASTRO / EDIÇÃO
       ════════════════════════════════════════════════════════════════════ */}
+      {socioEditando && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-white">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Sócio / Representante</h2>
+                <p className="text-xs text-slate-500">Complete os dados exigidos para contratos, análises e assinatura.</p>
+              </div>
+              <button onClick={() => setSocioEditando(null)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-5 overflow-y-auto space-y-5">
+              <SectionCard title="Dados societários importados" icon={<Users className="w-4 h-4" />}>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 py-3">
+                  <MField label="Nome" required><input value={socioForm.nome || ''} onChange={e => setSocioCampo('nome', e.target.value)} className={inputCls} /></MField>
+                  <MField label="CPF/CNPJ do sócio" required><input value={socioForm.cpf_cnpj || ''} onChange={e => setSocioCampo('cpf_cnpj', e.target.value)} className={inputCls} placeholder="CPF completo quando disponível" /></MField>
+                  <MField label="Qualificação"><input value={socioForm.qualificacao_socio || ''} onChange={e => setSocioCampo('qualificacao_socio', e.target.value)} className={inputCls} placeholder="Sócio-administrador..." /></MField>
+                  <MField label="Entrada na sociedade"><input type="date" value={socioForm.data_entrada_sociedade ? String(socioForm.data_entrada_sociedade).slice(0,10) : ''} onChange={e => setSocioCampo('data_entrada_sociedade', e.target.value)} className={inputCls} /></MField>
+                  <MField label="Participação (%)"><input type="number" value={socioForm.percentual_capital || ''} onChange={e => setSocioCampo('percentual_capital', e.target.value)} className={inputCls} /></MField>
+                  <label className="flex items-center gap-2 text-sm text-slate-700 pt-6"><input type="checkbox" checked={!!socioForm.representante_legal} onChange={e => setSocioCampo('representante_legal', e.target.checked)} /> Representante legal/assinante</label>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Dados pessoais obrigatórios" icon={<User className="w-4 h-4" />} defaultOpen>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 py-3">
+                  <MField label="RG / Documento" required><input value={socioForm.rg || ''} onChange={e => setSocioCampo('rg', e.target.value)} className={inputCls} /></MField>
+                  <MField label="Órgão emissor"><input value={socioForm.rg_orgao_emissor || ''} onChange={e => setSocioCampo('rg_orgao_emissor', e.target.value)} className={inputCls} /></MField>
+                  <MField label="UF emissão"><select value={socioForm.rg_uf_emissao || ''} onChange={e => setSocioCampo('rg_uf_emissao', e.target.value)} className={selectCls}><option value="">UF</option>{ESTADOS_BR.map(uf => <option key={uf} value={uf}>{uf}</option>)}</select></MField>
+                  <MField label="Data emissão"><input type="date" value={socioForm.rg_data_emissao ? String(socioForm.rg_data_emissao).slice(0,10) : ''} onChange={e => setSocioCampo('rg_data_emissao', e.target.value)} className={inputCls} /></MField>
+                  <MField label="Nascimento"><input type="date" value={socioForm.data_nascimento ? String(socioForm.data_nascimento).slice(0,10) : ''} onChange={e => setSocioCampo('data_nascimento', e.target.value)} className={inputCls} /></MField>
+                  <MField label="Nacionalidade" required><input value={socioForm.nacionalidade || ''} onChange={e => setSocioCampo('nacionalidade', e.target.value)} className={inputCls} /></MField>
+                  <MField label="Estado civil" required><select value={socioForm.estado_civil || ''} onChange={e => setSocioCampo('estado_civil', e.target.value)} className={selectCls}><option value="">Selecione</option>{ESTADOS_CIVIS_SOCIO.map(v => <option key={v} value={v}>{v}</option>)}</select></MField>
+                  <MField label="Profissão" required><input value={socioForm.profissao || ''} onChange={e => setSocioCampo('profissao', e.target.value)} className={inputCls} /></MField>
+                  <MField label="E-mail" required><input value={socioForm.email || ''} onChange={e => setSocioCampo('email', e.target.value)} className={inputCls} /></MField>
+                  <MField label="Telefone"><input value={socioForm.telefone || ''} onChange={e => setSocioCampo('telefone', e.target.value)} className={inputCls} /></MField>
+                  <MField label="WhatsApp" required><input value={socioForm.whatsapp || ''} onChange={e => setSocioCampo('whatsapp', e.target.value)} className={inputCls} /></MField>
+                  <label className="flex items-center gap-2 text-sm text-slate-700 pt-6"><input type="checkbox" checked={!!socioForm.pep} onChange={e => setSocioCampo('pep', e.target.checked)} /> PEP</label>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Endereço residencial" icon={<MapPin className="w-4 h-4" />} defaultOpen>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 py-3">
+                  <MField label="CEP" required><input value={socioForm.cep || ''} onChange={e => setSocioCampo('cep', e.target.value)} className={inputCls} /></MField>
+                  <MField label="Logradouro" required><input value={socioForm.logradouro || ''} onChange={e => setSocioCampo('logradouro', e.target.value)} className={inputCls} /></MField>
+                  <MField label="Número"><input value={socioForm.numero || ''} onChange={e => setSocioCampo('numero', e.target.value)} className={inputCls} /></MField>
+                  <MField label="Complemento"><input value={socioForm.complemento || ''} onChange={e => setSocioCampo('complemento', e.target.value)} className={inputCls} /></MField>
+                  <MField label="Bairro"><input value={socioForm.bairro || ''} onChange={e => setSocioCampo('bairro', e.target.value)} className={inputCls} /></MField>
+                  <MField label="Cidade" required><input value={socioForm.cidade || ''} onChange={e => setSocioCampo('cidade', e.target.value)} className={inputCls} /></MField>
+                  <MField label="UF" required><select value={socioForm.uf || ''} onChange={e => setSocioCampo('uf', e.target.value)} className={selectCls}><option value="">UF</option>{ESTADOS_BR.map(uf => <option key={uf} value={uf}>{uf}</option>)}</select></MField>
+                </div>
+              </SectionCard>
+
+              {(String(socioForm.estado_civil || '').toLowerCase().includes('casad') || String(socioForm.estado_civil || '').toLowerCase().includes('uni')) && (
+                <SectionCard title="Cônjuge / regime de bens" icon={<Users className="w-4 h-4" />} defaultOpen>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 py-3">
+                    <MField label="Nome do cônjuge" required><input value={socioForm.conjuge_nome || ''} onChange={e => setSocioCampo('conjuge_nome', e.target.value)} className={inputCls} /></MField>
+                    <MField label="CPF do cônjuge" required><input value={socioForm.conjuge_cpf || ''} onChange={e => setSocioCampo('conjuge_cpf', e.target.value)} className={inputCls} /></MField>
+                    <MField label="Regime de bens" required><select value={socioForm.regime_bens || ''} onChange={e => setSocioCampo('regime_bens', e.target.value)} className={selectCls}><option value="">Selecione</option>{REGIMES_BENS.map(v => <option key={v} value={v}>{v}</option>)}</select></MField>
+                    <MField label="RG do cônjuge"><input value={socioForm.conjuge_rg || ''} onChange={e => setSocioCampo('conjuge_rg', e.target.value)} className={inputCls} /></MField>
+                    <MField label="Profissão do cônjuge"><input value={socioForm.conjuge_profissao || ''} onChange={e => setSocioCampo('conjuge_profissao', e.target.value)} className={inputCls} /></MField>
+                    <MField label="Telefone do cônjuge"><input value={socioForm.conjuge_telefone || ''} onChange={e => setSocioCampo('conjuge_telefone', e.target.value)} className={inputCls} /></MField>
+                  </div>
+                </SectionCard>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-200 bg-slate-50 shrink-0">
+              <button type="button" onClick={() => setSocioEditando(null)} className="h-9 px-4 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-100 font-medium">Cancelar</button>
+              <button type="button" onClick={salvarSocio} disabled={salvandoSocio} className="flex items-center gap-2 h-9 px-5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm disabled:opacity-50">
+                {salvandoSocio ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Salvar sócio/representante
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {modalAberto && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4">
           <div className="bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl shadow-2xl max-h-[95vh] flex flex-col">
