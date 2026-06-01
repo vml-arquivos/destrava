@@ -441,7 +441,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         custeio_mensal: unmaskCurrencyInput(custeioMensal),
         prazo_contrato_meses: Number.parseInt(prazoContratoAssessoria, 10),
         modo_assinatura_contratante: modoAssinaturaContratante,
-        socios_assinantes: modoAssinaturaContratante === 'socios' ? sociosAssinantesAssessoria : [],
+        socios_assinantes: sociosAssinantesAssessoria,
         _documentosAnexos: documentosAnexos,
         data_assinatura: dataAssinatura,
         foro_eleito: foroEleito,
@@ -687,11 +687,11 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               <div>
                 <label className={lbl}>Quem assina pela contratante?</label>
                 <select value={modoAssinaturaContratante} onChange={e => setModoAssinaturaContratante(e.target.value as 'empresa' | 'responsavel' | 'socios')} className={cls}>
-                  <option value="empresa">Somente empresa (razão social e CNPJ)</option>
-                  <option value="responsavel">Responsável da empresa + razão social</option>
-                  <option value="socios">Sócio(s) da empresa + razão social</option>
+                  <option value="empresa">Representante da empresa + razão social</option>
+                  <option value="responsavel">Responsável principal + razão social</option>
+                  <option value="socios">Sócio(s) selecionado(s) + razão social</option>
                 </select>
-                <p className="text-[11px] text-gray-500 mt-1">A assinatura da CONTRATANTE fica no mesmo bloco: nome(s) escolhido(s) acima da razão social e CNPJ. Não cria assinatura extra separada.</p>
+                <p className="text-[11px] text-gray-500 mt-1">A assinatura da CONTRATANTE fica no mesmo bloco: representante/sócio(s) acima da razão social e CNPJ. Não cria assinatura extra separada.</p>
               </div>
             </div>
 

@@ -37,11 +37,7 @@ interface Empresa {
   situacao_cadastral?: string;
   matriz_filial?: string;
   ultima_sincronizacao_receita?: string;
-  data_situacao_cadastral?: string;
-  motivo_situacao_cadastral?: string;
-  regime_tributario?: string;
-  telefone_2?: string;
-  dados_extra_receita?: Record<string, any> | string | null;
+  dados_extra_receita?: any;
   email?: string;
   telefone?: string;
   whatsapp?: string;
@@ -88,7 +84,7 @@ type FormEmpresa = Omit<Empresa, "id" | "created_at" | "updated_at">;
 const FORM_VAZIO: FormEmpresa = {
   razao_social: "", nome_fantasia: "", cnpj: "", inscricao_estadual: "",
   natureza_juridica: "", capital_social: undefined, cnae_principal: "", cnaes_secundarios: [],
-  data_abertura: "", situacao_cadastral: "", matriz_filial: "", ultima_sincronizacao_receita: "",
+  data_abertura: "", situacao_cadastral: "", matriz_filial: "", ultima_sincronizacao_receita: "", dados_extra_receita: undefined,
   email: "", telefone: "", whatsapp: "", site: "", segmento: "", porte: "mei",
   faturamento_anual: undefined, numero_funcionarios: undefined,
   cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "",
@@ -275,54 +271,10 @@ function InfoTile({ label, value, icon, tone = "slate", mono = false }: { label:
   );
 }
 
-function normalizarValorMonetario(valor?: number | string | null): number | null {
-  if (valor === undefined || valor === null || valor === "") return null;
-  if (typeof valor === "number") return Number.isFinite(valor) ? valor : null;
-  const original = String(valor).replace(/R\$/gi, "").replace(/\s/g, "").trim();
-  if (!original) return null;
-  const sign = original.startsWith("-") ? "-" : "";
-  const s = original.replace(/[^0-9.,]/g, "");
-  if (!s) return null;
-  if (s.includes(",")) {
-    const n = Number(sign + s.replace(/\./g, "").replace(",", "."));
-    return Number.isFinite(n) ? n : null;
-  }
-  if (s.includes(".")) {
-    const parts = s.split(".");
-    const last = parts[parts.length - 1] || "";
-    if (parts.length === 2 && /^\d{1,2}$/.test(last)) {
-      const n = Number(sign + s);
-      return Number.isFinite(n) ? n : null;
-    }
-    const onlyThousands = parts.length > 1 && parts.slice(1).every(part => /^\d{3}$/.test(part));
-    const normalized = onlyThousands ? parts.join("") : `${parts.slice(0, -1).join("")}.${last}`;
-    const n = Number(sign + normalized);
-    return Number.isFinite(n) ? n : null;
-  }
-  const n = Number(sign + s.replace(/\D/g, ""));
-  return Number.isFinite(n) ? n : null;
-}
-
 function normalizarCapitalSocial(valor?: number | string | null) {
-  const n = normalizarValorMonetario(valor);
-  return n !== null ? fmt(n) : (valor ? String(valor) : "—");
-}
-
-function parseDadosReceita(raw: Empresa["dados_extra_receita"]): Record<string, any> {
-  if (!raw) return {};
-  if (typeof raw === "object") return raw as Record<string, any>;
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function valorSimNaoReceita(value: unknown): string {
-  if (value === true || value === "true" || value === "S" || value === "SIM") return "Sim";
-  if (value === false || value === "false" || value === "N" || value === "NAO" || value === "NÃO") return "Não";
-  return value === undefined || value === null || value === "" ? "Não informado" : String(value);
+  if (valor === undefined || valor === null || valor === "") return "—";
+  const n = typeof valor === "number" ? valor : Number(String(valor).replace(/[^0-9,.-]/g, "").replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(n) ? fmt(n) : String(valor);
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -569,7 +521,7 @@ export default function Empresas() {
         porte: porteMap,
         segmento: empresa.segmento || res.cnae_fiscal_descricao || "",
         natureza_juridica: res.natureza_juridica || empresa.natureza_juridica || null,
-        capital_social: normalizarValorMonetario(res.capital_social) ?? normalizarValorMonetario(empresa.capital_social as any) ?? null,
+        capital_social: res.capital_social ?? empresa.capital_social ?? null,
         cnae_principal: res.cnae_fiscal_descricao
           ? `${res.cnae_fiscal || ""} — ${res.cnae_fiscal_descricao}`.trim()
           : empresa.cnae_principal || null,
@@ -580,13 +532,14 @@ export default function Empresas() {
         situacao_cadastral: res.descricao_situacao_cadastral || empresa.situacao_cadastral || null,
         matriz_filial: res.identificador_matriz_filial === 1 ? "Matriz" : res.identificador_matriz_filial === 2 ? "Filial" : empresa.matriz_filial || null,
         ultima_sincronizacao_receita: new Date().toISOString(),
-        data_situacao_cadastral: res.data_situacao_cadastral || empresa.data_situacao_cadastral || null,
-        motivo_situacao_cadastral: res.motivo_situacao_cadastral || empresa.motivo_situacao_cadastral || null,
-        regime_tributario: res.opcao_pelo_simples ? "Simples Nacional" : (res.opcao_pelo_mei ? "MEI" : empresa.regime_tributario || null),
-        telefone_2: res.ddd_telefone_2
-          ? res.ddd_telefone_2.replace(/\D/g, "").replace(/(\d{2})(\d{4,5})(\d{4})/, "($1) $2-$3")
-          : empresa.telefone_2 || null,
-        dados_extra_receita: { ...res, capital_social: normalizarValorMonetario(res.capital_social) ?? res.capital_social },
+        dados_extra_receita: {
+          provedor_principal: res.provedor_principal || null,
+          fontes_consulta: res.fontes_consulta || [],
+          dados_fontes: res.dados_fontes || {},
+          inscricoes_estaduais: res.inscricoes_estaduais || [],
+          suframa: res.suframa || [],
+          payload_normalizado: res,
+        },
         // Responsável — só preenche se estiver vazio
         responsavel_nome: empresa.responsavel_nome || socio?.nome || "",
         responsavel_cpf: empresa.responsavel_cpf || socio?.cpf_cnpj || "",
@@ -1119,19 +1072,6 @@ export default function Empresas() {
                         </div>
                         {/* Banner: dados incompletos — convida sincronização */}
                         {selecionada.cnpj && (!selecionada.cidade || !selecionada.email || !selecionada.responsavel_nome) && (
-                          <>
-                          <div className="mt-3 pt-3 border-t border-slate-100">
-                            <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">Dados completos carregados do CNPJ</p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
-                              <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><b>Código CNAE:</b> {parseDadosReceita(selecionada.dados_extra_receita).cnae_fiscal || "Não informado"}</div>
-                              <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><b>Porte original:</b> {parseDadosReceita(selecionada.dados_extra_receita).descricao_porte || parseDadosReceita(selecionada.dados_extra_receita).porte || selecionada.porte || "Não informado"}</div>
-                              <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><b>Natureza original:</b> {parseDadosReceita(selecionada.dados_extra_receita).codigo_natureza_juridica || parseDadosReceita(selecionada.dados_extra_receita).natureza_juridica || "Não informado"}</div>
-                              <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><b>Município/UF:</b> {selecionada.cidade || parseDadosReceita(selecionada.dados_extra_receita).municipio || "—"}/{selecionada.estado || parseDadosReceita(selecionada.dados_extra_receita).uf || "—"}</div>
-                              <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><b>Motivo situação:</b> {selecionada.motivo_situacao_cadastral || parseDadosReceita(selecionada.dados_extra_receita).motivo_situacao_cadastral || "Não informado"}</div>
-                              <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><b>Última sync:</b> {selecionada.ultima_sincronizacao_receita ? fmtDate(selecionada.ultima_sincronizacao_receita) : "Não sincronizado"}</div>
-                            </div>
-                          </div>
-
                           <button
                             onClick={() => sincronizarDados(selecionada)}
                             disabled={sincronizando}
@@ -1141,7 +1081,6 @@ export default function Empresas() {
                             <span className="flex-1 text-left">Cadastro incompleto — clique para buscar dados atualizados da Receita Federal</span>
                             <RotateCw className={`w-3.5 h-3.5 shrink-0 ${sincronizando ? "animate-spin" : ""}`} />
                           </button>
-                          </>
                         )}
                         <button
                           onClick={() => {
@@ -1225,11 +1164,6 @@ export default function Empresas() {
                             <InfoTile label="Data de Abertura" value={selecionada.data_abertura ? fmtDate(selecionada.data_abertura) : "Não informado"} icon={<Calendar className="w-3.5 h-3.5" />} />
                             <InfoTile label="Situação Cadastral" value={selecionada.situacao_cadastral || "Não informado"} icon={<CheckCircle className="w-3.5 h-3.5" />} tone="emerald" />
                             <InfoTile label="Matriz / Filial" value={selecionada.matriz_filial || "Não informado"} icon={<Building className="w-3.5 h-3.5" />} />
-                            <InfoTile label="Situação em" value={selecionada.data_situacao_cadastral ? fmtDate(selecionada.data_situacao_cadastral) : "Não informado"} icon={<Calendar className="w-3.5 h-3.5" />} />
-                            <InfoTile label="Regime tributário" value={selecionada.regime_tributario || valorSimNaoReceita(parseDadosReceita(selecionada.dados_extra_receita).opcao_pelo_simples)} icon={<ShieldCheck className="w-3.5 h-3.5" />} tone="blue" />
-                            <InfoTile label="Opção pelo MEI" value={valorSimNaoReceita(parseDadosReceita(selecionada.dados_extra_receita).opcao_pelo_mei)} icon={<CheckCircle className="w-3.5 h-3.5" />} />
-                            <InfoTile label="E-mail Receita" value={parseDadosReceita(selecionada.dados_extra_receita).email || selecionada.email || "Não informado"} icon={<Mail className="w-3.5 h-3.5" />} />
-                            <InfoTile label="Telefone 2" value={selecionada.telefone_2 || parseDadosReceita(selecionada.dados_extra_receita).ddd_telefone_2 || "Não informado"} icon={<Phone className="w-3.5 h-3.5" />} />
                           </div>
                           {selecionada.cnaes_secundarios && selecionada.cnaes_secundarios.length > 0 && (
                             <div className="mt-3 pt-3 border-t border-slate-100">
@@ -1241,18 +1175,6 @@ export default function Empresas() {
                               </div>
                             </div>
                           )}
-                          <div className="mt-3 pt-3 border-t border-slate-100">
-                            <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">Dados completos carregados do CNPJ</p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
-                              <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><b>Código CNAE:</b> {parseDadosReceita(selecionada.dados_extra_receita).cnae_fiscal || "Não informado"}</div>
-                              <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><b>Porte original:</b> {parseDadosReceita(selecionada.dados_extra_receita).descricao_porte || parseDadosReceita(selecionada.dados_extra_receita).porte || selecionada.porte || "Não informado"}</div>
-                              <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><b>Natureza original:</b> {parseDadosReceita(selecionada.dados_extra_receita).codigo_natureza_juridica || parseDadosReceita(selecionada.dados_extra_receita).natureza_juridica || "Não informado"}</div>
-                              <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><b>Município/UF:</b> {selecionada.cidade || parseDadosReceita(selecionada.dados_extra_receita).municipio || "—"}/{selecionada.estado || parseDadosReceita(selecionada.dados_extra_receita).uf || "—"}</div>
-                              <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><b>Motivo situação:</b> {selecionada.motivo_situacao_cadastral || parseDadosReceita(selecionada.dados_extra_receita).motivo_situacao_cadastral || "Não informado"}</div>
-                              <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><b>Última sync:</b> {selecionada.ultima_sincronizacao_receita ? fmtDate(selecionada.ultima_sincronizacao_receita) : "Não sincronizado"}</div>
-                            </div>
-                          </div>
-
                           <button
                             onClick={() => sincronizarDados(selecionada)}
                             disabled={!selecionada.cnpj || sincronizando}
@@ -1516,13 +1438,12 @@ export default function Empresas() {
                                     <span className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Rep. Legal</span>
                                   )}
                                 </div>
-                                <div className="mt-2 pt-2 border-t border-slate-100 space-y-1 text-xs text-slate-500">
-                                  {s.cpf_cnpj && <div className="font-mono">Documento: {s.cpf_cnpj}</div>}
-                                  {s.percentual_capital && <div>Participação: <b>{s.percentual_capital}%</b></div>}
-                                  {s.data_entrada_sociedade && <div>Entrada na sociedade: <b>{fmtDate(s.data_entrada_sociedade)}</b></div>}
-                                  {s.pais && <div>País: <b>{s.pais}</b></div>}
-                                  {s.nome_representante && <div>Representante: <b>{s.nome_representante}</b></div>}
-                                </div>
+                                {(s.cpf_cnpj || s.percentual_capital) && (
+                                  <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                                    {s.cpf_cnpj && <span className="text-xs text-slate-400 font-mono">{s.cpf_cnpj}</span>}
+                                    {s.percentual_capital && <span className="text-xs font-semibold text-slate-600">{s.percentual_capital}%</span>}
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -1921,7 +1842,7 @@ export default function Empresas() {
                             porte: porteMap,
                             segmento: data.cnae_fiscal_descricao ?? prev.segmento,
                             natureza_juridica: data.natureza_juridica ?? prev.natureza_juridica,
-                            capital_social: normalizarValorMonetario(data.capital_social) ?? prev.capital_social,
+                            capital_social: data.capital_social ?? prev.capital_social,
                             cnae_principal: data.cnae_fiscal_descricao
                               ? `${data.cnae_fiscal || ""} — ${data.cnae_fiscal_descricao}`.trim()
                               : prev.cnae_principal,
@@ -1932,11 +1853,14 @@ export default function Empresas() {
                             situacao_cadastral: data.descricao_situacao_cadastral ?? prev.situacao_cadastral,
                             matriz_filial: (data as any).identificador_matriz_filial === 1 ? "Matriz" : (data as any).identificador_matriz_filial === 2 ? "Filial" : prev.matriz_filial,
                             ultima_sincronizacao_receita: new Date().toISOString(),
-                            data_situacao_cadastral: (data as any).data_situacao_cadastral ?? prev.data_situacao_cadastral,
-                            motivo_situacao_cadastral: (data as any).motivo_situacao_cadastral ?? prev.motivo_situacao_cadastral,
-                            regime_tributario: (data as any).opcao_pelo_simples ? "Simples Nacional" : ((data as any).opcao_pelo_mei ? "MEI" : prev.regime_tributario),
-                            telefone_2: (data as any).ddd_telefone_2 ? String((data as any).ddd_telefone_2).replace(/\D/g, "").replace(/(\d{2})(\d{4,5})(\d{4})/, "($1) $2-$3") : prev.telefone_2,
-                            dados_extra_receita: { ...(data as any), capital_social: normalizarValorMonetario(data.capital_social) ?? data.capital_social },
+                            dados_extra_receita: {
+                              provedor_principal: (data as any).provedor_principal || null,
+                              fontes_consulta: (data as any).fontes_consulta || [],
+                              dados_fontes: (data as any).dados_fontes || {},
+                              inscricoes_estaduais: (data as any).inscricoes_estaduais || [],
+                              suframa: (data as any).suframa || [],
+                              payload_normalizado: data,
+                            },
                           }));
                           setTimeout(() => setEtapaModal("form"), 500);
                         });

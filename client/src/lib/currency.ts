@@ -20,49 +20,29 @@
  */
 export function parseBRLCurrency(raw: string | number | null | undefined): number {
   if (raw === null || raw === undefined || raw === "") return 0;
-  if (typeof raw === "number") return Number.isFinite(raw) ? raw : 0;
-
-  const original = String(raw).replace(/R\$/gi, "").replace(/\s/g, "").trim();
-  if (!original) return 0;
-
-  const sign = original.startsWith("-") ? "-" : "";
-  const s = original.replace(/[^0-9.,]/g, "");
+  const s = String(raw).replace(/\s|R\$\s*/g, "").trim();
   if (!s) return 0;
 
-  const hasComma = s.includes(",");
-  const hasDot = s.includes(".");
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  const lastSep = Math.max(lastComma, lastDot);
 
-  // Formato brasileiro: 1.234,56 ou 1234,56
-  if (hasComma) {
-    const normalized = sign + s.replace(/\./g, "").replace(",", ".");
-    const n = Number(normalized);
-    return Number.isFinite(n) ? n : 0;
+  if (lastSep === -1) {
+    return parseFloat(s.replace(/\D/g, "")) || 0;
   }
 
-  // Formato internacional/API/Postgres: 1234.56 ou 50000.00.
-  // Antes o sistema removia o ponto e transformava 50000.00 em 5.000.000,00.
-  if (hasDot) {
-    const parts = s.split(".");
-    const last = parts[parts.length - 1] || "";
-    const onlyThousands = parts.length > 1 && parts.slice(1).every((part) => /^\d{3}$/.test(part));
+  const afterLastSep = s.slice(lastSep + 1);
 
-    if (parts.length === 2 && /^\d{1,2}$/.test(last)) {
-      const n = Number(sign + s);
-      return Number.isFinite(n) ? n : 0;
-    }
-
-    if (onlyThousands) {
-      const n = Number(sign + parts.join(""));
-      return Number.isFinite(n) ? n : 0;
-    }
-
-    const normalized = sign + parts.slice(0, -1).join("") + "." + last;
-    const n = Number(normalized);
-    return Number.isFinite(n) ? n : 0;
+  // Se após o último separador há exatamente 3 dígitos, é separador de milhar
+  if (/^\d{3}$/.test(afterLastSep)) {
+    return parseFloat(s.replace(/[.,]/g, "")) || 0;
   }
 
-  const n = Number(sign + s.replace(/\D/g, ""));
-  return Number.isFinite(n) ? n : 0;
+  // Caso geral: o último separador é decimal
+  const intPart = s.slice(0, lastSep).replace(/[.,]/g, "");
+  const decPart = afterLastSep.replace(/\D/g, "");
+  const normalized = decPart ? `${intPart}.${decPart}` : intPart;
+  return parseFloat(normalized) || 0;
 }
 
 /**
