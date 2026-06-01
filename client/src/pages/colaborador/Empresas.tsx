@@ -685,6 +685,7 @@ export default function Empresas() {
   function validar(): boolean {
     const e: Record<string, string> = {};
     if (!form.razao_social.trim()) e.razao_social = "Campo obrigatório";
+    if (!String(form.cnpj || "").replace(/\D/g, "").match(/^\d{14}$/)) e.cnpj = "CNPJ obrigatório";
     setErros(e);
     return Object.keys(e).length === 0;
   }
@@ -1934,9 +1935,9 @@ export default function Empresas() {
                   {cnpjError && <p className="text-xs text-red-500 font-medium mt-2 text-center">{cnpjError}</p>}
                   {cnpjStatus === "found" && <p className="text-xs text-emerald-600 font-medium mt-2 text-center">✓ Dados carregados com sucesso!</p>}
                 </div>
-                <button onClick={() => { setForm(f => ({ ...f, cnpj: cnpjInput })); setEtapaModal("form"); }} className="text-xs text-blue-600 hover:underline">
-                  Preencher manualmente sem CNPJ
-                </button>
+                <p className="text-xs text-amber-600 text-center max-w-xs">
+                  O CNPJ é obrigatório. Empresas sem CNPJ válido ficam bloqueadas em Dados Incompletos e não entram nas telas operacionais.
+                </p>
               </div>
             )}
 
@@ -1956,7 +1957,7 @@ export default function Empresas() {
                       <MField label="Nome Fantasia">
                         <input value={form.nome_fantasia || ""} onChange={e => set("nome_fantasia", e.target.value)} placeholder="Nome comercial" className={inputCls} />
                       </MField>
-                      <MField label="CNPJ">
+                      <MField label="CNPJ" required error={erros.cnpj}>
                         <input value={form.cnpj || ""} onChange={e => set("cnpj", formatCNPJ(e.target.value))} placeholder="00.000.000/0001-00" className={inputCls} inputMode="numeric" />
                       </MField>
                       <MField label="Inscrição Estadual">

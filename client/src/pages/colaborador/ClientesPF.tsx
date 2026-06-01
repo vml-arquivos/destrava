@@ -48,6 +48,15 @@ const fmtNasc = (d?: string) => {
   return `${day}/${m}/${y}`;
 };
 
+const onlyDigits = (v: string) => String(v || '').replace(/\D/g, '');
+const formatCPF = (v: string) => {
+  const d = onlyDigits(v).slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0,3)}.${d.slice(3)}`;
+  if (d.length <= 9) return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6)}`;
+  return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`;
+};
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function ClientesPF() {
   const [clientes, setClientes]           = useState<ClientePF[]>([]);
@@ -99,8 +108,12 @@ export default function ClientesPF() {
   const fecharForm = () => { setMostraForm(false); setEditando(null); };
 
   const handleSalvar = async () => {
-    if (!form.nome.trim() || !form.cpf.trim()) {
-      toast.error('Nome e CPF são obrigatórios');
+    if (!form.cpf.trim() || onlyDigits(form.cpf).length !== 11) {
+      toast.error('CPF válido é obrigatório antes de cadastrar cliente');
+      return;
+    }
+    if (!form.nome.trim()) {
+      toast.error('Nome é obrigatório');
       return;
     }
     setSalvando(true);
@@ -275,7 +288,7 @@ export default function ClientesPF() {
                     <h2 className="text-base font-bold">
                       {editando ? `Editar: ${editando.nome}` : 'Novo Cliente PF'}
                     </h2>
-                    <p className="text-violet-200 text-xs mt-0.5">Pessoa Física</p>
+                    <p className="text-violet-200 text-xs mt-0.5">Pessoa Física • CPF obrigatório e único</p>
                   </div>
                   <button onClick={fecharForm} className="text-violet-200 hover:text-white">
                     <X className="w-5 h-5" />
@@ -284,17 +297,17 @@ export default function ClientesPF() {
 
                 <div className="flex-1 overflow-y-auto p-5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={lbl}>CPF * — primeiro dado obrigatório</label>
+                      <input type="text" value={form.cpf}
+                        onChange={e => setForm(f => ({ ...f, cpf: formatCPF(e.target.value) }))}
+                        className={cls} placeholder="000.000.000-00" inputMode="numeric" maxLength={14} />
+                    </div>
                     <div className="sm:col-span-2">
                       <label className={lbl}>Nome Completo *</label>
                       <input type="text" value={form.nome}
                         onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
                         className={cls} placeholder="Nome completo" />
-                    </div>
-                    <div>
-                      <label className={lbl}>CPF *</label>
-                      <input type="text" value={form.cpf}
-                        onChange={e => setForm(f => ({ ...f, cpf: e.target.value }))}
-                        className={cls} placeholder="000.000.000-00" />
                     </div>
                     <div>
                       <label className={lbl}>RG</label>

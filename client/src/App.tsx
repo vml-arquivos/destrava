@@ -56,6 +56,7 @@ import AcompanhamentoBancario from "./pages/colaborador/AcompanhamentoBancario";
 import AcompanhamentoFinanceiro from "./pages/colaborador/AcompanhamentoFinanceiro";
 import WeeklyMonitorPage from "./pages/colaborador/WeeklyMonitorPage";
 import CadastroEmpresa from "./pages/colaborador/CadastroEmpresa";
+import DadosIncompletos from "./pages/colaborador/DadosIncompletos";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CargoRoute from "./components/CargoRoute";
 
@@ -165,6 +166,13 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <ColaboradorEmpresas />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/dados-incompletos">
+        {() => (
+          <ProtectedRoute>
+            <DadosIncompletos />
           </ProtectedRoute>
         )}
       </Route>

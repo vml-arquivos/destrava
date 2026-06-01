@@ -95,6 +95,7 @@ async function processarEmpresaDaSimulacao(
   if (!dados.razao_social || !dados.razao_social.trim()) return null;
 
   const cleanCnpj = dados.cnpj ? dados.cnpj.replace(/\D/g, "") : null;
+  if (!cleanCnpj || cleanCnpj.length !== 14) return null;
   const cleanPhone = dados.telefone ? dados.telefone.replace(/\D/g, "") : null;
   const cleanNome = dados.razao_social.trim();
 
@@ -257,6 +258,98 @@ function normalizeTextArray(value: unknown): string[] {
   return [];
 }
 
+
+function onlyDigits(value: unknown): string {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function validarCnpjObrigatorio(value: unknown): string | null {
+  const digits = onlyDigits(value);
+  return digits.length === 14 ? digits : null;
+}
+
+function validarCpfObrigatorio(value: unknown): string | null {
+  const digits = onlyDigits(value);
+  return digits.length === 11 ? digits : null;
+}
+
+function pendenciasEmpresa(dados: Record<string, any>): string[] {
+  const pendencias: string[] = [];
+  if (!validarCnpjObrigatorio(dados.cnpj)) pendencias.push("CNPJ obrigatório/ inválido");
+  if (!String(dados.razao_social || "").trim()) pendencias.push("Razão social obrigatória");
+  if (!String(dados.cnae_principal || "").trim()) pendencias.push("CNAE principal não sincronizado");
+  if (!String(dados.natureza_juridica || "").trim()) pendencias.push("Natureza jurídica não sincronizada");
+  if (dados.capital_social === null || dados.capital_social === undefined || Number(dados.capital_social) <= 0) pendencias.push("Capital social não sincronizado");
+  if (!String(dados.situacao_cadastral || "").trim()) pendencias.push("Situação cadastral não sincronizada");
+  return pendencias;
+}
+
+function pendenciasClientePF(dados: Record<string, any>): string[] {
+  const pendencias: string[] = [];
+  if (!validarCpfObrigatorio(dados.cpf)) pendencias.push("CPF obrigatório/ inválido");
+  if (!String(dados.nome || "").trim()) pendencias.push("Nome obrigatório");
+  return pendencias;
+}
+
+function pendenciasLeadCliente(dados: Record<string, any>): string[] {
+  const tipo = String(dados.tipo_pessoa || dados.tipo || "pf").toLowerCase();
+  const doc = onlyDigits(dados.cpf_cnpj);
+  const pendencias: string[] = [];
+  if (tipo === "pj" && doc.length !== 14) pendencias.push("CNPJ obrigatório/ inválido");
+  if (tipo !== "pj" && doc.length !== 11) pendencias.push("CPF obrigatório/ inválido");
+  if (!String(dados.nome || "").trim()) pendencias.push("Nome obrigatório");
+  return pendencias;
+}
+
+function statusCadastroFromPendencias(pendencias: string[]): "completo" | "incompleto" {
+  return pendencias.length === 0 ? "completo" : "incompleto";
+}
+
+async function existeEmpresaComCnpj(cnpj: string, ignorarId?: string): Promise<boolean> {
+  const params: any[] = [cnpj];
+  let whereId = "";
+  if (ignorarId) { params.push(ignorarId); whereId = ` AND id <> $${params.length}`; }
+  const { rows } = await pool.query(
+    `SELECT 1 FROM empresas
+      WHERE regexp_replace(COALESCE(cnpj,''), '\\D', '', 'g') = $1
+        AND COALESCE(arquivado_por_duplicidade, false) = false
+        ${whereId}
+      LIMIT 1`,
+    params
+  );
+  return rows.length > 0;
+}
+
+async function existeClientePFComCpf(cpf: string, ignorarId?: string): Promise<boolean> {
+  const params: any[] = [cpf];
+  let whereId = "";
+  if (ignorarId) { params.push(ignorarId); whereId = ` AND id <> $${params.length}`; }
+  const { rows } = await pool.query(
+    `SELECT 1 FROM clientes_pf
+      WHERE regexp_replace(COALESCE(cpf,''), '\\D', '', 'g') = $1
+        AND COALESCE(arquivado_por_duplicidade, false) = false
+        ${whereId}
+      LIMIT 1`,
+    params
+  );
+  return rows.length > 0;
+}
+
+async function existeLeadComDocumento(doc: string, ignorarId?: string): Promise<boolean> {
+  const params: any[] = [doc];
+  let whereId = "";
+  if (ignorarId) { params.push(ignorarId); whereId = ` AND id <> $${params.length}`; }
+  const { rows } = await pool.query(
+    `SELECT 1 FROM leads
+      WHERE regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g') = $1
+        AND COALESCE(arquivado_por_duplicidade, false) = false
+        ${whereId}
+      LIMIT 1`,
+    params
+  );
+  return rows.length > 0;
+}
+
 async function getTableColumns(tableName: string): Promise<Set<string>> {
   const { rows } = await pool.query(
     `SELECT column_name
@@ -293,6 +386,25 @@ async function requireEmpresaAccess(req: Request, res: Response, empresaId: stri
   const allowed = await canAccessEmpresa(colaborador, empresaId);
   if (!allowed) {
     res.status(403).json({ error: "Acesso negado à empresa" });
+    return false;
+  }
+  return true;
+}
+
+async function requireEmpresaOperacional(req: Request, res: Response, empresaId: string): Promise<boolean> {
+  if (!(await requireEmpresaAccess(req, res, empresaId))) return false;
+  const { rows } = await pool.query(
+    `SELECT cadastro_completo, bloqueado_operacional, cadastro_pendencias, arquivado_por_duplicidade
+       FROM empresas WHERE id = $1`,
+    [empresaId]
+  );
+  const e = rows[0];
+  if (!e) { res.status(404).json({ error: "Empresa não encontrada" }); return false; }
+  if (e.arquivado_por_duplicidade || !e.cadastro_completo || e.bloqueado_operacional) {
+    res.status(423).json({
+      error: "Cadastro empresarial incompleto/desatualizado. Atualize e sincronize o CNPJ antes de usar em contrato, simulação ou operação.",
+      pendencias: e.cadastro_pendencias || [],
+    });
     return false;
   }
   return true;
@@ -1486,6 +1598,19 @@ async function startServer() {
       const cpf_cnpj     = b.cpf_cnpj || b.cpfCnpj || null;
       const rawTipo      = b.tipo_pessoa || b.tipoPessoa || "pf";
       const tipo_pessoa  = rawTipo === "empresa" ? "pj" : rawTipo;
+      const documentoDigits = onlyDigits(cpf_cnpj);
+      if (tipo_pessoa === "pj" && documentoDigits.length !== 14) {
+        res.status(400).json({ success: false, message: "CNPJ é obrigatório para cliente/lead PJ." });
+        return;
+      }
+      if (tipo_pessoa !== "pj" && documentoDigits.length !== 11) {
+        res.status(400).json({ success: false, message: "CPF é obrigatório para cliente/lead PF." });
+        return;
+      }
+      if (await existeLeadComDocumento(documentoDigits)) {
+        res.status(409).json({ success: false, message: "Já existe cliente/lead cadastrado com este CPF/CNPJ." });
+        return;
+      }
       const produto      = b.produto_interesse || b.produto || null;
       const valor        = Number(b.valor_solicitado || b.valorSolicitado || b.valorDesejado) || null;
       const prazo        = Number(b.prazo_meses || b.prazo || b.parcelas) || null;
@@ -1579,6 +1704,21 @@ async function startServer() {
         ]
       );
       const lead = rows[0];
+      try {
+        const leadCols = await getTableColumns("leads");
+        const pendencias = pendenciasLeadCliente(lead);
+        const upd: Record<string, unknown> = {};
+        if (leadCols.has("cadastro_status")) upd.cadastro_status = statusCadastroFromPendencias(pendencias);
+        if (leadCols.has("cadastro_pendencias")) upd.cadastro_pendencias = pendencias;
+        if (leadCols.has("cadastro_completo")) upd.cadastro_completo = pendencias.length === 0;
+        if (leadCols.has("bloqueado_operacional")) upd.bloqueado_operacional = pendencias.length > 0;
+        if (Object.keys(upd).length) {
+          const ks = Object.keys(upd);
+          const vals = ks.map(k => upd[k]);
+          await pool.query(`UPDATE leads SET ${ks.map((k,i)=>`"${k}"=$${i+1}`).join(', ')} WHERE id=$${ks.length+1}`, [...vals, lead.id]);
+          Object.assign(lead, upd);
+        }
+      } catch (e) { console.warn('[lead cadastro status]', e instanceof Error ? e.message : e); }
       console.log(`[LEAD] Salvo: ${nome} — ${produto || origem}`);
 
       if (empresa_id) {
@@ -1680,10 +1820,14 @@ async function startServer() {
         params.push(tipoPessoa);
         conditions.push(`tipo_pessoa = $${params.length}`);
       }
-      // Filtro por cadastro incompleto
+      // Filtro por cadastro incompleto / desatualizado
       const incompleto = req.query.incompleto as string | undefined;
       if (incompleto === "1" || incompleto === "true") {
-        conditions.push(`(email IS NULL OR cpf_cnpj IS NULL)`);
+        conditions.push(`(COALESCE(arquivado_por_duplicidade, false) = true OR COALESCE(cadastro_completo, false) = false OR cpf_cnpj IS NULL)`);
+      } else {
+        conditions.push(`COALESCE(arquivado_por_duplicidade, false) = false`);
+        conditions.push(`COALESCE(cadastro_completo, false) = true`);
+        conditions.push(`COALESCE(bloqueado_operacional, false) = false`);
       }
       // Filtro por prioridade
       const prioridade = req.query.prioridade as string | undefined;
@@ -1698,7 +1842,7 @@ async function startServer() {
            *,
            COALESCE(tipo_pessoa, 'pj') AS tipo,
            COALESCE(prioridade, 'media') AS prioridade,
-           (email IS NULL OR cpf_cnpj IS NULL) AS cadastro_incompleto,
+           (COALESCE(cadastro_completo, false) = false OR cpf_cnpj IS NULL OR COALESCE(arquivado_por_duplicidade, false) = true) AS cadastro_incompleto,
            CASE
              WHEN origem ILIKE '%campanha%' OR utm_source IS NOT NULL THEN 'campanha'
              WHEN origem ILIKE '%site%' OR origem ILIKE '%formulario%'
@@ -2399,13 +2543,22 @@ async function startServer() {
       const now = new Date().toISOString();
       
       let empresa_id = null;
-      if (req.body.cliente_empresa) {
+      if (req.body.empresa_id) {
+        empresa_id = req.body.empresa_id;
+        if (!(await requireEmpresaOperacional(req, res, empresa_id))) return;
+      } else if (req.body.cliente_empresa) {
+        const doc = onlyDigits(req.body.cliente_cpf_cnpj);
+        if (doc.length !== 14) {
+          res.status(400).json({ error: "CNPJ obrigatório para simulação empresarial. Atualize o cadastro da empresa antes de simular." });
+          return;
+        }
         empresa_id = await processarEmpresaDaSimulacao(pool, {
           razao_social: req.body.cliente_empresa,
           cnpj: req.body.cliente_cpf_cnpj,
           telefone: req.body.cliente_telefone,
           colaborador_id: colaborador.id
         });
+        if (empresa_id && !(await requireEmpresaOperacional(req, res, empresa_id))) return;
       }
 
       const { rows } = await pool.query(
@@ -3153,6 +3306,72 @@ async function startServer() {
     }
   });
 
+
+  // ─── CADASTROS INCOMPLETOS / DESATUALIZADOS ──────────────────────────────
+  app.get("/api/cadastros-incompletos", auth, async (req: Request, res: Response) => {
+    try {
+      const tipo = String(req.query.tipo || "todos").toLowerCase();
+      const busca = String(req.query.busca || "").trim();
+      const term = `%${busca}%`;
+      const result: Record<string, any> = {};
+
+      if (tipo === "todos" || tipo === "empresas") {
+        const params: any[] = [];
+        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`];
+        if (busca) { params.push(term); conds.push(`(razao_social ILIKE $1 OR nome_fantasia ILIKE $1 OR cnpj ILIKE $1)`); }
+        const { rows } = await pool.query(
+          `SELECT id, 'empresa' AS tipo, razao_social AS nome, nome_fantasia, cnpj AS documento,
+                  cadastro_status, cadastro_pendencias, cadastro_completo, bloqueado_operacional,
+                  arquivado_por_duplicidade, duplicado_de, ultima_sincronizacao_receita, updated_at, created_at
+             FROM empresas
+            WHERE ${conds.join(' AND ')}
+            ORDER BY COALESCE(updated_at, created_at) DESC
+            LIMIT 300`, params);
+        result.empresas = rows;
+      }
+
+      if (tipo === "todos" || tipo === "clientes_pf") {
+        const params: any[] = [];
+        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`];
+        if (busca) { params.push(term); conds.push(`(nome ILIKE $1 OR cpf ILIKE $1 OR email ILIKE $1)`); }
+        const { rows } = await pool.query(
+          `SELECT id, 'cliente_pf' AS tipo, nome, cpf AS documento, email, telefone,
+                  cadastro_status, cadastro_pendencias, cadastro_completo, bloqueado_operacional,
+                  arquivado_por_duplicidade, duplicado_de, updated_at, created_at
+             FROM clientes_pf
+            WHERE ativo = true AND ${conds.join(' AND ')}
+            ORDER BY COALESCE(updated_at, created_at) DESC
+            LIMIT 300`, params);
+        result.clientes_pf = rows;
+      }
+
+      if (tipo === "todos" || tipo === "leads") {
+        const params: any[] = [];
+        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`];
+        if (busca) { params.push(term); conds.push(`(nome ILIKE $1 OR empresa ILIKE $1 OR cpf_cnpj ILIKE $1 OR email ILIKE $1)`); }
+        const { rows } = await pool.query(
+          `SELECT id, 'lead' AS tipo, nome, empresa, cpf_cnpj AS documento, email, telefone, tipo_pessoa,
+                  cadastro_status, cadastro_pendencias, cadastro_completo, bloqueado_operacional,
+                  arquivado_por_duplicidade, duplicado_de, updated_at, created_at
+             FROM leads
+            WHERE ${conds.join(' AND ')}
+            ORDER BY COALESCE(updated_at, created_at) DESC
+            LIMIT 300`, params);
+        result.leads = rows;
+      }
+
+      res.json({
+        empresas: result.empresas || [],
+        clientes_pf: result.clientes_pf || [],
+        leads: result.leads || [],
+        total: (result.empresas || []).length + (result.clientes_pf || []).length + (result.leads || []).length,
+      });
+    } catch (err) {
+      console.error("[GET /api/cadastros-incompletos]", err);
+      res.status(500).json({ error: "Erro ao listar cadastros incompletos" });
+    }
+  });
+
   // ─── EMPRESAS API ─────────────────────────────────────────────────────────
   app.get("/api/empresas", auth, async (req: Request, res: Response) => {
     try {
@@ -3201,6 +3420,12 @@ async function startServer() {
         const idx = params.length;
         conditions.push(`(e.razao_social ILIKE $${idx} OR e.nome_fantasia ILIKE $${idx} OR e.cnpj ILIKE $${idx} OR e.responsavel_nome ILIKE $${idx} OR e.telefone ILIKE $${idx})`);
       }
+      const incluirIncompletos = ["1", "true", "sim"].includes(String(req.query.incluir_incompletos || "").toLowerCase());
+      if (!incluirIncompletos) {
+        conditions.push(`COALESCE(e.arquivado_por_duplicidade, false) = false`);
+        conditions.push(`COALESCE(e.cadastro_completo, false) = true`);
+        conditions.push(`COALESCE(e.bloqueado_operacional, false) = false`);
+      }
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
       const { rows } = await pool.query(
         `SELECT e.*,
@@ -3239,6 +3464,15 @@ async function startServer() {
 
       if (!razaoSocial) {
         res.status(400).json({ error: "Razão social é obrigatória" });
+        return;
+      }
+      const cnpjValido = validarCnpjObrigatorio(body.cnpj);
+      if (!cnpjValido) {
+        res.status(400).json({ error: "CNPJ é obrigatório para cadastrar empresa. Informe um CNPJ válido antes de continuar." });
+        return;
+      }
+      if (await existeEmpresaComCnpj(cnpjValido)) {
+        res.status(409).json({ error: "Já existe empresa cadastrada com este CNPJ. Não é permitido duplicar empresa." });
         return;
       }
 
@@ -3299,6 +3533,11 @@ async function startServer() {
         captador_id: emptyToNull(body.captador_id),
         analista_id: emptyToNull(body.analista_id),
       };
+      const pendencias = pendenciasEmpresa(payload);
+      payload.cadastro_status = statusCadastroFromPendencias(pendencias);
+      payload.cadastro_pendencias = pendencias;
+      payload.cadastro_completo = pendencias.length === 0;
+      payload.bloqueado_operacional = pendencias.length > 0;
 
       // Compatibilidade: se a migration nova ainda não rodou, a API não quebra.
       const safeEntries = Object.entries(payload).filter(([key]) => columns.has(key));
@@ -3340,6 +3579,17 @@ async function startServer() {
       const { id } = req.params;
       if (!(await requireEmpresaAccess(req, res, id))) return;
       const columns = await getTableColumns("empresas");
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, "cnpj")) {
+        const cnpjValido = validarCnpjObrigatorio((req.body || {}).cnpj);
+        if (!cnpjValido) {
+          res.status(400).json({ error: "CNPJ é obrigatório para empresa. Informe um CNPJ válido." });
+          return;
+        }
+        if (await existeEmpresaComCnpj(cnpjValido, id)) {
+          res.status(409).json({ error: "Já existe outra empresa cadastrada com este CNPJ." });
+          return;
+        }
+      }
       const allowed = new Set([
         "razao_social", "nome_fantasia", "cnpj", "inscricao_estadual", "inscricao_municipal",
         "natureza_juridica", "capital_social", "cnae_principal", "cnaes_secundarios", "data_abertura",
@@ -3350,7 +3600,8 @@ async function startServer() {
         "responsavel_nome", "responsavel_cpf", "responsavel_cargo", "responsavel_telefone", "responsavel_email",
         "banco_principal", "agencia", "conta", "limite_credito_atual", "score_serasa", "score_spc",
         "score_cnpj", "restricoes_cnpj", "observacoes_credito", "status", "origem", "tags", "observacoes",
-        "captador_id", "analista_id", "responsavel_id"
+        "captador_id", "analista_id", "responsavel_id",
+        "cadastro_status", "cadastro_pendencias", "cadastro_completo", "bloqueado_operacional"
       ]);
       const updates: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(req.body || {})) {
@@ -3363,6 +3614,14 @@ async function startServer() {
         else if (key === "dados_extra_receita" && value && typeof value === "object") updates[key] = JSON.stringify(value);
         else updates[key] = emptyToNull(value);
       }
+      const { rows: atualRows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [id]);
+      const atual = atualRows[0] || {};
+      const combinado = { ...atual, ...updates };
+      const pendencias = pendenciasEmpresa(combinado);
+      if (columns.has("cadastro_status")) updates.cadastro_status = statusCadastroFromPendencias(pendencias);
+      if (columns.has("cadastro_pendencias")) updates.cadastro_pendencias = pendencias;
+      if (columns.has("cadastro_completo")) updates.cadastro_completo = pendencias.length === 0;
+      if (columns.has("bloqueado_operacional")) updates.bloqueado_operacional = pendencias.length > 0;
       if (columns.has("updated_at")) updates.updated_at = new Date().toISOString();
       const keys = Object.keys(updates);
       if (!keys.length) { res.status(400).json({ error: "Nenhum campo válido para atualizar" }); return; }
@@ -6782,14 +7041,19 @@ ${(temTest1 || temTest2) ? `
 
   // ─── CLIENTES PF ─────────────────────────────────────────────────────────────
 
-  app.get('/api/clientes-pf', auth, async (_req: Request, res: Response) => {
+  app.get('/api/clientes-pf', auth, async (req: Request, res: Response) => {
     try {
+      const incompleto = String(req.query.incompleto || '').toLowerCase();
+      const whereExtra = (incompleto === '1' || incompleto === 'true')
+        ? `AND (COALESCE(cadastro_completo, false) = false OR COALESCE(arquivado_por_duplicidade, false) = true)`
+        : `AND COALESCE(cadastro_completo, false) = true AND COALESCE(bloqueado_operacional, false) = false AND COALESCE(arquivado_por_duplicidade, false) = false`;
       const { rows } = await pool.query(
         `SELECT id, nome, cpf, rg, data_nascimento, email, telefone,
                 endereco, cidade, uf, cep, profissao, estado_civil,
-                observacoes, ativo, created_at, updated_at
+                observacoes, ativo, created_at, updated_at,
+                cadastro_status, cadastro_pendencias, cadastro_completo, bloqueado_operacional, arquivado_por_duplicidade, duplicado_de
            FROM clientes_pf
-          WHERE ativo = true
+          WHERE ativo = true ${whereExtra}
           ORDER BY nome`
       );
       res.json(rows);
@@ -6806,6 +7070,9 @@ ${(temTest1 || temTest2) ? `
         `SELECT id, nome, cpf, rg, email, telefone, cidade, uf
            FROM clientes_pf
           WHERE ativo = true
+            AND COALESCE(cadastro_completo, false) = true
+            AND COALESCE(bloqueado_operacional, false) = false
+            AND COALESCE(arquivado_por_duplicidade, false) = false
             AND (nome ILIKE $1 OR cpf ILIKE $1 OR email ILIKE $1)
           ORDER BY nome
           LIMIT 30`,
@@ -6836,14 +7103,25 @@ ${(temTest1 || temTest2) ? `
         endereco, cidade, uf, cep, profissao, estado_civil, observacoes
       } = req.body;
       if (!nome || !cpf) {
-        res.status(400).json({ error: 'nome e cpf são obrigatórios' });
+        res.status(400).json({ error: 'nome e CPF são obrigatórios' });
         return;
       }
+      const cpfValido = validarCpfObrigatorio(cpf);
+      if (!cpfValido) {
+        res.status(400).json({ error: 'CPF obrigatório/ inválido para cadastrar cliente PF' });
+        return;
+      }
+      if (await existeClientePFComCpf(cpfValido)) {
+        res.status(409).json({ error: 'Já existe cliente pessoa física cadastrado com este CPF.' });
+        return;
+      }
+      const pendencias = pendenciasClientePF({ nome, cpf });
       const { rows } = await pool.query(
         `INSERT INTO clientes_pf
            (nome, cpf, rg, data_nascimento, email, telefone,
-            endereco, cidade, uf, cep, profissao, estado_civil, observacoes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+            endereco, cidade, uf, cep, profissao, estado_civil, observacoes,
+            cadastro_status, cadastro_pendencias, cadastro_completo, bloqueado_operacional)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
          RETURNING *`,
         [
           nome, cpf,
@@ -6853,6 +7131,7 @@ ${(temTest1 || temTest2) ? `
           uf || null, cep || null,
           profissao || null, estado_civil || null,
           observacoes || null,
+          statusCadastroFromPendencias(pendencias), pendencias, pendencias.length === 0, pendencias.length > 0,
         ]
       );
       res.status(201).json(rows[0]);
@@ -6870,12 +7149,23 @@ ${(temTest1 || temTest2) ? `
         nome, cpf, rg, data_nascimento, email, telefone,
         endereco, cidade, uf, cep, profissao, estado_civil, observacoes, ativo
       } = req.body;
+      const cpfValido = validarCpfObrigatorio(cpf);
+      if (!cpfValido) {
+        res.status(400).json({ error: 'CPF obrigatório/ inválido para atualizar cliente PF' });
+        return;
+      }
+      if (await existeClientePFComCpf(cpfValido, id)) {
+        res.status(409).json({ error: 'Já existe outro cliente pessoa física cadastrado com este CPF.' });
+        return;
+      }
+      const pendencias = pendenciasClientePF({ nome, cpf });
       const { rows } = await pool.query(
         `UPDATE clientes_pf SET
            nome=$1, cpf=$2, rg=$3, data_nascimento=$4, email=$5, telefone=$6,
            endereco=$7, cidade=$8, uf=$9, cep=$10, profissao=$11,
-           estado_civil=$12, observacoes=$13, ativo=$14, updated_at=NOW()
-         WHERE id=$15 RETURNING *`,
+           estado_civil=$12, observacoes=$13, ativo=$14,
+           cadastro_status=$15, cadastro_pendencias=$16, cadastro_completo=$17, bloqueado_operacional=$18, updated_at=NOW()
+         WHERE id=$19 RETURNING *`,
         [
           nome, cpf,
           rg || null, data_nascimento || null,
@@ -6884,6 +7174,7 @@ ${(temTest1 || temTest2) ? `
           uf || null, cep || null,
           profissao || null, estado_civil || null,
           observacoes || null, ativo !== false,
+          statusCadastroFromPendencias(pendencias), pendencias, pendencias.length === 0, pendencias.length > 0,
           id
         ]
       );
@@ -7337,6 +7628,10 @@ ${(temTest1 || temTest2) ? `
       if (!data_assinatura || !foro_eleito) {
         res.status(400).json({ error: 'Campos obrigatórios: data_assinatura, foro_eleito' });
         return;
+      }
+
+      if (empresa_id && cliente_tipo !== 'pf') {
+        if (!(await requireEmpresaOperacional(req, res, empresa_id))) return;
       }
 
       const CONTRATADA = {
