@@ -67,6 +67,16 @@ function firstNonEmpty(...values: unknown[]): string | null {
   return null;
 }
 
+function getCPFHubErrorMessage(json: CPFHubRawResponse, fallback: string): string {
+  const err = json?.error;
+  if (typeof err === 'string' && err.trim()) return err.trim();
+  if (err && typeof err === 'object') {
+    const message = firstNonEmpty(err.message, err.mensagem, err.error, err.detail);
+    if (message) return message;
+  }
+  return firstNonEmpty(json?.message, json?.mensagem, json?.detail) || fallback;
+}
+
 export function normalizeCPFHubResponse(cpf: string, response: CPFHubRawResponse): CPFHubNormalized {
   const container = response?.data && typeof response.data === 'object' ? response.data : response;
   const day = container?.day ?? container?.dia;
@@ -113,12 +123,16 @@ export async function consultarCPFHub(cpfInput: unknown): Promise<CPFHubResult> 
     try { json = text ? JSON.parse(text) : {}; } catch { json = { raw: text }; }
 
     if (!res.ok) {
-      const message = firstNonEmpty(json?.error, json?.message, json?.mensagem) || `CPFHub retornou HTTP ${res.status}`;
+      const message = getCPFHubErrorMessage(json, `CPFHub retornou HTTP ${res.status}`);
       return { success: false, error: message, status: res.status };
     }
 
     if (json?.success === false) {
-      return { success: false, error: firstNonEmpty(json?.error, json?.message) || 'CPFHub não retornou dados para este CPF.', status: res.status };
+      return { success: false, error: getCPFHubErrorMessage(json, 'CPFHub não retornou dados para este CPF.'), status: res.status };
+    }
+
+    if (!json?.data && json?.success === true) {
+      return { success: false, error: 'CPFHub respondeu sucesso, mas sem dados cadastrais.', status: res.status };
     }
 
     return { success: true, data: normalizeCPFHubResponse(cpf, json), status: res.status };

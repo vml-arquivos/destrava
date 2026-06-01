@@ -537,7 +537,7 @@ export default function Empresas() {
         body: JSON.stringify({ cpf_completo: cpfCompleto, validado: true }),
       });
       setSociosEmpresa(prev => prev.map((s: any) => s.id === atualizado.id ? atualizado : s));
-      toast.success('CPF completo validado e salvo');
+      toast.success('CPF completo salvo; CPFHub consultado automaticamente quando disponível.');
     } catch (err: any) {
       toast.error(err?.message || 'CPF inválido ou erro ao salvar');
     }
@@ -576,6 +576,18 @@ export default function Empresas() {
     }
   };
 
+
+  const cpfHubStatusLabel = (s: any) => {
+    const status = s?.cpfhub_status || s?.dados_extra?.cpfhub?.status;
+    if (s?.cpf_fonte === 'cpfhub' || status === 'success') return 'CPFHub validado';
+    if (status === 'cpf_completo_ausente') return 'CPFHub aguardando CPF completo';
+    if (status === 'cpfhub_sem_chave') return 'CPFHub sem chave configurada';
+    if (status === 'cpf_nao_encontrado') return 'CPF não encontrado na CPFHub';
+    if (status === 'limite_cpfhub') return 'Limite CPFHub atingido';
+    if (status === 'erro_cpfhub') return 'Erro CPFHub';
+    return 'CPFHub ainda não consultado';
+  };
+
   const atualizarSocioIndividual = async (socio: any) => {
     if (!selecionada?.id || !socio?.id || !selecionada.cnpj || sincronizando) return;
     try {
@@ -594,7 +606,7 @@ export default function Empresas() {
       }
       const bulk = await apiFetch(`/api/empresas/${selecionada.id}/socios/bulk`, {
         method: 'POST',
-        body: JSON.stringify({ socios: [match] }),
+        body: JSON.stringify({ socios: [match], enriquecer_cpfhub: true }),
       });
       const atualizado = Array.isArray(bulk?.socios) ? bulk.socios[0] : null;
       if (atualizado) setSociosEmpresa(prev => prev.map((s: any) => s.id === atualizado.id ? atualizado : s));
@@ -826,7 +838,7 @@ export default function Empresas() {
       if (sociosReceita.length > 0) {
         const bulk = await apiFetch(`/api/empresas/${empresa.id}/socios/bulk`, {
           method: "POST",
-          body: JSON.stringify({ socios: sociosReceita, replace: true }),
+          body: JSON.stringify({ socios: sociosReceita, replace: true, enriquecer_cpfhub: true }),
         }).catch((err: any) => {
           console.error("[socios/bulk]", err);
           return null;
@@ -929,7 +941,7 @@ export default function Empresas() {
         if (socios.length > 0) {
           await apiFetch(`/api/empresas/${editando.id}/socios/bulk`, {
             method: "POST",
-            body: JSON.stringify({ socios: normalizarSociosReceita(socios as any[]), replace: true }),
+            body: JSON.stringify({ socios: normalizarSociosReceita(socios as any[]), replace: true, enriquecer_cpfhub: true }),
           }).catch(() => null);
         }
         toast.success("Empresa atualizada!");
@@ -938,7 +950,7 @@ export default function Empresas() {
         if (criada?.id && socios.length > 0) {
           await apiFetch(`/api/empresas/${criada.id}/socios/bulk`, {
             method: "POST",
-            body: JSON.stringify({ socios: normalizarSociosReceita(socios as any[]), replace: true }),
+            body: JSON.stringify({ socios: normalizarSociosReceita(socios as any[]), replace: true, enriquecer_cpfhub: true }),
           }).catch(() => null);
         }
         toast.success("Empresa cadastrada!");
@@ -1723,7 +1735,7 @@ export default function Empresas() {
                                         {s.qualificacao_socio && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{s.qualificacao_socio}</span>}
                                         {s.representante_legal && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Representante legal</span>}
                                         {s.fonte_dados && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 border border-slate-200">Fonte: {s.fonte_dados}</span>}
-                                        {s.cpf_fonte === 'cpfhub' && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200">CPFHub validado</span>}
+                                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${s.cpf_fonte === 'cpfhub' || s.cpfhub_status === 'success' ? 'bg-violet-50 text-violet-700 border-violet-200' : s.cpfhub_status === 'cpf_completo_ausente' ? 'bg-amber-50 text-amber-700 border-amber-200' : s.cpfhub_status ? 'bg-red-50 text-red-700 border-red-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{cpfHubStatusLabel(s)}</span>
                                         <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${completo ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
                                           {completo ? 'Completo para contrato' : `${pendencias.length} pendência(s)`}
                                         </span>
@@ -1744,6 +1756,7 @@ export default function Empresas() {
                                       <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Qualificação representante</span><b className="text-slate-700">{s.qualificacao_representante || 'Não informado'}</b></div>
                                       <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Nascimento</span><b className="text-slate-700">{s.data_nascimento ? new Date(s.data_nascimento).toLocaleDateString('pt-BR') : 'Pendente'}</b></div>
                                       <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Gênero</span><b className="text-slate-700">{s.genero || s.dados_extra?.cpfhub?.genero || 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Status CPFHub</span><b className="text-slate-700">{cpfHubStatusLabel(s)}</b></div>
                                       <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Estado civil</span><b className="text-slate-700">{s.estado_civil || 'Pendente'}</b></div>
                                       <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Profissão</span><b className="text-slate-700">{s.profissao || 'Pendente'}</b></div>
                                       <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">RG</span><b className="text-slate-700">{s.rg || 'Pendente'}</b></div>
