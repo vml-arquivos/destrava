@@ -40,6 +40,7 @@ interface FormState {
   uf: string;
   situacao: string;
   natureza_juridica: string;
+  inscricao_estadual: string;
   porte: string;
   data_abertura: string;
   capital_social: string;
@@ -67,7 +68,7 @@ interface UploadFile {
 const INITIAL_FORM: FormState = {
   cnpj: '', razao_social: '', nome_fantasia: '', email: '', telefone: '', telefone_2: '',
   cep: '', logradouro: '', numero: '', complemento: '', bairro: '',
-  cidade: '', uf: '', situacao: '', natureza_juridica: '', porte: '',
+  cidade: '', uf: '', situacao: '', natureza_juridica: '', inscricao_estadual: '', porte: '',
   data_abertura: '', capital_social: '', cnae: '', cnaes_secundarios: [], matriz_filial: '',
   data_situacao_cadastral: '', motivo_situacao_cadastral: '', regime_tributario: '', dados_extra_receita: null,
   responsavel_nome: '', responsavel_cpf: '', responsavel_email: '',
@@ -80,12 +81,28 @@ function formatCapital(value: number): string {
 }
 
 function parseBRL(value: string): number | null {
-  const clean = String(value || '')
-    .replace(/[^0-9,.-]/g, '')
-    .replace(/\./g, '')
-    .replace(',', '.');
-  const n = Number(clean);
+  const raw = String(value || '').replace(/R\$/g, '').replace(/\s/g, '').replace(/[^0-9,.-]/g, '');
+  if (!raw) return null;
+  const lastComma = raw.lastIndexOf(',');
+  const lastDot = raw.lastIndexOf('.');
+  const lastSep = Math.max(lastComma, lastDot);
+  if (lastSep === -1) {
+    const n = Number(raw.replace(/[^0-9-]/g, ''));
+    return Number.isFinite(n) ? n : null;
+  }
+  const dec = raw.slice(lastSep + 1).replace(/\D/g, '');
+  const int = raw.slice(0, lastSep).replace(/[^0-9-]/g, '');
+  const n = dec.length > 0 && dec.length <= 2
+    ? Number(`${int}.${dec}`)
+    : Number(raw.replace(/[.,]/g, '').replace(/[^0-9-]/g, ''));
   return Number.isFinite(n) ? n : null;
+}
+
+function primeiraInscricaoEstadual(data: CNPJData): string {
+  const inscricoes = Array.isArray((data as any).inscricoes_estaduais) ? (data as any).inscricoes_estaduais : [];
+  const ativa = inscricoes.find((ie: any) => String(ie?.situacao || ie?.status || '').toLowerCase().includes('ativ') || String(ie?.situacao || ie?.status || '').toLowerCase().includes('habilit'));
+  const item = ativa || inscricoes[0] || {};
+  return String((data as any).inscricao_estadual || item.numero || item.number || item.inscricao_estadual || '').trim();
 }
 
 function qualificacaoLabel(code: string | number): string {
@@ -240,13 +257,14 @@ export default function CadastroEmpresa() {
         uf: data.uf ?? '',
         situacao: data.descricao_situacao_cadastral ?? '',
         natureza_juridica: data.natureza_juridica ?? '',
+        inscricao_estadual: primeiraInscricaoEstadual(data),
         porte: data.descricao_porte ?? '',
         data_abertura: data.data_inicio_atividade ?? '',
         data_situacao_cadastral: data.data_situacao_cadastral ?? '',
         motivo_situacao_cadastral: data.motivo_situacao_cadastral ?? '',
         matriz_filial: data.descricao_identificador_matriz_filial ?? String(data.identificador_matriz_filial ?? ''),
         regime_tributario: regimeTributario,
-        capital_social: data.capital_social ? formatCapital(data.capital_social) : '',
+        capital_social: data.capital_social !== null && data.capital_social !== undefined ? formatCapital(Number(data.capital_social)) : '',
         cnae: data.cnae_fiscal_descricao
           ? `${data.cnae_fiscal} — ${data.cnae_fiscal_descricao}`
           : '',
@@ -335,6 +353,7 @@ export default function CadastroEmpresa() {
           cidade: form.cidade || null,
           estado: form.uf || null,
           natureza_juridica: form.natureza_juridica || null,
+          inscricao_estadual: form.inscricao_estadual || null,
           capital_social: parseBRL(form.capital_social),
           cnae_principal: form.cnae || null,
           cnaes_secundarios: form.cnaes_secundarios || [],
@@ -562,6 +581,9 @@ export default function CadastroEmpresa() {
                   </Field>
                   <Field label="Natureza Jurídica">
                     <input className={`${inputClass} opacity-75 cursor-not-allowed`} value={form.natureza_juridica} readOnly />
+                  </Field>
+                  <Field label="Inscrição Estadual">
+                    <input className={`${inputClass} opacity-75 cursor-not-allowed`} value={form.inscricao_estadual} readOnly placeholder="Não informada" />
                   </Field>
                   <Field label="Data de Abertura">
                     <input className={`${inputClass} opacity-75 cursor-not-allowed`} value={form.data_abertura} readOnly />

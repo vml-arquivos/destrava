@@ -47,24 +47,47 @@ function normalizeMoney(value: unknown): number | null {
   const raw = String(value).trim().replace(/[^\d,.-]/g, '');
   if (!raw) return null;
 
-  const hasComma = raw.includes(',');
-  const hasDot = raw.includes('.');
+  const lastComma = raw.lastIndexOf(',');
+  const lastDot = raw.lastIndexOf('.');
+  const lastSep = Math.max(lastComma, lastDot);
 
-  if (hasComma && hasDot) {
-    const normalized = raw.replace(/\./g, '').replace(',', '.');
-    const parsed = Number(normalized);
+  // Sem separador decimal/milhar: número inteiro vindo da API.
+  if (lastSep === -1) {
+    const parsed = Number(raw.replace(/[^\d-]/g, ''));
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  if (hasComma) {
-    const normalized = raw.replace(',', '.');
-    const parsed = Number(normalized);
+  const decimals = raw.slice(lastSep + 1).replace(/\D/g, '');
+  const before = raw.slice(0, lastSep).replace(/[^\d-]/g, '');
+
+  // Se há exatamente 1 ou 2 casas após o último separador, trate como decimal.
+  // Isso preserva formatos de API como "50000.00" = 50000.
+  if (decimals.length > 0 && decimals.length <= 2) {
+    const parsed = Number(`${before}.${decimals}`);
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  // Formato ISO/API: 50000.00 deve continuar 50000, não virar 5000000.
-  const parsed = Number(raw);
+  // Se há 3 casas após o separador, normalmente é milhar: "50.000" = 50000.
+  const parsed = Number(raw.replace(/[.,]/g, '').replace(/[^\d-]/g, ''));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeStateRegistrations(value: unknown): AnyRecord[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((r: AnyRecord) => ({
+      numero: emptyToNull(firstNonEmpty(r.number, r.numero, r.inscricao_estadual, r.registrationNumber)),
+      uf: emptyToNull(firstNonEmpty(r.state, r.uf, r.estado)),
+      situacao: emptyToNull(firstNonEmpty(r.status?.text, r.status?.name, r.status, r.situacao)),
+      tipo: emptyToNull(firstNonEmpty(r.type?.text, r.type, r.tipo)),
+      dados_extra: r,
+    }))
+    .filter((r) => r.numero || r.uf || r.situacao);
+}
+
+function firstStateRegistration(registrations: AnyRecord[]): string | null {
+  const active = registrations.find((r) => String(r.situacao || '').toLowerCase().includes('habilit') || String(r.situacao || '').toLowerCase().includes('ativ'));
+  return emptyToNull((active || registrations[0] || {}).numero);
 }
 
 function toDate(value: unknown): string | null {
@@ -146,6 +169,8 @@ function normalizeBrasilApi(data?: AnyRecord | null): AnyRecord {
     opcao_pelo_simples: normalizeBooleanText(data.opcao_pelo_simples),
     opcao_pelo_mei: normalizeBooleanText(data.opcao_pelo_mei),
     qsa: Array.isArray(data.qsa) ? data.qsa : [],
+    inscricoes_estaduais: normalizeStateRegistrations(firstNonEmpty(data.inscricoes_estaduais, data.registrations, [])),
+    inscricao_estadual: firstStateRegistration(normalizeStateRegistrations(firstNonEmpty(data.inscricoes_estaduais, data.registrations, []))),
   };
 }
 
@@ -163,6 +188,7 @@ function normalizeCnpja(data?: AnyRecord | null): AnyRecord {
   const emails = Array.isArray(data.emails) ? data.emails : [];
   const members = Array.isArray(company.members) ? company.members : Array.isArray(data.members) ? data.members : [];
   const simples = data.simples || data.simei || data.taxRegime || {};
+  const registrations = normalizeStateRegistrations(firstNonEmpty(data.registrations, data.inscricoes_estaduais, data.stateRegistrations, []));
 
   return {
     cnpj: onlyDigits(firstNonEmpty(data.taxId, data.cnpj, data.tax_id)),
@@ -207,7 +233,8 @@ function normalizeCnpja(data?: AnyRecord | null): AnyRecord {
       qualificacao_representante_legal: firstNonEmpty(m.agent?.role?.text, m.representative?.role?.text, m.qualificacao_representante_legal),
       dados_extra: m,
     })).filter((m: AnyRecord) => m.nome_socio),
-    inscricoes_estaduais: Array.isArray(data.registrations) ? data.registrations : [],
+    inscricoes_estaduais: registrations,
+    inscricao_estadual: firstStateRegistration(registrations),
     suframa: Array.isArray(data.suframa) ? data.suframa : [],
   };
 }
@@ -218,6 +245,7 @@ function normalizeOpenCnpj(data?: AnyRecord | null): AnyRecord {
   const socios = data.socios || data.qsa || data.partners || estabelecimento.socios || [];
   const atividadePrincipal = estabelecimento.atividade_principal || estabelecimento.cnae_principal || data.atividade_principal || {};
   const atividadesSecundarias = estabelecimento.atividades_secundarias || estabelecimento.cnaes_secundarios || data.cnaes_secundarios || [];
+  const registrations = normalizeStateRegistrations(firstNonEmpty(data.inscricoes_estaduais, data.registrations, estabelecimento.inscricoes_estaduais, []));
 
   return {
     cnpj: onlyDigits(firstNonEmpty(data.cnpj, estabelecimento.cnpj)),
@@ -250,6 +278,8 @@ function normalizeOpenCnpj(data?: AnyRecord | null): AnyRecord {
     descricao_identificador_matriz_filial: emptyToNull(firstNonEmpty(estabelecimento.tipo, estabelecimento.matriz === true ? 'Matriz' : estabelecimento.matriz === false ? 'Filial' : null)),
     opcao_pelo_simples: normalizeBooleanText(firstNonEmpty(data.simples?.optante, data.opcao_pelo_simples)),
     opcao_pelo_mei: normalizeBooleanText(firstNonEmpty(data.mei?.optante, data.opcao_pelo_mei)),
+    inscricoes_estaduais: registrations,
+    inscricao_estadual: firstStateRegistration(registrations),
     qsa: Array.isArray(socios) ? socios.map((s: AnyRecord) => ({
       nome_socio: firstNonEmpty(s.nome, s.nome_socio, s.razao_social),
       cnpj_cpf_do_socio: onlyDigits(firstNonEmpty(s.cpf_cnpj, s.cnpj_cpf_do_socio, s.documento, s.cpf, s.cnpj)),

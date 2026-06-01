@@ -97,6 +97,7 @@ export interface CNPJData {
   motivo_situacao_cadastral?: string;
   ente_federativo_responsavel?: string;
   natureza_juridica: string;
+  inscricao_estadual?: string;
   porte: string;
   descricao_porte: string;
   data_inicio_atividade: string;

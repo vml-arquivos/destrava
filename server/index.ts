@@ -201,14 +201,26 @@ function normalizeNumeric(value: unknown): number | null {
   if (value === undefined || value === null || value === "") return null;
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (typeof value !== "string") return null;
-  const cleaned = value
-    .replace(/R\$/g, "")
-    .replace(/\s/g, "")
-    .replace(/\./g, "")
-    .replace(/,/g, ".")
-    .replace(/[^0-9.-]/g, "");
-  if (!cleaned) return null;
-  const n = Number(cleaned);
+
+  const raw = value.replace(/R\$/g, "").replace(/\s/g, "").replace(/[^0-9,.-]/g, "");
+  if (!raw) return null;
+
+  const lastComma = raw.lastIndexOf(",");
+  const lastDot = raw.lastIndexOf(".");
+  const lastSep = Math.max(lastComma, lastDot);
+  if (lastSep === -1) {
+    const n = Number(raw.replace(/[^0-9-]/g, ""));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  const decimals = raw.slice(lastSep + 1).replace(/\D/g, "");
+  const intPart = raw.slice(0, lastSep).replace(/[^0-9-]/g, "");
+  if (decimals.length > 0 && decimals.length <= 2) {
+    const n = Number(`${intPart}.${decimals}`);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  const n = Number(raw.replace(/[.,]/g, "").replace(/[^0-9-]/g, ""));
   return Number.isFinite(n) ? n : null;
 }
 
@@ -858,6 +870,13 @@ async function startServer() {
         ADD COLUMN IF NOT EXISTS data_abertura DATE,
         ADD COLUMN IF NOT EXISTS situacao_cadastral TEXT,
         ADD COLUMN IF NOT EXISTS matriz_filial TEXT,
+        ADD COLUMN IF NOT EXISTS inscricao_estadual TEXT,
+        ADD COLUMN IF NOT EXISTS inscricao_municipal TEXT,
+        ADD COLUMN IF NOT EXISTS data_situacao_cadastral DATE,
+        ADD COLUMN IF NOT EXISTS motivo_situacao_cadastral TEXT,
+        ADD COLUMN IF NOT EXISTS regime_tributario TEXT,
+        ADD COLUMN IF NOT EXISTS telefone_2 TEXT,
+        ADD COLUMN IF NOT EXISTS dados_extra_receita JSONB DEFAULT '{}'::jsonb,
         ADD COLUMN IF NOT EXISTS ultima_sincronizacao_receita TIMESTAMPTZ;
 
       CREATE TABLE IF NOT EXISTS public.empresa_documentos (

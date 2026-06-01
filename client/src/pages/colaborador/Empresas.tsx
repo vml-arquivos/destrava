@@ -37,9 +37,13 @@ interface Empresa {
   situacao_cadastral?: string;
   matriz_filial?: string;
   ultima_sincronizacao_receita?: string;
+  data_situacao_cadastral?: string;
+  motivo_situacao_cadastral?: string;
+  regime_tributario?: string;
   dados_extra_receita?: any;
   email?: string;
   telefone?: string;
+  telefone_2?: string;
   whatsapp?: string;
   site?: string;
   segmento?: string;
@@ -84,8 +88,8 @@ type FormEmpresa = Omit<Empresa, "id" | "created_at" | "updated_at">;
 const FORM_VAZIO: FormEmpresa = {
   razao_social: "", nome_fantasia: "", cnpj: "", inscricao_estadual: "",
   natureza_juridica: "", capital_social: undefined, cnae_principal: "", cnaes_secundarios: [],
-  data_abertura: "", situacao_cadastral: "", matriz_filial: "", ultima_sincronizacao_receita: "", dados_extra_receita: undefined,
-  email: "", telefone: "", whatsapp: "", site: "", segmento: "", porte: "mei",
+  data_abertura: "", situacao_cadastral: "", matriz_filial: "", ultima_sincronizacao_receita: "", data_situacao_cadastral: "", motivo_situacao_cadastral: "", regime_tributario: "", dados_extra_receita: undefined,
+  email: "", telefone: "", telefone_2: "", whatsapp: "", site: "", segmento: "", porte: "mei",
   faturamento_anual: undefined, numero_funcionarios: undefined,
   cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "",
   responsavel_nome: "", responsavel_cpf: "", responsavel_cargo: "",
@@ -192,6 +196,48 @@ function normalizarSociosReceita(qsa: any[] | undefined | null) {
     .filter(Boolean) as any[];
 }
 
+
+function primeiraInscricaoEstadualReceita(data: any): string {
+  const inscricoes = Array.isArray(data?.inscricoes_estaduais) ? data.inscricoes_estaduais : [];
+  const ativa = inscricoes.find((ie: any) => String(ie?.situacao || ie?.status || '').toLowerCase().includes('ativ') || String(ie?.situacao || ie?.status || '').toLowerCase().includes('habilit'));
+  const item = ativa || inscricoes[0] || {};
+  return String(data?.inscricao_estadual || item.numero || item.number || item.inscricao_estadual || '').trim();
+}
+
+function telefoneReceita(numero?: string | null): string {
+  const digits = String(numero || '').replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.replace(/(\d{2})(\d{4,5})(\d{4})/, '($1) $2-$3');
+}
+
+function regimeTributarioReceita(data: any): string {
+  const simples = data?.opcao_pelo_simples === true || data?.opcao_pelo_simples === 'true';
+  const mei = data?.opcao_pelo_mei === true || data?.opcao_pelo_mei === 'true';
+  if (mei) return 'MEI';
+  if (simples) return 'Simples Nacional';
+  return '';
+}
+
+function parseCapitalSocial(valor?: number | string | null): number | null {
+  if (valor === undefined || valor === null || valor === '') return null;
+  if (typeof valor === 'number') return Number.isFinite(valor) ? valor : null;
+  const raw = String(valor).replace(/R\$/g, '').replace(/\s/g, '').replace(/[^0-9,.-]/g, '');
+  if (!raw) return null;
+  const lastComma = raw.lastIndexOf(',');
+  const lastDot = raw.lastIndexOf('.');
+  const lastSep = Math.max(lastComma, lastDot);
+  if (lastSep === -1) {
+    const n = Number(raw.replace(/[^0-9-]/g, ''));
+    return Number.isFinite(n) ? n : null;
+  }
+  const dec = raw.slice(lastSep + 1).replace(/\D/g, '');
+  const int = raw.slice(0, lastSep).replace(/[^0-9-]/g, '');
+  const n = dec.length > 0 && dec.length <= 2
+    ? Number(`${int}.${dec}`)
+    : Number(raw.replace(/[.,]/g, '').replace(/[^0-9-]/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
 function calcularScore(e: Empresa) {
   let pontos = 0;
   const tags: { text: string; ok: boolean }[] = [];
@@ -272,9 +318,8 @@ function InfoTile({ label, value, icon, tone = "slate", mono = false }: { label:
 }
 
 function normalizarCapitalSocial(valor?: number | string | null) {
-  if (valor === undefined || valor === null || valor === "") return "—";
-  const n = typeof valor === "number" ? valor : Number(String(valor).replace(/[^0-9,.-]/g, "").replace(/\./g, "").replace(",", "."));
-  return Number.isFinite(n) ? fmt(n) : String(valor);
+  const n = parseCapitalSocial(valor);
+  return n !== null ? fmt(n) : "—";
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -450,6 +495,9 @@ export default function Empresas() {
   function selecionar(emp: Empresa) {
     setSelecionada(emp);
     setShowDetail(true);
+    if (emp.cnpj) {
+      setTimeout(() => sincronizarDados(emp, { silencioso: true }), 50);
+    }
   }
 
   // ── Histórico ──────────────────────────────────────────────────────────────
@@ -484,10 +532,10 @@ export default function Empresas() {
   }
 
   // ── Sincronizar dados via CNPJ (atualiza empresa com dados frescos da Receita) ──
-  async function sincronizarDados(empresa: Empresa) {
+  async function sincronizarDados(empresa: Empresa, opts: { silencioso?: boolean } = {}) {
     if (!empresa.cnpj || sincronizando) return;
     setSincronizando(true);
-    toast.loading("Consultando Receita Federal...", { id: "sync" });
+    if (!opts.silencioso) toast.loading("Consultando e salvando dados completos da Receita...", { id: "sync" });
     try {
       const clean = empresa.cnpj.replace(/\D/g, "");
       const res = await apiFetch(`/api/cnpj/${clean}`);
@@ -508,9 +556,8 @@ export default function Empresas() {
         razao_social: res.razao_social || empresa.razao_social,
         nome_fantasia: res.nome_fantasia || empresa.nome_fantasia,
         email: res.email || empresa.email,
-        telefone: res.ddd_telefone_1
-          ? res.ddd_telefone_1.replace(/\D/g, "").replace(/(\d{2})(\d{4,5})(\d{4})/, "($1) $2-$3")
-          : empresa.telefone,
+        telefone: telefoneReceita(res.ddd_telefone_1) || empresa.telefone,
+        telefone_2: telefoneReceita(res.ddd_telefone_2) || (empresa as any).telefone_2 || null,
         cep: res.cep?.replace(/\D/g, "").replace(/(\d{5})(\d)/, "$1-$2") || empresa.cep,
         logradouro: res.logradouro || empresa.logradouro,
         numero: res.numero || empresa.numero,
@@ -519,9 +566,10 @@ export default function Empresas() {
         cidade: res.municipio || empresa.cidade,
         estado: res.uf || empresa.estado,
         porte: porteMap,
-        segmento: empresa.segmento || res.cnae_fiscal_descricao || "",
+        segmento: res.cnae_fiscal_descricao || empresa.segmento || "",
+        inscricao_estadual: primeiraInscricaoEstadualReceita(res) || empresa.inscricao_estadual || null,
         natureza_juridica: res.natureza_juridica || empresa.natureza_juridica || null,
-        capital_social: res.capital_social ?? empresa.capital_social ?? null,
+        capital_social: parseCapitalSocial(res.capital_social) ?? parseCapitalSocial(empresa.capital_social) ?? null,
         cnae_principal: res.cnae_fiscal_descricao
           ? `${res.cnae_fiscal || ""} — ${res.cnae_fiscal_descricao}`.trim()
           : empresa.cnae_principal || null,
@@ -530,6 +578,9 @@ export default function Empresas() {
           : empresa.cnaes_secundarios || [],
         data_abertura: res.data_inicio_atividade || empresa.data_abertura || null,
         situacao_cadastral: res.descricao_situacao_cadastral || empresa.situacao_cadastral || null,
+        data_situacao_cadastral: res.data_situacao_cadastral || (empresa as any).data_situacao_cadastral || null,
+        motivo_situacao_cadastral: res.motivo_situacao_cadastral || (empresa as any).motivo_situacao_cadastral || null,
+        regime_tributario: regimeTributarioReceita(res) || (empresa as any).regime_tributario || null,
         matriz_filial: res.identificador_matriz_filial === 1 ? "Matriz" : res.identificador_matriz_filial === 2 ? "Filial" : empresa.matriz_filial || null,
         ultima_sincronizacao_receita: new Date().toISOString(),
         dados_extra_receita: {
@@ -572,14 +623,17 @@ export default function Empresas() {
       const sociosFinal = Array.isArray(sociosReload) && sociosReload.length > 0 ? sociosReload : sociosAtualizados;
       setSociosEmpresa(sociosFinal);
 
-      toast.success(
-        sociosFinal.length > 0
-          ? `Dados sincronizados. ${sociosFinal.length} sócio(s) carregado(s).`
-          : "Dados sincronizados. A Receita Federal não retornou sócios para este CNPJ.",
-        { id: "sync" }
-      );
+      if (!opts.silencioso) {
+        toast.success(
+          sociosFinal.length > 0
+            ? `Dados sincronizados e salvos. ${sociosFinal.length} sócio(s) carregado(s).`
+            : "Dados sincronizados e salvos. A Receita Federal não retornou sócios para este CNPJ.",
+          { id: "sync" }
+        );
+      }
     } catch (err: any) {
-      toast.error(err?.message || "Erro ao sincronizar", { id: "sync" });
+      if (!opts.silencioso) toast.error(err?.message || "Erro ao sincronizar", { id: "sync" });
+      else console.error('[auto-sync empresa]', err);
     } finally {
       setSincronizando(false);
     }
@@ -600,7 +654,7 @@ export default function Empresas() {
       inscricao_estadual: emp.inscricao_estadual || "", natureza_juridica: emp.natureza_juridica || "",
       capital_social: emp.capital_social, cnae_principal: emp.cnae_principal || "", cnaes_secundarios: emp.cnaes_secundarios || [],
       data_abertura: emp.data_abertura || "", situacao_cadastral: emp.situacao_cadastral || "", matriz_filial: emp.matriz_filial || "",
-      ultima_sincronizacao_receita: emp.ultima_sincronizacao_receita || "", email: emp.email || "", telefone: emp.telefone || "",
+      ultima_sincronizacao_receita: emp.ultima_sincronizacao_receita || "", data_situacao_cadastral: emp.data_situacao_cadastral || "", motivo_situacao_cadastral: emp.motivo_situacao_cadastral || "", regime_tributario: emp.regime_tributario || "", email: emp.email || "", telefone: emp.telefone || "", telefone_2: emp.telefone_2 || "",
       whatsapp: emp.whatsapp || "", site: emp.site || "", segmento: emp.segmento || "",
       porte: emp.porte || "mei", faturamento_anual: emp.faturamento_anual,
       numero_funcionarios: emp.numero_funcionarios, cep: emp.cep || "", logradouro: emp.logradouro || "",
@@ -1831,7 +1885,8 @@ export default function Empresas() {
                             razao_social: data.razao_social ?? "",
                             nome_fantasia: data.nome_fantasia ?? "",
                             email: data.email ?? "",
-                            telefone: data.ddd_telefone_1 ? data.ddd_telefone_1.replace(/\D/g,"").replace(/(\d{2})(\d{4,5})(\d{4})/, "($1) $2-$3") : "",
+                            telefone: telefoneReceita(data.ddd_telefone_1),
+                            telefone_2: telefoneReceita((data as any).ddd_telefone_2) || (prev as any).telefone_2,
                             cep: data.cep?.replace(/\D/g,"").replace(/(\d{5})(\d)/,"$1-$2") ?? "",
                             logradouro: data.logradouro ?? "", numero: data.numero ?? "",
                             complemento: data.complemento ?? "", bairro: data.bairro ?? "",
@@ -1841,8 +1896,9 @@ export default function Empresas() {
                             responsavel_cargo: socio?.descricao_qualificacao_socio ?? "",
                             porte: porteMap,
                             segmento: data.cnae_fiscal_descricao ?? prev.segmento,
+                            inscricao_estadual: primeiraInscricaoEstadualReceita(data) || prev.inscricao_estadual,
                             natureza_juridica: data.natureza_juridica ?? prev.natureza_juridica,
-                            capital_social: data.capital_social ?? prev.capital_social,
+                            capital_social: parseCapitalSocial(data.capital_social) ?? prev.capital_social,
                             cnae_principal: data.cnae_fiscal_descricao
                               ? `${data.cnae_fiscal || ""} — ${data.cnae_fiscal_descricao}`.trim()
                               : prev.cnae_principal,
@@ -1851,6 +1907,9 @@ export default function Empresas() {
                               : prev.cnaes_secundarios,
                             data_abertura: data.data_inicio_atividade ?? prev.data_abertura,
                             situacao_cadastral: data.descricao_situacao_cadastral ?? prev.situacao_cadastral,
+                            data_situacao_cadastral: (data as any).data_situacao_cadastral ?? (prev as any).data_situacao_cadastral,
+                            motivo_situacao_cadastral: (data as any).motivo_situacao_cadastral ?? (prev as any).motivo_situacao_cadastral,
+                            regime_tributario: regimeTributarioReceita(data) || (prev as any).regime_tributario,
                             matriz_filial: (data as any).identificador_matriz_filial === 1 ? "Matriz" : (data as any).identificador_matriz_filial === 2 ? "Filial" : prev.matriz_filial,
                             ultima_sincronizacao_receita: new Date().toISOString(),
                             dados_extra_receita: {
