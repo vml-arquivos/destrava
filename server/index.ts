@@ -1139,6 +1139,10 @@ async function startServer() {
         profissao        TEXT,
         estado_civil     TEXT,
         observacoes      TEXT,
+        origem           TEXT DEFAULT 'painel_interno',
+        canal_origem     TEXT,
+        fonte_cadastro   TEXT DEFAULT 'Cliente PF cadastrado manualmente',
+        cadastrado_por   UUID REFERENCES colaboradores(id) ON DELETE SET NULL,
         ativo            BOOLEAN DEFAULT TRUE,
         created_at       TIMESTAMPTZ DEFAULT NOW(),
         updated_at       TIMESTAMPTZ DEFAULT NOW(),
@@ -7191,13 +7195,19 @@ ${(temTest1 || temTest2) ? `
         ? `AND (COALESCE(cadastro_completo, false) = false OR COALESCE(arquivado_por_duplicidade, false) = true)`
         : `AND COALESCE(cadastro_completo, false) = true AND COALESCE(bloqueado_operacional, false) = false AND COALESCE(arquivado_por_duplicidade, false) = false`;
       const { rows } = await pool.query(
-        `SELECT id, nome, cpf, rg, data_nascimento, email, telefone,
-                endereco, cidade, uf, cep, profissao, estado_civil,
-                observacoes, ativo, created_at, updated_at,
-                cadastro_status, cadastro_pendencias, cadastro_completo, bloqueado_operacional, arquivado_por_duplicidade, duplicado_de
-           FROM clientes_pf
-          WHERE ativo = true ${whereExtra}
-          ORDER BY nome`
+        `SELECT c.id, c.nome, c.cpf, c.rg, c.data_nascimento, c.email, c.telefone,
+                c.endereco, c.cidade, c.uf, c.cep, c.profissao, c.estado_civil,
+                c.observacoes, c.ativo, c.created_at, c.updated_at,
+                COALESCE(c.origem, 'painel_interno') AS origem,
+                c.canal_origem,
+                COALESCE(c.fonte_cadastro, 'Cliente PF cadastrado manualmente') AS fonte_cadastro,
+                c.cadastrado_por,
+                cb.nome AS cadastrado_por_nome,
+                c.cadastro_status, c.cadastro_pendencias, c.cadastro_completo, c.bloqueado_operacional, c.arquivado_por_duplicidade, c.duplicado_de
+           FROM clientes_pf c
+           LEFT JOIN colaboradores cb ON cb.id = c.cadastrado_por
+          WHERE c.ativo = true ${whereExtra}
+          ORDER BY c.created_at DESC, c.nome`
       );
       res.json(rows);
     } catch (err: any) {
@@ -7243,7 +7253,8 @@ ${(temTest1 || temTest2) ? `
     try {
       const {
         nome, cpf, rg, data_nascimento, email, telefone,
-        endereco, cidade, uf, cep, profissao, estado_civil, observacoes
+        endereco, cidade, uf, cep, profissao, estado_civil, observacoes,
+        origem, canal_origem, fonte_cadastro
       } = req.body;
       if (!nome || !cpf) {
         res.status(400).json({ error: 'nome e CPF são obrigatórios' });
@@ -7259,12 +7270,14 @@ ${(temTest1 || temTest2) ? `
         return;
       }
       const pendencias = pendenciasClientePF({ nome, cpf });
+      const colaborador = (req as Request & { colaborador?: any }).colaborador;
       const { rows } = await pool.query(
         `INSERT INTO clientes_pf
            (nome, cpf, rg, data_nascimento, email, telefone,
             endereco, cidade, uf, cep, profissao, estado_civil, observacoes,
+            origem, canal_origem, fonte_cadastro, cadastrado_por,
             cadastro_status, cadastro_pendencias, cadastro_completo, bloqueado_operacional)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
          RETURNING *`,
         [
           nome, cpf,
@@ -7274,6 +7287,7 @@ ${(temTest1 || temTest2) ? `
           uf || null, cep || null,
           profissao || null, estado_civil || null,
           observacoes || null,
+          origem || 'painel_interno', canal_origem || null, fonte_cadastro || 'Cliente PF cadastrado manualmente', colaborador?.id || null,
           statusCadastroFromPendencias(pendencias), pendencias, pendencias.length === 0, pendencias.length > 0,
         ]
       );
@@ -7290,7 +7304,8 @@ ${(temTest1 || temTest2) ? `
       const { id } = req.params;
       const {
         nome, cpf, rg, data_nascimento, email, telefone,
-        endereco, cidade, uf, cep, profissao, estado_civil, observacoes, ativo
+        endereco, cidade, uf, cep, profissao, estado_civil, observacoes, ativo,
+        origem, canal_origem, fonte_cadastro
       } = req.body;
       const cpfValido = validarCpfObrigatorio(cpf);
       if (!cpfValido) {
@@ -7307,8 +7322,9 @@ ${(temTest1 || temTest2) ? `
            nome=$1, cpf=$2, rg=$3, data_nascimento=$4, email=$5, telefone=$6,
            endereco=$7, cidade=$8, uf=$9, cep=$10, profissao=$11,
            estado_civil=$12, observacoes=$13, ativo=$14,
-           cadastro_status=$15, cadastro_pendencias=$16, cadastro_completo=$17, bloqueado_operacional=$18, updated_at=NOW()
-         WHERE id=$19 RETURNING *`,
+           origem=COALESCE($15, origem), canal_origem=$16, fonte_cadastro=COALESCE($17, fonte_cadastro),
+           cadastro_status=$18, cadastro_pendencias=$19, cadastro_completo=$20, bloqueado_operacional=$21, updated_at=NOW()
+         WHERE id=$22 RETURNING *`,
         [
           nome, cpf,
           rg || null, data_nascimento || null,
@@ -7317,6 +7333,7 @@ ${(temTest1 || temTest2) ? `
           uf || null, cep || null,
           profissao || null, estado_civil || null,
           observacoes || null, ativo !== false,
+          origem || null, canal_origem || null, fonte_cadastro || null,
           statusCadastroFromPendencias(pendencias), pendencias, pendencias.length === 0, pendencias.length > 0,
           id
         ]

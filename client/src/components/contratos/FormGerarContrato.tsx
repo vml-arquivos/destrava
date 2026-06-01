@@ -786,7 +786,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
           <div>
             <label className={lbl}>Tipo de Cliente *</label>
             <select value={clienteTipo} onChange={e => { setClienteTipo(e.target.value as any); setClienteId(''); }} className={cls}>
-              <option value="pf">Pessoa Física — Clientes PF Cadastrados</option>
+              <option value="pf">Pessoa Física — Clientes cadastrados</option>
               <option value="lead">Pessoa Física — Lead (CRM)</option>
               <option value="empresa">Pessoa Jurídica (Empresa)</option>
             </select>
@@ -802,14 +802,14 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 : clienteTipo === 'pf'
                   ? clientesPF.length > 0
                     ? clientesPF.map(c => <option key={c.id} value={c.id}>{c.nome}{c.cpf ? ` — CPF: ${c.cpf}` : ''}{c.cidade ? ` — ${c.cidade}/${c.uf}` : ''}</option>)
-                    : [<option key="empty" value="" disabled>Nenhum cliente PF cadastrado — vá em "Clientes PF" para cadastrar</option>]
+                    : [<option key="empty" value="" disabled>Nenhum cliente PF cadastrado — vá em "Clientes" para cadastrar</option>]
                   : leads.map(l => <option key={l.id} value={l.id}>{l.nome || l.razao_social || 'Lead sem nome'}{l.cpf ? ` — CPF: ${l.cpf}` : ''}</option>)
               }
             </select>
             {errors.clienteId && <p className="text-red-500 text-xs mt-1">{errors.clienteId}</p>}
             {clienteTipo === 'pf' && clientesPF.length === 0 && !carregandoListas && (
               <p className="text-xs text-amber-600 mt-1">
-                Cadastre clientes PF em <a href="/colaborador/clientes-pf" className="underline font-medium">Clientes PF</a> para selecioná-los aqui.
+                Cadastre clientes PF em <a href="/colaborador/clientes" className="underline font-medium">Clientes</a> para selecioná-los aqui.
               </p>
             )}
           </div>

@@ -20,7 +20,6 @@ import {
   ShieldAlert,
   TrendingUp,
   BookUser,
-  UserCheck,
   Activity,
   BarChart2,
   DatabaseZap,
@@ -39,7 +38,6 @@ const CARGOS_GESTAO = ["administrador", "diretor", "gerente comercial"];
 
 const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/colaborador/dashboard",   label: "Dashboard",          icon: LayoutDashboard },
-  { href: "/colaborador/meu-perfil",  label: "Meu Perfil",         icon: User },
   { href: "/colaborador/crm",         label: "Funil Comercial",    icon: Kanban },
   { href: "/colaborador/calculadora", label: "Calculadora",        icon: Calculator },
   { href: "/colaborador/simulacoes",  label: "Simulações",         icon: FileText },
@@ -52,7 +50,6 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/colaborador/previsao-faturamento", label: "Faturamento", icon: TrendingUp },
   { href: "/colaborador/contratos",   label: "Contratos",          icon: FileText },
   { href: "/colaborador/contadores",  label: "Contadores",         icon: BookUser, allowedCargos: ["administrador", "diretor"] },
-  { href: "/colaborador/clientes-pf", label: "Clientes PF",        icon: UserCheck },
   { href: "/colaborador/integracoes", label: "Integrações n8n",    icon: Workflow, allowedCargos: ["administrador"] },
   { href: "/colaborador/usuarios",    label: "Usuários",           icon: User, allowedCargos: CARGOS_GESTAO },
 ];

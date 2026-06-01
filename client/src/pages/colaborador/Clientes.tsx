@@ -15,20 +15,33 @@ import {
 // ─── Tipos ────────────────────────────────────────────────────
 interface Cliente {
   id: string;
+  api_id?: string;
+  tipo_registro?: "lead" | "cliente_pf";
   nome: string;
   empresa?: string;
   cpf_cnpj?: string;
+  cpf?: string;
+  rg?: string;
+  data_nascimento?: string;
   telefone: string;
   email?: string;
   tipo: "pf" | "pj";
   tipo_pessoa?: "pf" | "pj";
   cidade?: string;
   estado?: string;
+  uf?: string;
+  endereco?: string;
+  cep?: string;
+  profissao?: string;
+  estado_civil?: string;
   faturamento_anual?: number;
   segmento?: string;
   status: "lead" | "contato" | "analise" | "aprovado" | "reprovado" | "cancelado" | "convertido";
   origem: string;
   origem_normalizada?: string;
+  canal_origem?: string;
+  fonte_cadastro?: string;
+  cadastrado_por_nome?: string;
   prioridade: "baixa" | "media" | "alta";
   observacoes?: string;
   observacoes_ia?: string;
@@ -119,6 +132,60 @@ function getProximoContato(c: Cliente): string {
   return c.proximo_contato || c.proximo_followup || "";
 }
 
+function isClientePF(c: Cliente): boolean {
+  return c.tipo_registro === "cliente_pf";
+}
+
+function getApiId(c: Cliente): string {
+  return c.api_id || c.id.replace(/^pf:/, "").replace(/^lead:/, "");
+}
+
+function getFonteCadastro(c: Cliente): string {
+  if (c.fonte_cadastro) return c.fonte_cadastro;
+  const origem = getOrigem(c);
+  if (origem === "campanha") return "Cliente vindo de campanha";
+  if (origem === "site") return "Cliente vindo do site/formulário";
+  if (origem === "whatsapp") return "Cliente vindo do WhatsApp";
+  if (origem === "indicacao") return "Cliente vindo de indicação";
+  if (isClientePF(c)) return "Cliente PF cadastrado manualmente";
+  return "Cliente cadastrado no painel interno";
+}
+
+function normalizeClientePF(c: any): Cliente {
+  return {
+    ...c,
+    id: `pf:${c.id}`,
+    api_id: c.id,
+    tipo_registro: "cliente_pf",
+    cpf_cnpj: c.cpf,
+    telefone: c.telefone || "",
+    tipo: "pf",
+    tipo_pessoa: "pf",
+    status: "convertido",
+    origem: c.origem || "painel_interno",
+    origem_normalizada: c.origem_normalizada || "manual",
+    fonte_cadastro: c.fonte_cadastro || "Cliente PF cadastrado manualmente",
+    prioridade: "media",
+    observacoes: c.observacoes || "",
+    created_at: c.created_at,
+    updated_at: c.updated_at || c.created_at,
+    cadastro_incompleto: c.cadastro_status === "incompleto" || c.cadastro_completo === false || c.bloqueado_operacional === true,
+  } as Cliente;
+}
+
+function normalizeLead(c: any): Cliente {
+  return {
+    ...c,
+    api_id: c.id,
+    tipo_registro: "lead",
+    telefone: c.telefone || "",
+    tipo: c.tipo || c.tipo_pessoa || "pj",
+    tipo_pessoa: c.tipo_pessoa || c.tipo || "pj",
+    origem: c.origem || "painel_interno",
+    fonte_cadastro: c.fonte_cadastro || undefined,
+  } as Cliente;
+}
+
 // ─── Componente principal ─────────────────────────────────────
 export default function Clientes() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -141,7 +208,7 @@ export default function Clientes() {
 
   const [form, setForm] = useState({
     nome: "", empresa: "", cpf_cnpj: "", telefone: "", email: "",
-    tipo: "pj", cidade: "", estado: "", faturamento_anual: "",
+    tipo: "pf", cidade: "", estado: "", faturamento_anual: "",
     segmento: "", status: "lead", prioridade: "media", observacoes: "",
     proximo_contato: ""
   });
@@ -151,8 +218,24 @@ export default function Clientes() {
   async function carregarClientes() {
     setLoading(true);
     try {
-      const data = await apiFetch("/api/leads");
-      setClientes(data as Cliente[]);
+      const [leadsResult, clientesPfResult] = await Promise.allSettled([
+        apiFetch("/api/leads"),
+        apiFetch("/api/clientes-pf"),
+      ]);
+
+      const leads = leadsResult.status === "fulfilled" && Array.isArray(leadsResult.value)
+        ? leadsResult.value.map(normalizeLead)
+        : [];
+      const clientesPf = clientesPfResult.status === "fulfilled" && Array.isArray(clientesPfResult.value)
+        ? clientesPfResult.value.map(normalizeClientePF)
+        : [];
+
+      const unidos = [...leads, ...clientesPf].sort((a, b) => {
+        const da = new Date(a.created_at || 0).getTime();
+        const db = new Date(b.created_at || 0).getTime();
+        return db - da;
+      });
+      setClientes(unidos);
     } catch (err) {
       console.error(err);
       setClientes([]);
@@ -173,12 +256,19 @@ export default function Clientes() {
 
   async function selecionarCliente(cliente: Cliente) {
     setClienteSelecionado(cliente);
-    await carregarAtividades(cliente.id);
+    if (isClientePF(cliente)) {
+      setAtividades([]);
+      return;
+    }
+    await carregarAtividades(getApiId(cliente));
   }
 
   async function atualizarStatus(clienteId: string, novoStatus: string) {
+    const cliente = clientes.find(c => c.id === clienteId);
+    if (cliente && isClientePF(cliente)) return;
+    const apiId = cliente ? getApiId(cliente) : clienteId;
     try {
-      await apiFetch(`/api/leads/${clienteId}`, {
+      await apiFetch(`/api/leads/${apiId}`, {
         method: "PATCH",
         body: JSON.stringify({ status: novoStatus }),
       });
@@ -189,7 +279,7 @@ export default function Clientes() {
       await apiFetch("/api/crm/atividades", {
         method: "POST",
         body: JSON.stringify({
-          lead_id: clienteId,
+          lead_id: apiId,
           tipo: "status_change",
           descricao: `Status alterado para: ${STATUS_CONFIG[novoStatus as keyof typeof STATUS_CONFIG]?.label}`,
           resultado: "concluido",
@@ -208,7 +298,7 @@ export default function Clientes() {
       const data = await apiFetch("/api/crm/atividades", {
         method: "POST",
         body: JSON.stringify({
-          lead_id: clienteSelecionado.id,
+          lead_id: getApiId(clienteSelecionado),
           tipo: novaAtividade.tipo,
           descricao: novaAtividade.descricao,
           resultado: novaAtividade.resultado || null,
@@ -227,43 +317,70 @@ export default function Clientes() {
   }
 
   async function salvarNovoCliente() {
+    const documento = form.cpf_cnpj.replace(/\D/g, "");
     if (!form.nome || !form.telefone) return;
+    if (form.tipo === "pf" && documento.length !== 11) {
+      toast.error("CPF válido é obrigatório para cadastrar cliente pessoa física.");
+      return;
+    }
+    if (form.tipo === "pj" && documento.length !== 14) {
+      toast.error("CNPJ válido é obrigatório para cadastrar cliente pessoa jurídica.");
+      return;
+    }
     setSalvando(true);
     try {
-      const data = await apiFetch("/api/leads", {
-        method: "POST",
-        body: JSON.stringify({
-          nome: form.nome,
-          empresa: form.empresa || null,
-          cpf_cnpj: form.cpf_cnpj || null,
-          telefone: form.telefone,
-          email: form.email || null,
-          tipo_pessoa: form.tipo as "pf" | "pj",
-          cidade: form.cidade || null,
-          estado: form.estado || null,
-          segmento: form.segmento || null,
-          faturamento_anual: form.faturamento_anual ? Number(form.faturamento_anual) : null,
-          status: form.status,
-          prioridade: form.prioridade,
-          observacoes_ia: form.observacoes || null,
-          proximo_followup: form.proximo_contato || null,
-          origem: "painel_interno",
-          etapa_funil: "Novo",
-          temperatura: "frio",
-          score_ia: 0,
-        }),
-      });
-      if (data) {
-        setClientes(prev => [data as Cliente, ...prev]);
-        setModalNovoCliente(false);
-        setForm({
-          nome: "", empresa: "", cpf_cnpj: "", telefone: "", email: "",
-          tipo: "pj", cidade: "", estado: "", faturamento_anual: "",
-          segmento: "", status: "lead", prioridade: "media", observacoes: "",
-          proximo_contato: ""
+      let data: any;
+      if (form.tipo === "pf") {
+        data = await apiFetch("/api/clientes-pf", {
+          method: "POST",
+          body: JSON.stringify({
+            nome: form.nome,
+            cpf: form.cpf_cnpj,
+            telefone: form.telefone,
+            email: form.email || null,
+            cidade: form.cidade || null,
+            uf: form.estado || null,
+            profissao: form.segmento || null,
+            observacoes: form.observacoes || null,
+            origem: "painel_interno",
+            fonte_cadastro: "Cliente PF cadastrado manualmente",
+          }),
         });
-        toast.success("Cliente criado com sucesso.");
+        setClientes(prev => [normalizeClientePF(data), ...prev]);
+      } else {
+        data = await apiFetch("/api/leads", {
+          method: "POST",
+          body: JSON.stringify({
+            nome: form.nome,
+            empresa: form.empresa || null,
+            cpf_cnpj: form.cpf_cnpj || null,
+            telefone: form.telefone,
+            email: form.email || null,
+            tipo_pessoa: form.tipo as "pf" | "pj",
+            cidade: form.cidade || null,
+            estado: form.estado || null,
+            segmento: form.segmento || null,
+            faturamento_anual: form.faturamento_anual ? Number(form.faturamento_anual) : null,
+            status: form.status,
+            prioridade: form.prioridade,
+            observacoes_ia: form.observacoes || null,
+            proximo_followup: form.proximo_contato || null,
+            origem: "painel_interno",
+            etapa_funil: "Novo",
+            temperatura: "frio",
+            score_ia: 0,
+          }),
+        });
+        setClientes(prev => [normalizeLead(data), ...prev]);
       }
+      setModalNovoCliente(false);
+      setForm({
+        nome: "", empresa: "", cpf_cnpj: "", telefone: "", email: "",
+        tipo: "pf", cidade: "", estado: "", faturamento_anual: "",
+        segmento: "", status: "lead", prioridade: "media", observacoes: "",
+        proximo_contato: ""
+      });
+      toast.success("Cliente criado com sucesso.");
     } catch (err: any) {
       toast.error(err.message || "Erro ao salvar cliente.");
     }
@@ -272,8 +389,12 @@ export default function Clientes() {
 
   async function excluirCliente(clienteId: string) {
     if (!confirm("Tem certeza que deseja excluir este cliente?")) return;
+    const cliente = clientes.find(c => c.id === clienteId);
+    const endpoint = cliente && isClientePF(cliente)
+      ? `/api/clientes-pf/${getApiId(cliente)}`
+      : `/api/leads/${cliente ? getApiId(cliente) : clienteId}`;
     try {
-      await apiFetch(`/api/leads/${clienteId}`, { method: "DELETE" });
+      await apiFetch(endpoint, { method: "DELETE" });
       setClientes(prev => prev.filter(c => c.id !== clienteId));
       if (clienteSelecionado?.id === clienteId) setClienteSelecionado(null);
       toast.success("Cliente excluído.");
@@ -300,7 +421,7 @@ export default function Clientes() {
     const matchBusca = !busca ||
       c.nome.toLowerCase().includes(busca.toLowerCase()) ||
       c.empresa?.toLowerCase().includes(busca.toLowerCase()) ||
-      c.telefone.includes(busca) ||
+      (c.telefone || "").includes(busca) ||
       c.email?.toLowerCase().includes(busca.toLowerCase()) ||
       c.cpf_cnpj?.replace(/\D/g, "").includes(busca.replace(/\D/g, ""));
     const matchStatus = filtroStatus === "todos" || c.status === filtroStatus;
@@ -318,7 +439,7 @@ export default function Clientes() {
     analise: clientes.filter(c => c.status === "analise").length,
     aprovados: clientes.filter(c => c.status === "aprovado" || c.status === "convertido").length,
     alta: clientes.filter(c => c.prioridade === "alta").length,
-    incompletos: clientes.filter(c => !c.email || !c.cpf_cnpj).length,
+    incompletos: clientes.filter(c => c.cadastro_incompleto).length,
     whatsapp: clientes.filter(c => getOrigem(c) === "whatsapp").length,
     site: clientes.filter(c => getOrigem(c) === "site").length,
   };
@@ -346,10 +467,10 @@ export default function Clientes() {
               <div>
                 <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                   Clientes
-                  <span className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">PJ / PF</span>
+                  <span className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">Unificado</span>
                 </h1>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {clientesFiltrados.length} de {clientes.length} clientes
+                  {clientesFiltrados.length} de {clientes.length} clientes unificados
                   {totalDuplicatas > 0 && (
                     <span className="ml-2 text-orange-600 font-medium">
                       · {totalDuplicatas} telefones duplicados
@@ -547,7 +668,7 @@ export default function Clientes() {
                   const origemCfg = ORIGEM_CONFIG[origemNorm] || ORIGEM_CONFIG.manual;
                   const priorCfg = PRIORIDADE_CONFIG[cliente.prioridade] || PRIORIDADE_CONFIG.media;
                   const statusCfg = STATUS_CONFIG[cliente.status] || STATUS_CONFIG.lead;
-                  const incompleto = cliente.cadastro_incompleto || !cliente.email || !cliente.cpf_cnpj;
+                  const incompleto = !!cliente.cadastro_incompleto;
                   const isDuplicado = (telefoneCounts[cliente.telefone?.replace(/\D/g, "")] || 0) > 1;
 
                   return (
@@ -677,12 +798,14 @@ export default function Clientes() {
                       📧 E-mail
                     </a>
                   )}
-                  <button
-                    onClick={() => setModalAtividade(true)}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-white text-gray-700 border rounded-lg text-xs font-medium hover:bg-gray-50"
-                  >
-                    📝 Registrar
-                  </button>
+                  {!isClientePF(clienteSelecionado) && (
+                    <button
+                      onClick={() => setModalAtividade(true)}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-white text-gray-700 border rounded-lg text-xs font-medium hover:bg-gray-50"
+                    >
+                      📝 Registrar
+                    </button>
+                  )}
                   <Link
                     href="/colaborador/calculadora"
                     className="flex items-center gap-1 px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-medium hover:bg-amber-600"
@@ -700,23 +823,30 @@ export default function Clientes() {
 
               {/* Alterar Status */}
               <div className="px-4 py-3 border-b">
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Alterar Status</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {Object.entries(STATUS_CONFIG).map(([k, v]) => (
-                    <button
-                      key={k}
-                      onClick={() => atualizarStatus(clienteSelecionado.id, k)}
-                      className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all flex items-center gap-1 ${
-                        clienteSelecionado.status === k
-                          ? `${v.color} border-current ring-2 ring-offset-1 ring-blue-400`
-                          : "border-gray-200 text-gray-500 hover:border-gray-400 hover:bg-gray-50"
-                      }`}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${v.dot}`} />
-                      {v.label}
-                    </button>
-                  ))}
-                </div>
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{isClientePF(clienteSelecionado) ? "Origem do cadastro" : "Alterar Status"}</p>
+                {isClientePF(clienteSelecionado) ? (
+                  <div className="text-sm text-gray-700">
+                    {getFonteCadastro(clienteSelecionado)} · Cadastrado em {fmtDate(clienteSelecionado.created_at)}
+                    {clienteSelecionado.cadastrado_por_nome ? ` por ${clienteSelecionado.cadastrado_por_nome}` : ""}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {Object.entries(STATUS_CONFIG).map(([k, v]) => (
+                      <button
+                        key={k}
+                        onClick={() => atualizarStatus(clienteSelecionado.id, k)}
+                        className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-all flex items-center gap-1 ${
+                          clienteSelecionado.status === k
+                            ? `${v.color} border-current ring-2 ring-offset-1 ring-blue-400`
+                            : "border-gray-200 text-gray-500 hover:border-gray-400 hover:bg-gray-50"
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${v.dot}`} />
+                        {v.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Dados do cliente */}
@@ -778,7 +908,7 @@ export default function Clientes() {
                     </div>
                   )}
                   <div>
-                    <span className="text-gray-400 text-xs block">Origem</span>
+                    <span className="text-gray-400 text-xs block">Origem / Canal</span>
                     <div className="flex items-center gap-1 mt-0.5">
                       {(() => {
                         const cfg = ORIGEM_CONFIG[getOrigem(clienteSelecionado)] || ORIGEM_CONFIG.manual;
@@ -789,6 +919,13 @@ export default function Clientes() {
                         );
                       })()}
                     </div>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 text-xs block">Cadastro</span>
+                    <p className="font-medium text-sm">{getFonteCadastro(clienteSelecionado)}</p>
+                    <p className="text-xs text-gray-500">
+                      {fmtDate(clienteSelecionado.created_at)}{clienteSelecionado.cadastrado_por_nome ? ` · ${clienteSelecionado.cadastrado_por_nome}` : ""}
+                    </p>
                   </div>
                   <div>
                     <span className="text-gray-400 text-xs block">Prioridade</span>
@@ -821,12 +958,14 @@ export default function Clientes() {
               <div className="px-4 py-3">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-semibold text-gray-500 uppercase">Histórico de Atividades</p>
-                  <button
-                    onClick={() => setModalAtividade(true)}
-                    className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" /> Registrar
-                  </button>
+                  {!isClientePF(clienteSelecionado) && (
+                    <button
+                      onClick={() => setModalAtividade(true)}
+                      className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" /> Registrar
+                    </button>
+                  )}
                 </div>
 
                 {loadingAtividades ? (
@@ -836,7 +975,7 @@ export default function Clientes() {
                 ) : atividades.length === 0 ? (
                   <div className="text-center py-6 text-gray-400">
                     <Clock className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    <p className="text-xs">Nenhuma atividade registrada</p>
+                    <p className="text-xs">{isClientePF(clienteSelecionado) ? "Cliente PF cadastrado diretamente. Histórico comercial será criado quando houver atendimento." : "Nenhuma atividade registrada"}</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -941,7 +1080,7 @@ export default function Clientes() {
                 { label: "Empresa / Razão Social", key: "empresa", type: "text", placeholder: "Nome da empresa" },
                 { label: "Telefone / WhatsApp *", key: "telefone", type: "tel", placeholder: "(61) 9 9999-9999" },
                 { label: "E-mail", key: "email", type: "email", placeholder: "email@empresa.com" },
-                { label: "CPF / CNPJ", key: "cpf_cnpj", type: "text", placeholder: "00.000.000/0001-00" },
+                { label: form.tipo === "pf" ? "CPF *" : "CNPJ *", key: "cpf_cnpj", type: "text", placeholder: form.tipo === "pf" ? "000.000.000-00" : "00.000.000/0001-00" },
                 { label: "Segmento", key: "segmento", type: "text", placeholder: "Ex: Agronegócio, Varejo..." },
                 { label: "Cidade", key: "cidade", type: "text", placeholder: "Brasília" },
                 { label: "Estado", key: "estado", type: "text", placeholder: "DF" },
@@ -966,8 +1105,8 @@ export default function Clientes() {
                   onChange={e => setForm(p => ({ ...p, tipo: e.target.value }))}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="pj">Pessoa Jurídica</option>
                   <option value="pf">Pessoa Física</option>
+                  <option value="pj">Pessoa Jurídica</option>
                 </select>
               </div>
               <div>
@@ -1002,7 +1141,7 @@ export default function Clientes() {
               </button>
               <button
                 onClick={salvarNovoCliente}
-                disabled={salvando || !form.nome || !form.telefone}
+                disabled={salvando || !form.nome || !form.telefone || !form.cpf_cnpj}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
