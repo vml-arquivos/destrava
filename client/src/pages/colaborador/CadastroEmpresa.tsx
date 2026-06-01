@@ -79,12 +79,31 @@ function formatCapital(value: number): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-function parseBRL(value: string): number | null {
-  const clean = String(value || '')
-    .replace(/[^0-9,.-]/g, '')
-    .replace(/\./g, '')
-    .replace(',', '.');
-  const n = Number(clean);
+function parseBRL(value: string | number | null | undefined): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const original = String(value).replace(/R\$/gi, '').replace(/\s/g, '').trim();
+  if (!original) return null;
+  const sign = original.startsWith('-') ? '-' : '';
+  const s = original.replace(/[^0-9.,]/g, '');
+  if (!s) return null;
+  if (s.includes(',')) {
+    const n = Number(sign + s.replace(/\./g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  }
+  if (s.includes('.')) {
+    const parts = s.split('.');
+    const last = parts[parts.length - 1] || '';
+    if (parts.length === 2 && /^\d{1,2}$/.test(last)) {
+      const n = Number(sign + s);
+      return Number.isFinite(n) ? n : null;
+    }
+    const onlyThousands = parts.length > 1 && parts.slice(1).every(part => /^\d{3}$/.test(part));
+    const normalized = onlyThousands ? parts.join('') : `${parts.slice(0, -1).join('')}.${last}`;
+    const n = Number(sign + normalized);
+    return Number.isFinite(n) ? n : null;
+  }
+  const n = Number(sign + s.replace(/\D/g, ''));
   return Number.isFinite(n) ? n : null;
 }
 
@@ -246,7 +265,7 @@ export default function CadastroEmpresa() {
         motivo_situacao_cadastral: data.motivo_situacao_cadastral ?? '',
         matriz_filial: data.descricao_identificador_matriz_filial ?? String(data.identificador_matriz_filial ?? ''),
         regime_tributario: regimeTributario,
-        capital_social: data.capital_social ? formatCapital(data.capital_social) : '',
+        capital_social: data.capital_social !== undefined && data.capital_social !== null ? formatCapital(Number(data.capital_social)) : '',
         cnae: data.cnae_fiscal_descricao
           ? `${data.cnae_fiscal} — ${data.cnae_fiscal_descricao}`
           : '',

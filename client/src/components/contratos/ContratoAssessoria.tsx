@@ -330,10 +330,9 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
     ? Number(d.prazo_contrato_meses)
     : 12;
   const sociosAssinantes = Array.isArray(d.socios_assinantes) ? d.socios_assinantes.filter(s => nomeSignatario(s)) : [];
-  const primeiroSocioAssinante = sociosAssinantes[0];
   const representantePrincipalContratante = {
-    nome: d.empresa_representante || primeiroSocioAssinante?.nome || '',
-    cpf: d.empresa_cpf_representante || primeiroSocioAssinante?.cpf,
+    nome: d.empresa_representante || '',
+    cpf: d.empresa_cpf_representante,
     cargo: 'Representante legal',
   };
   const representantesContratante = d.modo_assinatura_contratante === 'socios' && sociosAssinantes.length > 0
@@ -341,7 +340,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
     : [representantePrincipalContratante].filter(s => s.nome);
   const assinantesContratante = d.modo_assinatura_contratante === 'socios' && sociosAssinantes.length > 0
     ? sociosAssinantes
-    : representantePrincipalContratante.nome
+    : d.modo_assinatura_contratante === 'responsavel' && representantePrincipalContratante.nome
       ? [representantePrincipalContratante]
       : [];
   const representanteContratada = 'FERNANDO ELI OLIVEIRA MARQUES';
@@ -495,7 +494,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               {/* Assinaturas da contratante */}
               <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs text-slate-700">
                 <p className="font-semibold text-slate-800 mb-1">Assinantes da CONTRATANTE</p>
-                <p>{d.modo_assinatura_contratante === 'socios' && sociosAssinantes.length > 0 ? 'Sócio(s) selecionado(s) + razão social' : d.modo_assinatura_contratante === 'responsavel' ? 'Responsável principal + razão social' : 'Representante da empresa + razão social'}</p>
+                <p>{d.modo_assinatura_contratante === 'socios' && sociosAssinantes.length > 0 ? 'Sócio(s) selecionado(s) + razão social' : d.modo_assinatura_contratante === 'responsavel' ? 'Responsável principal + razão social' : 'Somente razão social e CNPJ da empresa'}</p>
                 <ul className="mt-2 space-y-1 list-disc list-inside">
                   {representantesContratante.map((s, i) => (
                     <li key={`${s.nome}-${i}`}>{s.nome}{s.cpf ? ` — CPF: ${s.cpf}` : ''}</li>

@@ -201,14 +201,36 @@ function normalizeNumeric(value: unknown): number | null {
   if (value === undefined || value === null || value === "") return null;
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (typeof value !== "string") return null;
-  const cleaned = value
-    .replace(/R\$/g, "")
-    .replace(/\s/g, "")
-    .replace(/\./g, "")
-    .replace(/,/g, ".")
-    .replace(/[^0-9.-]/g, "");
-  if (!cleaned) return null;
-  const n = Number(cleaned);
+
+  const original = value.replace(/R\$/gi, "").replace(/\s/g, "").trim();
+  if (!original) return null;
+  const sign = original.startsWith("-") ? "-" : "";
+  const s = original.replace(/[^0-9.,]/g, "");
+  if (!s) return null;
+
+  if (s.includes(",")) {
+    const n = Number(sign + s.replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  if (s.includes(".")) {
+    const parts = s.split(".");
+    const last = parts[parts.length - 1] || "";
+
+    // Postgres/APIs retornam NUMERIC como string decimal: 50000.00.
+    // Não pode remover o ponto, senão vira 5.000.000,00.
+    if (parts.length === 2 && /^\d{1,2}$/.test(last)) {
+      const n = Number(sign + s);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    const onlyThousands = parts.length > 1 && parts.slice(1).every((part) => /^\d{3}$/.test(part));
+    const normalized = onlyThousands ? parts.join("") : `${parts.slice(0, -1).join("")}.${last}`;
+    const n = Number(sign + normalized);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  const n = Number(sign + s.replace(/\D/g, ""));
   return Number.isFinite(n) ? n : null;
 }
 
@@ -4404,10 +4426,9 @@ Responda APENAS com um JSON válido no seguinte formato:
     const sociosAssinantes = Array.isArray(contratante.socios_assinantes)
       ? contratante.socios_assinantes.filter((s: any) => String(s?.nome || '').trim())
       : [];
-    const primeiroSocioAssinante = sociosAssinantes[0] || null;
     const representantePrincipalContratante = {
-      nome: contratante.representante || primeiroSocioAssinante?.nome || '',
-      cpf: contratante.cpf_representante || primeiroSocioAssinante?.cpf || primeiroSocioAssinante?.documento || '',
+      nome: contratante.representante || '',
+      cpf: contratante.cpf_representante,
       cargo: 'Representante legal',
     };
     const representantesContratante = contratante.modo_assinatura === 'socios' && sociosAssinantes.length > 0
@@ -4415,7 +4436,7 @@ Responda APENAS com um JSON válido no seguinte formato:
       : [representantePrincipalContratante].filter((s: any) => String(s?.nome || '').trim());
     const assinantesContratante = contratante.modo_assinatura === 'socios' && sociosAssinantes.length > 0
       ? sociosAssinantes
-      : representantePrincipalContratante.nome
+      : contratante.modo_assinatura === 'responsavel' && representantePrincipalContratante.nome
         ? [representantePrincipalContratante]
         : [];
     const linhasAssinantesContratanteHtml = assinantesContratante.map((s: any) => `
@@ -7875,8 +7896,8 @@ ${(temTest1 || temTest2) ? `
           razao_social: empresa_razao_social || empresa?.razao_social || '',
           cnpj: empresa_cnpj || empresa?.cnpj || '',
           endereco: empresa_endereco || enderecoEmpresaBanco,
-          representante: empresa_representante || empresa?.responsavel_nome || empresa?.representante_nome || socios_assinantes?.[0]?.nome || '',
-          cpf_representante: empresa_cpf_representante || empresa?.responsavel_cpf || empresa?.representante_cpf || socios_assinantes?.[0]?.cpf || socios_assinantes?.[0]?.documento || '',
+          representante: empresa_representante || empresa?.responsavel_nome || empresa?.representante_nome || '',
+          cpf_representante: empresa_cpf_representante || empresa?.responsavel_cpf || empresa?.representante_cpf || '',
           socios_assinantes: Array.isArray(socios_assinantes) ? socios_assinantes : [],
           modo_assinatura: modo_assinatura_contratante || 'responsavel',
         },
@@ -11537,142 +11558,6 @@ ${canal === "whatsapp"
 
 
 
-
-
-  // ── INTEGRAÇÃO NEXUS GESTÃO ───────────────────────────────────────────────
-  function getNexusIntegrationSecret(req: Request): string {
-    const direct = String(req.header('x-nexus-integration-secret') || req.header('x-integration-secret') || '').trim();
-    const authHeader = String(req.header('authorization') || '');
-    if (authHeader.toLowerCase().startsWith('bearer ')) return authHeader.slice(7).trim();
-    return direct;
-  }
-
-  function requireNexusIntegration(req: Request, res: Response, next: NextFunction) {
-    const configured = String(process.env.NEXUS_INTEGRATION_SECRET || process.env.NEXUS_DESTRAVA_INTEGRATION_SECRET || process.env.INTEGRATION_SECRET || '').trim();
-    if (!configured) {
-      res.status(503).json({ error: 'Integração Nexus/Destrava não configurada no Destrava.' });
-      return;
-    }
-    if (getNexusIntegrationSecret(req) !== configured) {
-      res.status(401).json({ error: 'Chave de integração Nexus inválida.' });
-      return;
-    }
-    next();
-  }
-
-  app.get('/api/nexus/status', requireNexusIntegration, (_req: Request, res: Response) => {
-    res.json({ ok: true, sistema: 'destrava', integracao: 'nexus', timestamp: new Date().toISOString() });
-  });
-
-  app.get('/api/nexus/catalogo', requireNexusIntegration, async (req: Request, res: Response) => {
-    try {
-      const tipo = String(req.query.tipo || 'empresa').toLowerCase();
-      const q = String(req.query.q || '').trim();
-      const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 50);
-      const like = `%${q}%`;
-
-      if (tipo === 'cliente' || tipo === 'clientes') {
-        const { rows } = await pool.query(
-          `SELECT id, nome, cpf, email, telefone, status, created_at
-             FROM clientes_pf
-            WHERE ($1 = '' OR nome ILIKE $2 OR COALESCE(cpf,'') ILIKE $2 OR COALESCE(email,'') ILIKE $2 OR COALESCE(telefone,'') ILIKE $2)
-            ORDER BY nome ASC
-            LIMIT $3`,
-          [q, like, limit]
-        ).catch(async () => ({ rows: [] as any[] }));
-        res.json({ items: rows.map((r: any) => ({
-          id: r.id,
-          tipo: 'cliente',
-          nome: r.nome,
-          documento: r.cpf || null,
-          email: r.email || null,
-          telefone: r.telefone || null,
-          status: r.status || null,
-          subtitulo: [r.cpf, r.email, r.telefone].filter(Boolean).join(' · '),
-          url: `${process.env.FRONTEND_URL || ''}/colaborador/clientes/${r.id}`,
-          metadata: { created_at: r.created_at || null },
-        })) });
-        return;
-      }
-
-      const { rows } = await pool.query(
-        `SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.email, e.telefone, e.status, e.cidade, e.estado, e.responsavel_nome, e.created_at
-           FROM empresas e
-          WHERE ($1 = '' OR e.razao_social ILIKE $2 OR COALESCE(e.nome_fantasia,'') ILIKE $2 OR COALESCE(e.cnpj,'') ILIKE $2 OR COALESCE(e.telefone,'') ILIKE $2 OR COALESCE(e.email,'') ILIKE $2)
-          ORDER BY e.razao_social ASC
-          LIMIT $3`,
-        [q, like, limit]
-      );
-
-      res.json({ items: rows.map((r: any) => ({
-        id: r.id,
-        tipo: 'empresa',
-        nome: r.razao_social || r.nome_fantasia || 'Empresa sem nome',
-        documento: r.cnpj || null,
-        email: r.email || null,
-        telefone: r.telefone || null,
-        status: r.status || null,
-        subtitulo: [r.cnpj, r.cidade && r.estado ? `${r.cidade}/${r.estado}` : null, r.responsavel_nome].filter(Boolean).join(' · '),
-        url: `${process.env.FRONTEND_URL || ''}/colaborador/empresas/${r.id}`,
-        metadata: {
-          nome_fantasia: r.nome_fantasia || null,
-          cidade: r.cidade || null,
-          estado: r.estado || null,
-          responsavel_nome: r.responsavel_nome || null,
-          created_at: r.created_at || null,
-        },
-      })) });
-    } catch (err) {
-      console.error('[NEXUS] Erro no catálogo:', err);
-      res.status(500).json({ error: 'Erro ao buscar catálogo para o Nexus.' });
-    }
-  });
-
-  app.get('/api/nexus/empresas/:id/resumo', requireNexusIntegration, async (req: Request, res: Response) => {
-    try {
-      const empresa = await pool.query('SELECT * FROM empresas WHERE id = $1 LIMIT 1', [req.params.id]);
-      if (empresa.rows.length === 0) { res.status(404).json({ error: 'Empresa não encontrada.' }); return; }
-      const [historico, documentos, contratos, simulacoes] = await Promise.all([
-        pool.query('SELECT * FROM empresa_historico WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 20', [req.params.id]).catch(() => ({ rows: [] as any[] })),
-        pool.query('SELECT * FROM empresa_documentos WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 20', [req.params.id]).catch(() => ({ rows: [] as any[] })),
-        pool.query('SELECT * FROM contratos WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 10', [req.params.id]).catch(() => ({ rows: [] as any[] })),
-        pool.query('SELECT * FROM simulacoes WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 10', [req.params.id]).catch(() => ({ rows: [] as any[] })),
-      ]);
-      res.json({ empresa: empresa.rows[0], historico: historico.rows, documentos: documentos.rows, contratos: contratos.rows, simulacoes: simulacoes.rows });
-    } catch (err) {
-      console.error('[NEXUS] Erro ao buscar resumo da empresa:', err);
-      res.status(500).json({ error: 'Erro ao buscar resumo da empresa para o Nexus.' });
-    }
-  });
-
-  app.post('/api/nexus/eventos', requireNexusIntegration, async (req: Request, res: Response) => {
-    try {
-      const body = req.body || {};
-      const externalType = String(body.external_type || 'empresa');
-      const externalId = String(body.external_id || '').trim();
-      const evento = String(body.evento || 'nexus.evento');
-      if (!externalId) { res.status(400).json({ error: 'external_id é obrigatório.' }); return; }
-
-      if (externalType === 'empresa') {
-        const empresa = await pool.query('SELECT id FROM empresas WHERE id = $1 LIMIT 1', [externalId]);
-        if (empresa.rows.length === 0) { res.status(404).json({ error: 'Empresa não encontrada.' }); return; }
-        const tarefa = body.tarefa || {};
-        const descricao = [
-          `Nexus: ${evento}`,
-          tarefa?.titulo ? `Tarefa: ${tarefa.titulo}` : null,
-          body?.observacao ? `Observação: ${body.observacao}` : null,
-          body?.progresso ? `Progresso: ${body.progresso.feitos || 0}/${body.progresso.total || 0}` : null,
-          body?.arquivo?.nome_original ? `Arquivo: ${body.arquivo.nome_original}` : null,
-        ].filter(Boolean).join(' | ');
-        await registrarHistoricoEmpresaSeguro(externalId, 'nexus', descricao, 'Nexus Gestão');
-      }
-
-      res.json({ ok: true, evento, external_type: externalType, external_id: externalId });
-    } catch (err) {
-      console.error('[NEXUS] Erro ao registrar evento:', err);
-      res.status(500).json({ error: 'Erro ao registrar evento do Nexus.' });
-    }
-  });
 
   // Qualquer /api não encontrada deve responder JSON, nunca o index.html da SPA.
   app.use('/api', (req: Request, res: Response) => {

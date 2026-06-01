@@ -7,6 +7,35 @@ import { Router, Request, Response } from 'express';
 
 const router = Router();
 
+function normalizeCapitalSocial(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const original = String(value).replace(/R\$/gi, '').replace(/\s/g, '').trim();
+  if (!original) return null;
+  const sign = original.startsWith('-') ? '-' : '';
+  const s = original.replace(/[^0-9.,]/g, '');
+  if (!s) return null;
+  if (s.includes(',')) {
+    const n = Number(sign + s.replace(/\./g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  }
+  if (s.includes('.')) {
+    const parts = s.split('.');
+    const last = parts[parts.length - 1] || '';
+    if (parts.length === 2 && /^\d{1,2}$/.test(last)) {
+      const n = Number(sign + s);
+      return Number.isFinite(n) ? n : null;
+    }
+    const onlyThousands = parts.length > 1 && parts.slice(1).every((part) => /^\d{3}$/.test(part));
+    const normalized = onlyThousands ? parts.join('') : `${parts.slice(0, -1).join('')}.${last}`;
+    const n = Number(sign + normalized);
+    return Number.isFinite(n) ? n : null;
+  }
+  const n = Number(sign + s.replace(/\D/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
+
 /**
  * GET /api/cnpj/:cnpj
  *
@@ -34,7 +63,12 @@ router.get('/:cnpj', async (req: Request, res: Response) => {
       return res.status(502).json({ error: 'BrasilAPI retornou erro. Tente novamente.' });
     }
     const data = await upstream.json();
-    return res.json(data);
+    const capitalNormalizado = normalizeCapitalSocial(data?.capital_social);
+    return res.json({
+      ...data,
+      capital_social: capitalNormalizado ?? data?.capital_social ?? null,
+      dados_fonte: 'brasilapi',
+    });
   } catch (err: unknown) {
     const isTimeout = err instanceof Error && err.name === 'TimeoutError';
     return res.status(502).json({
