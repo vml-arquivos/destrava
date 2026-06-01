@@ -111,6 +111,107 @@ function normalizeBooleanText(value: unknown): boolean | null {
   return null;
 }
 
+
+function normalizeRepresentativeFlag(value: unknown, representativeName?: unknown): string | null {
+  if (representativeName && String(representativeName).trim()) return 'SIM';
+  if (value === true || value === 1 || value === '1') return 'SIM';
+  const text = String(value ?? '').trim().toLowerCase();
+  if (!text) return null;
+  if (['true', 'sim', 's', 'yes', 'representante', 'representante legal'].includes(text)) return 'SIM';
+  return null;
+}
+
+function normalizeSocioApi(raw: AnyRecord, fonte: string): AnyRecord | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const pessoa = raw.pessoa || raw.person || raw.socio || raw.partner || raw;
+  const qualificacao = firstNonEmpty(
+    raw.qualificacao_socio,
+    raw.descricao_qualificacao_socio,
+    raw.qualificacao?.descricao,
+    raw.qualificacao?.nome,
+    raw.qualificacao,
+    raw.role?.text,
+    raw.role?.name,
+    raw.role,
+    raw.cargo,
+    raw.papel
+  );
+  const representante = raw.representante || raw.representative || raw.agent || raw.representante_legal || {};
+  const nomeRepresentante = firstNonEmpty(
+    raw.nome_representante_legal,
+    raw.nome_do_representante,
+    raw.nome_representante,
+    representante?.nome,
+    representante?.name
+  );
+  const documento = firstNonEmpty(
+    raw.cnpj_cpf_do_socio,
+    raw.cnpj_cpf,
+    raw.cpf_cnpj,
+    raw.documento,
+    raw.document,
+    raw.taxId,
+    raw.tax_id,
+    raw.cpf,
+    raw.cnpj,
+    pessoa?.cnpj_cpf_do_socio,
+    pessoa?.taxId,
+    pessoa?.document,
+    pessoa?.cpf,
+    pessoa?.cnpj
+  );
+  const nome = emptyToNull(firstNonEmpty(
+    raw.nome_socio,
+    raw.nome_do_socio,
+    raw.nome,
+    raw.name,
+    raw.razao_social,
+    pessoa?.nome,
+    pessoa?.name,
+    pessoa?.razao_social
+  ));
+  if (!nome) return null;
+
+  return {
+    nome_socio: nome,
+    cnpj_cpf_do_socio: documento ? String(documento).trim() : null,
+    qualificacao_socio: emptyToNull(qualificacao) || 'Sócio',
+    descricao_qualificacao_socio: emptyToNull(qualificacao) || 'Sócio',
+    data_entrada_sociedade: toDate(firstNonEmpty(raw.data_entrada_sociedade, raw.data_entrada, raw.since, raw.inicio, raw.started_at)),
+    pais: emptyToNull(firstNonEmpty(raw.pais?.nome, raw.pais, raw.country, pessoa?.pais?.nome, pessoa?.country)),
+    representante_legal: normalizeRepresentativeFlag(raw.representante_legal, nomeRepresentante),
+    nome_representante_legal: emptyToNull(nomeRepresentante),
+    nome_do_representante: emptyToNull(nomeRepresentante),
+    nome_representante: emptyToNull(nomeRepresentante),
+    qualificacao_representante_legal: emptyToNull(firstNonEmpty(
+      raw.qualificacao_representante_legal,
+      raw.qualificacao_do_representante,
+      raw.qualificacao_representante,
+      representante?.qualificacao?.descricao,
+      representante?.qualificacao,
+      representante?.role?.text,
+      representante?.role?.name,
+      representante?.role
+    )),
+    faixa_etaria: emptyToNull(firstNonEmpty(raw.faixa_etaria, pessoa?.faixa_etaria, raw.ageRange, raw.age_range)),
+    identificador_socio: firstNonEmpty(raw.identificador_socio, raw.tipo_socio, raw.identifier, raw.type),
+    fonte_dados: fonte,
+    dados_extra: raw,
+  };
+}
+
+function normalizeSociosApi(value: unknown, fonte: string): AnyRecord[] {
+  if (!Array.isArray(value)) return [];
+  const normalized = value.map((item) => normalizeSocioApi(item as AnyRecord, fonte)).filter(Boolean) as AnyRecord[];
+  const seen = new Set<string>();
+  return normalized.filter((socio) => {
+    const key = `${String(socio.nome_socio || '').trim().toLowerCase()}|${String(socio.cnpj_cpf_do_socio || '').replace(/\D/g, '')}`;
+    if (!socio.nome_socio || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function cleanPhone(area?: unknown, number?: unknown): string | null {
   const ddd = onlyDigits(area);
   const num = onlyDigits(number);
@@ -185,7 +286,7 @@ function normalizeBrasilApi(data?: AnyRecord | null): AnyRecord {
     descricao_identificador_matriz_filial: emptyToNull(data.descricao_identificador_matriz_filial),
     opcao_pelo_simples: normalizeBooleanText(data.opcao_pelo_simples),
     opcao_pelo_mei: normalizeBooleanText(data.opcao_pelo_mei),
-    qsa: Array.isArray(data.qsa) ? data.qsa : [],
+    qsa: normalizeSociosApi(data.qsa, 'brasilapi'),
     inscricoes_estaduais: normalizeStateRegistrations(firstNonEmpty(data.inscricoes_estaduais, data.registrations, [])),
     inscricao_estadual: firstStateRegistration(normalizeStateRegistrations(firstNonEmpty(data.inscricoes_estaduais, data.registrations, []))),
   };
@@ -238,18 +339,7 @@ function normalizeCnpja(data?: AnyRecord | null): AnyRecord {
     descricao_identificador_matriz_filial: data.head === true ? 'Matriz' : data.head === false ? 'Filial' : null,
     opcao_pelo_simples: normalizeBooleanText(firstNonEmpty(simples.optant, simples.simples, data.optantSimples, data.opcao_pelo_simples)),
     opcao_pelo_mei: normalizeBooleanText(firstNonEmpty(simples.simei, simples.mei, data.optantMei, data.opcao_pelo_mei)),
-    qsa: members.map((m: AnyRecord) => ({
-      nome_socio: firstNonEmpty(m.person?.name, m.name, m.nome_socio),
-      cnpj_cpf_do_socio: onlyDigits(firstNonEmpty(m.person?.taxId, m.taxId, m.document, m.cnpj_cpf_do_socio)),
-      qualificacao_socio: firstNonEmpty(m.role?.text, m.role?.name, m.role, m.qualificacao_socio),
-      descricao_qualificacao_socio: firstNonEmpty(m.role?.text, m.role?.name, m.role, m.descricao_qualificacao_socio),
-      data_entrada_sociedade: toDate(firstNonEmpty(m.since, m.data_entrada_sociedade)),
-      pais: firstNonEmpty(m.person?.country, m.country, m.pais),
-      representante_legal: firstNonEmpty(m.agent?.name, m.representative?.name, m.nome_do_representante) ? 'SIM' : null,
-      nome_do_representante: firstNonEmpty(m.agent?.name, m.representative?.name, m.nome_do_representante),
-      qualificacao_representante_legal: firstNonEmpty(m.agent?.role?.text, m.representative?.role?.text, m.qualificacao_representante_legal),
-      dados_extra: m,
-    })).filter((m: AnyRecord) => m.nome_socio),
+    qsa: normalizeSociosApi(members, 'cnpja_open'),
     inscricoes_estaduais: registrations,
     inscricao_estadual: firstStateRegistration(registrations),
     suframa: Array.isArray(data.suframa) ? data.suframa : [],
@@ -259,7 +349,7 @@ function normalizeCnpja(data?: AnyRecord | null): AnyRecord {
 function normalizeOpenCnpj(data?: AnyRecord | null): AnyRecord {
   if (!data) return {};
   const estabelecimento = data.estabelecimento || data.office || data.empresa || data;
-  const socios = data.socios || data.qsa || data.partners || estabelecimento.socios || [];
+  const socios = firstNonEmpty(data.socios, data.qsa, data.partners, data.quadro_societario, data.sociedade, estabelecimento.socios, estabelecimento.qsa, estabelecimento.partners, []);
   const atividadePrincipal = estabelecimento.atividade_principal || estabelecimento.cnae_principal || data.atividade_principal || {};
   const atividadesSecundarias = estabelecimento.atividades_secundarias || estabelecimento.cnaes_secundarios || data.cnaes_secundarios || [];
   const registrations = normalizeStateRegistrations(firstNonEmpty(data.inscricoes_estaduais, data.registrations, estabelecimento.inscricoes_estaduais, []));
@@ -297,18 +387,7 @@ function normalizeOpenCnpj(data?: AnyRecord | null): AnyRecord {
     opcao_pelo_mei: normalizeBooleanText(firstNonEmpty(data.mei?.optante, data.opcao_pelo_mei)),
     inscricoes_estaduais: registrations,
     inscricao_estadual: firstStateRegistration(registrations),
-    qsa: Array.isArray(socios) ? socios.map((s: AnyRecord) => ({
-      nome_socio: firstNonEmpty(s.nome, s.nome_socio, s.razao_social),
-      cnpj_cpf_do_socio: onlyDigits(firstNonEmpty(s.cpf_cnpj, s.cnpj_cpf_do_socio, s.documento, s.cpf, s.cnpj)),
-      qualificacao_socio: firstNonEmpty(s.qualificacao_socio, s.qualificacao?.descricao, s.cargo, s.papel),
-      descricao_qualificacao_socio: firstNonEmpty(s.qualificacao_socio, s.qualificacao?.descricao, s.cargo, s.papel),
-      data_entrada_sociedade: toDate(firstNonEmpty(s.data_entrada_sociedade, s.data_entrada)),
-      pais: firstNonEmpty(s.pais?.nome, s.pais),
-      representante_legal: firstNonEmpty(s.representante_legal, s.representante?.nome) ? 'SIM' : null,
-      nome_do_representante: firstNonEmpty(s.representante?.nome, s.nome_do_representante),
-      qualificacao_representante_legal: firstNonEmpty(s.representante?.qualificacao, s.qualificacao_representante_legal),
-      dados_extra: s,
-    })).filter((m: AnyRecord) => m.nome_socio) : [],
+    qsa: normalizeSociosApi(socios, 'opencnpj'),
   };
 }
 
@@ -358,15 +437,24 @@ router.get('/:cnpj', async (req: Request, res: Response) => {
   if (ENABLE_OPENCNPJ) {
     const openResult = await fetchJson('opencnpj', `${OPENCNPJ_BASE_URL}/${raw}`);
     results.push(openResult);
-    console.log(`[CNPJ] OpenCNPJ ${raw}: ${openResult.ok ? 'OK' : openResult.error || openResult.status}`);
+    const openQsaCount = normalizeOpenCnpj(openResult.data).qsa?.length || 0;
+    console.log(`[CNPJ] OpenCNPJ ${raw}: ${openResult.ok ? `OK (${openQsaCount} sócio(s))` : openResult.error || openResult.status}`);
   }
 
-  // BrasilAPI é fallback gratuito/compatível. Só consulta quando OpenCNPJ falhar
-  // ou quando OpenCNPJ estiver desabilitado por variável de ambiente.
-  if (!results.some((r) => r.ok && r.data)) {
+  // BrasilAPI é fallback gratuito/compatível. Além de falha total do OpenCNPJ,
+  // também consultamos quando OpenCNPJ responde sem QSA, pois isso era a causa
+  // da aba Sócios ficar vazia mesmo com sócios disponíveis na fonte fallback.
+  const openResult = results.find((r) => r.name === 'opencnpj');
+  const shouldUseBrasilApi =
+    !results.some((r) => r.ok && r.data) ||
+    !openResult?.ok ||
+    (openResult?.ok && (normalizeOpenCnpj(openResult.data).qsa || []).length === 0);
+
+  if (shouldUseBrasilApi) {
     const brasilResult = await fetchJson('brasilapi', `https://brasilapi.com.br/api/cnpj/v1/${raw}`);
     results.push(brasilResult);
-    console.log(`[CNPJ] BrasilAPI ${raw}: ${brasilResult.ok ? 'OK' : brasilResult.error || brasilResult.status}`);
+    const brasilQsaCount = normalizeBrasilApi(brasilResult.data).qsa?.length || 0;
+    console.log(`[CNPJ] BrasilAPI ${raw}: ${brasilResult.ok ? `OK (${brasilQsaCount} sócio(s))` : brasilResult.error || brasilResult.status}`);
   }
 
   const success = results.filter((r) => r.ok && r.data);
@@ -398,7 +486,9 @@ router.get('/:cnpj', async (req: Request, res: Response) => {
     data_sincronizacao: dataSincronizacao,
     ultima_sincronizacao_receita: dataSincronizacao,
     fontes_consulta: fontesConsulta,
-    dados_extra: { fontes_consulta: fontesConsulta },
+    dados_extra: { fontes_consulta: fontesConsulta, qsa_count: merged.qsa?.length || 0 },
+    qsa_count: merged.qsa?.length || 0,
+    qsa_mensagem: (merged.qsa || []).length > 0 ? null : 'Nenhum sócio retornado pelas fontes gratuitas para este CNPJ',
     dados_fontes: {
       brasilapi: brasilRaw,
       opencnpj: opencnpjRaw,

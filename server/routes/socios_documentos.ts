@@ -263,6 +263,44 @@ const SOCIOS_BASE_COLUMNS = new Set([
   'dados_extra',
 ]);
 
+const SOCIOS_MANUAL_PROTECTED_COLUMNS = new Set([
+  'rg',
+  'rg_orgao_emissor',
+  'rg_uf_emissao',
+  'rg_data_emissao',
+  'data_nascimento',
+  'nacionalidade',
+  'estado_civil',
+  'profissao',
+  'email',
+  'telefone',
+  'whatsapp',
+  'cep',
+  'logradouro',
+  'numero',
+  'complemento',
+  'bairro',
+  'cidade',
+  'uf',
+  'conjuge_nome',
+  'conjuge_cpf',
+  'conjuge_rg',
+  'conjuge_data_nasc',
+  'conjuge_profissao',
+  'conjuge_email',
+  'conjuge_telefone',
+  'regime_bens',
+  'cpf_completo_manual',
+  'cpf_validado',
+  'cpf_fonte',
+  'ultima_atualizacao_pessoal',
+]);
+
+function hasValue(value: unknown): boolean {
+  return value !== null && value !== undefined && value !== '';
+}
+
+
 let sociosSchemaReady = false;
 let sociosColumnsCache: Set<string> | null = null;
 
@@ -431,19 +469,28 @@ async function upsertSocioEmpresa(empresaId: string, socio: SocioInput) {
   const nome = String(payload.nome || '').trim();
   const documento = String(payload.cpf_cnpj || '').replace(/\D/g, '');
   const existing = documento
-    ? await pool.query("SELECT * FROM public.socios_empresa WHERE empresa_id=$1 AND regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')=$2 LIMIT 1", [empresaId, documento])
+    ? await pool.query(
+        `SELECT * FROM public.socios_empresa
+         WHERE empresa_id=$1
+           AND (regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')=$2 OR lower(nome)=lower($3))
+         ORDER BY CASE WHEN regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g')=$2 THEN 0 ELSE 1 END
+         LIMIT 1`,
+        [empresaId, documento, nome]
+      )
     : await pool.query('SELECT * FROM public.socios_empresa WHERE empresa_id=$1 AND lower(nome)=lower($2) LIMIT 1', [empresaId, nome]);
 
   if (existing.rows.length === 0) return insertSocioEmpresa(empresaId, socio);
 
   const current = existing.rows[0];
   const updatePayload: Record<string, unknown> = {};
+  const source = String(payload.fonte_dados || '').toLowerCase();
+  const isPublicSync = source.includes('api') || source.includes('cnpj') || source.includes('opencnpj') || source.includes('brasilapi');
   for (const [key, value] of Object.entries(payload)) {
     if (key === 'empresa_id') continue;
     if (!SOCIOS_BASE_COLUMNS.has(key) || !columns.has(key)) continue;
-    // Campos importados por API atualizam apenas quando vierem preenchidos ou quando o campo atual estiver vazio.
-    if (value !== null && value !== undefined && value !== '') updatePayload[key] = value;
-    else if (current[key] === null || current[key] === undefined) updatePayload[key] = value;
+    if (SOCIOS_MANUAL_PROTECTED_COLUMNS.has(key) && hasValue(current[key]) && isPublicSync) continue;
+    if (hasValue(value)) updatePayload[key] = value;
+    else if (!hasValue(current[key])) updatePayload[key] = value;
   }
   const entries = Object.entries(updatePayload);
   if (!entries.length) return current;
@@ -650,7 +697,7 @@ router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
     }
 
     if (inserted.length > 0) {
-      await registrarHistoricoEmpresa(req.params.id, 'socios_importados', `${inserted.length} sócio(s) sincronizado(s) com a Receita Federal.`, (req as any).colaborador?.nome || 'Sistema');
+      await registrarHistoricoEmpresa(req.params.id, 'socios_importados', `${inserted.length} sócio(s) sincronizado(s) com as fontes públicas de CNPJ.`, (req as any).colaborador?.nome || 'Sistema');
     }
     const status = failed.length > 0 ? 207 : 200;
     res.status(status).json({ inserted: inserted.length, socios: inserted, failed });
