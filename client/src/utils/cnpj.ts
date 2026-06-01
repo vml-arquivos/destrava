@@ -117,7 +117,11 @@ export interface CNPJData {
   descricao_tipo_de_logradouro?: string;
   qsa: CNPJSocio[];
   provedor_principal?: string;
+  provedor?: 'opencnpj' | 'brasilapi' | string;
+  data_sincronizacao?: string;
+  ultima_sincronizacao_receita?: string;
   fontes_consulta?: Array<{ name: string; ok: boolean; status?: number; error?: string }>;
+  dados_extra?: { fontes_consulta?: Array<{ name: string; ok: boolean; status?: number; error?: string }>; [key: string]: unknown };
   dados_fontes?: Record<string, unknown>;
   inscricoes_estaduais?: unknown[];
   suframa?: unknown[];

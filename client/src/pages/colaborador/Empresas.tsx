@@ -462,10 +462,12 @@ export default function Empresas() {
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [selecionada, setSelecionada] = useState<Empresa | null>(null);
   const [showDetail, setShowDetail] = useState(false); // mobile toggle
-  const [abaAtiva, setAbaAtiva] = useState<"visao_geral" | "socios" | "followup" | "historico" | "documentos" | "simulacoes" | "contratos">("visao_geral");
+  const [abaAtiva, setAbaAtiva] = useState<"visao_geral" | "socios" | "contrato_social" | "followup" | "historico" | "documentos" | "simulacoes" | "contratos">("visao_geral");
   const [followups, setFollowups] = useState<EmpresaFollowup[]>([]);
   const [historico, setHistorico] = useState<EmpresaHistorico[]>([]);
   const [documentos, setDocumentos] = useState<EmpresaDocumento[]>([]);
+  const [contratosSociais, setContratosSociais] = useState<any[]>([]);
+  const [enviandoContratoSocial, setEnviandoContratoSocial] = useState(false);
   const [sociosEmpresa, setSociosEmpresa] = useState<any[]>([]);
   const [simulacoesEmpresa, setSimulacoesEmpresa] = useState<any[]>([]);
   const [contratosEmpresa, setContratosEmpresa] = useState<any[]>([]);
@@ -525,6 +527,50 @@ export default function Empresas() {
     }
   };
 
+  const atualizarCpfManualSocio = async (socio: any, cpfCompleto: string) => {
+    if (!selecionada?.id || !socio?.id) return;
+    try {
+      const atualizado = await apiFetch(`/api/empresas/${selecionada.id}/socios/${socio.id}/cpf-manual`, {
+        method: 'PUT',
+        body: JSON.stringify({ cpf_completo: cpfCompleto, validado: true }),
+      });
+      setSociosEmpresa(prev => prev.map((s: any) => s.id === atualizado.id ? atualizado : s));
+      toast.success('CPF completo validado e salvo');
+    } catch (err: any) {
+      toast.error(err?.message || 'CPF inválido ou erro ao salvar');
+    }
+  };
+
+  const enviarContratoSocial = async (file: File) => {
+    if (!selecionada?.id) return;
+    if (file.type !== 'application/pdf') { toast.error('Envie apenas PDF.'); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error('PDF acima de 10MB.'); return; }
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      setEnviandoContratoSocial(true);
+      await apiFetch(`/api/empresas/${selecionada.id}/contrato-social/upload`, { method: 'POST', body: fd, headers: {} });
+      const lista = await apiFetch(`/api/empresas/${selecionada.id}/contrato-social`).catch(() => []);
+      setContratosSociais(Array.isArray(lista) ? lista : []);
+      toast.success('Contrato social enviado.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao enviar contrato social.');
+    } finally {
+      setEnviandoContratoSocial(false);
+    }
+  };
+
+  const removerContratoSocial = async (id: string) => {
+    if (!selecionada?.id || !confirm('Apagar este contrato social?')) return;
+    try {
+      await apiFetch(`/api/empresas/${selecionada.id}/contrato-social/${id}`, { method: 'DELETE' });
+      setContratosSociais(prev => prev.filter((c: any) => c.id !== id));
+      toast.success('Contrato social removido.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao remover contrato social.');
+    }
+  };
+
   // ── Colaboradores ──────────────────────────────────────────────────────────
   useEffect(() => {
     apiFetch("/api/colaboradores/para-empresa")
@@ -564,20 +610,22 @@ export default function Empresas() {
   useEffect(() => {
     if (!selecionada) return;
     setAbaAtiva("visao_geral");
-    setFollowups([]); setHistorico([]); setDocumentos([]); setSociosEmpresa([]);
+    setFollowups([]); setHistorico([]); setDocumentos([]); setContratosSociais([]); setSociosEmpresa([]);
     setSimulacoesEmpresa([]); setContratosEmpresa([]);
     setLoadingDetalhe(true);
     Promise.all([
       apiFetch(`/api/empresas/${selecionada.id}/followups`).catch(() => []),
       apiFetch(`/api/empresas/${selecionada.id}/historico`).catch(() => []),
       apiFetch(`/api/empresas/${selecionada.id}/documentos`).catch(() => []),
+      apiFetch(`/api/empresas/${selecionada.id}/contrato-social`).catch(() => []),
       apiFetch(`/api/empresas/${selecionada.id}/socios`).catch(() => []),
       apiFetch(`/api/empresas/${selecionada.id}/simulacoes`).catch(() => []),
       apiFetch(`/api/empresas/${selecionada.id}/contratos`).catch(() => []),
-    ]).then(([f, h, d, s, sim, cont]) => {
+    ]).then(([f, h, d, cs, s, sim, cont]) => {
       setFollowups(Array.isArray(f) ? f : []);
       setHistorico(Array.isArray(h) ? h : []);
       setDocumentos(Array.isArray(d) ? d : []);
+      setContratosSociais(Array.isArray(cs) ? cs : []);
       setSociosEmpresa(Array.isArray(s) ? s : []);
       setSimulacoesEmpresa(Array.isArray(sim) ? sim : []);
       setContratosEmpresa(Array.isArray(cont) ? cont : []);
@@ -1253,6 +1301,7 @@ export default function Empresas() {
                       {([
                         { id: "visao_geral",  label: "Visão Geral" },
                         { id: "socios",       label: "Sócios",      badge: sociosEmpresa.length },
+                        { id: "contrato_social", label: "Contrato Social", badge: contratosSociais.length },
                         { id: "followup",     label: "Follow-up",   badge: followups.filter(f=>!f.concluido).length },
                         { id: "simulacoes",   label: "Simulações",  badge: simulacoesEmpresa.length },
                         { id: "contratos",    label: "Contratos",   badge: contratosEmpresa.length },
@@ -1303,6 +1352,11 @@ export default function Empresas() {
 
                         {/* Receita Federal / Junta Comercial */}
                         <SectionCard title="Receita Federal e Junta Comercial" icon={<Briefcase className="w-4 h-4" />}>
+                          <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 flex flex-col gap-1">
+                            <div><b>Fonte de Dados:</b> {selecionada.dados_extra_receita?.provedor_principal || selecionada.dados_extra_receita?.provedor || selecionada.dados_extra_receita?.payload_normalizado?.provedor || 'OpenCNPJ/BrasilAPI'}</div>
+                            <div><b>Última sincronização:</b> {selecionada.ultima_sincronizacao_receita ? new Date(selecionada.ultima_sincronizacao_receita).toLocaleString('pt-BR') : 'Não sincronizada'}</div>
+                            <div className="flex items-start gap-1.5 text-amber-700"><Info className="w-3.5 h-3.5 mt-0.5" /> CPF dos sócios pode vir parcialmente mascarado por sigilo fiscal. Preencha manualmente o CPF completo para contratos e análise de crédito.</div>
+                          </div>
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 py-2">
                             <InfoTile label="Razão Social" value={selecionada.razao_social} icon={<Building2 className="w-3.5 h-3.5" />} />
                             <InfoTile label="Nome Fantasia" value={selecionada.nome_fantasia || "Não informado"} icon={<Star className="w-3.5 h-3.5" />} />
@@ -1600,7 +1654,7 @@ export default function Empresas() {
                                   </div>
 
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Documento</span><b className="text-slate-700 font-mono">{s.cpf_cnpj || 'Não informado'}</b></div>
+                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Documento público</span><b className="text-slate-700 font-mono">{s.cpf_cnpj || 'Não informado'}</b><button onClick={() => { const cpf = prompt('Informe o CPF completo do sócio'); if (cpf) atualizarCpfManualSocio(s, cpf); }} className="block mt-1 text-[11px] font-bold text-blue-600 hover:underline">Informar CPF completo</button></div>
                                     <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Entrada na sociedade</span><b className="text-slate-700">{s.data_entrada_sociedade ? new Date(s.data_entrada_sociedade).toLocaleDateString('pt-BR') : 'Não informado'}</b></div>
                                     <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Estado civil</span><b className="text-slate-700">{s.estado_civil || 'Pendente'}</b></div>
                                     <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Profissão</span><b className="text-slate-700">{s.profissao || 'Pendente'}</b></div>
@@ -1719,6 +1773,47 @@ export default function Empresas() {
                                   </div>
                                   <p className="text-sm text-slate-700 whitespace-pre-wrap">{h.descricao}</p>
                                 </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+
+                    /* ── CONTRATO SOCIAL ── */
+                    : abaAtiva === "contrato_social" ? (
+                      <div className="p-5 fade-in space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-sm font-bold text-slate-700">Contrato Social e Alterações</h3>
+                            <p className="text-xs text-slate-400 mt-0.5">Anexe o contrato social atual, alterações contratuais e registros societários para completar a análise.</p>
+                          </div>
+                          <label className="flex items-center gap-1.5 text-xs font-semibold bg-blue-600 text-white px-3 py-1.5 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors opacity-100">
+                            <Upload className="w-3.5 h-3.5" /> {enviandoContratoSocial ? 'Enviando...' : 'Enviar PDF'}
+                            <input type="file" accept="application/pdf,.pdf" className="hidden" disabled={enviandoContratoSocial} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviarContratoSocial(file); e.currentTarget.value = ''; }} />
+                          </label>
+                        </div>
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 leading-relaxed">
+                          <b>Obrigatório para contratos:</b> contrato social/última alteração, representante assinante, poderes de administração e documentos dos sócios. O sistema mantém histórico de versões enviadas.
+                        </div>
+                        {contratosSociais.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
+                            <FileText className="w-10 h-10 text-slate-200" />
+                            <p className="text-sm text-slate-500">Nenhum contrato social enviado</p>
+                            <p className="text-xs text-slate-400">Envie um PDF de até 10MB.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {contratosSociais.map((doc: any) => (
+                              <div key={doc.id} className="p-4 rounded-xl border border-slate-200 bg-white flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><FileText className="w-5 h-5 text-blue-600" /></div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-bold text-slate-800 truncate">{doc.nome_arquivo}</p>
+                                  <p className="text-xs text-slate-400">Enviado em {doc.data_upload ? new Date(doc.data_upload).toLocaleString('pt-BR') : '-'} • {(Number(doc.tamanho_bytes || 0) / 1024).toFixed(0)} KB</p>
+                                  {doc.numero_registro && <p className="text-xs text-slate-500">Registro: {doc.numero_registro}</p>}
+                                </div>
+                                {doc.url && <a href={doc.url} target="_blank" rel="noreferrer" className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50">Visualizar</a>}
+                                <button onClick={() => removerContratoSocial(doc.id)} className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">Apagar</button>
                               </div>
                             ))}
                           </div>

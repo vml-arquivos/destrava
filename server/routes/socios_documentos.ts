@@ -1,4 +1,8 @@
 import { Router, Request, Response } from 'express';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
 import pkg from 'pg';
 import { auth } from '../middleware/auth';
 
@@ -12,6 +16,36 @@ const pool = new Pool({
 });
 
 const router = Router();
+
+const uploadContratoSocial = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/pdf') cb(null, true);
+    else cb(new Error('Apenas PDF é permitido para contrato social'));
+  },
+});
+
+function onlyDigits(value: unknown): string {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function validarCpf(cpfInput: unknown): boolean {
+  const cpf = onlyDigits(cpfInput);
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+  const calc = (base: string, factor: number) => {
+    let total = 0;
+    for (const digit of base) total += Number(digit) * factor--;
+    const rest = (total * 10) % 11;
+    return rest === 10 ? 0 : rest;
+  };
+  return calc(cpf.slice(0, 9), 10) === Number(cpf[9]) && calc(cpf.slice(0, 10), 11) === Number(cpf[10]);
+}
+
+function validarRegimeBens(value: unknown): boolean {
+  if (!value) return true;
+  return ['comunhao_universal', 'comunhao_parcial', 'separacao_bens', 'participacao_aquestos', 'separacao_obrigatoria', 'outro'].includes(String(value));
+}
 
 
 function isGestorCargo(cargo: string | null | undefined): boolean {
@@ -219,6 +253,13 @@ const SOCIOS_BASE_COLUMNS = new Set([
   'pep',
   'ativo',
   'fonte_dados',
+  'cpf_completo_manual',
+  'cpf_validado',
+  'cpf_fonte',
+  'ultima_atualizacao_pessoal',
+  'assinante_contrato',
+  'pendencias_contrato',
+  'cadastro_completo_contrato',
   'dados_extra',
 ]);
 
@@ -276,6 +317,13 @@ async function ensureSociosEmpresaSchema(): Promise<Set<string>> {
       ADD COLUMN IF NOT EXISTS pep BOOLEAN DEFAULT false,
       ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true,
       ADD COLUMN IF NOT EXISTS fonte_dados TEXT,
+      ADD COLUMN IF NOT EXISTS cpf_completo_manual VARCHAR(14),
+      ADD COLUMN IF NOT EXISTS cpf_validado BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS cpf_fonte VARCHAR(50) DEFAULT 'opencnpj',
+      ADD COLUMN IF NOT EXISTS ultima_atualizacao_pessoal TIMESTAMPTZ DEFAULT NOW(),
+      ADD COLUMN IF NOT EXISTS assinante_contrato BOOLEAN DEFAULT false,
+      ADD COLUMN IF NOT EXISTS pendencias_contrato TEXT[] DEFAULT ARRAY[]::TEXT[],
+      ADD COLUMN IF NOT EXISTS cadastro_completo_contrato BOOLEAN DEFAULT false,
       ADD COLUMN IF NOT EXISTS dados_extra JSONB DEFAULT '{}'::jsonb`);
     await pool.query('CREATE INDEX IF NOT EXISTS idx_socios_empresa_cpf ON public.socios_empresa(cpf_cnpj)');
     sociosSchemaReady = true;
@@ -485,6 +533,55 @@ function pgErrorDetails(err: unknown) {
   };
 }
 
+
+async function ensureSociosConjugeSchema(): Promise<void> {
+  await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+  await pool.query(`CREATE TABLE IF NOT EXISTS public.socios_conjuge (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    socio_id UUID NOT NULL REFERENCES public.socios_empresa(id) ON DELETE CASCADE,
+    empresa_id UUID NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
+    conjuge_nome VARCHAR(255),
+    conjuge_cpf VARCHAR(14),
+    regime_bens VARCHAR(100),
+    data_casamento DATE,
+    estado_civil VARCHAR(50),
+    fonte VARCHAR(50) DEFAULT 'manual',
+    criado_por UUID NULL REFERENCES public.colaboradores(id) ON DELETE SET NULL,
+    atualizado_por UUID NULL REFERENCES public.colaboradores(id) ON DELETE SET NULL,
+    data_insercao TIMESTAMPTZ DEFAULT NOW(),
+    ultima_atualizacao TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_socios_conjuge_socio_id ON public.socios_conjuge(socio_id)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_socios_conjuge_empresa_id ON public.socios_conjuge(empresa_id)');
+}
+
+async function ensureContratosSociaisSchema(): Promise<void> {
+  await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+  await pool.query(`CREATE TABLE IF NOT EXISTS public.empresas_contratos_sociais (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id UUID NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
+    nome_arquivo VARCHAR(255) NOT NULL,
+    caminho_arquivo VARCHAR(500) NOT NULL,
+    url VARCHAR(500),
+    tamanho_bytes INT,
+    tipo_mime VARCHAR(50) DEFAULT 'application/pdf',
+    data_assinatura DATE,
+    numero_registro VARCHAR(50),
+    data_registro DATE,
+    numero_alteracoes INT DEFAULT 0,
+    ultima_alteracao DATE,
+    descricao TEXT,
+    uploaded_by UUID NULL REFERENCES public.colaboradores(id) ON DELETE SET NULL,
+    data_upload TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_contratos_sociais_empresa_id ON public.empresas_contratos_sociais(empresa_id)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_contratos_sociais_data_upload ON public.empresas_contratos_sociais(data_upload)');
+}
+
 // ─── SOCIOS_EMPRESA ──────────────────────────────────────────────────────────
 
 // GET /api/empresas/:id/socios
@@ -591,6 +688,115 @@ router.put('/:id/socios/:sid', auth, async (req: Request, res: Response) => {
   }
 });
 
+
+// PUT /api/empresas/:id/socios/:sid/cpf-manual
+router.put('/:id/socios/:sid/cpf-manual', auth, async (req: Request, res: Response) => {
+  try {
+    if (!(await requireEmpresaAccess(req, res))) return;
+    await ensureSociosEmpresaSchema();
+    const cpf = onlyDigits(req.body?.cpf_completo);
+    if (!validarCpf(cpf)) {
+      res.status(400).json({ error: 'CPF inválido. Verifique os dígitos informados.' });
+      return;
+    }
+    const validado = req.body?.validado !== false;
+    const { rows } = await pool.query(
+      `UPDATE public.socios_empresa
+          SET cpf_cnpj=$1,
+              cpf_completo_manual=$1,
+              cpf_validado=$2,
+              cpf_fonte='manual',
+              ultima_atualizacao_pessoal=NOW(),
+              updated_at=NOW()
+        WHERE id=$3 AND empresa_id=$4
+        RETURNING *`,
+      [cpf, validado, req.params.sid, req.params.id]
+    );
+    if (rows.length === 0) { res.status(404).json({ error: 'Sócio não encontrado' }); return; }
+    await registrarHistoricoEmpresa(req.params.id, 'cpf_socio_atualizado', `CPF completo do sócio ${rows[0].nome} atualizado manualmente.`, (req as any).colaborador?.nome || 'Sistema');
+    res.json(enrichSocioRow(rows[0]));
+  } catch (err) {
+    console.error('[PUT /api/empresas/:id/socios/:sid/cpf-manual]', pgErrorDetails(err));
+    res.status(500).json({ error: 'Erro ao atualizar CPF manual', details: pgErrorDetails(err) });
+  }
+});
+
+// GET /api/empresas/:id/socios/:sid/conjuge
+router.get('/:id/socios/:sid/conjuge', auth, async (req: Request, res: Response) => {
+  try {
+    if (!(await requireEmpresaAccess(req, res))) return;
+    await ensureSociosConjugeSchema();
+    const { rows } = await pool.query('SELECT * FROM public.socios_conjuge WHERE empresa_id=$1 AND socio_id=$2 ORDER BY created_at DESC', [req.params.id, req.params.sid]);
+    res.json(rows);
+  } catch (err) {
+    console.error('[GET /api/empresas/:id/socios/:sid/conjuge]', pgErrorDetails(err));
+    res.status(500).json({ error: 'Erro ao listar cônjuge', details: pgErrorDetails(err) });
+  }
+});
+
+// POST /api/empresas/:id/socios/:sid/conjuge
+router.post('/:id/socios/:sid/conjuge', auth, async (req: Request, res: Response) => {
+  try {
+    if (!(await requireEmpresaAccess(req, res))) return;
+    await ensureSociosConjugeSchema();
+    const cpf = req.body?.conjuge_cpf ? onlyDigits(req.body.conjuge_cpf) : null;
+    if (cpf && !validarCpf(cpf)) { res.status(400).json({ error: 'CPF do cônjuge inválido' }); return; }
+    if (!validarRegimeBens(req.body?.regime_bens)) { res.status(400).json({ error: 'Regime de bens inválido' }); return; }
+    const colab = (req as any).colaborador || (req as any).user;
+    const { rows } = await pool.query(
+      `INSERT INTO public.socios_conjuge
+        (empresa_id, socio_id, conjuge_nome, conjuge_cpf, regime_bens, data_casamento, estado_civil, fonte, criado_por, atualizado_por)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'manual',$8,$8)
+       RETURNING *`,
+      [req.params.id, req.params.sid, req.body?.conjuge_nome || null, cpf, req.body?.regime_bens || null, req.body?.data_casamento || null, req.body?.estado_civil || null, colab?.id || null]
+    );
+    await registrarHistoricoEmpresa(req.params.id, 'conjuge_socio_criado', 'Dados de cônjuge do sócio cadastrados manualmente.', colab?.nome || 'Sistema');
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('[POST /api/empresas/:id/socios/:sid/conjuge]', pgErrorDetails(err));
+    res.status(500).json({ error: 'Erro ao cadastrar cônjuge', details: pgErrorDetails(err) });
+  }
+});
+
+// PUT /api/empresas/:id/socios/:sid/conjuge/:cid
+router.put('/:id/socios/:sid/conjuge/:cid', auth, async (req: Request, res: Response) => {
+  try {
+    if (!(await requireEmpresaAccess(req, res))) return;
+    await ensureSociosConjugeSchema();
+    const cpf = req.body?.conjuge_cpf ? onlyDigits(req.body.conjuge_cpf) : null;
+    if (cpf && !validarCpf(cpf)) { res.status(400).json({ error: 'CPF do cônjuge inválido' }); return; }
+    if (!validarRegimeBens(req.body?.regime_bens)) { res.status(400).json({ error: 'Regime de bens inválido' }); return; }
+    const colab = (req as any).colaborador || (req as any).user;
+    const { rows } = await pool.query(
+      `UPDATE public.socios_conjuge
+          SET conjuge_nome=$1, conjuge_cpf=$2, regime_bens=$3, data_casamento=$4,
+              estado_civil=$5, atualizado_por=$6, ultima_atualizacao=NOW(), updated_at=NOW()
+        WHERE id=$7 AND empresa_id=$8 AND socio_id=$9
+        RETURNING *`,
+      [req.body?.conjuge_nome || null, cpf, req.body?.regime_bens || null, req.body?.data_casamento || null, req.body?.estado_civil || null, colab?.id || null, req.params.cid, req.params.id, req.params.sid]
+    );
+    if (rows.length === 0) { res.status(404).json({ error: 'Cônjuge não encontrado' }); return; }
+    await registrarHistoricoEmpresa(req.params.id, 'conjuge_socio_atualizado', 'Dados de cônjuge do sócio atualizados.', colab?.nome || 'Sistema');
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('[PUT /api/empresas/:id/socios/:sid/conjuge/:cid]', pgErrorDetails(err));
+    res.status(500).json({ error: 'Erro ao atualizar cônjuge', details: pgErrorDetails(err) });
+  }
+});
+
+// DELETE /api/empresas/:id/socios/:sid/conjuge/:cid
+router.delete('/:id/socios/:sid/conjuge/:cid', auth, async (req: Request, res: Response) => {
+  try {
+    if (!(await requireEmpresaAccess(req, res))) return;
+    await ensureSociosConjugeSchema();
+    await pool.query('DELETE FROM public.socios_conjuge WHERE id=$1 AND empresa_id=$2 AND socio_id=$3', [req.params.cid, req.params.id, req.params.sid]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[DELETE /api/empresas/:id/socios/:sid/conjuge/:cid]', pgErrorDetails(err));
+    res.status(500).json({ error: 'Erro ao remover cônjuge', details: pgErrorDetails(err) });
+  }
+});
+
 // DELETE /api/empresas/:id/socios/:sid
 router.delete('/:id/socios/:sid', auth, async (req: Request, res: Response) => {
   try {
@@ -685,6 +891,66 @@ router.delete('/:id/ged/:did', auth, async (req: Request, res: Response) => {
   } catch (err) {
     console.error('[DELETE /api/empresas/:id/ged/:did]', err);
     res.status(500).json({ error: 'Erro ao remover documento' });
+  }
+});
+
+
+// ─── CONTRATO SOCIAL ────────────────────────────────────────────────────────
+router.get('/:id/contrato-social', auth, async (req: Request, res: Response) => {
+  try {
+    if (!(await requireEmpresaAccess(req, res))) return;
+    await ensureContratosSociaisSchema();
+    const { rows } = await pool.query('SELECT * FROM public.empresas_contratos_sociais WHERE empresa_id=$1 ORDER BY data_upload DESC', [req.params.id]);
+    res.json(rows);
+  } catch (err) {
+    console.error('[GET /api/empresas/:id/contrato-social]', pgErrorDetails(err));
+    res.status(500).json({ error: 'Erro ao listar contratos sociais', details: pgErrorDetails(err) });
+  }
+});
+
+router.post('/:id/contrato-social/upload', auth, uploadContratoSocial.single('file'), async (req: Request, res: Response) => {
+  try {
+    if (!(await requireEmpresaAccess(req, res))) return;
+    await ensureContratosSociaisSchema();
+    const file = req.file;
+    if (!file) { res.status(400).json({ error: 'Arquivo PDF é obrigatório' }); return; }
+    if (file.mimetype !== 'application/pdf') { res.status(400).json({ error: 'Apenas PDF é permitido' }); return; }
+
+    const dataDir = process.env.DATA_DIR || '/data';
+    const uploadDir = path.join(dataDir, 'uploads', 'contratos-sociais', req.params.id);
+    await fs.promises.mkdir(uploadDir, { recursive: true });
+    const safeName = path.basename(file.originalname || 'contrato_social.pdf').replace(/[^a-zA-Z0-9_.-]+/g, '_').slice(0, 120);
+    const fileName = `${Date.now()}_${crypto.randomUUID()}_${safeName.endsWith('.pdf') ? safeName : `${safeName}.pdf`}`;
+    const filePath = path.join(uploadDir, fileName);
+    await fs.promises.writeFile(filePath, file.buffer);
+    const url = `/uploads/contratos-sociais/${req.params.id}/${fileName}`;
+    const colab = (req as any).colaborador || (req as any).user;
+    const { rows } = await pool.query(
+      `INSERT INTO public.empresas_contratos_sociais
+        (empresa_id, nome_arquivo, caminho_arquivo, url, tamanho_bytes, tipo_mime, data_assinatura, numero_registro, data_registro, numero_alteracoes, ultima_alteracao, descricao, uploaded_by)
+       VALUES ($1,$2,$3,$4,$5,'application/pdf',$6,$7,$8,$9,$10,$11,$12)
+       RETURNING *`,
+      [req.params.id, file.originalname || fileName, filePath, url, file.size, req.body?.data_assinatura || null, req.body?.numero_registro || null, req.body?.data_registro || null, req.body?.numero_alteracoes || 0, req.body?.ultima_alteracao || null, req.body?.descricao || null, colab?.id || null]
+    );
+    await registrarHistoricoEmpresa(req.params.id, 'contrato_social_upload', `Contrato social enviado: ${file.originalname || fileName}`, colab?.nome || 'Sistema');
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('[POST /api/empresas/:id/contrato-social/upload]', pgErrorDetails(err));
+    res.status(500).json({ error: 'Erro ao enviar contrato social', details: pgErrorDetails(err) });
+  }
+});
+
+router.delete('/:id/contrato-social/:cid', auth, async (req: Request, res: Response) => {
+  try {
+    if (!(await requireEmpresaAccess(req, res))) return;
+    await ensureContratosSociaisSchema();
+    const { rows } = await pool.query('DELETE FROM public.empresas_contratos_sociais WHERE id=$1 AND empresa_id=$2 RETURNING caminho_arquivo', [req.params.cid, req.params.id]);
+    const filePath = rows[0]?.caminho_arquivo;
+    if (filePath && fs.existsSync(filePath)) await fs.promises.unlink(filePath).catch(() => {});
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[DELETE /api/empresas/:id/contrato-social/:cid]', pgErrorDetails(err));
+    res.status(500).json({ error: 'Erro ao remover contrato social', details: pgErrorDetails(err) });
   }
 });
 

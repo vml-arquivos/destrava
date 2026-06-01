@@ -8835,8 +8835,9 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
-  // Servir arquivos de contratos gerados
+  // Servir arquivos de contratos gerados e contratos sociais enviados
   app.use('/uploads/contratos', express.static(path.resolve('uploads', 'contratos')));
+  app.use('/uploads/contratos-sociais', express.static(path.join(process.env.DATA_DIR || '/data', 'uploads', 'contratos-sociais')));
 
   app.patch('/api/me', auth, async (req: Request, res: Response) => {
     try {

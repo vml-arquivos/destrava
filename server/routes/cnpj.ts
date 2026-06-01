@@ -9,7 +9,7 @@ const router = Router();
 type AnyRecord = Record<string, any>;
 
 type ProviderResult = {
-  name: 'brasilapi' | 'cnpja_open' | 'opencnpj';
+  name: 'brasilapi' | 'opencnpj' | 'cnpja_open';
   ok: boolean;
   status?: number;
   data?: AnyRecord | null;
@@ -17,9 +17,8 @@ type ProviderResult = {
 };
 
 const REQUEST_TIMEOUT_MS = Number(process.env.CNPJ_API_TIMEOUT_MS || 8_000);
-const ENABLE_OPEN_CNPJA = process.env.CNPJ_ENABLE_OPEN_CNPJA !== 'false';
 const ENABLE_OPENCNPJ = process.env.CNPJ_ENABLE_OPENCNPJ !== 'false';
-const OPENCNPJ_BASE_URL = (process.env.OPENCNPJ_BASE_URL || 'https://opencnpj.org').replace(/\/$/, '');
+const OPENCNPJ_BASE_URL = (process.env.OPENCNPJ_BASE_URL || 'https://api.opencnpj.org').replace(/\/$/, '');
 
 function onlyDigits(value: unknown): string {
   return String(value || '').replace(/\D/g, '');
@@ -120,21 +119,39 @@ function cleanPhone(area?: unknown, number?: unknown): string | null {
   return full || null;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function fetchJson(name: ProviderResult['name'], url: string): Promise<ProviderResult> {
-  try {
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'destrava-credito/1.0', Accept: 'application/json' },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
+  const backoffs = [0, 1000, 2000, 4000];
+  let lastError = 'erro de consulta';
+  let lastStatus: number | undefined;
 
-    if (response.status === 404) return { name, ok: false, status: 404, error: 'CNPJ não encontrado' };
-    if (!response.ok) return { name, ok: false, status: response.status, error: `HTTP ${response.status}` };
+  for (let attempt = 0; attempt < backoffs.length; attempt += 1) {
+    if (backoffs[attempt] > 0) await sleep(backoffs[attempt]);
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'destrava-credito/1.0', Accept: 'application/json' },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      lastStatus = response.status;
 
-    const data = await response.json();
-    return { name, ok: true, status: response.status, data };
-  } catch (err: any) {
-    return { name, ok: false, error: err?.name === 'TimeoutError' ? 'timeout' : err?.message || 'erro de consulta' };
+      if (response.status === 404) return { name, ok: false, status: 404, error: 'CNPJ não encontrado' };
+      if (!response.ok) {
+        lastError = `HTTP ${response.status}`;
+        if (response.status >= 400 && response.status < 500 && response.status !== 429) break;
+        continue;
+      }
+
+      const data = await response.json();
+      return { name, ok: true, status: response.status, data };
+    } catch (err: any) {
+      lastError = err?.name === 'TimeoutError' ? 'timeout' : err?.message || 'erro de consulta';
+    }
   }
+
+  return { name, ok: false, status: lastStatus, error: lastError };
 }
 
 function normalizeBrasilApi(data?: AnyRecord | null): AnyRecord {
@@ -309,16 +326,16 @@ function mergeArrays(primary: any[], fallback: any[]): any[] {
 
 function mergeNormalized(rawCnpj: string, brasil: AnyRecord, cnpja: AnyRecord, opencnpj: AnyRecord): AnyRecord {
   const merged: AnyRecord = { cnpj: rawCnpj };
-  const keys = new Set([...Object.keys(brasil), ...Object.keys(cnpja), ...Object.keys(opencnpj)]);
+  const keys = new Set([...Object.keys(opencnpj), ...Object.keys(brasil), ...Object.keys(cnpja)]);
 
   for (const key of keys) {
     if (key === 'qsa' || key === 'cnaes_secundarios') continue;
-    // CNPJá geralmente traz estrutura societária/IE/Simples mais rica; BrasilAPI fica como compatibilidade.
-    merged[key] = firstNonEmpty(cnpja[key], brasil[key], opencnpj[key]);
+    // OpenCNPJ é a fonte principal gratuita; BrasilAPI é fallback de compatibilidade.
+    merged[key] = firstNonEmpty(opencnpj[key], brasil[key], cnpja[key]);
   }
 
-  merged.qsa = mergeArrays(cnpja.qsa || [], mergeArrays(brasil.qsa || [], opencnpj.qsa || []));
-  merged.cnaes_secundarios = mergeArrays(cnpja.cnaes_secundarios || [], mergeArrays(brasil.cnaes_secundarios || [], opencnpj.cnaes_secundarios || []));
+  merged.qsa = mergeArrays(opencnpj.qsa || [], mergeArrays(brasil.qsa || [], cnpja.qsa || []));
+  merged.cnaes_secundarios = mergeArrays(opencnpj.cnaes_secundarios || [], mergeArrays(brasil.cnaes_secundarios || [], cnpja.cnaes_secundarios || []));
 
   return merged;
 }
@@ -336,14 +353,22 @@ router.get('/:cnpj', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'CNPJ deve ter 14 dígitos.' });
   }
 
-  const providers: Promise<ProviderResult>[] = [
-    fetchJson('brasilapi', `https://brasilapi.com.br/api/cnpj/v1/${raw}`),
-  ];
+  const results: ProviderResult[] = [];
 
-  if (ENABLE_OPEN_CNPJA) providers.push(fetchJson('cnpja_open', `https://open.cnpja.com/office/${raw}`));
-  if (ENABLE_OPENCNPJ) providers.push(fetchJson('opencnpj', `${OPENCNPJ_BASE_URL}/${raw}`));
+  if (ENABLE_OPENCNPJ) {
+    const openResult = await fetchJson('opencnpj', `${OPENCNPJ_BASE_URL}/${raw}`);
+    results.push(openResult);
+    console.log(`[CNPJ] OpenCNPJ ${raw}: ${openResult.ok ? 'OK' : openResult.error || openResult.status}`);
+  }
 
-  const results = await Promise.all(providers);
+  // BrasilAPI é fallback gratuito/compatível. Só consulta quando OpenCNPJ falhar
+  // ou quando OpenCNPJ estiver desabilitado por variável de ambiente.
+  if (!results.some((r) => r.ok && r.data)) {
+    const brasilResult = await fetchJson('brasilapi', `https://brasilapi.com.br/api/cnpj/v1/${raw}`);
+    results.push(brasilResult);
+    console.log(`[CNPJ] BrasilAPI ${raw}: ${brasilResult.ok ? 'OK' : brasilResult.error || brasilResult.status}`);
+  }
+
   const success = results.filter((r) => r.ok && r.data);
 
   if (success.length === 0) {
@@ -363,13 +388,19 @@ router.get('/:cnpj', async (req: Request, res: Response) => {
   const opencnpj = normalizeOpenCnpj(opencnpjRaw);
   const merged = mergeNormalized(raw, brasil, cnpja, opencnpj);
 
+  const dataSincronizacao = new Date().toISOString();
+  const fontesConsulta = results.map(({ name, ok, status, error }) => ({ name, ok, status, error }));
+
   return res.json({
     ...merged,
-    provedor_principal: success.find((r) => r.name === 'cnpja_open')?.name || success[0].name,
-    fontes_consulta: results.map(({ name, ok, status, error }) => ({ name, ok, status, error })),
+    provedor_principal: success[0].name,
+    provedor: success[0].name,
+    data_sincronizacao: dataSincronizacao,
+    ultima_sincronizacao_receita: dataSincronizacao,
+    fontes_consulta: fontesConsulta,
+    dados_extra: { fontes_consulta: fontesConsulta },
     dados_fontes: {
       brasilapi: brasilRaw,
-      cnpja_open: cnpjaRaw,
       opencnpj: opencnpjRaw,
     },
   });
