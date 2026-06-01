@@ -470,6 +470,7 @@ export default function Empresas() {
   const [enviandoContratoSocial, setEnviandoContratoSocial] = useState(false);
   const [sociosEmpresa, setSociosEmpresa] = useState<any[]>([]);
   const [sociosExpandidos, setSociosExpandidos] = useState<Record<string, boolean>>({});
+  const [consultandoCpfSocioId, setConsultandoCpfSocioId] = useState<string | null>(null);
   const [simulacoesEmpresa, setSimulacoesEmpresa] = useState<any[]>([]);
   const [contratosEmpresa, setContratosEmpresa] = useState<any[]>([]);
   const [loadingDetalhe, setLoadingDetalhe] = useState(false);
@@ -543,6 +544,37 @@ export default function Empresas() {
   };
 
 
+
+
+  const consultarCpfHubSocio = async (socio: any) => {
+    if (!selecionada?.id || !socio?.id) return;
+    const atual = String(socio.cpf_completo_manual || socio.cpf_cnpj || '').replace(/\D/g, '');
+    let cpf = atual.length === 11 ? atual : '';
+    if (!cpf) {
+      const informado = prompt('Informe o CPF completo do sócio para consultar a CPFHub.io');
+      cpf = String(informado || '').replace(/\D/g, '');
+    }
+    if (cpf.length !== 11) {
+      toast.error('Informe um CPF completo com 11 dígitos para consultar a CPFHub.io.');
+      return;
+    }
+    try {
+      setConsultandoCpfSocioId(socio.id);
+      const res = await apiFetch(`/api/empresas/${selecionada.id}/socios/${socio.id}/enriquecer-cpf`, {
+        method: 'POST',
+        body: JSON.stringify({ cpf }),
+      });
+      const atualizado = res?.socio || res;
+      if (atualizado?.id) {
+        setSociosEmpresa(prev => prev.map((s: any) => s.id === atualizado.id ? atualizado : s));
+      }
+      toast.success('Dados cadastrais do CPF consultados e salvos via CPFHub.io.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao consultar CPFHub.io para este sócio');
+    } finally {
+      setConsultandoCpfSocioId(null);
+    }
+  };
 
   const atualizarSocioIndividual = async (socio: any) => {
     if (!selecionada?.id || !socio?.id || !selecionada.cnpj || sincronizando) return;
@@ -1691,6 +1723,7 @@ export default function Empresas() {
                                         {s.qualificacao_socio && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{s.qualificacao_socio}</span>}
                                         {s.representante_legal && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Representante legal</span>}
                                         {s.fonte_dados && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 border border-slate-200">Fonte: {s.fonte_dados}</span>}
+                                        {s.cpf_fonte === 'cpfhub' && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200">CPFHub validado</span>}
                                         <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${completo ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
                                           {completo ? 'Completo para contrato' : `${pendencias.length} pendência(s)`}
                                         </span>
@@ -1700,7 +1733,7 @@ export default function Empresas() {
                                   </div>
 
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Documento público</span><b className="text-slate-700 font-mono">{s.cpf_cnpj || 'Não informado'}</b><button onClick={() => { const cpf = prompt('Informe o CPF completo do sócio'); if (cpf) atualizarCpfManualSocio(s, cpf); }} className="block mt-1 text-[11px] font-bold text-blue-600 hover:underline">Informar CPF completo</button></div>
+                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Documento público</span><b className="text-slate-700 font-mono">{s.cpf_cnpj || 'Não informado'}</b><button onClick={() => { const cpf = prompt('Informe o CPF completo do sócio'); if (cpf) atualizarCpfManualSocio(s, cpf); }} className="block mt-1 text-[11px] font-bold text-blue-600 hover:underline">Informar CPF completo</button><button onClick={() => consultarCpfHubSocio(s)} disabled={consultandoCpfSocioId === s.id} className="block mt-1 text-[11px] font-bold text-violet-600 hover:underline disabled:opacity-50">{consultandoCpfSocioId === s.id ? 'Consultando CPFHub...' : 'Consultar CPFHub'}</button></div>
                                     <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Entrada na sociedade</span><b className="text-slate-700">{s.data_entrada_sociedade ? new Date(s.data_entrada_sociedade).toLocaleDateString('pt-BR') : 'Não informado'}</b></div>
                                     <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">País</span><b className="text-slate-700">{s.pais || 'Não informado'}</b></div>
                                     <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Representante legal</span><b className="text-slate-700">{s.nome_representante || (s.representante_legal ? 'Sim' : 'Não informado')}</b></div>
@@ -1709,6 +1742,8 @@ export default function Empresas() {
                                   {sociosExpandidos[s.id] && (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs border-t border-slate-100 pt-3">
                                       <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Qualificação representante</span><b className="text-slate-700">{s.qualificacao_representante || 'Não informado'}</b></div>
+                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Nascimento</span><b className="text-slate-700">{s.data_nascimento ? new Date(s.data_nascimento).toLocaleDateString('pt-BR') : 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Gênero</span><b className="text-slate-700">{s.genero || s.dados_extra?.cpfhub?.genero || 'Pendente'}</b></div>
                                       <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Estado civil</span><b className="text-slate-700">{s.estado_civil || 'Pendente'}</b></div>
                                       <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Profissão</span><b className="text-slate-700">{s.profissao || 'Pendente'}</b></div>
                                       <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">RG</span><b className="text-slate-700">{s.rg || 'Pendente'}</b></div>
@@ -1722,6 +1757,7 @@ export default function Empresas() {
                                   <div className="flex flex-wrap gap-2 pt-1">
                                     <button onClick={() => abrirEdicaoSocio(s)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><Edit2 className="w-3 h-3" /> Editar</button>
                                     <button onClick={() => atualizarSocioIndividual(s)} disabled={sincronizando} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50"><RotateCw className="w-3 h-3" /> Atualizar</button>
+                                    <button onClick={() => consultarCpfHubSocio(s)} disabled={consultandoCpfSocioId === s.id} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 disabled:opacity-50"><Zap className="w-3 h-3" /> {consultandoCpfSocioId === s.id ? 'Consultando...' : 'CPFHub'}</button>
                                     <button onClick={() => apagarSocio(s)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100"><Trash2 className="w-3 h-3" /> Apagar</button>
                                   </div>
 
