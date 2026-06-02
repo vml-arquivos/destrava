@@ -1037,6 +1037,40 @@ export default function AcompanhamentoBancario() {
     }
   };
 
+  // ─── Sincronizar dados cadastrais do acompanhamento com o cadastro oficial da empresa ──
+  const sincronizarCadastroEmpresa = async (row: Acompanhamento) => {
+    if (!row?.id) return;
+    const ok = confirm(
+      "Atualizar os dados cadastrais deste acompanhamento com o cadastro oficial da empresa? Nome, CNPJ, telefone, WhatsApp, e-mail e faturamento serão sincronizados."
+    );
+    if (!ok) return;
+
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/acompanhamentos-bancarios/${row.id}/sincronizar-cadastro`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({}),
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        alert(payload?.error || "Erro ao atualizar os dados cadastrais do acompanhamento.");
+        return;
+      }
+
+      alert(payload?.message || "Dados cadastrais atualizados com sucesso.");
+      await fetchData();
+
+      if (detalhe?.id === row.id) {
+        const detalheResp = await fetch(`/api/acompanhamentos-bancarios/${row.id}`, { headers: authHeaders() });
+        if (detalheResp.ok) setDetalhe(await detalheResp.json());
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // ─── Salvar atualização semanal / edição de semana já salva ──────────────────
   const salvarAtualizacao = async () => {
     if (!updOpen?.id) return;
@@ -1710,9 +1744,15 @@ export default function AcompanhamentoBancario() {
           onClick={() => abrirEditarAcompanhamento(row)}
         >Editar</button>
         <button
+          className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
+          disabled={saving}
+          onClick={() => sincronizarCadastroEmpresa(row)}
+          title="Puxa para este acompanhamento os mesmos dados cadastrais já atualizados no módulo Empresas"
+        >Atualizar cadastro</button>
+        <button
           className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
           onClick={() => abrirAtualizacao(row)}
-        >Atualizar</button>
+        >Atualizar semana</button>
         <button
           className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
           onClick={() => adicionarOutroBanco(row)}

@@ -331,7 +331,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
     : 12;
   const sociosAssinantes = Array.isArray(d.socios_assinantes) ? d.socios_assinantes.filter(s => nomeSignatario(s)) : [];
   const primeiroSocioAssinante = sociosAssinantes[0];
-  const representantePrincipalContratante: SignatarioContratanteAssessoria = {
+  const representantePrincipalContratante = {
     nome: d.empresa_representante || primeiroSocioAssinante?.nome || '',
     cpf: d.empresa_cpf_representante || primeiroSocioAssinante?.cpf,
     cargo: 'Representante legal',

@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { Bell, Clock, AlertTriangle, CheckCircle2, X, ExternalLink } from "lucide-react";
-import { apiFetch } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
@@ -42,11 +41,11 @@ export default function NotificacoesFollowup() {
     setCarregando(true);
     try {
       const [resAtrasados, resHoje] = await Promise.all([
-        apiFetch("/api/leads/atrasados").catch(() => null),
-        apiFetch("/api/leads/hoje").catch(() => null),
+        fetch("/api/leads/atrasados", { credentials: "include" }),
+        fetch("/api/leads/hoje", { credentials: "include" }),
       ]);
-      if (Array.isArray(resAtrasados)) setAtrasados(resAtrasados);
-      if (Array.isArray(resHoje)) setHoje(resHoje);
+      if (resAtrasados.ok) setAtrasados(await resAtrasados.json());
+      if (resHoje.ok) setHoje(await resHoje.json());
     } catch {
       // silencioso
     } finally {

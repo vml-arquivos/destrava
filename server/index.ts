@@ -101,7 +101,7 @@ async function processarEmpresaDaSimulacao(
 
   if (cleanCnpj && cleanCnpj.length >= 11) {
     const res = await client.query(
-      `SELECT id FROM empresas WHERE regexp_replace(cnpj, '\\D', '', 'g') = $1 LIMIT 1`,
+      `SELECT id FROM empresas WHERE regexp_replace(cnpj, '[^0-9]', '', 'g') = $1 LIMIT 1`,
       [cleanCnpj]
     );
     if (res.rows.length > 0) return res.rows[0].id;
@@ -111,7 +111,7 @@ async function processarEmpresaDaSimulacao(
     const res = await client.query(
       `SELECT id FROM empresas 
        WHERE lower(trim(razao_social)) = lower($1) 
-       AND regexp_replace(telefone, '\\D', '', 'g') = $2 LIMIT 1`,
+       AND regexp_replace(telefone, '[^0-9]', '', 'g') = $2 LIMIT 1`,
       [cleanNome, cleanPhone]
     );
     if (res.rows.length > 0) return res.rows[0].id;
@@ -311,7 +311,7 @@ async function existeEmpresaComCnpj(cnpj: string, ignorarId?: string): Promise<b
   if (ignorarId) { params.push(ignorarId); whereId = ` AND id <> $${params.length}`; }
   const { rows } = await pool.query(
     `SELECT 1 FROM empresas
-      WHERE regexp_replace(COALESCE(cnpj,''), '\\D', '', 'g') = $1
+      WHERE regexp_replace(COALESCE(cnpj,''), '[^0-9]', '', 'g') = $1
         AND COALESCE(arquivado_por_duplicidade, false) = false
         ${whereId}
       LIMIT 1`,
@@ -326,7 +326,7 @@ async function existeClientePFComCpf(cpf: string, ignorarId?: string): Promise<b
   if (ignorarId) { params.push(ignorarId); whereId = ` AND id <> $${params.length}`; }
   const { rows } = await pool.query(
     `SELECT 1 FROM clientes_pf
-      WHERE regexp_replace(COALESCE(cpf,''), '\\D', '', 'g') = $1
+      WHERE regexp_replace(COALESCE(cpf,''), '[^0-9]', '', 'g') = $1
         AND COALESCE(arquivado_por_duplicidade, false) = false
         ${whereId}
       LIMIT 1`,
@@ -341,7 +341,7 @@ async function existeLeadComDocumento(doc: string, ignorarId?: string): Promise<
   if (ignorarId) { params.push(ignorarId); whereId = ` AND id <> $${params.length}`; }
   const { rows } = await pool.query(
     `SELECT 1 FROM leads
-      WHERE regexp_replace(COALESCE(cpf_cnpj,''), '\\D', '', 'g') = $1
+      WHERE regexp_replace(COALESCE(cpf_cnpj,''), '[^0-9]', '', 'g') = $1
         AND COALESCE(arquivado_por_duplicidade, false) = false
         ${whereId}
       LIMIT 1`,
@@ -809,7 +809,7 @@ async function sincronizarConversaChatwoot(conversation: ChatwootConversationPay
 
   if (!leadId && telefone) {
     const leadPorTelefone = await pool.query(
-      `SELECT id FROM leads WHERE regexp_replace(COALESCE(telefone, ''), '\\D', '', 'g') = $1 ORDER BY created_at DESC LIMIT 1`,
+      `SELECT id FROM leads WHERE regexp_replace(COALESCE(telefone, ''), '[^0-9]', '', 'g') = $1 ORDER BY created_at DESC LIMIT 1`,
       [telefone]
     );
     if (leadPorTelefone.rows.length > 0) {
@@ -965,6 +965,9 @@ async function listarConversasChatwoot({
 // ─── App ─────────────────────────────────────────────────────────────────────
 async function startServer() {
   const app = express();
+  // Rota para consulta de CNPJ (proxy para BrasilAPI)
+  app.use('/api/cnpj', cnpjRouter);
+  app.use('/api/empresas', sociosDocumentosRouter);
   const server = createServer(app);
 
   // ─── AUTO-CREATE: Company Hub / Empresas enriquecidas ──────────────────────
@@ -1285,7 +1288,7 @@ async function startServer() {
         TRUE
       WHERE NOT EXISTS (
         SELECT 1 FROM prestadores_servico
-        WHERE regexp_replace(COALESCE(cnpj, ''), '\\D', '', 'g') = '35427182000166'
+        WHERE regexp_replace(COALESCE(cnpj, ''), '[^0-9]', '', 'g') = '35427182000166'
       )
     `);
   } catch { /* seed opcional */ }
@@ -1457,47 +1460,12 @@ async function startServer() {
     `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS cor_secundaria TEXT`,
     `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
   ];
-    for (const sql of alteracoesParceiros016) { try { await pool.query(sql); } catch { /* compat */ } }
+  for (const sql of alteracoesParceiros016) { try { await pool.query(sql); } catch { /* compat */ } }
   console.log('[startup] Patches de banco (contratos_gerados) aplicados/verificados.');
-  // ─── AUTO-CREATE: Acompanhamento Bancário — colunas de compensação/aderência ──
-  // Garante que todas as colunas usadas no INSERT/UPDATE de atualizações semanais
-  // existam na tabela, mesmo que a migration manual ainda não tenha sido aplicada.
-  const alteracoesAcompBancario = [
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS semanas_no_mes INTEGER DEFAULT 4`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS semanas_restantes_mes INTEGER DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS acumulado_anual NUMERIC(15,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS motivo_alerta_aderencia TEXT`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS diagnostico_tecnico TEXT`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS faturamento_anual_ref NUMERIC(15,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS teto_anual_movimentacao NUMERIC(15,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS faturamento_mensal_base NUMERIC(15,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS teto_mensal_movimentacao NUMERIC(15,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS referencia_semanal_base NUMERIC(15,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS teto_semanal_movimentacao NUMERIC(15,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS acumulado_mensal NUMERIC(15,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS valor_abaixo_semana NUMERIC(15,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS valor_excedente_semana NUMERIC(15,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS saldo_faltante_ref_mensal NUMERIC(15,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS saldo_disponivel_teto_mensal NUMERIC(15,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS meta_base_dinamica NUMERIC(15,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS teto_dinamico_proxima NUMERIC(15,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS percentual_uso_semanal NUMERIC(8,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS percentual_uso_mensal NUMERIC(8,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS percentual_uso_anual NUMERIC(8,2) DEFAULT 0`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS status_aderencia TEXT`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS alerta_aderencia BOOLEAN DEFAULT false`,
-    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS criado_por UUID`,
-  ];
-  for (const sql of alteracoesAcompBancario) { try { await pool.query(sql); } catch { /* compat */ } }
-  console.log('[startup] Patches de banco (acompanhamento_bancario_atualizacoes) aplicados/verificados.');
   // ─────────────────────────────────────────────────────────────────────────────
+
   app.use(express.json({ limit: "5mb" }));
   app.use(express.urlencoded({ extended: true }));
-
-  // Rotas de CNPJ e sócios/documentos de empresas — registradas APÓS express.json
-  // para que req.body seja parseado corretamente em todos os endpoints POST/PUT/PATCH
-  app.use('/api/cnpj', cnpjRouter);
-  app.use('/api/empresas', sociosDocumentosRouter);
 
   // CORS
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -4335,7 +4303,7 @@ Responda APENAS com um JSON válido no seguinte formato:
           const cleanPhoneColab = telefone.replace(/\D/g, '');
           const colaboradorCheck = await pool.query(
             `SELECT id, nome, cargo FROM colaboradores
-             WHERE regexp_replace(COALESCE(telefone,''), '\\D', '', 'g') = $1
+             WHERE regexp_replace(COALESCE(telefone,''), '[^0-9]', '', 'g') = $1
                AND ativo = true
                AND telefone IS NOT NULL
                AND telefone <> ''
@@ -4394,7 +4362,7 @@ Responda APENAS com um JSON válido no seguinte formato:
         if (!leadId && telefone) {
           const cleanPhone = telefone.replace(/\D/g, '');
           const r = await pool.query(
-            `SELECT id FROM leads WHERE regexp_replace(telefone, '\\D', '', 'g') = $1 ORDER BY created_at DESC LIMIT 1`,
+            `SELECT id FROM leads WHERE regexp_replace(telefone, '[^0-9]', '', 'g') = $1 ORDER BY created_at DESC LIMIT 1`,
             [cleanPhone]
           );
           if (r.rows.length > 0) leadId = r.rows[0].id;
@@ -8428,7 +8396,7 @@ ${(temTest1 || temTest2) ? `
         [
           'assessoria',
           null,
-          empresa_id || null,
+          empresa_id || dadosEmpresa.empresa_id || null,
           parceiro_id || null,
           lead_id || null,
           contratadaAssessoriaId,
@@ -9093,6 +9061,181 @@ ${(temTest1 || temTest2) ? `
     return Number.isFinite(n) ? n : null;
   }
 
+  function somenteDigitosAcompanhamento(valor: unknown): string {
+    return String(valor || "").replace(/\D/g, "");
+  }
+
+  function primeiroValorAcompanhamento(...values: unknown[]): string | null {
+    for (const value of values) {
+      if (value === null || value === undefined) continue;
+      const text = String(value).trim();
+      if (text) return text;
+    }
+    return null;
+  }
+
+  function jsonFieldAcompanhamento(source: any, ...keys: string[]): any {
+    if (!source || typeof source !== "object") return null;
+    for (const key of keys) {
+      const value = source[key];
+      if (value !== null && value !== undefined && String(value).trim() !== "") return value;
+    }
+    return null;
+  }
+
+  function montarDadosEmpresaParaAcompanhamento(empresa: any): Record<string, any> {
+    const dadosReceita = empresa?.dados_receita && typeof empresa.dados_receita === "object"
+      ? empresa.dados_receita
+      : {};
+
+    const nomeEmpresa = primeiroValorAcompanhamento(
+      empresa?.razao_social,
+      empresa?.nome_empresarial,
+      empresa?.nome_fantasia,
+      empresa?.fantasia,
+      empresa?.nome,
+      jsonFieldAcompanhamento(dadosReceita, "razao_social", "razao", "nome", "nome_empresarial"),
+      jsonFieldAcompanhamento(dadosReceita, "nome_fantasia", "fantasia")
+    );
+
+    const cnpj = primeiroValorAcompanhamento(empresa?.cnpj, jsonFieldAcompanhamento(dadosReceita, "cnpj"));
+    const telefone = primeiroValorAcompanhamento(
+      empresa?.telefone,
+      empresa?.telefone_1,
+      empresa?.telefone1,
+      empresa?.telefone_comercial,
+      empresa?.celular,
+      jsonFieldAcompanhamento(dadosReceita, "telefone", "telefone1", "ddd_telefone_1", "tel")
+    );
+    const whatsapp = primeiroValorAcompanhamento(
+      empresa?.whatsapp,
+      empresa?.telefone_whatsapp,
+      empresa?.celular,
+      telefone,
+      jsonFieldAcompanhamento(dadosReceita, "whatsapp", "celular")
+    );
+    const email = primeiroValorAcompanhamento(
+      empresa?.email,
+      empresa?.email_principal,
+      empresa?.email_comercial,
+      jsonFieldAcompanhamento(dadosReceita, "email", "correio_eletronico")
+    );
+
+    const faturamentoAnual = normalizarNumeroAcompanhamento(
+      empresa?.faturamento_anual ??
+      empresa?.receita_bruta_anual ??
+      empresa?.faturamento ??
+      empresa?.faturamento_estimado ??
+      empresa?.faturamento_presumido
+    );
+    const mediaMensal = faturamentoAnual ? Math.round((faturamentoAnual / 12) * 100) / 100 : null;
+    const margemSeguranca = mediaMensal ? Math.round((mediaMensal * 1.30) * 100) / 100 : null;
+
+    return {
+      empresa_id: empresa?.id || null,
+      nome_empresa: nomeEmpresa,
+      cnpj,
+      telefone_cliente: telefone,
+      whatsapp_cliente: whatsapp,
+      email_cliente: email,
+      faturamento_anual: faturamentoAnual,
+      media_mensal: mediaMensal,
+      margem_seguranca_30: margemSeguranca,
+    };
+  }
+
+  async function buscarEmpresaParaAcompanhamento(input: { empresaId?: string | null; cnpj?: string | null; nome?: string | null }) {
+    if (input.empresaId) {
+      const { rows } = await pool.query("SELECT * FROM empresas WHERE id = $1 LIMIT 1", [input.empresaId]);
+      if (rows[0]) return rows[0];
+    }
+
+    const cnpjDigits = somenteDigitosAcompanhamento(input.cnpj);
+    if (cnpjDigits.length === 14) {
+      const { rows } = await pool.query(
+        `SELECT *
+           FROM empresas
+          WHERE regexp_replace(COALESCE(cnpj, ''), '[^0-9]', '', 'g') = $1
+          LIMIT 1`,
+        [cnpjDigits]
+      );
+      if (rows[0]) return rows[0];
+    }
+
+    const nome = String(input.nome || "").trim();
+    if (nome.length >= 3) {
+      const { rows } = await pool.query(
+        `SELECT *
+           FROM empresas
+          WHERE razao_social ILIKE $1
+             OR nome_fantasia ILIKE $1
+          LIMIT 1`,
+        [`%${nome}%`]
+      );
+      if (rows[0]) return rows[0];
+    }
+
+    return null;
+  }
+
+  async function sincronizarDadosEmpresaNoAcompanhamento(acompanhamentoId: string) {
+    const { rows: acompRows } = await pool.query(
+      `SELECT * FROM acompanhamentos_bancarios WHERE id = $1 LIMIT 1`,
+      [acompanhamentoId]
+    );
+    const acompanhamento = acompRows[0];
+    if (!acompanhamento) return { status: 404, payload: { error: "Acompanhamento não encontrado." } };
+
+    const empresa = await buscarEmpresaParaAcompanhamento({
+      empresaId: acompanhamento.empresa_id,
+      cnpj: acompanhamento.cnpj,
+      nome: acompanhamento.nome_empresa,
+    });
+
+    if (!empresa) {
+      return {
+        status: 404,
+        payload: { error: "Empresa vinculada não encontrada para sincronizar dados cadastrais." },
+      };
+    }
+
+    const dados = montarDadosEmpresaParaAcompanhamento(empresa);
+    const updates: Record<string, any> = {
+      empresa_id: dados.empresa_id || acompanhamento.empresa_id || null,
+      nome_empresa: dados.nome_empresa || acompanhamento.nome_empresa,
+      cnpj: dados.cnpj || acompanhamento.cnpj || null,
+      telefone_cliente: dados.telefone_cliente || acompanhamento.telefone_cliente || null,
+      whatsapp_cliente: dados.whatsapp_cliente || acompanhamento.whatsapp_cliente || dados.telefone_cliente || null,
+      email_cliente: dados.email_cliente || acompanhamento.email_cliente || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (dados.faturamento_anual !== null && dados.faturamento_anual !== undefined) {
+      updates.faturamento_anual = dados.faturamento_anual;
+      updates.media_mensal = dados.media_mensal || 0;
+      updates.margem_seguranca_30 = dados.margem_seguranca_30 || 0;
+    }
+
+    const keys = Object.keys(updates);
+    const values = Object.values(updates);
+    const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+
+    const { rows } = await pool.query(
+      `UPDATE acompanhamentos_bancarios SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
+      [...values, acompanhamentoId]
+    );
+
+    return {
+      status: 200,
+      payload: {
+        success: true,
+        message: "Dados cadastrais sincronizados com o cadastro da empresa.",
+        empresa: { id: empresa.id, nome: dados.nome_empresa, cnpj: dados.cnpj },
+        acompanhamento: rows[0],
+      },
+    };
+  }
+
   function proximaQuartaFeira(base = new Date()): string {
     const d = new Date(base);
     d.setHours(12, 0, 0, 0);
@@ -9677,6 +9820,16 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
+  app.post("/api/acompanhamentos-bancarios/:id/sincronizar-cadastro", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+    try {
+      const result = await sincronizarDadosEmpresaNoAcompanhamento(req.params.id);
+      res.status(result.status).json(result.payload);
+    } catch (err) {
+      console.error("[POST /api/acompanhamentos-bancarios/:id/sincronizar-cadastro]", err);
+      res.status(500).json({ error: "Erro ao sincronizar dados cadastrais da empresa." });
+    }
+  });
+
   app.post("/api/acompanhamentos-bancarios/:id/relatorio-mensal", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
@@ -9835,13 +9988,14 @@ ${(temTest1 || temTest2) ? `
         observacoes_iniciais,
       } = req.body || {};
 
-      let empresa: any = null;
-      if (empresa_id) {
-        const result = await pool.query("SELECT * FROM empresas WHERE id = $1 LIMIT 1", [empresa_id]);
-        empresa = result.rows[0] || null;
-      }
+      const empresa = await buscarEmpresaParaAcompanhamento({
+        empresaId: empresa_id || null,
+        cnpj: cnpj || null,
+        nome: nome_empresa || null,
+      });
+      const dadosEmpresa = empresa ? montarDadosEmpresaParaAcompanhamento(empresa) : {};
 
-      const nomeFinal = String(nome_empresa || empresa?.razao_social || empresa?.nome_fantasia || "").trim();
+      const nomeFinal = String(nome_empresa || dadosEmpresa.nome_empresa || "").trim();
       if (!nomeFinal) {
         res.status(400).json({ error: "Informe a empresa do acompanhamento." });
         return;
@@ -9858,7 +10012,7 @@ ${(temTest1 || temTest2) ? `
       const fimCalculado = new Date(dtInicio);
       fimCalculado.setDate(fimCalculado.getDate() + 30);
 
-      const faturamento = normalizarNumeroAcompanhamento(faturamento_anual ?? empresa?.faturamento_anual) || 0;
+      const faturamento = normalizarNumeroAcompanhamento(faturamento_anual ?? dadosEmpresa.faturamento_anual) || 0;
       const mediaInformada = normalizarNumeroAcompanhamento(media_mensal);
       const media = mediaInformada ?? (faturamento ? faturamento / 12 : 0);
       const margemInformada = normalizarNumeroAcompanhamento(margem_seguranca_30);
@@ -9906,13 +10060,13 @@ ${(temTest1 || temTest2) ? `
         )
         RETURNING *`,
         [
-          empresa_id || null,
+          empresa_id || dadosEmpresa.empresa_id || null,
           lead_id || null,
           nomeFinal,
-          cnpj || empresa?.cnpj || null,
-          telefone_cliente || empresa?.telefone || null,
-          whatsapp_cliente || empresa?.whatsapp || telefone_cliente || empresa?.telefone || null,
-          email_cliente || empresa?.email || null,
+          cnpj || dadosEmpresa.cnpj || null,
+          telefone_cliente || dadosEmpresa.telefone_cliente || null,
+          whatsapp_cliente || telefone_cliente || dadosEmpresa.whatsapp_cliente || dadosEmpresa.telefone_cliente || null,
+          email_cliente || dadosEmpresa.email_cliente || null,
           bancoFinal,
           agencia || null,
           conta || null,
@@ -10358,7 +10512,7 @@ ${(temTest1 || temTest2) ? `
           $1,$2,$3,$4,COALESCE($5::date,CURRENT_DATE),
           $6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
           $22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,
-          $35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57
+          $35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56
         )
         ON CONFLICT (acompanhamento_id, numero_semana) DO UPDATE SET
           data_referencia_inicio = EXCLUDED.data_referencia_inicio,

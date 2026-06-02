@@ -660,16 +660,13 @@ async function atualizarStatusSocioEmpresa(empresaId: string, socioId: string, u
 
 async function enriquecerSocioComCPFHubAutomatico(empresaId: string, socioRow: any) {
   const cpf = onlyDigits(socioRow?.cpf_completo_manual || socioRow?.cpf_cnpj);
-  // Sem CPF completo: apenas marca status sem chamar a API
   if (cpf.length !== 11 || !validarCPFHub(cpf)) {
-    // Evita sobrescrever status já definido para não gerar UPDATE desnecessário
-    if (socioRow?.cpfhub_status && socioRow.cpfhub_status !== 'cpf_completo_ausente') return socioRow;
     return await atualizarStatusSocioEmpresa(empresaId, socioRow.id, {
       cpfhub_status: 'cpf_completo_ausente',
+      ultima_atualizacao_pessoal: new Date(),
     }) || socioRow;
   }
-  // CPF já consultado com sucesso: não reconsulta para evitar custo desnecessário
-  if (socioRow?.cpfhub_status === 'success' && socioRow?.cpfhub_consultado_at) return socioRow;
+
   const result = await consultarCPFHub(cpf);
   if (!result.success || !result.data) {
     return await atualizarStatusSocioEmpresa(empresaId, socioRow.id, {
@@ -953,11 +950,7 @@ router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
       }
     }
 
-    // CPFHub só é chamado quando o payload pede explicitamente enriquecer_cpfhub=true.
-    // Por padrão (undefined/false) não consultamos a API para evitar custo automático.
-    // O enriquecimento acontece via PUT /socios/:sid/cpf-manual (CPF manual) ou
-    // POST /socios/:sid/enriquecer-cpf (botão manual na tela).
-    if (enriquecer_cpfhub === true) {
+    if (enriquecer_cpfhub !== false) {
       const { rows: candidatosCpfHub } = await pool.query(
         `SELECT * FROM public.socios_empresa
           WHERE empresa_id=$1 AND COALESCE(ativo, true)=true
