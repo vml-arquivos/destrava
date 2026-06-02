@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import pkg from 'pg';
 import { auth } from '../middleware/auth';
 import { consultarCPFHub, validarCPF as validarCPFHub } from '../services/cpfhub';
+import { consultarCPFCNPJ } from '../services/cpfcnpj';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -255,8 +256,6 @@ const SOCIOS_BASE_COLUMNS = new Set([
   'ativo',
   'fonte_dados',
   'cpf_completo_manual',
-  'cpf_validado',
-  'cpf_fonte',
   'ultima_atualizacao_pessoal',
   'assinante_contrato',
   'pendencias_contrato',
@@ -265,6 +264,10 @@ const SOCIOS_BASE_COLUMNS = new Set([
   'genero',
   'cpfhub_consultado_at',
   'cpfhub_status',
+  'cpfcnpj_consultado_at',
+  'cpfcnpj_status',
+  'cpfcnpj_fonte',
+  'cpfcnpj_payload_resumo',
 ]);
 
 const SOCIOS_MANUAL_PROTECTED_COLUMNS = new Set([
@@ -295,8 +298,6 @@ const SOCIOS_MANUAL_PROTECTED_COLUMNS = new Set([
   'conjuge_telefone',
   'regime_bens',
   'cpf_completo_manual',
-  'cpf_validado',
-  'cpf_fonte',
   'ultima_atualizacao_pessoal',
 ]);
 
@@ -369,7 +370,11 @@ async function ensureSociosEmpresaSchema(): Promise<Set<string>> {
       ADD COLUMN IF NOT EXISTS dados_extra JSONB DEFAULT '{}'::jsonb,
       ADD COLUMN IF NOT EXISTS genero VARCHAR(20),
       ADD COLUMN IF NOT EXISTS cpfhub_consultado_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS cpfhub_status TEXT`);
+      ADD COLUMN IF NOT EXISTS cpfhub_status TEXT,
+      ADD COLUMN IF NOT EXISTS cpfcnpj_consultado_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS cpfcnpj_status TEXT,
+      ADD COLUMN IF NOT EXISTS cpfcnpj_fonte TEXT,
+      ADD COLUMN IF NOT EXISTS cpfcnpj_payload_resumo JSONB DEFAULT '{}'::jsonb`);
     await pool.query('CREATE INDEX IF NOT EXISTS idx_socios_empresa_cpf ON public.socios_empresa(cpf_cnpj)');
     sociosSchemaReady = true;
   }
@@ -425,7 +430,8 @@ function buildSocioPayload(empresaId: string, socio: SocioInput): Record<string,
   const normalized = normalizeSocioInput(socio);
   const nome = normalized.nome?.trim();
   if (!nome) return null;
-  return {
+
+  const payload: Record<string, unknown> = {
     empresa_id: empresaId,
     nome,
     cpf_cnpj: normalized.cpf_cnpj || null,
@@ -467,6 +473,20 @@ function buildSocioPayload(empresaId: string, socio: SocioInput): Record<string,
     fonte_dados: normalized.fonte_dados || 'api_publica_cnpj',
     dados_extra: typeof normalized.dados_extra === 'string' ? normalized.dados_extra : JSON.stringify(normalized.dados_extra || {}),
   };
+
+  const docDigits = onlyDigits(normalized.cpf_cnpj);
+  if (docDigits.length === 11 && String(normalized.fonte_dados || '').toLowerCase().includes('cpfcnpj')) {
+    payload.cpf_cnpj = docDigits;
+    payload.cpf_completo_manual = docDigits;
+    payload.cpf_validado = true;
+    payload.cpf_fonte = 'cpfcnpj';
+    payload.cpfcnpj_status = 'success';
+    payload.cpfcnpj_fonte = 'cpfcnpj';
+    payload.cpfcnpj_consultado_at = new Date();
+    payload.ultima_atualizacao_pessoal = new Date();
+  }
+
+  return payload;
 }
 
 async function upsertSocioEmpresa(empresaId: string, socio: SocioInput) {
@@ -513,52 +533,8 @@ async function upsertSocioEmpresa(empresaId: string, socio: SocioInput) {
 
 async function insertSocioEmpresa(empresaId: string, socio: SocioInput) {
   const columns = await ensureSociosEmpresaSchema();
-  const normalized = normalizeSocioInput(socio);
-  const nome = normalized.nome?.trim();
-  if (!nome) return null;
-
-  const payload: Record<string, unknown> = {
-    empresa_id: empresaId,
-    nome,
-    cpf_cnpj: normalized.cpf_cnpj || null,
-    qualificacao_socio: normalized.qualificacao_socio || null,
-    percentual_capital: toNullableNumeric(normalized.percentual_capital),
-    representante_legal: normalized.representante_legal ?? false,
-    nome_representante: normalized.nome_representante || null,
-    qualificacao_representante: normalized.qualificacao_representante || null,
-    data_entrada_sociedade: normalized.data_entrada_sociedade || null,
-    pais: normalized.pais || null,
-    rg: normalized.rg || null,
-    rg_orgao_emissor: normalized.rg_orgao_emissor || null,
-    rg_uf_emissao: normalized.rg_uf_emissao || null,
-    rg_data_emissao: normalized.rg_data_emissao || null,
-    data_nascimento: normalized.data_nascimento || null,
-    nacionalidade: normalized.nacionalidade || null,
-    estado_civil: normalized.estado_civil || null,
-    profissao: normalized.profissao || null,
-    email: normalized.email || null,
-    telefone: normalized.telefone || null,
-    whatsapp: normalized.whatsapp || null,
-    cep: normalized.cep || null,
-    logradouro: normalized.logradouro || null,
-    numero: normalized.numero || null,
-    complemento: normalized.complemento || null,
-    bairro: normalized.bairro || null,
-    cidade: normalized.cidade || null,
-    uf: normalized.uf || null,
-    conjuge_nome: normalized.conjuge_nome || null,
-    conjuge_cpf: normalized.conjuge_cpf || null,
-    conjuge_rg: normalized.conjuge_rg || null,
-    conjuge_data_nasc: normalized.conjuge_data_nasc || null,
-    conjuge_profissao: normalized.conjuge_profissao || null,
-    conjuge_email: normalized.conjuge_email || null,
-    conjuge_telefone: normalized.conjuge_telefone || null,
-    regime_bens: normalized.regime_bens || null,
-    pep: normalized.pep ?? false,
-    ativo: normalized.ativo ?? true,
-    fonte_dados: normalized.fonte_dados || 'api_publica_cnpj',
-    dados_extra: typeof normalized.dados_extra === 'string' ? normalized.dados_extra : JSON.stringify(normalized.dados_extra || {}),
-  };
+  const payload = buildSocioPayload(empresaId, socio);
+  if (!payload?.nome) return null;
 
   const safeEntries = Object.entries(payload).filter(([key]) => SOCIOS_BASE_COLUMNS.has(key) && columns.has(key));
   const insertColumns = safeEntries.map(([key]) => key);
@@ -588,12 +564,35 @@ function pgErrorDetails(err: unknown) {
 }
 
 
-async function updateSocioEmpresaCampos(empresaId: string, socioId: string, updates: Record<string, unknown>) {
+function mergeJsonObject(value: unknown): Record<string, unknown> {
+  if (!value) return {};
+  if (typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function cpfHubStatusFromError(error?: string): string {
+  const text = String(error || '').toLowerCase();
+  if (text.includes('não configurada') || text.includes('nao configurada')) return 'cpfhub_sem_chave';
+  if (text.includes('não encontrado') || text.includes('nao encontrado') || text.includes('404')) return 'cpfhub_nao_encontrado';
+  if (text.includes('rate') || text.includes('limite') || text.includes('429')) return 'cpfhub_limite';
+  if (text.includes('timeout')) return 'cpfhub_timeout';
+  return 'cpfhub_erro';
+}
+
+async function atualizarStatusSocioEmpresa(empresaId: string, socioId: string, updates: Record<string, unknown>) {
   const columns = await ensureSociosEmpresaSchema();
   const entries = Object.entries(updates).filter(([key]) => SOCIOS_BASE_COLUMNS.has(key) && columns.has(key));
   if (!entries.length) {
-    const { rows } = await pool.query('SELECT * FROM public.socios_empresa WHERE id=$1 AND empresa_id=$2 LIMIT 1', [socioId, empresaId]);
-    return rows[0] || null;
+    const current = await pool.query('SELECT * FROM public.socios_empresa WHERE id=$1 AND empresa_id=$2 LIMIT 1', [socioId, empresaId]);
+    return current.rows[0] || null;
   }
   const sets = entries.map(([key], index) => `${key}=$${index + 1}`);
   const values = entries.map(([, value]) => value);
@@ -608,89 +607,32 @@ async function updateSocioEmpresaCampos(empresaId: string, socioId: string, upda
   return rows[0] || null;
 }
 
-function parseDadosExtra(value: unknown): Record<string, unknown> {
-  if (!value) return {};
-  if (typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value);
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-    } catch {
-      return {};
-    }
-  }
-  return {};
-}
-
-function cpfCompletoDisponivel(socio: any, cpfInformado?: unknown): string | null {
-  const candidatos = [cpfInformado, socio?.cpf_completo_manual, socio?.cpf_cnpj, socio?.cpf, socio?.documento];
-  for (const candidato of candidatos) {
-    const cpf = onlyDigits(candidato);
-    if (cpf.length === 11 && validarCPFHub(cpf)) return cpf;
-  }
-  return null;
-}
-
-async function enrichSocioWithCPFHubIfPossible(empresaId: string, socioRow: any, cpfInformado?: unknown) {
-  const cpf = cpfCompletoDisponivel(socioRow, cpfInformado);
-  const now = new Date();
-  const currentExtra = parseDadosExtra(socioRow?.dados_extra);
-
-  if (!cpf) {
-    const statusOnly = await updateSocioEmpresaCampos(empresaId, socioRow.id, {
+async function enriquecerSocioComCPFHubAutomatico(empresaId: string, socioRow: any) {
+  const cpf = onlyDigits(socioRow?.cpf_completo_manual || socioRow?.cpf_cnpj);
+  if (cpf.length !== 11 || !validarCPFHub(cpf)) {
+    return await atualizarStatusSocioEmpresa(empresaId, socioRow.id, {
       cpfhub_status: 'cpf_completo_ausente',
-      dados_extra: JSON.stringify({
-        ...currentExtra,
-        cpfhub: {
-          ...(typeof currentExtra.cpfhub === 'object' && currentExtra.cpfhub ? (currentExtra.cpfhub as Record<string, unknown>) : {}),
-          status: 'cpf_completo_ausente',
-          mensagem: 'CPF completo não disponível. APIs públicas de CNPJ normalmente retornam CPF mascarado.',
-          atualizado_em: now.toISOString(),
-        },
-      }),
-    });
-    return statusOnly || socioRow;
+      ultima_atualizacao_pessoal: new Date(),
+    }) || socioRow;
   }
 
   const result = await consultarCPFHub(cpf);
   if (!result.success || !result.data) {
-    const status = result.error?.toLowerCase().includes('api_key') || result.status === 401
-      ? 'cpfhub_sem_chave'
-      : result.status === 404
-        ? 'cpf_nao_encontrado'
-        : result.status === 429
-          ? 'limite_cpfhub'
-          : 'erro_cpfhub';
-    const statusOnly = await updateSocioEmpresaCampos(empresaId, socioRow.id, {
-      cpf_cnpj: cpf,
-      cpf_completo_manual: cpf,
-      cpf_validado: false,
-      cpf_fonte: 'manual',
-      cpfhub_consultado_at: now,
-      cpfhub_status: status,
-      ultima_atualizacao_pessoal: now,
-      dados_extra: JSON.stringify({
-        ...currentExtra,
-        cpfhub: {
-          ...(typeof currentExtra.cpfhub === 'object' && currentExtra.cpfhub ? (currentExtra.cpfhub as Record<string, unknown>) : {}),
-          status,
-          erro: result.error || 'CPFHub não retornou dados.',
-          http_status: result.status || null,
-          consultado_em: now.toISOString(),
-        },
-      }),
-    });
-    return statusOnly || socioRow;
+    return await atualizarStatusSocioEmpresa(empresaId, socioRow.id, {
+      cpfhub_status: cpfHubStatusFromError(result.error),
+      cpfhub_consultado_at: new Date(),
+      ultima_atualizacao_pessoal: new Date(),
+    }) || socioRow;
   }
 
   const data = result.data;
   const updates: Record<string, unknown> = {
     cpf_cnpj: cpf,
-    cpf_completo_manual: cpf,
+    cpf_completo_manual: hasValue(socioRow?.cpf_completo_manual) ? socioRow.cpf_completo_manual : cpf,
     cpf_validado: true,
-    cpf_fonte: 'cpfhub',
-    ultima_atualizacao_pessoal: now,
-    cpfhub_consultado_at: now,
+    cpf_fonte: hasValue(socioRow?.cpf_fonte) && socioRow.cpf_fonte !== 'opencnpj' ? socioRow.cpf_fonte : 'cpfhub',
+    ultima_atualizacao_pessoal: new Date(),
+    cpfhub_consultado_at: new Date(),
     cpfhub_status: 'success',
   };
 
@@ -699,24 +641,111 @@ async function enrichSocioWithCPFHubIfPossible(empresaId: string, socioRow: any,
   if (data.genero && !hasValue(socioRow?.genero)) updates.genero = data.genero;
 
   updates.dados_extra = JSON.stringify({
-    ...currentExtra,
+    ...mergeJsonObject(socioRow?.dados_extra),
     cpfhub: {
       cpf: data.cpf,
       nome: data.nome,
       nome_maiusculo: data.nome_maiusculo,
       genero: data.genero,
       data_nascimento: data.data_nascimento,
-      dia: data.dia,
-      mes: data.mes,
-      ano: data.ano,
-      status: 'success',
-      consultado_em: now.toISOString(),
+      consultado_em: new Date().toISOString(),
       raw: data.raw,
     },
   });
 
-  return await updateSocioEmpresaCampos(empresaId, socioRow.id, updates) || socioRow;
+  return await atualizarStatusSocioEmpresa(empresaId, socioRow.id, updates) || socioRow;
 }
+
+function normalizarNomeParaMatch(nome: unknown): string {
+  return String(nome || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9 ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+async function obterCnpjEmpresa(empresaId: string): Promise<string | null> {
+  const { rows } = await pool.query('SELECT cnpj FROM public.empresas WHERE id=$1 LIMIT 1', [empresaId]);
+  const cnpj = onlyDigits(rows[0]?.cnpj);
+  return cnpj.length === 14 ? cnpj : null;
+}
+
+async function empresaPrecisaCpfCompleto(empresaId: string): Promise<boolean> {
+  const total = await pool.query(
+    `SELECT COUNT(*)::int AS total FROM public.socios_empresa WHERE empresa_id=$1 AND COALESCE(ativo, true)=true`,
+    [empresaId]
+  );
+  if (Number(total.rows[0]?.total || 0) === 0) return true;
+
+  const { rows } = await pool.query(
+    `SELECT 1 FROM public.socios_empresa
+      WHERE empresa_id=$1
+        AND COALESCE(ativo, true)=true
+        AND LENGTH(regexp_replace(COALESCE(cpf_completo_manual, cpf_cnpj, ''), '\\D', '', 'g')) <> 11
+      LIMIT 1`,
+    [empresaId]
+  );
+  return rows.length > 0;
+}
+
+async function consultarEAplicarCPFCNPJ(empresaId: string, cnpjInput?: unknown, force = false) {
+  const cnpj = onlyDigits(cnpjInput) || (await obterCnpjEmpresa(empresaId)) || '';
+  if (!cnpj || cnpj.length !== 14) {
+    return { success: false, status: 'cnpj_ausente', socios: [], error: 'CNPJ ausente para consulta CPF.CNPJ.' };
+  }
+
+  if (!force) {
+    const precisa = await empresaPrecisaCpfCompleto(empresaId);
+    if (!precisa) return { success: true, status: 'skipped_cpf_ja_existente', socios: [] };
+  }
+
+  const result = await consultarCPFCNPJ(cnpj);
+  if (!result.success) {
+    await pool.query(
+      `UPDATE public.socios_empresa
+          SET cpfcnpj_status=$1,
+              cpfcnpj_consultado_at=NOW(),
+              cpfcnpj_fonte='cpfcnpj',
+              cpfcnpj_payload_resumo=$2,
+              updated_at=NOW()
+        WHERE empresa_id=$3 AND COALESCE(ativo, true)=true`,
+      [String(result.error || 'erro').slice(0, 120), JSON.stringify(result.resumo || { error: result.error }), empresaId]
+    ).catch(() => undefined);
+    return { success: false, status: 'error', socios: [], error: result.error, resumo: result.resumo };
+  }
+
+  const aplicados = [] as any[];
+  for (const socio of result.socios) {
+    const row = await upsertSocioEmpresa(empresaId, {
+      ...socio,
+      fonte_dados: 'cpfcnpj',
+      dados_extra: {
+        ...socio.dados_extra,
+        cpfcnpj: result.resumo,
+      },
+    });
+    if (!row) continue;
+    const enriched = await atualizarStatusSocioEmpresa(empresaId, row.id, {
+      cpfcnpj_status: onlyDigits(socio.cpf_cnpj).length === 11 ? 'success' : 'documento_nao_revelado',
+      cpfcnpj_fonte: 'cpfcnpj',
+      cpfcnpj_consultado_at: new Date(),
+      cpfcnpj_payload_resumo: JSON.stringify(result.resumo || {}),
+      dados_extra: JSON.stringify({
+        ...mergeJsonObject(row.dados_extra),
+        cpfcnpj: {
+          ...(result.resumo || {}),
+          socio_match: socio.dados_extra,
+        },
+      }),
+    }) || row;
+    aplicados.push(enriched);
+  }
+
+  return { success: true, status: 'success', socios: aplicados, resumo: result.resumo };
+}
+
 
 async function ensureSociosConjugeSchema(): Promise<void> {
   await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
@@ -806,11 +835,14 @@ router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
   try {
     if (!(await requireEmpresaAccess(req, res))) return;
     await ensureSociosEmpresaSchema();
-    const { socios, replace, enriquecer_cpfhub } = req.body as { socios: SocioInput[]; replace?: boolean; enriquecer_cpfhub?: boolean };
-    if (!Array.isArray(socios) || socios.length === 0) {
-      res.status(200).json({ inserted: 0, socios: [], warning: 'Nenhum sócio enviado para importação' });
-      return;
-    }
+    const { socios, replace, cnpj, enriquecer_cpfcnpj, force_cpfcnpj, enriquecer_cpfhub } = req.body as {
+      socios?: SocioInput[];
+      replace?: boolean;
+      cnpj?: string;
+      enriquecer_cpfcnpj?: boolean;
+      force_cpfcnpj?: boolean;
+      enriquecer_cpfhub?: boolean;
+    };
 
     // Não apagamos mais dados manuais sensíveis (estado civil, cônjuge, RG, endereço etc.)
     // durante sincronização pública. A importação faz merge/upsert e preserva campos preenchidos manualmente.
@@ -819,28 +851,62 @@ router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
     const failed: Array<{ nome?: string; error: unknown }> = [];
     const seen = new Set<string>();
 
-    for (const rawSocio of socios) {
-      const socio = normalizeSocioInput(rawSocio);
-      const key = `${(socio.nome || '').trim().toLowerCase()}|${String(socio.cpf_cnpj || '').replace(/\D/g, '')}`;
-      if (!socio.nome || seen.has(key)) continue;
-      seen.add(key);
-      try {
-        const row = await upsertSocioEmpresa(req.params.id, socio);
-        if (row) {
-          const finalRow = enriquecer_cpfhub === false ? row : await enrichSocioWithCPFHubIfPossible(req.params.id, row);
-          inserted.push(enrichSocioRow(finalRow));
+    if (Array.isArray(socios)) {
+      for (const rawSocio of socios) {
+        const socio = normalizeSocioInput(rawSocio);
+        const key = `${(socio.nome || '').trim().toLowerCase()}|${String(socio.cpf_cnpj || '').replace(/\D/g, '')}`;
+        if (!socio.nome || seen.has(key)) continue;
+        seen.add(key);
+        try {
+          const row = await upsertSocioEmpresa(req.params.id, socio);
+          if (row) inserted.push(row);
+        } catch (err) {
+          failed.push({ nome: socio?.nome, error: pgErrorDetails(err) });
+          console.error('[POST /api/empresas/:id/socios/bulk] item', socio?.nome, pgErrorDetails(err));
         }
-      } catch (err) {
-        failed.push({ nome: socio?.nome, error: pgErrorDetails(err) });
-        console.error('[POST /api/empresas/:id/socios/bulk] item', socio?.nome, pgErrorDetails(err));
       }
     }
 
-    if (inserted.length > 0) {
-      await registrarHistoricoEmpresa(req.params.id, 'socios_importados', `${inserted.length} sócio(s) sincronizado(s) com as fontes públicas de CNPJ.`, (req as any).colaborador?.nome || 'Sistema');
+    let cpfcnpjResult: any = null;
+    const cpfcnpjAutoEnabled = String(process.env.CPFCNPJ_ENABLED || '').toLowerCase() !== 'false';
+    if ((enriquecer_cpfcnpj !== false) && cpfcnpjAutoEnabled) {
+      cpfcnpjResult = await consultarEAplicarCPFCNPJ(req.params.id, cnpj, Boolean(force_cpfcnpj));
+      if (Array.isArray(cpfcnpjResult?.socios)) {
+        for (const row of cpfcnpjResult.socios) {
+          if (row?.id && !inserted.some((s: any) => s.id === row.id)) inserted.push(row);
+        }
+      }
+    }
+
+    if (enriquecer_cpfhub !== false) {
+      const { rows: candidatosCpfHub } = await pool.query(
+        `SELECT * FROM public.socios_empresa
+          WHERE empresa_id=$1 AND COALESCE(ativo, true)=true
+          ORDER BY nome ASC`,
+        [req.params.id]
+      );
+      for (const row of candidatosCpfHub) {
+        const enriched = await enriquecerSocioComCPFHubAutomatico(req.params.id, row);
+        if (enriched?.id && !inserted.some((s: any) => s.id === enriched.id)) inserted.push(enriched);
+      }
+    }
+
+    const { rows: finalRows } = await pool.query(
+      'SELECT * FROM public.socios_empresa WHERE empresa_id=$1 AND COALESCE(ativo, true)=true ORDER BY nome ASC',
+      [req.params.id]
+    );
+
+    if (finalRows.length > 0) {
+      const fonteExtra = cpfcnpjResult?.success ? ' e CPF.CNPJ' : '';
+      await registrarHistoricoEmpresa(req.params.id, 'socios_importados', `${finalRows.length} sócio(s) sincronizado(s) com as fontes públicas de CNPJ${fonteExtra}.`, (req as any).colaborador?.nome || 'Sistema');
     }
     const status = failed.length > 0 ? 207 : 200;
-    res.status(status).json({ inserted: inserted.length, socios: inserted, failed });
+    res.status(status).json({
+      inserted: finalRows.length,
+      socios: finalRows.map(enrichSocioRow),
+      failed,
+      cpfcnpj: cpfcnpjResult ? { success: cpfcnpjResult.success, status: cpfcnpjResult.status, error: cpfcnpjResult.error, socios: cpfcnpjResult.socios?.length || 0 } : null,
+    });
   } catch (err) {
     console.error('[POST /api/empresas/:id/socios/bulk]', pgErrorDetails(err));
     res.status(500).json({ error: 'Erro ao importar sócios', details: pgErrorDetails(err) });
@@ -900,9 +966,9 @@ router.put('/:id/socios/:sid/cpf-manual', auth, async (req: Request, res: Respon
       [cpf, validado, req.params.sid, req.params.id]
     );
     if (rows.length === 0) { res.status(404).json({ error: 'Sócio não encontrado' }); return; }
-    const enriched = await enrichSocioWithCPFHubIfPossible(req.params.id, rows[0], cpf);
-    await registrarHistoricoEmpresa(req.params.id, 'cpf_socio_atualizado', `CPF completo do sócio ${rows[0].nome} atualizado manualmente e enriquecido via CPFHub quando disponível.`, (req as any).colaborador?.nome || 'Sistema');
-    res.json(enrichSocioRow(enriched));
+    const enriquecido = await enriquecerSocioComCPFHubAutomatico(req.params.id, rows[0]);
+    await registrarHistoricoEmpresa(req.params.id, 'cpf_socio_atualizado', `CPF completo do sócio ${rows[0].nome} atualizado manualmente e enviado para enriquecimento CPFHub.`, (req as any).colaborador?.nome || 'Sistema');
+    res.json(enrichSocioRow(enriquecido || rows[0]));
   } catch (err) {
     console.error('[PUT /api/empresas/:id/socios/:sid/cpf-manual]', pgErrorDetails(err));
     res.status(500).json({ error: 'Erro ao atualizar CPF manual', details: pgErrorDetails(err) });
@@ -915,7 +981,7 @@ router.put('/:id/socios/:sid/cpf-manual', auth, async (req: Request, res: Respon
 router.post('/:id/socios/:sid/enriquecer-cpf', auth, async (req: Request, res: Response) => {
   try {
     if (!(await requireEmpresaAccess(req, res))) return;
-    await ensureSociosEmpresaSchema();
+    const columns = await ensureSociosEmpresaSchema();
     const cpf = onlyDigits(req.body?.cpf || req.body?.cpf_completo);
     if (!validarCPFHub(cpf)) {
       res.status(400).json({ error: 'CPF inválido. Informe o CPF completo do sócio para consultar a API CPFHub.' });
@@ -931,9 +997,58 @@ router.post('/:id/socios/:sid/enriquecer-cpf', auth, async (req: Request, res: R
       return;
     }
 
-    const enriched = await enrichSocioWithCPFHubIfPossible(req.params.id, currentResult.rows[0], cpf);
-    await registrarHistoricoEmpresa(req.params.id, 'cpfhub_socio_consultado', `Dados CPFHub do sócio ${enriched.nome} consultados e salvos quando disponíveis.`, (req as any).colaborador?.nome || 'Sistema');
-    res.json({ socio: enrichSocioRow(enriched), cpfhub_status: enriched.cpfhub_status || null, cpfhub: enriched.dados_extra?.cpfhub || null });
+    const result = await consultarCPFHub(cpf);
+    if (!result.success || !result.data) {
+      res.status(result.status && result.status >= 400 ? 502 : 400).json({ error: result.error || 'CPFHub não retornou dados para este CPF.' });
+      return;
+    }
+
+    const data = result.data;
+    const updates: Record<string, unknown> = {
+      cpf_cnpj: cpf,
+      cpf_completo_manual: cpf,
+      cpf_validado: true,
+      cpf_fonte: 'cpfhub',
+      ultima_atualizacao_pessoal: new Date(),
+      fonte_dados: 'cpfhub',
+      cpfhub_consultado_at: new Date(),
+      cpfhub_status: 'success',
+    };
+
+    if (data.nome && !hasValue(currentResult.rows[0].nome)) updates.nome = data.nome;
+    if (data.data_nascimento && !hasValue(currentResult.rows[0].data_nascimento)) updates.data_nascimento = data.data_nascimento;
+    if (data.genero && columns.has('genero') && !hasValue(currentResult.rows[0].genero)) updates.genero = data.genero;
+
+    const currentExtra = currentResult.rows[0].dados_extra && typeof currentResult.rows[0].dados_extra === 'object'
+      ? currentResult.rows[0].dados_extra
+      : {};
+    updates.dados_extra = JSON.stringify({
+      ...currentExtra,
+      cpfhub: {
+        cpf: data.cpf,
+        nome: data.nome,
+        nome_maiusculo: data.nome_maiusculo,
+        genero: data.genero,
+        data_nascimento: data.data_nascimento,
+        consultado_em: new Date().toISOString(),
+        raw: data.raw,
+      },
+    });
+
+    const entries = Object.entries(updates).filter(([key]) => SOCIOS_BASE_COLUMNS.has(key) && columns.has(key));
+    const sets = entries.map(([key], index) => `${key}=$${index + 1}`);
+    const values = entries.map(([, value]) => value);
+    values.push(req.params.sid, req.params.id);
+    const { rows } = await pool.query(
+      `UPDATE public.socios_empresa
+          SET ${sets.join(', ')}, updated_at=NOW()
+        WHERE id=$${values.length - 1} AND empresa_id=$${values.length}
+        RETURNING *`,
+      values
+    );
+
+    await registrarHistoricoEmpresa(req.params.id, 'cpfhub_socio_consultado', `Dados CPFHub do sócio ${rows[0].nome} consultados e salvos.`, (req as any).colaborador?.nome || 'Sistema');
+    res.json({ socio: enrichSocioRow(rows[0]), cpfhub: data });
   } catch (err) {
     console.error('[POST /api/empresas/:id/socios/:sid/enriquecer-cpf]', pgErrorDetails(err));
     res.status(500).json({ error: 'Erro ao consultar CPFHub para o sócio', details: pgErrorDetails(err) });
