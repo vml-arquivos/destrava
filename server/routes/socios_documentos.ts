@@ -310,88 +310,106 @@ let sociosSchemaReady = false;
 let sociosColumnsCache: Set<string> | null = null;
 
 async function ensureSociosEmpresaSchema(): Promise<Set<string>> {
-  if (!sociosSchemaReady) {
-    await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS public.socios_empresa (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        empresa_id UUID NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
-        nome TEXT NOT NULL,
-        cpf_cnpj TEXT,
-        qualificacao_socio TEXT,
-        percentual_capital NUMERIC(5,2),
-        representante_legal BOOLEAN DEFAULT false,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_socios_empresa_empresa_id ON public.socios_empresa(empresa_id)');
-    await pool.query(`ALTER TABLE public.socios_empresa
-      ADD COLUMN IF NOT EXISTS nome_representante TEXT,
-      ADD COLUMN IF NOT EXISTS qualificacao_representante TEXT,
-      ADD COLUMN IF NOT EXISTS data_entrada_sociedade DATE,
-      ADD COLUMN IF NOT EXISTS pais TEXT,
-      ADD COLUMN IF NOT EXISTS rg TEXT,
-      ADD COLUMN IF NOT EXISTS rg_orgao_emissor TEXT,
-      ADD COLUMN IF NOT EXISTS rg_uf_emissao CHAR(2),
-      ADD COLUMN IF NOT EXISTS rg_data_emissao DATE,
-      ADD COLUMN IF NOT EXISTS data_nascimento DATE,
-      ADD COLUMN IF NOT EXISTS nacionalidade TEXT,
-      ADD COLUMN IF NOT EXISTS estado_civil TEXT,
-      ADD COLUMN IF NOT EXISTS profissao TEXT,
-      ADD COLUMN IF NOT EXISTS email TEXT,
-      ADD COLUMN IF NOT EXISTS telefone TEXT,
-      ADD COLUMN IF NOT EXISTS whatsapp TEXT,
-      ADD COLUMN IF NOT EXISTS cep TEXT,
-      ADD COLUMN IF NOT EXISTS logradouro TEXT,
-      ADD COLUMN IF NOT EXISTS numero TEXT,
-      ADD COLUMN IF NOT EXISTS complemento TEXT,
-      ADD COLUMN IF NOT EXISTS bairro TEXT,
-      ADD COLUMN IF NOT EXISTS cidade TEXT,
-      ADD COLUMN IF NOT EXISTS uf CHAR(2),
-      ADD COLUMN IF NOT EXISTS conjuge_nome TEXT,
-      ADD COLUMN IF NOT EXISTS conjuge_cpf TEXT,
-      ADD COLUMN IF NOT EXISTS conjuge_rg TEXT,
-      ADD COLUMN IF NOT EXISTS conjuge_data_nasc DATE,
-      ADD COLUMN IF NOT EXISTS conjuge_profissao TEXT,
-      ADD COLUMN IF NOT EXISTS conjuge_email TEXT,
-      ADD COLUMN IF NOT EXISTS conjuge_telefone TEXT,
-      ADD COLUMN IF NOT EXISTS regime_bens TEXT,
-      ADD COLUMN IF NOT EXISTS pep BOOLEAN DEFAULT false,
-      ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true,
-      ADD COLUMN IF NOT EXISTS fonte_dados TEXT,
-      ADD COLUMN IF NOT EXISTS cpf_completo_manual VARCHAR(14),
-      ADD COLUMN IF NOT EXISTS cpf_validado BOOLEAN DEFAULT FALSE,
-      ADD COLUMN IF NOT EXISTS cpf_fonte VARCHAR(50) DEFAULT 'opencnpj',
-      ADD COLUMN IF NOT EXISTS ultima_atualizacao_pessoal TIMESTAMPTZ DEFAULT NOW(),
-      ADD COLUMN IF NOT EXISTS assinante_contrato BOOLEAN DEFAULT false,
-      ADD COLUMN IF NOT EXISTS pendencias_contrato TEXT[] DEFAULT ARRAY[]::TEXT[],
-      ADD COLUMN IF NOT EXISTS cadastro_completo_contrato BOOLEAN DEFAULT false,
-      ADD COLUMN IF NOT EXISTS dados_extra JSONB DEFAULT '{}'::jsonb,
-      ADD COLUMN IF NOT EXISTS genero VARCHAR(20),
-      ADD COLUMN IF NOT EXISTS cpfhub_consultado_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS cpfhub_status TEXT,
-      ADD COLUMN IF NOT EXISTS cpfcnpj_consultado_at TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS cpfcnpj_status TEXT,
-      ADD COLUMN IF NOT EXISTS cpfcnpj_fonte TEXT,
-      ADD COLUMN IF NOT EXISTS cpfcnpj_payload_resumo JSONB DEFAULT '{}'::jsonb`);
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_socios_empresa_cpf ON public.socios_empresa(cpf_cnpj)');
+  if (sociosColumnsCache) return sociosColumnsCache;
+
+  // Produção: NÃO executar DDL em request.
+  // A migration 052 já cria/ajusta a tabela. Rodar CREATE/ALTER dentro do endpoint
+  // pode derrubar GET/POST com 500 quando o usuário do backend não é owner/superuser
+  // (comum em Coolify/PostgreSQL gerenciado). Aqui apenas lemos o schema existente.
+  const current = await pool.query(
+    `SELECT column_name
+       FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'socios_empresa'`
+  );
+
+  if (current.rows.length > 0) {
+    sociosColumnsCache = new Set(current.rows.map((r: { column_name: string }) => r.column_name));
     sociosSchemaReady = true;
+    return sociosColumnsCache;
   }
 
-  if (!sociosColumnsCache) {
-    const { rows } = await pool.query(
-      `SELECT column_name
-         FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name = 'socios_empresa'`
-    );
-    sociosColumnsCache = new Set(rows.map((r: { column_name: string }) => r.column_name));
+  const allowRuntimeDDL = String(process.env.SOCIOS_SCHEMA_AUTO_MIGRATE || '').toLowerCase() === 'true';
+  if (!allowRuntimeDDL) {
+    throw new Error('Tabela public.socios_empresa não encontrada. Execute as migrations 047, 049, 050, 051 e 052 antes do deploy.');
   }
 
+  await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS public.socios_empresa (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      empresa_id UUID NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
+      nome TEXT NOT NULL,
+      cpf_cnpj TEXT,
+      qualificacao_socio TEXT,
+      percentual_capital NUMERIC(5,2),
+      representante_legal BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_socios_empresa_empresa_id ON public.socios_empresa(empresa_id)');
+  await pool.query(`ALTER TABLE public.socios_empresa
+    ADD COLUMN IF NOT EXISTS nome_representante TEXT,
+    ADD COLUMN IF NOT EXISTS qualificacao_representante TEXT,
+    ADD COLUMN IF NOT EXISTS data_entrada_sociedade DATE,
+    ADD COLUMN IF NOT EXISTS pais TEXT,
+    ADD COLUMN IF NOT EXISTS rg TEXT,
+    ADD COLUMN IF NOT EXISTS rg_orgao_emissor TEXT,
+    ADD COLUMN IF NOT EXISTS rg_uf_emissao CHAR(2),
+    ADD COLUMN IF NOT EXISTS rg_data_emissao DATE,
+    ADD COLUMN IF NOT EXISTS data_nascimento DATE,
+    ADD COLUMN IF NOT EXISTS nacionalidade TEXT,
+    ADD COLUMN IF NOT EXISTS estado_civil TEXT,
+    ADD COLUMN IF NOT EXISTS profissao TEXT,
+    ADD COLUMN IF NOT EXISTS email TEXT,
+    ADD COLUMN IF NOT EXISTS telefone TEXT,
+    ADD COLUMN IF NOT EXISTS whatsapp TEXT,
+    ADD COLUMN IF NOT EXISTS cep TEXT,
+    ADD COLUMN IF NOT EXISTS logradouro TEXT,
+    ADD COLUMN IF NOT EXISTS numero TEXT,
+    ADD COLUMN IF NOT EXISTS complemento TEXT,
+    ADD COLUMN IF NOT EXISTS bairro TEXT,
+    ADD COLUMN IF NOT EXISTS cidade TEXT,
+    ADD COLUMN IF NOT EXISTS uf CHAR(2),
+    ADD COLUMN IF NOT EXISTS conjuge_nome TEXT,
+    ADD COLUMN IF NOT EXISTS conjuge_cpf TEXT,
+    ADD COLUMN IF NOT EXISTS conjuge_rg TEXT,
+    ADD COLUMN IF NOT EXISTS conjuge_data_nasc DATE,
+    ADD COLUMN IF NOT EXISTS conjuge_profissao TEXT,
+    ADD COLUMN IF NOT EXISTS conjuge_email TEXT,
+    ADD COLUMN IF NOT EXISTS conjuge_telefone TEXT,
+    ADD COLUMN IF NOT EXISTS regime_bens TEXT,
+    ADD COLUMN IF NOT EXISTS pep BOOLEAN DEFAULT false,
+    ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT true,
+    ADD COLUMN IF NOT EXISTS fonte_dados TEXT,
+    ADD COLUMN IF NOT EXISTS cpf_completo_manual VARCHAR(14),
+    ADD COLUMN IF NOT EXISTS cpf_validado BOOLEAN DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS cpf_fonte VARCHAR(50) DEFAULT 'opencnpj',
+    ADD COLUMN IF NOT EXISTS ultima_atualizacao_pessoal TIMESTAMPTZ DEFAULT NOW(),
+    ADD COLUMN IF NOT EXISTS assinante_contrato BOOLEAN DEFAULT false,
+    ADD COLUMN IF NOT EXISTS pendencias_contrato TEXT[] DEFAULT ARRAY[]::TEXT[],
+    ADD COLUMN IF NOT EXISTS cadastro_completo_contrato BOOLEAN DEFAULT false,
+    ADD COLUMN IF NOT EXISTS dados_extra JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS genero VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS cpfhub_consultado_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS cpfhub_status TEXT,
+    ADD COLUMN IF NOT EXISTS cpfcnpj_consultado_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS cpfcnpj_status TEXT,
+    ADD COLUMN IF NOT EXISTS cpfcnpj_fonte TEXT,
+    ADD COLUMN IF NOT EXISTS cpfcnpj_payload_resumo JSONB DEFAULT '{}'::jsonb`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_socios_empresa_cpf ON public.socios_empresa(cpf_cnpj)');
+
+  const { rows } = await pool.query(
+    `SELECT column_name
+       FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'socios_empresa'`
+  );
+  sociosColumnsCache = new Set(rows.map((r: { column_name: string }) => r.column_name));
+  sociosSchemaReady = true;
   return sociosColumnsCache;
 }
-
 
 function sociosPendenciasContrato(s: any): string[] {
   const pendencias: string[] = [];
