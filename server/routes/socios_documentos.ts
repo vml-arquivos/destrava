@@ -32,6 +32,35 @@ function onlyDigits(value: unknown): string {
   return String(value || '').replace(/\D/g, '');
 }
 
+function normalizeDateForPg(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  const text = String(value).trim();
+  if (!text) return null;
+
+  const br = text.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+  if (br) {
+    const d = Number(br[1]);
+    const m = Number(br[2]);
+    const y = Number(br[3]);
+    if (d >= 1 && d <= 31 && m >= 1 && m <= 12 && y >= 1800) {
+      return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+
+  const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) {
+    const y = Number(iso[1]);
+    const m = Number(iso[2]);
+    const d = Number(iso[3]);
+    if (d >= 1 && d <= 31 && m >= 1 && m <= 12 && y >= 1800) {
+      return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+
+  return null;
+}
+
 function validarCpf(cpfInput: unknown): boolean {
   const cpf = onlyDigits(cpfInput);
   if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
@@ -180,13 +209,13 @@ function normalizeSocioInput(input: any): SocioInput {
     representante_legal: representanteLegal,
     nome_representante: input?.nome_representante ?? input?.nome_do_representante ?? null,
     qualificacao_representante: input?.qualificacao_representante ?? input?.qualificacao_representante_legal ?? null,
-    data_entrada_sociedade: input?.data_entrada_sociedade ?? input?.data_entrada ?? null,
+    data_entrada_sociedade: normalizeDateForPg(input?.data_entrada_sociedade ?? input?.data_entrada),
     pais: input?.pais ?? null,
     rg: input?.rg ?? null,
     rg_orgao_emissor: input?.rg_orgao_emissor ?? input?.orgao_emissor ?? null,
     rg_uf_emissao: input?.rg_uf_emissao ?? null,
-    rg_data_emissao: input?.rg_data_emissao ?? null,
-    data_nascimento: input?.data_nascimento ?? input?.nascimento ?? null,
+    rg_data_emissao: normalizeDateForPg(input?.rg_data_emissao),
+    data_nascimento: normalizeDateForPg(input?.data_nascimento ?? input?.nascimento),
     nacionalidade: input?.nacionalidade ?? null,
     estado_civil: input?.estado_civil ?? null,
     profissao: input?.profissao ?? null,
@@ -203,7 +232,7 @@ function normalizeSocioInput(input: any): SocioInput {
     conjuge_nome: input?.conjuge_nome ?? null,
     conjuge_cpf: input?.conjuge_cpf ?? null,
     conjuge_rg: input?.conjuge_rg ?? null,
-    conjuge_data_nasc: input?.conjuge_data_nasc ?? null,
+    conjuge_data_nasc: normalizeDateForPg(input?.conjuge_data_nasc),
     conjuge_profissao: input?.conjuge_profissao ?? null,
     conjuge_email: input?.conjuge_email ?? null,
     conjuge_telefone: input?.conjuge_telefone ?? null,
@@ -256,6 +285,8 @@ const SOCIOS_BASE_COLUMNS = new Set([
   'ativo',
   'fonte_dados',
   'cpf_completo_manual',
+  'cpf_validado',
+  'cpf_fonte',
   'ultima_atualizacao_pessoal',
   'assinante_contrato',
   'pendencias_contrato',
@@ -298,6 +329,8 @@ const SOCIOS_MANUAL_PROTECTED_COLUMNS = new Set([
   'conjuge_telefone',
   'regime_bens',
   'cpf_completo_manual',
+  'cpf_validado',
+  'cpf_fonte',
   'ultima_atualizacao_pessoal',
 ]);
 
@@ -658,7 +691,7 @@ async function enriquecerSocioComCPFHubAutomatico(empresaId: string, socioRow: a
   // Ao receber CPF manual, sincronizamos nascimento/gênero imediatamente e atualizamos
   // os campos mesmo quando havia valor anterior, porque CPFHub passa a ser a fonte validada.
   if (data.nome && !hasValue(socioRow?.nome)) updates.nome = data.nome;
-  if (data.data_nascimento) updates.data_nascimento = data.data_nascimento;
+  if (data.data_nascimento) updates.data_nascimento = normalizeDateForPg(data.data_nascimento);
   if (data.genero) updates.genero = data.genero;
 
   updates.dados_extra = JSON.stringify({
@@ -792,6 +825,21 @@ async function ensureSociosConjugeSchema(): Promise<void> {
 }
 
 async function ensureContratosSociaisSchema(): Promise<void> {
+  const existing = await pool.query(
+    `SELECT column_name
+       FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'empresas_contratos_sociais'`
+  );
+  if (existing.rows.length > 0) return;
+
+  const allowRuntimeDDL = String(process.env.CONTRATO_SOCIAL_SCHEMA_AUTO_MIGRATE || '').toLowerCase() === 'true';
+  if (!allowRuntimeDDL) {
+    const err: any = new Error('Tabela public.empresas_contratos_sociais não encontrada. Execute a migration 053 antes do deploy.');
+    err.code = '42P01';
+    throw err;
+  }
+
   await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
   await pool.query(`CREATE TABLE IF NOT EXISTS public.empresas_contratos_sociais (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -977,17 +1025,24 @@ router.put('/:id/socios/:sid/cpf-manual', auth, async (req: Request, res: Respon
       return;
     }
     const validado = req.body?.validado !== false;
+    const columns = await ensureSociosEmpresaSchema();
+    const updates: Record<string, unknown> = {
+      cpf_cnpj: cpf,
+      cpf_completo_manual: cpf,
+      cpf_validado: validado,
+      cpf_fonte: 'manual',
+      ultima_atualizacao_pessoal: new Date(),
+    };
+    const entries = Object.entries(updates).filter(([key]) => columns.has(key));
+    const sets = entries.map(([key], index) => `${key}=$${index + 1}`);
+    const values = entries.map(([, value]) => value);
+    values.push(req.params.sid, req.params.id);
     const { rows } = await pool.query(
       `UPDATE public.socios_empresa
-          SET cpf_cnpj=$1,
-              cpf_completo_manual=$1,
-              cpf_validado=$2,
-              cpf_fonte='manual',
-              ultima_atualizacao_pessoal=NOW(),
-              updated_at=NOW()
-        WHERE id=$3 AND empresa_id=$4
+          SET ${sets.join(', ')}, updated_at=NOW()
+        WHERE id=$${values.length - 1} AND empresa_id=$${values.length}
         RETURNING *`,
-      [cpf, validado, req.params.sid, req.params.id]
+      values
     );
     if (rows.length === 0) { res.status(404).json({ error: 'Sócio não encontrado' }); return; }
     const enriquecido = await enriquecerSocioComCPFHubAutomatico(req.params.id, rows[0]);
@@ -1040,7 +1095,7 @@ router.post('/:id/socios/:sid/enriquecer-cpf', auth, async (req: Request, res: R
     };
 
     if (data.nome && !hasValue(currentResult.rows[0].nome)) updates.nome = data.nome;
-    if (data.data_nascimento) updates.data_nascimento = data.data_nascimento;
+    if (data.data_nascimento) updates.data_nascimento = normalizeDateForPg(data.data_nascimento);
     if (data.genero && columns.has('genero')) updates.genero = data.genero;
 
     const currentExtra = currentResult.rows[0].dados_extra && typeof currentResult.rows[0].dados_extra === 'object'
@@ -1260,8 +1315,9 @@ router.get('/:id/contrato-social', auth, async (req: Request, res: Response) => 
     await ensureContratosSociaisSchema();
     const { rows } = await pool.query('SELECT * FROM public.empresas_contratos_sociais WHERE empresa_id=$1 ORDER BY data_upload DESC', [req.params.id]);
     res.json(rows);
-  } catch (err) {
+  } catch (err: any) {
     console.error('[GET /api/empresas/:id/contrato-social]', pgErrorDetails(err));
+    if (err?.code === '42P01') { res.json([]); return; }
     res.status(500).json({ error: 'Erro ao listar contratos sociais', details: pgErrorDetails(err) });
   }
 });
