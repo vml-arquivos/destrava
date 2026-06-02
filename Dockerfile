@@ -14,14 +14,32 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
 COPY . .
 
 ENV NODE_OPTIONS=--max-old-space-size=4096
-RUN pnpm exec vite build
+# Coolify encerra builds com muito tempo sem saída. O Vite pode ficar vários
+# segundos/minutos em "transforming..." sem imprimir nada em projetos grandes;
+# este heartbeat mantém o log ativo e preserva o exit code real do Vite.
+RUN set -eu; \
+    (while true; do echo "[destrava-build] vite build em andamento..."; sleep 25; done) & \
+    HEARTBEAT_PID=$!; \
+    pnpm exec vite build; \
+    BUILD_STATUS=$?; \
+    kill "$HEARTBEAT_PID" 2>/dev/null || true; \
+    wait "$HEARTBEAT_PID" 2>/dev/null || true; \
+    exit "$BUILD_STATUS"
 
-RUN pnpm exec esbuild server/index.ts \
-    --platform=node \
-    --packages=external \
-    --bundle \
-    --format=esm \
-    --outdir=dist
+# Mesmo tratamento para o bundle do backend: evita falso timeout por falta de log.
+RUN set -eu; \
+    (while true; do echo "[destrava-build] esbuild backend em andamento..."; sleep 25; done) & \
+    HEARTBEAT_PID=$!; \
+    pnpm exec esbuild server/index.ts \
+        --platform=node \
+        --packages=external \
+        --bundle \
+        --format=esm \
+        --outdir=dist; \
+    BUILD_STATUS=$?; \
+    kill "$HEARTBEAT_PID" 2>/dev/null || true; \
+    wait "$HEARTBEAT_PID" 2>/dev/null || true; \
+    exit "$BUILD_STATUS"
 
 # Copiar assets de logos para dist/assets (lidos em runtime pelo logo_constants.ts)
 RUN mkdir -p dist/assets && cp -r server/assets/. dist/assets/
