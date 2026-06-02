@@ -405,8 +405,7 @@ function mergeArrays(primary: any[], fallback: any[]): any[] {
 
 function mergeNormalized(rawCnpj: string, brasil: AnyRecord, cnpja: AnyRecord, opencnpj: AnyRecord): AnyRecord {
   const merged: AnyRecord = { cnpj: rawCnpj };
-  const keys = new Set([...Object.keys(opencnpj), ...Object.keys(brasil), ...Object.keys(cnpja)]);
-
+    const keys = Array.from(new Set([...Object.keys(opencnpj), ...Object.keys(brasil), ...Object.keys(cnpja)]));
   for (const key of keys) {
     if (key === 'qsa' || key === 'cnaes_secundarios') continue;
     // OpenCNPJ é a fonte principal gratuita; BrasilAPI é fallback de compatibilidade.

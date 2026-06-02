@@ -602,7 +602,7 @@ export default function Empresas() {
       }
       const bulk = await apiFetch(`/api/empresas/${selecionada.id}/socios/bulk`, {
         method: 'POST',
-        body: JSON.stringify({ socios: [match] }),
+        body: JSON.stringify({ socios: [match], enriquecer_cpfhub: false }),
       });
       const atualizado = Array.isArray(bulk?.socios) ? bulk.socios[0] : null;
       if (atualizado) setSociosEmpresa(prev => prev.map((s: any) => s.id === atualizado.id ? atualizado : s));
@@ -942,7 +942,7 @@ export default function Empresas() {
         if (socios.length > 0) {
           await apiFetch(`/api/empresas/${editando.id}/socios/bulk`, {
             method: "POST",
-            body: JSON.stringify({ socios: normalizarSociosReceita(socios as any[]), replace: true }),
+            body: JSON.stringify({ socios: normalizarSociosReceita(socios as any[]), replace: true, enriquecer_cpfhub: false }),
           }).catch(() => null);
         }
         toast.success("Empresa atualizada!");
@@ -951,7 +951,7 @@ export default function Empresas() {
         if (criada?.id && socios.length > 0) {
           await apiFetch(`/api/empresas/${criada.id}/socios/bulk`, {
             method: "POST",
-            body: JSON.stringify({ socios: normalizarSociosReceita(socios as any[]), replace: true }),
+            body: JSON.stringify({ socios: normalizarSociosReceita(socios as any[]), replace: true, enriquecer_cpfhub: false }),
           }).catch(() => null);
         }
         toast.success("Empresa cadastrada!");
