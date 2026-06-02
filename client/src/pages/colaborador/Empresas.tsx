@@ -471,6 +471,8 @@ export default function Empresas() {
   const [sociosEmpresa, setSociosEmpresa] = useState<any[]>([]);
   const [sociosExpandidos, setSociosExpandidos] = useState<Record<string, boolean>>({});
   const [consultandoCpfSocioId, setConsultandoCpfSocioId] = useState<string | null>(null);
+  const [editandoCpfSocioId, setEditandoCpfSocioId] = useState<string | null>(null);
+  const [cpfInputTemp, setCpfInputTemp] = useState<string>('');
   const [simulacoesEmpresa, setSimulacoesEmpresa] = useState<any[]>([]);
   const [contratosEmpresa, setContratosEmpresa] = useState<any[]>([]);
   const [loadingDetalhe, setLoadingDetalhe] = useState(false);
@@ -1745,7 +1747,83 @@ export default function Empresas() {
                                   </div>
 
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">CPF/CNPJ do sócio</span><b className="text-slate-700 font-mono">{s.cpf_cnpj || 'Não informado'}</b><button onClick={() => { const cpf = prompt('Informe o CPF completo do sócio'); if (cpf) atualizarCpfManualSocio(s, cpf); }} className="block mt-1 text-[11px] font-bold text-blue-600 hover:underline">Informar CPF completo</button><button onClick={() => consultarCpfHubSocio(s)} disabled={consultandoCpfSocioId === s.id} className="block mt-1 text-[11px] font-bold text-violet-600 hover:underline disabled:opacity-50">{consultandoCpfSocioId === s.id ? 'Consultando CPFHub...' : 'Consultar CPFHub'}</button></div>
+                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2">
+                                      <span className="block text-slate-400 text-[11px] mb-0.5">CPF/CNPJ do sócio</span>
+                                      {editandoCpfSocioId === s.id ? (
+                                        <div className="flex flex-col gap-1 mt-1">
+                                          <input
+                                            autoFocus
+                                            type="text"
+                                            inputMode="numeric"
+                                            maxLength={14}
+                                            value={cpfInputTemp}
+                                            onChange={e => setCpfInputTemp(e.target.value.replace(/[^0-9]/g, '').slice(0, 11))}
+                                            onKeyDown={async e => {
+                                              if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                if (cpfInputTemp.length === 11) {
+                                                  setEditandoCpfSocioId(null);
+                                                  await atualizarCpfManualSocio(s, cpfInputTemp);
+                                                }
+                                              }
+                                              if (e.key === 'Escape') { setEditandoCpfSocioId(null); setCpfInputTemp(''); }
+                                            }}
+                                            placeholder="Somente números (11 dígitos)"
+                                            className="w-full border border-blue-300 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                          />
+                                          <div className="flex gap-1">
+                                            <button
+                                              onClick={async () => {
+                                                if (cpfInputTemp.length === 11) {
+                                                  setEditandoCpfSocioId(null);
+                                                  await atualizarCpfManualSocio(s, cpfInputTemp);
+                                                }
+                                              }}
+                                              disabled={cpfInputTemp.length !== 11}
+                                              className="flex-1 text-[11px] font-bold bg-blue-600 text-white rounded py-0.5 px-2 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                                            >
+                                              {cpfInputTemp.length === 11 ? 'Salvar e Sincronizar CPFHub →' : `${cpfInputTemp.length}/11 dígitos`}
+                                            </button>
+                                            <button
+                                              onClick={() => { setEditandoCpfSocioId(null); setCpfInputTemp(''); }}
+                                              className="text-[11px] text-slate-500 hover:text-slate-700 px-2 rounded border border-slate-200"
+                                            >
+                                              ✕
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <b className="text-slate-700 font-mono">
+                                            {s.cpf_cnpj
+                                              ? String(s.cpf_cnpj).replace(/\D/g, '').length === 11
+                                                ? String(s.cpf_cnpj).replace(/\D/g, '').replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+                                                : s.cpf_cnpj
+                                              : 'Não informado'}
+                                          </b>
+                                          {s.cpfhub_status === 'success' && (
+                                            <span className="ml-1 text-[10px] text-emerald-600 font-semibold">✓ CPFHub</span>
+                                          )}
+                                          <button
+                                            onClick={() => {
+                                              const atual = String(s.cpf_completo_manual || s.cpf_cnpj || '').replace(/\D/g, '');
+                                              setCpfInputTemp(atual.length === 11 ? atual : '');
+                                              setEditandoCpfSocioId(s.id);
+                                            }}
+                                            className="block mt-1 text-[11px] font-bold text-blue-600 hover:underline"
+                                          >
+                                            {s.cpf_cnpj ? 'Editar CPF' : 'Informar CPF completo'}
+                                          </button>
+                                          <button
+                                            onClick={() => consultarCpfHubSocio(s)}
+                                            disabled={consultandoCpfSocioId === s.id}
+                                            className="block mt-1 text-[11px] font-bold text-violet-600 hover:underline disabled:opacity-50"
+                                          >
+                                            {consultandoCpfSocioId === s.id ? 'Consultando CPFHub...' : 'Consultar CPFHub'}
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
                                     <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Entrada na sociedade</span><b className="text-slate-700">{s.data_entrada_sociedade ? new Date(s.data_entrada_sociedade).toLocaleDateString('pt-BR') : 'Não informado'}</b></div>
                                     <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">País</span><b className="text-slate-700">{s.pais || 'Não informado'}</b></div>
                                     <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Representante legal</span><b className="text-slate-700">{s.nome_representante || (s.representante_legal ? 'Sim' : 'Não informado')}</b></div>
