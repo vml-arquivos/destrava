@@ -965,9 +965,6 @@ async function listarConversasChatwoot({
 // ─── App ─────────────────────────────────────────────────────────────────────
 async function startServer() {
   const app = express();
-  // Rota para consulta de CNPJ (proxy para BrasilAPI)
-  app.use('/api/cnpj', cnpjRouter);
-  app.use('/api/empresas', sociosDocumentosRouter);
   const server = createServer(app);
 
   // ─── AUTO-CREATE: Company Hub / Empresas enriquecidas ──────────────────────
@@ -1466,6 +1463,11 @@ async function startServer() {
 
   app.use(express.json({ limit: "5mb" }));
   app.use(express.urlencoded({ extended: true }));
+
+  // Rotas de CNPJ e sócios/documentos de empresas — registradas APÓS express.json
+  // para que req.body seja parseado corretamente em todos os endpoints POST/PUT/PATCH
+  app.use('/api/cnpj', cnpjRouter);
+  app.use('/api/empresas', sociosDocumentosRouter);
 
   // CORS
   app.use((req: Request, res: Response, next: NextFunction) => {
