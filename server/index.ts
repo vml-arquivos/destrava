@@ -1457,10 +1457,40 @@ async function startServer() {
     `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS cor_secundaria TEXT`,
     `ALTER TABLE parceiros_comerciais ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
   ];
-  for (const sql of alteracoesParceiros016) { try { await pool.query(sql); } catch { /* compat */ } }
+    for (const sql of alteracoesParceiros016) { try { await pool.query(sql); } catch { /* compat */ } }
   console.log('[startup] Patches de banco (contratos_gerados) aplicados/verificados.');
+  // ─── AUTO-CREATE: Acompanhamento Bancário — colunas de compensação/aderência ──
+  // Garante que todas as colunas usadas no INSERT/UPDATE de atualizações semanais
+  // existam na tabela, mesmo que a migration manual ainda não tenha sido aplicada.
+  const alteracoesAcompBancario = [
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS semanas_no_mes INTEGER DEFAULT 4`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS semanas_restantes_mes INTEGER DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS acumulado_anual NUMERIC(15,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS motivo_alerta_aderencia TEXT`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS diagnostico_tecnico TEXT`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS faturamento_anual_ref NUMERIC(15,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS teto_anual_movimentacao NUMERIC(15,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS faturamento_mensal_base NUMERIC(15,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS teto_mensal_movimentacao NUMERIC(15,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS referencia_semanal_base NUMERIC(15,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS teto_semanal_movimentacao NUMERIC(15,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS acumulado_mensal NUMERIC(15,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS valor_abaixo_semana NUMERIC(15,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS valor_excedente_semana NUMERIC(15,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS saldo_faltante_ref_mensal NUMERIC(15,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS saldo_disponivel_teto_mensal NUMERIC(15,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS meta_base_dinamica NUMERIC(15,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS teto_dinamico_proxima NUMERIC(15,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS percentual_uso_semanal NUMERIC(8,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS percentual_uso_mensal NUMERIC(8,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS percentual_uso_anual NUMERIC(8,2) DEFAULT 0`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS status_aderencia TEXT`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS alerta_aderencia BOOLEAN DEFAULT false`,
+    `ALTER TABLE IF EXISTS public.acompanhamento_bancario_atualizacoes ADD COLUMN IF NOT EXISTS criado_por UUID`,
+  ];
+  for (const sql of alteracoesAcompBancario) { try { await pool.query(sql); } catch { /* compat */ } }
+  console.log('[startup] Patches de banco (acompanhamento_bancario_atualizacoes) aplicados/verificados.');
   // ─────────────────────────────────────────────────────────────────────────────
-
   app.use(express.json({ limit: "5mb" }));
   app.use(express.urlencoded({ extended: true }));
 
@@ -10328,7 +10358,7 @@ ${(temTest1 || temTest2) ? `
           $1,$2,$3,$4,COALESCE($5::date,CURRENT_DATE),
           $6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
           $22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,
-          $35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56
+          $35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57
         )
         ON CONFLICT (acompanhamento_id, numero_semana) DO UPDATE SET
           data_referencia_inicio = EXCLUDED.data_referencia_inicio,
