@@ -537,7 +537,13 @@ export default function Empresas() {
         body: JSON.stringify({ cpf_completo: cpfCompleto, validado: true }),
       });
       setSociosEmpresa(prev => prev.map((s: any) => s.id === atualizado.id ? atualizado : s));
-      toast.success('CPF completo validado e salvo');
+      if (atualizado?.cpfhub_status === 'success') {
+        toast.success('CPF salvo e dados sincronizados pelo CPFHub.');
+      } else if (atualizado?.cpfhub_status) {
+        toast.warning(`CPF salvo. CPFHub não sincronizou: ${atualizado.cpfhub_status}`);
+      } else {
+        toast.success('CPF completo validado e salvo.');
+      }
     } catch (err: any) {
       toast.error(err?.message || 'CPF inválido ou erro ao salvar');
     }
@@ -829,7 +835,7 @@ export default function Empresas() {
           socios: sociosReceita,
           replace: true,
           cnpj: clean,
-          enriquecer_cpfcnpj: true,
+          enriquecer_cpfcnpj: false,
           enriquecer_cpfhub: true,
           force_cpfcnpj: false,
         }),
@@ -1700,7 +1706,7 @@ export default function Empresas() {
                         </div>
 
                         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 leading-relaxed">
-                          <b>Importante:</b> A sincronização busca QSA nas fontes públicas e, quando CPF.CNPJ estiver configurado, tenta revelar CPF completo dos sócios automaticamente. Com CPF completo, CPFHub valida nome, nascimento e gênero. Campos não retornados pelas APIs seguem como pendência de contrato/análise.
+                          <b>Importante:</b> A sincronização busca QSA nas fontes públicas gratuitas (BrasilAPI/OpenCNPJ). Como CPF.CNPJ está desativado por custo, informe o CPF completo manualmente; após salvar, o sistema consulta CPFHub automaticamente e sincroniza nascimento/gênero/status. Campos não retornados seguem como pendência de contrato/análise.
                         </div>
 
                         {sociosEmpresa.length === 0 ? (
@@ -1728,8 +1734,6 @@ export default function Empresas() {
                                         {s.qualificacao_socio && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{s.qualificacao_socio}</span>}
                                         {s.representante_legal && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Representante legal</span>}
                                         {s.fonte_dados && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 border border-slate-200">Fonte: {s.fonte_dados}</span>}
-                                        {s.cpfcnpj_status === 'success' && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">CPF.CNPJ OK</span>}
-                                        {s.cpfcnpj_status && s.cpfcnpj_status !== 'success' && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">CPF.CNPJ: {s.cpfcnpj_status}</span>}
                                         {s.cpfhub_status === 'success' && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200">CPFHub validado</span>}
                                         {s.cpfhub_status && s.cpfhub_status !== 'success' && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 border border-slate-200">CPFHub: {s.cpfhub_status}</span>}
                                         <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${completo ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>

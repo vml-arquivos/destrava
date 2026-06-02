@@ -654,9 +654,12 @@ async function enriquecerSocioComCPFHubAutomatico(empresaId: string, socioRow: a
     cpfhub_status: 'success',
   };
 
+  // CPFHub não descobre CPF. Ele só enriquece dados quando já existe CPF completo.
+  // Ao receber CPF manual, sincronizamos nascimento/gênero imediatamente e atualizamos
+  // os campos mesmo quando havia valor anterior, porque CPFHub passa a ser a fonte validada.
   if (data.nome && !hasValue(socioRow?.nome)) updates.nome = data.nome;
-  if (data.data_nascimento && !hasValue(socioRow?.data_nascimento)) updates.data_nascimento = data.data_nascimento;
-  if (data.genero && !hasValue(socioRow?.genero)) updates.genero = data.genero;
+  if (data.data_nascimento) updates.data_nascimento = data.data_nascimento;
+  if (data.genero) updates.genero = data.genero;
 
   updates.dados_extra = JSON.stringify({
     ...mergeJsonObject(socioRow?.dados_extra),
@@ -886,8 +889,11 @@ router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
     }
 
     let cpfcnpjResult: any = null;
-    const cpfcnpjAutoEnabled = String(process.env.CPFCNPJ_ENABLED || '').toLowerCase() !== 'false';
-    if ((enriquecer_cpfcnpj !== false) && cpfcnpjAutoEnabled) {
+    // CPF.CNPJ fica DESLIGADO por padrão para evitar custo automático.
+    // Só roda se o payload pedir explicitamente enriquecer_cpfcnpj=true E a env CPFCNPJ_ENABLED=true.
+    // No fluxo atual do Destrava, usamos apenas BrasilAPI/OpenCNPJ + CPF manual + CPFHub.
+    const cpfcnpjAutoEnabled = String(process.env.CPFCNPJ_ENABLED || '').toLowerCase() === 'true';
+    if ((enriquecer_cpfcnpj === true) && cpfcnpjAutoEnabled) {
       cpfcnpjResult = await consultarEAplicarCPFCNPJ(req.params.id, cnpj, Boolean(force_cpfcnpj));
       if (Array.isArray(cpfcnpjResult?.socios)) {
         for (const row of cpfcnpjResult.socios) {
@@ -1034,8 +1040,8 @@ router.post('/:id/socios/:sid/enriquecer-cpf', auth, async (req: Request, res: R
     };
 
     if (data.nome && !hasValue(currentResult.rows[0].nome)) updates.nome = data.nome;
-    if (data.data_nascimento && !hasValue(currentResult.rows[0].data_nascimento)) updates.data_nascimento = data.data_nascimento;
-    if (data.genero && columns.has('genero') && !hasValue(currentResult.rows[0].genero)) updates.genero = data.genero;
+    if (data.data_nascimento) updates.data_nascimento = data.data_nascimento;
+    if (data.genero && columns.has('genero')) updates.genero = data.genero;
 
     const currentExtra = currentResult.rows[0].dados_extra && typeof currentResult.rows[0].dados_extra === 'object'
       ? currentResult.rows[0].dados_extra
