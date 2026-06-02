@@ -14,11 +14,10 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
 COPY . .
 
 ENV NODE_OPTIONS=--max-old-space-size=4096
-# Coolify encerra builds com muito tempo sem saída. O Vite pode ficar vários
-# segundos/minutos em "transforming..." sem imprimir nada em projetos grandes;
-# este heartbeat mantém o log ativo e preserva o exit code real do Vite.
+
+# Coolify encerra comandos longos sem saída útil. Mantém log ativo e preserva exit code.
 RUN set -eu; \
-    (while true; do echo "[destrava-build] vite build em andamento..."; sleep 25; done) & \
+    (while true; do echo "[destrava-build] vite build em andamento..."; sleep 20; done) & \
     HEARTBEAT_PID=$!; \
     pnpm exec vite build; \
     BUILD_STATUS=$?; \
@@ -26,9 +25,8 @@ RUN set -eu; \
     wait "$HEARTBEAT_PID" 2>/dev/null || true; \
     exit "$BUILD_STATUS"
 
-# Mesmo tratamento para o bundle do backend: evita falso timeout por falta de log.
 RUN set -eu; \
-    (while true; do echo "[destrava-build] esbuild backend em andamento..."; sleep 25; done) & \
+    (while true; do echo "[destrava-build] esbuild backend em andamento..."; sleep 20; done) & \
     HEARTBEAT_PID=$!; \
     pnpm exec esbuild server/index.ts \
         --platform=node \
@@ -45,21 +43,39 @@ RUN set -eu; \
 RUN mkdir -p dist/assets && cp -r server/assets/. dist/assets/
 
 # ─── Stage 2: Production ───────────────────────────────────────────────────────
-# node:20-slim (Debian) — Chromium via apt é muito mais leve que Alpine
-# (Alpine puxa Mesa, LLVM, FFmpeg → ~189 dependências extras → timeout no build)
 FROM node:20-slim AS runner
 
-# Chromium + dependências mínimas
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium \
-    fonts-freefont-ttf \
-    ca-certificates \
-    wget \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+USER root
+ENV DEBIAN_FRONTEND=noninteractive
 
-# pnpm para instalar prod deps
-RUN npm install -g pnpm@10.4.1 && npm cache clean --force
+# Chromium + dependências mínimas.
+# O apt em Debian/Chromium pode ficar muito tempo em fases silenciosas; o heartbeat
+# evita kill 255 do Coolify durante apt-get/dpkg sem alterar o resultado real.
+RUN set -eu; \
+    (while true; do echo "[destrava-build] instalando chromium/dependencias..."; sleep 20; done) & \
+    HEARTBEAT_PID=$!; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        chromium \
+        fonts-freefont-ttf \
+        ca-certificates \
+        wget; \
+    APT_STATUS=$?; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*; \
+    kill "$HEARTBEAT_PID" 2>/dev/null || true; \
+    wait "$HEARTBEAT_PID" 2>/dev/null || true; \
+    exit "$APT_STATUS"
+
+RUN set -eu; \
+    (while true; do echo "[destrava-build] instalando pnpm runtime..."; sleep 20; done) & \
+    HEARTBEAT_PID=$!; \
+    npm install -g pnpm@10.4.1; \
+    NPM_STATUS=$?; \
+    npm cache clean --force; \
+    kill "$HEARTBEAT_PID" 2>/dev/null || true; \
+    wait "$HEARTBEAT_PID" 2>/dev/null || true; \
+    exit "$NPM_STATUS"
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
@@ -69,8 +85,6 @@ ENV CHROMIUM_PATH=/usr/bin/chromium
 RUN mkdir -p /var/data/destrava /var/log/destrava \
     && chown -R node:node /var/data/destrava /var/log/destrava
 
-# USER node ANTES do pnpm install → elimina o chown -R /app final
-# que causava timeout de ~260s sobre node_modules no Coolify
 USER node
 
 WORKDIR /app
@@ -79,7 +93,14 @@ COPY --chown=node:node package.json pnpm-lock.yaml .npmrc ./
 COPY --chown=node:node patches/ ./patches/
 
 RUN --mount=type=cache,id=pnpm-store-prod,uid=1000,target=/home/node/.local/share/pnpm/store \
-    pnpm install --prod --frozen-lockfile
+    set -eu; \
+    (while true; do echo "[destrava-build] pnpm install prod em andamento..."; sleep 20; done) & \
+    HEARTBEAT_PID=$!; \
+    pnpm install --prod --frozen-lockfile; \
+    PNPM_STATUS=$?; \
+    kill "$HEARTBEAT_PID" 2>/dev/null || true; \
+    wait "$HEARTBEAT_PID" 2>/dev/null || true; \
+    exit "$PNPM_STATUS"
 
 COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/scripts ./scripts
