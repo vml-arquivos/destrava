@@ -275,7 +275,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     const [empresasResult, leadsResult, clientesPFResult, parceirosResult, prestadoresResult, responsaveisResult] = await Promise.allSettled([
       fetchJsonApi('/api/empresas?limit=500', token),
       fetchJsonApi('/api/leads?limit=500', token),
-      fetchJsonApi('/api/clientes-pf', token),
+      fetchJsonApi('/api/clientes-pf?incompleto=0&todos=1', token),
       fetchFirstAvailable(['/api/parceiros', '/api/parceiros-comerciais'], token),
       fetchJsonApi('/api/prestadores-servico', token),
       fetchJsonApi('/api/contratos/responsaveis', token),
