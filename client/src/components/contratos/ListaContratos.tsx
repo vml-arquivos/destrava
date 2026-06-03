@@ -11,12 +11,14 @@ interface Contrato {
   codigo_tipo_contrato?: string;
   empresa_id?: string;
   lead_id?: string;
+  cliente_pf_id?: string;
   parceiro_id?: string;
   parceiro_nome?: string;
   contratada_nome?: string;
   responsavel_contrato_nome?: string;
   empresa_nome?: string;
   lead_nome?: string;
+  cliente_pf_nome?: string;
   valor_referencia?: number;
   valor_contrato?: number;
   taxa_comissao?: number;
@@ -332,7 +334,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
           <tbody>
             {contratosSemDuplicatas.map(c => {
               const sc = statusConfig[c.status] || statusConfig.gerado;
-              const nomeCliente = c.empresa_nome || c.lead_nome || '—';
+              const nomeCliente = c.empresa_nome || c.cliente_pf_nome || c.lead_nome || '—';
               const valor = c.valor_contrato ?? c.valor_referencia;
               const dataDisplay = formatData(c.data_assinatura || c.created_at);
               const isSelected = selectedIds.has(c.id);
