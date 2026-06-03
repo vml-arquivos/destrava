@@ -7191,9 +7191,15 @@ ${(temTest1 || temTest2) ? `
   app.get('/api/clientes-pf', auth, async (req: Request, res: Response) => {
     try {
       const incompleto = String(req.query.incompleto || '').toLowerCase();
-      const whereExtra = (incompleto === '1' || incompleto === 'true')
-        ? `AND (COALESCE(cadastro_completo, false) = false OR COALESCE(arquivado_por_duplicidade, false) = true)`
-        : `AND COALESCE(cadastro_completo, false) = true AND COALESCE(bloqueado_operacional, false) = false AND COALESCE(arquivado_por_duplicidade, false) = false`;
+      const todos = String(req.query.todos || '').toLowerCase();
+      // todos=1 → retorna todos os ativos (sem restrição de cadastro_completo)
+      // incompleto=1 → retorna apenas incompletos/duplicados
+      // padrão → apenas cadastro_completo=true e não bloqueados
+      const whereExtra = (todos === '1' || todos === 'true')
+        ? `AND COALESCE(c.bloqueado_operacional, false) = false AND COALESCE(c.arquivado_por_duplicidade, false) = false`
+        : (incompleto === '1' || incompleto === 'true')
+          ? `AND (COALESCE(c.cadastro_completo, false) = false OR COALESCE(c.arquivado_por_duplicidade, false) = true)`
+          : `AND COALESCE(c.cadastro_completo, false) = true AND COALESCE(c.bloqueado_operacional, false) = false AND COALESCE(c.arquivado_por_duplicidade, false) = false`;
       const { rows } = await pool.query(
         `SELECT c.id, c.nome, c.cpf, c.rg, c.data_nascimento, c.email, c.telefone,
                 c.endereco, c.cidade, c.uf, c.cep, c.profissao, c.estado_civil,
@@ -8639,8 +8645,11 @@ ${(temTest1 || temTest2) ? `
                 cg.foro_eleito, cg.hash_documento, cg.pdf_path,
                 cg.empresa_id, cg.lead_id, cg.parceiro_id, cg.criado_por,
                 cg.contratada_id, cg.responsavel_contrato_id,
-                e.razao_social AS empresa_nome,
+                cg.numero_contrato, cg.protocolo_contrato,
+                -- nome do cliente: empresa > lead > cliente_pf (ordem de prioridade)
+                COALESCE(e.razao_social, l.nome, cpf.nome) AS empresa_nome,
                 l.nome AS lead_nome,
+                cpf.nome AS cliente_pf_nome,
                 pc.nome AS parceiro_nome,
                 COALESCE(ps.razao_social, ps.nome, ps.nome_fantasia, cg.contratada_snapshot->>'nome_exibicao') AS contratada_nome,
                 col_resp.nome AS responsavel_contrato_nome,
@@ -8648,6 +8657,7 @@ ${(temTest1 || temTest2) ? `
          FROM contratos_gerados cg
          LEFT JOIN empresas e ON e.id = cg.empresa_id
          LEFT JOIN leads l ON l.id = cg.lead_id
+         LEFT JOIN clientes_pf cpf ON cpf.id = cg.cliente_pf_id
          LEFT JOIN parceiros_comerciais pc ON pc.id = cg.parceiro_id
          LEFT JOIN prestadores_servico ps ON ps.id = cg.contratada_id
          LEFT JOIN colaboradores col_resp ON col_resp.id = cg.responsavel_contrato_id
@@ -8667,8 +8677,9 @@ ${(temTest1 || temTest2) ? `
   async function buscarContratoDetalhado(id: string) {
     const { rows } = await pool.query(
       `SELECT cg.*,
-              e.razao_social AS empresa_nome,
+              COALESCE(e.razao_social, l.nome, cpf.nome) AS empresa_nome,
               l.nome AS lead_nome,
+              cpf.nome AS cliente_pf_nome,
               pc.nome AS parceiro_nome,
               COALESCE(ps.razao_social, ps.nome, ps.nome_fantasia, cg.contratada_snapshot->>'nome_exibicao') AS contratada_nome,
               col_resp.nome AS responsavel_contrato_nome,
@@ -8676,6 +8687,7 @@ ${(temTest1 || temTest2) ? `
          FROM contratos_gerados cg
          LEFT JOIN empresas e ON e.id = cg.empresa_id
          LEFT JOIN leads l ON l.id = cg.lead_id
+         LEFT JOIN clientes_pf cpf ON cpf.id = cg.cliente_pf_id
          LEFT JOIN parceiros_comerciais pc ON pc.id = cg.parceiro_id
          LEFT JOIN prestadores_servico ps ON ps.id = cg.contratada_id
          LEFT JOIN colaboradores col_resp ON col_resp.id = cg.responsavel_contrato_id
