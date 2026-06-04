@@ -111,3 +111,61 @@ Evidências:
 - Migration criada para estrutura documental centralizada."
 git push
 ```
+
+---
+
+## Correção adicional: garantia em contratos Limpa Nome e Limpa BACEN
+
+Arquivos atualizados:
+- `client/src/components/contratos/FormGerarContrato.tsx`
+- `server/index.ts`
+
+Alterações:
+- Adicionada seleção `Sem garantia` / `Com garantia` no contrato Limpa Nome.
+- Adicionada seleção `Sem garantia` / `Com garantia` no contrato Limpa BACEN.
+- O prazo de garantia agora só aparece e só é obrigatório quando a opção `Com garantia` estiver selecionada.
+- O payload enviado para geração passa a incluir `possui_garantia` e `prazo_garantia_meses`.
+- O PDF do Limpa Nome passa a gerar cláusulas diferentes para contratos com garantia e sem garantia.
+- O PDF do Limpa BACEN passa a exibir quadro resumido com garantia e cláusula específica com ou sem garantia.
+- A geração salva essas informações no `payload_snapshot`, mantendo rastreabilidade do contrato gerado.
+
+Evidências desta etapa:
+
+```bash
+npm install --prefer-offline --no-audit --no-fund
+npm run check
+npm run build
+npm test
+```
+
+Resultado:
+
+```txt
+npm run check: sem erros
+npm run build: sucesso
+npm test: 1 arquivo aprovado, 26 testes aprovados
+```
+
+## Comandos prontos para executar a migration
+
+Linux/servidor:
+
+```bash
+cd /caminho/do/projeto/destrava-main
+export DATABASE_URL='postgres://destravadb:SUA_SENHA@tr3go0jqyc5h3tuvz7f46zkc:5432/postgres'
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/055_documentos_arquivos_entidades_regras.sql
+```
+
+Windows PowerShell:
+
+```powershell
+cd C:\caminho\do\projeto\destrava-main
+$env:DATABASE_URL="postgres://destravadb:SUA_SENHA@tr3go0jqyc5h3tuvz7f46zkc:5432/postgres"
+psql $env:DATABASE_URL -v ON_ERROR_STOP=1 -f db/migrations/055_documentos_arquivos_entidades_regras.sql
+```
+
+Docker/Postgres em container:
+
+```bash
+docker exec -i NOME_DO_CONTAINER_POSTGRES psql 'postgres://destravadb:SUA_SENHA@tr3go0jqyc5h3tuvz7f46zkc:5432/postgres' -v ON_ERROR_STOP=1 < db/migrations/055_documentos_arquivos_entidades_regras.sql
+```

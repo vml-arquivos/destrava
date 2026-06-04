@@ -194,6 +194,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [condicaoPgto, setCondicaoPgto]       = useState('');
   const [prazoEntrega, setPrazoEntrega]       = useState('30');
   const [prorrogacaoExcepcional, setProrrogacaoExcepcional] = useState('30');
+  const [garantiaLimpaNome, setGarantiaLimpaNome] = useState<'sem_garantia' | 'com_garantia'>('com_garantia');
   const [prazoGarantia, setPrazoGarantia]     = useState('6');
   const [taxaConsulta, setTaxaConsulta]       = useState('R$ 50,00');
   const [taxaReprotocolo, setTaxaReprotocolo] = useState('R$ 300,00');
@@ -211,6 +212,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [condicaoPgtoBacen, setCondicaoPgtoBacen]     = useState('');
   const [prazoExecucaoBacen, setPrazoExecucaoBacen]   = useState('120');
   const [prazoAtualizacaoBacen, setPrazoAtualizacaoBacen] = useState('60');
+  const [garantiaBacen, setGarantiaBacen] = useState<'sem_garantia' | 'com_garantia'>('sem_garantia');
+  const [prazoGarantiaBacen, setPrazoGarantiaBacen] = useState('6');
   const [parceiroIdBacen, setParceiroIdBacen]         = useState('');
   const [contratadaIdBacen, setContratadaIdBacen]     = useState('');
   const [responsavelContratoIdBacen, setResponsavelContratoIdBacen] = useState('');
@@ -390,6 +393,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
       if (!contratadaIdLimpaNome) errs.contratadaIdLimpaNome = 'Selecione a contratada/prestadora';
       if (!valorContrato || Number(valorContrato) <= 0) errs.valorContrato = 'Informe o valor do contrato';
       if (!condicaoPgto) errs.condicaoPgto = 'Informe a condição de pagamento';
+      if (garantiaLimpaNome === 'com_garantia' && (!prazoGarantia || Number.parseInt(prazoGarantia, 10) <= 0)) errs.prazoGarantia = 'Informe o prazo da garantia';
     }
 
     if (tipoContrato === 'limpa_bacen') {
@@ -400,6 +404,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
       if (clienteTipoBacen === 'empresa' && !representanteCpfBacen) errs.representanteCpfBacen = 'Informe o CPF do representante';
       if (!valorContratoBacen || Number(valorContratoBacen) <= 0) errs.valorContratoBacen = 'Informe o valor do contrato';
       if (!condicaoPgtoBacen) errs.condicaoPgtoBacen = 'Informe a condição de pagamento';
+      if (garantiaBacen === 'com_garantia' && (!prazoGarantiaBacen || Number.parseInt(prazoGarantiaBacen, 10) <= 0)) errs.prazoGarantiaBacen = 'Informe o prazo da garantia';
     }
 
     if (tipoContrato === 'rating') {
@@ -461,7 +466,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         condicao_pagamento: condicaoPgto,
         prazo_entrega_dias: Number.parseInt(prazoEntrega, 10),
         prorrogacao_excepcional_dias: Number.parseInt(prorrogacaoExcepcional, 10),
-        prazo_garantia_meses: Number.parseInt(prazoGarantia, 10),
+        possui_garantia: garantiaLimpaNome === 'com_garantia',
+        prazo_garantia_meses: garantiaLimpaNome === 'com_garantia' ? Number.parseInt(prazoGarantia, 10) : null,
         taxa_consulta_serasa: taxaConsulta,
         taxa_reprotocolo: taxaReprotocolo,
         data_assinatura: dataAssinatura,
@@ -483,6 +489,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         condicao_pagamento: condicaoPgtoBacen,
         prazo_execucao_dias_uteis: Number.parseInt(prazoExecucaoBacen, 10),
         prazo_atualizacao_orgao_dias: Number.parseInt(prazoAtualizacaoBacen, 10),
+        possui_garantia: garantiaBacen === 'com_garantia',
+        prazo_garantia_meses: garantiaBacen === 'com_garantia' ? Number.parseInt(prazoGarantiaBacen, 10) : null,
         data_assinatura: dataAssinatura,
         foro_eleito: foroEleito,
       });
@@ -843,7 +851,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               {errors.condicaoPgto && <p className="text-red-500 text-xs mt-1">{errors.condicaoPgto}</p>}
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
               <label className={lbl}>Prazo de Entrega (dias)</label>
               <input type="number" min="1" value={prazoEntrega} onChange={e => setPrazoEntrega(e.target.value)} className={cls} />
@@ -853,9 +861,19 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               <input type="number" min="1" value={prorrogacaoExcepcional} onChange={e => setProrrogacaoExcepcional(e.target.value)} className={cls} />
             </div>
             <div>
-              <label className={lbl}>Prazo de Garantia (meses)</label>
-              <input type="number" min="1" value={prazoGarantia} onChange={e => setPrazoGarantia(e.target.value)} className={cls} />
+              <label className={lbl}>Garantia contratual</label>
+              <select value={garantiaLimpaNome} onChange={e => setGarantiaLimpaNome(e.target.value as 'sem_garantia' | 'com_garantia')} className={cls}>
+                <option value="sem_garantia">Sem garantia</option>
+                <option value="com_garantia">Com garantia</option>
+              </select>
             </div>
+            {garantiaLimpaNome === 'com_garantia' && (
+              <div>
+                <label className={lbl}>Prazo de Garantia (meses)</label>
+                <input type="number" min="1" value={prazoGarantia} onChange={e => setPrazoGarantia(e.target.value)} className={cls} />
+                {errors.prazoGarantia && <p className="text-red-500 text-xs mt-1">{errors.prazoGarantia}</p>}
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -944,7 +962,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               {errors.condicaoPgtoBacen && <p className="text-red-500 text-xs mt-1">{errors.condicaoPgtoBacen}</p>}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
               <label className={lbl}>Prazo de Execução (dias úteis)</label>
               <input type="number" min="1" value={prazoExecucaoBacen} onChange={e => setPrazoExecucaoBacen(e.target.value)} className={cls} />
@@ -953,6 +971,20 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               <label className={lbl}>Prazo de Atualização no Órgão (dias)</label>
               <input type="number" min="1" value={prazoAtualizacaoBacen} onChange={e => setPrazoAtualizacaoBacen(e.target.value)} className={cls} />
             </div>
+            <div>
+              <label className={lbl}>Garantia contratual</label>
+              <select value={garantiaBacen} onChange={e => setGarantiaBacen(e.target.value as 'sem_garantia' | 'com_garantia')} className={cls}>
+                <option value="sem_garantia">Sem garantia</option>
+                <option value="com_garantia">Com garantia</option>
+              </select>
+            </div>
+            {garantiaBacen === 'com_garantia' && (
+              <div>
+                <label className={lbl}>Prazo de Garantia (meses)</label>
+                <input type="number" min="1" value={prazoGarantiaBacen} onChange={e => setPrazoGarantiaBacen(e.target.value)} className={cls} />
+                {errors.prazoGarantiaBacen && <p className="text-red-500 text-xs mt-1">{errors.prazoGarantiaBacen}</p>}
+              </div>
+            )}
           </div>
           <SelectParceiro value={parceiroIdBacen} onChange={setParceiroIdBacen} />
         </>

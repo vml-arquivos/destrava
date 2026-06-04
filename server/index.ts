@@ -5997,7 +5997,9 @@ tr:nth-child(even) td { background: #f4f7ff; }
     const valorContrato   = contrato.valor_contrato_formatado || 'R$ 0,00';
     const condicaoPgto    = contrato.condicao_pagamento || 'a combinar';
     const prazoEntrega    = contrato.prazo_entrega_dias || 30;
-    const prazoGarantia   = contrato.prazo_garantia_meses || 6;
+    const prazoGarantia   = Number.parseInt(String(contrato.prazo_garantia_meses ?? 6), 10);
+    const possuiGarantia  = contrato.possui_garantia === false ? false : prazoGarantia > 0;
+    const textoGarantiaResumo = possuiGarantia ? `${prazoGarantia} meses` : 'Sem garantia contratual';
     const foro            = contrato.foro_eleito || 'Taguatinga';
     const dataAss         = contrato.data_assinatura_formatada || new Date().toLocaleDateString('pt-BR');
     const cidadeAss       = cidadeUfAssinaturaContrato(contrato, contratada, 'BRASÍLIA – DF');
@@ -6021,7 +6023,7 @@ ${blocoIdentificacaoContrato(contrato)}
   <tr><td style="font-weight:bold; background:#f0f4ff;">Valor do Contrato</td><td><strong>${valorContrato}</strong></td></tr>
   <tr><td style="font-weight:bold; background:#f0f4ff;">Condição de Pagamento</td><td>${condicaoPgto}</td></tr>
   <tr><td style="font-weight:bold; background:#f0f4ff;">Prazo de Entrega</td><td>Até ${prazoEntrega} dias corridos</td></tr>
-  <tr><td style="font-weight:bold; background:#f0f4ff;">Prazo Total de Garantia</td><td>${prazoGarantia} meses</td></tr>
+  <tr><td style="font-weight:bold; background:#f0f4ff;">Garantia contratual</td><td>${textoGarantiaResumo}</td></tr>
 </table>
 
 <h2 class="section-title">IDENTIFICAÇÃO DA CONTRATADA</h2>
@@ -6034,7 +6036,9 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
 
 <h2 class="section-title">CLÁUSULA 2 – DA NATUREZA JURÍDICA DO SERVIÇO E DA POSSIBILIDADE DE CASSAÇÃO DA LIMINAR</h2>
 <p class="clause"><strong>2.1</strong> - O CONTRATANTE está ciente de que o serviço é baseado em medida judicial liminar, de caráter provisório, podendo ser cassada a qualquer momento por decisão judicial superveniente, independentemente da vontade das partes.</p>
-<p class="clause"><strong>2.2</strong> - A CONTRATADA não se responsabiliza pela cassação da liminar por decisão judicial, sendo que, neste caso, o serviço será reprotocolado sem custo adicional, desde que dentro do prazo de garantia contratual.</p>
+${possuiGarantia
+  ? `<p class="clause"><strong>2.2</strong> - A CONTRATADA não se responsabiliza pela cassação da liminar por decisão judicial, sendo que, neste caso, o serviço será reprotocolado sem custo adicional, desde que dentro do prazo de garantia contratual.</p>`
+  : `<p class="clause"><strong>2.2</strong> - A CONTRATADA não se responsabiliza pela cassação da liminar por decisão judicial superveniente. Este contrato foi emitido sem garantia contratual de reprocessamento ou reprotocolo gratuito.</p>`}
 
 <h2 class="section-title">CLÁUSULA 3 – DO PRAZO DE ENTREGA DO SERVIÇO</h2>
 <p class="clause"><strong>3.1</strong> - A CONTRATADA se compromete a entregar o serviço no prazo de até ${prazoEntrega} (${prazoEntrega === 30 ? 'trinta' : String(prazoEntrega)}) dias corridos, contados da data de assinatura deste contrato e do pagamento integral do valor acordado.</p>
@@ -6047,12 +6051,19 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
 <h2 class="section-title">CLÁUSULA 5 – DA CONCLUSÃO DO SERVIÇO</h2>
 <p class="clause"><strong>5.1</strong> - O serviço será considerado concluído quando o CONTRATANTE apresentar consulta ao Serasa demonstrando a não exposição das restrições financeiras.</p>
 
-<h2 class="section-title">CLÁUSULA 6 – DA GARANTIA CONTRATUAL DE ${prazoGarantia} MESES</h2>
+${possuiGarantia
+  ? `<h2 class="section-title">CLÁUSULA 6 – DA GARANTIA CONTRATUAL DE ${prazoGarantia} MESES</h2>
 <p class="clause"><strong>6.1</strong> - A CONTRATADA oferece garantia de ${prazoGarantia} (${prazoGarantia === 6 ? 'seis' : String(prazoGarantia)}) meses, contados da data da consulta Serasa que comprove a não exposição das restrições.</p>
 <p class="clause"><strong>6.2</strong> - Durante o período de garantia, caso haja retorno da exposição das restrições, a CONTRATADA reprotocolará o serviço sem custo adicional, desde que comprovado mediante consulta ao Serasa, cujo custo de ${taxaConsulta} será de responsabilidade do CONTRATANTE.</p>
 
 <h2 class="section-title">CLÁUSULA 7 – DA NECESSIDADE DE CONSULTA PARA COMPROVAÇÃO DE RETORNO DA RESTRIÇÃO</h2>
-<p class="clause"><strong>7.1</strong> - Para acionamento da garantia, o CONTRATANTE deverá apresentar consulta ao Serasa, com custo de ${taxaConsulta}, a ser pago pelo CONTRATANTE, comprovando o retorno da exposição da restrição.</p>
+<p class="clause"><strong>7.1</strong> - Para acionamento da garantia, o CONTRATANTE deverá apresentar consulta ao Serasa, com custo de ${taxaConsulta}, a ser pago pelo CONTRATANTE, comprovando o retorno da exposição da restrição.</p>`
+  : `<h2 class="section-title">CLÁUSULA 6 – DA AUSÊNCIA DE GARANTIA CONTRATUAL</h2>
+<p class="clause"><strong>6.1</strong> - As partes ajustam expressamente que este contrato é firmado sem garantia contratual posterior à conclusão do serviço.</p>
+<p class="clause"><strong>6.2</strong> - Eventual nova análise, reprocessamento, reprotocolo ou atuação complementar após a conclusão do serviço dependerá de nova contratação ou autorização expressa da CONTRATADA.</p>
+
+<h2 class="section-title">CLÁUSULA 7 – DA COMPROVAÇÃO DA CONCLUSÃO DO SERVIÇO</h2>
+<p class="clause"><strong>7.1</strong> - O CONTRATANTE deverá apresentar a documentação ou consulta necessária para comprovação da conclusão do serviço, quando aplicável, sem que isso implique garantia de resultado futuro.</p>`}
 
 <h2 class="section-title">CLÁUSULA 8 – DAS NOVAS RESTRIÇÕES E DA TAXA DE REPROTOCOLO</h2>
 <p class="clause"><strong>8.1</strong> - Restrições financeiras inseridas após a data de assinatura deste contrato não estão cobertas pela garantia e serão tratadas como novo serviço.</p>
@@ -6115,6 +6126,9 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
     const condicaoPgto     = contrato.condicao_pagamento || 'a combinar';
     const prazoExecucao    = contrato.prazo_execucao_dias_uteis || 120;
     const prazoAtualizacao = contrato.prazo_atualizacao_orgao_dias || 60;
+    const prazoGarantia    = Number.parseInt(String(contrato.prazo_garantia_meses ?? 0), 10);
+    const possuiGarantia   = contrato.possui_garantia === true && prazoGarantia > 0;
+    const textoGarantiaResumo = possuiGarantia ? `${prazoGarantia} meses` : 'Sem garantia contratual';
     const foro             = contrato.foro_eleito || 'Brasília/DF';
     const dataAss          = contrato.data_assinatura_formatada || new Date().toLocaleDateString('pt-BR');
     const cidadeAss        = cidadeUfAssinaturaContrato(contrato, contratada, 'BRASÍLIA – DF');
@@ -6136,6 +6150,17 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
 <h1 class="doc-title">CONTRATO DE PRESTAÇÃO DE SERVIÇOS</h1>
 
 ${blocoIdentificacaoContrato(contrato)}
+<h2 class="section-title">QUADRO RESUMIDO</h2>
+<table class="data-table" style="margin-bottom:20px;">
+  <tr><td style="width:40%; font-weight:bold; background:#f0f4ff;">CONTRATADA</td><td>${nomeContratada}${docContratada ? ` — ${docContratada}` : ''}</td></tr>
+  ${responsavelTexto ? `<tr><td style="font-weight:bold; background:#f0f4ff;">Responsável pela assessoria</td><td>${responsavelTexto}</td></tr>` : ''}
+  <tr><td style="font-weight:bold; background:#f0f4ff;">CONTRATANTE</td><td>${nomeContratante}</td></tr>
+  <tr><td style="font-weight:bold; background:#f0f4ff;">${docContratanteLabel}</td><td>${docContratante}</td></tr>
+  <tr><td style="font-weight:bold; background:#f0f4ff;">Valor do Contrato</td><td><strong>${valorContrato}</strong></td></tr>
+  <tr><td style="font-weight:bold; background:#f0f4ff;">Condição de Pagamento</td><td>${condicaoPgto}</td></tr>
+  <tr><td style="font-weight:bold; background:#f0f4ff;">Prazo de Execução</td><td>${prazoExecucao} dias úteis</td></tr>
+  <tr><td style="font-weight:bold; background:#f0f4ff;">Garantia contratual</td><td>${textoGarantiaResumo}</td></tr>
+</table>
 <h2 class="section-title">IDENTIFICAÇÃO DAS PARTES</h2>
 <p class="clause"><strong>CONTRATADA:</strong> ${qualifContratada}</p>
 ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA ASSESSORIA:</strong> ${responsavelTexto}.</p>` : ''}
@@ -6152,6 +6177,9 @@ ${responsavelTexto ? `<p class="clause"><strong>RESPONSÁVEL OPERACIONAL PELA AS
 <p class="clause"><strong>4.1.</strong> O CONTRATANTE declara ter sido devidamente cientificado pela CONTRATADA de todas as peculiaridades da situação em que se encontra, com base no relatório SCR/BACEN. Contrato em aberto (EM DIA) não está incluso neste processo e, vindo a ser inserido posteriormente no relatório de VENCIDO, deverá o CONTRATANTE solicitar e pagar à CONTRATADA um novo contrato de prestação de serviço.</p>
 <p class="clause"><strong>4.2.</strong> Sob exclusiva responsabilidade do CONTRATANTE, e a seu ônus, serão contratados profissionais da área para a prática dos atos que forem privativos de profissões regulamentadas, quando assim for determinado judicialmente, tais como Perito Judicial e Assistente Técnico.</p>
 <p class="clause"><strong>4.3.</strong> Se, sem culpa da CONTRATADA, lhe for cassado o mandato, ou se o CONTRATANTE ajustar outro patrono ou terceiros, ou ainda acordar diretamente com a outra parte sem a ciência e anuência da CONTRATADA, ou se por ato prejudicial aos objetivos do presente instrumento por parte do CONTRATANTE a CONTRATADA vier a renunciar ao mandato, a quantia fixada na cláusula segunda torna o presente contrato imediatamente exigível como dívida líquida e certa, independentemente de quaisquer formalidades, inclusive notificação ou interpelação, e serão cobrados por via de Ação de Execução.</p>
+${possuiGarantia
+  ? `<p class="clause"><strong>4.4.</strong> A CONTRATADA concede garantia contratual pelo prazo de ${prazoGarantia} meses, limitada à reavaliação ou atuação complementar relacionada aos apontamentos BACEN/SCR existentes até a referência utilizada na assinatura, sem garantia de crédito ou aprovação por instituições financeiras.</p>`
+  : `<p class="clause"><strong>4.4.</strong> As partes ajustam expressamente que este contrato é firmado sem garantia contratual posterior à conclusão do serviço, sem promessa de crédito, aprovação bancária ou manutenção de resultado futuro.</p>`}
 <h2 class="section-title">5. CLÁUSULA QUINTA – DISPOSIÇÕES FINAIS</h2>
 <p class="clause"><strong>5.1.</strong> O CONTRATANTE se obriga por si, seus herdeiros e sucessores ao fiel cumprimento de todas as cláusulas e condições pactuadas. Qualquer tolerância ou concessão por parte da CONTRATADA não implicará em novação e não terá a faculdade de alterar o pactuado, permanecendo íntegras todas as cláusulas e condições ora avençadas.</p>
 <p class="clause"><strong>5.2.</strong> O presente contrato é um título executivo extrajudicial conforme previsão legal e, em caso de inadimplemento do cliente, permite a propositura de ação de execução autônoma para o recebimento dos honorários devidos e não pagos.</p>
@@ -7937,7 +7965,8 @@ async function registrarDocumentoContratoGerado(params: {
             valor_contrato_formatado: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parseFloat(valor_contrato)),
             condicao_pagamento,
             prazo_entrega_dias: parseInt(prazo_entrega_dias),
-            prazo_garantia_meses: parseInt(prazo_garantia_meses),
+            possui_garantia: bodyData.possui_garantia === false || bodyData.possui_garantia === 'false' ? false : !!prazo_garantia_meses,
+            prazo_garantia_meses: (bodyData.possui_garantia === false || bodyData.possui_garantia === 'false') ? null : parseInt(prazo_garantia_meses, 10),
             taxa_consulta_serasa: taxa_consulta_serasa || 'R$ 50,00',
             taxa_reprotocolo: taxa_reprotocolo || 'R$ 300,00',
             data_assinatura_formatada: new Date(data_assinatura + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }),
@@ -8099,6 +8128,8 @@ async function registrarDocumentoContratoGerado(params: {
             condicao_pagamento,
             prazo_execucao_dias_uteis: parseInt(prazo_execucao_dias_uteis),
             prazo_atualizacao_orgao_dias: parseInt(prazo_atualizacao_orgao_dias),
+            possui_garantia: bodyData.possui_garantia === true || bodyData.possui_garantia === 'true',
+            prazo_garantia_meses: (bodyData.possui_garantia === true || bodyData.possui_garantia === 'true') ? parseInt(prazo_garantia_meses, 10) : null,
             data_assinatura_formatada: new Date(data_assinatura + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }),
             foro_eleito,
             cidade_assinatura: cidade_assinatura || 'BRASÍLIA – DF',
