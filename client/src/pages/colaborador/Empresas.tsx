@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { EmptyState, LoadingState, ErrorState } from "@/components/ui/states";
 import { RiscoBadge, ScoreIndicator, StatusCadastroBadge } from "@/components/ui/risco-badge";
+import DocumentosEntidade from "@/components/documentos/DocumentosEntidade";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -1766,6 +1767,22 @@ export default function Empresas() {
                                     </div>
                                   )}
 
+                                  {sociosExpandidos[s.id] && (
+                                    <div className="border-t border-slate-100 pt-3">
+                                      <DocumentosEntidade
+                                        entidadeTipo="socio"
+                                        entidadeId={s.id}
+                                        empresaId={selecionada?.id}
+                                        socioId={s.id}
+                                        tiposPermitidos={["documento_socio", "cpf", "rg", "cnh", "comprovante_residencia", "imposto_renda", "procuracao", "outros"]}
+                                        titulo={`Documentos do sócio: ${s.nome || "Sócio"}`}
+                                        permitirUpload
+                                        permitirExcluir
+                                        permitirValidar
+                                      />
+                                    </div>
+                                  )}
+
                                   <div className="flex flex-wrap gap-2 pt-1">
                                     <button onClick={() => abrirEdicaoSocio(s)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><Edit2 className="w-3 h-3" /> Editar</button>
                                     <button onClick={() => atualizarSocioIndividual(s)} disabled={sincronizando} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50"><RotateCw className="w-3 h-3" /> Atualizar</button>
@@ -1894,107 +1911,38 @@ export default function Empresas() {
                     /* ── CONTRATO SOCIAL ── */
                     : abaAtiva === "contrato_social" ? (
                       <div className="p-5 fade-in space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="text-sm font-bold text-slate-700">Contrato Social e Alterações</h3>
-                            <p className="text-xs text-slate-400 mt-0.5">Anexe o contrato social atual, alterações contratuais e registros societários para completar a análise.</p>
-                          </div>
-                          <label className="flex items-center gap-1.5 text-xs font-semibold bg-blue-600 text-white px-3 py-1.5 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors opacity-100">
-                            <Upload className="w-3.5 h-3.5" /> {enviandoContratoSocial ? 'Enviando...' : 'Enviar PDF'}
-                            <input type="file" accept="application/pdf,.pdf" className="hidden" disabled={enviandoContratoSocial} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviarContratoSocial(file); e.currentTarget.value = ''; }} />
-                          </label>
-                        </div>
                         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 leading-relaxed">
-                          <b>Obrigatório para contratos:</b> contrato social/última alteração, representante assinante, poderes de administração e documentos dos sócios. O sistema mantém histórico de versões enviadas.
+                          <b>Obrigatório para contratos:</b> contrato social/última alteração, representante assinante, poderes de administração e documentos dos sócios. Os arquivos agora são vinculados exclusivamente à empresa selecionada.
                         </div>
-                        {contratosSociais.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
-                            <FileText className="w-10 h-10 text-slate-200" />
-                            <p className="text-sm text-slate-500">Nenhum contrato social enviado</p>
-                            <p className="text-xs text-slate-400">Envie um PDF de até 10MB.</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            {contratosSociais.map((doc: any) => (
-                              <div key={doc.id} className="p-4 rounded-xl border border-slate-200 bg-white flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><FileText className="w-5 h-5 text-blue-600" /></div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-bold text-slate-800 truncate">{doc.nome_arquivo}</p>
-                                  <p className="text-xs text-slate-400">Enviado em {doc.data_upload ? new Date(doc.data_upload).toLocaleString('pt-BR') : '-'} • {(Number(doc.tamanho_bytes || 0) / 1024).toFixed(0)} KB</p>
-                                  {doc.numero_registro && <p className="text-xs text-slate-500">Registro: {doc.numero_registro}</p>}
-                                </div>
-                                {doc.url && <a href={doc.url} target="_blank" rel="noreferrer" className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50">Visualizar</a>}
-                                <button onClick={() => removerContratoSocial(doc.id)} className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">Apagar</button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        <DocumentosEntidade
+                          entidadeTipo="empresa"
+                          entidadeId={selecionada?.id}
+                          empresaId={selecionada?.id}
+                          tiposPermitidos={["contrato_social", "alteracao_contratual", "procuracao", "certidao", "outros"]}
+                          titulo="Contrato Social e Alterações"
+                          permitirUpload
+                          permitirExcluir
+                          permitirValidar
+                        />
                       </div>
                     )
 
                     /* ── DOCUMENTOS ── */
                     : abaAtiva === "documentos" ? (
-                      <div className="p-5 fade-in">
-                        <div className="flex items-center justify-between mb-4">
-                          <div>
-                            <h3 className="text-sm font-bold text-slate-700">Documentos, fotos e evidências</h3>
-                            <p className="text-xs text-slate-400 mt-0.5">Fachada, interior, contrato social, alterações, cartão CNPJ e arquivos de análise de crédito.</p>
-                          </div>
-                          <label className="flex items-center gap-1.5 text-xs font-semibold bg-blue-600 text-white px-3 py-1.5 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors">
-                            <Upload className="w-3.5 h-3.5" /> Enviar
-                            <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden" onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file || !selecionada) return;
-                              const fd = new FormData(); fd.append("file", file);
-                              try {
-                                const docSalvo = await apiFetch(`/api/empresas/${selecionada.id}/documentos`, { method:"POST", body:fd, headers:{} });
-                                // Classificar automaticamente com IA (com consentimento implícito do operador)
-                                if (docSalvo?.id) {
-                                  apiFetch("/api/ia/classificar-documento", {
-                                    method: "POST",
-                                    body: JSON.stringify({
-                                      documento_id: docSalvo.id,
-                                      empresa_id: selecionada.id,
-                                      consentimento: true,
-                                    }),
-                                  }).then(cls => {
-                                    if (cls?.tipo && cls.tipo !== "outro") {
-                                      toast.info(`Documento classificado como: ${cls.tipo.replace(/_/g, " ")} (${Math.round((cls.confianca || 0) * 100)}% confiança)`);
-                                    }
-                                  }).catch(() => {});
-                                }
-                                const docs = await apiFetch(`/api/empresas/${selecionada.id}/documentos`).catch(() => []);
-                                setDocumentos(Array.isArray(docs) ? docs : []);
-                                toast.success("Documento enviado.");
-                              } catch { toast.error("Erro ao enviar."); }
-                            }} />
-                          </label>
+                      <div className="p-5 fade-in space-y-4">
+                        <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 leading-relaxed">
+                          Esta aba mostra somente documentos com entidade_tipo = empresa e entidade_id igual à empresa aberta. Documentos pessoais de PF ou sócios não aparecem aqui.
                         </div>
-                        {documentos.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
-                            <Paperclip className="w-10 h-10 text-slate-200" />
-                            <p className="text-sm text-slate-500">Nenhum documento, foto ou evidência enviado</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            {documentos.map(doc => (
-                              <div key={doc.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors">
-                                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-                                  <FileText className="w-4 h-4 text-blue-500" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium text-slate-800 truncate">{doc.nome}</p>
-                                  <p className="text-xs text-slate-400 mt-0.5">{doc.tipo || "arquivo"} · {fmtDate(doc.created_at)}</p>
-                                </div>
-                                {doc.url && (
-                                  <a href={doc.url} target="_blank" rel="noreferrer" className="shrink-0 p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                  </a>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        <DocumentosEntidade
+                          entidadeTipo="empresa"
+                          entidadeId={selecionada?.id}
+                          empresaId={selecionada?.id}
+                          tiposPermitidos={["cartao_cnpj", "comprovante_faturamento", "extrato_bancario", "imposto_renda", "balanco", "dre", "certidao", "procuracao", "declaracao_faturamento", "outros"]}
+                          titulo="Documentos da Empresa"
+                          permitirUpload
+                          permitirExcluir
+                          permitirValidar
+                        />
                       </div>
                     ) : abaAtiva === "simulacoes" ? (
                       <div className="p-4 space-y-3">

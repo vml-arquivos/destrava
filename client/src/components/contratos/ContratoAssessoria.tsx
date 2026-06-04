@@ -593,7 +593,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               <strong>
                 {representantesContratante.map((s, i) => (
                   <span key={`${s.nome}-${i}`}>
-                    {i > 0 ? '; ' : ''}{s.nome}{s.cpf ? `, CPF n° ${s.cpf}` : ''}{s.cargo || s.qualificacao ? `, ${s.cargo || s.qualificacao}` : ''}
+                    {i > 0 ? '; ' : ''}{s.nome}{s.cpf ? `, CPF n° ${s.cpf}` : ''}{s.cargo || ('qualificacao' in s ? s.qualificacao : '') ? `, ${s.cargo || ('qualificacao' in s ? s.qualificacao : '')}` : ''}
                   </span>
                 ))}
               </strong>,

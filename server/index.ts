@@ -14,6 +14,7 @@ import { setAuditoriaPool, registrarAuditoria, rotaAuditLogs } from "./middlewar
 import { getPermissoes, temPermissao, LISTA_CARGOS_VALIDOS, nivelHierarquico, podeGerenciar as _podeGerenciar, cargosGerenciaveis as _cargosGerenciaveis } from "../shared/cargos.ts";
 import cnpjRouter from './routes/cnpj';
 import sociosDocumentosRouter from './routes/socios_documentos';
+import documentosRouter from './routes/documentos';
 import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
 import { gerarHtmlTimbrado, getPuppeteerHeaderTemplate, getPuppeteerFooterTemplate, getDocumentStyles, CONTRATADA_DADOS, getHtmlHeaderEmbutido, getHtmlFooterEmbutido } from "./letterhead.ts";
 import { DESTRAVA_LOGO_B64, PERMUPAY_LOGO_B64 } from "./logo_constants.ts";
@@ -1466,6 +1467,7 @@ async function startServer() {
 
   app.use(express.json({ limit: "5mb" }));
   app.use(express.urlencoded({ extended: true }));
+  app.use('/api/documentos', documentosRouter);
 
   // CORS
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -7729,6 +7731,56 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
+
+async function registrarDocumentoContratoGerado(params: {
+  contratoId: string;
+  pdfPath: string;
+  tipoContrato?: string | null;
+  empresaId?: string | null;
+  clientePfId?: string | null;
+  leadId?: string | null;
+  hash?: string | null;
+  criadoPor?: string | null;
+}) {
+  try {
+    const fileName = path.basename(params.pdfPath || `contrato-${params.contratoId}.pdf`);
+    const tipoDocumento = params.tipoContrato === 'assessoria' ? 'contrato_assessoria' : 'contrato_gerado';
+    const stats = params.pdfPath && fs.existsSync(params.pdfPath) ? await fs.promises.stat(params.pdfPath) : null;
+    await pool.query(
+      `INSERT INTO public.documentos_arquivos
+        (entidade_tipo, entidade_id, empresa_id, cliente_pf_id, lead_id, contrato_id, tipo_documento,
+         nome_original, nome_arquivo, caminho_arquivo, url_arquivo, mime_type, tamanho_bytes, hash_arquivo,
+         status, origem, validado, criado_por, metadados)
+       VALUES ('contrato',$1,$2,$3,$4,$1,$5,$6,$6,$7,$8,'application/pdf',$9,$10,'ativo','gerado_sistema',true,$11,$12::jsonb)
+       ON CONFLICT DO NOTHING`,
+      [
+        params.contratoId,
+        params.empresaId || null,
+        params.clientePfId || null,
+        params.leadId || null,
+        tipoDocumento,
+        fileName,
+        params.pdfPath,
+        `/uploads/contratos/${fileName}`,
+        stats?.size || null,
+        params.hash || null,
+        params.criadoPor || null,
+        JSON.stringify({ origem_tabela: 'contratos_gerados', origem_id: params.contratoId, tipo_contrato: params.tipoContrato || null }),
+      ]
+    );
+    await pool.query(
+      `INSERT INTO public.auditoria_documentos (documento_id, acao, antes, depois, usuario_id)
+       SELECT id, 'contrato_gerado', NULL, to_jsonb(documentos_arquivos), $2
+       FROM public.documentos_arquivos
+       WHERE entidade_tipo='contrato' AND entidade_id=$1 AND contrato_id=$1
+       ORDER BY criado_em DESC LIMIT 1`,
+      [params.contratoId, params.criadoPor || null]
+    ).catch(() => undefined);
+  } catch (err: any) {
+    console.warn('[documentos_arquivos] Falha ao registrar contrato gerado:', err?.message || err);
+  }
+}
+
   // ─── CONTRATOS GERADOS ───────────────────────────────────────────────────
 
   app.post('/api/contratos/gerar', auth, uploadContratos.any(), async (req: Request, res: Response) => {
@@ -7946,6 +7998,7 @@ ${(temTest1 || temTest2) ? `
         );
         const contrato2 = contratoRows2[0];
         await salvarIdentificacaoContrato(contrato2.id, payloadLN.contrato);
+        await registrarDocumentoContratoGerado({ contratoId: contrato2.id, pdfPath, tipoContrato: 'limpa_nome', empresaId: empresaContratoId, clientePfId: cliente_pf_id || null, leadId: leadContratoId, hash: hash2, criadoPor: colaborador.id });
         res.status(201).json({
           success: true,
           contrato_id: contrato2.id,
@@ -8088,6 +8141,7 @@ ${(temTest1 || temTest2) ? `
         );
         const contratoBacen = contratoRowsBacen[0];
         await salvarIdentificacaoContrato(contratoBacen.id, payloadBacen.contrato);
+        await registrarDocumentoContratoGerado({ contratoId: contratoBacen.id, pdfPath, tipoContrato: 'limpa_bacen', empresaId: empresa_id || null, clientePfId: cliente_pf_id || null, leadId: cliente_tipo === 'lead' ? cliente_id : null, hash: hashBacen, criadoPor: colaborador.id });
         res.status(201).json({
           success: true,
           contrato_id: contratoBacen.id,
@@ -8180,6 +8234,7 @@ ${(temTest1 || temTest2) ? `
         );
         const contratoRating = contratoRowsRating[0];
         await salvarIdentificacaoContrato(contratoRating.id, payloadRating.contrato);
+        await registrarDocumentoContratoGerado({ contratoId: contratoRating.id, pdfPath, tipoContrato: 'rating', empresaId: empresa_id || null, clientePfId: cliente_pf_id || null, leadId: cliente_tipo === 'lead' ? cliente_id : null, hash: hashRating, criadoPor: colaborador.id });
         res.status(201).json({
           success: true,
           contrato_id: contratoRating.id,
@@ -8254,6 +8309,7 @@ ${(temTest1 || temTest2) ? `
         );
         const contratoParceria = contratoRowsParceria[0];
         await salvarIdentificacaoContrato(contratoParceria.id, payloadParceria.contrato);
+        await registrarDocumentoContratoGerado({ contratoId: contratoParceria.id, pdfPath, tipoContrato: 'parceria_comercial', empresaId: null, clientePfId: null, leadId: null, hash: hashParceria, criadoPor: colaborador.id });
         res.status(201).json({
           success: true,
           contrato_id: contratoParceria.id,
@@ -8402,7 +8458,7 @@ ${(temTest1 || temTest2) ? `
         [
           'assessoria',
           null,
-          empresa_id || dadosEmpresa.empresa_id || null,
+          empresa_id || null,
           parceiro_id || null,
           lead_id || null,
           contratadaAssessoriaId,
@@ -8806,6 +8862,13 @@ ${(temTest1 || temTest2) ? `
         [pdfPath, req.params.id]
       );
       if (!rows.length) { res.status(404).json({ error: 'Contrato não encontrado' }); return; }
+      await pool.query(
+        `INSERT INTO public.documentos_arquivos
+          (entidade_tipo, entidade_id, contrato_id, tipo_documento, nome_original, nome_arquivo, caminho_arquivo, url_arquivo,
+           mime_type, tamanho_bytes, status, origem, validado, criado_por, metadados)
+         VALUES ('contrato',$1,$1,'contrato_assinado',$2,$3,$4,NULL,'application/pdf',$5,'ativo','upload_manual',true,$6,$7::jsonb)`,
+        [req.params.id, nome_arquivo || 'contrato-assinado.pdf', fileName, pdfPath, Buffer.from(base64, 'base64').byteLength, ((req as any).colaborador || (req as any).user)?.id || null, JSON.stringify({ origem_endpoint: '/api/contratos/:id/anexo-assinado' })]
+      ).catch((docErr) => console.warn('[documentos_arquivos] Falha ao registrar contrato assinado:', docErr?.message || docErr));
       res.json({ success: true, ...rows[0] });
     } catch (err) {
       console.error('[POST /api/contratos/:id/anexo-assinado]', err);

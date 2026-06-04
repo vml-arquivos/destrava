@@ -11,6 +11,7 @@ import {
   GitMerge, Filter, SlidersHorizontal, Globe, Megaphone,
   UserPlus, Smartphone, TrendingUp, BarChart3,
 } from "lucide-react";
+import DocumentosEntidade from "@/components/documentos/DocumentosEntidade";
 
 // ─── Tipos ────────────────────────────────────────────────────
 interface Cliente {
@@ -952,6 +953,22 @@ export default function Clientes() {
                     <p className="text-sm text-gray-700">{getObs(clienteSelecionado)}</p>
                   </div>
                 )}
+              </div>
+
+              {/* Documentos do cliente/lead */}
+              <div className="px-4 py-3 border-t">
+                <DocumentosEntidade
+                  entidadeTipo={isClientePF(clienteSelecionado) ? "cliente_pf" : "lead"}
+                  entidadeId={getApiId(clienteSelecionado)}
+                  clientePfId={isClientePF(clienteSelecionado) ? getApiId(clienteSelecionado) : undefined}
+                  tiposPermitidos={isClientePF(clienteSelecionado)
+                    ? ["cpf", "rg", "cnh", "comprovante_residencia", "imposto_renda", "outros"]
+                    : ["comprovante_faturamento", "extrato_bancario", "certidao", "procuracao", "outros"]}
+                  titulo={isClientePF(clienteSelecionado) ? "Documentos do Cliente PF" : "Documentos do Lead"}
+                  permitirUpload
+                  permitirExcluir
+                  permitirValidar
+                />
               </div>
 
               {/* Histórico de Atividades */}
