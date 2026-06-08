@@ -238,7 +238,12 @@ function ModalQualificacao({
                 return (
                   <button
                     key={s}
-                    onClick={() => setStatus(s)}
+                    onClick={async () => {
+                      setStatus(s);
+                      setSalvando(true);
+                      await onAtualizar(item.id, { status: s, classificacao, observacoes });
+                      setSalvando(false);
+                    }}
                     className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-medium transition-all ${
                       status === s ? `${c.color} border-current` : "border-gray-200 bg-white hover:border-gray-300"
                     }`}

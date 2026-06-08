@@ -1310,7 +1310,7 @@ export default function CRM() {
   const [visuKanban, setVisuKanban] = useState(true);
   const [showNovoLead, setShowNovoLead] = useState(false);
   const [etapaNovoLead, setEtapaNovoLead] = useState(ETAPA_FUNIL_DEFAULT);
-  const [novoLead, setNovoLead] = useState({ nome: "", telefone: "", email: "", empresa: "", produto_interesse: "", valor_solicitado: "" });
+  const [novoLead, setNovoLead] = useState({ nome: "", telefone: "", email: "", empresa: "", cpf_cnpj: "", produto_interesse: "", valor_solicitado: "" });
   const [salvando, setSalvando] = useState(false);
   const [metricas, setMetricas] = useState<Record<string, { total: number; valor: number }>>({});
 
@@ -1396,6 +1396,7 @@ export default function CRM() {
           telefone: novoLead.telefone,
           email: novoLead.email || null,
           empresa: novoLead.empresa || null,
+          cpf_cnpj: novoLead.cpf_cnpj || null,
           produto_interesse: novoLead.produto_interesse || null,
           valor_solicitado: novoLead.valor_solicitado ? parseFloat(novoLead.valor_solicitado) : null,
           etapa_funil: etapaNovoLead,
@@ -1406,7 +1407,7 @@ export default function CRM() {
       });
       toast.success("Lead criado com sucesso!");
       setShowNovoLead(false);
-      setNovoLead({ nome: "", telefone: "", email: "", empresa: "", produto_interesse: "", valor_solicitado: "" });
+      setNovoLead({ nome: "", telefone: "", email: "", empresa: "", cpf_cnpj: "", produto_interesse: "", valor_solicitado: "" });
       carregarLeads();
     } catch (err) {
       console.error(err);
@@ -1809,6 +1810,7 @@ export default function CRM() {
               { key: "telefone", label: "Telefone *", placeholder: "+55 61 9..." },
               { key: "email", label: "E-mail", placeholder: "email@exemplo.com" },
               { key: "empresa", label: "Empresa", placeholder: "Nome da empresa (PJ)" },
+              { key: "cpf_cnpj", label: "CPF / CNPJ", placeholder: "000.000.000-00 ou 00.000.000/0001-00" },
               { key: "produto_interesse", label: "Produto de interesse", placeholder: "Capital de Giro, PRONAMPE..." },
               { key: "valor_solicitado", label: "Valor solicitado", placeholder: "0,00" },
             ].map(({ key, label, placeholder }) => (

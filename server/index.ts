@@ -1157,6 +1157,120 @@ async function startServer() {
     console.error('[startup] Aviso: falha ao auto-criar tabelas de faturamento/contratos:', err.message);
     // Não aborta o servidor — pode ser que as tabelas já existam com constraints diferentes
   }
+  // ─── AUTO-CREATE: Acompanhamento Financeiro (migration 024) ──────────────────
+  // Garante que as 4 tabelas do módulo financeiro e a coluna de permissão
+  // existam em produção mesmo sem execução manual da migration 024.
+  // Totalmente idempotente: CREATE TABLE IF NOT EXISTS + ADD COLUMN IF NOT EXISTS.
+  try {
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION atualizar_updated_at_af()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        NEW.updated_at = NOW();
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      CREATE TABLE IF NOT EXISTS acompanhamento_financeiro_config (
+        id                          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+        empresa_id                  UUID         NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+        faturamento_anual_declarado NUMERIC(15,2) NOT NULL CHECK (faturamento_anual_declarado >= 0),
+        percentual_operacional      NUMERIC(5,2) NOT NULL DEFAULT 30.00
+                                      CHECK (percentual_operacional > 0 AND percentual_operacional <= 100),
+        ativo                       BOOLEAN      NOT NULL DEFAULT TRUE,
+        criado_por                  UUID         REFERENCES colaboradores(id) ON DELETE SET NULL,
+        created_at                  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        updated_at                  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        UNIQUE(empresa_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_af_config_empresa ON acompanhamento_financeiro_config(empresa_id);
+      CREATE INDEX IF NOT EXISTS idx_af_config_ativo   ON acompanhamento_financeiro_config(ativo);
+
+      CREATE TABLE IF NOT EXISTS acompanhamento_financeiro_semanal (
+        id                        UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+        empresa_id                UUID         NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+        config_id                 UUID         REFERENCES acompanhamento_financeiro_config(id) ON DELETE SET NULL,
+        ano                       INTEGER      NOT NULL CHECK (ano >= 2020 AND ano <= 2100),
+        mes                       INTEGER      NOT NULL CHECK (mes >= 1 AND mes <= 12),
+        numero_semana             INTEGER      NOT NULL CHECK (numero_semana >= 1 AND numero_semana <= 6),
+        semana_inicio             DATE         NOT NULL,
+        semana_fim                DATE         NOT NULL,
+        saldo_inicial             NUMERIC(15,2) NOT NULL DEFAULT 0,
+        total_entradas            NUMERIC(15,2) NOT NULL DEFAULT 0,
+        total_saidas              NUMERIC(15,2) NOT NULL DEFAULT 0,
+        saldo_final               NUMERIC(15,2) NOT NULL DEFAULT 0,
+        saldo_medio               NUMERIC(15,2) NOT NULL DEFAULT 0,
+        limite_semanal_referencia NUMERIC(15,2) NOT NULL DEFAULT 0,
+        limite_mensal_referencia  NUMERIC(15,2) NOT NULL DEFAULT 0,
+        limite_anual_referencia   NUMERIC(15,2) NOT NULL DEFAULT 0,
+        acumulado_mensal          NUMERIC(15,2) NOT NULL DEFAULT 0,
+        acumulado_anual           NUMERIC(15,2) NOT NULL DEFAULT 0,
+        percentual_uso_semana     NUMERIC(7,2)  NOT NULL DEFAULT 0,
+        percentual_uso_mes        NUMERIC(7,2)  NOT NULL DEFAULT 0,
+        percentual_uso_ano        NUMERIC(7,2)  NOT NULL DEFAULT 0,
+        status                    TEXT         NOT NULL DEFAULT 'aguardando_atualizacao'
+                                    CHECK (status IN (
+                                      'dentro_da_referencia','atencao_leve','atencao_media',
+                                      'incompativel','critico','sem_documentacao',
+                                      'aguardando_atualizacao','regularizado'
+                                    )),
+        diagnostico               TEXT,
+        observacoes               TEXT,
+        criado_por                UUID         REFERENCES colaboradores(id) ON DELETE SET NULL,
+        created_at                TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        updated_at                TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        UNIQUE(empresa_id, ano, mes, numero_semana)
+      );
+      CREATE INDEX IF NOT EXISTS idx_af_semanal_empresa  ON acompanhamento_financeiro_semanal(empresa_id);
+      CREATE INDEX IF NOT EXISTS idx_af_semanal_periodo  ON acompanhamento_financeiro_semanal(ano, mes);
+      CREATE INDEX IF NOT EXISTS idx_af_semanal_status   ON acompanhamento_financeiro_semanal(status);
+      CREATE INDEX IF NOT EXISTS idx_af_semanal_criado   ON acompanhamento_financeiro_semanal(created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS acompanhamento_financeiro_movimentacoes (
+        id                UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+        acompanhamento_id UUID         NOT NULL REFERENCES acompanhamento_financeiro_semanal(id) ON DELETE CASCADE,
+        empresa_id        UUID         NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+        data_movimento    DATE         NOT NULL,
+        tipo              TEXT         NOT NULL CHECK (tipo IN ('entrada', 'saida')),
+        categoria         TEXT,
+        descricao         TEXT,
+        valor             NUMERIC(15,2) NOT NULL CHECK (valor > 0),
+        comprovante_url   TEXT,
+        criado_por        UUID         REFERENCES colaboradores(id) ON DELETE SET NULL,
+        created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_af_mov_acomp   ON acompanhamento_financeiro_movimentacoes(acompanhamento_id);
+      CREATE INDEX IF NOT EXISTS idx_af_mov_empresa ON acompanhamento_financeiro_movimentacoes(empresa_id);
+      CREATE INDEX IF NOT EXISTS idx_af_mov_data    ON acompanhamento_financeiro_movimentacoes(data_movimento);
+
+      CREATE TABLE IF NOT EXISTS acompanhamento_financeiro_saldos_diarios (
+        id                UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+        acompanhamento_id UUID         NOT NULL REFERENCES acompanhamento_financeiro_semanal(id) ON DELETE CASCADE,
+        empresa_id        UUID         NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+        data_referencia   DATE         NOT NULL,
+        saldo_dia         NUMERIC(15,2) NOT NULL DEFAULT 0,
+        criado_por        UUID         REFERENCES colaboradores(id) ON DELETE SET NULL,
+        created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        UNIQUE(acompanhamento_id, data_referencia)
+      );
+      CREATE INDEX IF NOT EXISTS idx_af_saldos_acomp ON acompanhamento_financeiro_saldos_diarios(acompanhamento_id);
+      CREATE INDEX IF NOT EXISTS idx_af_saldos_data  ON acompanhamento_financeiro_saldos_diarios(data_referencia);
+
+      ALTER TABLE colaboradores
+        ADD COLUMN IF NOT EXISTS acesso_acompanhamento_financeiro BOOLEAN DEFAULT FALSE;
+
+      UPDATE colaboradores
+        SET acesso_acompanhamento_financeiro = TRUE
+        WHERE LOWER(TRIM(COALESCE(cargo,''))) IN ('administrador','admin','diretor','gestor_credito','gestor de credito')
+           OR LOWER(TRIM(COALESCE(perfil,''))) IN ('administrador','admin','diretor','gestor_credito','gestor de credito');
+    `);
+    console.log('[startup] Tabelas de acompanhamento financeiro verificadas/criadas com sucesso.');
+  } catch (err: any) {
+    console.error('[startup] Aviso: falha ao auto-criar tabelas de acompanhamento financeiro:', err.message);
+  }
+
 
   // ─── PATCH: Remove CHECK constraint legado de modelo_usado ─────────────────────
   // A migration 016 criou CHECK (modelo_usado IN ('prophet','arima')).
@@ -1605,15 +1719,22 @@ async function startServer() {
       const rawTipo      = b.tipo_pessoa || b.tipoPessoa || "pf";
       const tipo_pessoa  = rawTipo === "empresa" ? "pj" : rawTipo;
       const documentoDigits = onlyDigits(cpf_cnpj);
-      if (tipo_pessoa === "pj" && documentoDigits.length !== 14) {
-        res.status(400).json({ success: false, message: "CNPJ é obrigatório para cliente/lead PJ." });
-        return;
+      const origem       = b.origem || "site";
+      // Documento obrigatório apenas quando enviado pelo simulador público.
+      // Leads criados manualmente pelo CRM não exigem CPF/CNPJ no momento da criação.
+      const origemExigeDocumento = origem === "simulador_publico" || origem === "simulador-publico" || origem === "site";
+      if (origemExigeDocumento) {
+        if (tipo_pessoa === "pj" && documentoDigits.length !== 14) {
+          res.status(400).json({ success: false, message: "CNPJ é obrigatório para cliente/lead PJ." });
+          return;
+        }
+        if (tipo_pessoa !== "pj" && documentoDigits.length !== 11) {
+          res.status(400).json({ success: false, message: "CPF é obrigatório para cliente/lead PF." });
+          return;
+        }
       }
-      if (tipo_pessoa !== "pj" && documentoDigits.length !== 11) {
-        res.status(400).json({ success: false, message: "CPF é obrigatório para cliente/lead PF." });
-        return;
-      }
-      if (await existeLeadComDocumento(documentoDigits)) {
+      // Deduplicação apenas quando há documento válido
+      if (documentoDigits.length >= 11 && await existeLeadComDocumento(documentoDigits)) {
         res.status(409).json({ success: false, message: "Já existe cliente/lead cadastrado com este CPF/CNPJ." });
         return;
       }
@@ -1621,7 +1742,6 @@ async function startServer() {
       const valor        = Number(b.valor_solicitado || b.valorSolicitado || b.valorDesejado) || null;
       const prazo        = Number(b.prazo_meses || b.prazo || b.parcelas) || null;
       const finalidade   = b.finalidade || b.mensagem || null;
-      const origem       = b.origem || "site";
       const tipo_registro = (
         b.tipo_registro
         || (origem === "contato_site" ? "contato"
@@ -2553,18 +2673,18 @@ async function startServer() {
         empresa_id = req.body.empresa_id;
         if (!(await requireEmpresaOperacional(req, res, empresa_id))) return;
       } else if (req.body.cliente_empresa) {
+        // Tentamos vincular à empresa cadastrada se houver CNPJ válido.
+        // Sem CNPJ, a simulação prossegue normalmente — apenas não vincula empresa.
         const doc = onlyDigits(req.body.cliente_cpf_cnpj);
-        if (doc.length !== 14) {
-          res.status(400).json({ error: "CNPJ obrigatório para simulação empresarial. Atualize o cadastro da empresa antes de simular." });
-          return;
+        if (doc.length === 14) {
+          empresa_id = await processarEmpresaDaSimulacao(pool, {
+            razao_social: req.body.cliente_empresa,
+            cnpj: req.body.cliente_cpf_cnpj,
+            telefone: req.body.cliente_telefone,
+            colaborador_id: colaborador.id
+          });
+          if (empresa_id && !(await requireEmpresaOperacional(req, res, empresa_id))) return;
         }
-        empresa_id = await processarEmpresaDaSimulacao(pool, {
-          razao_social: req.body.cliente_empresa,
-          cnpj: req.body.cliente_cpf_cnpj,
-          telefone: req.body.cliente_telefone,
-          colaborador_id: colaborador.id
-        });
-        if (empresa_id && !(await requireEmpresaOperacional(req, res, empresa_id))) return;
       }
 
       const { rows } = await pool.query(
@@ -4114,9 +4234,6 @@ async function startServer() {
       if (!r.rows[0]) return res.status(404).json({ error: "Não encontrado" });
       const lead = r.rows[0];
 
-      const { OpenAI } = await import("openai");
-      const openai = new OpenAI();
-
       const prompt = `Você é um analista de crédito empresarial especializado em assessoria de crédito para PMEs.
 Analise o perfil abaixo e classifique o potencial deste lead para crédito empresarial.
 
@@ -4132,23 +4249,23 @@ Dados do lead:
 
 Responda APENAS com um JSON válido no seguinte formato:
 {
-  "classificacao": "possivel_cliente" | "curioso" | "sem_perfil" | "pendente",
-  "score": <número de 0 a 100>,
-  "temperatura": "frio" | "morno" | "quente",
-  "resumo": "<2-3 frases explicando a classificação>",
-  "pontos_positivos": ["<ponto1>", "<ponto2>"],
-  "pontos_atencao": ["<ponto1>", "<ponto2>"],
-  "proxima_acao": "<ação recomendada para o consultor>"
+  "classificacao": "possivel_cliente",
+  "score": 0,
+  "temperatura": "frio",
+  "resumo": "texto",
+  "pontos_positivos": [],
+  "pontos_atencao": [],
+  "proxima_acao": "texto"
 }`;
 
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4.1-mini",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.3,
-        response_format: { type: "json_object" },
+      const { GoogleGenerativeAI } = await import("@google/generative-ai");
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+      const model = genAI.getGenerativeModel({
+        model: "gemini-2.0-flash",
+        generationConfig: { responseMimeType: "application/json", temperature: 0.3 },
       });
-
-      const analise = JSON.parse(completion.choices[0].message.content || "{}");
+      const result = await model.generateContent(prompt);
+      const analise = JSON.parse(result.response.text() || "{}");
 
       const novoStatus = analise.classificacao === "possivel_cliente" ? "possivel_cliente"
         : analise.classificacao === "curioso" ? "curioso"
@@ -11937,17 +12054,14 @@ Dados do lead:
 - Próximo follow-up: ${lead.proximo_followup || "não agendado"}
 - Histórico recente: ${historico.rows.map((h: any) => `${h.tipo}: ${h.descricao}`).join("; ") || "sem histórico"}`;
 
-      const { OpenAI } = await import("openai");
-      const openai = new OpenAI();
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4.1-mini",
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" },
-        max_tokens: 800,
-        temperature: 0.4,
+      const { GoogleGenerativeAI } = await import("@google/generative-ai");
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+      const gemModel = genAI.getGenerativeModel({
+        model: "gemini-2.0-flash",
+        generationConfig: { responseMimeType: "application/json", temperature: 0.4 } as any,
       });
-
-      const resposta = JSON.parse(completion.choices[0].message.content || "{}");
+      const gemResult2 = await gemModel.generateContent(prompt);
+      const resposta = JSON.parse(gemResult2.response.text() || "{}");
       res.json({
         lead_id,
         recomendacoes: resposta.recomendacoes || [],
@@ -11999,17 +12113,14 @@ Valor: R$ ${lead.valor_solicitado || 0} | Score: ${lead.score_efetivo || lead.sc
 Contratos: ${contratos.rows.map((c: any) => c.tipo_contrato).join(", ") || "nenhum"}
 Histórico: ${historico.rows.slice(0, 10).map((h: any) => `${h.tipo}: ${h.descricao}`).join("; ") || "sem histórico"}`;
 
-      const { OpenAI } = await import("openai");
-      const openai = new OpenAI();
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4.1-mini",
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" },
-        max_tokens: 500,
-        temperature: 0.3,
+      const { GoogleGenerativeAI } = await import("@google/generative-ai");
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+      const gemModel = genAI.getGenerativeModel({
+        model: "gemini-2.0-flash",
+        generationConfig: { responseMimeType: "application/json", temperature: 0.3 } as any,
       });
-
-      const resposta = JSON.parse(completion.choices[0].message.content || "{}");
+      const gemResult3 = await gemModel.generateContent(prompt);
+      const resposta = JSON.parse(gemResult3.response.text() || "{}");
       res.json({
         lead_id: Number(leadId),
         resumo: resposta.resumo || "",
@@ -12065,68 +12176,50 @@ Histórico: ${historico.rows.slice(0, 10).map((h: any) => `${h.tipo}: ${h.descri
       const isPdf = ext === "pdf";
       const isImage = ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
 
-      const { OpenAI } = await import("openai");
-      const openai = new OpenAI();
+      const { GoogleGenerativeAI } = await import("@google/generative-ai");
+      const genAI4 = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+      const gemModel4 = genAI4.getGenerativeModel({
+        model: "gemini-2.0-flash",
+        generationConfig: { responseMimeType: "application/json", temperature: 0.2 } as any,
+      });
 
       let classificacao: any;
 
       if (isImage && docRow.url) {
-        // Usar vision para imagens
+        // Gemini suporta visão nativamente via inlineData
         const dataDir = process.env.DATA_DIR || "/data";
         const filePath = path.join(dataDir, docRow.url.replace(/^\//, ""));
-        let imageContent: any;
+        const mimeType = (ext === "png" ? "image/png" : "image/jpeg") as any;
+
+        const promptVisao = `Classifique este documento empresarial. Responda em JSON com:
+"tipo": um dos valores ["rg", "cnh", "cpf", "cnpj_cartao", "contrato_social", "balanco", "dre", "extrato_bancario", "comprovante_residencia", "procuracao", "certidao_negativa", "nota_fiscal", "contrato_credito", "outro"]
+"descricao": breve descricao do que e o documento (max 80 chars)
+"confianca": numero de 0 a 1 indicando certeza da classificacao`;
 
         if (fs.existsSync(filePath)) {
           const buffer = fs.readFileSync(filePath);
           const base64 = buffer.toString("base64");
-          const mimeType = ext === "png" ? "image/png" : "image/jpeg";
-          imageContent = {
-            type: "image_url" as const,
-            image_url: { url: `data:${mimeType};base64,${base64}` },
-          };
+          const imgPart = { inlineData: { data: base64, mimeType } };
+          const gemResult4 = await gemModel4.generateContent([promptVisao, imgPart]);
+          classificacao = JSON.parse(gemResult4.response.text() || "{}");
         } else {
-          imageContent = { type: "text" as const, content: `Arquivo: ${nomeArquivo}` };
+          const gemResult4 = await gemModel4.generateContent(
+            `Classifique o documento pelo nome do arquivo: "${nomeArquivo}". Responda em JSON com "tipo", "descricao" e "confianca".`
+          );
+          classificacao = JSON.parse(gemResult4.response.text() || "{}");
         }
-
-        const completion = await openai.chat.completions.create({
-          model: "gpt-4.1-mini",
-          messages: [{
-            role: "user",
-            content: [
-              imageContent,
-              {
-                type: "text",
-                text: `Classifique este documento empresarial. Responda em JSON com:
-"tipo": um dos valores ["rg", "cnh", "cpf", "cnpj_cartao", "contrato_social", "balanco", "dre", "extrato_bancario", "comprovante_residencia", "procuracao", "certidao_negativa", "nota_fiscal", "contrato_credito", "outro"]
-"descricao": breve descrição do que é o documento (máx 80 chars)
-"confianca": número de 0 a 1 indicando certeza da classificação`,
-              },
-            ],
-          }],
-          response_format: { type: "json_object" },
-          max_tokens: 200,
-        });
-        classificacao = JSON.parse(completion.choices[0].message.content || "{}");
       } else {
-        // Para PDFs e outros, classificar pelo nome do arquivo
-        const completion = await openai.chat.completions.create({
-          model: "gpt-4.1-mini",
-          messages: [{
-            role: "user",
-            content: `Classifique o documento pelo nome do arquivo: "${nomeArquivo}".
+        // PDFs e outros: classificar pelo nome do arquivo
+        const promptNome = `Classifique o documento pelo nome do arquivo: "${nomeArquivo}".
 Responda em JSON com:
 "tipo": um dos valores ["rg", "cnh", "cpf", "cnpj_cartao", "contrato_social", "balanco", "dre", "extrato_bancario", "comprovante_residencia", "procuracao", "certidao_negativa", "nota_fiscal", "contrato_credito", "outro"]
-"descricao": breve descrição do que é o documento (máx 80 chars)
-"confianca": número de 0 a 1 indicando certeza da classificação`,
-          }],
-          response_format: { type: "json_object" },
-          max_tokens: 200,
-          temperature: 0.2,
-        });
-        classificacao = JSON.parse(completion.choices[0].message.content || "{}");
+"descricao": breve descricao do que e o documento (max 80 chars)
+"confianca": numero de 0 a 1 indicando certeza da classificacao`;
+        const gemResult4b = await gemModel4.generateContent(promptNome);
+        classificacao = JSON.parse(gemResult4b.response.text() || "{}");
       }
 
-      const tipo = classificacao.tipo || "outro";
+            const tipo = classificacao.tipo || "outro";
       const descricao = classificacao.descricao || "";
       const confianca = classificacao.confianca || 0;
 
@@ -12206,16 +12299,14 @@ ${canal === "whatsapp"
   : '"assunto": assunto do email, "mensagem": corpo completo do email'
 }`;
 
-      const { OpenAI } = await import("openai");
-      const openai = new OpenAI();
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4.1-mini",
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" },
-        max_tokens: 600,
-        temperature: 0.6,
+      const { GoogleGenerativeAI } = await import("@google/generative-ai");
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+      const gemModel = genAI.getGenerativeModel({
+        model: "gemini-2.0-flash",
+        generationConfig: { responseMimeType: "application/json", temperature: 0.6 } as any,
       });
-      const resposta = JSON.parse(completion.choices[0].message.content || "{}");
+      const gemResult5 = await gemModel.generateContent(prompt);
+      const resposta = JSON.parse(gemResult5.response.text() || "{}");
 
       // Montar link WhatsApp se canal for whatsapp
       if (canal === "whatsapp" && lead.telefone) {
