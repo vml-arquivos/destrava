@@ -1271,6 +1271,105 @@ async function startServer() {
     console.error('[startup] Aviso: falha ao auto-criar tabelas de acompanhamento financeiro:', err.message);
   }
 
+  // ─── AUTO-CREATE: Fix 060 — Acompanhamento bancário, empresas e faturamento ───
+  // Garante que o schema do acompanhamento bancário esteja completo em produção.
+  // Corrige: empresas sumindo da listagem, semana não salvando, faturamento sem dropdown.
+  // Totalmente idempotente: ADD COLUMN IF NOT EXISTS, CREATE INDEX IF NOT EXISTS.
+  try {
+    await pool.query(`
+      -- Colunas novas na tabela de histórico de compensações
+      ALTER TABLE IF EXISTS acompanhamento_compensacoes_historico
+        ADD COLUMN IF NOT EXISTS faturamento_anual_ref        NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teto_anual_movimentacao      NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS faturamento_mensal_base      NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teto_mensal_movimentacao     NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS referencia_semanal_base      NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teto_semanal_movimentacao    NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS acumulado_mensal             NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS valor_abaixo_semana          NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS valor_excedente_semana       NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS saldo_faltante_ref_mensal    NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS saldo_disponivel_teto_mensal NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS meta_base_dinamica           NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teto_dinamico_proxima        NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS percentual_uso_semanal       NUMERIC(8,2)  NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS percentual_uso_mensal        NUMERIC(8,2)  NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS percentual_uso_anual         NUMERIC(8,2)  NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS status_aderencia             TEXT,
+        ADD COLUMN IF NOT EXISTS alerta_aderencia             BOOLEAN       NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS motivo_alerta                TEXT,
+        ADD COLUMN IF NOT EXISTS diagnostico_tecnico          TEXT,
+        ADD COLUMN IF NOT EXISTS criado_por                   UUID;
+
+      -- Colunas novas nas atualizações semanais
+      ALTER TABLE IF EXISTS acompanhamento_bancario_atualizacoes
+        ADD COLUMN IF NOT EXISTS faturamento_anual_ref        NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teto_anual_movimentacao      NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS faturamento_mensal_base      NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teto_mensal_movimentacao     NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS referencia_semanal_base      NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teto_semanal_movimentacao    NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS semanas_no_mes               INTEGER        NOT NULL DEFAULT 4,
+        ADD COLUMN IF NOT EXISTS acumulado_mensal             NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS acumulado_anual              NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS valor_abaixo_semana          NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS valor_excedente_semana       NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS saldo_faltante_ref_mensal    NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS saldo_disponivel_teto_mensal NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS semanas_restantes_mes        INTEGER        NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS meta_base_dinamica           NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS teto_dinamico_proxima        NUMERIC(15,2) NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS percentual_uso_semanal       NUMERIC(8,2)  NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS percentual_uso_mensal        NUMERIC(8,2)  NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS percentual_uso_anual         NUMERIC(8,2)  NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS status_aderencia             TEXT,
+        ADD COLUMN IF NOT EXISTS alerta_aderencia             BOOLEAN        NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS motivo_alerta_aderencia      TEXT,
+        ADD COLUMN IF NOT EXISTS diagnostico_tecnico          TEXT,
+        ADD COLUMN IF NOT EXISTS scr_status                   TEXT,
+        ADD COLUMN IF NOT EXISTS cenprot_status               TEXT,
+        ADD COLUMN IF NOT EXISTS serasa_status                TEXT,
+        ADD COLUMN IF NOT EXISTS cnd_status                   TEXT,
+        ADD COLUMN IF NOT EXISTS pld_aml_status               TEXT,
+        ADD COLUMN IF NOT EXISTS coaf_status                  TEXT,
+        ADD COLUMN IF NOT EXISTS analise_semana               TEXT,
+        ADD COLUMN IF NOT EXISTS orientacao_cliente           TEXT,
+        ADD COLUMN IF NOT EXISTS proxima_acao                 TEXT;
+
+      -- UNIQUE constraint para o ON CONFLICT do INSERT de compensações
+      DO $do$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_indexes
+          WHERE schemaname = current_schema()
+            AND indexname = 'ux_acomp_comp_hist_acomp_semana'
+        ) THEN
+          CREATE UNIQUE INDEX ux_acomp_comp_hist_acomp_semana
+            ON acompanhamento_compensacoes_historico(acompanhamento_id, numero_semana);
+        END IF;
+      END $do$;
+
+      -- Índice para a query de empresas com acompanhamento (performance)
+      CREATE INDEX IF NOT EXISTS idx_acomp_bancario_empresa_status
+        ON acompanhamentos_bancarios(empresa_id, status)
+        WHERE empresa_id IS NOT NULL;
+
+      -- Desbloquear empresas vinculadas a acompanhamentos ativos
+      UPDATE empresas e
+      SET bloqueado_operacional = FALSE
+      WHERE EXISTS (
+        SELECT 1 FROM acompanhamentos_bancarios ab
+        WHERE ab.empresa_id = e.id
+          AND ab.status NOT IN ('encerrado', 'cancelado')
+      )
+      AND COALESCE(e.bloqueado_operacional, FALSE) = TRUE;
+    `);
+    console.log('[startup] Fix 060: schema acompanhamento bancário verificado/atualizado com sucesso.');
+  } catch (err: any) {
+    console.error('[startup] Aviso Fix 060:', err.message);
+  }
+
+
 
   // ─── PATCH: Remove CHECK constraint legado de modelo_usado ─────────────────────
   // A migration 016 criou CHECK (modelo_usado IN ('prophet','arima')).
@@ -3692,8 +3791,17 @@ async function startServer() {
       const incluirIncompletos = ["1", "true", "sim"].includes(String(req.query.incluir_incompletos || "").toLowerCase());
       if (!incluirIncompletos) {
         conditions.push(`COALESCE(e.arquivado_por_duplicidade, false) = false`);
-        conditions.push(`COALESCE(e.cadastro_completo, false) = true`);
         conditions.push(`COALESCE(e.bloqueado_operacional, false) = false`);
+        // Empresas vinculadas a acompanhamentos bancários ativos ficam sempre visíveis,
+        // independente de cadastro_completo — elas foram criadas pelo fluxo de acompanhamento.
+        conditions.push(`(
+          COALESCE(e.cadastro_completo, false) = true
+          OR EXISTS (
+            SELECT 1 FROM acompanhamentos_bancarios ab
+            WHERE ab.empresa_id = e.id
+              AND ab.status NOT IN ('encerrado', 'cancelado')
+          )
+        )`);
       }
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
       const { rows } = await pool.query(
