@@ -15,6 +15,7 @@ import { getPermissoes, temPermissao, LISTA_CARGOS_VALIDOS, nivelHierarquico, po
 import cnpjRouter from './routes/cnpj';
 import sociosDocumentosRouter from './routes/socios_documentos';
 import documentosRouter from './routes/documentos';
+import documentacaoRouter from './routes/documentacao';
 import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
 import { gerarHtmlTimbrado, getPuppeteerHeaderTemplate, getPuppeteerFooterTemplate, getDocumentStyles, CONTRATADA_DADOS, getHtmlHeaderEmbutido, getHtmlFooterEmbutido } from "./letterhead.ts";
 import { DESTRAVA_LOGO_B64, PERMUPAY_LOGO_B64 } from "./logo_constants.ts";
@@ -969,6 +970,7 @@ async function startServer() {
   // Rota para consulta de CNPJ (proxy para BrasilAPI)
   app.use('/api/cnpj', cnpjRouter);
   app.use('/api/empresas', sociosDocumentosRouter);
+  app.use('/api/documentacao', documentacaoRouter);
   const server = createServer(app);
 
   // ─── AUTO-CREATE: Company Hub / Empresas enriquecidas ──────────────────────

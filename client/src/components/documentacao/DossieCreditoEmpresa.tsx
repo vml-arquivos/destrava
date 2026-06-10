@@ -1,0 +1,389 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { apiFetch } from "@/lib/api";
+import { toast } from "sonner";
+import {
+  AlertTriangle,
+  Bot,
+  Building2,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  ClipboardList,
+  FileText,
+  Loader2,
+  RefreshCw,
+  ShieldAlert,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
+
+type Severidade = "alta" | "media" | "baixa";
+
+type Pendencia = {
+  codigo: string;
+  mensagem: string;
+  severidade: Severidade;
+  origem?: string;
+  recomendacao?: string;
+  bloco_codigo?: string;
+  bloco_nome?: string;
+};
+
+type DocumentoBloco = {
+  id: string;
+  tipo_documento: string;
+  nome_original: string;
+  mime_type?: string;
+  tamanho_bytes?: number;
+  status?: string;
+  validado?: boolean;
+  criado_em?: string;
+  papel_documento?: string;
+  principal?: boolean;
+};
+
+type BlocoDossie = {
+  id: string;
+  codigo: string;
+  nome_amigavel: string;
+  descricao?: string;
+  entidade_principal?: string;
+  obrigatorio?: boolean;
+  ordem?: number;
+  status: string;
+  completo: boolean;
+  validado?: boolean;
+  dados_estruturados: any;
+  pendencias: Pendencia[];
+  documentos: DocumentoBloco[];
+  origem?: string;
+  atualizacao_em?: string;
+};
+
+type DossieResponse = {
+  empresa: {
+    id: string;
+    razao_social?: string;
+    nome_fantasia?: string;
+    cnpj?: string;
+    situacao_cadastral?: string;
+    ultima_sincronizacao_receita?: string;
+  };
+  resumo: {
+    total_blocos: number;
+    blocos_completos: number;
+    pendencias_total: number;
+    pendencias_altas: number;
+    pendencias_medias: number;
+    pendencias_baixas: number;
+    prioridade_imediata?: Record<string, string>;
+  };
+  blocos: BlocoDossie[];
+  pendencias: Pendencia[];
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  nao_iniciado: "Não iniciado",
+  pendente: "Pendente",
+  em_preenchimento: "Em preenchimento",
+  em_validacao: "Em validação",
+  validado: "Validado",
+  recusado: "Recusado",
+  desatualizado: "Desatualizado",
+  inconclusivo: "Inconclusivo",
+};
+
+function formatCnpj(cnpj?: string) {
+  const digits = String(cnpj || "").replace(/\D/g, "");
+  if (digits.length !== 14) return cnpj || "Não informado";
+  return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+}
+
+function formatDate(value?: string) {
+  if (!value) return "Não informado";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "Não informado";
+  return d.toLocaleDateString("pt-BR");
+}
+
+function formatMoney(value: unknown) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "Não informado";
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function statusClasses(status: string, completo?: boolean) {
+  if (status === "validado" || completo) return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (status === "em_validacao" || status === "em_preenchimento") return "bg-blue-50 text-blue-700 border-blue-200";
+  if (status === "recusado") return "bg-red-50 text-red-700 border-red-200";
+  if (status === "desatualizado" || status === "pendente") return "bg-amber-50 text-amber-700 border-amber-200";
+  return "bg-slate-50 text-slate-600 border-slate-200";
+}
+
+function severidadeClasses(severidade: Severidade) {
+  if (severidade === "alta") return "bg-red-50 text-red-700 border-red-200";
+  if (severidade === "media") return "bg-amber-50 text-amber-700 border-amber-200";
+  return "bg-blue-50 text-blue-700 border-blue-200";
+}
+
+function MiniCampo({ label, value }: { label: string; value: any }) {
+  return (
+    <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+      <span className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wide">{label}</span>
+      <b className="block text-xs text-slate-700 truncate">{value || "Não informado"}</b>
+    </div>
+  );
+}
+
+function BlocoCnpj({ bloco }: { bloco: BlocoDossie }) {
+  const d = bloco.dados_estruturados || {};
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+      <MiniCampo label="CNPJ" value={formatCnpj(d.cnpj)} />
+      <MiniCampo label="Razão social" value={d.razao_social} />
+      <MiniCampo label="Situação cadastral" value={d.situacao_cadastral} />
+      <MiniCampo label="Data de abertura" value={formatDate(d.data_abertura)} />
+      <MiniCampo label="Natureza jurídica" value={d.natureza_juridica} />
+      <MiniCampo label="Capital social" value={formatMoney(d.capital_social)} />
+      <MiniCampo label="CNAE principal" value={d.cnae_principal} />
+      <MiniCampo label="Última Receita" value={formatDate(d.ultima_sincronizacao_receita)} />
+    </div>
+  );
+}
+
+function BlocoQsa({ bloco }: { bloco: BlocoDossie }) {
+  const socios = Array.isArray(bloco.dados_estruturados?.socios) ? bloco.dados_estruturados.socios : [];
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <MiniCampo label="Sócios cadastrados" value={bloco.dados_estruturados?.total_socios_cadastrados ?? 0} />
+        <MiniCampo label="QSA Receita JSON" value={bloco.dados_estruturados?.total_socios_receita_json ?? 0} />
+        <MiniCampo label="Status" value={STATUS_LABEL[bloco.status] || bloco.status} />
+      </div>
+      {socios.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-slate-200 p-4 text-xs text-slate-500 text-center">
+          Nenhum sócio/QSA disponível. Use “Atualizar dados societários” na aba Sócios ou cadastre sócio manualmente.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {socios.slice(0, 6).map((s: any) => (
+            <div key={s.id || s.nome} className="rounded-lg border border-slate-100 bg-white p-3 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <b className="text-slate-800">{s.nome || "Sócio sem nome"}</b>
+                <span className="text-[11px] rounded-full px-2 py-0.5 border border-slate-200 bg-slate-50 text-slate-600">
+                  {s.qualificacao || "Qualificação pendente"}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
+                <MiniCampo label="CPF/CNPJ" value={s.cpf_cnpj || "Pendente"} />
+                <MiniCampo label="Representante" value={s.representante_legal ? "Sim" : "Não informado"} />
+                <MiniCampo label="Assina contrato" value={s.assina_contrato ? "Sim" : "Não"} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BlocoGenerico({ bloco }: { bloco: BlocoDossie }) {
+  const docs = Array.isArray(bloco.documentos) ? bloco.documentos : [];
+  return (
+    <div className="space-y-2">
+      {docs.length === 0 ? (
+        <p className="text-xs text-slate-500">Nenhum documento vinculado a este bloco ainda.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {docs.slice(0, 6).map((doc) => (
+            <div key={doc.id} className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2">
+              <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-700 truncate">{doc.nome_original}</p>
+                <p className="text-[11px] text-slate-400">{doc.tipo_documento} • {doc.status}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BlocoCard({ bloco, aberto, onToggle }: { bloco: BlocoDossie; aberto: boolean; onToggle: () => void }) {
+  const pendencias = Array.isArray(bloco.pendencias) ? bloco.pendencias : [];
+  const docs = Array.isArray(bloco.documentos) ? bloco.documentos : [];
+  const isPrioritario = bloco.codigo === "cnpj_receita" || bloco.codigo === "qsa_quadro_societario";
+  return (
+    <div className={`rounded-2xl border bg-white shadow-sm overflow-hidden ${isPrioritario ? "border-blue-200" : "border-slate-200"}`}>
+      <button type="button" onClick={onToggle} className="w-full text-left p-4 hover:bg-slate-50 transition-colors">
+        <div className="flex items-start gap-3">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${bloco.completo ? "bg-emerald-100 text-emerald-700" : isPrioritario ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"}`}>
+            {bloco.codigo === "qsa_quadro_societario" ? <Users className="w-5 h-5" /> : bloco.codigo === "analise_ia_credito" ? <Bot className="w-5 h-5" /> : bloco.completo ? <ShieldCheck className="w-5 h-5" /> : <ClipboardList className="w-5 h-5" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-800 truncate">{String(bloco.ordem || "").padStart(2, "0")}. {bloco.nome_amigavel}</h3>
+              {isPrioritario && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white">IMEDIATO</span>}
+              {bloco.obrigatorio && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">OBRIGATÓRIO</span>}
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{bloco.descricao}</p>
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${statusClasses(bloco.status, bloco.completo)}`}>{STATUS_LABEL[bloco.status] || bloco.status}</span>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-slate-500">{pendencias.length} pendência(s)</span>
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-slate-500">{docs.length} documento(s)</span>
+            </div>
+          </div>
+          {aberto ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        </div>
+      </button>
+      {aberto && (
+        <div className="border-t border-slate-100 p-4 space-y-4 bg-white">
+          {bloco.codigo === "cnpj_receita" ? <BlocoCnpj bloco={bloco} /> : bloco.codigo === "qsa_quadro_societario" ? <BlocoQsa bloco={bloco} /> : <BlocoGenerico bloco={bloco} />}
+
+          {pendencias.length > 0 && (
+            <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3">
+              <p className="text-xs font-bold text-amber-800 mb-2 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" /> Pendências do bloco</p>
+              <div className="space-y-1.5">
+                {pendencias.slice(0, 8).map((p, idx) => (
+                  <div key={`${p.codigo}-${idx}`} className="flex items-start gap-2 text-xs">
+                    <span className={`mt-0.5 shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${severidadeClasses(p.severidade)}`}>{p.severidade}</span>
+                    <span className="text-slate-700">{p.mensagem}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita }: { empresaId?: string; onAtualizarReceita?: () => void }) {
+  const [dossie, setDossie] = useState<DossieResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [recalculando, setRecalculando] = useState(false);
+  const [abertos, setAbertos] = useState<Record<string, boolean>>({ cnpj_receita: true, qsa_quadro_societario: true });
+
+  const carregar = useCallback(async () => {
+    if (!empresaId) return;
+    setLoading(true);
+    try {
+      const data = await apiFetch(`/api/documentacao/empresa/${empresaId}/dossie`);
+      setDossie(data);
+    } catch (err: any) {
+      console.error("[DossieCreditoEmpresa]", err);
+      toast.error(err?.message || "Erro ao carregar Dossiê de Crédito");
+    } finally {
+      setLoading(false);
+    }
+  }, [empresaId]);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const recalcular = async () => {
+    if (!empresaId) return;
+    setRecalculando(true);
+    try {
+      const data = await apiFetch(`/api/documentacao/empresa/${empresaId}/recalcular`, { method: "POST" });
+      setDossie(data);
+      toast.success("Dossiê recalculado com base nos dados atuais");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao recalcular dossiê");
+    } finally {
+      setRecalculando(false);
+    }
+  };
+
+  const blocosPrioritarios = useMemo(() => (dossie?.blocos || []).filter((b) => ["cnpj_receita", "qsa_quadro_societario"].includes(b.codigo)), [dossie]);
+  const demaisBlocos = useMemo(() => (dossie?.blocos || []).filter((b) => !["cnpj_receita", "qsa_quadro_societario"].includes(b.codigo)), [dossie]);
+
+  if (!empresaId) return null;
+
+  if (loading && !dossie) {
+    return (
+      <div className="p-8 flex flex-col items-center justify-center gap-3 text-slate-500">
+        <Loader2 className="w-6 h-6 animate-spin" />
+        <p className="text-sm">Montando Dossiê de Crédito...</p>
+      </div>
+    );
+  }
+
+  const resumo = dossie?.resumo;
+
+  return (
+    <div className="p-5 fade-in space-y-4">
+      <div className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white p-4">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-blue-700" />
+              <h2 className="text-base font-extrabold text-slate-800">Dossiê Documental de Crédito Empresarial</h2>
+            </div>
+            <p className="text-xs text-slate-600 mt-1 max-w-3xl">
+              Organização estruturada dos blocos de CNPJ, QSA, contrato social, faturamento e documentação para leitura futura por IA, sem duplicar arquivos e usando documentos_arquivos como fonte única.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {onAtualizarReceita && (
+              <button onClick={onAtualizarReceita} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors">
+                <RefreshCw className="w-3.5 h-3.5" /> Atualizar Receita/QSA
+              </button>
+            )}
+            <button onClick={recalcular} disabled={recalculando} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors disabled:opacity-50">
+              {recalculando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Recalcular dossiê
+            </button>
+          </div>
+        </div>
+
+        {resumo && (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mt-4">
+            <div className="rounded-xl bg-white border border-blue-100 p-3"><span className="text-[11px] text-slate-400 font-semibold">Blocos</span><b className="block text-lg text-slate-800">{resumo.blocos_completos}/{resumo.total_blocos}</b></div>
+            <div className="rounded-xl bg-white border border-blue-100 p-3"><span className="text-[11px] text-slate-400 font-semibold">Pendências</span><b className="block text-lg text-slate-800">{resumo.pendencias_total}</b></div>
+            <div className="rounded-xl bg-white border border-red-100 p-3"><span className="text-[11px] text-red-400 font-semibold">Altas</span><b className="block text-lg text-red-700">{resumo.pendencias_altas}</b></div>
+            <div className="rounded-xl bg-white border border-amber-100 p-3"><span className="text-[11px] text-amber-500 font-semibold">Médias</span><b className="block text-lg text-amber-700">{resumo.pendencias_medias}</b></div>
+            <div className="rounded-xl bg-white border border-blue-100 p-3"><span className="text-[11px] text-blue-500 font-semibold">Baixas</span><b className="block text-lg text-blue-700">{resumo.pendencias_baixas}</b></div>
+          </div>
+        )}
+      </div>
+
+      {dossie?.pendencias?.some((p) => p.severidade === "alta") && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800 flex items-start gap-2">
+          <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0" />
+          <div><b>Bloqueios críticos:</b> existem pendências altas em CNPJ/QSA ou documentação obrigatória. A IA futura deve tratar esses itens como revisão humana obrigatória.</div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-blue-700" />
+          <h3 className="text-sm font-extrabold text-slate-800">Prioridade imediata: CNPJ e QSA</h3>
+        </div>
+        {blocosPrioritarios.map((bloco) => (
+          <BlocoCard
+            key={bloco.id}
+            bloco={bloco}
+            aberto={!!abertos[bloco.codigo]}
+            onToggle={() => setAbertos((prev) => ({ ...prev, [bloco.codigo]: !prev[bloco.codigo] }))}
+          />
+        ))}
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 pt-2">
+          <ClipboardList className="w-4 h-4 text-slate-600" />
+          <h3 className="text-sm font-extrabold text-slate-800">Demais blocos preparados</h3>
+        </div>
+        {demaisBlocos.map((bloco) => (
+          <BlocoCard
+            key={bloco.id}
+            bloco={bloco}
+            aberto={!!abertos[bloco.codigo]}
+            onToggle={() => setAbertos((prev) => ({ ...prev, [bloco.codigo]: !prev[bloco.codigo] }))}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}

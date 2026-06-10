@@ -21,6 +21,7 @@ import {
 import { EmptyState, LoadingState, ErrorState } from "@/components/ui/states";
 import { RiscoBadge, ScoreIndicator, StatusCadastroBadge } from "@/components/ui/risco-badge";
 import DocumentosEntidade from "@/components/documentos/DocumentosEntidade";
+import DossieCreditoEmpresa from "@/components/documentacao/DossieCreditoEmpresa";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -463,7 +464,7 @@ export default function Empresas() {
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [selecionada, setSelecionada] = useState<Empresa | null>(null);
   const [showDetail, setShowDetail] = useState(false); // mobile toggle
-  const [abaAtiva, setAbaAtiva] = useState<"visao_geral" | "socios" | "contrato_social" | "followup" | "historico" | "documentos" | "simulacoes" | "contratos">("visao_geral");
+  const [abaAtiva, setAbaAtiva] = useState<"visao_geral" | "socios" | "dossie_credito" | "contrato_social" | "followup" | "historico" | "documentos" | "simulacoes" | "contratos">("visao_geral");
   const [followups, setFollowups] = useState<EmpresaFollowup[]>([]);
   const [historico, setHistorico] = useState<EmpresaHistorico[]>([]);
   const [documentos, setDocumentos] = useState<EmpresaDocumento[]>([]);
@@ -1392,6 +1393,7 @@ export default function Empresas() {
                       {([
                         { id: "visao_geral",  label: "Visão Geral" },
                         { id: "socios",       label: "Sócios",      badge: sociosEmpresa.length },
+                        { id: "dossie_credito", label: "Dossiê de Crédito" },
                         { id: "contrato_social", label: "Contrato Social", badge: contratosSociais.length },
                         { id: "followup",     label: "Follow-up",   badge: followups.filter(f=>!f.concluido).length },
                         { id: "simulacoes",   label: "Simulações",  badge: simulacoesEmpresa.length },
@@ -1676,6 +1678,14 @@ export default function Empresas() {
                           </div>
                         )}
                       </div>
+                    )
+
+                    /* ── DOSSIÊ DE CRÉDITO ── */
+                    : abaAtiva === "dossie_credito" ? (
+                      <DossieCreditoEmpresa
+                        empresaId={selecionada?.id}
+                        onAtualizarReceita={selecionada ? () => sincronizarDados(selecionada) : undefined}
+                      />
                     )
 
                     /* ── SÓCIOS ── */
