@@ -3,7 +3,6 @@ import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import {
   AlertTriangle,
-  Bot,
   Building2,
   CheckCircle,
   ChevronDown,
@@ -237,7 +236,7 @@ function BlocoQsa({ bloco }: { bloco: BlocoDossie }) {
       </div>
       {bloco.dados_estruturados?.proprietario_inferido && (
         <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
-          Empresa individual/MEI detectada: o proprietário administrador foi exibido no QSA a partir dos dados cadastrais para não deixar a análise sem responsável. Confirme o CPF completo e documentos pessoais na aba Sócios.
+          Empresa individual/MEI: proprietário/administrador exibido a partir dos dados cadastrais. Confirme CPF completo e documentos pessoais na aba Sócios.
         </div>
       )}
       {socios.length === 0 ? (
@@ -294,7 +293,7 @@ function BlocoCard({ bloco, aberto, onToggle }: { bloco: BlocoDossie; aberto: bo
       <button type="button" onClick={onToggle} className="w-full text-left p-4 hover:bg-slate-50 transition-colors">
         <div className="flex items-start gap-3">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${bloco.completo ? "bg-emerald-100 text-emerald-700" : isPrioritario ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"}`}>
-            {bloco.codigo === "qsa_quadro_societario" ? <Users className="w-5 h-5" /> : bloco.codigo === "analise_ia_credito" ? <Bot className="w-5 h-5" /> : bloco.completo ? <ShieldCheck className="w-5 h-5" /> : <ClipboardList className="w-5 h-5" />}
+            {bloco.codigo === "qsa_quadro_societario" ? <Users className="w-5 h-5" /> : bloco.completo ? <ShieldCheck className="w-5 h-5" /> : <ClipboardList className="w-5 h-5" />}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -394,10 +393,10 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita }: 
           <div>
             <div className="flex items-center gap-2">
               <Building2 className="w-5 h-5 text-blue-700" />
-              <h2 className="text-base font-extrabold text-slate-800">Dossiê Documental de Crédito Empresarial</h2>
+              <h2 className="text-base font-extrabold text-slate-800">Dossiê de Crédito Empresarial</h2>
             </div>
             <p className="text-xs text-slate-600 mt-1 max-w-3xl">
-              Organização estruturada dos blocos de CNPJ, QSA, contrato social, faturamento e documentação para leitura futura por IA, com visualização segura dos documentos e usando documentos_arquivos como fonte única.
+              Consulte os dados cadastrais, quadro societário, documentos vinculados e pendências da empresa em um só lugar.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -426,7 +425,7 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita }: 
       {dossie?.pendencias?.some((p) => p.severidade === "alta") && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800 flex items-start gap-2">
           <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0" />
-          <div><b>Bloqueios críticos:</b> existem pendências altas em CNPJ/QSA ou documentação obrigatória. A IA futura deve tratar esses itens como revisão humana obrigatória.</div>
+          <div><b>Pendências obrigatórias:</b> revise os itens de CNPJ, QSA e documentação obrigatória antes de avançar.</div>
         </div>
       )}
 
@@ -448,7 +447,7 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita }: 
       <div className="space-y-3">
         <div className="flex items-center gap-2 pt-2">
           <ClipboardList className="w-4 h-4 text-slate-600" />
-          <h3 className="text-sm font-extrabold text-slate-800">Demais blocos preparados</h3>
+          <h3 className="text-sm font-extrabold text-slate-800">Outros blocos do dossiê</h3>
         </div>
         {demaisBlocos.map((bloco) => (
           <BlocoCard
