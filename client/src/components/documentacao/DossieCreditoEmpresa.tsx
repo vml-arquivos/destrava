@@ -9,6 +9,8 @@ import {
   ChevronDown,
   ChevronUp,
   ClipboardList,
+  Download,
+  ExternalLink,
   FileText,
   Loader2,
   RefreshCw,
@@ -40,6 +42,8 @@ type DocumentoBloco = {
   criado_em?: string;
   papel_documento?: string;
   principal?: boolean;
+  view_url?: string;
+  download_url?: string;
 };
 
 type BlocoDossie = {
@@ -111,6 +115,20 @@ function formatMoney(value: unknown) {
   if (!Number.isFinite(n)) return "Não informado";
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
+function formatBool(value: unknown) {
+  if (value === true) return "Sim";
+  if (value === false) return "Não";
+  return "Não informado";
+}
+
+function joinEndereco(value: any) {
+  if (!value) return "Não informado";
+  if (typeof value === "string") return value || "Não informado";
+  return [value.logradouro, value.numero, value.complemento, value.bairro, value.cidade, value.estado || value.uf, value.cep]
+    .filter(Boolean)
+    .join(", ") || "Não informado";
+}
+
 
 function statusClasses(status: string, completo?: boolean) {
   if (status === "validado" || completo) return "bg-emerald-50 text-emerald-700 border-emerald-200";
@@ -135,18 +153,74 @@ function MiniCampo({ label, value }: { label: string; value: any }) {
   );
 }
 
+function DocumentosDoBloco({ documentos }: { documentos?: DocumentoBloco[] }) {
+  const docs = Array.isArray(documentos) ? documentos : [];
+  if (docs.length === 0) {
+    return <p className="text-xs text-slate-500">Nenhum documento vinculado a este bloco ainda.</p>;
+  }
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-bold text-slate-700 flex items-center gap-1"><FileText className="w-3.5 h-3.5" /> Documentos vinculados ao bloco</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        {docs.map((doc) => (
+          <div key={doc.id} className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2">
+            <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-slate-700 truncate">{doc.nome_original}</p>
+              <p className="text-[11px] text-slate-400">{doc.tipo_documento} • {doc.status}</p>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <a href={doc.view_url || `/api/documentos/${doc.id}/view`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100" title="Visualizar documento">
+                <ExternalLink className="w-3 h-3" /> Ver
+              </a>
+              <a href={doc.download_url || `/api/documentos/${doc.id}/download`} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-100" title="Baixar documento">
+                <Download className="w-3 h-3" /> Baixar
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BlocoCnpj({ bloco }: { bloco: BlocoDossie }) {
   const d = bloco.dados_estruturados || {};
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
-      <MiniCampo label="CNPJ" value={formatCnpj(d.cnpj)} />
-      <MiniCampo label="Razão social" value={d.razao_social} />
-      <MiniCampo label="Situação cadastral" value={d.situacao_cadastral} />
-      <MiniCampo label="Data de abertura" value={formatDate(d.data_abertura)} />
-      <MiniCampo label="Natureza jurídica" value={d.natureza_juridica} />
-      <MiniCampo label="Capital social" value={formatMoney(d.capital_social)} />
-      <MiniCampo label="CNAE principal" value={d.cnae_principal} />
-      <MiniCampo label="Última Receita" value={formatDate(d.ultima_sincronizacao_receita)} />
+    <div className="space-y-4">
+      <div>
+        <p className="text-xs font-bold text-slate-700 mb-2">Dados cadastrais e Receita Federal</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+          <MiniCampo label="CNPJ" value={formatCnpj(d.cnpj)} />
+          <MiniCampo label="Razão social" value={d.razao_social} />
+          <MiniCampo label="Nome fantasia" value={d.nome_fantasia} />
+          <MiniCampo label="Situação cadastral" value={d.situacao_cadastral} />
+          <MiniCampo label="Data de abertura" value={formatDate(d.data_abertura)} />
+          <MiniCampo label="Natureza jurídica" value={d.natureza_juridica} />
+          <MiniCampo label="Capital social" value={formatMoney(d.capital_social)} />
+          <MiniCampo label="CNAE principal" value={d.cnae_principal} />
+          <MiniCampo label="Porte" value={d.porte} />
+          <MiniCampo label="Regime tributário" value={d.regime_tributario} />
+          <MiniCampo label="Simples Nacional" value={formatBool(d.opcao_simples)} />
+          <MiniCampo label="MEI" value={formatBool(d.opcao_mei)} />
+          <MiniCampo label="Inscrição estadual" value={d.inscricao_estadual} />
+          <MiniCampo label="Inscrição municipal" value={d.inscricao_municipal} />
+          <MiniCampo label="Fonte CNPJ" value={d.fonte_dados_empresa} />
+          <MiniCampo label="Última Receita" value={formatDate(d.ultima_sincronizacao_receita)} />
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-bold text-slate-700 mb-2">Endereço e contatos usados na análise</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+          <MiniCampo label="Endereço Receita" value={joinEndereco(d.endereco_receita)} />
+          <MiniCampo label="E-mail empresa" value={d.contato?.email} />
+          <MiniCampo label="Telefone" value={d.contato?.telefone || d.contato?.whatsapp} />
+          <MiniCampo label="Responsável" value={d.contato?.responsavel_nome} />
+        </div>
+      </div>
+
+      <DocumentosDoBloco documentos={bloco.documentos} />
     </div>
   );
 }
@@ -154,60 +228,61 @@ function BlocoCnpj({ bloco }: { bloco: BlocoDossie }) {
 function BlocoQsa({ bloco }: { bloco: BlocoDossie }) {
   const socios = Array.isArray(bloco.dados_estruturados?.socios) ? bloco.dados_estruturados.socios : [];
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
         <MiniCampo label="Sócios cadastrados" value={bloco.dados_estruturados?.total_socios_cadastrados ?? 0} />
         <MiniCampo label="QSA Receita JSON" value={bloco.dados_estruturados?.total_socios_receita_json ?? 0} />
-        <MiniCampo label="Status" value={STATUS_LABEL[bloco.status] || bloco.status} />
+        <MiniCampo label="Exibidos no dossiê" value={bloco.dados_estruturados?.total_socios_consolidados ?? socios.length} />
+        <MiniCampo label="Origem QSA" value={bloco.dados_estruturados?.origem_qsa_exibido} />
       </div>
+      {bloco.dados_estruturados?.proprietario_inferido && (
+        <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
+          Empresa individual/MEI detectada: o proprietário administrador foi exibido no QSA a partir dos dados cadastrais para não deixar a análise sem responsável. Confirme o CPF completo e documentos pessoais na aba Sócios.
+        </div>
+      )}
       {socios.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-200 p-4 text-xs text-slate-500 text-center">
-          Nenhum sócio/QSA disponível. Use “Atualizar dados societários” na aba Sócios ou cadastre sócio manualmente.
+          Nenhum sócio/QSA disponível. Use “Atualizar dados societários” na aba Sócios ou cadastre sócio/proprietário manualmente.
         </div>
       ) : (
         <div className="space-y-2">
-          {socios.slice(0, 6).map((s: any) => (
-            <div key={s.id || s.nome} className="rounded-lg border border-slate-100 bg-white p-3 text-xs">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <b className="text-slate-800">{s.nome || "Sócio sem nome"}</b>
-                <span className="text-[11px] rounded-full px-2 py-0.5 border border-slate-200 bg-slate-50 text-slate-600">
-                  {s.qualificacao || "Qualificação pendente"}
-                </span>
+          {socios.slice(0, 10).map((s: any) => {
+            const c = s.campos_complementares || {};
+            return (
+              <div key={s.id || s.nome} className="rounded-lg border border-slate-100 bg-white p-3 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <b className="text-slate-800">{s.nome || "Sócio sem nome"}</b>
+                  <div className="flex flex-wrap gap-1">
+                    <span className="text-[11px] rounded-full px-2 py-0.5 border border-slate-200 bg-slate-50 text-slate-600">{s.qualificacao || "Qualificação pendente"}</span>
+                    {s.fonte_dados && <span className="text-[11px] rounded-full px-2 py-0.5 border border-blue-100 bg-blue-50 text-blue-700">Fonte: {s.fonte_dados}</span>}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 mt-2">
+                  <MiniCampo label="CPF/CNPJ" value={s.cpf_cnpj || "Pendente"} />
+                  <MiniCampo label="Administrador" value={formatBool(s.administrador)} />
+                  <MiniCampo label="Representante legal" value={formatBool(s.representante_legal)} />
+                  <MiniCampo label="Assina contrato" value={formatBool(s.assina_contrato)} />
+                  <MiniCampo label="Participação" value={s.percentual_participacao !== null && s.percentual_participacao !== undefined ? `${s.percentual_participacao}%` : "Não informado"} />
+                  <MiniCampo label="Entrada" value={formatDate(s.data_entrada_sociedade)} />
+                  <MiniCampo label="Profissão/Cargo" value={c.profissao || s.cargo} />
+                  <MiniCampo label="Estado civil" value={c.estado_civil} />
+                  <MiniCampo label="RG" value={c.rg} />
+                  <MiniCampo label="E-mail" value={c.email} />
+                  <MiniCampo label="Telefone" value={c.telefone} />
+                  <MiniCampo label="Endereço" value={c.endereco} />
+                </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
-                <MiniCampo label="CPF/CNPJ" value={s.cpf_cnpj || "Pendente"} />
-                <MiniCampo label="Representante" value={s.representante_legal ? "Sim" : "Não informado"} />
-                <MiniCampo label="Assina contrato" value={s.assina_contrato ? "Sim" : "Não"} />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
+      <DocumentosDoBloco documentos={bloco.documentos} />
     </div>
   );
 }
 
 function BlocoGenerico({ bloco }: { bloco: BlocoDossie }) {
-  const docs = Array.isArray(bloco.documentos) ? bloco.documentos : [];
-  return (
-    <div className="space-y-2">
-      {docs.length === 0 ? (
-        <p className="text-xs text-slate-500">Nenhum documento vinculado a este bloco ainda.</p>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {docs.slice(0, 6).map((doc) => (
-            <div key={doc.id} className="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2">
-              <FileText className="w-4 h-4 text-slate-400 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-slate-700 truncate">{doc.nome_original}</p>
-                <p className="text-[11px] text-slate-400">{doc.tipo_documento} • {doc.status}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  return <DocumentosDoBloco documentos={bloco.documentos} />;
 }
 
 function BlocoCard({ bloco, aberto, onToggle }: { bloco: BlocoDossie; aberto: boolean; onToggle: () => void }) {
@@ -322,7 +397,7 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita }: 
               <h2 className="text-base font-extrabold text-slate-800">Dossiê Documental de Crédito Empresarial</h2>
             </div>
             <p className="text-xs text-slate-600 mt-1 max-w-3xl">
-              Organização estruturada dos blocos de CNPJ, QSA, contrato social, faturamento e documentação para leitura futura por IA, sem duplicar arquivos e usando documentos_arquivos como fonte única.
+              Organização estruturada dos blocos de CNPJ, QSA, contrato social, faturamento e documentação para leitura futura por IA, com visualização segura dos documentos e usando documentos_arquivos como fonte única.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
