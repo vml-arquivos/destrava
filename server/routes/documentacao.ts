@@ -177,7 +177,7 @@ async function ensureBlocosCatalogo() {
       ('socios_representantes', 'Sócios, Administradores e Representantes', 'Dados e documentos dos sócios/representantes.', 'socio', true, 4, '{}'::jsonb),
       ('endereco_contatos', 'Endereço, Contatos e Dados Operacionais', 'Endereço, contatos e dados operacionais.', 'empresa', false, 5, '{}'::jsonb),
       ('faturamento_historico', 'Faturamento Histórico', 'Histórico mensal de faturamento.', 'empresa', true, 6, '{}'::jsonb),
-      ('previsao_faturamento', 'Previsão de Faturamento', 'Previsão futura de faturamento.', 'empresa', false, 7, '{}'::jsonb),
+      ('previsao_faturamento', 'Previsão de Faturamento', 'Projeção de faturamento.', 'empresa', false, 7, '{}'::jsonb),
       ('demonstracoes_contabeis_fiscais', 'Demonstrações Contábeis e Fiscais', 'Balanço, DRE, ECD, ECF e declarações.', 'empresa', false, 8, '{}'::jsonb),
       ('extratos_movimentacao_bancaria', 'Extratos Bancários e Movimentação', 'Extratos e movimentação bancária.', 'empresa', false, 9, '{}'::jsonb),
       ('acompanhamento_bancario', 'Acompanhamento Bancário', 'Monitoramento bancário e rating.', 'empresa', false, 10, '{}'::jsonb),
@@ -187,7 +187,7 @@ async function ensureBlocosCatalogo() {
       ('garantias', 'Garantias', 'Garantias vinculadas a operações/contratos.', 'empresa', false, 14, '{}'::jsonb),
       ('contratos_gerados', 'Contratos Gerados', 'Contratos e PDFs gerados.', 'empresa', false, 15, '{}'::jsonb),
       ('pendencias_documentais', 'Pendências Documentais', 'Pendências consolidadas do dossiê.', 'empresa', true, 16, '{}'::jsonb),
-      ('analise_ia_credito', 'Análise IA / Parecer de Crédito', 'Parecer IA com revisão humana obrigatória.', 'empresa', false, 17, '{}'::jsonb)
+      ('analise_ia_credito', 'Parecer de Crédito', 'Parecer consolidado com revisão humana.', 'empresa', false, 17, '{}'::jsonb)
     ON CONFLICT (codigo) DO UPDATE SET
       nome_amigavel = EXCLUDED.nome_amigavel,
       descricao = EXCLUDED.descricao,
@@ -709,10 +709,10 @@ router.post('/ia/documentos/:documentoId/extrair', auth, async (req: Request, re
        RETURNING *`,
       [req.params.documentoId, bloco_entidade_id || null, prompt_codigo || null]
     );
-    res.status(202).json({ message: 'Extração IA registrada como pendente. Integração assíncrona será conectada na próxima fase.', extracao: rows[0] });
+    res.status(202).json({ message: 'Processamento registrado como pendente.', extracao: rows[0] });
   } catch (err: any) {
     console.error('[POST /api/documentacao/ia/documentos/:documentoId/extrair]', err);
-    res.status(500).json({ error: 'Erro ao registrar extração IA' });
+    res.status(500).json({ error: 'Erro ao registrar processamento do documento' });
   }
 });
 
@@ -728,10 +728,10 @@ router.post('/ia/empresa/:empresaId/analisar', auth, async (req: Request, res: R
        RETURNING *`,
       [req.params.empresaId, JSON.stringify({ resumo: dossie.resumo, blocos: dossie.blocos.map((b: any) => ({ codigo: b.codigo, status: b.status, pendencias: b.pendencias })) }), JSON.stringify(dossie.pendencias), user?.id || null]
     );
-    res.status(202).json({ message: 'Análise IA consolidada registrada como aguardando processamento. A decisão final seguirá com revisão humana.', analise: rows[0] });
+    res.status(202).json({ message: 'Parecer registrado como aguardando processamento.', analise: rows[0] });
   } catch (err: any) {
     console.error('[POST /api/documentacao/ia/empresa/:empresaId/analisar]', err);
-    res.status(500).json({ error: 'Erro ao registrar análise IA' });
+    res.status(500).json({ error: 'Erro ao registrar parecer' });
   }
 });
 
@@ -742,7 +742,7 @@ router.get('/ia/analises/:analiseId', auth, async (req: Request, res: Response) 
     res.json(rows[0]);
   } catch (err: any) {
     console.error('[GET /api/documentacao/ia/analises/:analiseId]', err);
-    res.status(500).json({ error: 'Erro ao buscar análise IA' });
+    res.status(500).json({ error: 'Erro ao buscar parecer' });
   }
 });
 
@@ -752,7 +752,7 @@ router.get('/ia/empresa/:empresaId/historico', auth, async (req: Request, res: R
     res.json(rows);
   } catch (err: any) {
     console.error('[GET /api/documentacao/ia/empresa/:empresaId/historico]', err);
-    res.status(500).json({ error: 'Erro ao listar histórico de IA' });
+    res.status(500).json({ error: 'Erro ao listar histórico de pareceres' });
   }
 });
 
