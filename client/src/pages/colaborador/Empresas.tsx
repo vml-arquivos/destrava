@@ -891,7 +891,7 @@ export default function Empresas() {
         toast.success(
           sociosFinal.length > 0
             ? `Dados sincronizados e salvos. ${sociosFinal.length} sócio(s) carregado(s).`
-            : "Dados sincronizados. Confira o sócio-administrador na aba Sócios.",
+            : "Dados sincronizados. Confira o sócio-administrador na aba QSA.",
           { id: "sync" }
         );
       }
@@ -1326,7 +1326,7 @@ export default function Empresas() {
                       <button
                         onClick={() => { setAbaAtiva("documentos"); }}
                         className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors"
-                        title="Adicionar Documento"
+                        title="Adicionar arquivo"
                       >
                         <Paperclip className="w-3.5 h-3.5" />
                         <span>Adicionar arquivo</span>
@@ -1394,12 +1394,12 @@ export default function Empresas() {
                     <div className="flex flex-wrap gap-1">
                       {([
                         { id: "visao_geral",  label: "Visão Geral" },
-                        { id: "socios",       label: "Sócios",      badge: sociosExibicao.length },
+                        { id: "socios",       label: "QSA",      badge: sociosExibicao.length },
                         { id: "dossie_credito", label: "Dossiê de Crédito" },
-                        { id: "documentos",   label: "Arquivos de Crédito",  badge: documentos.length + contratosSociais.length },
+                        { id: "documentos",   label: "Acervo Documental",  badge: documentos.length + contratosSociais.length },
                         { id: "followup",     label: "Conversas",   badge: followups.filter(f=>!f.concluido).length },
                         { id: "simulacoes",   label: "Simulações",  badge: simulacoesEmpresa.length },
-                        { id: "contratos",    label: "Contratos",   badge: contratosEmpresa.length },
+                        { id: "contratos",    label: "Contratos Firmados",   badge: contratosEmpresa.length },
                         { id: "historico",    label: "Histórico",   badge: historico.length },
                       ] as const).map(aba => (
                         <button
@@ -1693,9 +1693,9 @@ export default function Empresas() {
                       <div className="p-5 fade-in space-y-4">
                         <div className="flex items-center justify-between mb-1">
                           <div>
-                            <h3 className="text-sm font-bold text-slate-700">Sócios e Representantes</h3>
+                            <h3 className="text-sm font-bold text-slate-700">QSA</h3>
                             <p className="text-xs text-slate-400 mt-0.5">
-                              Sócio-administrador e representantes vinculados à empresa.
+                              Quadro de Sócios e Administradores da empresa.
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
@@ -1927,14 +1927,14 @@ export default function Empresas() {
                     : abaAtiva === "documentos" ? (
                       <div className="p-5 fade-in space-y-4">
                         <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 leading-relaxed">
-                          Arquivos usados na análise de crédito da empresa: CNPJ, contrato social, alterações, certidões, comprovantes de endereço, faturamento, extratos, balanço, DRE e documentos fiscais.
+                          Guarda segura dos documentos oficiais e fiscais utilizados na análise de crédito da empresa.
                         </div>
                         <DocumentosEntidade
                           entidadeTipo="empresa"
                           entidadeId={selecionada?.id}
                           empresaId={selecionada?.id}
                           tiposPermitidos={["cartao_cnpj", "contrato_social", "alteracao_contratual", "comprovante_endereco", "comprovante_faturamento", "declaracao_faturamento", "extrato_bancario", "imposto_renda", "balanco", "dre", "certidao", "procuracao", "outros"]}
-                          titulo="Arquivos de Crédito"
+                          titulo="Acervo Documental"
                           permitirUpload
                           permitirExcluir
                           permitirValidar
@@ -2004,13 +2004,16 @@ export default function Empresas() {
                     ) : abaAtiva === "contratos" ? (
                       <div className="p-4 space-y-3">
                         <div className="flex items-center justify-between mb-2">
-                          <h3 className="text-sm font-semibold text-slate-700">Contratos vinculados</h3>
+                          <div>
+                            <h3 className="text-sm font-semibold text-slate-700">Contratos Firmados</h3>
+                            <p className="text-xs text-slate-400 mt-0.5">Acordos e termos de serviço gerados e assinados entre a plataforma e o cliente.</p>
+                          </div>
                           <span className="text-xs text-slate-400">{contratosEmpresa.length} registro(s)</span>
                         </div>
                         {contratosEmpresa.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
                             <span className="text-4xl">📄</span>
-                            <p className="text-sm text-slate-500">Nenhum contrato vinculado a esta empresa</p>
+                            <p className="text-sm text-slate-500">Nenhum contrato firmado com esta empresa</p>
                           </div>
                         ) : (
                           <div className="space-y-2">
@@ -2402,7 +2405,7 @@ export default function Empresas() {
                     {/* Sócios da Receita */}
                     {socios.length > 0 && (
                       <div className="pb-3 space-y-2">
-                        <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Sócios identificados pela Receita Federal</p>
+                        <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> QSA identificado pela Receita Federal</p>
                         {socios.map((s, i) => (
                           <button key={i} type="button" onClick={() => { set("responsavel_nome", s.nome_socio || ""); set("responsavel_cpf", s.cnpj_cpf_do_socio || ""); set("responsavel_cargo", s.descricao_qualificacao_socio || ""); }} className="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50 transition-all text-left group">
                             <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0 group-hover:bg-blue-700">{s.nome_socio?.charAt(0) ?? "?"}</div>
