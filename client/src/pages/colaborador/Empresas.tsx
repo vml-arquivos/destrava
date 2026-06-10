@@ -1011,38 +1011,62 @@ export default function Empresas() {
 
       <div className="emp-page min-h-screen bg-[#f8f9fc]">
 
-        {/* ── Top Bar ── */}
-        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
-          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">Empresas</h1>
-              <p className="text-sm text-slate-500 mt-0.5">
-                {loading ? "Carregando..." : `${empresas.length} empresa${empresas.length !== 1 ? "s" : ""} cadastrada${empresas.length !== 1 ? "s" : ""}`}
-              </p>
-            </div>
-            <button
-              onClick={abrirNova}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition-colors shadow-sm shadow-blue-200"
-            >
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Nova Empresa</span>
-              <span className="sm:hidden">Nova</span>
-            </button>
-          </div>
-        </div>
+        {/* ── Top Bar / Resumo ── */}
+        <div className="border-b border-slate-200 bg-white">
+          <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-4 sm:py-5">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-col gap-1">
+                  <h1 className="text-2xl font-black tracking-tight text-slate-900">Empresas</h1>
+                  <p className="text-sm text-slate-500">
+                    {loading ? "Carregando..." : `${empresas.length} empresa${empresas.length !== 1 ? "s" : ""} cadastrada${empresas.length !== 1 ? "s" : ""}`}
+                  </p>
+                </div>
+                {selecionada && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 font-semibold text-slate-700">
+                      <Building2 className="h-3.5 w-3.5 text-slate-400" />
+                      {selecionada.razao_social}
+                    </span>
+                    {selecionada.cnpj && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 font-medium text-slate-600">
+                        <Hash className="h-3.5 w-3.5 text-slate-400" />
+                        {selecionada.cnpj}
+                      </span>
+                    )}
+                    {(selecionada.cidade || selecionada.estado) && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 font-medium text-slate-600">
+                        <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                        {[selecionada.cidade, selecionada.estado].filter(Boolean).join(', ')}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
 
-        {/* ── Stats Row ── */}
-        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-4 grid grid-cols-3 gap-3">
-          {[
-            { label: "Ativos", value: totalAtivo, color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100" },
-            { label: "Clientes", value: totalCliente, color: "text-violet-600", bg: "bg-violet-50 border-violet-100" },
-            { label: "Prospectos", value: totalProspecto, color: "text-blue-600", bg: "bg-blue-50 border-blue-100" },
-          ].map(s => (
-            <div key={s.label} className={`rounded-xl border p-3 ${s.bg}`}>
-              <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
-              <p className="text-xs font-medium text-slate-500 mt-0.5">{s.label}</p>
+              <div className="flex flex-col gap-3 xl:items-end">
+                <div className="grid grid-cols-3 gap-3 w-full xl:w-[540px]">
+                  {[
+                    { label: "Ativos", value: totalAtivo, color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100" },
+                    { label: "Clientes", value: totalCliente, color: "text-violet-600", bg: "bg-violet-50 border-violet-100" },
+                    { label: "Prospectos", value: totalProspecto, color: "text-blue-600", bg: "bg-blue-50 border-blue-100" },
+                  ].map(s => (
+                    <div key={s.label} className={`rounded-2xl border px-4 py-3 shadow-sm ${s.bg}`}>
+                      <p className={`text-2xl font-black leading-none ${s.color}`}>{s.value}</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={abrirNova}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-blue-200 transition-colors hover:bg-blue-700"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Nova Empresa</span>
+                </button>
+              </div>
             </div>
-          ))}
+          </div>
         </div>
 
         {/* ── Layout 2 colunas ── */}
@@ -1051,8 +1075,9 @@ export default function Empresas() {
 
             {/* ── COLUNA ESQUERDA: Lista ── */}
             <div className={`flex-shrink-0 w-full sm:w-72 lg:w-80 ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
+              <div className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
               {/* Filtros */}
-              <div className="mb-3 space-y-2">
+              <div className="mb-3 space-y-2 border-b border-slate-100 pb-3">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
@@ -1114,7 +1139,11 @@ export default function Empresas() {
               </div>
 
               {/* Lista */}
-              <div className="scroll-area overflow-y-auto space-y-1.5 flex-1" style={{ maxHeight: "calc(100vh - 260px)" }}>
+              <div className="mb-2 flex items-center justify-between px-1">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Lista de empresas</p>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{empresas.length}</span>
+              </div>
+              <div className="scroll-area overflow-y-auto space-y-1.5 flex-1 pr-1" style={{ maxHeight: "calc(100vh - 282px)" }}>
                 {loading ? (
                   <LoadingState message="Carregando empresas…" className="py-20" />
                 ) : empresas.length === 0 ? (
@@ -1183,6 +1212,7 @@ export default function Empresas() {
                   );
                 })}
               </div>
+              </div>
             </div>
 
             {/* ── COLUNA DIREITA: Detalhe ── */}
@@ -1200,195 +1230,221 @@ export default function Empresas() {
               ) : (
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden slide-up">
 
-                  {/* ── Header detalhe ── */}
-                  <div className="px-5 py-4 border-b border-slate-100">
-                    <div className="flex items-start gap-4">
-                      {/* Botão voltar mobile */}
-                      <button
-                        onClick={() => { setSelecionada(null); setShowDetail(false); }}
-                        className="sm:hidden mt-0.5 shrink-0 p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"
-                      >
-                        <ArrowLeft className="w-4 h-4" />
-                      </button>
-                      {/* Avatar grande */}
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white text-lg font-black shrink-0 shadow-md shadow-blue-100">
-                        {getInitials(selecionada.razao_social)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <h2 className="text-lg font-bold text-slate-900 leading-tight truncate">{selecionada.razao_social}</h2>
-                            {selecionada.nome_fantasia && (
-                              <p className="text-sm text-slate-500 mt-0.5">{selecionada.nome_fantasia}</p>
-                            )}
-                            <div className="flex flex-wrap items-center gap-2 mt-2">
-                              <StatusBadge status={selecionada.status} />
-                              {selecionada.porte && (
-                                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${PORTE_CFG[selecionada.porte]?.color || "bg-slate-100 text-slate-500"}`}>
-                                  {PORTE_CFG[selecionada.porte]?.label}
-                                </span>
-                              )}
-                              {selecionada.natureza_juridica && (
-                                <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">
-                                  {selecionada.natureza_juridica}
-                                </span>
-                              )}
-                              {selecionada.situacao_cadastral && (
-                                <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700">
-                                  Receita: {selecionada.situacao_cadastral}
-                                </span>
-                              )}
-                              {selecionada.segmento && (
-                                <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
-                                  {selecionada.segmento}
-                                </span>
-                              )}
+                  {/* ── Hero da empresa + score ── */}
+                  <div className="border-b border-slate-100 bg-gradient-to-b from-slate-50/80 via-white to-white px-5 py-5">
+                    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.65fr)_340px] gap-4">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-100">
+                        <div className="flex items-start gap-4">
+                          <button
+                            onClick={() => { setSelecionada(null); setShowDetail(false); }}
+                            className="sm:hidden mt-0.5 shrink-0 p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"
+                          >
+                            <ArrowLeft className="w-4 h-4" />
+                          </button>
+
+                          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-700 flex items-center justify-center text-white text-lg font-black shrink-0 shadow-lg shadow-blue-100">
+                            {getInitials(selecionada.razao_social)}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h2 className="text-[1.35rem] font-black tracking-tight text-slate-900 leading-tight break-words">
+                                    {selecionada.razao_social}
+                                  </h2>
+                                  <StatusBadge status={selecionada.status} />
+                                </div>
+                                {selecionada.nome_fantasia && (
+                                  <p className="mt-1 text-sm font-medium text-slate-500">{selecionada.nome_fantasia}</p>
+                                )}
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
+                                  {selecionada.porte && (
+                                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${PORTE_CFG[selecionada.porte]?.color || "bg-slate-100 text-slate-500"}`}>
+                                      {PORTE_CFG[selecionada.porte]?.label}
+                                    </span>
+                                  )}
+                                  {selecionada.natureza_juridica && (
+                                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                      {selecionada.natureza_juridica}
+                                    </span>
+                                  )}
+                                  {selecionada.situacao_cadastral && (
+                                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                      Receita: {selecionada.situacao_cadastral}
+                                    </span>
+                                  )}
+                                  {selecionada.segmento && (
+                                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                                      {selecionada.segmento}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                {selecionada.cnpj && (
+                                  <button
+                                    onClick={() => sincronizarDados(selecionada)}
+                                    disabled={sincronizando}
+                                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-50"
+                                    title="Atualizar dados da Receita Federal"
+                                  >
+                                    <RotateCw className={`w-3.5 h-3.5 ${sincronizando ? "animate-spin" : ""}`} />
+                                    <span>{sincronizando ? "Sincronizando..." : "Sincronizar"}</span>
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => abrirEditar(selecionada)}
+                                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                  <span>Editar</span>
+                                </button>
+                                {confirmDelete === selecionada.id ? (
+                                  <div className="flex gap-2">
+                                    <button onClick={() => handleExcluir(selecionada.id)} className="rounded-xl bg-red-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-red-700">Confirmar</button>
+                                    <button onClick={() => setConfirmDelete(null)} className="rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-50">Cancelar</button>
+                                  </div>
+                                ) : (
+                                  <button onClick={() => setConfirmDelete(selecionada.id)} className="rounded-xl border border-transparent p-2 text-slate-400 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500">
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+                              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">CNPJ</p>
+                                <p className="mt-1 text-sm font-semibold text-slate-800 break-all">{selecionada.cnpj || "Não informado"}</p>
+                              </div>
+                              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Localização</p>
+                                <p className="mt-1 text-sm font-semibold text-slate-800">{[selecionada.cidade, selecionada.estado].filter(Boolean).join(', ') || "Não informado"}</p>
+                              </div>
+                              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Responsável</p>
+                                <p className="mt-1 text-sm font-semibold text-slate-800">{selecionada.responsavel_nome || "Não informado"}</p>
+                              </div>
+                              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Contato</p>
+                                <p className="mt-1 text-sm font-semibold text-slate-800">{selecionada.telefone || selecionada.whatsapp || selecionada.email || "Não informado"}</p>
+                              </div>
+                            </div>
+
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <button
+                                onClick={() => {
+                                  sessionStorage.setItem("calculadora_empresa", JSON.stringify({
+                                    nome: selecionada.responsavel_nome || selecionada.razao_social,
+                                    empresa: selecionada.razao_social,
+                                    telefone: selecionada.telefone || selecionada.whatsapp || "",
+                                    cpf_cnpj: selecionada.cnpj || "",
+                                  }));
+                                  window.location.href = "/colaborador/calculadora";
+                                }}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+                                title="Nova Simulação"
+                              >
+                                <Calculator className="w-3.5 h-3.5" />
+                                <span>Nova Simulação</span>
+                              </button>
+                              <button
+                                onClick={() => window.location.href = "/colaborador/gerador-contratos"}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3.5 py-2 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100"
+                                title="Novo Contrato"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                                <span>Novo Contrato</span>
+                              </button>
+                              <button
+                                onClick={() => { setAbaAtiva("documentos"); }}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+                                title="Adicionar Documento"
+                              >
+                                <Paperclip className="w-3.5 h-3.5" />
+                                <span>Adicionar Doc.</span>
+                              </button>
+                              <button
+                                onClick={() => { setAbaAtiva("followup"); setShowFollowupForm(true); }}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100"
+                                title="Criar Follow-up"
+                              >
+                                <Bell className="w-3.5 h-3.5" />
+                                <span>Criar Follow-up</span>
+                              </button>
                             </div>
                           </div>
-                          {/* Ações */}
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {/* Botão Sincronizar — só aparece se tem CNPJ */}
-                            {selecionada.cnpj && (
+                        </div>
+                      </div>
+
+                      {(() => {
+                        const { score, risco, tags } = calcularScore(selecionada);
+                        const rCfg = {
+                          baixo:   { label: "Baixo Risco",   cls: "bg-emerald-50 border-emerald-200", Icon: ShieldCheck, ic: "text-emerald-600" },
+                          medio:   { label: "Risco Médio",   cls: "bg-amber-50 border-amber-200",     Icon: ShieldAlert,  ic: "text-amber-600" },
+                          alto:    { label: "Alto Risco",    cls: "bg-orange-50 border-orange-200",   Icon: AlertTriangle,ic: "text-orange-600" },
+                          critico: { label: "Risco Crítico", cls: "bg-red-50 border-red-200",         Icon: ShieldOff,    ic: "text-red-600" },
+                        }[risco] || { label: "—", cls: "bg-slate-50 border-slate-200", Icon: ShieldCheck, ic: "text-slate-500" };
+                        return (
+                          <div className={`rounded-2xl border p-4 shadow-sm ${rCfg.cls}`}>
+                            <div className="flex items-center justify-between gap-3 mb-2.5">
+                              <div className="flex items-center gap-2">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/80">
+                                  <rCfg.Icon className={`w-4 h-4 ${rCfg.ic}`} />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold text-slate-700">Score Destrava</p>
+                                  <p className="text-[11px] text-slate-500">Resumo rápido da empresa</p>
+                                </div>
+                              </div>
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                                risco === "baixo" ? "bg-emerald-100 text-emerald-700" :
+                                risco === "medio" ? "bg-amber-100 text-amber-700" :
+                                risco === "alto" ? "bg-orange-100 text-orange-700" : "bg-red-100 text-red-700"
+                              }`}>{rCfg.label}</span>
+                            </div>
+                            <ScoreBar score={score} risco={risco} />
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                              {tags.slice(0, 4).map((t, i) => (
+                                <span key={i} className={`rounded-xl px-2.5 py-2 text-[11px] font-medium ${t.ok ? "bg-white/90 text-slate-600 border border-slate-200" : "bg-white/90 text-rose-600 border border-rose-200"}`}>
+                                  {t.text}
+                                </span>
+                              ))}
+                            </div>
+                            {selecionada.cnpj && (!selecionada.cidade || !selecionada.email || !selecionada.responsavel_nome) && (
                               <button
                                 onClick={() => sincronizarDados(selecionada)}
                                 disabled={sincronizando}
-                                className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200 bg-emerald-50 px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50"
-                                title="Atualizar dados da Receita Federal"
+                                className="mt-3 flex w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50"
                               >
-                                <RotateCw className={`w-3.5 h-3.5 ${sincronizando ? "animate-spin" : ""}`} />
-                                <span className="hidden md:inline">{sincronizando ? "Sincronizando..." : "Sincronizar"}</span>
+                                <Zap className="w-3.5 h-3.5 shrink-0" />
+                                <span className="flex-1 text-left">Cadastro incompleto — clique para buscar dados atualizados</span>
+                                <RotateCw className={`w-3.5 h-3.5 shrink-0 ${sincronizando ? "animate-spin" : ""}`} />
                               </button>
                             )}
                             <button
-                              onClick={() => abrirEditar(selecionada)}
-                              className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"
+                              onClick={() => {
+                                sessionStorage.setItem("calculadora_empresa", JSON.stringify({
+                                  nome: selecionada.responsavel_nome || selecionada.razao_social,
+                                  empresa: selecionada.razao_social, telefone: selecionada.telefone || selecionada.whatsapp || "",
+                                  cpf_cnpj: selecionada.cnpj || "",
+                                }));
+                              }}
+                              className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
                             >
-                              <Edit2 className="w-3.5 h-3.5" />
-                              <span className="hidden md:inline">Editar</span>
+                              <Calculator className="w-4 h-4" />
+                              Nova Simulação
                             </button>
-                            {confirmDelete === selecionada.id ? (
-                              <div className="flex gap-1">
-                                <button onClick={() => handleExcluir(selecionada.id)} className="text-xs font-semibold bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700">Confirmar</button>
-                                <button onClick={() => setConfirmDelete(null)} className="text-xs text-slate-500 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50">Cancelar</button>
-                              </div>
-                            ) : (
-                              <button onClick={() => setConfirmDelete(selecionada.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
                           </div>
-                        </div>
-                      </div>
+                        );
+                      })()}
                     </div>
                   </div>
-
-                  {/* ── Quick Actions ── */}
-                  <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => {
-                          sessionStorage.setItem("calculadora_empresa", JSON.stringify({
-                            nome: selecionada.responsavel_nome || selecionada.razao_social,
-                            empresa: selecionada.razao_social,
-                            telefone: selecionada.telefone || selecionada.whatsapp || "",
-                            cpf_cnpj: selecionada.cnpj || "",
-                          }));
-                          window.location.href = "/colaborador/calculadora";
-                        }}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
-                        title="Nova Simulação"
-                      >
-                        <Calculator className="w-3.5 h-3.5" />
-                        <span>Nova Simulação</span>
-                      </button>
-                      <button
-                        onClick={() => window.location.href = "/colaborador/gerador-contratos"}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-3 py-1.5 rounded-lg hover:bg-violet-100 transition-colors"
-                        title="Novo Contrato"
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>Novo Contrato</span>
-                      </button>
-                      <button
-                        onClick={() => { setAbaAtiva("documentos"); }}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors"
-                        title="Adicionar Documento"
-                      >
-                        <Paperclip className="w-3.5 h-3.5" />
-                        <span>Adicionar Doc.</span>
-                      </button>
-                      <button
-                        onClick={() => { setAbaAtiva("followup"); setShowFollowupForm(true); }}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors"
-                        title="Criar Follow-up"
-                      >
-                        <Bell className="w-3.5 h-3.5" />
-                        <span>Criar Follow-up</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* ── Score rápido ── */}
-                  {(() => {
-                    const { score, risco, tags } = calcularScore(selecionada);
-                    const rCfg = {
-                      baixo:   { label: "Baixo Risco",   cls: "bg-emerald-50 border-emerald-200", Icon: ShieldCheck, ic: "text-emerald-600" },
-                      medio:   { label: "Risco Médio",   cls: "bg-amber-50 border-amber-200",     Icon: ShieldAlert,  ic: "text-amber-600" },
-                      alto:    { label: "Alto Risco",    cls: "bg-orange-50 border-orange-200",   Icon: AlertTriangle,ic: "text-orange-600" },
-                      critico: { label: "Risco Crítico", cls: "bg-red-50 border-red-200",         Icon: ShieldOff,    ic: "text-red-600" },
-                    }[risco] || { label: "—", cls: "", Icon: ShieldCheck, ic: "" };
-                    return (
-                      <div className={`mx-5 mt-4 rounded-xl border p-4 ${rCfg.cls}`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <rCfg.Icon className={`w-4 h-4 ${rCfg.ic}`} />
-                            <span className="text-sm font-bold text-slate-700">Score Destrava</span>
-                          </div>
-                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                            risco === "baixo" ? "bg-emerald-100 text-emerald-700" :
-                            risco === "medio" ? "bg-amber-100 text-amber-700" :
-                            risco === "alto" ? "bg-orange-100 text-orange-700" : "bg-red-100 text-red-700"
-                          }`}>{rCfg.label}</span>
-                        </div>
-                        <ScoreBar score={score} risco={risco} />
-                        <div className="flex flex-wrap gap-1.5 mt-2.5">
-                          {tags.slice(0, 4).map((t, i) => (
-                            <span key={i} className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${t.ok ? "bg-white/80 text-slate-600 border border-slate-200" : "bg-white/80 text-rose-600 border border-rose-200"}`}>
-                              {t.text}
-                            </span>
-                          ))}
-                        </div>
-                        {/* Banner: dados incompletos — convida sincronização */}
-                        {selecionada.cnpj && (!selecionada.cidade || !selecionada.email || !selecionada.responsavel_nome) && (
-                          <button
-                            onClick={() => sincronizarDados(selecionada)}
-                            disabled={sincronizando}
-                            className="mt-2 w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold hover:bg-amber-100 transition-colors disabled:opacity-50"
-                          >
-                            <Zap className="w-3.5 h-3.5 shrink-0" />
-                            <span className="flex-1 text-left">Cadastro incompleto — clique para buscar dados atualizados da Receita Federal</span>
-                            <RotateCw className={`w-3.5 h-3.5 shrink-0 ${sincronizando ? "animate-spin" : ""}`} />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            sessionStorage.setItem("calculadora_empresa", JSON.stringify({
-                              nome: selecionada.responsavel_nome || selecionada.razao_social,
-                              empresa: selecionada.razao_social, telefone: selecionada.telefone || selecionada.whatsapp || "",
-                              cpf_cnpj: selecionada.cnpj || "",
-                            }));
-                          }}
-                          className="mt-3 w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors"
-                        >
-                          <Calculator className="w-4 h-4" />
-                          Nova Simulação
-                        </button>
-                      </div>
-                    );
-                  })()}
 
                   {/* ── Abas ── */}
-                  <div className="mt-4 border-b border-slate-200 px-5 overflow-x-auto">
+                  <div className="border-b border-slate-200 bg-white px-5 overflow-x-auto">
                     <div className="flex gap-0 min-w-max">
                       {([
                         { id: "visao_geral",  label: "Visão Geral" },
