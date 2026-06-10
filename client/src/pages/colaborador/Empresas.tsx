@@ -985,9 +985,6 @@ export default function Empresas() {
   }
 
   // ── Stats header ───────────────────────────────────────────────────────────
-  const totalAtivo = empresas.filter(e => e.status === "ativo").length;
-  const totalCliente = empresas.filter(e => e.status === "cliente").length;
-  const totalProspecto = empresas.filter(e => e.status === "prospecto").length;
 
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
@@ -1012,10 +1009,10 @@ export default function Empresas() {
       <div className="emp-page min-h-screen bg-[#f8f9fc]">
 
         {/* ── Top Bar ── */}
-        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4">
+        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
             <div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">Empresas</h1>
+              <h1 className="text-[1.75rem] font-black text-slate-900 tracking-tight">Empresas</h1>
               <p className="text-sm text-slate-500 mt-0.5">
                 {loading ? "Carregando..." : `${empresas.length} empresa${empresas.length !== 1 ? "s" : ""} cadastrada${empresas.length !== 1 ? "s" : ""}`}
               </p>
@@ -1031,23 +1028,9 @@ export default function Empresas() {
           </div>
         </div>
 
-        {/* ── Stats Row ── */}
-        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 py-4 grid grid-cols-3 gap-3">
-          {[
-            { label: "Ativos", value: totalAtivo, color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-100" },
-            { label: "Clientes", value: totalCliente, color: "text-violet-600", bg: "bg-violet-50 border-violet-100" },
-            { label: "Prospectos", value: totalProspecto, color: "text-blue-600", bg: "bg-blue-50 border-blue-100" },
-          ].map(s => (
-            <div key={s.label} className={`rounded-xl border p-3 ${s.bg}`}>
-              <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
-              <p className="text-xs font-medium text-slate-500 mt-0.5">{s.label}</p>
-            </div>
-          ))}
-        </div>
-
         {/* ── Layout 2 colunas ── */}
-        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 pb-8">
-          <div className="flex gap-5" style={{ minHeight: 'calc(100vh - 200px)' }}>
+        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 pt-4 pb-8">
+          <div className="flex gap-5" style={{ minHeight: 'calc(100vh - 150px)' }}>
 
             {/* ── COLUNA ESQUERDA: Lista ── */}
             <div className={`flex-shrink-0 w-full sm:w-72 lg:w-80 ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
@@ -1332,63 +1315,91 @@ export default function Empresas() {
                   {(() => {
                     const { score, risco, tags } = calcularScore(selecionada);
                     const rCfg = {
-                      baixo:   { label: "Baixo Risco",   cls: "bg-emerald-50 border-emerald-200", Icon: ShieldCheck, ic: "text-emerald-600" },
-                      medio:   { label: "Risco Médio",   cls: "bg-amber-50 border-amber-200",     Icon: ShieldAlert,  ic: "text-amber-600" },
-                      alto:    { label: "Alto Risco",    cls: "bg-orange-50 border-orange-200",   Icon: AlertTriangle,ic: "text-orange-600" },
-                      critico: { label: "Risco Crítico", cls: "bg-red-50 border-red-200",         Icon: ShieldOff,    ic: "text-red-600" },
-                    }[risco] || { label: "—", cls: "", Icon: ShieldCheck, ic: "" };
+                      baixo:   { label: "Baixo",   wrap: "bg-emerald-50 border-emerald-200", badge: "bg-emerald-100 text-emerald-700", Icon: ShieldCheck, ic: "text-emerald-600" },
+                      medio:   { label: "Médio",   wrap: "bg-amber-50 border-amber-200",   badge: "bg-amber-100 text-amber-700",   Icon: ShieldAlert,  ic: "text-amber-600" },
+                      alto:    { label: "Alto",    wrap: "bg-orange-50 border-orange-200", badge: "bg-orange-100 text-orange-700", Icon: AlertTriangle,ic: "text-orange-600" },
+                      critico: { label: "Crítico", wrap: "bg-red-50 border-red-200",       badge: "bg-red-100 text-red-700",       Icon: ShieldOff,    ic: "text-red-600" },
+                    }[risco] || { label: "—", wrap: "bg-slate-50 border-slate-200", badge: "bg-slate-100 text-slate-600", Icon: ShieldCheck, ic: "text-slate-500" };
                     return (
-                      <div className={`mx-5 mt-4 rounded-xl border p-4 ${rCfg.cls}`}>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <rCfg.Icon className={`w-4 h-4 ${rCfg.ic}`} />
-                            <span className="text-sm font-bold text-slate-700">Score Destrava</span>
+                      <div className={`mx-5 mt-4 rounded-2xl border p-4 ${rCfg.wrap}`}>
+                        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2.5">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 border border-white shadow-sm">
+                                <rCfg.Icon className={`w-4 h-4 ${rCfg.ic}`} />
+                              </div>
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-sm font-bold text-slate-800">Score Destrava</span>
+                                  <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${rCfg.badge}`}>Risco {rCfg.label}</span>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-0.5">Leitura resumida da situação da empresa</p>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 flex items-center gap-3">
+                              <div className="min-w-[72px]">
+                                <div className="text-2xl font-black text-slate-900 leading-none">{score}</div>
+                                <div className="text-[11px] font-semibold text-slate-400 mt-1">de 100</div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <ScoreBar score={score} risco={risco} />
+                              </div>
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap gap-1.5">
+                              {tags.slice(0, 4).map((t, i) => (
+                                <span key={i} className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${t.ok ? "bg-white text-slate-600 border border-slate-200" : "bg-white text-rose-600 border border-rose-200"}`}>
+                                  {t.text}
+                                </span>
+                              ))}
+                            </div>
+
+                            {selecionada.cnpj && (!selecionada.cidade || !selecionada.email || !selecionada.responsavel_nome) && (
+                              <button
+                                onClick={() => sincronizarDados(selecionada)}
+                                disabled={sincronizando}
+                                className="mt-3 inline-flex max-w-full items-center gap-2 rounded-xl border border-amber-200 bg-white/80 px-3 py-2 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-50 disabled:opacity-50"
+                              >
+                                <Zap className="w-3.5 h-3.5 shrink-0" />
+                                <span>Cadastro incompleto — atualizar dados</span>
+                                <RotateCw className={`w-3.5 h-3.5 shrink-0 ${sincronizando ? "animate-spin" : ""}`} />
+                              </button>
+                            )}
                           </div>
-                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                            risco === "baixo" ? "bg-emerald-100 text-emerald-700" :
-                            risco === "medio" ? "bg-amber-100 text-amber-700" :
-                            risco === "alto" ? "bg-orange-100 text-orange-700" : "bg-red-100 text-red-700"
-                          }`}>{rCfg.label}</span>
+
+                          <div className="flex w-full flex-col gap-2 xl:w-[240px] xl:shrink-0">
+                            <button
+                              onClick={() => {
+                                sessionStorage.setItem("calculadora_empresa", JSON.stringify({
+                                  nome: selecionada.responsavel_nome || selecionada.razao_social,
+                                  empresa: selecionada.razao_social, telefone: selecionada.telefone || selecionada.whatsapp || "",
+                                  cpf_cnpj: selecionada.cnpj || "",
+                                }));
+                              }}
+                              className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+                            >
+                              <Calculator className="w-4 h-4" />
+                              Nova Simulação
+                            </button>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-2">
+                                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Faturamento</p>
+                                <p className="mt-1 text-xs font-semibold text-slate-700">{selecionada.faturamento_anual ? formatMoney(selecionada.faturamento_anual) : "Não informado"}</p>
+                              </div>
+                              <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-2">
+                                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Limite</p>
+                                <p className="mt-1 text-xs font-semibold text-slate-700">{formatMoney(selecionada.limite_credito_atual)}</p>
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                        <ScoreBar score={score} risco={risco} />
-                        <div className="flex flex-wrap gap-1.5 mt-2.5">
-                          {tags.slice(0, 4).map((t, i) => (
-                            <span key={i} className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${t.ok ? "bg-white/80 text-slate-600 border border-slate-200" : "bg-white/80 text-rose-600 border border-rose-200"}`}>
-                              {t.text}
-                            </span>
-                          ))}
-                        </div>
-                        {/* Banner: dados incompletos — convida sincronização */}
-                        {selecionada.cnpj && (!selecionada.cidade || !selecionada.email || !selecionada.responsavel_nome) && (
-                          <button
-                            onClick={() => sincronizarDados(selecionada)}
-                            disabled={sincronizando}
-                            className="mt-2 w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold hover:bg-amber-100 transition-colors disabled:opacity-50"
-                          >
-                            <Zap className="w-3.5 h-3.5 shrink-0" />
-                            <span className="flex-1 text-left">Cadastro incompleto — clique para buscar dados atualizados da Receita Federal</span>
-                            <RotateCw className={`w-3.5 h-3.5 shrink-0 ${sincronizando ? "animate-spin" : ""}`} />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            sessionStorage.setItem("calculadora_empresa", JSON.stringify({
-                              nome: selecionada.responsavel_nome || selecionada.razao_social,
-                              empresa: selecionada.razao_social, telefone: selecionada.telefone || selecionada.whatsapp || "",
-                              cpf_cnpj: selecionada.cnpj || "",
-                            }));
-                          }}
-                          className="mt-3 w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors"
-                        >
-                          <Calculator className="w-4 h-4" />
-                          Nova Simulação
-                        </button>
                       </div>
                     );
                   })()}
 
                   {/* ── Abas ── */}
-                  <div className="mt-4 border-b border-slate-200 px-5 overflow-x-auto">
+                  <div className="mt-3 border-b border-slate-200 px-5 overflow-x-auto">
                     <div className="flex gap-0 min-w-max">
                       {([
                         { id: "visao_geral",  label: "Visão Geral" },
