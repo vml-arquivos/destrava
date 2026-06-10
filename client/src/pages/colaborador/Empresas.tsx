@@ -455,6 +455,38 @@ function pickSocioForm(s: any) {
   return { ...SOCIO_FORM_VAZIO, ...(s || {}) };
 }
 
+function montarSocioAdministradorPadrao(empresa: Empresa | null): any | null {
+  if (!empresa) return null;
+  const nome = String(empresa.responsavel_nome || empresa.razao_social || "").trim();
+  if (!nome) return null;
+  const natureza = String(empresa.natureza_juridica || empresa.porte || "").toLowerCase();
+  const qualificacao = empresa.responsavel_cargo
+    || (natureza.includes("individual") || natureza.includes("mei") ? "Sócio-administrador" : "Sócio-administrador");
+  return {
+    id: `socio-admin-${empresa.id}`,
+    empresa_id: empresa.id,
+    nome,
+    cpf_cnpj: empresa.responsavel_cpf || "",
+    qualificacao_socio: qualificacao,
+    representante_legal: true,
+    nome_representante: nome,
+    qualificacao_representante: qualificacao,
+    email: empresa.responsavel_email || empresa.email || "",
+    telefone: empresa.responsavel_telefone || empresa.telefone || "",
+    whatsapp: empresa.whatsapp || "",
+    cep: empresa.cep || "",
+    logradouro: empresa.logradouro || "",
+    numero: empresa.numero || "",
+    complemento: empresa.complemento || "",
+    bairro: empresa.bairro || "",
+    cidade: empresa.cidade || "",
+    uf: empresa.estado || "",
+    fonte_dados: "cadastro_empresa",
+    inferido_empresa: true,
+  };
+}
+
+
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
 export default function Empresas() {
@@ -499,6 +531,11 @@ export default function Empresas() {
   const [socioForm, setSocioForm] = useState<any>({ ...SOCIO_FORM_VAZIO });
   const [salvandoSocio, setSalvandoSocio] = useState(false);
 
+  const socioAdministradorPadrao = montarSocioAdministradorPadrao(selecionada);
+  const sociosExibicao = sociosEmpresa.length > 0
+    ? sociosEmpresa
+    : (socioAdministradorPadrao ? [socioAdministradorPadrao] : []);
+
 
   const abrirEdicaoSocio = (socio: any) => {
     setSocioEditando(socio);
@@ -539,13 +576,7 @@ export default function Empresas() {
         body: JSON.stringify({ cpf_completo: cpfCompleto, validado: true }),
       });
       setSociosEmpresa(prev => prev.map((s: any) => s.id === atualizado.id ? atualizado : s));
-      if (atualizado?.cpfhub_status === 'success') {
-        toast.success('CPF salvo.');
-      } else if (atualizado?.cpfhub_status) {
-        toast.warning(`CPF salvo. Dados complementares não foram atualizados: ${atualizado.cpfhub_status}`);
-      } else {
-        toast.success('CPF completo validado e salvo.');
-      }
+      toast.success('CPF completo salvo.');
     } catch (err: any) {
       toast.error(err?.message || 'CPF inválido ou erro ao salvar');
     }
@@ -576,9 +607,9 @@ export default function Empresas() {
       if (atualizado?.id) {
         setSociosEmpresa(prev => prev.map((s: any) => s.id === atualizado.id ? atualizado : s));
       }
-      toast.success('Dados cadastrais do CPF consultados e salvos.');
+      toast.success('Dados do sócio atualizados.');
     } catch (err: any) {
-      toast.error(err?.message || 'Erro ao consultar dados cadastrais deste sócio');
+      toast.error(err?.message || 'Erro ao atualizar dados deste sócio');
     } finally {
       setConsultandoCpfSocioId(null);
     }
@@ -597,7 +628,7 @@ export default function Empresas() {
         return mesmoDoc || mesmoNome;
       });
       if (!match) {
-        toast.warning('Este sócio não foi retornado pelas fontes gratuitas para este CNPJ.');
+        toast.warning('Não encontramos atualização para este sócio na Receita Federal.');
         return;
       }
       const bulk = await apiFetch(`/api/empresas/${selecionada.id}/socios/bulk`, {
@@ -838,7 +869,7 @@ export default function Empresas() {
           replace: true,
           cnpj: clean,
           enriquecer_cpfcnpj: false,
-          enriquecer_cpfhub: true,
+          enriquecer_cpfhub: false,
           force_cpfcnpj: false,
         }),
       }).catch((err: any) => {
@@ -860,7 +891,7 @@ export default function Empresas() {
         toast.success(
           sociosFinal.length > 0
             ? `Dados sincronizados e salvos. ${sociosFinal.length} sócio(s) carregado(s).`
-            : "Nenhum sócio retornado pelas fontes gratuitas para este CNPJ",
+            : "Dados sincronizados. Confira o sócio-administrador na aba Sócios.",
           { id: "sync" }
         );
       }
@@ -1243,7 +1274,7 @@ export default function Empresas() {
                               </button>
                             )}
                             <button
-                              onClick={() => abrirEditar(selecionada)}
+                              onClick={() => selecionada && abrirEditar(selecionada)}
                               className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
@@ -1665,12 +1696,12 @@ export default function Empresas() {
                           <div>
                             <h3 className="text-sm font-bold text-slate-700">Sócios e Representantes</h3>
                             <p className="text-xs text-slate-400 mt-0.5">
-                              Dados societários sincronizados. Complete as informações pessoais necessárias para contratos quando houver pendências.
+                              Sócio-administrador e representantes vinculados à empresa.
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
-                              {sociosEmpresa.length} sócio(s)
+                              {sociosExibicao.length} sócio(s)
                             </span>
                             {selecionada.cnpj && (
                               <button
@@ -1687,20 +1718,20 @@ export default function Empresas() {
                         </div>
 
                         <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 leading-relaxed">
-                          Dados societários sincronizados com a Receita Federal. Informações não retornadas pela consulta podem ser completadas manualmente.
+                          Dados sincronizados com a Receita Federal. Complete manualmente as informações pendentes quando necessário.
                         </div>
 
-                        {sociosEmpresa.length === 0 ? (
+                        {sociosExibicao.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
                             <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center">
                               <Users className="w-6 h-6 text-slate-300" />
                             </div>
                             <p className="text-sm text-slate-500 font-medium">Nenhum sócio cadastrado</p>
-                            <p className="text-xs text-slate-400">Nenhum sócio retornado pelas fontes integradas para este CNPJ. Clique em Atualizar dados societários para tentar novamente.</p>
+                            <p className="text-xs text-slate-400">Nenhum sócio-administrador cadastrado. Atualize os dados ou complete manualmente o responsável da empresa.</p>
                           </div>
                         ) : (
                           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-                            {sociosEmpresa.map((s: any) => {
+                            {sociosExibicao.map((s: any) => {
                               const pendencias = Array.isArray(s.pendencias_contrato) ? s.pendencias_contrato : pendenciasSocioContrato(s);
                               const completo = pendencias.length === 0;
                               return (
@@ -1723,7 +1754,7 @@ export default function Empresas() {
                                   </div>
 
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">CPF/CNPJ do sócio</span><b className="text-slate-700 font-mono">{s.cpf_cnpj || 'Não informado'}</b><button onClick={() => { const cpf = prompt('Informe o CPF completo do sócio'); if (cpf) atualizarCpfManualSocio(s, cpf); }} className="block mt-1 text-[11px] font-bold text-blue-600 hover:underline">Informar CPF completo</button></div>
+                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">CPF/CNPJ do sócio</span><b className="text-slate-700 font-mono">{s.cpf_cnpj || 'Não informado'}</b>{s.inferido_empresa ? <button onClick={() => selecionada && abrirEditar(selecionada)} className="block mt-1 text-[11px] font-bold text-blue-600 hover:underline">Completar no cadastro</button> : <button onClick={() => { const cpf = prompt('Informe o CPF completo do sócio'); if (cpf) atualizarCpfManualSocio(s, cpf); }} className="block mt-1 text-[11px] font-bold text-blue-600 hover:underline">Informar CPF completo</button>}</div>
                                     <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Entrada na sociedade</span><b className="text-slate-700">{s.data_entrada_sociedade ? new Date(s.data_entrada_sociedade).toLocaleDateString('pt-BR') : 'Não informado'}</b></div>
                                     <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">País</span><b className="text-slate-700">{s.pais || 'Não informado'}</b></div>
                                     <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Representante legal</span><b className="text-slate-700">{s.nome_representante || (s.representante_legal ? 'Sim' : 'Não informado')}</b></div>
@@ -1733,7 +1764,7 @@ export default function Empresas() {
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs border-t border-slate-100 pt-3">
                                       <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Qualificação representante</span><b className="text-slate-700">{s.qualificacao_representante || 'Não informado'}</b></div>
                                       <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Nascimento</span><b className="text-slate-700">{s.data_nascimento ? new Date(s.data_nascimento).toLocaleDateString('pt-BR') : 'Pendente'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Gênero</span><b className="text-slate-700">{s.genero || s.dados_extra?.cpfhub?.genero || 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Gênero</span><b className="text-slate-700">{s.genero || 'Pendente'}</b></div>
                                       <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Estado civil</span><b className="text-slate-700">{s.estado_civil || 'Pendente'}</b></div>
                                       <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Profissão</span><b className="text-slate-700">{s.profissao || 'Pendente'}</b></div>
                                       <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">RG</span><b className="text-slate-700">{s.rg || 'Pendente'}</b></div>
@@ -1744,7 +1775,7 @@ export default function Empresas() {
                                     </div>
                                   )}
 
-                                  {sociosExpandidos[s.id] && (
+                                  {sociosExpandidos[s.id] && !s.inferido_empresa && (
                                     <div className="border-t border-slate-100 pt-3">
                                       <DocumentosEntidade
                                         entidadeTipo="socio"
@@ -1761,9 +1792,18 @@ export default function Empresas() {
                                   )}
 
                                   <div className="flex flex-wrap gap-2 pt-1">
-                                    <button onClick={() => abrirEdicaoSocio(s)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><Edit2 className="w-3 h-3" /> Editar</button>
-                                    <button onClick={() => atualizarSocioIndividual(s)} disabled={sincronizando} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50"><RotateCw className="w-3 h-3" /> Atualizar</button>
-                                    <button onClick={() => apagarSocio(s)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100"><Trash2 className="w-3 h-3" /> Apagar</button>
+                                    {s.inferido_empresa ? (
+                                      <>
+                                        <button onClick={() => selecionada && abrirEditar(selecionada)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><Edit2 className="w-3 h-3" /> Completar dados</button>
+                                        <button onClick={() => selecionada && sincronizarDados(selecionada)} disabled={sincronizando} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50"><RotateCw className="w-3 h-3" /> Atualizar</button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <button onClick={() => abrirEdicaoSocio(s)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><Edit2 className="w-3 h-3" /> Editar</button>
+                                        <button onClick={() => atualizarSocioIndividual(s)} disabled={sincronizando} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50"><RotateCw className="w-3 h-3" /> Atualizar</button>
+                                        <button onClick={() => apagarSocio(s)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100"><Trash2 className="w-3 h-3" /> Apagar</button>
+                                      </>
+                                    )}
                                   </div>
 
                                   {pendencias.length > 0 && (
