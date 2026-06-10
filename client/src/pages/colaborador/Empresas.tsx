@@ -540,9 +540,9 @@ export default function Empresas() {
       });
       setSociosEmpresa(prev => prev.map((s: any) => s.id === atualizado.id ? atualizado : s));
       if (atualizado?.cpfhub_status === 'success') {
-        toast.success('CPF salvo e dados sincronizados pelo CPFHub.');
+        toast.success('CPF salvo.');
       } else if (atualizado?.cpfhub_status) {
-        toast.warning(`CPF salvo. CPFHub não sincronizou: ${atualizado.cpfhub_status}`);
+        toast.warning(`CPF salvo. Dados complementares não foram atualizados: ${atualizado.cpfhub_status}`);
       } else {
         toast.success('CPF completo validado e salvo.');
       }
@@ -559,11 +559,11 @@ export default function Empresas() {
     const atual = String(socio.cpf_completo_manual || socio.cpf_cnpj || '').replace(/\D/g, '');
     let cpf = atual.length === 11 ? atual : '';
     if (!cpf) {
-      const informado = prompt('Informe o CPF completo do sócio para consultar a CPFHub.io');
+      const informado = prompt('Informe o CPF completo do sócio');
       cpf = String(informado || '').replace(/\D/g, '');
     }
     if (cpf.length !== 11) {
-      toast.error('Informe um CPF completo com 11 dígitos para consultar a CPFHub.io.');
+      toast.error('Informe um CPF completo com 11 dígitos.');
       return;
     }
     try {
@@ -576,9 +576,9 @@ export default function Empresas() {
       if (atualizado?.id) {
         setSociosEmpresa(prev => prev.map((s: any) => s.id === atualizado.id ? atualizado : s));
       }
-      toast.success('Dados cadastrais do CPF consultados e salvos via CPFHub.io.');
+      toast.success('Dados cadastrais do CPF consultados e salvos.');
     } catch (err: any) {
-      toast.error(err?.message || 'Erro ao consultar CPFHub.io para este sócio');
+      toast.error(err?.message || 'Erro ao consultar dados cadastrais deste sócio');
     } finally {
       setConsultandoCpfSocioId(null);
     }
@@ -746,8 +746,8 @@ export default function Empresas() {
       const f = await apiFetch(`/api/empresas/${selecionada.id}/followups`).catch(() => []);
       setFollowups(Array.isArray(f) ? f : []);
       setNovoFollowup({ titulo: "", tipo: "ligacao", data_agendada: "", descricao: "" });
-      setShowFollowupForm(false); toast.success("Follow-up agendado.");
-    } catch { toast.error("Erro ao salvar follow-up."); }
+      setShowFollowupForm(false); toast.success("Conversa salva.");
+    } catch { toast.error("Erro ao salvar conversa."); }
   }
 
   async function concluirFollowup(id: string) {
@@ -755,7 +755,7 @@ export default function Empresas() {
     try {
       await apiFetch(`/api/empresas/${selecionada.id}/followups/${id}/concluir`, { method: "PATCH" });
       setFollowups(prev => prev.map(f => f.id === id ? { ...f, concluido: true } : f));
-      adicionarHistorico("Follow-up concluído", "followup");
+      adicionarHistorico("Conversa concluída", "followup");
     } catch { toast.error("Erro."); }
   }
 
@@ -1285,7 +1285,7 @@ export default function Empresas() {
                         <span>Nova Simulação</span>
                       </button>
                       <button
-                        onClick={() => window.location.href = "/colaborador/gerador-contratos"}
+                        onClick={() => window.location.href = "/colaborador/contratos"}
                         className="flex items-center gap-1.5 text-xs font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-3 py-1.5 rounded-lg hover:bg-violet-100 transition-colors"
                         title="Novo Contrato"
                       >
@@ -1303,10 +1303,10 @@ export default function Empresas() {
                       <button
                         onClick={() => { setAbaAtiva("followup"); setShowFollowupForm(true); }}
                         className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors"
-                        title="Criar Follow-up"
+                        title="Iniciar conversa"
                       >
                         <Bell className="w-3.5 h-3.5" />
-                        <span>Criar Follow-up</span>
+                        <span>Iniciar conversa</span>
                       </button>
                     </div>
                   </div>
@@ -1321,77 +1321,37 @@ export default function Empresas() {
                       critico: { label: "Crítico", wrap: "bg-red-50 border-red-200",       badge: "bg-red-100 text-red-700",       Icon: ShieldOff,    ic: "text-red-600" },
                     }[risco] || { label: "—", wrap: "bg-slate-50 border-slate-200", badge: "bg-slate-100 text-slate-600", Icon: ShieldCheck, ic: "text-slate-500" };
                     return (
-                      <div className={`mx-5 mt-4 rounded-2xl border p-4 ${rCfg.wrap}`}>
-                        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2.5">
-                              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 border border-white shadow-sm">
-                                <rCfg.Icon className={`w-4 h-4 ${rCfg.ic}`} />
-                              </div>
-                              <div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="text-sm font-bold text-slate-800">Score Destrava</span>
-                                  <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${rCfg.badge}`}>Risco {rCfg.label}</span>
-                                </div>
-                                <p className="text-xs text-slate-500 mt-0.5">Leitura resumida da situação da empresa</p>
-                              </div>
+                      <div className={`mx-5 mt-4 rounded-2xl border px-4 py-3 ${rCfg.wrap}`}>
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                          <div className="flex items-center gap-3 min-w-[210px]">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 border border-white shadow-sm">
+                              <rCfg.Icon className={`w-4 h-4 ${rCfg.ic}`} />
                             </div>
-
-                            <div className="mt-3 flex items-center gap-3">
-                              <div className="min-w-[72px]">
-                                <div className="text-2xl font-black text-slate-900 leading-none">{score}</div>
-                                <div className="text-[11px] font-semibold text-slate-400 mt-1">de 100</div>
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm font-bold text-slate-800">Score Destrava</span>
+                                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${rCfg.badge}`}>Risco {rCfg.label}</span>
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <ScoreBar score={score} risco={risco} />
-                              </div>
+                              <p className="text-xs text-slate-500 mt-0.5">Resumo da situação da empresa</p>
                             </div>
-
-                            <div className="mt-3 flex flex-wrap gap-1.5">
-                              {tags.slice(0, 4).map((t, i) => (
-                                <span key={i} className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${t.ok ? "bg-white text-slate-600 border border-slate-200" : "bg-white text-rose-600 border border-rose-200"}`}>
-                                  {t.text}
-                                </span>
-                              ))}
-                            </div>
-
-                            {selecionada.cnpj && (!selecionada.cidade || !selecionada.email || !selecionada.responsavel_nome) && (
-                              <button
-                                onClick={() => sincronizarDados(selecionada)}
-                                disabled={sincronizando}
-                                className="mt-3 inline-flex max-w-full items-center gap-2 rounded-xl border border-amber-200 bg-white/80 px-3 py-2 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-50 disabled:opacity-50"
-                              >
-                                <Zap className="w-3.5 h-3.5 shrink-0" />
-                                <span>Cadastro incompleto — atualizar dados</span>
-                                <RotateCw className={`w-3.5 h-3.5 shrink-0 ${sincronizando ? "animate-spin" : ""}`} />
-                              </button>
-                            )}
                           </div>
 
-                          <div className="flex w-full flex-col gap-2 xl:w-[240px] xl:shrink-0">
-                            <button
-                              onClick={() => {
-                                sessionStorage.setItem("calculadora_empresa", JSON.stringify({
-                                  nome: selecionada.responsavel_nome || selecionada.razao_social,
-                                  empresa: selecionada.razao_social, telefone: selecionada.telefone || selecionada.whatsapp || "",
-                                  cpf_cnpj: selecionada.cnpj || "",
-                                }));
-                              }}
-                              className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-                            >
-                              <Calculator className="w-4 h-4" />
-                              Nova Simulação
-                            </button>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-2">
-                                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Faturamento</p>
-                                <p className="mt-1 text-xs font-semibold text-slate-700">{selecionada.faturamento_anual ? fmt(selecionada.faturamento_anual) : "Não informado"}</p>
-                              </div>
-                              <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-2">
-                                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Limite</p>
-                                <p className="mt-1 text-xs font-semibold text-slate-700">{fmt(selecionada.limite_credito_atual)}</p>
-                              </div>
+                          <div className="flex flex-1 items-center gap-3 min-w-0">
+                            <div className="min-w-[54px]">
+                              <div className="text-2xl font-black text-slate-900 leading-none">{score}</div>
+                              <div className="text-[11px] font-semibold text-slate-400 mt-1">de 100</div>
                             </div>
+                            <div className="flex-1 min-w-[140px]">
+                              <ScoreBar score={score} risco={risco} />
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-1.5 lg:max-w-[420px]">
+                            {tags.slice(0, 4).map((t, i) => (
+                              <span key={i} className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${t.ok ? "bg-white text-slate-600 border border-slate-200" : "bg-white text-rose-600 border border-rose-200"}`}>
+                                {t.text}
+                              </span>
+                            ))}
                           </div>
                         </div>
                       </div>
@@ -1399,14 +1359,14 @@ export default function Empresas() {
                   })()}
 
                   {/* ── Abas ── */}
-                  <div className="mt-3 border-b border-slate-200 px-5 overflow-x-auto">
-                    <div className="flex gap-0 min-w-max">
+                  <div className="mt-3 border-b border-slate-200 px-5 py-2">
+                    <div className="flex flex-wrap gap-1">
                       {([
                         { id: "visao_geral",  label: "Visão Geral" },
                         { id: "socios",       label: "Sócios",      badge: sociosEmpresa.length },
                         { id: "dossie_credito", label: "Dossiê de Crédito" },
                         { id: "contrato_social", label: "Contrato Social", badge: contratosSociais.length },
-                        { id: "followup",     label: "Follow-up",   badge: followups.filter(f=>!f.concluido).length },
+                        { id: "followup",     label: "Conversas",   badge: followups.filter(f=>!f.concluido).length },
                         { id: "simulacoes",   label: "Simulações",  badge: simulacoesEmpresa.length },
                         { id: "contratos",    label: "Contratos",   badge: contratosEmpresa.length },
                         { id: "historico",    label: "Histórico",   badge: historico.length },
@@ -1415,10 +1375,10 @@ export default function Empresas() {
                         <button
                           key={aba.id}
                           onClick={() => setAbaAtiva(aba.id)}
-                          className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold border-b-2 transition-all whitespace-nowrap ${
+                          className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold border transition-all whitespace-nowrap ${
                             abaAtiva === aba.id
-                              ? "border-blue-600 text-blue-700"
-                              : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-200"
+                              ? "border-blue-200 bg-blue-50 text-blue-700"
+                              : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-200 hover:bg-slate-50"
                           }`}
                         >
                           {aba.label}
@@ -1457,9 +1417,8 @@ export default function Empresas() {
                         {/* Receita Federal / Junta Comercial */}
                         <SectionCard title="Receita Federal e Junta Comercial" icon={<Briefcase className="w-4 h-4" />}>
                           <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 flex flex-col gap-1">
-                            <div><b>Fonte de Dados:</b> {selecionada.dados_extra_receita?.provedor_principal || selecionada.dados_extra_receita?.provedor || selecionada.dados_extra_receita?.payload_normalizado?.provedor || 'OpenCNPJ/BrasilAPI'}</div>
-                            <div><b>Última sincronização:</b> {selecionada.ultima_sincronizacao_receita ? new Date(selecionada.ultima_sincronizacao_receita).toLocaleString('pt-BR') : 'Não sincronizada'}</div>
-                            <div className="flex items-start gap-1.5 text-amber-700"><Info className="w-3.5 h-3.5 mt-0.5" /> CPF dos sócios pode vir parcialmente mascarado por sigilo fiscal. Preencha manualmente o CPF completo para contratos e análise de crédito.</div>
+                            <div><b>Sincronização:</b> dados cadastrais atualizados pela Receita Federal.</div>
+                            <div><b>Última atualização:</b> {selecionada.ultima_sincronizacao_receita ? new Date(selecionada.ultima_sincronizacao_receita).toLocaleString('pt-BR') : 'Não sincronizada'}</div>
                           </div>
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 py-2">
                             <InfoTile label="Razão Social" value={selecionada.razao_social} icon={<Building2 className="w-3.5 h-3.5" />} />
@@ -1706,7 +1665,7 @@ export default function Empresas() {
                           <div>
                             <h3 className="text-sm font-bold text-slate-700">Sócios e Representantes</h3>
                             <p className="text-xs text-slate-400 mt-0.5">
-                              Dados públicos importados automaticamente; CPF completo, RG, estado civil, cônjuge e endereço devem ser conferidos/preenchidos para contratos.
+                              Dados societários sincronizados. Complete as informações pessoais necessárias para contratos quando houver pendências.
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
@@ -1718,7 +1677,7 @@ export default function Empresas() {
                                 onClick={() => sincronizarDados(selecionada)}
                                 disabled={sincronizando}
                                 className="flex items-center gap-1 text-xs font-semibold text-emerald-700 border border-emerald-200 bg-emerald-50 px-2.5 py-1 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50"
-                                title="Re-importar sócios das fontes públicas de CNPJ sem apagar dados manuais já preenchidos"
+                                title="Atualizar dados societários"
                               >
                                 <RotateCw className={`w-3 h-3 ${sincronizando ? "animate-spin" : ""}`} />
                                 Atualizar dados societários
@@ -1727,8 +1686,8 @@ export default function Empresas() {
                           </div>
                         </div>
 
-                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 leading-relaxed">
-                          <b>Importante:</b> A sincronização busca QSA nas fontes públicas gratuitas (BrasilAPI/OpenCNPJ). Como CPF.CNPJ está desativado por custo, informe o CPF completo manualmente; após salvar, o sistema consulta CPFHub automaticamente e sincroniza nascimento/gênero/status. Campos não retornados seguem como pendência de contrato/análise.
+                        <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 leading-relaxed">
+                          Dados societários sincronizados com a Receita Federal. Informações não retornadas pela consulta podem ser completadas manualmente.
                         </div>
 
                         {sociosEmpresa.length === 0 ? (
@@ -1755,9 +1714,6 @@ export default function Empresas() {
                                       <div className="flex flex-wrap gap-1.5 mt-1">
                                         {s.qualificacao_socio && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{s.qualificacao_socio}</span>}
                                         {s.representante_legal && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Representante legal</span>}
-                                        {s.fonte_dados && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 border border-slate-200">Fonte: {s.fonte_dados}</span>}
-                                        {s.cpfhub_status === 'success' && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200">CPFHub validado</span>}
-                                        {s.cpfhub_status && s.cpfhub_status !== 'success' && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 border border-slate-200">CPFHub: {s.cpfhub_status}</span>}
                                         <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${completo ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
                                           {completo ? 'Completo para contrato' : `${pendencias.length} pendência(s)`}
                                         </span>
@@ -1767,7 +1723,7 @@ export default function Empresas() {
                                   </div>
 
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">CPF/CNPJ do sócio</span><b className="text-slate-700 font-mono">{s.cpf_cnpj || 'Não informado'}</b><button onClick={() => { const cpf = prompt('Informe o CPF completo do sócio'); if (cpf) atualizarCpfManualSocio(s, cpf); }} className="block mt-1 text-[11px] font-bold text-blue-600 hover:underline">Informar CPF completo</button><button onClick={() => consultarCpfHubSocio(s)} disabled={consultandoCpfSocioId === s.id} className="block mt-1 text-[11px] font-bold text-violet-600 hover:underline disabled:opacity-50">{consultandoCpfSocioId === s.id ? 'Consultando CPFHub...' : 'Consultar CPFHub'}</button></div>
+                                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">CPF/CNPJ do sócio</span><b className="text-slate-700 font-mono">{s.cpf_cnpj || 'Não informado'}</b><button onClick={() => { const cpf = prompt('Informe o CPF completo do sócio'); if (cpf) atualizarCpfManualSocio(s, cpf); }} className="block mt-1 text-[11px] font-bold text-blue-600 hover:underline">Informar CPF completo</button></div>
                                     <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Entrada na sociedade</span><b className="text-slate-700">{s.data_entrada_sociedade ? new Date(s.data_entrada_sociedade).toLocaleDateString('pt-BR') : 'Não informado'}</b></div>
                                     <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">País</span><b className="text-slate-700">{s.pais || 'Não informado'}</b></div>
                                     <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Representante legal</span><b className="text-slate-700">{s.nome_representante || (s.representante_legal ? 'Sim' : 'Não informado')}</b></div>
@@ -1807,7 +1763,6 @@ export default function Empresas() {
                                   <div className="flex flex-wrap gap-2 pt-1">
                                     <button onClick={() => abrirEdicaoSocio(s)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><Edit2 className="w-3 h-3" /> Editar</button>
                                     <button onClick={() => atualizarSocioIndividual(s)} disabled={sincronizando} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50"><RotateCw className="w-3 h-3" /> Atualizar</button>
-                                    <button onClick={() => consultarCpfHubSocio(s)} disabled={consultandoCpfSocioId === s.id} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 disabled:opacity-50"><Zap className="w-3 h-3" /> {consultandoCpfSocioId === s.id ? 'Consultando...' : 'CPFHub'}</button>
                                     <button onClick={() => apagarSocio(s)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100"><Trash2 className="w-3 h-3" /> Apagar</button>
                                   </div>
 
@@ -1831,14 +1786,14 @@ export default function Empresas() {
                     : abaAtiva === "followup" ? (
                       <div className="p-5 fade-in">
                         <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-sm font-bold text-slate-700">Follow-ups</h3>
+                          <h3 className="text-sm font-bold text-slate-700">Conversas</h3>
                           <button onClick={() => setShowFollowupForm(true)} className="flex items-center gap-1.5 text-xs font-semibold bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors">
                             <PlusCircle className="w-3.5 h-3.5" /> Novo
                           </button>
                         </div>
                         {showFollowupForm && (
                           <div className="mb-4 p-4 rounded-xl bg-blue-50 border border-blue-200 space-y-3">
-                            <input className={inputCls} placeholder="Título do follow-up..." value={novoFollowup.titulo} onChange={e => setNovoFollowup(p => ({ ...p, titulo: e.target.value }))} />
+                            <input className={inputCls} placeholder="Título da conversa..." value={novoFollowup.titulo} onChange={e => setNovoFollowup(p => ({ ...p, titulo: e.target.value }))} />
                             <div className="grid grid-cols-2 gap-2">
                               <select className={selectCls} value={novoFollowup.tipo} onChange={e => setNovoFollowup(p => ({ ...p, tipo: e.target.value }))}>
                                 <option value="ligacao">Ligação</option>
@@ -1860,7 +1815,7 @@ export default function Empresas() {
                         {followups.length === 0 && !showFollowupForm ? (
                           <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
                             <Bell className="w-10 h-10 text-slate-200" />
-                            <p className="text-sm text-slate-500">Nenhum follow-up agendado</p>
+                            <p className="text-sm text-slate-500">Nenhuma conversa registrada</p>
                           </div>
                         ) : (
                           <div className="space-y-2">
@@ -1952,7 +1907,7 @@ export default function Empresas() {
                     : abaAtiva === "documentos" ? (
                       <div className="p-5 fade-in space-y-4">
                         <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 leading-relaxed">
-                          Esta aba mostra somente documentos com entidade_tipo = empresa e entidade_id igual à empresa aberta. Documentos pessoais de PF ou sócios não aparecem aqui.
+                          Documentos vinculados a esta empresa. Documentos pessoais ficam nas áreas correspondentes de sócios ou clientes.
                         </div>
                         <DocumentosEntidade
                           entidadeTipo="empresa"
