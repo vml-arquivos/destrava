@@ -45,6 +45,32 @@ const statusCls: Record<string, string> = {
   substituido: "bg-violet-50 text-violet-700 border-violet-100",
 };
 
+
+const tipoDocumentoLabel: Record<string, string> = {
+  cartao_cnpj: "Cartão CNPJ",
+  contrato_social: "Contrato social",
+  alteracao_contratual: "Alteração contratual",
+  comprovante_endereco: "Comprovante de endereço",
+  comprovante_faturamento: "Comprovante de faturamento",
+  declaracao_faturamento: "Declaração de faturamento",
+  extrato_bancario: "Extrato bancário",
+  imposto_renda: "Imposto de renda",
+  balanco: "Balanço",
+  dre: "DRE",
+  certidao: "Certidão",
+  procuracao: "Procuração",
+  documento_socio: "Documento do sócio",
+  rg: "RG",
+  cpf: "CPF",
+  cnh: "CNH",
+  comprovante_residencia: "Comprovante de residência",
+  outros: "Outros",
+};
+
+function labelTipoDocumento(tipo: string) {
+  return tipoDocumentoLabel[tipo] || tipo.replace(/_/g, " ");
+}
+
 function formatBytes(value?: number) {
   const n = Number(value || 0);
   if (!n) return "-";
@@ -160,12 +186,12 @@ export default function DocumentosEntidade({
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3">
         <div>
           <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Paperclip className="w-4 h-4" /> {titulo}</h3>
-          <p className="text-xs text-slate-400 mt-0.5">Listagem filtrada por entidade: {entidadeTipo} / {entidadeId}</p>
+          <p className="text-xs text-slate-400 mt-0.5">Documentos vinculados ao cadastro selecionado.</p>
         </div>
         {permitirUpload && (
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
             <select value={tipoDocumento} onChange={(e) => setTipoDocumento(e.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700">
-              {tiposPermitidos.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
+              {tiposPermitidos.map((t) => <option key={t} value={t}>{labelTipoDocumento(t)}</option>)}
             </select>
             <input value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Observação opcional" className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700" />
             <label className="h-9 flex items-center justify-center gap-1.5 text-xs font-semibold bg-blue-600 text-white px-3 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors disabled:opacity-60">
@@ -191,7 +217,7 @@ export default function DocumentosEntidade({
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-slate-800 truncate">{doc.nome_original}</p>
                 <div className="flex flex-wrap gap-1.5 mt-1 text-[11px] text-slate-400">
-                  <span>{doc.tipo_documento.replace(/_/g, " ")}</span>
+                  <span>{labelTipoDocumento(doc.tipo_documento)}</span>
                   <span>•</span><span>{formatBytes(doc.tamanho_bytes)}</span>
                   <span>•</span><span>Enviado em {formatDate(doc.criado_em)}</span>
                   {doc.origem && <><span>•</span><span>{doc.origem.replace(/_/g, " ")}</span></>}

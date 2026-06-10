@@ -27,7 +27,7 @@ const ORIGENS = ['upload_manual', 'gerado_sistema', 'importado_api', 'sincroniza
 
 const TIPOS_DOCUMENTO = [
   'contrato_social', 'alteracao_contratual', 'documento_socio', 'rg', 'cpf', 'cnh',
-  'comprovante_residencia', 'comprovante_faturamento', 'extrato_bancario', 'imposto_renda',
+  'comprovante_residencia', 'comprovante_endereco', 'comprovante_faturamento', 'extrato_bancario', 'imposto_renda',
   'balanco', 'dre', 'certidao', 'procuracao', 'contrato_assessoria', 'declaracao_faturamento',
   'cartao_cnpj', 'nire', 'estatuto', 'contrato_gerado', 'contrato_assinado', 'outros',
 ];

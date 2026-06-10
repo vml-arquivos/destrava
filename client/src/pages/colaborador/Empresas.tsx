@@ -496,7 +496,7 @@ export default function Empresas() {
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [selecionada, setSelecionada] = useState<Empresa | null>(null);
   const [showDetail, setShowDetail] = useState(false); // mobile toggle
-  const [abaAtiva, setAbaAtiva] = useState<"visao_geral" | "socios" | "dossie_credito" | "contrato_social" | "followup" | "historico" | "documentos" | "simulacoes" | "contratos">("visao_geral");
+  const [abaAtiva, setAbaAtiva] = useState<"visao_geral" | "socios" | "dossie_credito" | "followup" | "historico" | "documentos" | "simulacoes" | "contratos">("visao_geral");
   const [followups, setFollowups] = useState<EmpresaFollowup[]>([]);
   const [historico, setHistorico] = useState<EmpresaHistorico[]>([]);
   const [documentos, setDocumentos] = useState<EmpresaDocumento[]>([]);
@@ -1329,7 +1329,7 @@ export default function Empresas() {
                         title="Adicionar Documento"
                       >
                         <Paperclip className="w-3.5 h-3.5" />
-                        <span>Adicionar Doc.</span>
+                        <span>Adicionar arquivo</span>
                       </button>
                       <button
                         onClick={() => { setAbaAtiva("followup"); setShowFollowupForm(true); }}
@@ -1394,14 +1394,13 @@ export default function Empresas() {
                     <div className="flex flex-wrap gap-1">
                       {([
                         { id: "visao_geral",  label: "Visão Geral" },
-                        { id: "socios",       label: "Sócios",      badge: sociosEmpresa.length },
+                        { id: "socios",       label: "Sócios",      badge: sociosExibicao.length },
                         { id: "dossie_credito", label: "Dossiê de Crédito" },
-                        { id: "contrato_social", label: "Contrato Social", badge: contratosSociais.length },
+                        { id: "documentos",   label: "Arquivos de Crédito",  badge: documentos.length + contratosSociais.length },
                         { id: "followup",     label: "Conversas",   badge: followups.filter(f=>!f.concluido).length },
                         { id: "simulacoes",   label: "Simulações",  badge: simulacoesEmpresa.length },
                         { id: "contratos",    label: "Contratos",   badge: contratosEmpresa.length },
                         { id: "historico",    label: "Histórico",   badge: historico.length },
-                        { id: "documentos",   label: "Documentos",  badge: documentos.length },
                       ] as const).map(aba => (
                         <button
                           key={aba.id}
@@ -1924,37 +1923,18 @@ export default function Empresas() {
                       </div>
                     )
 
-                    /* ── CONTRATO SOCIAL ── */
-                    : abaAtiva === "contrato_social" ? (
-                      <div className="p-5 fade-in space-y-4">
-                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 leading-relaxed">
-                          <b>Obrigatório para contratos:</b> contrato social/última alteração, representante assinante, poderes de administração e documentos dos sócios. Os arquivos agora são vinculados exclusivamente à empresa selecionada.
-                        </div>
-                        <DocumentosEntidade
-                          entidadeTipo="empresa"
-                          entidadeId={selecionada?.id}
-                          empresaId={selecionada?.id}
-                          tiposPermitidos={["contrato_social", "alteracao_contratual", "procuracao", "certidao", "outros"]}
-                          titulo="Contrato Social e Alterações"
-                          permitirUpload
-                          permitirExcluir
-                          permitirValidar
-                        />
-                      </div>
-                    )
-
-                    /* ── DOCUMENTOS ── */
+                    /* ── ARQUIVOS DA EMPRESA ── */
                     : abaAtiva === "documentos" ? (
                       <div className="p-5 fade-in space-y-4">
                         <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 leading-relaxed">
-                          Documentos vinculados a esta empresa. Documentos pessoais ficam nas áreas correspondentes de sócios ou clientes.
+                          Arquivos usados na análise de crédito da empresa: CNPJ, contrato social, alterações, certidões, comprovantes de endereço, faturamento, extratos, balanço, DRE e documentos fiscais.
                         </div>
                         <DocumentosEntidade
                           entidadeTipo="empresa"
                           entidadeId={selecionada?.id}
                           empresaId={selecionada?.id}
-                          tiposPermitidos={["cartao_cnpj", "comprovante_faturamento", "extrato_bancario", "imposto_renda", "balanco", "dre", "certidao", "procuracao", "declaracao_faturamento", "outros"]}
-                          titulo="Documentos da Empresa"
+                          tiposPermitidos={["cartao_cnpj", "contrato_social", "alteracao_contratual", "comprovante_endereco", "comprovante_faturamento", "declaracao_faturamento", "extrato_bancario", "imposto_renda", "balanco", "dre", "certidao", "procuracao", "outros"]}
+                          titulo="Arquivos de Crédito"
                           permitirUpload
                           permitirExcluir
                           permitirValidar
