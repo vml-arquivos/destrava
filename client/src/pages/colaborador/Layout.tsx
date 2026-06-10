@@ -130,11 +130,12 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
     window.location.href = "/colaborador/login";
   };
 
+  const primeiroNome = colaborador?.nome?.split(" ")[0] || "Colaborador";
+
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar Desktop */}
-      <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-gray-200 shadow-sm">
-        <div className="p-5 border-b border-gray-200">
+    <div className="destrava-shell min-h-screen flex bg-[radial-gradient(circle_at_top_left,#eff6ff_0,#f8fafc_32%,#f8fafc_100%)] text-slate-900">
+      <aside className="hidden lg:flex flex-col w-[270px] border-r border-slate-200/80 bg-white/88 backdrop-blur-xl shadow-[8px_0_30px_rgba(15,23,42,0.04)]">
+        <div className="p-5 border-b border-slate-100">
           <a href="/" className="flex items-center gap-2">
             <img
               src="/destrava-logo.svg"
@@ -143,28 +144,30 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
           </a>
-          <div className="mt-2">
-            <Badge variant="secondary" className="text-xs">Área do Colaborador</Badge>
+          <div className="mt-3">
+            <Badge variant="secondary" className="rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-[11px] font-black text-amber-800 shadow-sm">Área do Colaborador</Badge>
           </div>
         </div>
 
-        <div className="p-4 border-b border-gray-100 bg-gray-50">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-              <User className="h-5 w-5 text-blue-600" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate">
-                {colaborador?.nome || "Colaborador"}
-              </p>
-              <p className="text-xs text-gray-500 truncate">
-                {colaborador?.cargo || ""}
-              </p>
+        <div className="p-4 border-b border-slate-100 bg-slate-50/70">
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-100">
+                <User className="h-5 w-5 text-white" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-black text-slate-900 truncate">
+                  {colaborador?.nome || "Colaborador"}
+                </p>
+                <p className="text-xs font-medium text-slate-500 truncate">
+                  {colaborador?.cargo || ""}
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
-        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto destrava-nav-scroll">
           {navItems.map((item) => {
             const isActive =
               location === item.href ||
@@ -174,31 +177,33 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
             return (
               <Link key={item.href} href={item.href}>
                 <a
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  className={`group flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-semibold transition-all ${
                     isActive
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                      ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
                   }`}
                 >
-                  <Icon className="h-4 w-4 flex-shrink-0" />
-                  <span className="flex-1">{item.label}</span>
+                  <span className={`flex h-8 w-8 items-center justify-center rounded-xl transition-all ${isActive ? "bg-white/16" : "bg-white border border-slate-200 group-hover:border-blue-100 group-hover:text-blue-700"}`}>
+                    <Icon className="h-4 w-4 flex-shrink-0" />
+                  </span>
+                  <span className="flex-1 truncate">{item.label}</span>
                   {item.badge && (
                     <span className="text-xs bg-yellow-400 text-yellow-900 px-1.5 py-0.5 rounded-full font-bold">
                       {item.badge}
                     </span>
                   )}
-                  {isActive && <ChevronRight className="h-3 w-3 opacity-60" />}
+                  {isActive && <ChevronRight className="h-3 w-3 opacity-75" />}
                 </a>
               </Link>
             );
           })}
         </nav>
 
-        <div className="p-3 border-t border-gray-200">
+        <div className="p-3 border-t border-slate-100 bg-white/70">
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start text-gray-500 hover:text-red-600 hover:bg-red-50"
+            className="w-full justify-start rounded-2xl text-slate-500 hover:bg-red-50 hover:text-red-600"
             onClick={handleSignOut}
           >
             <LogOut className="h-4 w-4 mr-2" />
@@ -207,8 +212,7 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
         </div>
       </aside>
 
-      {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 px-4 h-14 flex items-center justify-between shadow-sm">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 h-16 border-b border-slate-200 bg-white/92 px-4 flex items-center justify-between shadow-sm backdrop-blur-xl">
         <a href="/" className="flex items-center gap-2">
           <img
             src="/destrava-logo.svg"
@@ -216,38 +220,37 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
             className="h-7"
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
-          <Badge variant="secondary" className="text-xs">Colaborador</Badge>
+          <Badge variant="secondary" className="rounded-full text-xs">Colaborador</Badge>
         </a>
         <button
           onClick={() => setMenuAberto(!menuAberto)}
-          className="p-2 rounded-md hover:bg-gray-100"
+          className="p-2 rounded-xl hover:bg-slate-100"
         >
           {menuAberto ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </div>
 
-      {/* Mobile Drawer */}
       {menuAberto && (
         <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/50"
+          className="lg:hidden fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-sm"
           onClick={() => setMenuAberto(false)}
         >
           <div
-            className="absolute left-0 top-14 bottom-0 w-64 bg-white shadow-xl overflow-y-auto"
+            className="absolute left-0 top-16 bottom-0 w-[280px] bg-white shadow-2xl overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-4 border-b border-gray-100 bg-gray-50">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center">
-                  <User className="h-5 w-5 text-blue-600" />
+            <div className="p-4 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center">
+                  <User className="h-5 w-5 text-white" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-gray-900">{colaborador?.nome || "Colaborador"}</p>
-                  <p className="text-xs text-gray-500">{colaborador?.cargo || ""}</p>
+                  <p className="text-sm font-black text-slate-900">{colaborador?.nome || "Colaborador"}</p>
+                  <p className="text-xs text-slate-500">{colaborador?.cargo || ""}</p>
                 </div>
               </div>
             </div>
-            <nav className="p-3 space-y-0.5">
+            <nav className="p-3 space-y-1">
               {navItems.map((item) => {
                 const isActive =
                   location === item.href ||
@@ -256,10 +259,10 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
                 return (
                   <Link key={item.href} href={item.href}>
                     <a
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-semibold transition-all ${
                         isActive
-                          ? "bg-blue-600 text-white"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                          ? "bg-blue-600 text-white shadow-md shadow-blue-100"
+                          : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
                       }`}
                       onClick={() => setMenuAberto(false)}
                     >
@@ -270,11 +273,11 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
                 );
               })}
             </nav>
-            <div className="p-3 border-t border-gray-200">
+            <div className="p-3 border-t border-slate-200">
               <Button
                 variant="ghost"
                 size="sm"
-                className="w-full justify-start text-gray-500 hover:text-red-600"
+                className="w-full justify-start rounded-2xl text-slate-500 hover:text-red-600"
                 onClick={handleSignOut}
               >
                 <LogOut className="h-4 w-4 mr-2" />
@@ -285,19 +288,22 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
         </div>
       )}
 
-      {/* Conteúdo principal */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <div className="hidden lg:flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200">
-          <h2 className="text-base font-semibold text-gray-900">{title || "Painel"}</h2>
+        <div className="hidden lg:flex items-center justify-between px-6 py-3.5 bg-white/82 backdrop-blur-xl border-b border-slate-200/80 shadow-sm shadow-slate-200/40">
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">
-              <strong className="text-gray-900">
-                {colaborador?.nome?.split(" ")[0] || "Colaborador"}
-              </strong>
+            <div className="h-9 w-1.5 rounded-full bg-blue-600" />
+            <div>
+              <h2 className="text-base font-black tracking-tight text-slate-900">{title || "Painel"}</h2>
+              <p className="text-[11px] font-medium text-slate-400">Destrava Crédito</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="rounded-full bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-700 border border-slate-200">
+              {primeiroNome}
             </span>
             <NotificacoesFollowup />
             <Link href="/colaborador/meu-perfil">
-              <a className="inline-flex items-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
+              <a className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950">
                 <User className="h-4 w-4 mr-1" />
                 Perfil
               </a>
@@ -306,7 +312,7 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
               variant="outline"
               size="sm"
               onClick={handleSignOut}
-              className="text-gray-500 hover:text-red-600"
+              className="rounded-xl text-slate-500 hover:text-red-600"
             >
               <LogOut className="h-4 w-4 mr-1" />
               Sair
@@ -314,7 +320,7 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
           </div>
         </div>
 
-        <div className="flex-1 mt-14 lg:mt-0 overflow-auto">
+        <div className="destrava-page flex-1 mt-16 lg:mt-0 overflow-auto">
           {children}
         </div>
       </main>
