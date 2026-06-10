@@ -1,7 +1,7 @@
 -- 056_dossie_documental_credito_blocos_ia.sql
 -- Camada de Dossiê Documental de Crédito Empresarial.
 -- Não altera documentos_arquivos, empresas, socios_empresa, faturamento ou contratos existentes.
--- Cria blocos estruturados acima da base central de documentos para CNPJ, QSA e demais análises futuras de IA.
+-- Cria blocos estruturados acima da base central de documentos para CNPJ, QSA e demais análises.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -228,7 +228,7 @@ VALUES
   ('garantias', 'Garantias', 'Garantias vinculadas a empresa, contrato ou operação.', 'empresa', false, 14, '{}'::jsonb),
   ('contratos_gerados', 'Contratos Gerados', 'Contratos de assessoria e PDFs gerados/assinados.', 'empresa', false, 15, '{}'::jsonb),
   ('pendencias_documentais', 'Pendências Documentais', 'Consolidação de documentos faltantes, vencidos ou divergentes.', 'empresa', true, 16, '{}'::jsonb),
-  ('analise_ia_credito', 'Análise IA / Parecer de Crédito', 'Parecer consolidado de IA com revisão humana obrigatória.', 'empresa', false, 17, '{}'::jsonb)
+  ('analise_ia_credito', 'Parecer de Crédito', 'Parecer consolidado com revisão humana.', 'empresa', false, 17, '{}'::jsonb)
 ON CONFLICT (codigo) DO UPDATE SET
   nome_amigavel = EXCLUDED.nome_amigavel,
   descricao = EXCLUDED.descricao,
@@ -240,8 +240,8 @@ ON CONFLICT (codigo) DO UPDATE SET
 
 INSERT INTO public.ia_prompts_documentais (bloco_id, codigo, versao, nome, descricao, prompt_sistema, prompt_usuario_template, schema_saida)
 SELECT b.id, 'extrair_' || b.codigo, '1.0.0', 'Extrair ' || b.nome_amigavel,
-       'Prompt inicial preparado para extração/análise do bloco ' || b.codigo,
-       'Você é uma IA de análise documental de crédito empresarial. Extraia somente informações comprovadas no bloco/documentos enviados. Nunca tome decisão final de crédito; apenas gere achados e pendências para revisão humana.',
+       'Prompt inicial preparado para conferência do bloco ' || b.codigo,
+       'Confira a documentação de crédito empresarial. Extraia somente informações comprovadas no bloco/documentos enviados. Nunca tome decisão final de crédito; apenas registre achados e pendências para revisão humana.',
        'Analise o bloco {{bloco_codigo}} da entidade {{entidade_tipo}}/{{entidade_id}}. Use os dados estruturados e documentos fornecidos. Retorne JSON válido com campos_extraidos, pendencias, inconsistencias, recomendacoes, nivel_confianca e revisao_humana_necessaria.',
        '{"type":"object","required":["campos_extraidos","pendencias","inconsistencias","nivel_confianca","revisao_humana_necessaria"]}'::jsonb
 FROM public.documentacao_blocos b
