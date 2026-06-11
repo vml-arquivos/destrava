@@ -1326,7 +1326,7 @@ export default function Empresas() {
                       <button
                         onClick={() => { setAbaAtiva("documentos"); }}
                         className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors"
-                        title="Adicionar arquivo"
+                        title="Adicionar Documento"
                       >
                         <Paperclip className="w-3.5 h-3.5" />
                         <span>Adicionar arquivo</span>
@@ -1923,7 +1923,7 @@ export default function Empresas() {
                       </div>
                     )
 
-                    /* ── ARQUIVOS DA EMPRESA ── */
+                    /* ── ACERVO DOCUMENTAL ── */
                     : abaAtiva === "documentos" ? (
                       <div className="p-5 fade-in space-y-4">
                         <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 leading-relaxed">
@@ -2013,7 +2013,7 @@ export default function Empresas() {
                         {contratosEmpresa.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-xl border-2 border-dashed border-slate-200">
                             <span className="text-4xl">📄</span>
-                            <p className="text-sm text-slate-500">Nenhum contrato firmado com esta empresa</p>
+                            <p className="text-sm text-slate-500">Nenhum contrato firmado para esta empresa</p>
                           </div>
                         ) : (
                           <div className="space-y-2">
@@ -2405,7 +2405,7 @@ export default function Empresas() {
                     {/* Sócios da Receita */}
                     {socios.length > 0 && (
                       <div className="pb-3 space-y-2">
-                        <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> QSA identificado pela Receita Federal</p>
+                        <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> Sócios identificados pela Receita Federal</p>
                         {socios.map((s, i) => (
                           <button key={i} type="button" onClick={() => { set("responsavel_nome", s.nome_socio || ""); set("responsavel_cpf", s.cnpj_cpf_do_socio || ""); set("responsavel_cargo", s.descricao_qualificacao_socio || ""); }} className="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50 hover:border-blue-300 hover:bg-blue-50 transition-all text-left group">
                             <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0 group-hover:bg-blue-700">{s.nome_socio?.charAt(0) ?? "?"}</div>
