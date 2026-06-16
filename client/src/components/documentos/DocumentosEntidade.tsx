@@ -16,6 +16,12 @@ type DocumentoArquivo = {
   obrigatorio?: boolean;
   validado?: boolean;
   observacoes?: string | null;
+  data_emissao_documento?: string | null;
+  data_validade_documento?: string | null;
+  validade_dias?: number | null;
+  status_validade?: string | null;
+  nome_customizado?: string | null;
+  exige_revisao_humana?: boolean;
   criado_por?: string | null;
   criado_em?: string;
   atualizado_em?: string;
@@ -41,29 +47,77 @@ const statusCls: Record<string, string> = {
   pendente_validacao: "bg-amber-50 text-amber-700 border-amber-100",
   validado: "bg-emerald-50 text-emerald-700 border-emerald-100",
   recusado: "bg-red-50 text-red-700 border-red-100",
+  desatualizado: "bg-red-50 text-red-700 border-red-100",
   arquivado: "bg-slate-50 text-slate-600 border-slate-100",
   substituido: "bg-violet-50 text-violet-700 border-violet-100",
 };
 
 
 const tipoDocumentoLabel: Record<string, string> = {
+  contrato_prestacao_servicos: "Contrato de prestação de serviços",
+  contrato_assessoria: "Contrato de assessoria",
   cartao_cnpj: "Cartão CNPJ",
+  qsa: "QSA",
+  atos_junta_comercial: "Atos da Junta Comercial",
   contrato_social: "Contrato social",
   alteracao_contratual: "Alteração contratual",
-  comprovante_endereco: "Comprovante de endereço",
-  comprovante_faturamento: "Comprovante de faturamento",
-  declaracao_faturamento: "Declaração de faturamento",
-  extrato_bancario: "Extrato bancário",
-  imposto_renda: "Imposto de renda",
-  balanco: "Balanço",
-  dre: "DRE",
-  certidao: "Certidão",
-  procuracao: "Procuração",
   documento_socio: "Documento do sócio",
   rg: "RG",
   cpf: "CPF",
   cnh: "CNH",
   comprovante_residencia: "Comprovante de residência",
+  certidao_casamento: "Certidão de casamento",
+  averbacao_divorcio: "Averbação de divórcio",
+  certidao_obito: "Certidão de óbito",
+  imposto_renda: "IRPF",
+  recibo_irpf: "Recibo de entrega do IRPF",
+  rating_bacen_cnpj: "Rating BACEN (CNPJ)",
+  rating_bacen_cpf: "Rating BACEN (CPF)",
+  cenprot_cnpj: "CENPROT (CNPJ)",
+  cenprot_cpf: "CENPROT (CPF)",
+  cnd_rfb_cnpj: "CND RFB (CNPJ)",
+  cnd_rfb_cpf: "CND RFB (CPF)",
+  cadin_cnpj: "Nada consta CADIN (CNPJ)",
+  cadin_cpf: "Nada consta CADIN (CPF)",
+  pgfn_cnpj: "Nada consta PGFN (CNPJ)",
+  pgfn_cpf: "Nada consta PGFN (CPF)",
+  simples_nacional: "Consulta Simples Nacional",
+  pgdas: "PGDAS",
+  pgmei: "PGMEI",
+  ecf: "ECF",
+  recibo_ecf: "Recibo ECF",
+  recibo_pgdas: "Recibo PGDAS",
+  recibo_pgmei: "Recibo PGMEI",
+  defis: "DEFIS",
+  dasn_simei: "DASN-SIMEI",
+  recibo_defis: "Recibo DEFIS",
+  recibo_dasn_simei: "Recibo DASN-SIMEI",
+  scr_cnpj: "Relatório SCR (CNPJ)",
+  ccs_cnpj: "Relatório CCS (CNPJ)",
+  ccf_cnpj: "Relatório CCF (CNPJ)",
+  scr_cpf: "Relatório SCR (CPF)",
+  ccs_cpf: "Relatório CCS (CPF)",
+  ccf_cpf: "Relatório CCF (CPF)",
+  consulta_serasa_cnpj: "Consulta Serasa (CNPJ)",
+  consulta_serasa_cpf: "Consulta Serasa (CPF)",
+  compartilhamento_ecac: "Compartilhamento eCAC",
+  foto_fachada: "Foto da fachada",
+  foto_interna_1: "Foto interna 1",
+  foto_interna_2: "Foto interna 2",
+  foto_interna_3: "Foto interna 3",
+  faturamento_12_meses: "Faturamento bruto 12 meses",
+  comprovante_endereco: "Comprovante de endereço",
+  comprovante_faturamento: "Comprovante de faturamento",
+  declaracao_faturamento: "Declaração de faturamento",
+  extrato_bancario: "Extrato bancário",
+  balanco: "Balanço",
+  dre: "DRE",
+  certidao: "Certidão",
+  procuracao: "Procuração",
+  nire: "NIRE",
+  estatuto: "Estatuto",
+  contrato_gerado: "Contrato gerado",
+  contrato_assinado: "Contrato assinado",
   outros: "Outros",
 };
 
@@ -102,6 +156,8 @@ export default function DocumentosEntidade({
   const [uploading, setUploading] = useState(false);
   const [tipoDocumento, setTipoDocumento] = useState(tiposPermitidos[0] || "outros");
   const [observacoes, setObservacoes] = useState("");
+  const [nomeCustomizado, setNomeCustomizado] = useState("");
+  const [dataEmissao, setDataEmissao] = useState("");
 
   const query = useMemo(() => {
     if (!entidadeId) return "";
@@ -143,11 +199,16 @@ export default function DocumentosEntidade({
     if (contratoId) fd.append("contrato_id", contratoId);
     if (simulacaoId) fd.append("simulacao_id", simulacaoId);
     if (observacoes.trim()) fd.append("observacoes", observacoes.trim());
+    if (nomeCustomizado.trim()) fd.append("nome_customizado", nomeCustomizado.trim());
+    if (dataEmissao) fd.append("data_emissao_documento", dataEmissao);
+    if (tipoDocumento === "cartao_cnpj") fd.append("validade_dias", "30");
     setUploading(true);
     try {
       await apiFetch("/api/documentos/upload", { method: "POST", body: fd });
       toast.success("Documento enviado e vinculado corretamente.");
       setObservacoes("");
+      setNomeCustomizado("");
+      setDataEmissao("");
       await carregar();
     } catch (err: any) {
       toast.error(err?.message || "Erro ao enviar documento.");
@@ -193,6 +254,12 @@ export default function DocumentosEntidade({
             <select value={tipoDocumento} onChange={(e) => setTipoDocumento(e.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700">
               {tiposPermitidos.map((t) => <option key={t} value={t}>{labelTipoDocumento(t)}</option>)}
             </select>
+            {(tipoDocumento === "outros" || tipoDocumento === "compartilhamento_ecac") && (
+              <input value={nomeCustomizado} onChange={(e) => setNomeCustomizado(e.target.value)} placeholder={tipoDocumento === "compartilhamento_ecac" ? "Banco/destinatário do eCAC" : "Nome do documento"} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700" />
+            )}
+            {tipoDocumento === "cartao_cnpj" && (
+              <input type="date" value={dataEmissao} onChange={(e) => setDataEmissao(e.target.value)} title="Data de emissão do Cartão CNPJ" className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700" />
+            )}
             <input value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Observação opcional" className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700" />
             <label className="h-9 flex items-center justify-center gap-1.5 text-xs font-semibold bg-blue-600 text-white px-3 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors disabled:opacity-60">
               {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} Enviar
@@ -217,10 +284,12 @@ export default function DocumentosEntidade({
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-slate-800 truncate">{doc.nome_original}</p>
                 <div className="flex flex-wrap gap-1.5 mt-1 text-[11px] text-slate-400">
-                  <span>{labelTipoDocumento(doc.tipo_documento)}</span>
+                  <span>{doc.nome_customizado || labelTipoDocumento(doc.tipo_documento)}</span>
                   <span>•</span><span>{formatBytes(doc.tamanho_bytes)}</span>
                   <span>•</span><span>Enviado em {formatDate(doc.criado_em)}</span>
                   {doc.origem && <><span>•</span><span>{doc.origem.replace(/_/g, " ")}</span></>}
+                  {doc.data_emissao_documento && <><span>•</span><span>Emissão {new Date(doc.data_emissao_documento).toLocaleDateString("pt-BR")}</span></>}
+                  {doc.status_validade && doc.status_validade !== "nao_verificado" && <><span>•</span><span>Validade: {doc.status_validade.replace(/_/g, " ")}</span></>}
                 </div>
                 {doc.observacoes && <p className="text-xs text-slate-500 mt-1">{doc.observacoes}</p>}
               </div>

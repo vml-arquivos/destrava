@@ -1781,7 +1781,7 @@ export default function Empresas() {
                                         entidadeId={s.id}
                                         empresaId={selecionada?.id}
                                         socioId={s.id}
-                                        tiposPermitidos={["documento_socio", "cpf", "rg", "cnh", "comprovante_residencia", "imposto_renda", "procuracao", "outros"]}
+                                        tiposPermitidos={["documento_socio", "cpf", "rg", "cnh", "comprovante_residencia", "imposto_renda", "recibo_irpf", "certidao_casamento", "averbacao_divorcio", "certidao_obito", "rating_bacen_cpf", "cenprot_cpf", "cnd_rfb_cpf", "cadin_cpf", "pgfn_cpf", "scr_cpf", "ccs_cpf", "ccf_cpf", "consulta_serasa_cpf", "procuracao", "outros"]}
                                         titulo={`Documentos do sócio: ${s.nome || "Sócio"}`}
                                         permitirUpload
                                         permitirExcluir
@@ -1933,7 +1933,7 @@ export default function Empresas() {
                           entidadeTipo="empresa"
                           entidadeId={selecionada?.id}
                           empresaId={selecionada?.id}
-                          tiposPermitidos={["cartao_cnpj", "contrato_social", "alteracao_contratual", "comprovante_endereco", "comprovante_faturamento", "declaracao_faturamento", "extrato_bancario", "imposto_renda", "balanco", "dre", "certidao", "procuracao", "outros"]}
+                          tiposPermitidos={["contrato_prestacao_servicos", "cartao_cnpj", "qsa", "atos_junta_comercial", "contrato_social", "alteracao_contratual", "rating_bacen_cnpj", "cenprot_cnpj", "cnd_rfb_cnpj", "cadin_cnpj", "pgfn_cnpj", "simples_nacional", "pgdas", "pgmei", "ecf", "recibo_ecf", "recibo_pgdas", "recibo_pgmei", "defis", "dasn_simei", "recibo_defis", "recibo_dasn_simei", "scr_cnpj", "ccs_cnpj", "ccf_cnpj", "consulta_serasa_cnpj", "compartilhamento_ecac", "foto_fachada", "foto_interna_1", "foto_interna_2", "foto_interna_3", "faturamento_12_meses", "comprovante_endereco", "comprovante_faturamento", "declaracao_faturamento", "extrato_bancario", "balanco", "dre", "certidao", "procuracao", "outros"]}
                           titulo="Acervo Documental"
                           permitirUpload
                           permitirExcluir

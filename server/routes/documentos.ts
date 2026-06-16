@@ -22,18 +22,25 @@ const ENTIDADES = [
   'acompanhamento_bancario', 'acompanhamento_financeiro', 'faturamento', 'contador', 'outros',
 ] as const;
 
-const STATUS = ['ativo', 'arquivado', 'substituido', 'excluido', 'pendente_validacao', 'validado', 'recusado'];
+const STATUS = ['ativo', 'arquivado', 'substituido', 'excluido', 'pendente_validacao', 'validado', 'recusado', 'desatualizado'];
 const ORIGENS = ['upload_manual', 'gerado_sistema', 'importado_api', 'sincronizacao', 'migracao'];
 
 const TIPOS_DOCUMENTO = [
-  'contrato_social', 'alteracao_contratual', 'documento_socio', 'rg', 'cpf', 'cnh',
-  'comprovante_residencia', 'comprovante_endereco', 'comprovante_faturamento', 'extrato_bancario', 'imposto_renda',
-  'balanco', 'dre', 'certidao', 'procuracao', 'contrato_assessoria', 'declaracao_faturamento',
-  'cartao_cnpj', 'nire', 'estatuto', 'contrato_gerado', 'contrato_assinado', 'outros',
+  'contrato_prestacao_servicos', 'contrato_assessoria', 'cartao_cnpj', 'qsa', 'atos_junta_comercial',
+  'contrato_social', 'alteracao_contratual', 'documento_socio', 'rg', 'cpf', 'cnh', 'comprovante_residencia',
+  'certidao_casamento', 'averbacao_divorcio', 'certidao_obito', 'imposto_renda', 'recibo_irpf',
+  'rating_bacen_cnpj', 'rating_bacen_cpf', 'cenprot_cnpj', 'cenprot_cpf', 'cnd_rfb_cnpj', 'cnd_rfb_cpf',
+  'cadin_cnpj', 'cadin_cpf', 'pgfn_cnpj', 'pgfn_cpf', 'simples_nacional', 'pgdas', 'pgmei', 'ecf',
+  'recibo_ecf', 'recibo_pgdas', 'recibo_pgmei', 'defis', 'dasn_simei', 'recibo_defis', 'recibo_dasn_simei',
+  'scr_cnpj', 'ccs_cnpj', 'ccf_cnpj', 'scr_cpf', 'ccs_cpf', 'ccf_cpf', 'consulta_serasa_cnpj', 'consulta_serasa_cpf',
+  'compartilhamento_ecac', 'foto_fachada', 'foto_interna_1', 'foto_interna_2', 'foto_interna_3',
+  'faturamento_12_meses', 'comprovante_endereco', 'comprovante_faturamento', 'declaracao_faturamento',
+  'extrato_bancario', 'balanco', 'dre', 'certidao', 'procuracao', 'nire', 'estatuto',
+  'contrato_gerado', 'contrato_assinado', 'outros',
 ];
 
-const DOCUMENTOS_PESSOAIS = new Set(['rg', 'cpf', 'cnh', 'comprovante_residencia', 'documento_socio']);
-const DOCUMENTOS_EMPRESA = new Set(['contrato_social', 'alteracao_contratual', 'cartao_cnpj', 'nire', 'estatuto']);
+const DOCUMENTOS_PESSOAIS = new Set(['rg', 'cpf', 'cnh', 'comprovante_residencia', 'documento_socio', 'imposto_renda', 'recibo_irpf', 'certidao_casamento', 'averbacao_divorcio', 'certidao_obito', 'rating_bacen_cpf', 'cenprot_cpf', 'cnd_rfb_cpf', 'cadin_cpf', 'pgfn_cpf', 'scr_cpf', 'ccs_cpf', 'ccf_cpf', 'consulta_serasa_cpf']);
+const DOCUMENTOS_EMPRESA = new Set(['contrato_prestacao_servicos', 'contrato_social', 'alteracao_contratual', 'cartao_cnpj', 'qsa', 'atos_junta_comercial', 'nire', 'estatuto', 'rating_bacen_cnpj', 'cenprot_cnpj', 'cnd_rfb_cnpj', 'cadin_cnpj', 'pgfn_cnpj', 'simples_nacional', 'pgdas', 'pgmei', 'ecf', 'defis', 'dasn_simei', 'scr_cnpj', 'ccs_cnpj', 'ccf_cnpj', 'consulta_serasa_cnpj', 'compartilhamento_ecac', 'foto_fachada', 'foto_interna_1', 'foto_interna_2', 'foto_interna_3', 'faturamento_12_meses']);
 
 const MIME_EXT: Record<string, string[]> = {
   'application/pdf': ['.pdf'],
@@ -204,6 +211,7 @@ router.get('/', auth, async (req: Request, res: Response) => {
       `SELECT id, entidade_tipo, entidade_id, empresa_id, cliente_pf_id, lead_id, socio_id, contrato_id, simulacao_id,
               tipo_documento, nome_original, nome_arquivo, url_arquivo, mime_type, tamanho_bytes, hash_arquivo,
               status, origem, obrigatorio, validado, validado_por, validado_em, observacoes, metadados,
+              data_emissao_documento, data_validade_documento, validade_dias, status_validade, exige_revisao_humana, nome_customizado, resultado_validacao,
               criado_por, criado_em, atualizado_em, excluido_em
          FROM public.documentos_arquivos
         WHERE ${where.join(' AND ')}
@@ -246,22 +254,31 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
     const origem = ORIGENS.includes(String(req.body.origem)) ? String(req.body.origem) : 'upload_manual';
     const status = STATUS.includes(String(req.body.status)) ? String(req.body.status) : 'ativo';
 
+    const dataEmissao = req.body.data_emissao_documento || null;
+    const dataValidade = req.body.data_validade_documento || null;
+    const validadeDias = req.body.validade_dias ? Number(req.body.validade_dias) : null;
+    const nomeCustomizado = String(req.body.nome_customizado || '').trim() || null;
+
     const { rows } = await pool.query(
       `INSERT INTO public.documentos_arquivos
         (entidade_tipo, entidade_id, empresa_id, cliente_pf_id, lead_id, socio_id, contrato_id, simulacao_id,
          tipo_documento, nome_original, nome_arquivo, caminho_arquivo, url_arquivo, mime_type, tamanho_bytes,
-         hash_arquivo, status, origem, obrigatorio, validado, observacoes, metadados, criado_por)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULL,$13,$14,$15,$16,$17,$18,$19,$20,$21::jsonb,$22)
+         hash_arquivo, status, origem, obrigatorio, validado, observacoes, metadados, criado_por,
+         data_emissao_documento, data_validade_documento, validade_dias, status_validade, nome_customizado)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULL,$13,$14,$15,$16,$17,$18,$19,$20,$21::jsonb,$22,$23,$24,$25,
+               CASE WHEN $23::date IS NOT NULL AND $23::date < (CURRENT_DATE - INTERVAL '30 days') AND $9 = 'cartao_cnpj' THEN 'desatualizado' ELSE 'nao_verificado' END,
+               $26)
        RETURNING id, entidade_tipo, entidade_id, empresa_id, cliente_pf_id, lead_id, socio_id, contrato_id, simulacao_id,
                  tipo_documento, nome_original, nome_arquivo, mime_type, tamanho_bytes, hash_arquivo, status, origem,
-                 obrigatorio, validado, observacoes, metadados, criado_por, criado_em, atualizado_em`,
+                 obrigatorio, validado, observacoes, metadados, criado_por, data_emissao_documento, data_validade_documento,
+                 validade_dias, status_validade, nome_customizado, criado_em, atualizado_em`,
       [
         entidadeTipo, entidadeId, (refs as any).empresa_id || req.body.empresa_id || null, (refs as any).cliente_pf_id || req.body.cliente_pf_id || null,
         (refs as any).lead_id || req.body.lead_id || null, (refs as any).socio_id || req.body.socio_id || null,
         (refs as any).contrato_id || req.body.contrato_id || null, (refs as any).simulacao_id || req.body.simulacao_id || null,
         tipoDocumento, file.originalname || safeOriginal, nomeArquivo, caminhoArquivo, file.mimetype, file.size,
         hash, status, origem, String(req.body.obrigatorio) === 'true', false, req.body.observacoes || null,
-        JSON.stringify(safeJson(req.body.metadados)), user.id,
+        JSON.stringify(safeJson(req.body.metadados)), user.id, dataEmissao, dataValidade, validadeDias, nomeCustomizado,
       ]
     );
     await auditar(rows[0].id, 'upload', null, rows[0], user.id);
@@ -291,6 +308,13 @@ router.patch('/:id', auth, async (req: Request, res: Response) => {
       values.push(String(body.status)); fields.push(`status=$${values.length}`);
     }
     if (body.observacoes !== undefined) { values.push(body.observacoes || null); fields.push(`observacoes=$${values.length}`); }
+    if (body.nome_customizado !== undefined) { values.push(String(body.nome_customizado || '').trim() || null); fields.push(`nome_customizado=$${values.length}`); }
+    if (body.data_emissao_documento !== undefined) { values.push(body.data_emissao_documento || null); fields.push(`data_emissao_documento=$${values.length}`); }
+    if (body.data_validade_documento !== undefined) { values.push(body.data_validade_documento || null); fields.push(`data_validade_documento=$${values.length}`); }
+    if (body.validade_dias !== undefined) { values.push(body.validade_dias ? Number(body.validade_dias) : null); fields.push(`validade_dias=$${values.length}`); }
+    if (body.status_validade !== undefined) { values.push(String(body.status_validade || 'nao_verificado')); fields.push(`status_validade=$${values.length}`); }
+    if (body.exige_revisao_humana !== undefined) { values.push(Boolean(body.exige_revisao_humana)); fields.push(`exige_revisao_humana=$${values.length}`); }
+    if (body.resultado_validacao !== undefined) { values.push(JSON.stringify(safeJson(body.resultado_validacao))); fields.push(`resultado_validacao=$${values.length}::jsonb`); }
     if (body.metadados !== undefined) { values.push(JSON.stringify(safeJson(body.metadados))); fields.push(`metadados=$${values.length}::jsonb`); }
     if (body.obrigatorio !== undefined) { values.push(Boolean(body.obrigatorio)); fields.push(`obrigatorio=$${values.length}`); }
     if (body.validado !== undefined) {
@@ -376,16 +400,30 @@ router.get('/pendencias/:entidadeTipo/:entidadeId', auth, async (req: Request, r
 export async function calcularPendenciasDocumentais(entidadeTipo: string, entidadeId: string) {
   if (!ENTIDADES.includes(entidadeTipo as any) || !isUuid(entidadeId)) throw new Error('Entidade inválida');
 
-  const obrigatoriosPorEntidade: Record<string, string[]> = {
-    empresa: ['contrato_social'],
-    cliente_pf: ['cpf', 'rg', 'comprovante_residencia'],
-    socio: ['cpf', 'rg', 'comprovante_residencia'],
-    contrato: ['contrato_gerado'],
-    simulacao: ['comprovante_faturamento', 'extrato_bancario'],
-  };
-  const obrigatorios = obrigatoriosPorEntidade[entidadeTipo] || [];
+  let regras: Array<{ tipo_documento: string; nome_amigavel?: string; validade_dias?: number | null; obrigatorio?: boolean }> = [];
+  if (await tableExists('documentos_regras_credito')) {
+    const result = await pool.query(
+      `SELECT tipo_documento, nome_amigavel, validade_dias, obrigatorio
+         FROM public.documentos_regras_credito
+        WHERE entidade_tipo=$1 AND ativo=true AND obrigatorio=true
+        ORDER BY ordem, nome_amigavel`,
+      [entidadeTipo]
+    );
+    regras = result.rows;
+  }
+  if (!regras.length) {
+    const obrigatoriosPorEntidade: Record<string, string[]> = {
+      empresa: ['contrato_prestacao_servicos', 'cartao_cnpj', 'qsa', 'contrato_social'],
+      cliente_pf: ['cpf', 'rg', 'comprovante_residencia'],
+      socio: ['cpf', 'rg', 'comprovante_residencia'],
+      contrato: ['contrato_gerado'],
+      simulacao: ['comprovante_faturamento', 'extrato_bancario'],
+    };
+    regras = (obrigatoriosPorEntidade[entidadeTipo] || []).map((tipo_documento) => ({ tipo_documento }));
+  }
+
   const { rows } = await pool.query(
-    `SELECT tipo_documento, status, validado
+    `SELECT tipo_documento, status, validado, data_emissao_documento, data_validade_documento, status_validade
        FROM public.documentos_arquivos
       WHERE entidade_tipo=$1 AND entidade_id=$2 AND excluido_em IS NULL AND status <> 'excluido'`,
     [entidadeTipo, entidadeId]
@@ -393,22 +431,28 @@ export async function calcularPendenciasDocumentais(entidadeTipo: string, entida
   const porTipo = new Map<string, any[]>();
   for (const row of rows) porTipo.set(row.tipo_documento, [...(porTipo.get(row.tipo_documento) || []), row]);
 
-  const documentos_obrigatorios = obrigatorios.map((tipo_documento) => {
-    const docs = porTipo.get(tipo_documento) || [];
+  const documentos_obrigatorios = regras.map((regra) => {
+    const docs = porTipo.get(regra.tipo_documento) || [];
     const melhor = docs.find((d) => d.status === 'validado' || d.validado) || docs[0];
+    const desatualizado = Boolean(melhor?.status === 'desatualizado' || melhor?.status_validade === 'desatualizado');
     return {
-      tipo_documento,
+      tipo_documento: regra.tipo_documento,
+      nome_amigavel: regra.nome_amigavel || regra.tipo_documento,
       presente: docs.length > 0,
       validado: Boolean(melhor?.validado || melhor?.status === 'validado'),
       status: melhor?.status || 'ausente',
+      status_validade: melhor?.status_validade || 'nao_verificado',
+      data_emissao_documento: melhor?.data_emissao_documento || null,
+      desatualizado,
     };
   });
 
   const pendencias: string[] = [];
   for (const doc of documentos_obrigatorios) {
-    if (!doc.presente) pendencias.push(`Falta documento obrigatório: ${doc.tipo_documento}`);
-    else if (doc.status === 'recusado') pendencias.push(`Documento recusado: ${doc.tipo_documento}`);
-    else if (doc.status === 'pendente_validacao' || !doc.validado) pendencias.push(`Documento pendente de validação: ${doc.tipo_documento}`);
+    if (!doc.presente) pendencias.push(`Falta documento obrigatório: ${doc.nome_amigavel || doc.tipo_documento}`);
+    else if (doc.status === 'recusado') pendencias.push(`Documento recusado: ${doc.nome_amigavel || doc.tipo_documento}`);
+    else if (doc.desatualizado) pendencias.push(`Documento desatualizado: ${doc.nome_amigavel || doc.tipo_documento}`);
+    else if (doc.status === 'pendente_validacao' || !doc.validado) pendencias.push(`Documento pendente de validação: ${doc.nome_amigavel || doc.tipo_documento}`);
   }
 
   return { completo: pendencias.length === 0, pendencias, documentos_obrigatorios };
