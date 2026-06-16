@@ -289,6 +289,234 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
   }
 });
 
+
+
+type DocumentoExportacao = {
+  id: string;
+  entidade_tipo: string;
+  entidade_id: string;
+  empresa_id?: string | null;
+  tipo_documento: string;
+  nome_original: string;
+  nome_customizado?: string | null;
+  caminho_arquivo: string;
+  nome_arquivo: string;
+  mime_type?: string | null;
+  tamanho_bytes?: number | null;
+  status?: string | null;
+  status_validade?: string | null;
+  data_emissao_documento?: string | null;
+  criado_em?: string | null;
+  observacoes?: string | null;
+};
+
+function uint32(n: number): number { return n >>> 0; }
+
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i += 1) {
+    let c = i;
+    for (let k = 0; k < 8; k += 1) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(buffer: Buffer): number {
+  let crc = 0xffffffff;
+  for (let i = 0; i < buffer.length; i += 1) crc = CRC_TABLE[(crc ^ buffer[i]) & 0xff] ^ (crc >>> 8);
+  return uint32(crc ^ 0xffffffff);
+}
+
+function zipDateTime(date = new Date()) {
+  const year = Math.max(1980, date.getFullYear());
+  const dosTime = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+  return { dosTime, dosDate };
+}
+
+function buildZip(files: Array<{ name: string; data: Buffer }>): Buffer {
+  const localParts: Buffer[] = [];
+  const centralParts: Buffer[] = [];
+  let offset = 0;
+  const { dosTime, dosDate } = zipDateTime();
+
+  for (const file of files) {
+    const nameBuffer = Buffer.from(file.name.replace(/^\/+/, ''), 'utf8');
+    const data = file.data;
+    const crc = crc32(data);
+
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0x0800, 6); // UTF-8
+    localHeader.writeUInt16LE(0, 8); // store, sem compressão
+    localHeader.writeUInt16LE(dosTime, 10);
+    localHeader.writeUInt16LE(dosDate, 12);
+    localHeader.writeUInt32LE(crc, 14);
+    localHeader.writeUInt32LE(data.length, 18);
+    localHeader.writeUInt32LE(data.length, 22);
+    localHeader.writeUInt16LE(nameBuffer.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+    localParts.push(localHeader, nameBuffer, data);
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(0x0800, 8);
+    centralHeader.writeUInt16LE(0, 10);
+    centralHeader.writeUInt16LE(dosTime, 12);
+    centralHeader.writeUInt16LE(dosDate, 14);
+    centralHeader.writeUInt32LE(crc, 16);
+    centralHeader.writeUInt32LE(data.length, 20);
+    centralHeader.writeUInt32LE(data.length, 24);
+    centralHeader.writeUInt16LE(nameBuffer.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt16LE(0, 34);
+    centralHeader.writeUInt16LE(0, 36);
+    centralHeader.writeUInt32LE(0, 38);
+    centralHeader.writeUInt32LE(offset, 42);
+    centralParts.push(centralHeader, nameBuffer);
+
+    offset += localHeader.length + nameBuffer.length + data.length;
+  }
+
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(centralSize, 12);
+  end.writeUInt32LE(offset, 16);
+  end.writeUInt16LE(0, 20);
+  return Buffer.concat([...localParts, ...centralParts, end]);
+}
+
+function assertDocumentFilePath(filePathRaw: string): string {
+  const filePath = path.resolve(filePathRaw);
+  const dataDir = path.resolve(process.env.DATA_DIR || '/data');
+  const localUploads = path.resolve('uploads');
+  if (!filePath.startsWith(dataDir) && !filePath.startsWith(localUploads)) throw new Error('Caminho de arquivo não permitido');
+  if (!fs.existsSync(filePath)) throw new Error('Arquivo físico não encontrado');
+  return filePath;
+}
+
+function exportFileName(doc: DocumentoExportacao, index: number): string {
+  const tipo = String(doc.nome_customizado || doc.tipo_documento || 'documento').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80) || 'documento';
+  const original = sanitizeFileName(doc.nome_original || doc.nome_arquivo || `arquivo_${index}`);
+  return `${String(index + 1).padStart(2, '0')}_${tipo}_${original}`;
+}
+
+async function coletarDocumentosExportacao(body: any): Promise<DocumentoExportacao[]> {
+  const ids = Array.isArray(body?.documento_ids) ? body.documento_ids.filter(isUuid) : [];
+  const entidadeTipo = String(body?.entidade_tipo || '');
+  const entidadeId = String(body?.entidade_id || '');
+  const incluirTodosDaEmpresa = Boolean(body?.incluir_todos_empresa);
+
+  const params: any[] = [];
+  const conds = [`excluido_em IS NULL`, `status <> 'excluido'`];
+
+  if (ids.length) {
+    params.push(ids);
+    conds.push(`id = ANY($${params.length}::uuid[])`);
+  } else {
+    if (!ENTIDADES.includes(entidadeTipo as any) || !isUuid(entidadeId)) throw new Error('Informe documento_ids ou entidade_tipo/entidade_id válidos.');
+    params.push(entidadeTipo); conds.push(`entidade_tipo=$${params.length}`);
+    params.push(entidadeId); conds.push(`entidade_id=$${params.length}`);
+  }
+
+  if (incluirTodosDaEmpresa && isUuid(body?.empresa_id)) {
+    params.push(body.empresa_id);
+    conds.push(`(empresa_id=$${params.length} OR (entidade_tipo='empresa' AND entidade_id=$${params.length}))`);
+  }
+
+  const { rows } = await pool.query(
+    `SELECT id, entidade_tipo, entidade_id, empresa_id, tipo_documento, nome_original, nome_customizado,
+            caminho_arquivo, nome_arquivo, mime_type, tamanho_bytes, status, status_validade,
+            data_emissao_documento, criado_em, observacoes
+       FROM public.documentos_arquivos
+      WHERE ${conds.join(' AND ')}
+      ORDER BY tipo_documento, criado_em DESC`,
+    params
+  );
+  return rows;
+}
+
+function montarManifestoDocumentos(docs: DocumentoExportacao[]) {
+  return docs.map((doc, index) => ({
+    ordem: index + 1,
+    id: doc.id,
+    tipo_documento: doc.tipo_documento,
+    nome_documento: doc.nome_customizado || doc.tipo_documento,
+    arquivo: doc.nome_original,
+    mime_type: doc.mime_type,
+    tamanho_bytes: doc.tamanho_bytes,
+    status: doc.status,
+    status_validade: doc.status_validade,
+    data_emissao_documento: doc.data_emissao_documento,
+    enviado_em: doc.criado_em,
+    observacoes: doc.observacoes,
+  }));
+}
+
+async function gerarZipDocumentos(docs: DocumentoExportacao[]): Promise<Buffer> {
+  if (!docs.length) throw new Error('Nenhum documento encontrado para exportar.');
+  const files: Array<{ name: string; data: Buffer }> = [];
+  const manifesto = montarManifestoDocumentos(docs);
+  files.push({ name: '00_manifesto_documentos.json', data: Buffer.from(JSON.stringify(manifesto, null, 2), 'utf8') });
+  files.push({ name: '00_manifesto_documentos.csv', data: Buffer.from('ordem;tipo_documento;nome_documento;arquivo;status;status_validade;data_emissao\n' + manifesto.map((m) => [m.ordem, m.tipo_documento, m.nome_documento, m.arquivo, m.status, m.status_validade, m.data_emissao_documento].map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\n'), 'utf8') });
+
+  for (let i = 0; i < docs.length; i += 1) {
+    const doc = docs[i];
+    const filePath = assertDocumentFilePath(doc.caminho_arquivo);
+    files.push({ name: `arquivos/${exportFileName(doc, i)}`, data: await fs.promises.readFile(filePath) });
+  }
+  return buildZip(files);
+}
+
+router.post('/exportar/zip', auth, async (req: Request, res: Response) => {
+  try {
+    const docs = await coletarDocumentosExportacao(req.body || {});
+    const zip = await gerarZipDocumentos(docs);
+    const nome = sanitizeFileName(String(req.body?.nome_arquivo || `documentos_destrava_${new Date().toISOString().slice(0, 10)}.zip`));
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${nome.endsWith('.zip') ? nome : `${nome}.zip`}"`);
+    res.send(zip);
+  } catch (err: any) {
+    console.error('[POST /api/documentos/exportar/zip]', err);
+    res.status(400).json({ error: err.message || 'Erro ao exportar documentos' });
+  }
+});
+
+router.post('/exportar/manifesto', auth, async (req: Request, res: Response) => {
+  try {
+    const docs = await coletarDocumentosExportacao(req.body || {});
+    res.json({ total: docs.length, documentos: montarManifestoDocumentos(docs) });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Erro ao gerar manifesto' });
+  }
+});
+
+router.post('/exportar/email', auth, async (req: Request, res: Response) => {
+  try {
+    const email = String(req.body?.email || '').trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { res.status(400).json({ error: 'E-mail de destino inválido.' }); return; }
+    const docs = await coletarDocumentosExportacao(req.body || {});
+    await gerarZipDocumentos(docs); // valida arquivos agora, mesmo quando SMTP ainda não está configurado
+    res.status(501).json({
+      error: 'Envio automático por e-mail ainda exige configuração SMTP no servidor.',
+      detalhe: 'O pacote de documentos foi validado. Configure SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS e EMAIL_FROM para ativar envio com anexo ZIP.',
+      total_documentos: docs.length,
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Erro ao preparar envio por e-mail' });
+  }
+});
+
 router.patch('/:id', auth, async (req: Request, res: Response) => {
   try {
     if (!isUuid(req.params.id)) { res.status(400).json({ error: 'ID inválido' }); return; }
