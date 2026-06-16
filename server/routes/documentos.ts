@@ -382,7 +382,7 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
     } else if (tipoDocumento === 'cartao_cnpj') {
       statusValidade = 'pendente';
       exigeRevisaoHumana = true;
-      resultadoValidacao.mensagem = 'Data de emissão do Cartão CNPJ não informada. A IA deverá extrair e validar antes do relatório.';
+      resultadoValidacao.mensagem = 'Aguardando extração automática por IA/OCR da data de emissão do Cartão CNPJ antes do relatório.';
     }
 
     const { rows } = await pool.query(
