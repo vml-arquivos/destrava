@@ -93,6 +93,68 @@ function sanitizeFileName(original: string): string {
 }
 
 
+const EXPORT_FOLDER_LABELS: Record<string, string> = {
+  contrato_prestacao_servicos: '01_Contrato_de_prestacao_de_servicos',
+  contrato_assessoria: '01_Contrato_de_prestacao_de_servicos',
+  cartao_cnpj: '02_CNPJ_Cartao_CNPJ',
+  qsa: '03_QSA',
+  atos_junta_comercial: '04_Atos_da_Junta_Comercial',
+  contrato_social: '05_Contrato_social_e_alteracoes',
+  alteracao_contratual: '05_Contrato_social_e_alteracoes',
+  documento_socio: '06A_Documento_de_identificacao_do_socio',
+  rg: '06A_Documento_de_identificacao_do_socio',
+  cnh: '06A_Documento_de_identificacao_do_socio',
+  cpf: '06A_Documento_de_identificacao_do_socio',
+  comprovante_residencia: '06B_Comprovante_de_endereco_do_socio',
+  irpf: '06C_IRPF_do_socio',
+  imposto_renda: '06C_IRPF_do_socio',
+  recibo_irpf: '06D_Recibo_IRPF',
+  certidao_casamento: '06E_Estado_civil_conjuge_averbacoes',
+  averbacao_divorcio: '06E_Estado_civil_conjuge_averbacoes',
+  certidao_obito: '06E_Estado_civil_conjuge_averbacoes',
+  rating_bacen_cnpj: '07_Rating_BACEN_CNPJ',
+  rating_bacen_cpf: '08_Rating_BACEN_CPF',
+  cenprot_cnpj: '09_CENPROT_CNPJ',
+  cenprot_cpf: '10_CENPROT_CPF',
+  cnd_rfb_cnpj: '11_CND_RFB_CNPJ',
+  cnd_rfb_cpf: '12_CND_RFB_CPF',
+  cadin_cnpj: '12A_CADIN_CNPJ',
+  cadin_cpf: '12A_CADIN_CPF',
+  pgfn_cnpj: '12B_PGFN_CNPJ',
+  pgfn_cpf: '12B_PGFN_CPF',
+  simples_nacional: '13_Simples_Nacional',
+  pgdas: '14_PGDAS_ECF_PGMEI',
+  pgmei: '14_PGDAS_ECF_PGMEI',
+  ecf: '14_PGDAS_ECF_PGMEI',
+  recibo_pgdas: '15_Recibo_ECF_PGDAS_PGMEI',
+  recibo_pgmei: '15_Recibo_ECF_PGDAS_PGMEI',
+  recibo_ecf: '15_Recibo_ECF_PGDAS_PGMEI',
+  defis: '16_DEFIS_DASN_SIMEI',
+  dasn_simei: '16_DEFIS_DASN_SIMEI',
+  recibo_defis: '17_Recibo_DEFIS_DASN_SIMEI_ECF',
+  recibo_dasn_simei: '17_Recibo_DEFIS_DASN_SIMEI_ECF',
+  scr_cnpj: '18_SCR_CNPJ',
+  ccs_cnpj: '19_CCS_CNPJ',
+  ccf_cnpj: '20_CCF_CNPJ',
+  scr_cpf: '21_SCR_CPF',
+  ccs_cpf: '22_CCS_CPF',
+  ccf_cpf: '23_CCF_CPF',
+  compartilhamento_ecac: '24_Compartilhamento_eCAC',
+  foto_fachada: '25_Fotos_da_empresa',
+  foto_interna_1: '25_Fotos_da_empresa',
+  foto_interna_2: '25_Fotos_da_empresa',
+  foto_interna_3: '25_Fotos_da_empresa',
+  faturamento_12_meses: '26_Faturamento_12_meses',
+  comprovante_faturamento: '26_Faturamento_12_meses',
+  declaracao_faturamento: '26_Faturamento_12_meses',
+  outros: '99_Outros_documentos',
+};
+
+function exportFolderForTipo(tipoDocumento: string): string {
+  return EXPORT_FOLDER_LABELS[tipoDocumento] || tipoDocumento || 'documento';
+}
+
+
 function escapeZipName(name: string): Buffer {
   return Buffer.from(name.replace(/\\/g, '/').replace(/^\/+/, ''), 'utf8');
 }
@@ -540,7 +602,7 @@ router.post('/exportar', auth, async (req: Request, res: Response) => {
         continue;
       }
       const baseName = sanitizeFileName(doc.nome_customizado || doc.nome_original || doc.nome_arquivo || `${doc.id}.bin`);
-      const folder = sanitizeFileName(doc.tipo_documento || 'documento');
+      const folder = sanitizeFileName(exportFolderForTipo(doc.tipo_documento || 'documento'));
       const key = `${folder}/${baseName}`;
       const count = usedNames.get(key) || 0;
       usedNames.set(key, count + 1);
