@@ -13,6 +13,7 @@ import {
   Search,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 
 type DocumentoArquivo = {
@@ -167,6 +168,11 @@ function canPrint(doc: DocumentoArquivo) {
   return Boolean(doc.mime_type?.includes("pdf") || doc.mime_type?.startsWith("image/"));
 }
 
+function csvEscape(value: unknown) {
+  const text = String(value ?? "").replace(/\r?\n/g, " ");
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
 export default function DocumentosEntidade({
   entidadeTipo,
   entidadeId,
@@ -186,11 +192,12 @@ export default function DocumentosEntidade({
   const [uploadingTipo, setUploadingTipo] = useState<string | null>(null);
   const [observacoesPorTipo, setObservacoesPorTipo] = useState<Record<string, string>>({});
   const [nomeCustomizadoPorTipo, setNomeCustomizadoPorTipo] = useState<Record<string, string>>({});
-  const [dataEmissaoPorTipo, setDataEmissaoPorTipo] = useState<Record<string, string>>({});
   const [selecionados, setSelecionados] = useState<Record<string, boolean>>({});
   const [busca, setBusca] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState("todos");
   const [exportando, setExportando] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<DocumentoArquivo | null>(null);
 
   const query = useMemo(() => {
     if (!entidadeId) return "";
@@ -217,6 +224,8 @@ export default function DocumentosEntidade({
   }, [entidadeId, query]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
   const tiposDaTela = useMemo(() => {
     const set = new Set<string>(tiposPermitidos || []);
@@ -250,10 +259,8 @@ export default function DocumentosEntidade({
     if (simulacaoId) fd.append("simulacao_id", simulacaoId);
     const obs = observacoesPorTipo[tipoDocumento]?.trim();
     const nomeCustomizado = nomeCustomizadoPorTipo[tipoDocumento]?.trim();
-    const dataEmissao = dataEmissaoPorTipo[tipoDocumento];
     if (obs) fd.append("observacoes", obs);
     if (nomeCustomizado) fd.append("nome_customizado", nomeCustomizado);
-    if (dataEmissao) fd.append("data_emissao_documento", dataEmissao);
 
     setUploadingTipo(tipoDocumento);
     try {
@@ -272,9 +279,10 @@ export default function DocumentosEntidade({
   async function visualizar(doc: DocumentoArquivo) {
     try {
       const { blob } = await apiFetchBlob(`/api/documentos/${doc.id}/view`);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
       const url = URL.createObjectURL(blob);
-      window.open(url, "_blank", "noopener,noreferrer");
-      setTimeout(() => URL.revokeObjectURL(url), 120000);
+      setPreviewUrl(url);
+      setPreviewDoc(doc);
     } catch (err: any) {
       toast.error(err?.message || "Erro ao abrir documento.");
     }
@@ -324,6 +332,25 @@ export default function DocumentosEntidade({
     }
   }
 
+  function exportarRelacao(lista: DocumentoArquivo[]) {
+    if (!lista.length) { toast.error("Não há documentos para exportar na relação."); return; }
+    const header = ["tipo", "nome", "arquivo_original", "status", "validade", "tamanho", "observacoes", "enviado_em"];
+    const lines = [header.map(csvEscape).join(";")];
+    lista.forEach((doc) => {
+      lines.push([
+        labelTipoDocumento(doc.tipo_documento),
+        doc.nome_customizado || doc.nome_original,
+        doc.nome_original,
+        doc.status,
+        doc.status_validade || "",
+        formatBytes(doc.tamanho_bytes),
+        doc.observacoes || "",
+        formatDate(doc.criado_em),
+      ].map(csvEscape).join(";"));
+    });
+    saveBlob(new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" }), `relacao-documentos-destrava-${new Date().toISOString().slice(0, 10)}.csv`);
+  }
+
   async function excluir(id: string) {
     if (!confirm("Excluir logicamente este documento? O arquivo físico será preservado.")) return;
     try {
@@ -355,98 +382,34 @@ export default function DocumentosEntidade({
       <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Paperclip className="w-4 h-4" /> {titulo}</h3>
-          <p className="text-xs text-slate-400 mt-0.5">Cada documento fica anexado no seu próprio local, com identificação, visualização, impressão, download e exportação.</p>
+          <p className="text-xs text-slate-400 mt-0.5">Arquivos anexados por tipo, com visualização segura, impressão, download e exportação.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => exportar(docs.map((doc) => doc.id), "acervo-documental-destrava.zip")}
-          disabled={exportando || docs.length === 0}
-          className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-        >
-          {exportando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileArchive className="w-3.5 h-3.5" />} Exportar todos
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => exportarRelacao(docs)} disabled={docs.length === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+            <FileText className="w-3.5 h-3.5" /> Exportar relação
+          </button>
+          <button type="button" onClick={() => exportar(docs.map((doc) => doc.id), "acervo-documental-destrava.zip")} disabled={exportando || docs.length === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+            {exportando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileArchive className="w-3.5 h-3.5" />} Exportar todos
+          </button>
+        </div>
       </div>
-
-      {permitirUpload && (
-        <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <p className="text-xs font-bold text-slate-700">Anexar arquivo no local correto</p>
-              <p className="text-[11px] text-slate-400">Escolha o documento pelo nome abaixo. O arquivo aparecerá dentro do mesmo grupo após o envio.</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-            {tiposDaTela.map((tipo) => {
-              const docsTipo = docs.filter((doc) => doc.tipo_documento === tipo);
-              const uploading = uploadingTipo === tipo;
-              const exigeNome = tipo === "outros" || tipo === "compartilhamento_ecac";
-              const exigeData = tipo === "cartao_cnpj";
-              return (
-                <div key={tipo} className="rounded-xl border border-slate-100 bg-slate-50 p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-700 truncate">{labelTipoDocumento(tipo)}</p>
-                      <p className="text-[11px] text-slate-400">{docsTipo.length} arquivo(s) anexado(s)</p>
-                    </div>
-                    <label className="h-8 inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold bg-blue-600 text-white px-2.5 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors disabled:opacity-60">
-                      {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} Anexar
-                      <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file); e.currentTarget.value = ""; }} />
-                    </label>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {exigeNome && (
-                      <input
-                        value={nomeCustomizadoPorTipo[tipo] || ""}
-                        onChange={(e) => setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))}
-                        placeholder={tipo === "compartilhamento_ecac" ? "Banco/destinatário eCAC" : "Nome do documento"}
-                        className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700"
-                      />
-                    )}
-                    {exigeData && (
-                      <input
-                        type="date"
-                        value={dataEmissaoPorTipo[tipo] || ""}
-                        onChange={(e) => setDataEmissaoPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))}
-                        className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700"
-                        title="Data de emissão do Cartão CNPJ"
-                      />
-                    )}
-                    <input
-                      value={observacoesPorTipo[tipo] || ""}
-                      onChange={(e) => setObservacoesPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))}
-                      placeholder="Observação opcional"
-                      className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700"
-                    />
-                  </div>
-                  {exigeData && <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1">Cartão CNPJ com emissão acima de 30 dias será marcado como vencido ou recusado.</p>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
           <div>
             <p className="text-xs font-bold text-slate-700">Documentação anexada</p>
-            <p className="text-[11px] text-slate-400">Visualize, imprima, baixe ou selecione documentos para exportar.</p>
+            <p className="text-[11px] text-slate-400">Aqui aparecem todos os arquivos já enviados. Visualize todos ou escolha o que deseja exportar.</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2.5" />
-              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar documento" className="h-9 rounded-lg border border-slate-200 bg-white pl-7 pr-3 text-xs text-slate-700" />
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar documento..." className="h-9 w-full sm:w-56 rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-700" />
             </div>
             <select value={tipoFiltro} onChange={(e) => setTipoFiltro(e.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700">
               <option value="todos">Todos os tipos</option>
               {tiposDaTela.map((t) => <option key={t} value={t}>{labelTipoDocumento(t)}</option>)}
             </select>
-            <button
-              type="button"
-              onClick={() => exportar(selecionadosIds, "documentos-selecionados-destrava.zip")}
-              disabled={exportando || selecionadosIds.length === 0}
-              className="h-9 inline-flex items-center justify-center gap-1.5 px-3 rounded-lg bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 disabled:opacity-50"
-            >
+            <button type="button" onClick={() => exportar(selecionadosIds, "documentos-selecionados-destrava.zip")} disabled={exportando || selecionadosIds.length === 0} className="h-9 inline-flex items-center justify-center gap-1.5 px-3 rounded-lg bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 disabled:opacity-50">
               {exportando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileArchive className="w-3.5 h-3.5" />} Exportar selecionados ({selecionadosIds.length})
             </button>
           </div>
@@ -455,7 +418,7 @@ export default function DocumentosEntidade({
         {loading ? (
           <div className="flex items-center justify-center py-10 text-sm text-slate-500"><Loader2 className="w-4 h-4 animate-spin mr-2" /> Carregando documentos...</div>
         ) : docs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 gap-3 rounded-xl border-2 border-dashed border-slate-200">
+          <div className="flex flex-col items-center justify-center py-10 gap-3 rounded-xl border-2 border-dashed border-slate-200">
             <FileText className="w-10 h-10 text-slate-200" />
             <p className="text-sm text-slate-500">Nenhum documento anexado a esta entidade.</p>
           </div>
@@ -463,20 +426,19 @@ export default function DocumentosEntidade({
           <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-500">Nenhum documento encontrado para o filtro aplicado.</div>
         ) : (
           <div className="space-y-3">
-            <div className="flex items-center gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  const todosMarcados = docsFiltrados.every((doc) => selecionados[doc.id]);
-                  setSelecionados((prev) => {
-                    const copy = { ...prev };
-                    docsFiltrados.forEach((doc) => { copy[doc.id] = !todosMarcados; });
-                    return copy;
-                  });
-                }}
-                className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-600 hover:bg-slate-50"
-              >
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <button type="button" onClick={() => {
+                const todosMarcados = docsFiltrados.every((doc) => selecionados[doc.id]);
+                setSelecionados((prev) => {
+                  const copy = { ...prev };
+                  docsFiltrados.forEach((doc) => { copy[doc.id] = !todosMarcados; });
+                  return copy;
+                });
+              }} className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-600 hover:bg-slate-50">
                 {docsFiltrados.every((doc) => selecionados[doc.id]) ? "Desmarcar visíveis" : "Selecionar visíveis"}
+              </button>
+              <button type="button" onClick={() => exportarRelacao(docsFiltrados)} className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-600 hover:bg-slate-50">
+                Exportar relação visível
               </button>
               <span className="text-slate-400">{docsFiltrados.length} visível(is), {selecionadosIds.length} selecionado(s)</span>
             </div>
@@ -493,13 +455,7 @@ export default function DocumentosEntidade({
                   <div className="divide-y divide-slate-100">
                     {docsTipo.map((doc) => (
                       <div key={doc.id} className="flex flex-col lg:flex-row lg:items-center gap-3 p-3 bg-white hover:bg-slate-50 transition-colors">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(selecionados[doc.id])}
-                          onChange={(e) => setSelecionados((prev) => ({ ...prev, [doc.id]: e.target.checked }))}
-                          className="w-4 h-4 rounded border-slate-300"
-                          aria-label={`Selecionar ${doc.nome_original}`}
-                        />
+                        <input type="checkbox" checked={Boolean(selecionados[doc.id])} onChange={(e) => setSelecionados((prev) => ({ ...prev, [doc.id]: e.target.checked }))} className="w-4 h-4 rounded border-slate-300" aria-label={`Selecionar ${doc.nome_original}`} />
                         <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0"><FileText className="w-4 h-4 text-blue-500" /></div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-slate-800 truncate">{doc.nome_customizado || doc.nome_original}</p>
@@ -511,6 +467,7 @@ export default function DocumentosEntidade({
                             {doc.origem && <><span>•</span><span>{doc.origem.replace(/_/g, " ")}</span></>}
                           </div>
                           {doc.observacoes && <p className="text-xs text-slate-500 mt-1">{doc.observacoes}</p>}
+                          {doc.tipo_documento === "cartao_cnpj" && !doc.data_emissao_documento && <p className="text-[11px] text-amber-700 mt-1">A data de emissão será extraída automaticamente pela análise IA/OCR do Cartão CNPJ.</p>}
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`text-[11px] font-semibold px-2 py-1 rounded-full border ${statusCls[doc.status] || "bg-slate-50 text-slate-600 border-slate-100"}`}>{doc.status.replace(/_/g, " ")}</span>
@@ -533,6 +490,66 @@ export default function DocumentosEntidade({
           </div>
         )}
       </div>
+
+      {permitirUpload && (
+        <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
+          <div>
+            <p className="text-xs font-bold text-slate-700">Anexar novo arquivo no local correto</p>
+            <p className="text-[11px] text-slate-400">Escolha o tipo do documento. O sistema não pede data manual do Cartão CNPJ; a emissão será identificada pela IA/OCR.</p>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+            {tiposDaTela.map((tipo) => {
+              const docsTipo = docs.filter((doc) => doc.tipo_documento === tipo);
+              const uploading = uploadingTipo === tipo;
+              const exigeNome = tipo === "outros" || tipo === "compartilhamento_ecac";
+              return (
+                <div key={tipo} className="rounded-xl border border-slate-100 bg-slate-50 p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-700 truncate">{labelTipoDocumento(tipo)}</p>
+                      <p className="text-[11px] text-slate-400">{docsTipo.length} arquivo(s) anexado(s)</p>
+                    </div>
+                    <label className="h-8 inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold bg-blue-600 text-white px-2.5 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors">
+                      {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} Anexar
+                      <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file); e.currentTarget.value = ""; }} />
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {exigeNome && <input value={nomeCustomizadoPorTipo[tipo] || ""} onChange={(e) => setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder={tipo === "compartilhamento_ecac" ? "Banco/destinatário eCAC" : "Nome do documento"} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700" />}
+                    <input value={observacoesPorTipo[tipo] || ""} onChange={(e) => setObservacoesPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder="Observação opcional" className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700" />
+                  </div>
+                  {tipo === "cartao_cnpj" && <p className="text-[11px] text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-2 py-1">Após anexar, a IA/OCR deverá extrair CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço, situação e data de emissão para validar os 30 dias.</p>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {previewUrl && previewDoc && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 p-4 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
+            <div className="h-14 px-4 border-b border-slate-200 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-slate-800 truncate">{previewDoc.nome_customizado || previewDoc.nome_original}</p>
+                <p className="text-[11px] text-slate-400">{labelTipoDocumento(previewDoc.tipo_documento)}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => imprimir(previewDoc)} className="h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50"><Printer className="w-3.5 h-3.5 inline mr-1" /> Imprimir</button>
+                <button onClick={() => baixar(previewDoc)} className="h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50"><Download className="w-3.5 h-3.5 inline mr-1" /> Baixar</button>
+                <button onClick={() => { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); setPreviewDoc(null); }} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><X className="w-5 h-5" /></button>
+              </div>
+            </div>
+            {previewDoc.mime_type?.startsWith("image/") ? (
+              <div className="flex-1 bg-slate-100 overflow-auto flex items-center justify-center p-4"><img src={previewUrl} alt={previewDoc.nome_original} className="max-w-full max-h-full object-contain" /></div>
+            ) : previewDoc.mime_type?.includes("pdf") ? (
+              <iframe title="Visualização do documento" src={previewUrl} className="flex-1 w-full bg-slate-100" />
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm text-slate-500"><FileText className="w-12 h-12 text-slate-300" /><p>Pré-visualização indisponível para este tipo de arquivo. Use Baixar.</p></div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
