@@ -1781,7 +1781,7 @@ export default function Empresas() {
                                         entidadeId={s.id}
                                         empresaId={selecionada?.id}
                                         socioId={s.id}
-                                        tiposPermitidos={["documento_socio", "cpf", "rg", "cnh", "comprovante_residencia", "imposto_renda", "recibo_irpf", "certidao_casamento", "averbacao_divorcio", "certidao_obito", "rating_bacen_cpf", "cenprot_cpf", "cnd_rfb_cpf", "cadin_cpf", "pgfn_cpf", "scr_cpf", "ccs_cpf", "ccf_cpf", "consulta_serasa_cpf", "procuracao", "outros"]}
+                                        tiposPermitidos={["documento_socio", "cpf", "rg", "cnh", "comprovante_residencia", "irpf", "recibo_irpf", "certidao_casamento", "averbacao_divorcio", "certidao_obito", "rating_bacen_cpf", "cenprot_cpf", "cnd_rfb_cpf", "cadin_cpf", "pgfn_cpf", "scr_cpf", "ccs_cpf", "ccf_cpf", "consulta_serasa_cpf", "procuracao", "outros"]}
                                         titulo={`Documentos do sócio: ${s.nome || "Sócio"}`}
                                         permitirUpload
                                         permitirExcluir

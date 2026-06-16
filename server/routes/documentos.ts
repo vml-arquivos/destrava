@@ -22,25 +22,38 @@ const ENTIDADES = [
   'acompanhamento_bancario', 'acompanhamento_financeiro', 'faturamento', 'contador', 'outros',
 ] as const;
 
-const STATUS = ['ativo', 'arquivado', 'substituido', 'excluido', 'pendente_validacao', 'validado', 'recusado', 'desatualizado'];
+const STATUS = ['ativo', 'arquivado', 'substituido', 'excluido', 'pendente_validacao', 'validado', 'recusado'];
 const ORIGENS = ['upload_manual', 'gerado_sistema', 'importado_api', 'sincronizacao', 'migracao'];
 
 const TIPOS_DOCUMENTO = [
-  'contrato_prestacao_servicos', 'contrato_assessoria', 'cartao_cnpj', 'qsa', 'atos_junta_comercial',
-  'contrato_social', 'alteracao_contratual', 'documento_socio', 'rg', 'cpf', 'cnh', 'comprovante_residencia',
-  'certidao_casamento', 'averbacao_divorcio', 'certidao_obito', 'imposto_renda', 'recibo_irpf',
-  'rating_bacen_cnpj', 'rating_bacen_cpf', 'cenprot_cnpj', 'cenprot_cpf', 'cnd_rfb_cnpj', 'cnd_rfb_cpf',
-  'cadin_cnpj', 'cadin_cpf', 'pgfn_cnpj', 'pgfn_cpf', 'simples_nacional', 'pgdas', 'pgmei', 'ecf',
-  'recibo_ecf', 'recibo_pgdas', 'recibo_pgmei', 'defis', 'dasn_simei', 'recibo_defis', 'recibo_dasn_simei',
-  'scr_cnpj', 'ccs_cnpj', 'ccf_cnpj', 'scr_cpf', 'ccs_cpf', 'ccf_cpf', 'consulta_serasa_cnpj', 'consulta_serasa_cpf',
-  'compartilhamento_ecac', 'foto_fachada', 'foto_interna_1', 'foto_interna_2', 'foto_interna_3',
-  'faturamento_12_meses', 'comprovante_endereco', 'comprovante_faturamento', 'declaracao_faturamento',
-  'extrato_bancario', 'balanco', 'dre', 'certidao', 'procuracao', 'nire', 'estatuto',
-  'contrato_gerado', 'contrato_assinado', 'outros',
+  'contrato_prestacao_servicos', 'contrato_assessoria',
+  'cartao_cnpj', 'qsa', 'atos_junta_comercial', 'contrato_social', 'alteracao_contratual',
+  'documento_socio', 'rg', 'cpf', 'cnh', 'comprovante_residencia', 'comprovante_endereco',
+  'imposto_renda', 'irpf', 'recibo_irpf', 'certidao_casamento', 'averbacao_divorcio', 'certidao_obito',
+  'rating_bacen_cnpj', 'rating_bacen_cpf', 'cenprot_cnpj', 'cenprot_cpf',
+  'cnd_rfb_cnpj', 'cnd_rfb_cpf', 'cadin_cnpj', 'cadin_cpf', 'pgfn_cnpj', 'pgfn_cpf',
+  'simples_nacional', 'pgdas', 'pgmei', 'ecf', 'recibo_ecf', 'recibo_pgdas', 'recibo_pgmei',
+  'defis', 'dasn_simei', 'recibo_defis', 'recibo_dasn_simei',
+  'scr_cnpj', 'ccs_cnpj', 'ccf_cnpj', 'scr_cpf', 'ccs_cpf', 'ccf_cpf',
+  'consulta_serasa_cnpj', 'consulta_serasa_cpf', 'compartilhamento_ecac',
+  'foto_fachada', 'foto_interna_1', 'foto_interna_2', 'foto_interna_3',
+  'faturamento_12_meses', 'comprovante_faturamento', 'declaracao_faturamento', 'extrato_bancario',
+  'balanco', 'dre', 'certidao', 'procuracao', 'nire', 'estatuto', 'contrato_gerado', 'contrato_assinado', 'outros',
 ];
 
-const DOCUMENTOS_PESSOAIS = new Set(['rg', 'cpf', 'cnh', 'comprovante_residencia', 'documento_socio', 'imposto_renda', 'recibo_irpf', 'certidao_casamento', 'averbacao_divorcio', 'certidao_obito', 'rating_bacen_cpf', 'cenprot_cpf', 'cnd_rfb_cpf', 'cadin_cpf', 'pgfn_cpf', 'scr_cpf', 'ccs_cpf', 'ccf_cpf', 'consulta_serasa_cpf']);
-const DOCUMENTOS_EMPRESA = new Set(['contrato_prestacao_servicos', 'contrato_social', 'alteracao_contratual', 'cartao_cnpj', 'qsa', 'atos_junta_comercial', 'nire', 'estatuto', 'rating_bacen_cnpj', 'cenprot_cnpj', 'cnd_rfb_cnpj', 'cadin_cnpj', 'pgfn_cnpj', 'simples_nacional', 'pgdas', 'pgmei', 'ecf', 'defis', 'dasn_simei', 'scr_cnpj', 'ccs_cnpj', 'ccf_cnpj', 'consulta_serasa_cnpj', 'compartilhamento_ecac', 'foto_fachada', 'foto_interna_1', 'foto_interna_2', 'foto_interna_3', 'faturamento_12_meses']);
+const DOCUMENTOS_PESSOAIS = new Set([
+  'documento_socio', 'rg', 'cpf', 'cnh', 'comprovante_residencia', 'imposto_renda', 'irpf', 'recibo_irpf',
+  'certidao_casamento', 'averbacao_divorcio', 'certidao_obito', 'rating_bacen_cpf', 'cenprot_cpf',
+  'cnd_rfb_cpf', 'cadin_cpf', 'pgfn_cpf', 'scr_cpf', 'ccs_cpf', 'ccf_cpf', 'consulta_serasa_cpf',
+]);
+const DOCUMENTOS_EMPRESA = new Set([
+  'contrato_prestacao_servicos', 'contrato_assessoria', 'cartao_cnpj', 'qsa', 'atos_junta_comercial',
+  'contrato_social', 'alteracao_contratual', 'comprovante_endereco', 'rating_bacen_cnpj', 'cenprot_cnpj',
+  'cnd_rfb_cnpj', 'cadin_cnpj', 'pgfn_cnpj', 'simples_nacional', 'pgdas', 'pgmei', 'ecf',
+  'recibo_ecf', 'recibo_pgdas', 'recibo_pgmei', 'defis', 'dasn_simei', 'recibo_defis', 'recibo_dasn_simei',
+  'scr_cnpj', 'ccs_cnpj', 'ccf_cnpj', 'consulta_serasa_cnpj', 'compartilhamento_ecac', 'foto_fachada',
+  'foto_interna_1', 'foto_interna_2', 'foto_interna_3', 'faturamento_12_meses', 'nire', 'estatuto',
+]);
 
 const MIME_EXT: Record<string, string[]> = {
   'application/pdf': ['.pdf'],
@@ -77,6 +90,95 @@ function sanitizeFileName(original: string): string {
   const base = path.basename(original || 'arquivo');
   const normalized = base.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   return normalized.replace(/[^a-zA-Z0-9_.-]+/g, '_').replace(/^\.+/, '').slice(0, 140) || 'arquivo';
+}
+
+
+function escapeZipName(name: string): Buffer {
+  return Buffer.from(name.replace(/\\/g, '/').replace(/^\/+/, ''), 'utf8');
+}
+
+const crcTable = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(buffer: Buffer): number {
+  let crc = 0xffffffff;
+  for (let i = 0; i < buffer.length; i++) crc = crcTable[(crc ^ buffer[i]) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function dosDateTime(date = new Date()): { time: number; date: number } {
+  const year = Math.max(1980, date.getFullYear());
+  const time = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+  return { time, date: dosDate };
+}
+
+function createZip(files: Array<{ name: string; data: Buffer; mtime?: Date }>): Buffer {
+  const localParts: Buffer[] = [];
+  const centralParts: Buffer[] = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const name = escapeZipName(file.name);
+    const data = file.data;
+    const crc = crc32(data);
+    const dt = dosDateTime(file.mtime || new Date());
+
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0x0800, 6);
+    local.writeUInt16LE(0, 8);
+    local.writeUInt16LE(dt.time, 10);
+    local.writeUInt16LE(dt.date, 12);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    local.writeUInt16LE(0, 28);
+    localParts.push(local, name, data);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0x0800, 8);
+    central.writeUInt16LE(0, 10);
+    central.writeUInt16LE(dt.time, 12);
+    central.writeUInt16LE(dt.date, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(name.length, 28);
+    central.writeUInt16LE(0, 30);
+    central.writeUInt16LE(0, 32);
+    central.writeUInt16LE(0, 34);
+    central.writeUInt16LE(0, 36);
+    central.writeUInt32LE(0, 38);
+    central.writeUInt32LE(offset, 42);
+    centralParts.push(central, name);
+    offset += local.length + name.length + data.length;
+  }
+
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(centralSize, 12);
+  end.writeUInt32LE(offset, 16);
+  end.writeUInt16LE(0, 20);
+
+  return Buffer.concat([...localParts, ...centralParts, end]);
 }
 
 function getMaxSize(tipoDocumento: string, mime: string): number {
@@ -128,9 +230,6 @@ function assertAllowedRelation(entidadeTipo: string, tipoDocumento: string, body
   }
   if (entidadeTipo === 'cliente_pf' && DOCUMENTOS_EMPRESA.has(tipoDocumento)) {
     throw new Error('Documento empresarial não pode ser vinculado a cliente PF.');
-  }
-  if (entidadeTipo === 'empresa' && tipoDocumento === 'contrato_assessoria') {
-    throw new Error('Contrato de assessoria deve ser vinculado à entidade contrato.');
   }
   if (!tipoDocumento) throw new Error('tipo_documento é obrigatório.');
 }
@@ -211,7 +310,8 @@ router.get('/', auth, async (req: Request, res: Response) => {
       `SELECT id, entidade_tipo, entidade_id, empresa_id, cliente_pf_id, lead_id, socio_id, contrato_id, simulacao_id,
               tipo_documento, nome_original, nome_arquivo, url_arquivo, mime_type, tamanho_bytes, hash_arquivo,
               status, origem, obrigatorio, validado, validado_por, validado_em, observacoes, metadados,
-              data_emissao_documento, data_validade_documento, validade_dias, status_validade, exige_revisao_humana, nome_customizado, resultado_validacao,
+              data_emissao_documento, data_validade_documento, validade_dias, status_validade, exige_revisao_humana,
+              nome_customizado, resultado_validacao, ultima_extracao_ia_id, ultima_indexacao_rag_id,
               criado_por, criado_em, atualizado_em, excluido_em
          FROM public.documentos_arquivos
         WHERE ${where.join(' AND ')}
@@ -252,33 +352,60 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
     await fs.promises.writeFile(caminhoArquivo, file.buffer, { flag: 'wx' });
 
     const origem = ORIGENS.includes(String(req.body.origem)) ? String(req.body.origem) : 'upload_manual';
-    const status = STATUS.includes(String(req.body.status)) ? String(req.body.status) : 'ativo';
-
-    const dataEmissao = req.body.data_emissao_documento || null;
-    const dataValidade = req.body.data_validade_documento || null;
-    const validadeDias = req.body.validade_dias ? Number(req.body.validade_dias) : null;
+    let status = STATUS.includes(String(req.body.status)) ? String(req.body.status) : 'ativo';
     const nomeCustomizado = String(req.body.nome_customizado || '').trim() || null;
+    const dataEmissaoDocumento = String(req.body.data_emissao_documento || '').trim() || null;
+    let statusValidade = 'nao_verificado';
+    let dataValidadeDocumento: string | null = null;
+    let exigeRevisaoHumana = false;
+    const resultadoValidacao: Record<string, unknown> = {};
+
+    if (dataEmissaoDocumento) {
+      const emissao = new Date(`${dataEmissaoDocumento}T00:00:00`);
+      if (!Number.isNaN(emissao.getTime())) {
+        const dias = Math.floor((Date.now() - emissao.getTime()) / (1000 * 60 * 60 * 24));
+        resultadoValidacao.dias_desde_emissao = dias;
+        if (tipoDocumento === 'cartao_cnpj') {
+          const validade = new Date(emissao);
+          validade.setDate(validade.getDate() + 30);
+          dataValidadeDocumento = validade.toISOString().slice(0, 10);
+          statusValidade = dias > 30 ? 'vencido' : 'valido';
+          if (dias > 30) {
+            status = 'recusado';
+            exigeRevisaoHumana = true;
+            resultadoValidacao.mensagem = 'Cartão CNPJ emitido há mais de 30 dias. Envie documento atualizado.';
+          }
+        } else {
+          statusValidade = 'pendente';
+        }
+      }
+    } else if (tipoDocumento === 'cartao_cnpj') {
+      statusValidade = 'pendente';
+      exigeRevisaoHumana = true;
+      resultadoValidacao.mensagem = 'Data de emissão do Cartão CNPJ não informada. A IA deverá extrair e validar antes do relatório.';
+    }
 
     const { rows } = await pool.query(
       `INSERT INTO public.documentos_arquivos
         (entidade_tipo, entidade_id, empresa_id, cliente_pf_id, lead_id, socio_id, contrato_id, simulacao_id,
          tipo_documento, nome_original, nome_arquivo, caminho_arquivo, url_arquivo, mime_type, tamanho_bytes,
          hash_arquivo, status, origem, obrigatorio, validado, observacoes, metadados, criado_por,
-         data_emissao_documento, data_validade_documento, validade_dias, status_validade, nome_customizado)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULL,$13,$14,$15,$16,$17,$18,$19,$20,$21::jsonb,$22,$23,$24,$25,
-               CASE WHEN $23::date IS NOT NULL AND $23::date < (CURRENT_DATE - INTERVAL '30 days') AND $9 = 'cartao_cnpj' THEN 'desatualizado' ELSE 'nao_verificado' END,
-               $26)
+         data_emissao_documento, data_validade_documento, validade_dias, status_validade, exige_revisao_humana, nome_customizado, resultado_validacao)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULL,$13,$14,$15,$16,$17,$18,$19,$20,$21::jsonb,$22,
+               $23,$24,$25,$26,$27,$28,$29::jsonb)
        RETURNING id, entidade_tipo, entidade_id, empresa_id, cliente_pf_id, lead_id, socio_id, contrato_id, simulacao_id,
-                 tipo_documento, nome_original, nome_arquivo, mime_type, tamanho_bytes, hash_arquivo, status, origem,
-                 obrigatorio, validado, observacoes, metadados, criado_por, data_emissao_documento, data_validade_documento,
-                 validade_dias, status_validade, nome_customizado, criado_em, atualizado_em`,
+                 tipo_documento, nome_original, nome_customizado, nome_arquivo, mime_type, tamanho_bytes, hash_arquivo, status, origem,
+                 obrigatorio, validado, observacoes, metadados, data_emissao_documento, data_validade_documento, validade_dias,
+                 status_validade, exige_revisao_humana, resultado_validacao, criado_por, criado_em, atualizado_em`,
       [
         entidadeTipo, entidadeId, (refs as any).empresa_id || req.body.empresa_id || null, (refs as any).cliente_pf_id || req.body.cliente_pf_id || null,
         (refs as any).lead_id || req.body.lead_id || null, (refs as any).socio_id || req.body.socio_id || null,
         (refs as any).contrato_id || req.body.contrato_id || null, (refs as any).simulacao_id || req.body.simulacao_id || null,
         tipoDocumento, file.originalname || safeOriginal, nomeArquivo, caminhoArquivo, file.mimetype, file.size,
-        hash, status, origem, String(req.body.obrigatorio) === 'true', false, req.body.observacoes || null,
-        JSON.stringify(safeJson(req.body.metadados)), user.id, dataEmissao, dataValidade, validadeDias, nomeCustomizado,
+        hash, status, origem, String(req.body.obrigatorio) === 'true', status === 'validado', req.body.observacoes || null,
+        JSON.stringify(safeJson(req.body.metadados)), user.id,
+        dataEmissaoDocumento, dataValidadeDocumento, tipoDocumento === 'cartao_cnpj' ? 30 : null, statusValidade,
+        exigeRevisaoHumana, nomeCustomizado, JSON.stringify(resultadoValidacao),
       ]
     );
     await auditar(rows[0].id, 'upload', null, rows[0], user.id);
@@ -286,234 +413,6 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
   } catch (err: any) {
     console.error('[POST /api/documentos/upload]', err);
     res.status(400).json({ error: err.message || 'Erro ao enviar documento' });
-  }
-});
-
-
-
-type DocumentoExportacao = {
-  id: string;
-  entidade_tipo: string;
-  entidade_id: string;
-  empresa_id?: string | null;
-  tipo_documento: string;
-  nome_original: string;
-  nome_customizado?: string | null;
-  caminho_arquivo: string;
-  nome_arquivo: string;
-  mime_type?: string | null;
-  tamanho_bytes?: number | null;
-  status?: string | null;
-  status_validade?: string | null;
-  data_emissao_documento?: string | null;
-  criado_em?: string | null;
-  observacoes?: string | null;
-};
-
-function uint32(n: number): number { return n >>> 0; }
-
-const CRC_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let i = 0; i < 256; i += 1) {
-    let c = i;
-    for (let k = 0; k < 8; k += 1) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
-    table[i] = c >>> 0;
-  }
-  return table;
-})();
-
-function crc32(buffer: Buffer): number {
-  let crc = 0xffffffff;
-  for (let i = 0; i < buffer.length; i += 1) crc = CRC_TABLE[(crc ^ buffer[i]) & 0xff] ^ (crc >>> 8);
-  return uint32(crc ^ 0xffffffff);
-}
-
-function zipDateTime(date = new Date()) {
-  const year = Math.max(1980, date.getFullYear());
-  const dosTime = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
-  const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
-  return { dosTime, dosDate };
-}
-
-function buildZip(files: Array<{ name: string; data: Buffer }>): Buffer {
-  const localParts: Buffer[] = [];
-  const centralParts: Buffer[] = [];
-  let offset = 0;
-  const { dosTime, dosDate } = zipDateTime();
-
-  for (const file of files) {
-    const nameBuffer = Buffer.from(file.name.replace(/^\/+/, ''), 'utf8');
-    const data = file.data;
-    const crc = crc32(data);
-
-    const localHeader = Buffer.alloc(30);
-    localHeader.writeUInt32LE(0x04034b50, 0);
-    localHeader.writeUInt16LE(20, 4);
-    localHeader.writeUInt16LE(0x0800, 6); // UTF-8
-    localHeader.writeUInt16LE(0, 8); // store, sem compressão
-    localHeader.writeUInt16LE(dosTime, 10);
-    localHeader.writeUInt16LE(dosDate, 12);
-    localHeader.writeUInt32LE(crc, 14);
-    localHeader.writeUInt32LE(data.length, 18);
-    localHeader.writeUInt32LE(data.length, 22);
-    localHeader.writeUInt16LE(nameBuffer.length, 26);
-    localHeader.writeUInt16LE(0, 28);
-    localParts.push(localHeader, nameBuffer, data);
-
-    const centralHeader = Buffer.alloc(46);
-    centralHeader.writeUInt32LE(0x02014b50, 0);
-    centralHeader.writeUInt16LE(20, 4);
-    centralHeader.writeUInt16LE(20, 6);
-    centralHeader.writeUInt16LE(0x0800, 8);
-    centralHeader.writeUInt16LE(0, 10);
-    centralHeader.writeUInt16LE(dosTime, 12);
-    centralHeader.writeUInt16LE(dosDate, 14);
-    centralHeader.writeUInt32LE(crc, 16);
-    centralHeader.writeUInt32LE(data.length, 20);
-    centralHeader.writeUInt32LE(data.length, 24);
-    centralHeader.writeUInt16LE(nameBuffer.length, 28);
-    centralHeader.writeUInt16LE(0, 30);
-    centralHeader.writeUInt16LE(0, 32);
-    centralHeader.writeUInt16LE(0, 34);
-    centralHeader.writeUInt16LE(0, 36);
-    centralHeader.writeUInt32LE(0, 38);
-    centralHeader.writeUInt32LE(offset, 42);
-    centralParts.push(centralHeader, nameBuffer);
-
-    offset += localHeader.length + nameBuffer.length + data.length;
-  }
-
-  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(0, 4);
-  end.writeUInt16LE(0, 6);
-  end.writeUInt16LE(files.length, 8);
-  end.writeUInt16LE(files.length, 10);
-  end.writeUInt32LE(centralSize, 12);
-  end.writeUInt32LE(offset, 16);
-  end.writeUInt16LE(0, 20);
-  return Buffer.concat([...localParts, ...centralParts, end]);
-}
-
-function assertDocumentFilePath(filePathRaw: string): string {
-  const filePath = path.resolve(filePathRaw);
-  const dataDir = path.resolve(process.env.DATA_DIR || '/data');
-  const localUploads = path.resolve('uploads');
-  if (!filePath.startsWith(dataDir) && !filePath.startsWith(localUploads)) throw new Error('Caminho de arquivo não permitido');
-  if (!fs.existsSync(filePath)) throw new Error('Arquivo físico não encontrado');
-  return filePath;
-}
-
-function exportFileName(doc: DocumentoExportacao, index: number): string {
-  const tipo = String(doc.nome_customizado || doc.tipo_documento || 'documento').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80) || 'documento';
-  const original = sanitizeFileName(doc.nome_original || doc.nome_arquivo || `arquivo_${index}`);
-  return `${String(index + 1).padStart(2, '0')}_${tipo}_${original}`;
-}
-
-async function coletarDocumentosExportacao(body: any): Promise<DocumentoExportacao[]> {
-  const ids = Array.isArray(body?.documento_ids) ? body.documento_ids.filter(isUuid) : [];
-  const entidadeTipo = String(body?.entidade_tipo || '');
-  const entidadeId = String(body?.entidade_id || '');
-  const incluirTodosDaEmpresa = Boolean(body?.incluir_todos_empresa);
-
-  const params: any[] = [];
-  const conds = [`excluido_em IS NULL`, `status <> 'excluido'`];
-
-  if (ids.length) {
-    params.push(ids);
-    conds.push(`id = ANY($${params.length}::uuid[])`);
-  } else {
-    if (!ENTIDADES.includes(entidadeTipo as any) || !isUuid(entidadeId)) throw new Error('Informe documento_ids ou entidade_tipo/entidade_id válidos.');
-    params.push(entidadeTipo); conds.push(`entidade_tipo=$${params.length}`);
-    params.push(entidadeId); conds.push(`entidade_id=$${params.length}`);
-  }
-
-  if (incluirTodosDaEmpresa && isUuid(body?.empresa_id)) {
-    params.push(body.empresa_id);
-    conds.push(`(empresa_id=$${params.length} OR (entidade_tipo='empresa' AND entidade_id=$${params.length}))`);
-  }
-
-  const { rows } = await pool.query(
-    `SELECT id, entidade_tipo, entidade_id, empresa_id, tipo_documento, nome_original, nome_customizado,
-            caminho_arquivo, nome_arquivo, mime_type, tamanho_bytes, status, status_validade,
-            data_emissao_documento, criado_em, observacoes
-       FROM public.documentos_arquivos
-      WHERE ${conds.join(' AND ')}
-      ORDER BY tipo_documento, criado_em DESC`,
-    params
-  );
-  return rows;
-}
-
-function montarManifestoDocumentos(docs: DocumentoExportacao[]) {
-  return docs.map((doc, index) => ({
-    ordem: index + 1,
-    id: doc.id,
-    tipo_documento: doc.tipo_documento,
-    nome_documento: doc.nome_customizado || doc.tipo_documento,
-    arquivo: doc.nome_original,
-    mime_type: doc.mime_type,
-    tamanho_bytes: doc.tamanho_bytes,
-    status: doc.status,
-    status_validade: doc.status_validade,
-    data_emissao_documento: doc.data_emissao_documento,
-    enviado_em: doc.criado_em,
-    observacoes: doc.observacoes,
-  }));
-}
-
-async function gerarZipDocumentos(docs: DocumentoExportacao[]): Promise<Buffer> {
-  if (!docs.length) throw new Error('Nenhum documento encontrado para exportar.');
-  const files: Array<{ name: string; data: Buffer }> = [];
-  const manifesto = montarManifestoDocumentos(docs);
-  files.push({ name: '00_manifesto_documentos.json', data: Buffer.from(JSON.stringify(manifesto, null, 2), 'utf8') });
-  files.push({ name: '00_manifesto_documentos.csv', data: Buffer.from('ordem;tipo_documento;nome_documento;arquivo;status;status_validade;data_emissao\n' + manifesto.map((m) => [m.ordem, m.tipo_documento, m.nome_documento, m.arquivo, m.status, m.status_validade, m.data_emissao_documento].map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\n'), 'utf8') });
-
-  for (let i = 0; i < docs.length; i += 1) {
-    const doc = docs[i];
-    const filePath = assertDocumentFilePath(doc.caminho_arquivo);
-    files.push({ name: `arquivos/${exportFileName(doc, i)}`, data: await fs.promises.readFile(filePath) });
-  }
-  return buildZip(files);
-}
-
-router.post('/exportar/zip', auth, async (req: Request, res: Response) => {
-  try {
-    const docs = await coletarDocumentosExportacao(req.body || {});
-    const zip = await gerarZipDocumentos(docs);
-    const nome = sanitizeFileName(String(req.body?.nome_arquivo || `documentos_destrava_${new Date().toISOString().slice(0, 10)}.zip`));
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${nome.endsWith('.zip') ? nome : `${nome}.zip`}"`);
-    res.send(zip);
-  } catch (err: any) {
-    console.error('[POST /api/documentos/exportar/zip]', err);
-    res.status(400).json({ error: err.message || 'Erro ao exportar documentos' });
-  }
-});
-
-router.post('/exportar/manifesto', auth, async (req: Request, res: Response) => {
-  try {
-    const docs = await coletarDocumentosExportacao(req.body || {});
-    res.json({ total: docs.length, documentos: montarManifestoDocumentos(docs) });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message || 'Erro ao gerar manifesto' });
-  }
-});
-
-router.post('/exportar/email', auth, async (req: Request, res: Response) => {
-  try {
-    const email = String(req.body?.email || '').trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { res.status(400).json({ error: 'E-mail de destino inválido.' }); return; }
-    const docs = await coletarDocumentosExportacao(req.body || {});
-    await gerarZipDocumentos(docs); // valida arquivos agora, mesmo quando SMTP ainda não está configurado
-    res.status(501).json({
-      error: 'Envio automático por e-mail ainda exige configuração SMTP no servidor.',
-      detalhe: 'O pacote de documentos foi validado. Configure SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS e EMAIL_FROM para ativar envio com anexo ZIP.',
-      total_documentos: docs.length,
-    });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message || 'Erro ao preparar envio por e-mail' });
   }
 });
 
@@ -538,10 +437,7 @@ router.patch('/:id', auth, async (req: Request, res: Response) => {
     if (body.observacoes !== undefined) { values.push(body.observacoes || null); fields.push(`observacoes=$${values.length}`); }
     if (body.nome_customizado !== undefined) { values.push(String(body.nome_customizado || '').trim() || null); fields.push(`nome_customizado=$${values.length}`); }
     if (body.data_emissao_documento !== undefined) { values.push(body.data_emissao_documento || null); fields.push(`data_emissao_documento=$${values.length}`); }
-    if (body.data_validade_documento !== undefined) { values.push(body.data_validade_documento || null); fields.push(`data_validade_documento=$${values.length}`); }
-    if (body.validade_dias !== undefined) { values.push(body.validade_dias ? Number(body.validade_dias) : null); fields.push(`validade_dias=$${values.length}`); }
     if (body.status_validade !== undefined) { values.push(String(body.status_validade || 'nao_verificado')); fields.push(`status_validade=$${values.length}`); }
-    if (body.exige_revisao_humana !== undefined) { values.push(Boolean(body.exige_revisao_humana)); fields.push(`exige_revisao_humana=$${values.length}`); }
     if (body.resultado_validacao !== undefined) { values.push(JSON.stringify(safeJson(body.resultado_validacao))); fields.push(`resultado_validacao=$${values.length}::jsonb`); }
     if (body.metadados !== undefined) { values.push(JSON.stringify(safeJson(body.metadados))); fields.push(`metadados=$${values.length}::jsonb`); }
     if (body.obrigatorio !== undefined) { values.push(Boolean(body.obrigatorio)); fields.push(`obrigatorio=$${values.length}`); }
@@ -616,6 +512,79 @@ router.get('/:id/view', auth, async (req, res) => {
   catch (err) { console.error('[GET /api/documentos/:id/view]', err); res.status(500).json({ error: 'Erro ao visualizar documento' }); }
 });
 
+
+router.post('/exportar', auth, async (req: Request, res: Response) => {
+  try {
+    const idsRaw = Array.isArray(req.body?.documento_ids) ? req.body.documento_ids : Array.isArray(req.body?.documentoIds) ? req.body.documentoIds : [];
+    const ids = Array.from(new Set(idsRaw.map((id: unknown) => String(id || '').trim()).filter(isUuid)));
+    if (!ids.length) { res.status(400).json({ error: 'Informe ao menos um documento para exportar.' }); return; }
+    if (ids.length > 100) { res.status(400).json({ error: 'Exporte no máximo 100 documentos por vez.' }); return; }
+
+    const placeholders = ids.map((_, idx) => `$${idx + 1}`).join(',');
+    const { rows } = await pool.query(
+      `SELECT * FROM public.documentos_arquivos
+        WHERE id IN (${placeholders}) AND excluido_em IS NULL AND status <> 'excluido'
+        ORDER BY tipo_documento, criado_em DESC`,
+      ids
+    );
+    if (!rows.length) { res.status(404).json({ error: 'Nenhum documento encontrado para exportação.' }); return; }
+
+    const dataDir = path.resolve(process.env.DATA_DIR || '/data');
+    const localUploads = path.resolve('uploads');
+    const files: Array<{ name: string; data: Buffer; mtime?: Date }> = [];
+    const manifest = rows.map((doc: any) => ({
+      id: doc.id,
+      entidade_tipo: doc.entidade_tipo,
+      entidade_id: doc.entidade_id,
+      empresa_id: doc.empresa_id,
+      socio_id: doc.socio_id,
+      tipo_documento: doc.tipo_documento,
+      nome_original: doc.nome_original,
+      nome_customizado: doc.nome_customizado,
+      mime_type: doc.mime_type,
+      tamanho_bytes: doc.tamanho_bytes,
+      status: doc.status,
+      status_validade: doc.status_validade,
+      data_emissao_documento: doc.data_emissao_documento,
+      observacoes: doc.observacoes,
+      criado_em: doc.criado_em,
+    }));
+
+    const csvHeader = ['id','tipo_documento','nome_original','nome_customizado','mime_type','tamanho_bytes','status','status_validade','data_emissao_documento','observacoes','criado_em'];
+    const csvLines = [csvHeader.join(';')];
+    const usedNames = new Map<string, number>();
+
+    for (const doc of rows as any[]) {
+      const filePath = path.resolve(doc.caminho_arquivo || '');
+      if (!filePath || (!filePath.startsWith(dataDir) && !filePath.startsWith(localUploads)) || !fs.existsSync(filePath)) {
+        continue;
+      }
+      const baseName = sanitizeFileName(doc.nome_customizado || doc.nome_original || doc.nome_arquivo || `${doc.id}.bin`);
+      const folder = sanitizeFileName(doc.tipo_documento || 'documento');
+      const key = `${folder}/${baseName}`;
+      const count = usedNames.get(key) || 0;
+      usedNames.set(key, count + 1);
+      const parsed = path.parse(baseName);
+      const finalName = count > 0 ? `${folder}/${parsed.name}_${count + 1}${parsed.ext}` : `${folder}/${baseName}`;
+      files.push({ name: finalName, data: await fs.promises.readFile(filePath), mtime: doc.criado_em ? new Date(doc.criado_em) : new Date() });
+      csvLines.push(csvHeader.map((field) => String((doc as any)[field] ?? '').replace(/\r?\n/g, ' ').replace(/;/g, ',')).join(';'));
+    }
+
+    if (!files.length) { res.status(404).json({ error: 'Os registros existem, mas os arquivos físicos não foram encontrados no servidor.' }); return; }
+    files.push({ name: 'manifesto.json', data: Buffer.from(JSON.stringify(manifest, null, 2), 'utf8') });
+    files.push({ name: 'manifesto.csv', data: Buffer.from(csvLines.join('\n'), 'utf8') });
+    const zip = createZip(files);
+    const filename = `documentos-destrava-${new Date().toISOString().slice(0, 10)}.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', String(zip.length));
+    res.send(zip);
+  } catch (err: any) {
+    console.error('[POST /api/documentos/exportar]', err);
+    res.status(500).json({ error: 'Erro ao exportar documentos' });
+  }
+});
+
 router.get('/pendencias/:entidadeTipo/:entidadeId', auth, async (req: Request, res: Response) => {
   try {
     const resultado = await calcularPendenciasDocumentais(req.params.entidadeTipo, req.params.entidadeId);
@@ -628,30 +597,16 @@ router.get('/pendencias/:entidadeTipo/:entidadeId', auth, async (req: Request, r
 export async function calcularPendenciasDocumentais(entidadeTipo: string, entidadeId: string) {
   if (!ENTIDADES.includes(entidadeTipo as any) || !isUuid(entidadeId)) throw new Error('Entidade inválida');
 
-  let regras: Array<{ tipo_documento: string; nome_amigavel?: string; validade_dias?: number | null; obrigatorio?: boolean }> = [];
-  if (await tableExists('documentos_regras_credito')) {
-    const result = await pool.query(
-      `SELECT tipo_documento, nome_amigavel, validade_dias, obrigatorio
-         FROM public.documentos_regras_credito
-        WHERE entidade_tipo=$1 AND ativo=true AND obrigatorio=true
-        ORDER BY ordem, nome_amigavel`,
-      [entidadeTipo]
-    );
-    regras = result.rows;
-  }
-  if (!regras.length) {
-    const obrigatoriosPorEntidade: Record<string, string[]> = {
-      empresa: ['contrato_prestacao_servicos', 'cartao_cnpj', 'qsa', 'contrato_social'],
-      cliente_pf: ['cpf', 'rg', 'comprovante_residencia'],
-      socio: ['cpf', 'rg', 'comprovante_residencia'],
-      contrato: ['contrato_gerado'],
-      simulacao: ['comprovante_faturamento', 'extrato_bancario'],
-    };
-    regras = (obrigatoriosPorEntidade[entidadeTipo] || []).map((tipo_documento) => ({ tipo_documento }));
-  }
-
+  const obrigatoriosPorEntidade: Record<string, string[]> = {
+    empresa: ['contrato_social'],
+    cliente_pf: ['cpf', 'rg', 'comprovante_residencia'],
+    socio: ['cpf', 'rg', 'comprovante_residencia'],
+    contrato: ['contrato_gerado'],
+    simulacao: ['comprovante_faturamento', 'extrato_bancario'],
+  };
+  const obrigatorios = obrigatoriosPorEntidade[entidadeTipo] || [];
   const { rows } = await pool.query(
-    `SELECT tipo_documento, status, validado, data_emissao_documento, data_validade_documento, status_validade
+    `SELECT tipo_documento, status, validado
        FROM public.documentos_arquivos
       WHERE entidade_tipo=$1 AND entidade_id=$2 AND excluido_em IS NULL AND status <> 'excluido'`,
     [entidadeTipo, entidadeId]
@@ -659,28 +614,22 @@ export async function calcularPendenciasDocumentais(entidadeTipo: string, entida
   const porTipo = new Map<string, any[]>();
   for (const row of rows) porTipo.set(row.tipo_documento, [...(porTipo.get(row.tipo_documento) || []), row]);
 
-  const documentos_obrigatorios = regras.map((regra) => {
-    const docs = porTipo.get(regra.tipo_documento) || [];
+  const documentos_obrigatorios = obrigatorios.map((tipo_documento) => {
+    const docs = porTipo.get(tipo_documento) || [];
     const melhor = docs.find((d) => d.status === 'validado' || d.validado) || docs[0];
-    const desatualizado = Boolean(melhor?.status === 'desatualizado' || melhor?.status_validade === 'desatualizado');
     return {
-      tipo_documento: regra.tipo_documento,
-      nome_amigavel: regra.nome_amigavel || regra.tipo_documento,
+      tipo_documento,
       presente: docs.length > 0,
       validado: Boolean(melhor?.validado || melhor?.status === 'validado'),
       status: melhor?.status || 'ausente',
-      status_validade: melhor?.status_validade || 'nao_verificado',
-      data_emissao_documento: melhor?.data_emissao_documento || null,
-      desatualizado,
     };
   });
 
   const pendencias: string[] = [];
   for (const doc of documentos_obrigatorios) {
-    if (!doc.presente) pendencias.push(`Falta documento obrigatório: ${doc.nome_amigavel || doc.tipo_documento}`);
-    else if (doc.status === 'recusado') pendencias.push(`Documento recusado: ${doc.nome_amigavel || doc.tipo_documento}`);
-    else if (doc.desatualizado) pendencias.push(`Documento desatualizado: ${doc.nome_amigavel || doc.tipo_documento}`);
-    else if (doc.status === 'pendente_validacao' || !doc.validado) pendencias.push(`Documento pendente de validação: ${doc.nome_amigavel || doc.tipo_documento}`);
+    if (!doc.presente) pendencias.push(`Falta documento obrigatório: ${doc.tipo_documento}`);
+    else if (doc.status === 'recusado') pendencias.push(`Documento recusado: ${doc.tipo_documento}`);
+    else if (doc.status === 'pendente_validacao' || !doc.validado) pendencias.push(`Documento pendente de validação: ${doc.tipo_documento}`);
   }
 
   return { completo: pendencias.length === 0, pendencias, documentos_obrigatorios };

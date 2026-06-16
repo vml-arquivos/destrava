@@ -69,3 +69,37 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
 
   return payload;
 }
+
+
+export async function apiFetchBlob(path: string, options: RequestInit = {}): Promise<{ blob: Blob; filename?: string; contentType?: string }> {
+  const token = getToken();
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  const headers = new Headers(options.headers);
+  if (!isFormData && options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const res = await fetch(API_BASE + path, { ...options, headers });
+  if (!res.ok) {
+    const contentType = res.headers.get("content-type") || "";
+    let message = res.statusText || `HTTP ${res.status}`;
+    try {
+      const text = await res.text();
+      if (contentType.includes("application/json")) {
+        const payload = JSON.parse(text);
+        message = payload?.error || payload?.message || message;
+      } else if (text.trim()) {
+        message = text.slice(0, 180).replace(/\s+/g, " ");
+      }
+    } catch {}
+    if (res.status === 401) {
+      removeToken();
+      message = message || "Sessão expirada. Entre novamente.";
+    }
+    throw new Error(message);
+  }
+
+  const disposition = res.headers.get("content-disposition") || "";
+  const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+  const filename = filenameMatch ? decodeURIComponent(filenameMatch[1] || filenameMatch[2] || "") : undefined;
+  return { blob: await res.blob(), filename, contentType: res.headers.get("content-type") || undefined };
+}
