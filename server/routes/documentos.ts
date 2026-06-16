@@ -532,26 +532,6 @@ router.post('/exportar', auth, async (req: Request, res: Response) => {
     const dataDir = path.resolve(process.env.DATA_DIR || '/data');
     const localUploads = path.resolve('uploads');
     const files: Array<{ name: string; data: Buffer; mtime?: Date }> = [];
-    const manifest = rows.map((doc: any) => ({
-      id: doc.id,
-      entidade_tipo: doc.entidade_tipo,
-      entidade_id: doc.entidade_id,
-      empresa_id: doc.empresa_id,
-      socio_id: doc.socio_id,
-      tipo_documento: doc.tipo_documento,
-      nome_original: doc.nome_original,
-      nome_customizado: doc.nome_customizado,
-      mime_type: doc.mime_type,
-      tamanho_bytes: doc.tamanho_bytes,
-      status: doc.status,
-      status_validade: doc.status_validade,
-      data_emissao_documento: doc.data_emissao_documento,
-      observacoes: doc.observacoes,
-      criado_em: doc.criado_em,
-    }));
-
-    const csvHeader = ['id','tipo_documento','nome_original','nome_customizado','mime_type','tamanho_bytes','status','status_validade','data_emissao_documento','observacoes','criado_em'];
-    const csvLines = [csvHeader.join(';')];
     const usedNames = new Map<string, number>();
 
     for (const doc of rows as any[]) {
@@ -567,12 +547,9 @@ router.post('/exportar', auth, async (req: Request, res: Response) => {
       const parsed = path.parse(baseName);
       const finalName = count > 0 ? `${folder}/${parsed.name}_${count + 1}${parsed.ext}` : `${folder}/${baseName}`;
       files.push({ name: finalName, data: await fs.promises.readFile(filePath), mtime: doc.criado_em ? new Date(doc.criado_em) : new Date() });
-      csvLines.push(csvHeader.map((field) => String((doc as any)[field] ?? '').replace(/\r?\n/g, ' ').replace(/;/g, ',')).join(';'));
     }
 
     if (!files.length) { res.status(404).json({ error: 'Os registros existem, mas os arquivos físicos não foram encontrados no servidor.' }); return; }
-    files.push({ name: 'manifesto.json', data: Buffer.from(JSON.stringify(manifest, null, 2), 'utf8') });
-    files.push({ name: 'manifesto.csv', data: Buffer.from(csvLines.join('\n'), 'utf8') });
     const zip = createZip(files);
     const filename = `documentos-destrava-${new Date().toISOString().slice(0, 10)}.zip`;
     res.setHeader('Content-Type', 'application/zip');
