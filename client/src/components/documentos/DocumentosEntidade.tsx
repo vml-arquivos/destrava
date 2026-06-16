@@ -7,6 +7,7 @@ import {
   Eye,
   FileArchive,
   FileText,
+  FolderOpen,
   Loader2,
   Paperclip,
   Printer,
@@ -69,60 +70,60 @@ const statusValidadeCls: Record<string, string> = {
 };
 
 const tipoDocumentoLabel: Record<string, string> = {
-  contrato_prestacao_servicos: "Contrato de prestação de serviços",
-  contrato_assessoria: "Contrato de prestação de serviços",
-  cartao_cnpj: "Cartão CNPJ",
-  qsa: "QSA",
-  atos_junta_comercial: "Atos da Junta Comercial",
-  contrato_social: "Contrato social",
-  alteracao_contratual: "Alteração contratual",
-  documento_socio: "Documento de identificação do sócio",
-  rg: "RG",
-  cpf: "CPF",
-  cnh: "CNH",
-  comprovante_residencia: "Comprovante de endereço do sócio",
+  contrato_prestacao_servicos: "1. Contrato de prestação de serviços",
+  contrato_assessoria: "1. Contrato de prestação de serviços",
+  cartao_cnpj: "2. CNPJ / Cartão CNPJ",
+  qsa: "3. QSA",
+  atos_junta_comercial: "4. Atos da Junta Comercial",
+  contrato_social: "5. Contrato social",
+  alteracao_contratual: "5. Alterações contratuais",
+  documento_socio: "6. Documento de identificação do sócio",
+  rg: "6A. RG do sócio",
+  cnh: "6A. CNH do sócio",
+  cpf: "CPF do sócio",
+  comprovante_residencia: "6B. Comprovante de endereço do sócio",
   comprovante_endereco: "Comprovante de endereço da empresa",
-  imposto_renda: "IRPF",
-  irpf: "IRPF",
-  recibo_irpf: "Recibo de entrega do IRPF",
-  certidao_casamento: "Certidão de casamento",
-  averbacao_divorcio: "Averbação de divórcio",
-  certidao_obito: "Certidão de óbito",
-  rating_bacen_cnpj: "Consulta de rating BACEN (CNPJ)",
-  rating_bacen_cpf: "Consulta de rating BACEN (CPF)",
-  cenprot_cnpj: "Consulta CENPROT (CNPJ)",
-  cenprot_cpf: "Consulta CENPROT (CPF)",
-  cnd_rfb_cnpj: "CND RFB (CNPJ)",
-  cnd_rfb_cpf: "CND RFB (CPF)",
-  cadin_cnpj: "CADIN (CNPJ)",
-  cadin_cpf: "CADIN (CPF)",
-  pgfn_cnpj: "PGFN (CNPJ)",
-  pgfn_cpf: "PGFN (CPF)",
-  simples_nacional: "Consulta de optante pelo Simples Nacional",
-  pgdas: "PGDAS",
-  pgmei: "PGMEI",
-  ecf: "ECF",
-  recibo_ecf: "Recibo de entrega da ECF",
-  recibo_pgdas: "Recibo de entrega do PGDAS",
-  recibo_pgmei: "Recibo de entrega do PGMEI",
-  defis: "DEFIS",
-  dasn_simei: "DASN-SIMEI",
-  recibo_defis: "Recibo de entrega da DEFIS",
-  recibo_dasn_simei: "Recibo de entrega da DASN-SIMEI",
-  scr_cnpj: "Relatório SCR do CNPJ",
-  ccs_cnpj: "Relatório CCS do CNPJ",
-  ccf_cnpj: "Relatório CCF do CNPJ",
-  scr_cpf: "Relatório SCR do CPF",
-  ccs_cpf: "Relatório CCS do CPF",
-  ccf_cpf: "Relatório CCF do CPF",
+  imposto_renda: "6C. IRPF",
+  irpf: "6C. IRPF",
+  recibo_irpf: "6D. Recibo de entrega do IRPF",
+  certidao_casamento: "6E. Certidão de casamento",
+  averbacao_divorcio: "6E. Averbação de divórcio",
+  certidao_obito: "6E. Certidão de óbito",
+  rating_bacen_cnpj: "7. Consulta de rating BACEN (CNPJ)",
+  rating_bacen_cpf: "8. Consulta de rating BACEN (CPF)",
+  cenprot_cnpj: "9. Consulta CENPROT (CNPJ)",
+  cenprot_cpf: "10. Consulta CENPROT (CPF)",
+  cnd_rfb_cnpj: "11. CND RFB (CNPJ)",
+  cnd_rfb_cpf: "12. CND RFB (CPF)",
+  cadin_cnpj: "12A. Nada consta CADIN (CNPJ)",
+  cadin_cpf: "12A. Nada consta CADIN (CPF)",
+  pgfn_cnpj: "12B. Nada consta PGFN (CNPJ)",
+  pgfn_cpf: "12B. Nada consta PGFN (CPF)",
+  simples_nacional: "13. Consulta de optante pelo Simples Nacional",
+  pgdas: "14. PGDAS",
+  pgmei: "14. PGMEI",
+  ecf: "14. ECF",
+  recibo_ecf: "15. Recibo de entrega da ECF",
+  recibo_pgdas: "15. Recibo de entrega do PGDAS",
+  recibo_pgmei: "15. Recibo de entrega do PGMEI",
+  defis: "16. DEFIS",
+  dasn_simei: "16. DASN-SIMEI",
+  recibo_defis: "17. Recibo de entrega da DEFIS",
+  recibo_dasn_simei: "17. Recibo de entrega da DASN-SIMEI",
+  scr_cnpj: "18. Relatório SCR do CNPJ",
+  ccs_cnpj: "19. Relatório CCS do CNPJ",
+  ccf_cnpj: "20. Relatório CCF do CNPJ",
+  scr_cpf: "21. Relatório SCR do CPF",
+  ccs_cpf: "22. Relatório CCS do CPF",
+  ccf_cpf: "23. Relatório CCF do CPF",
   consulta_serasa_cnpj: "Consulta Serasa (CNPJ)",
   consulta_serasa_cpf: "Consulta Serasa (CPF)",
-  compartilhamento_ecac: "Compartilhamento eCAC",
-  foto_fachada: "Foto da fachada",
-  foto_interna_1: "Foto interna 1",
-  foto_interna_2: "Foto interna 2",
-  foto_interna_3: "Foto interna 3",
-  faturamento_12_meses: "Faturamento bruto dos últimos 12 meses",
+  compartilhamento_ecac: "24. Compartilhamento eCAC por banco",
+  foto_fachada: "25. Foto da fachada",
+  foto_interna_1: "25. Foto 1 interna",
+  foto_interna_2: "25. Foto 2 interna",
+  foto_interna_3: "25. Foto 3 interna",
+  faturamento_12_meses: "26. Faturamento bruto dos últimos 12 meses",
   comprovante_faturamento: "Comprovante de faturamento",
   declaracao_faturamento: "Declaração de faturamento",
   extrato_bancario: "Extrato bancário",
@@ -134,8 +135,19 @@ const tipoDocumentoLabel: Record<string, string> = {
   estatuto: "Estatuto",
   contrato_gerado: "Contrato gerado",
   contrato_assinado: "Contrato assinado",
-  outros: "Outros documentos",
+  outros: "Campo outros / Documento nomeado",
 };
+
+type SecaoDocumento = { titulo: string; descricao?: string; tipos: string[] };
+
+const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
+  { titulo: "Documentos iniciais da empresa", tipos: ["contrato_prestacao_servicos", "cartao_cnpj", "qsa", "atos_junta_comercial", "contrato_social", "alteracao_contratual"] },
+  { titulo: "Documentos dos sócios", descricao: "Anexe aqui documentos de identificação e comprovações dos sócios quando estiver montando o dossiê completo pela empresa.", tipos: ["documento_socio", "rg", "cnh", "cpf", "comprovante_residencia", "irpf", "recibo_irpf", "certidao_casamento", "averbacao_divorcio", "certidao_obito"] },
+  { titulo: "Consultas e certidões CNPJ", tipos: ["rating_bacen_cnpj", "cenprot_cnpj", "cnd_rfb_cnpj", "cadin_cnpj", "pgfn_cnpj", "scr_cnpj", "ccs_cnpj", "ccf_cnpj", "consulta_serasa_cnpj"] },
+  { titulo: "Consultas e certidões CPF dos sócios", descricao: "Obrigatório para todos os sócios ou sócio único. Em caso de cônjuge, incluir SCR, CCS, CCF, Serasa e CENPROT também do cônjuge.", tipos: ["rating_bacen_cpf", "cenprot_cpf", "cnd_rfb_cpf", "cadin_cpf", "pgfn_cpf", "scr_cpf", "ccs_cpf", "ccf_cpf", "consulta_serasa_cpf"] },
+  { titulo: "Fiscal, tributário e faturamento", descricao: "PGDAS/PGMEI/ECF e recibos conforme regime tributário. DEFIS para Simples não MEI. DASN-SIMEI para MEI.", tipos: ["simples_nacional", "pgdas", "pgmei", "ecf", "recibo_pgdas", "recibo_pgmei", "recibo_ecf", "defis", "dasn_simei", "recibo_defis", "recibo_dasn_simei", "faturamento_12_meses"] },
+  { titulo: "eCAC, fotos e outros", tipos: ["compartilhamento_ecac", "foto_fachada", "foto_interna_1", "foto_interna_2", "foto_interna_3", "outros"] },
+];
 
 function labelTipoDocumento(tipo: string) {
   return tipoDocumentoLabel[tipo] || tipo.replace(/_/g, " ");
@@ -168,11 +180,6 @@ function canPrint(doc: DocumentoArquivo) {
   return Boolean(doc.mime_type?.includes("pdf") || doc.mime_type?.startsWith("image/"));
 }
 
-function csvEscape(value: unknown) {
-  const text = String(value ?? "").replace(/\r?\n/g, " ");
-  return `"${text.replace(/"/g, '""')}"`;
-}
-
 export default function DocumentosEntidade({
   entidadeTipo,
   entidadeId,
@@ -196,6 +203,7 @@ export default function DocumentosEntidade({
   const [busca, setBusca] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState("todos");
   const [exportando, setExportando] = useState(false);
+  const [modalExportacao, setModalExportacao] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentoArquivo | null>(null);
 
@@ -224,14 +232,27 @@ export default function DocumentosEntidade({
   }, [entidadeId, query]);
 
   useEffect(() => { carregar(); }, [carregar]);
-
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
   const tiposDaTela = useMemo(() => {
     const set = new Set<string>(tiposPermitidos || []);
     docs.forEach((doc) => set.add(doc.tipo_documento));
-    return Array.from(set);
+    const ordenados: string[] = [];
+    SECOES_DOCUMENTAIS.forEach((secao) => secao.tipos.forEach((tipo) => { if (set.has(tipo) && !ordenados.includes(tipo)) ordenados.push(tipo); }));
+    Array.from(set).forEach((tipo) => { if (!ordenados.includes(tipo)) ordenados.push(tipo); });
+    return ordenados;
   }, [tiposPermitidos, docs]);
+
+  const secoesDaTela = useMemo(() => {
+    const set = new Set(tiposDaTela);
+    const base = SECOES_DOCUMENTAIS
+      .map((secao) => ({ ...secao, tipos: secao.tipos.filter((tipo) => set.has(tipo)) }))
+      .filter((secao) => secao.tipos.length > 0);
+    const conhecidos = new Set(SECOES_DOCUMENTAIS.flatMap((s) => s.tipos));
+    const extras = tiposDaTela.filter((tipo) => !conhecidos.has(tipo));
+    if (extras.length) base.push({ titulo: "Outros documentos do sistema", tipos: extras });
+    return base;
+  }, [tiposDaTela]);
 
   const docsFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -244,6 +265,19 @@ export default function DocumentosEntidade({
   }, [docs, busca, tipoFiltro]);
 
   const selecionadosIds = useMemo(() => docs.filter((doc) => selecionados[doc.id]).map((doc) => doc.id), [docs, selecionados]);
+
+  function abrirChecklistExportacao() {
+    if (!docs.length) { toast.error("Não há documentos anexados para exportar."); return; }
+    if (selecionadosIds.length === 0) {
+      const idsVisiveis = docsFiltrados.length ? docsFiltrados : docs;
+      setSelecionados((prev) => {
+        const copy = { ...prev };
+        idsVisiveis.forEach((doc) => { copy[doc.id] = true; });
+        return copy;
+      });
+    }
+    setModalExportacao(true);
+  }
 
   async function enviar(tipoDocumento: string, file: File) {
     if (!entidadeId) return;
@@ -324,31 +358,13 @@ export default function DocumentosEntidade({
         body: JSON.stringify({ documento_ids: ids }),
       });
       saveBlob(blob, filename || nome);
-      toast.success("Exportação gerada para o seu computador.");
+      toast.success("ZIP com os arquivos selecionados gerado para o computador.");
+      setModalExportacao(false);
     } catch (err: any) {
       toast.error(err?.message || "Erro ao exportar documentos.");
     } finally {
       setExportando(false);
     }
-  }
-
-  function exportarRelacao(lista: DocumentoArquivo[]) {
-    if (!lista.length) { toast.error("Não há documentos para exportar na relação."); return; }
-    const header = ["tipo", "nome", "arquivo_original", "status", "validade", "tamanho", "observacoes", "enviado_em"];
-    const lines = [header.map(csvEscape).join(";")];
-    lista.forEach((doc) => {
-      lines.push([
-        labelTipoDocumento(doc.tipo_documento),
-        doc.nome_customizado || doc.nome_original,
-        doc.nome_original,
-        doc.status,
-        doc.status_validade || "",
-        formatBytes(doc.tamanho_bytes),
-        doc.observacoes || "",
-        formatDate(doc.criado_em),
-      ].map(csvEscape).join(";"));
-    });
-    saveBlob(new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" }), `relacao-documentos-destrava-${new Date().toISOString().slice(0, 10)}.csv`);
   }
 
   async function excluir(id: string) {
@@ -373,6 +389,14 @@ export default function DocumentosEntidade({
     }
   }
 
+  function marcarDocs(lista: DocumentoArquivo[], valor: boolean) {
+    setSelecionados((prev) => {
+      const copy = { ...prev };
+      lista.forEach((doc) => { copy[doc.id] = valor; });
+      return copy;
+    });
+  }
+
   if (!entidadeId) {
     return <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Selecione ou salve o cadastro antes de anexar documentos.</div>;
   }
@@ -382,14 +406,14 @@ export default function DocumentosEntidade({
       <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Paperclip className="w-4 h-4" /> {titulo}</h3>
-          <p className="text-xs text-slate-400 mt-0.5">Arquivos anexados por tipo, com visualização segura, impressão, download e exportação.</p>
+          <p className="text-xs text-slate-400 mt-0.5">Cada documento fica no seu local correto. A data do Cartão CNPJ será identificada pela IA/OCR, não digitada manualmente.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => exportarRelacao(docs)} disabled={docs.length === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-            <FileText className="w-3.5 h-3.5" /> Exportar relação
+          <button type="button" onClick={() => toast.info("A geração do relatório de análise será feita pela etapa de IA/OCR usando os documentos anexados e os campos extraídos.")} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">
+            <FileText className="w-3.5 h-3.5" /> Relatório da análise
           </button>
-          <button type="button" onClick={() => exportar(docs.map((doc) => doc.id), "acervo-documental-destrava.zip")} disabled={exportando || docs.length === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-            {exportando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileArchive className="w-3.5 h-3.5" />} Exportar todos
+          <button type="button" onClick={abrirChecklistExportacao} disabled={docs.length === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 disabled:opacity-50">
+            <FileArchive className="w-3.5 h-3.5" /> Exportar documentos
           </button>
         </div>
       </div>
@@ -397,8 +421,8 @@ export default function DocumentosEntidade({
       <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
           <div>
-            <p className="text-xs font-bold text-slate-700">Documentação anexada</p>
-            <p className="text-[11px] text-slate-400">Aqui aparecem todos os arquivos já enviados. Visualize todos ou escolha o que deseja exportar.</p>
+            <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><FolderOpen className="w-3.5 h-3.5" /> Documentação anexada</p>
+            <p className="text-[11px] text-slate-400">Visualize todos os documentos anexados, abra o arquivo desejado ou clique em Exportar documentos para escolher em checklist.</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative">
@@ -409,9 +433,6 @@ export default function DocumentosEntidade({
               <option value="todos">Todos os tipos</option>
               {tiposDaTela.map((t) => <option key={t} value={t}>{labelTipoDocumento(t)}</option>)}
             </select>
-            <button type="button" onClick={() => exportar(selecionadosIds, "documentos-selecionados-destrava.zip")} disabled={exportando || selecionadosIds.length === 0} className="h-9 inline-flex items-center justify-center gap-1.5 px-3 rounded-lg bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 disabled:opacity-50">
-              {exportando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileArchive className="w-3.5 h-3.5" />} Exportar selecionados ({selecionadosIds.length})
-            </button>
           </div>
         </div>
 
@@ -427,47 +448,38 @@ export default function DocumentosEntidade({
         ) : (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2 text-xs">
-              <button type="button" onClick={() => {
-                const todosMarcados = docsFiltrados.every((doc) => selecionados[doc.id]);
-                setSelecionados((prev) => {
-                  const copy = { ...prev };
-                  docsFiltrados.forEach((doc) => { copy[doc.id] = !todosMarcados; });
-                  return copy;
-                });
-              }} className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-600 hover:bg-slate-50">
-                {docsFiltrados.every((doc) => selecionados[doc.id]) ? "Desmarcar visíveis" : "Selecionar visíveis"}
+              <span className="text-slate-400">{docsFiltrados.length} documento(s) visível(is)</span>
+              <button type="button" onClick={abrirChecklistExportacao} className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-600 hover:bg-slate-50">
+                Abrir checklist de exportação
               </button>
-              <button type="button" onClick={() => exportarRelacao(docsFiltrados)} className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-600 hover:bg-slate-50">
-                Exportar relação visível
-              </button>
-              <span className="text-slate-400">{docsFiltrados.length} visível(is), {selecionadosIds.length} selecionado(s)</span>
             </div>
 
-            {tiposDaTela.map((tipo) => {
-              const docsTipo = docsFiltrados.filter((doc) => doc.tipo_documento === tipo);
-              if (!docsTipo.length) return null;
+            {secoesDaTela.map((secao) => {
+              const docsSecao = docsFiltrados.filter((doc) => secao.tipos.includes(doc.tipo_documento));
+              if (!docsSecao.length) return null;
               return (
-                <div key={tipo} className="rounded-xl border border-slate-100 overflow-hidden">
+                <div key={secao.titulo} className="rounded-xl border border-slate-100 overflow-hidden">
                   <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between gap-2">
-                    <p className="text-xs font-bold text-slate-700">{labelTipoDocumento(tipo)}</p>
-                    <span className="text-[11px] text-slate-400">{docsTipo.length} arquivo(s)</span>
+                    <div>
+                      <p className="text-xs font-bold text-slate-700">{secao.titulo}</p>
+                      {secao.descricao && <p className="text-[11px] text-slate-400 mt-0.5">{secao.descricao}</p>}
+                    </div>
+                    <span className="text-[11px] text-slate-400">{docsSecao.length} arquivo(s)</span>
                   </div>
                   <div className="divide-y divide-slate-100">
-                    {docsTipo.map((doc) => (
+                    {docsSecao.map((doc) => (
                       <div key={doc.id} className="flex flex-col lg:flex-row lg:items-center gap-3 p-3 bg-white hover:bg-slate-50 transition-colors">
-                        <input type="checkbox" checked={Boolean(selecionados[doc.id])} onChange={(e) => setSelecionados((prev) => ({ ...prev, [doc.id]: e.target.checked }))} className="w-4 h-4 rounded border-slate-300" aria-label={`Selecionar ${doc.nome_original}`} />
                         <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0"><FileText className="w-4 h-4 text-blue-500" /></div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-slate-800 truncate">{doc.nome_customizado || doc.nome_original}</p>
                           <div className="flex flex-wrap gap-1.5 mt-1 text-[11px] text-slate-400">
-                            {doc.nome_customizado && <><span>arquivo: {doc.nome_original}</span><span>•</span></>}
-                            <span>{formatBytes(doc.tamanho_bytes)}</span>
+                            <span>{labelTipoDocumento(doc.tipo_documento)}</span>
+                            <span>•</span><span>{formatBytes(doc.tamanho_bytes)}</span>
                             <span>•</span><span>Enviado em {formatDate(doc.criado_em)}</span>
-                            {doc.data_emissao_documento && <><span>•</span><span>Emissão: {new Date(doc.data_emissao_documento).toLocaleDateString("pt-BR")}</span></>}
                             {doc.origem && <><span>•</span><span>{doc.origem.replace(/_/g, " ")}</span></>}
                           </div>
                           {doc.observacoes && <p className="text-xs text-slate-500 mt-1">{doc.observacoes}</p>}
-                          {doc.tipo_documento === "cartao_cnpj" && !doc.data_emissao_documento && <p className="text-[11px] text-amber-700 mt-1">A data de emissão será extraída automaticamente pela análise IA/OCR do Cartão CNPJ.</p>}
+                          {doc.tipo_documento === "cartao_cnpj" && !doc.data_emissao_documento && <p className="text-[11px] text-amber-700 mt-1">A data de emissão e os dados do Cartão CNPJ serão extraídos automaticamente pela análise IA/OCR.</p>}
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`text-[11px] font-semibold px-2 py-1 rounded-full border ${statusCls[doc.status] || "bg-slate-50 text-slate-600 border-slate-100"}`}>{doc.status.replace(/_/g, " ")}</span>
@@ -495,33 +507,92 @@ export default function DocumentosEntidade({
         <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
           <div>
             <p className="text-xs font-bold text-slate-700">Anexar novo arquivo no local correto</p>
-            <p className="text-[11px] text-slate-400">Escolha o tipo do documento. O sistema não pede data manual do Cartão CNPJ; a emissão será identificada pela IA/OCR.</p>
+            <p className="text-[11px] text-slate-400">Use os campos abaixo como checklist documental. O arquivo anexado aparecerá no mesmo grupo acima.</p>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-            {tiposDaTela.map((tipo) => {
-              const docsTipo = docs.filter((doc) => doc.tipo_documento === tipo);
-              const uploading = uploadingTipo === tipo;
-              const exigeNome = tipo === "outros" || tipo === "compartilhamento_ecac";
-              return (
-                <div key={tipo} className="rounded-xl border border-slate-100 bg-slate-50 p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-700 truncate">{labelTipoDocumento(tipo)}</p>
-                      <p className="text-[11px] text-slate-400">{docsTipo.length} arquivo(s) anexado(s)</p>
-                    </div>
-                    <label className="h-8 inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold bg-blue-600 text-white px-2.5 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors">
-                      {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} Anexar
-                      <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file); e.currentTarget.value = ""; }} />
-                    </label>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {exigeNome && <input value={nomeCustomizadoPorTipo[tipo] || ""} onChange={(e) => setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder={tipo === "compartilhamento_ecac" ? "Banco/destinatário eCAC" : "Nome do documento"} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700" />}
-                    <input value={observacoesPorTipo[tipo] || ""} onChange={(e) => setObservacoesPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder="Observação opcional" className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700" />
-                  </div>
-                  {tipo === "cartao_cnpj" && <p className="text-[11px] text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-2 py-1">Após anexar, a IA/OCR deverá extrair CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço, situação e data de emissão para validar os 30 dias.</p>}
+          <div className="space-y-3">
+            {secoesDaTela.map((secao) => (
+              <div key={secao.titulo} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <p className="text-xs font-bold text-slate-700 mb-1">{secao.titulo}</p>
+                {secao.descricao && <p className="text-[11px] text-slate-400 mb-2">{secao.descricao}</p>}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                  {secao.tipos.map((tipo) => {
+                    const docsTipo = docs.filter((doc) => doc.tipo_documento === tipo);
+                    const uploading = uploadingTipo === tipo;
+                    const exigeNome = tipo === "outros" || tipo === "compartilhamento_ecac";
+                    return (
+                      <div key={tipo} className="rounded-xl border border-slate-100 bg-white p-3 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-700 truncate">{labelTipoDocumento(tipo)}</p>
+                            <p className="text-[11px] text-slate-400">{docsTipo.length} arquivo(s) anexado(s)</p>
+                          </div>
+                          <label className="h-8 inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold bg-blue-600 text-white px-2.5 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors">
+                            {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} Anexar
+                            <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file); e.currentTarget.value = ""; }} />
+                          </label>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {exigeNome && <input value={nomeCustomizadoPorTipo[tipo] || ""} onChange={(e) => setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder={tipo === "compartilhamento_ecac" ? "Banco/destinatário eCAC" : "Nome do documento"} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700" />}
+                          <input value={observacoesPorTipo[tipo] || ""} onChange={(e) => setObservacoesPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder="Observação opcional" className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700" />
+                        </div>
+                        {tipo === "cartao_cnpj" && <p className="text-[11px] text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-2 py-1">O usuário só anexa. O sistema/IA deverá identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral para o relatório.</p>}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {modalExportacao && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 p-4 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="h-14 px-4 border-b border-slate-200 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-slate-800">Exportar documentos</p>
+                <p className="text-[11px] text-slate-400">Marque os arquivos que quer baixar em ZIP. Use Exportar todos para baixar todos os anexados.</p>
+              </div>
+              <button onClick={() => setModalExportacao(false)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-4 border-b border-slate-100 flex flex-wrap gap-2 text-xs">
+              <button type="button" onClick={() => marcarDocs(docs, true)} className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-600 hover:bg-slate-50">Selecionar todos</button>
+              <button type="button" onClick={() => marcarDocs(docs, false)} className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-600 hover:bg-slate-50">Desmarcar todos</button>
+              <button type="button" onClick={() => marcarDocs(docsFiltrados, true)} className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-600 hover:bg-slate-50">Selecionar visíveis</button>
+              <span className="self-center text-slate-400">{selecionadosIds.length} selecionado(s) de {docs.length}</span>
+            </div>
+            <div className="flex-1 overflow-auto p-4 space-y-3">
+              {secoesDaTela.map((secao) => {
+                const docsSecao = docs.filter((doc) => secao.tipos.includes(doc.tipo_documento));
+                if (!docsSecao.length) return null;
+                return (
+                  <div key={secao.titulo} className="rounded-xl border border-slate-100 overflow-hidden">
+                    <div className="px-3 py-2 bg-slate-50 border-b border-slate-100"><p className="text-xs font-bold text-slate-700">{secao.titulo}</p></div>
+                    <div className="divide-y divide-slate-100">
+                      {docsSecao.map((doc) => (
+                        <label key={doc.id} className="flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer">
+                          <input type="checkbox" checked={Boolean(selecionados[doc.id])} onChange={(e) => setSelecionados((prev) => ({ ...prev, [doc.id]: e.target.checked }))} className="w-4 h-4 rounded border-slate-300" />
+                          <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-slate-700 truncate">{doc.nome_customizado || doc.nome_original}</p>
+                            <p className="text-[11px] text-slate-400 truncate">{labelTipoDocumento(doc.tipo_documento)} • {formatBytes(doc.tamanho_bytes)} • {formatDate(doc.criado_em)}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="p-4 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-2">
+              <button type="button" onClick={() => exportar(docs.map((doc) => doc.id), "acervo-documental-destrava.zip")} disabled={exportando || docs.length === 0} className="h-10 px-4 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                Exportar todos os anexados
+              </button>
+              <button type="button" onClick={() => exportar(selecionadosIds, "documentos-selecionados-destrava.zip")} disabled={exportando || selecionadosIds.length === 0} className="h-10 px-4 rounded-lg bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 disabled:opacity-50">
+                {exportando ? <Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1" /> : <FileArchive className="w-3.5 h-3.5 inline mr-1" />} Exportar selecionados
+              </button>
+            </div>
           </div>
         </div>
       )}
