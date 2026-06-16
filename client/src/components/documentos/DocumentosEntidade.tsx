@@ -76,19 +76,19 @@ const tipoDocumentoLabel: Record<string, string> = {
   qsa: "3. QSA",
   atos_junta_comercial: "4. Atos da Junta Comercial",
   contrato_social: "5. Contrato social",
-  alteracao_contratual: "5. Alterações contratuais",
-  documento_socio: "6. Documento de identificação do sócio",
-  rg: "6A. RG do sócio",
-  cnh: "6A. CNH do sócio",
-  cpf: "CPF do sócio",
+  alteracao_contratual: "5. Contrato social e alterações contratuais",
+  documento_socio: "6A. Documento de identificação do sócio",
+  rg: "6A. Documento de identificação do sócio",
+  cnh: "6A. Documento de identificação do sócio",
+  cpf: "6A. Documento de identificação do sócio",
   comprovante_residencia: "6B. Comprovante de endereço do sócio",
   comprovante_endereco: "Comprovante de endereço da empresa",
-  imposto_renda: "6C. IRPF",
-  irpf: "6C. IRPF",
+  imposto_renda: "6C. IRPF do sócio",
+  irpf: "6C. IRPF do sócio",
   recibo_irpf: "6D. Recibo de entrega do IRPF",
-  certidao_casamento: "6E. Certidão de casamento",
-  averbacao_divorcio: "6E. Averbação de divórcio",
-  certidao_obito: "6E. Certidão de óbito",
+  certidao_casamento: "6E. Estado civil / cônjuge / averbações",
+  averbacao_divorcio: "6E. Estado civil / cônjuge / averbações",
+  certidao_obito: "6E. Estado civil / cônjuge / averbações",
   rating_bacen_cnpj: "7. Consulta de rating BACEN (CNPJ)",
   rating_bacen_cpf: "8. Consulta de rating BACEN (CPF)",
   cenprot_cnpj: "9. Consulta CENPROT (CNPJ)",
@@ -100,16 +100,16 @@ const tipoDocumentoLabel: Record<string, string> = {
   pgfn_cnpj: "12B. Nada consta PGFN (CNPJ)",
   pgfn_cpf: "12B. Nada consta PGFN (CPF)",
   simples_nacional: "13. Consulta de optante pelo Simples Nacional",
-  pgdas: "14. PGDAS",
-  pgmei: "14. PGMEI",
-  ecf: "14. ECF",
-  recibo_ecf: "15. Recibo de entrega da ECF",
-  recibo_pgdas: "15. Recibo de entrega do PGDAS",
-  recibo_pgmei: "15. Recibo de entrega do PGMEI",
-  defis: "16. DEFIS",
-  dasn_simei: "16. DASN-SIMEI",
-  recibo_defis: "17. Recibo de entrega da DEFIS",
-  recibo_dasn_simei: "17. Recibo de entrega da DASN-SIMEI",
+  pgdas: "14. PGDAS, PGMEI ou ECF",
+  pgmei: "14. PGDAS, PGMEI ou ECF",
+  ecf: "14. PGDAS, PGMEI ou ECF",
+  recibo_ecf: "15. Recibo de entrega da ECF, PGDAS ou PGMEI",
+  recibo_pgdas: "15. Recibo de entrega da ECF, PGDAS ou PGMEI",
+  recibo_pgmei: "15. Recibo de entrega da ECF, PGDAS ou PGMEI",
+  defis: "16. DEFIS ou DASN-SIMEI",
+  dasn_simei: "16. DEFIS ou DASN-SIMEI",
+  recibo_defis: "17. Recibo de entrega da DEFIS, DASN-SIMEI ou ECF",
+  recibo_dasn_simei: "17. Recibo de entrega da DEFIS, DASN-SIMEI ou ECF",
   scr_cnpj: "18. Relatório SCR do CNPJ",
   ccs_cnpj: "19. Relatório CCS do CNPJ",
   ccf_cnpj: "20. Relatório CCF do CNPJ",
@@ -119,13 +119,13 @@ const tipoDocumentoLabel: Record<string, string> = {
   consulta_serasa_cnpj: "Consulta Serasa (CNPJ)",
   consulta_serasa_cpf: "Consulta Serasa (CPF)",
   compartilhamento_ecac: "24. Compartilhamento eCAC por banco",
-  foto_fachada: "25. Foto da fachada",
-  foto_interna_1: "25. Foto 1 interna",
-  foto_interna_2: "25. Foto 2 interna",
-  foto_interna_3: "25. Foto 3 interna",
+  foto_fachada: "25. Fotos da empresa",
+  foto_interna_1: "25. Fotos da empresa",
+  foto_interna_2: "25. Fotos da empresa",
+  foto_interna_3: "25. Fotos da empresa",
   faturamento_12_meses: "26. Faturamento bruto dos últimos 12 meses",
-  comprovante_faturamento: "Comprovante de faturamento",
-  declaracao_faturamento: "Declaração de faturamento",
+  comprovante_faturamento: "26. Faturamento bruto dos últimos 12 meses",
+  declaracao_faturamento: "26. Faturamento bruto dos últimos 12 meses",
   extrato_bancario: "Extrato bancário",
   balanco: "Balanço",
   dre: "DRE",
@@ -138,19 +138,109 @@ const tipoDocumentoLabel: Record<string, string> = {
   outros: "Campo outros / Documento nomeado",
 };
 
-type SecaoDocumento = { titulo: string; descricao?: string; tipos: string[] };
+type DocumentoSlot = {
+  titulo: string;
+  tipoUpload: string;
+  matchTipos: string[];
+  descricao?: string;
+  exigeNome?: boolean;
+  placeholderNome?: string;
+};
+
+type SecaoDocumento = { titulo: string; descricao?: string; slots: DocumentoSlot[] };
+
+const slot = (titulo: string, tipoUpload: string, matchTipos?: string[], extra: Partial<DocumentoSlot> = {}): DocumentoSlot => ({
+  titulo,
+  tipoUpload,
+  matchTipos: Array.from(new Set([tipoUpload, ...(matchTipos || [])])),
+  ...extra,
+});
 
 const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
-  { titulo: "Documentos iniciais da empresa", tipos: ["contrato_prestacao_servicos", "cartao_cnpj", "qsa", "atos_junta_comercial", "contrato_social", "alteracao_contratual"] },
-  { titulo: "Documentos dos sócios", descricao: "Anexe aqui documentos de identificação e comprovações dos sócios quando estiver montando o dossiê completo pela empresa.", tipos: ["documento_socio", "rg", "cnh", "cpf", "comprovante_residencia", "irpf", "recibo_irpf", "certidao_casamento", "averbacao_divorcio", "certidao_obito"] },
-  { titulo: "Consultas e certidões CNPJ", tipos: ["rating_bacen_cnpj", "cenprot_cnpj", "cnd_rfb_cnpj", "cadin_cnpj", "pgfn_cnpj", "scr_cnpj", "ccs_cnpj", "ccf_cnpj", "consulta_serasa_cnpj"] },
-  { titulo: "Consultas e certidões CPF dos sócios", descricao: "Obrigatório para todos os sócios ou sócio único. Em caso de cônjuge, incluir SCR, CCS, CCF, Serasa e CENPROT também do cônjuge.", tipos: ["rating_bacen_cpf", "cenprot_cpf", "cnd_rfb_cpf", "cadin_cpf", "pgfn_cpf", "scr_cpf", "ccs_cpf", "ccf_cpf", "consulta_serasa_cpf"] },
-  { titulo: "Fiscal, tributário e faturamento", descricao: "PGDAS/PGMEI/ECF e recibos conforme regime tributário. DEFIS para Simples não MEI. DASN-SIMEI para MEI.", tipos: ["simples_nacional", "pgdas", "pgmei", "ecf", "recibo_pgdas", "recibo_pgmei", "recibo_ecf", "defis", "dasn_simei", "recibo_defis", "recibo_dasn_simei", "faturamento_12_meses"] },
-  { titulo: "eCAC, fotos e outros", tipos: ["compartilhamento_ecac", "foto_fachada", "foto_interna_1", "foto_interna_2", "foto_interna_3", "outros"] },
+  {
+    titulo: "Documentos principais da empresa",
+    descricao: "Base do dossiê empresarial para análise, envio ao banco e comparação futura pela IA.",
+    slots: [
+      slot("1. Contrato de prestação de serviços", "contrato_prestacao_servicos", ["contrato_assessoria"]),
+      slot("2. CNPJ / Cartão CNPJ", "cartao_cnpj", [], { descricao: "A IA/OCR deve identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral." }),
+      slot("3. QSA", "qsa"),
+      slot("4. Atos da Junta Comercial", "atos_junta_comercial"),
+      slot("5. Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { descricao: "Pode receber mais de um arquivo: contrato inicial e alterações." }),
+    ],
+  },
+  {
+    titulo: "Documentos dos sócios",
+    descricao: "Use um único local para documentos que cumprem a mesma função. Não duplicamos RG, CNH e CPF em campos separados.",
+    slots: [
+      slot("6A. Documento de identificação do sócio", "documento_socio", ["rg", "cnh", "cpf"], { descricao: "Anexe RG, CNH ou documento equivalente com CPF, conforme disponível." }),
+      slot("6B. Comprovante de endereço do sócio", "comprovante_residencia"),
+      slot("6C. IRPF do sócio", "irpf", ["imposto_renda"]),
+      slot("6D. Recibo de entrega do IRPF", "recibo_irpf"),
+      slot("6E. Estado civil / cônjuge / averbações", "certidao_casamento", ["averbacao_divorcio", "certidao_obito"], { descricao: "Use somente quando necessário: certidão de casamento, averbação de divórcio, óbito ou documento equivalente." }),
+    ],
+  },
+  {
+    titulo: "Consultas e certidões CNPJ",
+    slots: [
+      slot("7. Consulta de rating BACEN (CNPJ)", "rating_bacen_cnpj"),
+      slot("9. Consulta CENPROT (CNPJ)", "cenprot_cnpj"),
+      slot("11. CND RFB (CNPJ)", "cnd_rfb_cnpj"),
+      slot("12A. Nada consta CADIN (CNPJ)", "cadin_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada." }),
+      slot("12B. Nada consta PGFN (CNPJ)", "pgfn_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada." }),
+      slot("18. Relatório SCR do CNPJ", "scr_cnpj"),
+      slot("19. Relatório CCS do CNPJ", "ccs_cnpj"),
+      slot("20. Relatório CCF do CNPJ", "ccf_cnpj"),
+      slot("Consulta Serasa (CNPJ)", "consulta_serasa_cnpj"),
+    ],
+  },
+  {
+    titulo: "Consultas e certidões CPF dos sócios",
+    descricao: "Obrigatório para todos os sócios ou sócio único. Em caso de cônjuge, incluir SCR, CCS, CCF, Serasa e CENPROT também do cônjuge.",
+    slots: [
+      slot("8. Consulta de rating BACEN (CPF)", "rating_bacen_cpf"),
+      slot("10. Consulta CENPROT (CPF)", "cenprot_cpf"),
+      slot("12. CND RFB (CPF)", "cnd_rfb_cpf"),
+      slot("12A. Nada consta CADIN (CPF)", "cadin_cpf", [], { descricao: "Exigido quando a CND RFB CPF não for disponibilizada." }),
+      slot("12B. Nada consta PGFN (CPF)", "pgfn_cpf", [], { descricao: "Exigido quando a CND RFB CPF não for disponibilizada." }),
+      slot("21. Relatório SCR do CPF", "scr_cpf"),
+      slot("22. Relatório CCS do CPF", "ccs_cpf"),
+      slot("23. Relatório CCF do CPF", "ccf_cpf"),
+      slot("Consulta Serasa (CPF)", "consulta_serasa_cpf"),
+    ],
+  },
+  {
+    titulo: "Fiscal, tributário e faturamento",
+    descricao: "A IA deve interpretar regime tributário e exigir DEFIS, DASN-SIMEI ou ECF conforme o caso.",
+    slots: [
+      slot("13. Consulta de optante pelo Simples Nacional", "simples_nacional"),
+      slot("14. PGDAS, ECF ou PGMEI", "pgdas", ["pgmei", "ecf"], { descricao: "Anexe o arquivo aplicável ao regime tributário." }),
+      slot("15. Recibo de entrega da ECF, PGDAS ou PGMEI", "recibo_pgdas", ["recibo_pgmei", "recibo_ecf"], { descricao: "Anexe o recibo correspondente ao documento fiscal enviado." }),
+      slot("16. DEFIS ou DASN-SIMEI", "defis", ["dasn_simei"], { descricao: "DEFIS para Simples Nacional não MEI. DASN-SIMEI para MEI." }),
+      slot("17. Recibo de entrega da DEFIS, DASN-SIMEI ou ECF", "recibo_defis", ["recibo_dasn_simei", "recibo_ecf"], { descricao: "Anexe o recibo aplicável." }),
+      slot("26. Faturamento bruto dos últimos 12 meses", "faturamento_12_meses", ["comprovante_faturamento", "declaracao_faturamento"], { descricao: "Pode conter planilha, declaração ou relatório solicitado pelo banco." }),
+    ],
+  },
+  {
+    titulo: "eCAC, fotos e outros",
+    slots: [
+      slot("24. Compartilhamento eCAC por banco", "compartilhamento_ecac", [], { exigeNome: true, placeholderNome: "Banco/destinatário eCAC" }),
+      slot("25. Fotos da empresa", "foto_fachada", ["foto_interna_1", "foto_interna_2", "foto_interna_3"], { descricao: "Anexe fachada e fotos internas no mesmo local." }),
+      slot("Campo outros / Documento nomeado", "outros", [], { exigeNome: true, placeholderNome: "Nome do documento" }),
+    ],
+  },
 ];
 
+const TODOS_SLOTS = SECOES_DOCUMENTAIS.flatMap((secao) => secao.slots);
+const TIPO_PARA_SLOT = new Map<string, DocumentoSlot>();
+TODOS_SLOTS.forEach((documentoSlot) => documentoSlot.matchTipos.forEach((tipo) => TIPO_PARA_SLOT.set(tipo, documentoSlot)));
+
 function labelTipoDocumento(tipo: string) {
-  return tipoDocumentoLabel[tipo] || tipo.replace(/_/g, " ");
+  const documentoSlot = TIPO_PARA_SLOT.get(tipo);
+  return documentoSlot?.titulo || tipoDocumentoLabel[tipo] || tipo.replace(/_/g, " ");
+}
+
+function slotDoTipo(tipo: string) {
+  return TIPO_PARA_SLOT.get(tipo) || slot(labelTipoDocumento(tipo), tipo, [tipo]);
 }
 
 function formatBytes(value?: number) {
@@ -234,30 +324,49 @@ export default function DocumentosEntidade({
   useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
-  const tiposDaTela = useMemo(() => {
+  const slotsDaTela = useMemo(() => {
     const set = new Set<string>(tiposPermitidos || []);
     docs.forEach((doc) => set.add(doc.tipo_documento));
-    const ordenados: string[] = [];
-    SECOES_DOCUMENTAIS.forEach((secao) => secao.tipos.forEach((tipo) => { if (set.has(tipo) && !ordenados.includes(tipo)) ordenados.push(tipo); }));
-    Array.from(set).forEach((tipo) => { if (!ordenados.includes(tipo)) ordenados.push(tipo); });
+
+    const ordenados: DocumentoSlot[] = [];
+    const vistos = new Set<string>();
+    SECOES_DOCUMENTAIS.forEach((secao) => {
+      secao.slots.forEach((documentoSlot) => {
+        const visivel = documentoSlot.matchTipos.some((tipo) => set.has(tipo)) || set.has(documentoSlot.tipoUpload);
+        if (visivel && !vistos.has(documentoSlot.tipoUpload)) {
+          ordenados.push(documentoSlot);
+          vistos.add(documentoSlot.tipoUpload);
+        }
+      });
+    });
+
+    Array.from(set).forEach((tipo) => {
+      if (!TIPO_PARA_SLOT.has(tipo) && !vistos.has(tipo)) {
+        ordenados.push(slotDoTipo(tipo));
+        vistos.add(tipo);
+      }
+    });
+
     return ordenados;
   }, [tiposPermitidos, docs]);
 
   const secoesDaTela = useMemo(() => {
-    const set = new Set(tiposDaTela);
+    const uploadsVisiveis = new Set(slotsDaTela.map((documentoSlot) => documentoSlot.tipoUpload));
     const base = SECOES_DOCUMENTAIS
-      .map((secao) => ({ ...secao, tipos: secao.tipos.filter((tipo) => set.has(tipo)) }))
-      .filter((secao) => secao.tipos.length > 0);
-    const conhecidos = new Set(SECOES_DOCUMENTAIS.flatMap((s) => s.tipos));
-    const extras = tiposDaTela.filter((tipo) => !conhecidos.has(tipo));
-    if (extras.length) base.push({ titulo: "Outros documentos do sistema", tipos: extras });
+      .map((secao) => ({ ...secao, slots: secao.slots.filter((documentoSlot) => uploadsVisiveis.has(documentoSlot.tipoUpload)) }))
+      .filter((secao) => secao.slots.length > 0);
+
+    const uploadsConhecidos = new Set(SECOES_DOCUMENTAIS.flatMap((secao) => secao.slots.map((documentoSlot) => documentoSlot.tipoUpload)));
+    const extras = slotsDaTela.filter((documentoSlot) => !uploadsConhecidos.has(documentoSlot.tipoUpload));
+    if (extras.length) base.push({ titulo: "Outros documentos do sistema", slots: extras });
     return base;
-  }, [tiposDaTela]);
+  }, [slotsDaTela]);
 
   const docsFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return docs.filter((doc) => {
-      const bateTipo = tipoFiltro === "todos" || doc.tipo_documento === tipoFiltro;
+      const documentoSlot = slotDoTipo(doc.tipo_documento);
+      const bateTipo = tipoFiltro === "todos" || documentoSlot.tipoUpload === tipoFiltro || doc.tipo_documento === tipoFiltro;
       const alvo = `${doc.nome_original || ""} ${doc.nome_customizado || ""} ${doc.observacoes || ""} ${labelTipoDocumento(doc.tipo_documento)}`.toLowerCase();
       const bateBusca = !termo || alvo.includes(termo);
       return bateTipo && bateBusca;
@@ -431,7 +540,7 @@ export default function DocumentosEntidade({
             </div>
             <select value={tipoFiltro} onChange={(e) => setTipoFiltro(e.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700">
               <option value="todos">Todos os tipos</option>
-              {tiposDaTela.map((t) => <option key={t} value={t}>{labelTipoDocumento(t)}</option>)}
+              {slotsDaTela.map((documentoSlot) => <option key={documentoSlot.tipoUpload} value={documentoSlot.tipoUpload}>{documentoSlot.titulo}</option>)}
             </select>
           </div>
         </div>
@@ -455,7 +564,8 @@ export default function DocumentosEntidade({
             </div>
 
             {secoesDaTela.map((secao) => {
-              const docsSecao = docsFiltrados.filter((doc) => secao.tipos.includes(doc.tipo_documento));
+              const tiposSecao = secao.slots.flatMap((documentoSlot) => documentoSlot.matchTipos);
+              const docsSecao = docsFiltrados.filter((doc) => tiposSecao.includes(doc.tipo_documento));
               if (!docsSecao.length) return null;
               return (
                 <div key={secao.titulo} className="rounded-xl border border-slate-100 overflow-hidden">
@@ -515,15 +625,16 @@ export default function DocumentosEntidade({
                 <p className="text-xs font-bold text-slate-700 mb-1">{secao.titulo}</p>
                 {secao.descricao && <p className="text-[11px] text-slate-400 mb-2">{secao.descricao}</p>}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-                  {secao.tipos.map((tipo) => {
-                    const docsTipo = docs.filter((doc) => doc.tipo_documento === tipo);
+                  {secao.slots.map((documentoSlot) => {
+                    const tipo = documentoSlot.tipoUpload;
+                    const docsTipo = docs.filter((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento));
                     const uploading = uploadingTipo === tipo;
-                    const exigeNome = tipo === "outros" || tipo === "compartilhamento_ecac";
+                    const exigeNome = Boolean(documentoSlot.exigeNome);
                     return (
                       <div key={tipo} className="rounded-xl border border-slate-100 bg-white p-3 space-y-2">
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="text-xs font-bold text-slate-700 truncate">{labelTipoDocumento(tipo)}</p>
+                            <p className="text-xs font-bold text-slate-700 truncate">{documentoSlot.titulo}</p>
                             <p className="text-[11px] text-slate-400">{docsTipo.length} arquivo(s) anexado(s)</p>
                           </div>
                           <label className="h-8 inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold bg-blue-600 text-white px-2.5 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors">
@@ -532,9 +643,10 @@ export default function DocumentosEntidade({
                           </label>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {exigeNome && <input value={nomeCustomizadoPorTipo[tipo] || ""} onChange={(e) => setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder={tipo === "compartilhamento_ecac" ? "Banco/destinatário eCAC" : "Nome do documento"} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700" />}
+                          {exigeNome && <input value={nomeCustomizadoPorTipo[tipo] || ""} onChange={(e) => setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder={documentoSlot.placeholderNome || "Nome do documento"} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700" />}
                           <input value={observacoesPorTipo[tipo] || ""} onChange={(e) => setObservacoesPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder="Observação opcional" className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700" />
                         </div>
+                        {documentoSlot.descricao && <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1">{documentoSlot.descricao}</p>}
                         {tipo === "cartao_cnpj" && <p className="text-[11px] text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-2 py-1">O usuário só anexa. O sistema/IA deverá identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral para o relatório.</p>}
                       </div>
                     );
@@ -564,7 +676,8 @@ export default function DocumentosEntidade({
             </div>
             <div className="flex-1 overflow-auto p-4 space-y-3">
               {secoesDaTela.map((secao) => {
-                const docsSecao = docs.filter((doc) => secao.tipos.includes(doc.tipo_documento));
+                const tiposSecao = secao.slots.flatMap((documentoSlot) => documentoSlot.matchTipos);
+                const docsSecao = docs.filter((doc) => tiposSecao.includes(doc.tipo_documento));
                 if (!docsSecao.length) return null;
                 return (
                   <div key={secao.titulo} className="rounded-xl border border-slate-100 overflow-hidden">
