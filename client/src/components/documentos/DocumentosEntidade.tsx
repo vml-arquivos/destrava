@@ -160,6 +160,9 @@ export default function DocumentosEntidade({
   const [dataEmissao, setDataEmissao] = useState("");
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [exportando, setExportando] = useState(false);
+  const [abaDocumentos, setAbaDocumentos] = useState<"upload" | "exportar">("upload");
+  const [filtroTipoExportacao, setFiltroTipoExportacao] = useState("todos");
+  const [buscaExportacao, setBuscaExportacao] = useState("");
 
   const query = useMemo(() => {
     if (!entidadeId) return "";
@@ -186,6 +189,24 @@ export default function DocumentosEntidade({
   }, [entidadeId, query]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+
+  const docsExportacao = useMemo(() => {
+    const termo = buscaExportacao.trim().toLowerCase();
+    return docs.filter((doc) => {
+      const bateTipo = filtroTipoExportacao === "todos" || doc.tipo_documento === filtroTipoExportacao;
+      const baseBusca = [
+        doc.nome_original,
+        doc.nome_customizado,
+        labelTipoDocumento(doc.tipo_documento),
+        doc.observacoes,
+        doc.status,
+        doc.status_validade,
+      ].filter(Boolean).join(" ").toLowerCase();
+      const bateBusca = !termo || baseBusca.includes(termo);
+      return bateTipo && bateBusca;
+    });
+  }, [docs, filtroTipoExportacao, buscaExportacao]);
 
   useEffect(() => {
     setSelecionados((atual) => new Set(Array.from(atual).filter((id) => docs.some((doc) => doc.id === id))));
@@ -253,8 +274,18 @@ export default function DocumentosEntidade({
     });
   }
 
-  function selecionarTodos() {
-    setSelecionados((atual) => atual.size === docs.length ? new Set() : new Set(docs.map((doc) => doc.id)));
+  function selecionarTodosExportacao() {
+    const idsVisiveis = docsExportacao.map((doc) => doc.id);
+    if (!idsVisiveis.length) return;
+    setSelecionados((atual) => {
+      const todosVisiveisSelecionados = idsVisiveis.every((id) => atual.has(id));
+      if (todosVisiveisSelecionados) {
+        const proximo = new Set(atual);
+        idsVisiveis.forEach((id) => proximo.delete(id));
+        return proximo;
+      }
+      return new Set([...Array.from(atual), ...idsVisiveis]);
+    });
   }
 
   async function fetchDocumentoBlob(id: string, modo: "view" | "download") {
@@ -370,57 +401,93 @@ export default function DocumentosEntidade({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Paperclip className="w-4 h-4" /> {titulo}</h3>
-          <p className="text-xs text-slate-400 mt-0.5">Documentos vinculados ao cadastro selecionado.</p>
-        </div>
-        {permitirUpload && (
-          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-            <select value={tipoDocumento} onChange={(e) => setTipoDocumento(e.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700">
-              {tiposPermitidos.map((t) => <option key={t} value={t}>{labelTipoDocumento(t)}</option>)}
-            </select>
-            {(tipoDocumento === "outros" || tipoDocumento === "compartilhamento_ecac") && (
-              <input value={nomeCustomizado} onChange={(e) => setNomeCustomizado(e.target.value)} placeholder={tipoDocumento === "compartilhamento_ecac" ? "Banco/destinatário do eCAC" : "Nome do documento"} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700" />
-            )}
-            {tipoDocumento === "cartao_cnpj" && (
-              <input type="date" value={dataEmissao} onChange={(e) => setDataEmissao(e.target.value)} title="Data de emissão do Cartão CNPJ" className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700" />
-            )}
-            <input value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Observação opcional" className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700" />
-            <label className="h-9 flex items-center justify-center gap-1.5 text-xs font-semibold bg-blue-600 text-white px-3 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors disabled:opacity-60">
-              {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} Enviar
-              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(file); e.currentTarget.value = ""; }} />
-            </label>
-          </div>
-        )}
+      <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
+        <button
+          type="button"
+          onClick={() => setAbaDocumentos("upload")}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${abaDocumentos === "upload" ? "bg-blue-600 text-white shadow-sm" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"}`}
+        >
+          Enviar documento
+        </button>
+        <button
+          type="button"
+          onClick={() => setAbaDocumentos("exportar")}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${abaDocumentos === "exportar" ? "bg-slate-900 text-white shadow-sm" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"}`}
+        >
+          Visualizar / exportar documentos ({docs.length})
+        </button>
       </div>
 
-      {docs.length > 0 && (
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-            <button onClick={selecionarTodos} className="px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 font-semibold">
-              {selecionados.size === docs.length ? "Limpar seleção" : "Selecionar todos"}
-            </button>
-            <span>{selecionados.size} de {docs.length} selecionado(s)</span>
+      {abaDocumentos === "upload" && (
+        <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-4 space-y-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Upload className="w-4 h-4" /> Enviar novo documento</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Este local é somente para anexar novo arquivo. A lista para visualizar, imprimir, baixar e exportar fica separada na aba “Visualizar / exportar documentos”.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button disabled={exportando || selecionados.size === 0} onClick={() => exportarZip(true)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 disabled:opacity-50"><Archive className="w-3.5 h-3.5" /> Exportar selecionados</button>
-            <button disabled={exportando} onClick={() => exportarZip(false)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-100 disabled:opacity-50"><Archive className="w-3.5 h-3.5" /> Exportar tudo</button>
-            <button disabled={exportando || selecionados.size === 0} onClick={enviarEmailSelecionados} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100 disabled:opacity-50"><Mail className="w-3.5 h-3.5" /> Enviar por e-mail</button>
-          </div>
+          {permitirUpload ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-2">
+              <select value={tipoDocumento} onChange={(e) => setTipoDocumento(e.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700">
+                {tiposPermitidos.map((t) => <option key={t} value={t}>{labelTipoDocumento(t)}</option>)}
+              </select>
+              {(tipoDocumento === "outros" || tipoDocumento === "compartilhamento_ecac") && (
+                <input value={nomeCustomizado} onChange={(e) => setNomeCustomizado(e.target.value)} placeholder={tipoDocumento === "compartilhamento_ecac" ? "Banco/destinatário do eCAC" : "Nome do documento"} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700" />
+              )}
+              {tipoDocumento === "cartao_cnpj" && (
+                <input type="date" value={dataEmissao} onChange={(e) => setDataEmissao(e.target.value)} title="Data de emissão do Cartão CNPJ" className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700" />
+              )}
+              <input value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Observação opcional" className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700 xl:col-span-2" />
+              <label className="h-10 flex items-center justify-center gap-1.5 text-xs font-semibold bg-blue-600 text-white px-3 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors disabled:opacity-60">
+                {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} Enviar arquivo
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(file); e.currentTarget.value = ""; }} />
+              </label>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">Upload desabilitado para este cadastro.</p>
+          )}
         </div>
       )}
 
-      {loading ? (
+      {abaDocumentos === "exportar" && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+          <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Archive className="w-4 h-4" /> Central de visualização e exportação</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Aqui ficam os documentos já enviados. Selecione todos ou apenas os necessários para exportar em ZIP para o PC.</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input value={buscaExportacao} onChange={(e) => setBuscaExportacao(e.target.value)} placeholder="Buscar arquivo, tipo ou observação" className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700" />
+              <select value={filtroTipoExportacao} onChange={(e) => setFiltroTipoExportacao(e.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700">
+                <option value="todos">Todos os tipos</option>
+                {tiposPermitidos.map((t) => <option key={t} value={t}>{labelTipoDocumento(t)}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {docs.length > 0 && (
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <button onClick={selecionarTodosExportacao} className="px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 font-semibold">
+                  {docsExportacao.length > 0 && docsExportacao.every((doc) => selecionados.has(doc.id)) ? "Limpar seleção visível" : "Selecionar documentos visíveis"}
+                </button>
+                <span>{selecionados.size} selecionado(s) • {docsExportacao.length} visível(is) de {docs.length}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button disabled={exportando || selecionados.size === 0} onClick={() => exportarZip(true)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 disabled:opacity-50"><Archive className="w-3.5 h-3.5" /> Exportar selecionados</button>
+                <button disabled={exportando || docs.length === 0} onClick={() => exportarZip(false)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-100 disabled:opacity-50"><Archive className="w-3.5 h-3.5" /> Exportar todos</button>
+                <button disabled={exportando || selecionados.size === 0} onClick={enviarEmailSelecionados} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100 disabled:opacity-50"><Mail className="w-3.5 h-3.5" /> Enviar por e-mail</button>
+              </div>
+            </div>
+          )}
+          {loading ? (
         <div className="flex items-center justify-center py-10 text-sm text-slate-500"><Loader2 className="w-4 h-4 animate-spin mr-2" /> Carregando documentos...</div>
       ) : docs.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 gap-3 rounded-xl border-2 border-dashed border-slate-200">
           <FileText className="w-10 h-10 text-slate-200" />
-          <p className="text-sm text-slate-500">Nenhum documento vinculado a esta entidade.</p>
+          <p className="text-sm text-slate-500">Nenhum documento encontrado para os filtros atuais.</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {docs.map((doc) => (
+          {docsExportacao.map((doc) => (
             <div key={doc.id} className="flex flex-col lg:flex-row lg:items-center gap-3 p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors">
               <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer shrink-0">
                 <input type="checkbox" checked={selecionados.has(doc.id)} onChange={() => alternarSelecionado(doc.id)} className="h-4 w-4 rounded border-slate-300" />
@@ -449,6 +516,8 @@ export default function DocumentosEntidade({
               </div>
             </div>
           ))}
+        </div>
+          )}
         </div>
       )}
     </div>
