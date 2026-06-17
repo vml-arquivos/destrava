@@ -514,53 +514,53 @@ export default function DocumentosEntidade({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
+    <div className="space-y-3">
+      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-2.5">
         <div>
-          <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Paperclip className="w-4 h-4" /> {titulo}</h3>
-          <p className="text-xs text-slate-400 mt-0.5">Cada documento fica no seu local correto. Os arquivos permanecem salvos no repositório documental e alimentam o laudo/dossiê gerado pela IA.</p>
+          <h3 className="text-sm font-bold text-slate-700 flex items-center gap-1.5"><Paperclip className="w-3.5 h-3.5" /> {titulo}</h3>
+          <p className="text-[11px] text-slate-400 mt-0.5">Cada documento fica no seu local correto. Os arquivos permanecem salvos no repositório documental e alimentam o laudo/dossiê gerado pela IA.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => toast.info("O laudo/dossiê será gerado pela etapa de IA/OCR com base no acervo documental, dados extraídos e validações do sistema.")} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">
+        <div className="flex flex-wrap gap-1.5">
+          <button type="button" onClick={() => toast.info("O laudo/dossiê será gerado pela etapa de IA/OCR com base no acervo documental, dados extraídos e validações do sistema.")} className="inline-flex items-center justify-center gap-1.5 h-8 px-2.5 rounded-lg border border-indigo-200 bg-indigo-50 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100">
             <FileText className="w-3.5 h-3.5" /> Laudo / dossiê IA
           </button>
-          <button type="button" onClick={abrirChecklistExportacao} disabled={docs.length === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 disabled:opacity-50">
+          <button type="button" onClick={abrirChecklistExportacao} disabled={docs.length === 0} className="inline-flex items-center justify-center gap-1.5 h-8 px-2.5 rounded-lg bg-slate-800 text-white text-[11px] font-semibold hover:bg-slate-900 disabled:opacity-50">
             <FileArchive className="w-3.5 h-3.5" /> Exportar documentos
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Arquivos</p>
-          <p className="mt-1 text-xl font-black text-slate-900">{docs.length}</p>
+        <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Arquivos</p>
+          <p className="mt-0.5 text-base font-black text-slate-900">{docs.length}</p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Campos preenchidos</p>
-          <p className="mt-1 text-xl font-black text-slate-900">{slotsPreenchidos}/{totalSlots}</p>
+        <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Campos preenchidos</p>
+          <p className="mt-0.5 text-base font-black text-slate-900">{slotsPreenchidos}/{totalSlots}</p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Validados</p>
-          <p className="mt-1 text-xl font-black text-emerald-700">{documentosValidados}</p>
+        <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Validados</p>
+          <p className="mt-0.5 text-base font-black text-emerald-700">{documentosValidados}</p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Pendentes</p>
-          <p className="mt-1 text-xl font-black text-amber-700">{Math.max(docs.length - documentosValidados, 0)}</p>
+        <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Pendentes</p>
+          <p className="mt-0.5 text-base font-black text-amber-700">{Math.max(docs.length - documentosValidados, 0)}</p>
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
+      <div className="rounded-lg border border-slate-200 bg-white p-2.5 space-y-2.5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
           <div>
             <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><FolderOpen className="w-3.5 h-3.5" /> Documentação anexada</p>
-            <p className="text-[11px] text-slate-400">Visualize os documentos anexados, pesquise, filtre ou exporte em checklist. Os arquivos físicos seguem preservados mesmo com atualizações do cadastro.</p>
+            <p className="text-[10px] text-slate-400">Visualize os documentos anexados, pesquise, filtre ou exporte em checklist. Os arquivos físicos seguem preservados mesmo com atualizações do cadastro.</p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex flex-col sm:flex-row gap-1.5">
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar documento..." className="h-9 w-full sm:w-56 rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-700" />
+              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar documento..." className="h-8 w-full sm:w-52 rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-[11px] text-slate-700" />
             </div>
-            <select value={tipoFiltro} onChange={(e) => setTipoFiltro(e.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700">
+            <select value={tipoFiltro} onChange={(e) => setTipoFiltro(e.target.value)} className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-700">
               <option value="todos">Todos os tipos</option>
               {slotsDaTela.map((documentoSlot) => <option key={documentoSlot.tipoUpload} value={documentoSlot.tipoUpload}>{documentoSlot.titulo}</option>)}
             </select>
@@ -568,19 +568,19 @@ export default function DocumentosEntidade({
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-10 text-sm text-slate-500"><Loader2 className="w-4 h-4 animate-spin mr-2" /> Carregando documentos...</div>
+          <div className="flex items-center justify-center py-8 text-xs text-slate-500"><Loader2 className="w-4 h-4 animate-spin mr-2" /> Carregando documentos...</div>
         ) : docs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 gap-3 rounded-xl border-2 border-dashed border-slate-200">
-            <FileText className="w-10 h-10 text-slate-200" />
-            <p className="text-sm text-slate-500">Nenhum documento anexado a esta entidade.</p>
+          <div className="flex flex-col items-center justify-center py-7 gap-2 rounded-lg border-2 border-dashed border-slate-200">
+            <FileText className="w-8 h-8 text-slate-200" />
+            <p className="text-xs text-slate-500">Nenhum documento anexado a esta entidade.</p>
           </div>
         ) : docsFiltrados.length === 0 ? (
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-500">Nenhum documento encontrado para o filtro aplicado.</div>
+          <div className="rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs text-slate-500">Nenhum documento encontrado para o filtro aplicado.</div>
         ) : (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2 text-xs">
+          <div className="space-y-2.5">
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
               <span className="text-slate-400">{docsFiltrados.length} documento(s) visível(is)</span>
-              <button type="button" onClick={abrirChecklistExportacao} className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-600 hover:bg-slate-50">
+              <button type="button" onClick={abrirChecklistExportacao} className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white font-semibold text-slate-600 hover:bg-slate-50">
                 Checklist de exportação
               </button>
             </div>
@@ -590,40 +590,40 @@ export default function DocumentosEntidade({
               const docsSecao = docsFiltrados.filter((doc) => tiposSecao.includes(doc.tipo_documento));
               if (!docsSecao.length) return null;
               return (
-                <div key={secao.titulo} className="rounded-xl border border-slate-100 overflow-hidden">
-                  <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between gap-2">
+                <div key={secao.titulo} className="rounded-lg border border-slate-100 overflow-hidden">
+                  <div className="px-2.5 py-1.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between gap-2">
                     <div>
-                      <p className="text-xs font-bold text-slate-700">{secao.titulo}</p>
-                      {secao.descricao && <p className="text-[11px] text-slate-400 mt-0.5">{secao.descricao}</p>}
+                      <p className="text-[11px] font-bold text-slate-700">{secao.titulo}</p>
+                      {secao.descricao && <p className="text-[10px] text-slate-400 mt-0.5">{secao.descricao}</p>}
                     </div>
-                    <span className="text-[11px] text-slate-400">{docsSecao.length} arquivo(s)</span>
+                    <span className="text-[10px] text-slate-400">{docsSecao.length} arquivo(s)</span>
                   </div>
                   <div className="divide-y divide-slate-100">
                     {docsSecao.map((doc) => (
-                      <div key={doc.id} className="flex flex-col lg:flex-row lg:items-center gap-3 p-3 bg-white hover:bg-slate-50 transition-colors">
-                        <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0"><FileText className="w-4 h-4 text-blue-500" /></div>
+                      <div key={doc.id} className="flex flex-col lg:flex-row lg:items-center gap-2.5 p-2.5 bg-white hover:bg-slate-50 transition-colors">
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0"><FileText className="w-3.5 h-3.5 text-blue-500" /></div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-800 truncate">{doc.nome_customizado || doc.nome_original}</p>
-                          <div className="flex flex-wrap gap-1.5 mt-1 text-[11px] text-slate-400">
+                          <p className="text-xs font-semibold text-slate-800 truncate">{doc.nome_customizado || doc.nome_original}</p>
+                          <div className="flex flex-wrap gap-1.5 mt-0.5 text-[10px] text-slate-400">
                             <span>{labelTipoDocumento(doc.tipo_documento)}</span>
                             <span>•</span><span>{formatBytes(doc.tamanho_bytes)}</span>
                             <span>•</span><span>Enviado em {formatDate(doc.criado_em)}</span>
                             {doc.origem && <><span>•</span><span>{doc.origem.replace(/_/g, " ")}</span></>}
                           </div>
-                          {doc.observacoes && <p className="text-xs text-slate-500 mt-1">{doc.observacoes}</p>}
-                          {doc.tipo_documento === "cartao_cnpj" && !doc.data_emissao_documento && <p className="text-[11px] text-amber-700 mt-1">A data de emissão e os dados do Cartão CNPJ serão extraídos automaticamente pela análise IA/OCR.</p>}
+                          {doc.observacoes && <p className="text-[11px] text-slate-500 mt-0.5">{doc.observacoes}</p>}
+                          {doc.tipo_documento === "cartao_cnpj" && !doc.data_emissao_documento && <p className="text-[10px] text-amber-700 mt-0.5">A data de emissão e os dados do Cartão CNPJ serão extraídos automaticamente pela análise IA/OCR.</p>}
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`text-[11px] font-semibold px-2 py-1 rounded-full border ${statusCls[doc.status] || "bg-slate-50 text-slate-600 border-slate-100"}`}>{doc.status.replace(/_/g, " ")}</span>
-                          {doc.status_validade && <span className={`text-[11px] font-semibold px-2 py-1 rounded-full border ${statusValidadeCls[doc.status_validade] || statusValidadeCls.nao_verificado}`}>{doc.status_validade.replace(/_/g, " ")}</span>}
-                          {doc.validado && <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100"><CheckCircle className="w-3 h-3 inline mr-1" />validado</span>}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${statusCls[doc.status] || "bg-slate-50 text-slate-600 border-slate-100"}`}>{doc.status.replace(/_/g, " ")}</span>
+                          {doc.status_validade && <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${statusValidadeCls[doc.status_validade] || statusValidadeCls.nao_verificado}`}>{doc.status_validade.replace(/_/g, " ")}</span>}
+                          {doc.validado && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100"><CheckCircle className="w-3 h-3 inline mr-1" />validado</span>}
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button title="Visualizar" onClick={() => visualizar(doc)} className="p-2 rounded-lg hover:bg-blue-50 text-blue-600"><Eye className="w-4 h-4" /></button>
-                          <button title="Imprimir" onClick={() => imprimir(doc)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><Printer className="w-4 h-4" /></button>
-                          <button title="Baixar" onClick={() => baixar(doc)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><Download className="w-4 h-4" /></button>
-                          {permitirValidar && <button onClick={() => validar(doc.id, !doc.validado)} className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border ${doc.validado ? "border-amber-200 text-amber-700 bg-amber-50" : "border-emerald-200 text-emerald-700 bg-emerald-50"}`}>{doc.validado ? "Reabrir" : "Validar"}</button>}
-                          {permitirExcluir && <button title="Excluir" onClick={() => excluir(doc.id)} className="p-2 rounded-lg hover:bg-red-50 text-red-500"><Trash2 className="w-4 h-4" /></button>}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button title="Visualizar" onClick={() => visualizar(doc)} className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600"><Eye className="w-3.5 h-3.5" /></button>
+                          <button title="Imprimir" onClick={() => imprimir(doc)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><Printer className="w-3.5 h-3.5" /></button>
+                          <button title="Baixar" onClick={() => baixar(doc)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><Download className="w-3.5 h-3.5" /></button>
+                          {permitirValidar && <button onClick={() => validar(doc.id, !doc.validado)} className={`text-[11px] font-bold px-2 py-1 rounded-lg border ${doc.validado ? "border-amber-200 text-amber-700 bg-amber-50" : "border-emerald-200 text-emerald-700 bg-emerald-50"}`}>{doc.validado ? "Reabrir" : "Validar"}</button>}
+                          {permitirExcluir && <button title="Excluir" onClick={() => excluir(doc.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>}
                         </div>
                       </div>
                     ))}
@@ -636,74 +636,71 @@ export default function DocumentosEntidade({
       </div>
 
       {permitirUpload && (
-        <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
+        <div className="rounded-lg border border-slate-200 bg-white p-2.5 space-y-2.5">
           <div>
-            <p className="text-sm font-bold text-slate-700">Checklist de inclusão de documentos</p>
-            <p className="text-[11px] text-slate-400">Use os campos abaixo como checklist documental organizado. O arquivo anexado aparecerá automaticamente no grupo correspondente acima e ficará visível também no respectivo bloco.</p>
+            <p className="text-xs font-bold text-slate-700">Checklist de inclusão de documentos</p>
+            <p className="text-[10px] text-slate-400">Use os campos abaixo como checklist documental organizado. O arquivo anexado aparecerá automaticamente no grupo correspondente acima e ficará visível também no respectivo bloco.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {secoesDaTela.map((secao, index) => (
-              <a key={secao.titulo} href={`#secao-upload-${index}`} className="px-3 py-1.5 rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600 hover:bg-slate-200 transition-colors">
+              <a key={secao.titulo} href={`#secao-upload-${index}`} className="px-2.5 py-1 rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600 hover:bg-slate-200 transition-colors">
                 {secao.titulo}
               </a>
             ))}
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {secoesDaTela.map((secao, index) => (
-              <div key={secao.titulo} id={`secao-upload-${index}`} className="rounded-xl border border-slate-100 bg-slate-50 p-3 scroll-mt-6">
-                <div className="flex items-start justify-between gap-3 mb-2">
+              <div key={secao.titulo} id={`secao-upload-${index}`} className="rounded-lg border border-slate-100 bg-slate-50 p-2.5 scroll-mt-6">
+                <div className="flex items-start justify-between gap-2.5 mb-1.5">
                   <div>
-                    <p className="text-sm font-bold text-slate-700">{secao.titulo}</p>
-                    {secao.descricao && <p className="text-[11px] text-slate-400 mt-1">{secao.descricao}</p>}
+                    <p className="text-xs font-bold text-slate-700">{secao.titulo}</p>
+                    {secao.descricao && <p className="text-[10px] text-slate-400 mt-0.5">{secao.descricao}</p>}
                   </div>
-                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-500">{secao.slots.length} campo(s)</span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-500">{secao.slots.length} campo(s)</span>
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
                   {secao.slots.map((documentoSlot) => {
                     const tipo = documentoSlot.tipoUpload;
                     const docsTipo = docs.filter((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento));
                     const uploading = uploadingTipo === tipo;
                     const exigeNome = Boolean(documentoSlot.exigeNome);
                     return (
-                      <div key={tipo} className="rounded-xl border border-slate-100 bg-white p-3 space-y-3 shadow-sm shadow-slate-100/30">
+                      <div key={tipo} className="rounded-lg border border-slate-100 bg-white p-2.5 space-y-2 shadow-sm shadow-slate-100/30">
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="text-sm font-bold text-slate-700 leading-tight">{documentoSlot.titulo}</p>
-                            <p className="text-[11px] text-slate-400 mt-0.5">{docsTipo.length} arquivo(s) anexado(s)</p>
+                            <p className="text-xs font-bold text-slate-700 leading-tight">{documentoSlot.titulo}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">{docsTipo.length} arquivo(s) anexado(s)</p>
                           </div>
-                          <label className="h-9 inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold bg-blue-600 text-white px-3 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors shrink-0">
-                            {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} Anexar
+                          <label className="h-7 inline-flex items-center justify-center gap-1 text-[10px] font-semibold bg-blue-600 text-white px-2.5 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors shrink-0">
+                            {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Anexar
                             <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file); e.currentTarget.value = ""; }} />
                           </label>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {exigeNome && <input value={nomeCustomizadoPorTipo[tipo] || ""} onChange={(e) => setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder={documentoSlot.placeholderNome || "Nome do documento"} className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700" />}
-                          <input value={observacoesPorTipo[tipo] || ""} onChange={(e) => setObservacoesPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder="Observação opcional" className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700" />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                          {exigeNome && <input value={nomeCustomizadoPorTipo[tipo] || ""} onChange={(e) => setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder={documentoSlot.placeholderNome || "Nome do documento"} className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[10px] text-slate-700" />}
+                          <input value={observacoesPorTipo[tipo] || ""} onChange={(e) => setObservacoesPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder="Observação opcional" className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[10px] text-slate-700" />
                         </div>
-                        {documentoSlot.descricao && <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1">{documentoSlot.descricao}</p>}
-                        {tipo === "cartao_cnpj" && <p className="text-[11px] text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-2 py-1">O usuário só anexa. O sistema/IA deverá identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral para o relatório.</p>}
-                        <div className="rounded-lg border border-slate-100 bg-slate-50 p-2.5">
-                          <p className="text-[11px] font-semibold text-slate-600 mb-2">Arquivos neste campo</p>
-                          {docsTipo.length === 0 ? (
-                            <p className="text-[11px] text-slate-400">Nenhum arquivo anexado neste local.</p>
-                          ) : (
-                            <div className="space-y-1.5">
+                        {documentoSlot.descricao && <p className="text-[10px] text-slate-500 bg-slate-50 border border-slate-100 rounded-md px-2 py-1">{documentoSlot.descricao}</p>}
+                        {tipo === "cartao_cnpj" && <p className="text-[10px] text-blue-700 bg-blue-50 border border-blue-100 rounded-md px-2 py-1">O usuário só anexa. O sistema/IA deverá identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral para o relatório.</p>}
+                        {docsTipo.length > 0 && (
+                          <div className="rounded-md border border-slate-100 bg-slate-50 p-2">
+                            <div className="space-y-1">
                               {docsTipo.slice(0, 3).map((doc) => (
-                                <div key={doc.id} className="flex items-center justify-between gap-2 rounded-lg bg-white border border-slate-100 px-2 py-1.5">
+                                <div key={doc.id} className="flex items-center justify-between gap-2 rounded-md bg-white border border-slate-100 px-2 py-1">
                                   <div className="min-w-0">
-                                    <p className="text-[11px] font-semibold text-slate-700 truncate">{doc.nome_customizado || doc.nome_original}</p>
-                                    <p className="text-[10px] text-slate-400 truncate">{formatDate(doc.criado_em)}</p>
+                                    <p className="text-[10px] font-semibold text-slate-700 truncate">{doc.nome_customizado || doc.nome_original}</p>
+                                    <p className="text-[9px] text-slate-400 truncate">{formatDate(doc.criado_em)}</p>
                                   </div>
-                                  <div className="flex items-center gap-1 shrink-0">
-                                    <button type="button" title="Visualizar" onClick={() => visualizar(doc)} className="p-1.5 rounded-md hover:bg-blue-50 text-blue-600"><Eye className="w-3.5 h-3.5" /></button>
-                                    <button type="button" title="Baixar" onClick={() => baixar(doc)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500"><Download className="w-3.5 h-3.5" /></button>
+                                  <div className="flex items-center gap-0.5 shrink-0">
+                                    <button type="button" title="Visualizar" onClick={() => visualizar(doc)} className="p-1 rounded-md hover:bg-blue-50 text-blue-600"><Eye className="w-3 h-3" /></button>
+                                    <button type="button" title="Baixar" onClick={() => baixar(doc)} className="p-1 rounded-md hover:bg-slate-100 text-slate-500"><Download className="w-3 h-3" /></button>
                                   </div>
                                 </div>
                               ))}
-                              {docsTipo.length > 3 && <p className="text-[10px] text-slate-400">+ {docsTipo.length - 3} arquivo(s) neste mesmo campo.</p>}
+                              {docsTipo.length > 3 && <p className="text-[9px] text-slate-400">+ {docsTipo.length - 3} arquivo(s) neste mesmo campo.</p>}
                             </div>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

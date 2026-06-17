@@ -4028,7 +4028,14 @@ async function startServer() {
       }
       await pool.query("DELETE FROM empresas WHERE id = $1", [req.params.id]);
       res.json({ success: true });
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.code === "23503") {
+        res.status(409).json({
+          error: "Não é possível excluir esta empresa porque ela possui contrato(s) gerado(s) vinculado(s). Remova ou reatribua os contratos antes de excluir.",
+          detail: err?.detail,
+        });
+        return;
+      }
       console.error("[DELETE /api/empresas/:id]", err);
       res.status(500).json({ error: "Erro ao excluir empresa" });
     }
