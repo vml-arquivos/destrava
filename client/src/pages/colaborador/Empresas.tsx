@@ -328,12 +328,12 @@ function InfoTile({ label, value, icon, tone = "slate", mono = false }: { label:
     violet: "bg-violet-50 border-violet-100 text-violet-800",
   }[tone];
   return (
-    <div className={`rounded-xl border px-3 py-2 ${palette}`}>
-      <div className="flex items-center gap-1.5 mb-1 text-slate-400">
+    <div className={`rounded-2xl border p-4 ${palette}`}>
+      <div className="flex items-center gap-2 mb-2 text-slate-400">
         {icon}
-        <p className="text-[9px] font-black uppercase tracking-widest">{label}</p>
+        <p className="text-[10px] font-black uppercase tracking-widest">{label}</p>
       </div>
-      <p className={`text-xs font-black leading-snug break-words ${mono ? "font-mono" : ""}`}>{value}</p>
+      <p className={`text-sm font-black leading-snug break-words ${mono ? "font-mono" : ""}`}>{value}</p>
     </div>
   );
 }
@@ -365,15 +365,15 @@ function SectionCard({ title, icon, children, defaultOpen = true }: {
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 hover:bg-slate-100 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
       >
-        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+        <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
           <span className="text-slate-500">{icon}</span>
           {title}
         </span>
-        {open ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+        {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
       </button>
-      {open && <div className="px-3 pb-1">{children}</div>}
+      {open && <div className="px-4 pb-1">{children}</div>}
     </div>
   );
 }
@@ -790,113 +790,31 @@ export default function Empresas() {
     } catch { toast.error("Erro."); }
   }
 
-  // ── Sincronizar dados via CNPJ (atualiza empresa com dados frescos da Receita) ──
+  // ── Sincronizar dados via Receita no backend (salva de forma atômica) ──
   async function sincronizarDados(empresa: Empresa, opts: { silencioso?: boolean } = {}) {
     if (!empresa.cnpj || sincronizando) return;
     setSincronizando(true);
-    if (!opts.silencioso) toast.loading("Consultando e salvando dados completos da Receita...", { id: "sync" });
+    if (!opts.silencioso) toast.loading("Consultando Receita e salvando cadastro...", { id: "sync" });
     try {
-      const clean = empresa.cnpj.replace(/\D/g, "");
-      const res = await apiFetch(`/api/cnpj/${clean}`);
-      if (!res || res.error) throw new Error(res?.error || "CNPJ não encontrado");
-
-      // Mapear campos novos vs existentes — só atualiza campos vazios ou todos (opção force)
-      const porteRaw = (res.porte || res.descricao_porte || "").toLowerCase();
-      let porteMap: FormEmpresa["porte"] = empresa.porte || "mei";
-      if (porteRaw.includes("mei")) porteMap = "mei";
-      else if (porteRaw.includes("micro") || porteRaw === "me") porteMap = "me";
-      else if (porteRaw.includes("pequeno") || porteRaw.includes("epp")) porteMap = "epp";
-      else if (porteRaw.includes("medio") || porteRaw.includes("médio")) porteMap = "medio";
-      else if (porteRaw.includes("grande")) porteMap = "grande";
-
-      const sociosReceita = normalizarSociosReceita(res.qsa);
-      const socio = sociosReceita[0];
-      const payload: Record<string, any> = {
-        razao_social: res.razao_social || empresa.razao_social,
-        nome_fantasia: res.nome_fantasia || empresa.nome_fantasia,
-        email: res.email || empresa.email,
-        telefone: telefoneReceita(res.ddd_telefone_1) || empresa.telefone,
-        telefone_2: telefoneReceita(res.ddd_telefone_2) || (empresa as any).telefone_2 || null,
-        cep: res.cep?.replace(/\D/g, "").replace(/(\d{5})(\d)/, "$1-$2") || empresa.cep,
-        logradouro: res.logradouro || empresa.logradouro,
-        numero: res.numero || empresa.numero,
-        complemento: res.complemento || empresa.complemento,
-        bairro: res.bairro || empresa.bairro,
-        cidade: res.municipio || empresa.cidade,
-        estado: res.uf || empresa.estado,
-        porte: porteMap,
-        segmento: res.cnae_fiscal_descricao || empresa.segmento || "",
-        inscricao_estadual: primeiraInscricaoEstadualReceita(res) || empresa.inscricao_estadual || null,
-        natureza_juridica: res.natureza_juridica || empresa.natureza_juridica || null,
-        capital_social: parseCapitalSocial(res.capital_social) ?? parseCapitalSocial(empresa.capital_social) ?? null,
-        cnae_principal: res.cnae_fiscal_descricao
-          ? `${res.cnae_fiscal || ""} — ${res.cnae_fiscal_descricao}`.trim()
-          : empresa.cnae_principal || null,
-        cnaes_secundarios: Array.isArray(res.cnaes_secundarios)
-          ? res.cnaes_secundarios.map((c: any) => c.descricao ? `${c.codigo || ""} — ${c.descricao}`.trim() : String(c)).filter(Boolean)
-          : empresa.cnaes_secundarios || [],
-        data_abertura: res.data_inicio_atividade || empresa.data_abertura || null,
-        situacao_cadastral: res.descricao_situacao_cadastral || empresa.situacao_cadastral || null,
-        data_situacao_cadastral: res.data_situacao_cadastral || (empresa as any).data_situacao_cadastral || null,
-        motivo_situacao_cadastral: res.motivo_situacao_cadastral || (empresa as any).motivo_situacao_cadastral || null,
-        regime_tributario: regimeTributarioReceita(res) || (empresa as any).regime_tributario || null,
-        matriz_filial: res.identificador_matriz_filial === 1 ? "Matriz" : res.identificador_matriz_filial === 2 ? "Filial" : empresa.matriz_filial || null,
-        ultima_sincronizacao_receita: new Date().toISOString(),
-        dados_extra_receita: {
-          provedor_principal: res.provedor_principal || null,
-          fontes_consulta: res.fontes_consulta || [],
-          dados_fontes: res.dados_fontes || {},
-          inscricoes_estaduais: res.inscricoes_estaduais || [],
-          suframa: res.suframa || [],
-          payload_normalizado: res,
-        },
-        // Responsável — só preenche se estiver vazio
-        responsavel_nome: empresa.responsavel_nome || socio?.nome || "",
-        responsavel_cpf: empresa.responsavel_cpf || socio?.cpf_cnpj || "",
-        responsavel_cargo: empresa.responsavel_cargo || socio?.qualificacao_socio || "",
-      };
-
-      await apiFetch(`/api/empresas/${empresa.id}`, {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-      });
-
-      let sociosAtualizados = sociosReceita;
-      const bulk = await apiFetch(`/api/empresas/${empresa.id}/socios/bulk`, {
+      const result = await apiFetch(`/api/empresas/${empresa.id}/sincronizar-receita`, {
         method: "POST",
-        body: JSON.stringify({
-          socios: sociosReceita,
-          replace: true,
-          cnpj: clean,
-          enriquecer_cpfcnpj: false,
-          enriquecer_cpfhub: false,
-          force_cpfcnpj: false,
-        }),
-      }).catch((err: any) => {
-        console.error("[socios/bulk]", err);
-        return null;
+        body: JSON.stringify({ cnpj: empresa.cnpj }),
       });
-      if (Array.isArray(bulk?.socios)) sociosAtualizados = bulk.socios;
 
-      // Atualizar estado local e recarregar os dados da aba ativa imediatamente.
-      const atualizada = await apiFetch(`/api/empresas/${empresa.id}`);
+      const atualizada = result?.empresa || await apiFetch(`/api/empresas/${empresa.id}`);
       setSelecionada(atualizada);
       setEmpresas(prev => prev.map(e => e.id === empresa.id ? atualizada : e));
 
       const sociosReload = await apiFetch(`/api/empresas/${empresa.id}/socios`).catch(() => []);
-      const sociosFinal = Array.isArray(sociosReload) && sociosReload.length > 0 ? sociosReload : sociosAtualizados;
-      setSociosEmpresa(sociosFinal);
+      const sociosReceita = Array.isArray(result?.qsa) ? result.qsa : [];
+      setSociosEmpresa(Array.isArray(sociosReload) && sociosReload.length > 0 ? sociosReload : sociosReceita);
 
       if (!opts.silencioso) {
-        toast.success(
-          sociosFinal.length > 0
-            ? `Dados sincronizados e salvos. ${sociosFinal.length} sócio(s) carregado(s).`
-            : "Dados sincronizados. Confira os dados cadastrais e o quadro societário na visão da empresa.",
-          { id: "sync" }
-        );
+        toast.success("Dados da Receita sincronizados e salvos.", { id: "sync" });
       }
     } catch (err: any) {
-      if (!opts.silencioso) toast.error(err?.message || "Erro ao sincronizar", { id: "sync" });
+      const msg = err?.message || "Erro ao sincronizar Receita";
+      if (!opts.silencioso) toast.error(msg, { id: "sync" });
       else console.error('[auto-sync empresa]', err);
     } finally {
       setSincronizando(false);
@@ -994,12 +912,14 @@ export default function Empresas() {
 
   async function handleExcluir(id: string) {
     try {
-      await apiFetch(`/api/empresas/${id}`, { method: "DELETE" });
-      toast.success("Empresa excluída.");
+      const result = await apiFetch(`/api/empresas/${id}`, { method: "DELETE" });
+      toast.success(result?.message || "Empresa arquivada sem apagar documentos.");
       setConfirmDelete(null);
       if (selecionada?.id === id) { setSelecionada(null); setShowDetail(false); }
       carregarEmpresas();
-    } catch { toast.error("Erro ao excluir."); }
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao arquivar empresa.");
+    }
   }
 
   async function buscarCEP(cep: string) {
@@ -1432,10 +1352,10 @@ export default function Empresas() {
 
                     /* ── VISÃO GERAL ── */
                     abaAtiva === "visao_geral" ? (
-                      <div className="p-3 space-y-2.5 fade-in">
+                      <div className="p-4 space-y-3 fade-in">
 
                         {/* Painel executivo ampliado para análise de crédito */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
                           <InfoTile label="Capital Social" value={normalizarCapitalSocial(selecionada.capital_social)} icon={<Banknote className="w-3.5 h-3.5" />} tone="emerald" />
                           <InfoTile label="Natureza Jurídica" value={selecionada.natureza_juridica || "Não informado"} icon={<Briefcase className="w-3.5 h-3.5" />} tone="blue" />
                           <InfoTile label="CNAE Principal" value={selecionada.cnae_principal || selecionada.segmento || "Não informado"} icon={<Tag className="w-3.5 h-3.5" />} tone="violet" />
@@ -1448,11 +1368,11 @@ export default function Empresas() {
 
                         {/* Receita Federal / Junta Comercial */}
                         <SectionCard title="Receita Federal e Junta Comercial" icon={<Briefcase className="w-4 h-4" />}>
-                          <div className="mb-2.5 rounded-lg border border-blue-100 bg-blue-50 p-2.5 text-xs text-blue-800 flex flex-col gap-1">
+                          <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 flex flex-col gap-1">
                             <div><b>Sincronização:</b> dados cadastrais atualizados pela Receita Federal.</div>
                             <div><b>Última atualização:</b> {selecionada.ultima_sincronizacao_receita ? new Date(selecionada.ultima_sincronizacao_receita).toLocaleString('pt-BR') : 'Não sincronizada'}</div>
                           </div>
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 py-1.5">
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 py-2">
                             <InfoTile label="Razão Social" value={selecionada.razao_social} icon={<Building2 className="w-3.5 h-3.5" />} />
                             <InfoTile label="Nome Fantasia" value={selecionada.nome_fantasia || "Não informado"} icon={<Star className="w-3.5 h-3.5" />} />
                             <InfoTile label="Natureza Jurídica" value={selecionada.natureza_juridica || "Não sincronizada"} icon={<Briefcase className="w-3.5 h-3.5" />} tone="blue" />
