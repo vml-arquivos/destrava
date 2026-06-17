@@ -289,22 +289,22 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
       )}
 
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <div className="hidden lg:flex items-center justify-between px-6 py-3.5 bg-white/82 backdrop-blur-xl border-b border-slate-200/80 shadow-sm shadow-slate-200/40">
+        <div className="hidden lg:flex items-center justify-between px-5 py-2 bg-white/82 backdrop-blur-xl border-b border-slate-200/80 shadow-sm shadow-slate-200/40">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-1.5 rounded-full bg-blue-600" />
+            <div className="h-7 w-1.5 rounded-full bg-blue-600" />
             <div>
-              <h2 className="text-base font-black tracking-tight text-slate-900">{title || "Painel"}</h2>
-              <p className="text-[11px] font-medium text-slate-400">Destrava Crédito</p>
+              <h2 className="text-sm font-black tracking-tight text-slate-900">{title || "Painel"}</h2>
+              <p className="text-[10px] font-medium text-slate-400 leading-none">Destrava Crédito</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="rounded-full bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-700 border border-slate-200">
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 border border-slate-200">
               {primeiroNome}
             </span>
             <NotificacoesFollowup />
             <Link href="/colaborador/meu-perfil">
-              <a className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950">
-                <User className="h-4 w-4 mr-1" />
+              <a className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950">
+                <User className="h-3.5 w-3.5 mr-1" />
                 Perfil
               </a>
             </Link>
@@ -312,9 +312,9 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
               variant="outline"
               size="sm"
               onClick={handleSignOut}
-              className="rounded-xl text-slate-500 hover:text-red-600"
+              className="rounded-xl text-slate-500 hover:text-red-600 h-8 text-xs"
             >
-              <LogOut className="h-4 w-4 mr-1" />
+              <LogOut className="h-3.5 w-3.5 mr-1" />
               Sair
             </Button>
           </div>
