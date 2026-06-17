@@ -9168,6 +9168,548 @@ async function registrarDocumentoContratoGerado(params: {
     }
   });
 
+
+
+  // ─── ORÇAMENTOS TIMBRADOS DESTRAVA / PERMUPAY ─────────────────────────────
+  const uploadOrcamentoAnexos = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 35 * 1024 * 1024, files: 20 },
+  });
+
+  function escapeHtmlOrcamento(value: unknown): string {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function dinheiroOrcamento(value: unknown): string {
+    const n = Number(value || 0);
+    return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
+
+  function numeroOrcamento(): string {
+    const d = new Date();
+    const y = d.getFullYear();
+    const stamp = `${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}${String(d.getSeconds()).padStart(2, "0")}`;
+    return `ORC-${y}-${stamp}`;
+  }
+
+  function normalizarOrcamentoBody(body: any) {
+    const tipoCliente = ["empresa", "pessoa_fisica", "livre"].includes(String(body?.tipo_cliente)) ? String(body.tipo_cliente) : "empresa";
+    const marca = ["destrava", "permupay"].includes(String(body?.marca)) ? String(body.marca) : "destrava";
+    const valor = Number(String(body?.valor_total ?? 0).replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", "."));
+    const validadeDias = Number.parseInt(String(body?.validade_dias || 7), 10);
+    const assinaturas = Array.isArray(body?.assinaturas) ? body.assinaturas : [];
+    return {
+      tipo_cliente: tipoCliente,
+      empresa_id: body?.empresa_id || null,
+      cliente_pf_id: body?.cliente_pf_id || null,
+      cliente_nome: String(body?.cliente_nome || "").trim() || null,
+      cliente_documento: String(body?.cliente_documento || "").trim() || null,
+      cliente_email: String(body?.cliente_email || "").trim() || null,
+      cliente_telefone: String(body?.cliente_telefone || "").trim() || null,
+      marca,
+      titulo: String(body?.titulo || "Orçamento de Serviços").trim(),
+      descricao: String(body?.descricao || "").trim() || null,
+      conteudo: String(body?.conteudo || "").trim(),
+      valor_total: Number.isFinite(valor) ? valor : 0,
+      validade_dias: Number.isFinite(validadeDias) && validadeDias > 0 ? validadeDias : 7,
+      validade_ate: body?.validade_ate || null,
+      assinaturas,
+      payload: body?.payload && typeof body.payload === "object" ? body.payload : {},
+    };
+  }
+
+  async function hidratarClienteOrcamento(payload: any) {
+    if (payload.tipo_cliente === "empresa" && payload.empresa_id) {
+      const { rows } = await pool.query(
+        `SELECT id, razao_social, nome_fantasia, cnpj, email, telefone, whatsapp,
+                logradouro, numero, complemento, bairro, cidade, estado, uf, cep,
+                responsavel_nome, responsavel_cpf
+           FROM empresas
+          WHERE id = $1
+          LIMIT 1`,
+        [payload.empresa_id]
+      );
+      const e = rows[0];
+      if (e) {
+        return {
+          ...payload,
+          cliente_nome: payload.cliente_nome || e.razao_social || e.nome_fantasia,
+          cliente_documento: payload.cliente_documento || e.cnpj,
+          cliente_email: payload.cliente_email || e.email,
+          cliente_telefone: payload.cliente_telefone || e.whatsapp || e.telefone,
+          payload: {
+            ...(payload.payload || {}),
+            cliente_origem: "empresa",
+            empresa: {
+              id: e.id,
+              razao_social: e.razao_social,
+              nome_fantasia: e.nome_fantasia,
+              cnpj: e.cnpj,
+              endereco: [e.logradouro, e.numero, e.complemento, e.bairro, e.cidade, e.estado || e.uf, e.cep].filter(Boolean).join(", "),
+              responsavel_nome: e.responsavel_nome,
+              responsavel_cpf: e.responsavel_cpf,
+            },
+          },
+        };
+      }
+    }
+
+    if (payload.tipo_cliente === "pessoa_fisica" && payload.cliente_pf_id) {
+      const { rows } = await pool.query(
+        `SELECT id, nome, cpf, email, telefone, endereco, cidade, uf, cep
+           FROM clientes_pf
+          WHERE id = $1
+          LIMIT 1`,
+        [payload.cliente_pf_id]
+      );
+      const c = rows[0];
+      if (c) {
+        return {
+          ...payload,
+          cliente_nome: payload.cliente_nome || c.nome,
+          cliente_documento: payload.cliente_documento || c.cpf,
+          cliente_email: payload.cliente_email || c.email,
+          cliente_telefone: payload.cliente_telefone || c.telefone,
+          payload: {
+            ...(payload.payload || {}),
+            cliente_origem: "pessoa_fisica",
+            cliente_pf: {
+              id: c.id,
+              nome: c.nome,
+              cpf: c.cpf,
+              endereco: [c.endereco, c.cidade, c.uf, c.cep].filter(Boolean).join(", "),
+            },
+          },
+        };
+      }
+    }
+
+    return payload;
+  }
+
+  function htmlOrcamentoTimbrado(orcamento: any, anexos: any[] = []): string {
+    const marca = String(orcamento.marca || "destrava");
+    const isPermuPay = marca === "permupay";
+    const logo = isPermuPay ? PERMUPAY_LOGO_B64 : DESTRAVA_LOGO_B64;
+    const cor = isPermuPay ? "#0066CC" : "#1B3A8C";
+    const nomeMarca = isPermuPay ? "PermuPay" : "Destrava Crédito";
+    const clienteDocumento = orcamento.cliente_documento ? ` · ${escapeHtmlOrcamento(orcamento.cliente_documento)}` : "";
+    const conteudo = String(orcamento.conteudo || "")
+      .split(/\n{2,}/)
+      .map((p) => `<p>${escapeHtmlOrcamento(p).replace(/\n/g, "<br/>")}</p>`)
+      .join("\n");
+    const assinaturas = Array.isArray(orcamento.assinaturas) ? orcamento.assinaturas : [];
+    const assinaturaHtml = assinaturas.length
+      ? assinaturas.map((a: any) => `
+        <div class="assinatura">
+          <div class="linha"></div>
+          <strong>${escapeHtmlOrcamento(a.nome || "Assinante")}</strong>
+          <span>${escapeHtmlOrcamento(a.cargo || a.tipo || "")}</span>
+          <small>${escapeHtmlOrcamento(a.documento || "")}</small>
+        </div>`).join("")
+      : `
+        <div class="assinatura"><div class="linha"></div><strong>${escapeHtmlOrcamento(nomeMarca)}</strong><span>Contratada</span></div>
+        <div class="assinatura"><div class="linha"></div><strong>${escapeHtmlOrcamento(orcamento.cliente_nome || "Cliente")}</strong><span>Cliente</span></div>`;
+
+    const anexosHtml = anexos.length
+      ? `<section><h3>Documentos anexados</h3><ul>${anexos.map((a) => `<li>${escapeHtmlOrcamento(a.nome_original)}${a.descricao ? " — " + escapeHtmlOrcamento(a.descricao) : ""}</li>`).join("")}</ul></section>`
+      : "";
+
+    return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>${escapeHtmlOrcamento(orcamento.titulo || "Orçamento")}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; margin: 0; background: #fff; font-size: 11pt; line-height: 1.55; }
+  .topo { display:flex; align-items:center; justify-content:space-between; gap:24px; border-bottom:3px solid ${cor}; padding-bottom:14px; margin-bottom:22px; }
+  .topo img { height: 52px; max-width: 190px; object-fit: contain; }
+  .meta { text-align:right; color:#475569; font-size:9.5pt; }
+  h1 { color:${cor}; font-size:22pt; margin:0 0 6px; line-height:1.15; }
+  h2 { font-size:13pt; margin:0; color:#334155; font-weight:700; }
+  h3 { font-size:12pt; color:${cor}; margin:22px 0 8px; border-bottom:1px solid #e2e8f0; padding-bottom:4px; }
+  .cliente, .valor { border:1px solid #e2e8f0; background:#f8fafc; border-radius:12px; padding:12px 14px; margin:12px 0; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .label { display:block; font-size:8.5pt; color:#64748b; text-transform:uppercase; letter-spacing:.04em; font-weight:700; }
+  .valor-final { font-size:19pt; color:${cor}; font-weight:800; }
+  p { margin:0 0 10px; }
+  ul { margin-top:6px; }
+  .assinaturas { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:28px; margin-top:34px; break-inside: avoid; }
+  .assinatura { text-align:center; padding-top:16px; }
+  .linha { border-top:1px solid #0f172a; margin-bottom:8px; }
+  .assinatura strong { display:block; font-size:10pt; }
+  .assinatura span, .assinatura small { display:block; color:#64748b; font-size:8.8pt; }
+  .rodape-local { margin-top:28px; font-size:9pt; color:#475569; }
+  .watermark { position:fixed; right:0; bottom:0; color:#f1f5f9; font-size:72pt; font-weight:800; transform:rotate(-18deg); z-index:-1; }
+</style>
+</head>
+<body>
+  <div class="watermark">${escapeHtmlOrcamento(nomeMarca)}</div>
+  <header class="topo">
+    <img src="${logo}" alt="${escapeHtmlOrcamento(nomeMarca)}"/>
+    <div class="meta">
+      <strong>${escapeHtmlOrcamento(orcamento.numero || "")}</strong><br/>
+      Emitido em ${new Date(orcamento.criado_em || Date.now()).toLocaleDateString("pt-BR")}<br/>
+      Validade: ${orcamento.validade_ate ? new Date(orcamento.validade_ate).toLocaleDateString("pt-BR") : `${orcamento.validade_dias || 7} dias`}
+    </div>
+  </header>
+
+  <h1>${escapeHtmlOrcamento(orcamento.titulo || "Orçamento de Serviços")}</h1>
+  ${orcamento.descricao ? `<h2>${escapeHtmlOrcamento(orcamento.descricao)}</h2>` : ""}
+
+  <section class="cliente">
+    <span class="label">Cliente</span>
+    <strong>${escapeHtmlOrcamento(orcamento.cliente_nome || "Cliente não informado")}${clienteDocumento}</strong><br/>
+    ${orcamento.cliente_email ? `E-mail: ${escapeHtmlOrcamento(orcamento.cliente_email)}<br/>` : ""}
+    ${orcamento.cliente_telefone ? `Telefone: ${escapeHtmlOrcamento(orcamento.cliente_telefone)}<br/>` : ""}
+  </section>
+
+  <section>
+    <h3>Escopo do orçamento</h3>
+    ${conteudo || "<p>Descreva aqui o escopo, condições comerciais, entregáveis e observações do orçamento.</p>"}
+  </section>
+
+  <section class="valor">
+    <div class="grid">
+      <div>
+        <span class="label">Valor total</span>
+        <div class="valor-final">${dinheiroOrcamento(orcamento.valor_total)}</div>
+      </div>
+      <div>
+        <span class="label">Status</span>
+        <strong>${escapeHtmlOrcamento(String(orcamento.status || "rascunho").toUpperCase())}</strong><br/>
+        <span class="label" style="margin-top:8px">Marca</span>
+        <strong>${escapeHtmlOrcamento(nomeMarca)}</strong>
+      </div>
+    </div>
+  </section>
+
+  ${anexosHtml}
+
+  <section>
+    <h3>Assinaturas</h3>
+    <div class="assinaturas">${assinaturaHtml}</div>
+  </section>
+
+  <div class="rodape-local">
+    Documento gerado pelo sistema Destrava Crédito. Anexos e documentos complementares podem acompanhar este orçamento no acervo interno.
+  </div>
+</body>
+</html>`;
+  }
+
+  async function carregarOrcamentoPorId(id: string) {
+    const { rows } = await pool.query("SELECT * FROM orcamentos_timbrados WHERE id = $1 LIMIT 1", [id]);
+    return rows[0] || null;
+  }
+
+  async function listarAnexosOrcamento(id: string) {
+    const { rows } = await pool.query(
+      `SELECT id, orcamento_id, tipo, descricao, nome_original, mime_type, tamanho_bytes, url, criado_em
+         FROM orcamentos_timbrados_anexos
+        WHERE orcamento_id = $1
+        ORDER BY criado_em DESC`,
+      [id]
+    );
+    return rows;
+  }
+
+  async function gerarPdfOrcamento(orcamentoId: string): Promise<string> {
+    const orcamento = await carregarOrcamentoPorId(orcamentoId);
+    if (!orcamento) throw new Error("Orçamento não encontrado");
+    const anexos = await listarAnexosOrcamento(orcamentoId);
+    const dataDir = process.env.DATA_DIR || "/var/data/destrava";
+    const uploadsDir = path.join(dataDir, "uploads", "orcamentos", orcamentoId);
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    const fileName = `${String(orcamento.numero || orcamentoId).replace(/[^a-zA-Z0-9_-]/g, "-")}.pdf`;
+    const filePath = path.join(uploadsDir, fileName);
+    const html = htmlOrcamentoTimbrado(orcamento, anexos);
+    await gerarPdfComLayout(html, {
+      contratada: {
+        razao_social: orcamento.marca === "permupay" ? "PERMUPAY" : "DESTRAVA CREDITO LTDA",
+        nome_fantasia: orcamento.marca === "permupay" ? "PermuPay" : "Destrava Crédito",
+      },
+    }, filePath);
+    await pool.query("UPDATE orcamentos_timbrados SET pdf_path=$1 WHERE id=$2", [filePath, orcamentoId]);
+    return filePath;
+  }
+
+  app.get("/api/orcamentos/clientes", auth, async (_req: Request, res: Response) => {
+    try {
+      const [empresas, clientesPf] = await Promise.all([
+        pool.query(
+          `SELECT id, razao_social, nome_fantasia, cnpj, email, telefone, whatsapp
+             FROM empresas
+            ORDER BY COALESCE(razao_social, nome_fantasia) ASC
+            LIMIT 500`
+        ),
+        pool.query(
+          `SELECT id, nome, cpf, email, telefone
+             FROM clientes_pf
+            WHERE ativo = true
+            ORDER BY nome ASC
+            LIMIT 500`
+        ).catch(() => ({ rows: [] as any[] })),
+      ]);
+      res.json({ empresas: empresas.rows, clientes_pf: clientesPf.rows });
+    } catch (err: any) {
+      console.error("[GET /api/orcamentos/clientes]", err);
+      res.status(500).json({ error: "Erro ao carregar clientes para orçamento" });
+    }
+  });
+
+  app.get("/api/orcamentos", auth, async (req: Request, res: Response) => {
+    try {
+      const busca = String(req.query.busca || "").trim();
+      const status = String(req.query.status || "").trim();
+      const params: any[] = [];
+      let where = "WHERE 1=1";
+      if (busca) {
+        params.push(`%${busca}%`);
+        where += ` AND (cliente_nome ILIKE $${params.length} OR cliente_documento ILIKE $${params.length} OR titulo ILIKE $${params.length} OR numero ILIKE $${params.length})`;
+      }
+      if (status) {
+        params.push(status);
+        where += ` AND status = $${params.length}`;
+      }
+      const { rows } = await pool.query(
+        `SELECT id, numero, tipo_cliente, empresa_id, cliente_pf_id, cliente_nome, cliente_documento,
+                marca, titulo, valor_total, validade_ate, status, anexos_count, criado_em, atualizado_em, finalizado_em
+           FROM orcamentos_timbrados
+          ${where}
+          ORDER BY atualizado_em DESC, criado_em DESC
+          LIMIT 200`,
+        params
+      );
+      res.json(rows);
+    } catch (err: any) {
+      console.error("[GET /api/orcamentos]", err);
+      res.status(500).json({ error: "Erro ao listar orçamentos" });
+    }
+  });
+
+  app.get("/api/orcamentos/:id", auth, async (req: Request, res: Response) => {
+    try {
+      const orcamento = await carregarOrcamentoPorId(req.params.id);
+      if (!orcamento) { res.status(404).json({ error: "Orçamento não encontrado" }); return; }
+      const anexos = await listarAnexosOrcamento(req.params.id);
+      res.json({ ...orcamento, anexos });
+    } catch (err: any) {
+      console.error("[GET /api/orcamentos/:id]", err);
+      res.status(500).json({ error: "Erro ao carregar orçamento" });
+    }
+  });
+
+  app.post("/api/orcamentos", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as any).colaborador;
+      const body = await hidratarClienteOrcamento(normalizarOrcamentoBody(req.body || {}));
+      const validadeAte = body.validade_ate || new Date(Date.now() + body.validade_dias * 86400000).toISOString().slice(0, 10);
+      const { rows } = await pool.query(
+        `INSERT INTO orcamentos_timbrados (
+           numero, tipo_cliente, empresa_id, cliente_pf_id, cliente_nome, cliente_documento, cliente_email,
+           cliente_telefone, marca, titulo, descricao, conteudo, valor_total, validade_dias, validade_ate,
+           status, assinaturas, payload, criado_por
+         ) VALUES (
+           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'rascunho',$16::jsonb,$17::jsonb,$18
+         )
+         RETURNING *`,
+        [
+          numeroOrcamento(),
+          body.tipo_cliente,
+          body.empresa_id,
+          body.cliente_pf_id,
+          body.cliente_nome,
+          body.cliente_documento,
+          body.cliente_email,
+          body.cliente_telefone,
+          body.marca,
+          body.titulo,
+          body.descricao,
+          body.conteudo,
+          body.valor_total,
+          body.validade_dias,
+          validadeAte,
+          JSON.stringify(body.assinaturas),
+          JSON.stringify(body.payload || {}),
+          colaborador?.id || null,
+        ]
+      );
+      res.status(201).json(rows[0]);
+    } catch (err: any) {
+      console.error("[POST /api/orcamentos]", err);
+      res.status(500).json({ error: err?.message || "Erro ao criar orçamento" });
+    }
+  });
+
+  app.put("/api/orcamentos/:id", auth, async (req: Request, res: Response) => {
+    try {
+      const existente = await carregarOrcamentoPorId(req.params.id);
+      if (!existente) { res.status(404).json({ error: "Orçamento não encontrado" }); return; }
+      if (existente.status === "finalizado") {
+        res.status(409).json({ error: "Orçamento finalizado não pode ser editado. Duplique ou crie novo orçamento." });
+        return;
+      }
+      const body = await hidratarClienteOrcamento(normalizarOrcamentoBody(req.body || {}));
+      const validadeAte = body.validade_ate || new Date(Date.now() + body.validade_dias * 86400000).toISOString().slice(0, 10);
+      const { rows } = await pool.query(
+        `UPDATE orcamentos_timbrados SET
+           tipo_cliente=$1, empresa_id=$2, cliente_pf_id=$3, cliente_nome=$4, cliente_documento=$5,
+           cliente_email=$6, cliente_telefone=$7, marca=$8, titulo=$9, descricao=$10, conteudo=$11,
+           valor_total=$12, validade_dias=$13, validade_ate=$14, assinaturas=$15::jsonb, payload=$16::jsonb,
+           pdf_path=NULL
+         WHERE id=$17
+         RETURNING *`,
+        [
+          body.tipo_cliente,
+          body.empresa_id,
+          body.cliente_pf_id,
+          body.cliente_nome,
+          body.cliente_documento,
+          body.cliente_email,
+          body.cliente_telefone,
+          body.marca,
+          body.titulo,
+          body.descricao,
+          body.conteudo,
+          body.valor_total,
+          body.validade_dias,
+          validadeAte,
+          JSON.stringify(body.assinaturas),
+          JSON.stringify(body.payload || {}),
+          req.params.id,
+        ]
+      );
+      res.json(rows[0]);
+    } catch (err: any) {
+      console.error("[PUT /api/orcamentos/:id]", err);
+      res.status(500).json({ error: err?.message || "Erro ao atualizar orçamento" });
+    }
+  });
+
+  app.post("/api/orcamentos/:id/finalizar", auth, async (req: Request, res: Response) => {
+    try {
+      const existente = await carregarOrcamentoPorId(req.params.id);
+      if (!existente) { res.status(404).json({ error: "Orçamento não encontrado" }); return; }
+      const filePath = await gerarPdfOrcamento(req.params.id);
+      const { rows } = await pool.query(
+        `UPDATE orcamentos_timbrados
+            SET status='finalizado', finalizado_em=NOW(), pdf_path=$1
+          WHERE id=$2
+          RETURNING *`,
+        [filePath, req.params.id]
+      );
+      res.json({ success: true, orcamento: rows[0] });
+    } catch (err: any) {
+      console.error("[POST /api/orcamentos/:id/finalizar]", err);
+      res.status(500).json({ error: err?.message || "Erro ao finalizar orçamento" });
+    }
+  });
+
+  app.get("/api/orcamentos/:id/download", auth, async (req: Request, res: Response) => {
+    try {
+      const orcamento = await carregarOrcamentoPorId(req.params.id);
+      if (!orcamento) { res.status(404).json({ error: "Orçamento não encontrado" }); return; }
+      let filePath = orcamento.pdf_path;
+      if (!filePath || !fs.existsSync(filePath)) filePath = await gerarPdfOrcamento(req.params.id);
+      res.download(filePath, `${String(orcamento.numero || "orcamento").replace(/[^a-zA-Z0-9_-]/g, "-")}.pdf`);
+    } catch (err: any) {
+      console.error("[GET /api/orcamentos/:id/download]", err);
+      res.status(500).json({ error: err?.message || "Erro ao baixar orçamento" });
+    }
+  });
+
+  app.post("/api/orcamentos/:id/anexos", auth, uploadOrcamentoAnexos.array("arquivos", 20), async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as any).colaborador;
+      const orcamento = await carregarOrcamentoPorId(req.params.id);
+      if (!orcamento) { res.status(404).json({ error: "Orçamento não encontrado" }); return; }
+      const files = (req.files || []) as Express.Multer.File[];
+      if (!files.length) { res.status(400).json({ error: "Nenhum arquivo enviado" }); return; }
+      const dataDir = process.env.DATA_DIR || "/var/data/destrava";
+      const dir = path.join(dataDir, "uploads", "orcamentos", req.params.id, "anexos");
+      fs.mkdirSync(dir, { recursive: true });
+      const descricao = String(req.body?.descricao || "").trim() || null;
+      const tipo = String(req.body?.tipo || "anexo").trim() || "anexo";
+      const salvos: any[] = [];
+      for (const file of files) {
+        const ext = path.extname(file.originalname || "");
+        const safeBase = path.basename(file.originalname || "documento", ext).replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80);
+        const fileName = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}-${safeBase}${ext}`;
+        const filePath = path.join(dir, fileName);
+        fs.writeFileSync(filePath, file.buffer);
+        const hash = crypto.createHash("sha256").update(file.buffer).digest("hex");
+        const { rows } = await pool.query(
+          `INSERT INTO orcamentos_timbrados_anexos (
+             orcamento_id, tipo, descricao, nome_original, mime_type, tamanho_bytes, storage_path, url, hash_sha256, criado_por
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           RETURNING id, orcamento_id, tipo, descricao, nome_original, mime_type, tamanho_bytes, url, criado_em`,
+          [
+            req.params.id,
+            tipo,
+            descricao,
+            file.originalname,
+            file.mimetype,
+            file.size,
+            filePath,
+            `/api/orcamentos/anexos/${hash}/download`,
+            hash,
+            colaborador?.id || null,
+          ]
+        );
+        salvos.push(rows[0]);
+      }
+      await pool.query("UPDATE orcamentos_timbrados SET anexos_count = (SELECT COUNT(*) FROM orcamentos_timbrados_anexos WHERE orcamento_id=$1), pdf_path=NULL WHERE id=$1", [req.params.id]);
+      res.status(201).json({ success: true, anexos: salvos });
+    } catch (err: any) {
+      console.error("[POST /api/orcamentos/:id/anexos]", err);
+      res.status(500).json({ error: err?.message || "Erro ao anexar documentos" });
+    }
+  });
+
+  app.get("/api/orcamentos/:id/anexos", auth, async (req: Request, res: Response) => {
+    try {
+      res.json(await listarAnexosOrcamento(req.params.id));
+    } catch (err: any) {
+      console.error("[GET /api/orcamentos/:id/anexos]", err);
+      res.status(500).json({ error: "Erro ao listar anexos" });
+    }
+  });
+
+  app.get("/api/orcamentos/anexos/:hash/download", auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query("SELECT * FROM orcamentos_timbrados_anexos WHERE hash_sha256=$1 LIMIT 1", [req.params.hash]);
+      const anexo = rows[0];
+      if (!anexo || !fs.existsSync(anexo.storage_path)) { res.status(404).json({ error: "Anexo não encontrado" }); return; }
+      res.download(anexo.storage_path, anexo.nome_original || "anexo");
+    } catch (err: any) {
+      console.error("[GET /api/orcamentos/anexos/:hash/download]", err);
+      res.status(500).json({ error: "Erro ao baixar anexo" });
+    }
+  });
+
+  app.delete("/api/orcamentos/anexos/:id", auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query("DELETE FROM orcamentos_timbrados_anexos WHERE id=$1 RETURNING *", [req.params.id]);
+      const anexo = rows[0];
+      if (!anexo) { res.status(404).json({ error: "Anexo não encontrado" }); return; }
+      if (anexo.storage_path && fs.existsSync(anexo.storage_path)) {
+        try { fs.unlinkSync(anexo.storage_path); } catch {}
+      }
+      await pool.query("UPDATE orcamentos_timbrados SET anexos_count = (SELECT COUNT(*) FROM orcamentos_timbrados_anexos WHERE orcamento_id=$1), pdf_path=NULL WHERE id=$1", [anexo.orcamento_id]);
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[DELETE /api/orcamentos/anexos/:id]", err);
+      res.status(500).json({ error: "Erro ao excluir anexo" });
+    }
+  });
+
+
   // Servir arquivos de contratos gerados e contratos sociais enviados
   app.use('/uploads/contratos', express.static(path.resolve('uploads', 'contratos')));
   app.use('/uploads/contratos-sociais', express.static(path.join(process.env.DATA_DIR || '/data', 'uploads', 'contratos-sociais')));

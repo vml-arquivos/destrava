@@ -45,6 +45,7 @@ import ColaboradorClientes from "./pages/colaborador/Clientes";
 import ColaboradorIntegracoes from "./pages/colaborador/Integracoes";
 import PrevisaoFaturamento from "./pages/colaborador/PrevisaoFaturamento";
 import GeradorContratos from "./pages/colaborador/GeradorContratos";
+import ColaboradorOrcamentos from "./pages/colaborador/Orcamentos";
 import ColaboradorCRM from "./pages/colaborador/CRM";
 import ColaboradorEmpresas from "./pages/colaborador/Empresas";
 import ColaboradorTriagem from "./pages/colaborador/Triagem";
@@ -244,6 +245,13 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <GeradorContratos />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/orcamentos">
+        {() => (
+          <ProtectedRoute>
+            <ColaboradorOrcamentos />
           </ProtectedRoute>
         )}
       </Route>

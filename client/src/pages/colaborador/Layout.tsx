@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Calculator,
   FileText,
+  FileSignature,
   LogOut,
   Menu,
   X,
@@ -49,6 +50,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/colaborador/acompanhamento-financeiro",  label: "Acomp. Financeiro", icon: BarChart2 },
   { href: "/colaborador/previsao-faturamento", label: "Faturamento", icon: TrendingUp },
   { href: "/colaborador/contratos",   label: "Contratos",          icon: FileText },
+  { href: "/colaborador/orcamentos",  label: "Orçamentos",        icon: FileSignature },
   { href: "/colaborador/contadores",  label: "Contadores",         icon: BookUser, allowedCargos: ["administrador", "diretor"] },
   { href: "/colaborador/integracoes", label: "Integrações n8n",    icon: Workflow, allowedCargos: ["administrador"] },
   { href: "/colaborador/usuarios",    label: "Usuários",           icon: User, allowedCargos: CARGOS_GESTAO },
@@ -131,7 +133,6 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
   };
 
   const primeiroNome = colaborador?.nome?.split(" ")[0] || "Colaborador";
-  const isTelaEmpresas = location.startsWith("/colaborador/empresas");
 
   return (
     <div className="destrava-shell h-screen max-h-screen overflow-hidden flex bg-[radial-gradient(circle_at_top_left,#eff6ff_0,#f8fafc_32%,#f8fafc_100%)] text-slate-900">
@@ -289,7 +290,7 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
         </div>
       )}
 
-      <main className={`flex-1 h-screen max-h-screen flex flex-col min-w-0 ${isTelaEmpresas ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden"}`}> 
+      <main className="flex-1 h-screen max-h-screen flex flex-col min-w-0 overflow-hidden">
         <div className="hidden lg:flex items-center justify-between px-6 py-3.5 bg-white/82 backdrop-blur-xl border-b border-slate-200/80 shadow-sm shadow-slate-200/40">
           <div className="flex items-center gap-3">
             <div className="h-9 w-1.5 rounded-full bg-blue-600" />
@@ -321,7 +322,7 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
           </div>
         </div>
 
-        <div className={`destrava-page mt-16 lg:mt-0 ${isTelaEmpresas ? "flex-1 min-h-0 overflow-hidden" : "flex-none min-h-0 overflow-visible"}`}>
+        <div className="destrava-page flex-1 min-h-0 mt-16 lg:mt-0 overflow-hidden">
           {children}
         </div>
       </main>
