@@ -159,17 +159,174 @@ function montarCamposReceita(empresa: any) {
   };
 }
 
-function compararCampo(label: string, receita: unknown, cartao: unknown, tipo: 'texto' | 'cnpj' | 'data' = 'texto') {
-  if (cartao === undefined || cartao === null || String(cartao).trim() === '') {
-    return { label, status: 'nao_extraido', receita, cartao, divergente: false };
+
+function normalizarBasico(value: unknown): string {
+  return normalizeText(value)
+    .replace(/[.,;:()\[\]{}\/\\|_+*=!?'"´`^~<>-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizarNomeEmpresarial(value: unknown): string {
+  return normalizeText(value)
+    .replace(/\b(ltda|limitada|me|epp|eireli)\b/g, (m) => m)
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function normalizarCodigo(value: unknown, minDigits = 4): string {
+  const digits = onlyDigits(value);
+  return digits.length >= minDigits ? digits : '';
+}
+
+function codigoCnae(value: unknown): string {
+  const digits = onlyDigits(value);
+  // CNAE tem 7 dígitos. Ex.: 86.30-5-06 => 8630506.
+  if (digits.length >= 7) return digits.slice(0, 7);
+  return digits;
+}
+
+function codigoNatureza(value: unknown): string {
+  const digits = onlyDigits(value);
+  // Natureza jurídica costuma ter 4 dígitos. Ex.: 206-2 => 2062.
+  if (digits.length >= 4) return digits.slice(0, 4);
+  return digits;
+}
+
+function normalizarSituacao(value: unknown): string {
+  const t = normalizarBasico(value);
+  if (t.includes('ativa')) return 'ativa';
+  if (t.includes('baixada')) return 'baixada';
+  if (t.includes('inapta')) return 'inapta';
+  if (t.includes('suspensa')) return 'suspensa';
+  return t;
+}
+
+function tokensEndereco(value: unknown): Set<string> {
+  const ignorar = new Set(['rua','r','avenida','av','numero','n','sn','sem','quadra','qd','lote','lt','sala','sl','go','goias','cep','bairro','distrito','municipio']);
+  const t = normalizarBasico(value)
+    .replace(/\b(s\/n|s n)\b/g, 'sn')
+    .split(' ')
+    .map((x) => x.trim())
+    .filter((x) => x.length >= 2 && !ignorar.has(x));
+  return new Set(t);
+}
+
+function compararEndereco(receita: unknown, cartao: unknown) {
+  const rOriginal = String(receita || '').trim();
+  const cOriginal = String(cartao || '').trim();
+  if (!rOriginal || !cOriginal) {
+    return { label: 'Endereço completo', status: 'nao_comparado', receita, cartao, divergente: false, normalizado_receita: '', normalizado_cartao: '', motivo: 'Valor ausente em uma das fontes.' };
   }
+
+  const cepR = onlyDigits(rOriginal).match(/\d{8}/)?.[0] || '';
+  const cepC = onlyDigits(cOriginal).match(/\d{8}/)?.[0] || '';
+  const normR = normalizarBasico(rOriginal);
+  const normC = normalizarBasico(cOriginal);
+
+  // Se o CEP é igual, não marcar divergência por diferença de ordem, abreviação, vírgula ou complemento.
+  if (cepR && cepC && cepR === cepC) {
+    return { label: 'Endereço completo', status: 'conferido', receita, cartao, divergente: false, normalizado_receita: normR, normalizado_cartao: normC, motivo: 'CEP igual; diferenças de formatação/ordem não são divergência.' };
+  }
+
+  const tr = tokensEndereco(rOriginal);
+  const tc = tokensEndereco(cOriginal);
+  const comum = [...tr].filter((x) => tc.has(x)).length;
+  const base = Math.max(1, Math.min(tr.size, tc.size));
+  const similaridade = comum / base;
+  const divergente = similaridade < 0.65 && !(normR.includes(normC) || normC.includes(normR));
+
+  return {
+    label: 'Endereço completo',
+    status: divergente ? 'divergente' : 'conferido',
+    receita,
+    cartao,
+    divergente,
+    normalizado_receita: normR,
+    normalizado_cartao: normC,
+    motivo: divergente ? `Tokens relevantes em comum insuficientes (${comum}/${base}).` : 'Endereço equivalente após normalização.',
+  };
+}
+
+type ComparacaoCampo = {
+  label: string;
+  status: string;
+  receita: unknown;
+  cartao: unknown;
+  divergente: boolean;
+  normalizado_receita?: string;
+  normalizado_cartao?: string;
+  motivo?: string;
+};
+
+function compararCampo(label: string, receita: unknown, cartao: unknown, tipo: 'texto' | 'nome' | 'cnpj' | 'data' | 'cnae' | 'natureza' | 'situacao' | 'endereco' = 'texto'): ComparacaoCampo {
+  if (cartao === undefined || cartao === null || String(cartao).trim() === '') {
+    return { label, status: 'nao_extraido', receita, cartao, divergente: false, motivo: 'Campo não extraído do Cartão CNPJ.' };
+  }
+  if (receita === undefined || receita === null || String(receita).trim() === '') {
+    return { label, status: 'sem_base_receita', receita, cartao, divergente: false, motivo: 'Campo não existe na base Receita/cadastro para comparação segura.' };
+  }
+
+  if (tipo === 'endereco') return compararEndereco(receita, cartao);
+
   let r = String(receita || '').trim();
   let c = String(cartao || '').trim();
-  if (tipo === 'cnpj') { r = onlyDigits(r); c = onlyDigits(c); }
-  else if (tipo === 'data') { r = parseDate(r) || ''; c = parseDate(c) || ''; }
-  else { r = normalizeText(r); c = normalizeText(c); }
+  let motivoConferido = 'Valores equivalentes após normalização.';
+  let motivoDivergente = 'Valores normalizados são diferentes.';
+
+  if (tipo === 'cnpj') {
+    r = onlyDigits(r); c = onlyDigits(c);
+    motivoDivergente = 'CNPJs numéricos diferentes.';
+  } else if (tipo === 'data') {
+    const dr = parseDate(r); const dc = parseDate(c);
+    r = dr || ''; c = dc || '';
+    motivoDivergente = 'Datas diferentes.';
+  } else if (tipo === 'cnae') {
+    r = codigoCnae(r); c = codigoCnae(c);
+    motivoConferido = 'Código CNAE igual; descrição textual/formatação ignorada.';
+    motivoDivergente = 'Código CNAE principal diferente.';
+  } else if (tipo === 'natureza') {
+    r = codigoNatureza(r); c = codigoNatureza(c);
+    motivoConferido = 'Código da natureza jurídica igual; descrição textual/formatação ignorada.';
+    motivoDivergente = 'Código da natureza jurídica diferente.';
+  } else if (tipo === 'situacao') {
+    r = normalizarSituacao(r); c = normalizarSituacao(c);
+    motivoDivergente = 'Situação cadastral normalizada diferente.';
+  } else if (tipo === 'nome') {
+    r = normalizarNomeEmpresarial(r); c = normalizarNomeEmpresarial(c);
+    motivoConferido = 'Nome empresarial equivalente após remover espaços, pontuação e caixa.';
+    motivoDivergente = 'Nome empresarial diferente após normalização forte.';
+  } else {
+    r = normalizarBasico(r); c = normalizarBasico(c);
+  }
+
+  // Regra inquebrável: só existe divergência quando os dois lados existem e a diferença objetiva fica preservada após normalização.
   const divergente = !!r && !!c && r !== c;
-  return { label, status: divergente ? 'divergente' : 'conferido', receita, cartao, divergente };
+  return {
+    label,
+    status: divergente ? 'divergente' : 'conferido',
+    receita,
+    cartao,
+    divergente,
+    normalizado_receita: r,
+    normalizado_cartao: c,
+    motivo: divergente ? motivoDivergente : motivoConferido,
+  };
+}
+
+function montarDivergencia(campo: string, item: ComparacaoCampo) {
+  return {
+    campo,
+    label: item.label,
+    receita: item.receita ?? null,
+    cartao: item.cartao ?? null,
+    valor_receita: item.receita ?? null,
+    valor_cartao: item.cartao ?? null,
+    normalizado_receita: item.normalizado_receita ?? null,
+    normalizado_cartao: item.normalizado_cartao ?? null,
+    motivo: item.motivo || 'Diferença objetiva identificada pelo backend.',
+    evidencia: `${item.label}: Receita/cadastro = "${String(item.receita ?? '')}" | Cartão CNPJ = "${String(item.cartao ?? '')}".`,
+    severidade: (campo === 'cnpj' || campo === 'situacao_cadastral' ? 'critica' : 'alta') as Severidade,
+  };
 }
 
 function extrairJson(text: string): any | null {
@@ -255,7 +412,7 @@ async function resolverCaminhoDocumento(caminhoArquivo?: string | null): Promise
 function montarPromptCartaoCnpj() {
   return `Você é um auditor documental brasileiro especializado em Cartão CNPJ da Receita Federal.
 
-Tarefa: leia o PDF/imagem anexado e extraia campos estruturados. A DATA DE EMISSÃO DO COMPROVANTE normalmente aparece no rodapé, em frase parecida com: "Emitido no dia DD/MM/AAAA às HH:MM:SS". NÃO confunda com DATA DE ABERTURA nem com DATA DA SITUAÇÃO CADASTRAL.
+Tarefa: leia o PDF/imagem anexado e EXTRAIA campos estruturados. NÃO diagnostique divergências e NÃO compare com a Receita. Divergências são calculadas somente pelo backend. A DATA DE EMISSÃO DO COMPROVANTE normalmente aparece no rodapé, em frase parecida com: "Emitido no dia DD/MM/AAAA às HH:MM:SS". NÃO confunda com DATA DE ABERTURA nem com DATA DA SITUAÇÃO CADASTRAL.
 
 Responda SOMENTE JSON válido, sem markdown, sem comentários, com exatamente estas chaves:
 {
@@ -282,6 +439,7 @@ Regras:
 - Se o arquivo não for Cartão CNPJ, use documento_e_cartao_cnpj=false.
 - Se a data de emissão não estiver visível, data_emissao=null.
 - Preserve números, códigos CNAE e natureza jurídica.
+- Não invente campos. Se não estiver visível, use null.
 - Confianca deve ir de 0 a 1.`;
 }
 
@@ -513,19 +671,24 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
 
   const comparacao = {
     cnpj: compararCampo('CNPJ', camposReceita.cnpj, camposCartao.cnpj, 'cnpj'),
-    nome_empresarial: compararCampo('Nome empresarial', camposReceita.nome_empresarial, camposCartao.nome_empresarial),
-    cnae_principal: compararCampo('CNAE principal', camposReceita.cnae_principal, camposCartao.cnae_principal),
-    natureza_juridica: compararCampo('Natureza jurídica', camposReceita.natureza_juridica, camposCartao.natureza_juridica),
-    endereco_completo: compararCampo('Endereço completo', camposReceita.endereco_completo, camposCartao.endereco_completo),
-    situacao_cadastral: compararCampo('Situação cadastral', camposReceita.situacao_cadastral, camposCartao.situacao_cadastral),
+    nome_empresarial: compararCampo('Nome empresarial', camposReceita.nome_empresarial, camposCartao.nome_empresarial, 'nome'),
+    cnae_principal: compararCampo('CNAE principal', camposReceita.cnae_principal, camposCartao.cnae_principal, 'cnae'),
+    natureza_juridica: compararCampo('Natureza jurídica', camposReceita.natureza_juridica, camposCartao.natureza_juridica, 'natureza'),
+    endereco_completo: compararCampo('Endereço completo', camposReceita.endereco_completo, camposCartao.endereco_completo, 'endereco'),
+    situacao_cadastral: compararCampo('Situação cadastral', camposReceita.situacao_cadastral, camposCartao.situacao_cadastral, 'situacao'),
     data_abertura: compararCampo('Data de abertura', camposReceita.data_abertura, camposCartao.data_abertura, 'data'),
   };
   const divergencias = Object.entries(comparacao)
-    .filter(([, item]: any) => item.divergente)
-    .map(([campo, item]: any) => ({ campo, label: item.label, receita: item.receita, cartao: item.cartao, severidade: (campo === 'cnpj' || campo === 'situacao_cadastral' ? 'critica' : 'alta') as Severidade }));
+    .filter(([, item]: any) => item.divergente && item.normalizado_receita && item.normalizado_cartao)
+    .map(([campo, item]: any) => montarDivergencia(campo, item));
 
   for (const div of divergencias) {
-    alertas.push({ codigo: `divergencia_${div.campo}`, mensagem: `${div.label} divergente entre Receita e Cartão CNPJ anexado.`, severidade: div.severidade, recomendacao: 'Revisar documento anexado e atualizar dados antes do laudo final.' });
+    alertas.push({
+      codigo: `divergencia_${div.campo}`,
+      mensagem: `${div.label} divergente. Receita/cadastro: "${String(div.valor_receita || 'não informado')}". Cartão CNPJ: "${String(div.valor_cartao || 'não informado')}". Motivo: ${div.motivo}`,
+      severidade: div.severidade,
+      recomendacao: 'Revisar a evidência da divergência antes do laudo final. Se os valores forem equivalentes, atualizar normalização/comparação antes de marcar como divergente.',
+    });
   }
 
   if (!camposReceita.cnae_principal) recomendacoes.push('Atualizar CNAE principal da Receita antes de gerar o laudo final.');

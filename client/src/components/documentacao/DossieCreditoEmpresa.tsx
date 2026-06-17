@@ -449,6 +449,36 @@ function AnaliseCnpjCard({ analise, onGerar, loading }: { analise: AnaliseCnpjEm
             </div>
           )}
 
+          {Array.isArray(analise.divergencias) && analise.divergencias.length > 0 && (
+            <div className="rounded-xl border border-red-200 bg-red-50/70 p-3">
+              <p className="text-xs font-black text-red-800 mb-2">Divergências encontradas com evidência</p>
+              <div className="space-y-2">
+                {analise.divergencias.map((div: any, idx: number) => (
+                  <div key={idx} className="rounded-lg border border-red-100 bg-white p-2.5">
+                    <p className="text-xs font-black text-red-800 mb-1">{div.label || div.campo || `Divergência ${idx + 1}`}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+                      <div className="rounded-md bg-slate-50 border border-slate-100 p-2">
+                        <p className="font-bold text-slate-500 uppercase tracking-wide">Receita/cadastro</p>
+                        <p className="font-semibold text-slate-800 break-words">{String(div.valor_receita ?? div.receita ?? "Não informado")}</p>
+                        {div.normalizado_receita && <p className="mt-1 text-slate-400 break-words">Normalizado: {String(div.normalizado_receita)}</p>}
+                      </div>
+                      <div className="rounded-md bg-slate-50 border border-slate-100 p-2">
+                        <p className="font-bold text-slate-500 uppercase tracking-wide">Cartão CNPJ</p>
+                        <p className="font-semibold text-slate-800 break-words">{String(div.valor_cartao ?? div.cartao ?? "Não informado")}</p>
+                        {div.normalizado_cartao && <p className="mt-1 text-slate-400 break-words">Normalizado: {String(div.normalizado_cartao)}</p>}
+                      </div>
+                    </div>
+                    {(div.motivo || div.evidencia) && (
+                      <p className="mt-2 text-[11px] text-red-700 leading-relaxed">
+                        {div.motivo || div.evidencia}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
               <p className="text-xs font-bold text-emerald-800 mb-2">Pontos positivos</p>
