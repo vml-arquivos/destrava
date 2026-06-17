@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import pkg from 'pg';
 import { auth } from '../middleware/auth';
+import { analisarCnpjReceitaCartaoEmpresa, buscarUltimaAnaliseCnpjEmpresa } from '../services/analiseCnpjReceitaCartao';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -564,6 +565,29 @@ router.get('/blocos', auth, async (_req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[GET /api/documentacao/blocos]', err);
     res.status(500).json({ error: 'Erro ao listar blocos documentais' });
+  }
+});
+
+
+router.get('/empresa/:empresaId/analise-cnpj', auth, async (req: Request, res: Response) => {
+  try {
+    const analise = await buscarUltimaAnaliseCnpjEmpresa(req.params.empresaId);
+    res.json(analise || null);
+  } catch (err: any) {
+    console.error('[GET /api/documentacao/empresa/:empresaId/analise-cnpj]', err);
+    res.status(500).json({ error: 'Erro ao buscar análise CNPJ' });
+  }
+});
+
+router.post('/empresa/:empresaId/analise-cnpj', auth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).colaborador || (req as any).user;
+    const analise = await analisarCnpjReceitaCartaoEmpresa(req.params.empresaId, user?.id || null);
+    if (!analise) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+    res.json({ message: 'Análise CNPJ gerada com base na Receita Federal e no Cartão CNPJ anexado.', analise });
+  } catch (err: any) {
+    console.error('[POST /api/documentacao/empresa/:empresaId/analise-cnpj]', err);
+    res.status(500).json({ error: err?.message || 'Erro ao gerar análise CNPJ' });
   }
 });
 

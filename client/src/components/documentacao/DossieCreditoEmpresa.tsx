@@ -84,6 +84,38 @@ type DossieResponse = {
   blocos: BlocoDossie[];
   pendencias: Pendencia[];
 };
+type AnaliseCnpjEmpresa = {
+  id: string;
+  empresa_id: string;
+  status: string;
+  score_cnpj: number;
+  risco_cnpj: "baixo" | "medio" | "alto" | "critico" | "nao_calculado";
+  cnpj?: string;
+  matriz_filial?: string;
+  data_abertura?: string;
+  idade_meses?: number;
+  tempo_abertura_descricao?: string;
+  situacao_cadastral?: string;
+  risco_situacao?: string;
+  cnae_principal?: string;
+  natureza_juridica?: string;
+  porte?: string;
+  data_emissao_cartao?: string;
+  dias_emissao_cartao?: number;
+  status_validade_cartao?: string;
+  cartao_anexado?: boolean;
+  cartao_pendente_ocr?: boolean;
+  divergencias?: any[];
+  alertas?: any[];
+  pontos_positivos?: string[];
+  pontos_atencao?: string[];
+  pontos_impeditivos?: string[];
+  recomendacoes?: string[];
+  diagnostico?: string;
+  resultado?: any;
+  criado_em?: string;
+};
+
 
 const STATUS_LABEL: Record<string, string> = {
   nao_iniciado: "Não iniciado",
@@ -141,6 +173,26 @@ function severidadeClasses(severidade: Severidade) {
   if (severidade === "alta") return "bg-red-50 text-red-700 border-red-200";
   if (severidade === "media") return "bg-amber-50 text-amber-700 border-amber-200";
   return "bg-blue-50 text-blue-700 border-blue-200";
+}
+
+function riscoCnpjClasses(risco?: string) {
+  if (risco === "baixo") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (risco === "medio") return "bg-amber-50 text-amber-700 border-amber-200";
+  if (risco === "alto") return "bg-orange-50 text-orange-700 border-orange-200";
+  if (risco === "critico") return "bg-red-50 text-red-700 border-red-200";
+  return "bg-slate-50 text-slate-600 border-slate-200";
+}
+
+function statusCartaoClasses(status?: string) {
+  if (status === "valido") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (status === "vencido" || status === "divergente" || status === "ilegivel") return "bg-red-50 text-red-700 border-red-200";
+  if (status === "pendente") return "bg-amber-50 text-amber-700 border-amber-200";
+  return "bg-slate-50 text-slate-600 border-slate-200";
+}
+
+function normalizarRiscoLabel(risco?: string) {
+  if (!risco || risco === "nao_calculado") return "Não calculado";
+  return risco.charAt(0).toUpperCase() + risco.slice(1);
 }
 
 function MiniCampo({ label, value }: { label: string; value: any }) {
@@ -334,10 +386,93 @@ function BlocoCard({ bloco, aberto, onToggle }: { bloco: BlocoDossie; aberto: bo
   );
 }
 
+function AnaliseCnpjCard({ analise, onGerar, loading }: { analise: AnaliseCnpjEmpresa | null; onGerar: () => void; loading: boolean }) {
+  const alertas = Array.isArray(analise?.alertas) ? analise!.alertas : [];
+  const recomendacoes = Array.isArray(analise?.recomendacoes) ? analise!.recomendacoes : [];
+  const positivos = Array.isArray(analise?.pontos_positivos) ? analise!.pontos_positivos : [];
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-blue-700" />
+            <h3 className="text-sm font-extrabold text-slate-800">Análise CNPJ — Receita + Cartão anexado</h3>
+            {analise && <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${riscoCnpjClasses(analise.risco_cnpj)}`}>Risco {normalizarRiscoLabel(analise.risco_cnpj)}</span>}
+          </div>
+          <p className="text-xs text-slate-500 mt-1 max-w-3xl">
+            Primeiro diagnóstico automático: usa os dados sincronizados da Receita Federal e valida o Cartão CNPJ anexado como comprovante documental.
+          </p>
+        </div>
+        <button onClick={onGerar} disabled={loading} className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 text-white text-xs font-bold hover:bg-slate-900 transition-colors disabled:opacity-50">
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          {analise ? "Atualizar análise CNPJ" : "Gerar análise CNPJ"}
+        </button>
+      </div>
+
+      {!analise ? (
+        <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+          Nenhuma análise CNPJ gerada ainda. Clique em “Gerar análise CNPJ” para criar o primeiro diagnóstico usando Receita Federal + Cartão CNPJ anexado.
+        </div>
+      ) : (
+        <div className="mt-4 space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-2">
+            <MiniCampo label="Score CNPJ" value={`${analise.score_cnpj ?? 0}/100`} />
+            <MiniCampo label="Status Receita" value={analise.situacao_cadastral} />
+            <MiniCampo label="Matriz/filial" value={analise.matriz_filial} />
+            <MiniCampo label="Abertura" value={formatDate(analise.data_abertura)} />
+            <MiniCampo label="Tempo" value={analise.tempo_abertura_descricao} />
+            <MiniCampo label="CNAE" value={analise.cnae_principal} />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${statusCartaoClasses(analise.status_validade_cartao)}`}>
+              Cartão CNPJ: {analise.cartao_anexado ? (analise.status_validade_cartao || "anexado") : "não anexado"}
+            </span>
+            {analise.dias_emissao_cartao !== undefined && analise.dias_emissao_cartao !== null && (
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-600">
+                Emissão: {analise.dias_emissao_cartao} dia(s)
+              </span>
+            )}
+            {Array.isArray(analise.divergencias) && analise.divergencias.length > 0 && (
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full border border-red-200 bg-red-50 text-red-700">
+                {analise.divergencias.length} divergência(s)
+              </span>
+            )}
+          </div>
+
+          {analise.diagnostico && (
+            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+              <p className="text-xs font-bold text-blue-800 mb-1">Diagnóstico inicial</p>
+              <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">{analise.diagnostico}</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
+              <p className="text-xs font-bold text-emerald-800 mb-2">Pontos positivos</p>
+              {positivos.length ? positivos.slice(0, 5).map((item, idx) => <p key={idx} className="text-xs text-emerald-800 mb-1">• {item}</p>) : <p className="text-xs text-slate-500">Nenhum ponto positivo registrado.</p>}
+            </div>
+            <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3">
+              <p className="text-xs font-bold text-amber-800 mb-2">Alertas</p>
+              {alertas.length ? alertas.slice(0, 5).map((item, idx) => <p key={idx} className="text-xs text-amber-900 mb-1">• {item.mensagem || item.codigo}</p>) : <p className="text-xs text-slate-500">Sem alertas críticos.</p>}
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+              <p className="text-xs font-bold text-slate-800 mb-2">Recomendações</p>
+              {recomendacoes.length ? recomendacoes.slice(0, 5).map((item, idx) => <p key={idx} className="text-xs text-slate-700 mb-1">• {item}</p>) : <p className="text-xs text-slate-500">Sem recomendações registradas.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita }: { empresaId?: string; onAtualizarReceita?: () => void }) {
   const [dossie, setDossie] = useState<DossieResponse | null>(null);
+  const [analiseCnpj, setAnaliseCnpj] = useState<AnaliseCnpjEmpresa | null>(null);
   const [loading, setLoading] = useState(false);
   const [recalculando, setRecalculando] = useState(false);
+  const [gerandoAnaliseCnpj, setGerandoAnaliseCnpj] = useState(false);
   const [abertos, setAbertos] = useState<Record<string, boolean>>({ cnpj_receita: true, qsa_quadro_societario: true });
 
   const carregar = useCallback(async () => {
@@ -356,12 +491,39 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita }: 
 
   useEffect(() => { carregar(); }, [carregar]);
 
+  const carregarAnaliseCnpj = useCallback(async () => {
+    if (!empresaId) return;
+    try {
+      const data = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-cnpj`);
+      setAnaliseCnpj(data || null);
+    } catch (err) {
+      console.warn("[AnaliseCNPJ] erro ao carregar última análise", err);
+    }
+  }, [empresaId]);
+
+  useEffect(() => { carregarAnaliseCnpj(); }, [carregarAnaliseCnpj]);
+
+  const gerarAnaliseCnpj = async () => {
+    if (!empresaId) return;
+    setGerandoAnaliseCnpj(true);
+    try {
+      const data = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-cnpj`, { method: "POST" });
+      setAnaliseCnpj(data?.analise || data || null);
+      toast.success("Análise CNPJ gerada com base na Receita Federal e Cartão CNPJ anexado.");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao gerar análise CNPJ");
+    } finally {
+      setGerandoAnaliseCnpj(false);
+    }
+  };
+
   const recalcular = async () => {
     if (!empresaId) return;
     setRecalculando(true);
     try {
       const data = await apiFetch(`/api/documentacao/empresa/${empresaId}/recalcular`, { method: "POST" });
       setDossie(data);
+      await carregarAnaliseCnpj();
       toast.success("Dossiê recalculado com base nos dados atuais");
     } catch (err: any) {
       toast.error(err?.message || "Erro ao recalcular dossiê");
@@ -421,6 +583,8 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita }: 
           </div>
         )}
       </div>
+
+      <AnaliseCnpjCard analise={analiseCnpj} onGerar={gerarAnaliseCnpj} loading={gerandoAnaliseCnpj} />
 
       {dossie?.pendencias?.some((p) => p.severidade === "alta") && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800 flex items-start gap-2">
