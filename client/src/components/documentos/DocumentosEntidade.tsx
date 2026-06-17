@@ -374,6 +374,9 @@ export default function DocumentosEntidade({
   }, [docs, busca, tipoFiltro]);
 
   const selecionadosIds = useMemo(() => docs.filter((doc) => selecionados[doc.id]).map((doc) => doc.id), [docs, selecionados]);
+  const totalSlots = useMemo(() => slotsDaTela.length, [slotsDaTela]);
+  const slotsPreenchidos = useMemo(() => slotsDaTela.filter((documentoSlot) => docs.some((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento))).length, [slotsDaTela, docs]);
+  const documentosValidados = useMemo(() => docs.filter((doc) => doc.validado).length, [docs]);
 
   function abrirChecklistExportacao() {
     if (!docs.length) { toast.error("Não há documentos anexados para exportar."); return; }
@@ -527,6 +530,25 @@ export default function DocumentosEntidade({
         </div>
       </div>
 
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Arquivos</p>
+          <p className="mt-1 text-xl font-black text-slate-900">{docs.length}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Campos preenchidos</p>
+          <p className="mt-1 text-xl font-black text-slate-900">{slotsPreenchidos}/{totalSlots}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Validados</p>
+          <p className="mt-1 text-xl font-black text-emerald-700">{documentosValidados}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Pendentes</p>
+          <p className="mt-1 text-xl font-black text-amber-700">{Math.max(docs.length - documentosValidados, 0)}</p>
+        </div>
+      </div>
+
       <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
           <div>
@@ -616,28 +638,40 @@ export default function DocumentosEntidade({
       {permitirUpload && (
         <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
           <div>
-            <p className="text-xs font-bold text-slate-700">Checklist de inclusão de documentos</p>
-            <p className="text-[11px] text-slate-400">Use os campos abaixo como checklist documental organizado. O arquivo anexado aparecerá automaticamente no grupo correspondente acima.</p>
+            <p className="text-sm font-bold text-slate-700">Checklist de inclusão de documentos</p>
+            <p className="text-[11px] text-slate-400">Use os campos abaixo como checklist documental organizado. O arquivo anexado aparecerá automaticamente no grupo correspondente acima e ficará visível também no respectivo bloco.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {secoesDaTela.map((secao, index) => (
+              <a key={secao.titulo} href={`#secao-upload-${index}`} className="px-3 py-1.5 rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600 hover:bg-slate-200 transition-colors">
+                {secao.titulo}
+              </a>
+            ))}
           </div>
           <div className="space-y-3">
-            {secoesDaTela.map((secao) => (
-              <div key={secao.titulo} className="rounded-xl border border-slate-100 bg-slate-50 p-2.5">
-                <p className="text-xs font-bold text-slate-700 mb-1">{secao.titulo}</p>
-                {secao.descricao && <p className="text-[11px] text-slate-400 mb-2">{secao.descricao}</p>}
-                <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-2">
+            {secoesDaTela.map((secao, index) => (
+              <div key={secao.titulo} id={`secao-upload-${index}`} className="rounded-xl border border-slate-100 bg-slate-50 p-3 scroll-mt-6">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div>
+                    <p className="text-sm font-bold text-slate-700">{secao.titulo}</p>
+                    {secao.descricao && <p className="text-[11px] text-slate-400 mt-1">{secao.descricao}</p>}
+                  </div>
+                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-500">{secao.slots.length} campo(s)</span>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                   {secao.slots.map((documentoSlot) => {
                     const tipo = documentoSlot.tipoUpload;
                     const docsTipo = docs.filter((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento));
                     const uploading = uploadingTipo === tipo;
                     const exigeNome = Boolean(documentoSlot.exigeNome);
                     return (
-                      <div key={tipo} className="rounded-xl border border-slate-100 bg-white p-2.5 space-y-2">
+                      <div key={tipo} className="rounded-xl border border-slate-100 bg-white p-3 space-y-3 shadow-sm shadow-slate-100/30">
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="text-xs font-bold text-slate-700 truncate">{documentoSlot.titulo}</p>
-                            <p className="text-[11px] text-slate-400">{docsTipo.length} arquivo(s) anexado(s)</p>
+                            <p className="text-sm font-bold text-slate-700 leading-tight">{documentoSlot.titulo}</p>
+                            <p className="text-[11px] text-slate-400 mt-0.5">{docsTipo.length} arquivo(s) anexado(s)</p>
                           </div>
-                          <label className="h-8 inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold bg-blue-600 text-white px-2.5 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors">
+                          <label className="h-9 inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold bg-blue-600 text-white px-3 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors shrink-0">
                             {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} Anexar
                             <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file); e.currentTarget.value = ""; }} />
                           </label>
@@ -648,6 +682,28 @@ export default function DocumentosEntidade({
                         </div>
                         {documentoSlot.descricao && <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-2 py-1">{documentoSlot.descricao}</p>}
                         {tipo === "cartao_cnpj" && <p className="text-[11px] text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-2 py-1">O usuário só anexa. O sistema/IA deverá identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral para o relatório.</p>}
+                        <div className="rounded-lg border border-slate-100 bg-slate-50 p-2.5">
+                          <p className="text-[11px] font-semibold text-slate-600 mb-2">Arquivos neste campo</p>
+                          {docsTipo.length === 0 ? (
+                            <p className="text-[11px] text-slate-400">Nenhum arquivo anexado neste local.</p>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {docsTipo.slice(0, 3).map((doc) => (
+                                <div key={doc.id} className="flex items-center justify-between gap-2 rounded-lg bg-white border border-slate-100 px-2 py-1.5">
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-semibold text-slate-700 truncate">{doc.nome_customizado || doc.nome_original}</p>
+                                    <p className="text-[10px] text-slate-400 truncate">{formatDate(doc.criado_em)}</p>
+                                  </div>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button type="button" title="Visualizar" onClick={() => visualizar(doc)} className="p-1.5 rounded-md hover:bg-blue-50 text-blue-600"><Eye className="w-3.5 h-3.5" /></button>
+                                    <button type="button" title="Baixar" onClick={() => baixar(doc)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500"><Download className="w-3.5 h-3.5" /></button>
+                                  </div>
+                                </div>
+                              ))}
+                              {docsTipo.length > 3 && <p className="text-[10px] text-slate-400">+ {docsTipo.length - 3} arquivo(s) neste mesmo campo.</p>}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
