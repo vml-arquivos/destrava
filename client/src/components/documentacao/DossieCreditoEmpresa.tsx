@@ -388,6 +388,7 @@ function BlocoCard({ bloco, aberto, onToggle }: { bloco: BlocoDossie; aberto: bo
 
 function AnaliseCnpjCard({ analise, onGerar, loading }: { analise: AnaliseCnpjEmpresa | null; onGerar: () => void; loading: boolean }) {
   const alertas = Array.isArray(analise?.alertas) ? analise!.alertas : [];
+  const divergencias = Array.isArray(analise?.divergencias) ? analise!.divergencias : [];
   const recomendacoes = Array.isArray(analise?.recomendacoes) ? analise!.recomendacoes : [];
   const positivos = Array.isArray(analise?.pontos_positivos) ? analise!.pontos_positivos : [];
   return (
@@ -448,6 +449,46 @@ function AnaliseCnpjCard({ analise, onGerar, loading }: { analise: AnaliseCnpjEm
               <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">{analise.diagnostico}</p>
             </div>
           )}
+
+          <div className={`rounded-xl border p-3 ${divergencias.length ? "border-red-200 bg-red-50/60" : "border-emerald-100 bg-emerald-50/50"}`}>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <p className={`text-xs font-black ${divergencias.length ? "text-red-800" : "text-emerald-800"}`}>
+                Conferência Receita x Cartão CNPJ
+              </p>
+              <span className={`text-[10px] font-black rounded-full border px-2 py-0.5 ${divergencias.length ? "border-red-200 bg-white text-red-700" : "border-emerald-200 bg-white text-emerald-700"}`}>
+                {divergencias.length ? `${divergencias.length} divergência(s) com evidência` : "Sem divergência comprovada"}
+              </span>
+            </div>
+
+            {!divergencias.length ? (
+              <p className="text-xs text-emerald-800">
+                Nenhuma divergência objetiva foi identificada. Diferenças de pontuação, acentos, maiúsculas/minúsculas, hífen, CEP formatado, abreviações e ordem do endereço são ignoradas.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {divergencias.map((div: any, idx: number) => (
+                  <div key={`${div.campo || div.label}-${idx}`} className="rounded-lg border border-red-200 bg-white p-3">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className="text-[10px] font-black uppercase tracking-wide rounded-full bg-red-100 text-red-700 px-2 py-0.5">{div.label || div.campo}</span>
+                      <span className="text-[10px] font-bold text-slate-500">{div.motivo_tecnico || "Diferença objetiva encontrada pelo backend."}</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+                        <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Valor na Receita/cadastro</p>
+                        <p className="text-xs font-semibold text-slate-800 break-words">{div.receita || "Não informado"}</p>
+                        {div.receita_normalizado && <p className="mt-1 text-[10px] text-slate-400 break-all">Normalizado: {div.receita_normalizado}</p>}
+                      </div>
+                      <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+                        <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Valor no Cartão CNPJ anexado</p>
+                        <p className="text-xs font-semibold text-slate-800 break-words">{div.cartao || "Não informado"}</p>
+                        {div.cartao_normalizado && <p className="mt-1 text-[10px] text-slate-400 break-all">Normalizado: {div.cartao_normalizado}</p>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
