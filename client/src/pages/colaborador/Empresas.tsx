@@ -1039,34 +1039,31 @@ export default function Empresas() {
 
       <div className="emp-page min-h-screen bg-[#f8f9fc]">
 
-        {/* ── Top Bar ── */}
-        <div className="bg-white border-b border-slate-200 px-4 sm:px-5 py-1.5">
-          <div className="max-w-[1680px] mx-auto flex items-center justify-between gap-3">
-            <div className="flex items-baseline gap-3 min-w-0">
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">Empresas</h1>
-              <p className="text-xs sm:text-sm text-slate-500 truncate">
-                {loading ? "Carregando..." : `${empresas.length} empresa${empresas.length !== 1 ? "s" : ""} cadastrada${empresas.length !== 1 ? "s" : ""}`}
-              </p>
-            </div>
-            <button
-              onClick={abrirNova}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl font-semibold text-sm transition-colors shadow-sm shadow-blue-200"
-            >
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Nova Empresa</span>
-              <span className="sm:hidden">Nova</span>
-            </button>
-          </div>
-        </div>
-
-        {/* ── Layout 2 colunas ── */}
-        <div className="max-w-[1760px] mx-auto px-2 sm:px-4 pt-1.5 pb-3">
-          <div className="flex gap-3" style={{ minHeight: 'calc(100vh - 82px)' }}>
+        {/* ── Layout principal em tela cheia útil ── */}
+        <div className="max-w-[1780px] mx-auto px-3 sm:px-4 pt-2 pb-3">
+          <div className="flex gap-4 items-stretch" style={{ minHeight: 'calc(100vh - 84px)' }}>
 
             {/* ── COLUNA ESQUERDA: Lista ── */}
-            <div className={`flex-shrink-0 w-full sm:w-[280px] lg:w-[300px] ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
+            <div className={`flex-shrink-0 w-full sm:w-[280px] lg:w-[300px] xl:w-[320px] ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
+              <div className="mb-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h1 className="text-xl font-black text-slate-900 tracking-tight leading-tight">Empresas</h1>
+                    <p className="text-xs font-medium text-slate-500 mt-0.5">
+                      {loading ? "Carregando..." : `${empresas.length} cadastrada${empresas.length !== 1 ? "s" : ""}`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={abrirNova}
+                    className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl font-bold text-xs transition-colors shadow-sm shadow-blue-200 shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Nova
+                  </button>
+                </div>
+              </div>
               {/* Filtros */}
-              <div className="mb-2 space-y-2">
+              <div className="mb-3 space-y-2">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
@@ -1128,7 +1125,7 @@ export default function Empresas() {
               </div>
 
               {/* Lista */}
-              <div className="scroll-area overflow-y-auto space-y-1.5 flex-1 pr-1" style={{ maxHeight: "calc(100vh - 145px)" }}>
+              <div className="scroll-area overflow-y-auto space-y-1.5 flex-1 pr-1" style={{ maxHeight: "calc(100vh - 250px)" }}>
                 {loading ? (
                   <LoadingState message="Carregando empresas…" className="py-20" />
                 ) : empresas.length === 0 ? (
@@ -1212,7 +1209,7 @@ export default function Empresas() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden slide-up h-[calc(100vh-84px)] flex flex-col">
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden slide-up h-[calc(100vh-88px)] flex flex-col min-w-0">
 
                   {/* ── Header detalhe ── */}
                   <div className="px-4 sm:px-5 py-3 border-b border-slate-100">
@@ -1258,16 +1255,16 @@ export default function Empresas() {
                                 </span>
                               )}
                             </div>
-                            <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5">
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">CNPJ</p>
                                 <p className="text-sm font-semibold text-slate-700 mt-0.5 truncate">{selecionada.cnpj || "Não informado"}</p>
                               </div>
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5">
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Localização</p>
                                 <p className="text-sm font-semibold text-slate-700 mt-0.5 truncate">{[selecionada.cidade, selecionada.estado].filter(Boolean).join(" / ") || "Não informado"}</p>
                               </div>
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5">
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Contato principal</p>
                                 <p className="text-sm font-semibold text-slate-700 mt-0.5 truncate">{selecionada.responsavel_nome || selecionada.telefone || selecionada.whatsapp || "Não informado"}</p>
                               </div>
@@ -1358,10 +1355,10 @@ export default function Empresas() {
                       critico: { label: "Crítico", wrap: "bg-red-50 border-red-200",       badge: "bg-red-100 text-red-700",       Icon: ShieldOff,    ic: "text-red-600" },
                     }[risco] || { label: "—", wrap: "bg-slate-50 border-slate-200", badge: "bg-slate-100 text-slate-600", Icon: ShieldCheck, ic: "text-slate-500" };
                     return (
-                      <div className={`mx-4 mt-2.5 rounded-2xl border px-4 py-2.5 ${rCfg.wrap}`}>
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                      <div className={`mx-4 mt-2 rounded-xl border px-3 py-2 ${rCfg.wrap}`}>
+                        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                           <div className="flex items-center gap-3 min-w-[210px]">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 border border-white shadow-sm">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/90 border border-white shadow-sm">
                               <rCfg.Icon className={`w-4 h-4 ${rCfg.ic}`} />
                             </div>
                             <div>
@@ -1375,7 +1372,7 @@ export default function Empresas() {
 
                           <div className="flex flex-1 items-center gap-3 min-w-0">
                             <div className="min-w-[54px]">
-                              <div className="text-2xl font-black text-slate-900 leading-none">{score}</div>
+                              <div className="text-xl font-black text-slate-900 leading-none">{score}</div>
                               <div className="text-[11px] font-semibold text-slate-400 mt-1">de 100</div>
                             </div>
                             <div className="flex-1 min-w-[140px]">
@@ -1428,14 +1425,14 @@ export default function Empresas() {
                   </div>
 
                   {/* ── Conteúdo das abas ── */}
-                  <div className="scroll-area overflow-y-auto flex-1 min-h-0">
+                  <div className="scroll-area overflow-y-auto flex-1 min-h-0" style={{ minHeight: 0 }}>
                     {loadingDetalhe ? (
                       <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
                     ) : (
 
                     /* ── VISÃO GERAL ── */
                     abaAtiva === "visao_geral" ? (
-                      <div className="p-5 space-y-4 fade-in">
+                      <div className="p-4 space-y-3 fade-in">
 
                         {/* Painel executivo ampliado para análise de crédito */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
