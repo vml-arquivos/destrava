@@ -1037,14 +1037,14 @@ export default function Empresas() {
         .fade-in { animation: fadeIn 0.2s ease forwards; }
       `}</style>
 
-      <div className="emp-page min-h-screen bg-[#f8f9fc]">
+      <div className="emp-page h-full min-h-0 overflow-hidden bg-[#f8f9fc]">
 
         {/* ── Layout principal em tela cheia útil ── */}
-        <div className="max-w-[1780px] mx-auto px-3 sm:px-4 pt-2 pb-3">
-          <div className="flex gap-4 items-stretch" style={{ minHeight: 'calc(100vh - 84px)' }}>
+        <div className="max-w-none w-full h-full min-h-0 px-3 sm:px-4 py-2 overflow-hidden">
+          <div className="flex gap-4 items-stretch h-full min-h-0">
 
             {/* ── COLUNA ESQUERDA: Lista ── */}
-            <div className={`flex-shrink-0 w-full sm:w-[280px] lg:w-[300px] xl:w-[320px] ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
+            <div className={`flex-shrink-0 w-full sm:w-[280px] lg:w-[300px] xl:w-[320px] h-full min-h-0 ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
               <div className="mb-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -1125,7 +1125,7 @@ export default function Empresas() {
               </div>
 
               {/* Lista */}
-              <div className="scroll-area overflow-y-auto space-y-1.5 flex-1 pr-1" style={{ maxHeight: "calc(100vh - 250px)" }}>
+              <div className="scroll-area overflow-y-auto space-y-1.5 flex-1 min-h-0 pr-1">
                 {loading ? (
                   <LoadingState message="Carregando empresas…" className="py-20" />
                 ) : empresas.length === 0 ? (
@@ -1197,9 +1197,9 @@ export default function Empresas() {
             </div>
 
             {/* ── COLUNA DIREITA: Detalhe ── */}
-            <div className={`flex-1 min-w-0 ${!showDetail && !selecionada ? "hidden sm:block" : "block"}`}>
+            <div className={`flex-1 min-w-0 h-full min-h-0 ${!showDetail && !selecionada ? "hidden sm:block" : "block"}`}>
               {!selecionada ? (
-                <div className="hidden sm:flex flex-col items-center justify-center h-80 gap-4 rounded-2xl border-2 border-dashed border-slate-200 bg-white">
+                <div className="hidden sm:flex flex-col items-center justify-center h-full min-h-[520px] gap-4 rounded-2xl border-2 border-dashed border-slate-200 bg-white">
                   <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
                     <Building2 className="w-8 h-8 text-slate-300" />
                   </div>
@@ -1209,7 +1209,7 @@ export default function Empresas() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden slide-up h-[calc(100vh-88px)] flex flex-col min-w-0">
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden slide-up h-full min-h-0 flex flex-col min-w-0">
 
                   {/* ── Header detalhe ── */}
                   <div className="px-4 sm:px-5 py-3 border-b border-slate-100">
@@ -1706,12 +1706,12 @@ export default function Empresas() {
                                 Nenhum sócio retornado para esta empresa até o momento.
                               </div>
                             ) : (
-                              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                              <div className={`grid grid-cols-1 ${sociosExibicao.length > 1 ? "xl:grid-cols-2" : ""} gap-3`}>
                                 {sociosExibicao.map((s: any) => {
                                   const pendencias = Array.isArray(s.pendencias_contrato) ? s.pendencias_contrato : pendenciasSocioContrato(s);
                                   const completo = pendencias.length === 0;
                                   return (
-                                    <div key={s.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                                    <div key={s.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm w-full">
                                       <div className="flex items-start gap-3">
                                         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center font-bold text-sm shrink-0">
                                           {(s.nome?.charAt(0) ?? "?").toUpperCase()}
