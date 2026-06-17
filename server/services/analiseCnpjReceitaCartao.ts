@@ -44,6 +44,9 @@ type ExtracaoCartao = {
   endereco_completo?: string | null;
   situacao_cadastral?: string | null;
   data_emissao?: string | null;
+  data_situacao_cadastral?: string | null;
+  data_emissao_texto?: string | null;
+  modelo?: string | null;
   fonte?: string | null;
   confianca?: number | null;
   raw_text?: string | null;
@@ -180,44 +183,200 @@ function extrairJson(text: string): any | null {
   return null;
 }
 
+function geminiOcrEnabled(): boolean {
+  return String(process.env.GEMINI_DOCUMENT_OCR_ENABLED || 'true').toLowerCase() !== 'false';
+}
+
+function normalizarConfianca(value: unknown): number | null {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  if (n > 1 && n <= 100) return Math.round(n) / 100;
+  return Math.max(0, Math.min(1, n));
+}
+
+function extracaoTemQualidade(extracao: ExtracaoCartao | null): boolean {
+  if (!extracao) return false;
+  const confianca = normalizarConfianca(extracao.confianca);
+  const temCamposCriticos = !!(extracao.cnpj && extracao.data_abertura && extracao.data_emissao && extracao.situacao_cadastral);
+  if (!temCamposCriticos) return false;
+  if (confianca !== null && confianca < 0.72) return false;
+  return true;
+}
+
+function inferirMimeDocumento(doc: DocCartao): string | null {
+  const explicit = String(doc.mime_type || '').toLowerCase().trim();
+  if (explicit && explicit !== 'application/octet-stream') return explicit;
+  const nome = String(doc.nome_original || doc.caminho_arquivo || '').toLowerCase();
+  if (nome.endsWith('.pdf')) return 'application/pdf';
+  if (nome.endsWith('.png')) return 'image/png';
+  if (nome.endsWith('.jpg') || nome.endsWith('.jpeg')) return 'image/jpeg';
+  if (nome.endsWith('.webp')) return 'image/webp';
+  return explicit || null;
+}
+
+function documentoSuportadoPorGemini(doc: DocCartao): boolean {
+  const mime = inferirMimeDocumento(doc);
+  return !!mime && (mime.includes('pdf') || mime.startsWith('image/'));
+}
+
+async function arquivoExiste(filePath: string): Promise<boolean> {
+  try {
+    const st = await fs.stat(filePath);
+    return st.isFile();
+  } catch {
+    return false;
+  }
+}
+
+async function resolverCaminhoDocumento(caminhoArquivo?: string | null): Promise<string | null> {
+  const raw = String(caminhoArquivo || '').trim();
+  if (!raw) return null;
+
+  const cwd = process.cwd();
+  const dataDir = path.resolve(process.env.DATA_DIR || '/data');
+  const uploadDir = path.resolve(process.env.UPLOAD_DIR || path.join(dataDir, 'uploads'));
+  const candidatos = new Set<string>();
+
+  if (path.isAbsolute(raw)) candidatos.add(path.resolve(raw));
+  candidatos.add(path.resolve(cwd, raw));
+  candidatos.add(path.resolve(dataDir, raw));
+  candidatos.add(path.resolve(uploadDir, raw));
+  if (raw.startsWith('/app/')) candidatos.add(path.resolve(raw.replace('/app/', `${cwd}/`)));
+  if (raw.includes('/uploads/')) candidatos.add(path.resolve(dataDir, raw.slice(raw.indexOf('/uploads/') + 1)));
+
+  for (const candidato of candidatos) {
+    if (await arquivoExiste(candidato)) return candidato;
+  }
+
+  console.warn('[analiseCnpjReceitaCartao] Arquivo do Cartão CNPJ não encontrado para IA/OCR:', raw);
+  return null;
+}
+
+function montarPromptCartaoCnpj() {
+  return `Você é um auditor documental brasileiro especializado em Cartão CNPJ da Receita Federal.
+
+Tarefa: leia o PDF/imagem anexado e extraia campos estruturados. A DATA DE EMISSÃO DO COMPROVANTE normalmente aparece no rodapé, em frase parecida com: "Emitido no dia DD/MM/AAAA às HH:MM:SS". NÃO confunda com DATA DE ABERTURA nem com DATA DA SITUAÇÃO CADASTRAL.
+
+Responda SOMENTE JSON válido, sem markdown, sem comentários, com exatamente estas chaves:
+{
+  "documento_e_cartao_cnpj": true,
+  "cnpj": "00.000.000/0000-00 ou null",
+  "matriz_filial": "matriz|filial|null",
+  "data_abertura": "YYYY-MM-DD ou null",
+  "nome_empresarial": "texto ou null",
+  "nome_fantasia": "texto ou null",
+  "cnae_principal": "código - descrição ou null",
+  "cnaes_secundarios": ["código - descrição"],
+  "natureza_juridica": "código - descrição ou null",
+  "porte": "texto ou null",
+  "endereco_completo": "texto ou null",
+  "situacao_cadastral": "texto ou null",
+  "data_situacao_cadastral": "YYYY-MM-DD ou null",
+  "data_emissao": "YYYY-MM-DD ou null",
+  "data_emissao_texto": "texto completo encontrado no rodapé ou null",
+  "horario_emissao": "HH:MM:SS ou null",
+  "confianca": 0.0
+}
+
+Regras:
+- Se o arquivo não for Cartão CNPJ, use documento_e_cartao_cnpj=false.
+- Se a data de emissão não estiver visível, data_emissao=null.
+- Preserve números, códigos CNAE e natureza jurídica.
+- Confianca deve ir de 0 a 1.`;
+}
+
+async function gerarGeminiCartao(modelName: string, doc: DocCartao, buffer: Buffer): Promise<ExtracaoCartao | null> {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!apiKey) return null;
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: modelName,
+    generationConfig: {
+      temperature: 0,
+      responseMimeType: 'application/json',
+    } as any,
+  });
+
+  const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 30000);
+  const request = model.generateContent([
+    { text: montarPromptCartaoCnpj() },
+    { inlineData: { mimeType: inferirMimeDocumento(doc) || 'application/pdf', data: buffer.toString('base64') } },
+  ] as any);
+
+  const result = await Promise.race([
+    request,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Timeout Gemini após ${timeoutMs}ms`)), timeoutMs)),
+  ]);
+
+  const responseText = result.response.text();
+  const json = extrairJson(responseText);
+  if (!json || typeof json !== 'object') return null;
+
+  return {
+    cnpj: firstNonEmpty(json.cnpj, json.CNPJ),
+    matriz_filial: firstNonEmpty(json.matriz_filial, json.matrizFilial),
+    data_abertura: parseDate(json.data_abertura || json.dataAbertura),
+    nome_empresarial: firstNonEmpty(json.nome_empresarial, json.razao_social, json.nomeEmpresarial),
+    nome_fantasia: firstNonEmpty(json.nome_fantasia, json.nomeFantasia),
+    cnae_principal: firstNonEmpty(json.cnae_principal, json.cnaePrincipal),
+    natureza_juridica: firstNonEmpty(json.natureza_juridica, json.naturezaJuridica),
+    porte: firstNonEmpty(json.porte),
+    endereco_completo: firstNonEmpty(json.endereco_completo, json.endereco),
+    situacao_cadastral: firstNonEmpty(json.situacao_cadastral, json.situacaoCadastral),
+    data_situacao_cadastral: parseDate(json.data_situacao_cadastral || json.dataSituacaoCadastral),
+    data_emissao: parseDate(json.data_emissao || json.dataEmissao),
+    data_emissao_texto: firstNonEmpty(json.data_emissao_texto, json.texto_emissao, json.emitido_no_dia),
+    modelo: modelName,
+    fonte: 'gemini_document_ocr',
+    confianca: normalizarConfianca(json.confianca),
+    raw_text: responseText,
+  };
+}
+
 async function tentarExtrairCartaoComGemini(doc: DocCartao | null): Promise<ExtracaoCartao | null> {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  if (!apiKey || !doc?.caminho_arquivo || !doc?.mime_type) return null;
-  if (!doc.mime_type.includes('pdf') && !doc.mime_type.startsWith('image/')) return null;
+  if (!geminiOcrEnabled() || !apiKey || !doc?.caminho_arquivo) return null;
+  if (!documentoSuportadoPorGemini(doc)) return null;
 
-  const filePath = path.resolve(doc.caminho_arquivo);
-  const dataDir = path.resolve(process.env.DATA_DIR || '/data');
-  if (!filePath.startsWith(dataDir) && !filePath.startsWith(path.resolve('uploads'))) return null;
+  const filePath = await resolverCaminhoDocumento(doc.caminho_arquivo);
+  if (!filePath) return null;
 
   try {
     const buffer = await fs.readFile(filePath);
-    if (buffer.length > 18 * 1024 * 1024) return null;
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-1.5-flash' });
-    const prompt = `Analise este Cartão CNPJ/comprovante de inscrição. Responda SOMENTE JSON válido, sem markdown, no formato: {"cnpj":"","matriz_filial":"matriz|filial|null","data_abertura":"YYYY-MM-DD|null","nome_empresarial":"","nome_fantasia":"","cnae_principal":"codigo - descrição","natureza_juridica":"codigo - descrição","porte":"","endereco_completo":"","situacao_cadastral":"","data_emissao":"YYYY-MM-DD|null","confianca":0.0}. Se algum campo não existir, use null.`;
-    const result = await model.generateContent([
-      { text: prompt },
-      { inlineData: { mimeType: doc.mime_type, data: buffer.toString('base64') } },
-    ] as any);
-    const responseText = result.response.text();
-    const json = extrairJson(responseText);
-    if (!json || typeof json !== 'object') return null;
-    return {
-      cnpj: firstNonEmpty(json.cnpj, json.CNPJ),
-      matriz_filial: firstNonEmpty(json.matriz_filial, json.matrizFilial),
-      data_abertura: parseDate(json.data_abertura || json.dataAbertura),
-      nome_empresarial: firstNonEmpty(json.nome_empresarial, json.razao_social, json.nomeEmpresarial),
-      nome_fantasia: firstNonEmpty(json.nome_fantasia, json.nomeFantasia),
-      cnae_principal: firstNonEmpty(json.cnae_principal, json.cnaePrincipal),
-      natureza_juridica: firstNonEmpty(json.natureza_juridica, json.naturezaJuridica),
-      porte: firstNonEmpty(json.porte),
-      endereco_completo: firstNonEmpty(json.endereco_completo, json.endereco),
-      situacao_cadastral: firstNonEmpty(json.situacao_cadastral, json.situacaoCadastral),
-      data_emissao: parseDate(json.data_emissao || json.dataEmissao),
-      fonte: 'gemini',
-      confianca: Number.isFinite(Number(json.confianca)) ? Number(json.confianca) : null,
-      raw_text: responseText,
-    };
+    const maxBytes = Number(process.env.GEMINI_MAX_INLINE_BYTES || 20 * 1024 * 1024);
+    if (buffer.length > maxBytes) {
+      console.warn('[analiseCnpjReceitaCartao] Cartão CNPJ acima do limite para IA/OCR:', buffer.length);
+      return null;
+    }
+
+    const principal = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const fallback = process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.5-pro';
+    const modelos = Array.from(new Set([principal, fallback].filter(Boolean)));
+
+    let ultimaExtracao: ExtracaoCartao | null = null;
+    let ultimoErro: unknown = null;
+
+    for (const modelName of modelos) {
+      try {
+        const extracao = await gerarGeminiCartao(modelName, doc, buffer);
+        if (extracao) ultimaExtracao = extracao;
+        if (extracaoTemQualidade(extracao)) return extracao;
+        console.warn('[analiseCnpjReceitaCartao] Extração Gemini incompleta/baixa confiança, tentando fallback se disponível:', modelName, extracao?.confianca, {
+          cnpj: !!extracao?.cnpj,
+          data_abertura: !!extracao?.data_abertura,
+          data_emissao: !!extracao?.data_emissao,
+          situacao: !!extracao?.situacao_cadastral,
+        });
+      } catch (err) {
+        ultimoErro = err;
+        console.warn('[analiseCnpjReceitaCartao] Falha no Gemini com modelo:', modelName, (err as any)?.message || err);
+      }
+    }
+
+    if (ultimaExtracao) return ultimaExtracao;
+    if (ultimoErro) throw ultimoErro;
+    return null;
   } catch (err) {
     console.warn('[analiseCnpjReceitaCartao] Gemini não conseguiu extrair Cartão CNPJ:', (err as any)?.message || err);
     return null;

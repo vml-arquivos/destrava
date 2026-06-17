@@ -415,12 +415,14 @@ function AnaliseCnpjCard({ analise, onGerar, loading }: { analise: AnaliseCnpjEm
         </div>
       ) : (
         <div className="mt-4 space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2">
             <MiniCampo label="Score CNPJ" value={`${analise.score_cnpj ?? 0}/100`} />
             <MiniCampo label="Status Receita" value={analise.situacao_cadastral} />
             <MiniCampo label="Matriz/filial" value={analise.matriz_filial} />
             <MiniCampo label="Abertura" value={formatDate(analise.data_abertura)} />
             <MiniCampo label="Tempo" value={analise.tempo_abertura_descricao} />
+            <MiniCampo label="Emissão cartão" value={formatDate(analise.data_emissao_cartao)} />
+            <MiniCampo label="Validade cartão" value={analise.status_validade_cartao} />
             <MiniCampo label="CNAE" value={analise.cnae_principal} />
           </div>
 
