@@ -363,6 +363,19 @@ async function getTableColumns(tableName: string): Promise<Set<string>> {
   return new Set(rows.map((r: { column_name: string }) => r.column_name));
 }
 
+function pgErrorDetails(err: unknown) {
+  if (!err || typeof err !== "object") return { message: String(err) };
+  const e = err as { message?: string; code?: string; detail?: string; constraint?: string; table?: string; column?: string };
+  return {
+    message: e.message,
+    code: e.code,
+    detail: e.detail,
+    constraint: e.constraint,
+    table: e.table,
+    column: e.column,
+  };
+}
+
 async function empresaExiste(empresaId: string): Promise<boolean> {
   const { rows } = await pool.query("SELECT 1 FROM empresas WHERE id=$1 LIMIT 1", [empresaId]);
   return rows.length > 0;
@@ -4288,8 +4301,9 @@ async function startServer() {
         empresa: rows[0],
       });
     } catch (err: any) {
-      console.error("[DELETE /api/empresas/:id]", err);
-      res.status(500).json({ error: err?.message || "Erro ao arquivar empresa" });
+      const details = pgErrorDetails(err);
+      console.error("[DELETE /api/empresas/:id]", details);
+      res.status(500).json({ error: details.message || "Erro ao arquivar empresa", details });
     }
   });
 

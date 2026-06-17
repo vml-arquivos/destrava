@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import pkg from 'pg';
 import { auth } from '../middleware/auth';
-import { analisarCnpjReceitaCartaoEmpresa, buscarUltimaAnaliseCnpjEmpresa } from '../services/analiseCnpjReceitaCartao';
+import { analisarCnpjReceitaCartaoEmpresa, buscarUltimaAnaliseCnpjEmpresa, limparAnalisesCnpjEmpresa } from '../services/analiseCnpjReceitaCartao';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -588,6 +588,18 @@ router.post('/empresa/:empresaId/analise-cnpj', auth, async (req: Request, res: 
   } catch (err: any) {
     console.error('[POST /api/documentacao/empresa/:empresaId/analise-cnpj]', err);
     res.status(500).json({ error: err?.message || 'Erro ao gerar análise CNPJ' });
+  }
+});
+
+// Limpa o histórico de análises de IA (laudo/dossiê CNPJ) de uma empresa, permitindo
+// gerar um laudo novo do zero. Não afeta documentos anexados nem dados cadastrais.
+router.delete('/empresa/:empresaId/analise-cnpj', auth, async (req: Request, res: Response) => {
+  try {
+    const removidas = await limparAnalisesCnpjEmpresa(req.params.empresaId);
+    res.json({ success: true, removidas, message: removidas > 0 ? `${removidas} análise(s) removida(s). Gere um novo laudo quando quiser.` : 'Nenhuma análise encontrada para esta empresa.' });
+  } catch (err: any) {
+    console.error('[DELETE /api/documentacao/empresa/:empresaId/analise-cnpj]', err);
+    res.status(500).json({ error: 'Erro ao limpar análise de CNPJ' });
   }
 });
 

@@ -558,6 +558,86 @@ async function tableExists(tableName: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+// AUTO-CREATE idempotente: garante a tabela de análises de CNPJ antes de qualquer
+// INSERT, sem depender de migration manual ter sido executada em produção. Mesmo
+// schema da migration 062 (idempotente, pode ser chamada quantas vezes for preciso).
+let analisesCnpjSchemaReady = false;
+async function ensureAnalisesCnpjSchema(): Promise<void> {
+  if (analisesCnpjSchemaReady) return;
+  await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+  await pool.query(`CREATE TABLE IF NOT EXISTS public.analises_cnpj_empresa (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id UUID NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
+    cartao_cnpj_arquivo_id UUID NULL REFERENCES public.documentos_arquivos(id) ON DELETE SET NULL,
+
+    status TEXT NOT NULL DEFAULT 'concluida',
+    score_cnpj INTEGER NOT NULL DEFAULT 0,
+    risco_cnpj TEXT NOT NULL DEFAULT 'nao_calculado',
+
+    cnpj TEXT NULL,
+    matriz_filial TEXT NULL,
+    data_abertura DATE NULL,
+    idade_meses INTEGER NULL,
+    tempo_abertura_descricao TEXT NULL,
+    alerta_menos_12_meses BOOLEAN NOT NULL DEFAULT false,
+    alerta_mais_36_meses BOOLEAN NOT NULL DEFAULT false,
+
+    situacao_cadastral TEXT NULL,
+    risco_situacao TEXT NULL,
+    cnae_principal TEXT NULL,
+    natureza_juridica TEXT NULL,
+    porte TEXT NULL,
+    capital_social NUMERIC NULL,
+
+    data_emissao_cartao DATE NULL,
+    dias_emissao_cartao INTEGER NULL,
+    status_validade_cartao TEXT NOT NULL DEFAULT 'nao_verificado',
+    cartao_pendente_ocr BOOLEAN NOT NULL DEFAULT false,
+    cartao_anexado BOOLEAN NOT NULL DEFAULT false,
+
+    campos_receita JSONB NOT NULL DEFAULT '{}'::jsonb,
+    campos_cartao JSONB NOT NULL DEFAULT '{}'::jsonb,
+    comparacao JSONB NOT NULL DEFAULT '{}'::jsonb,
+    divergencias JSONB NOT NULL DEFAULT '[]'::jsonb,
+    alertas JSONB NOT NULL DEFAULT '[]'::jsonb,
+    pontos_positivos JSONB NOT NULL DEFAULT '[]'::jsonb,
+    pontos_atencao JSONB NOT NULL DEFAULT '[]'::jsonb,
+    pontos_impeditivos JSONB NOT NULL DEFAULT '[]'::jsonb,
+    recomendacoes JSONB NOT NULL DEFAULT '[]'::jsonb,
+    diagnostico TEXT NULL,
+    resultado JSONB NOT NULL DEFAULT '{}'::jsonb,
+    fonte_receita TEXT NULL,
+
+    criado_por UUID NULL,
+    criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`DO $$ BEGIN
+    ALTER TABLE public.analises_cnpj_empresa ADD CONSTRAINT analises_cnpj_empresa_status_chk CHECK (status IN ('concluida','pendente_documento','pendente_ocr','revisao_humana','falhou'));
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$;`);
+  await pool.query(`DO $$ BEGIN
+    ALTER TABLE public.analises_cnpj_empresa ADD CONSTRAINT analises_cnpj_empresa_risco_chk CHECK (risco_cnpj IN ('baixo','medio','alto','critico','nao_calculado'));
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$;`);
+  await pool.query(`DO $$ BEGIN
+    ALTER TABLE public.analises_cnpj_empresa ADD CONSTRAINT analises_cnpj_empresa_validade_chk CHECK (status_validade_cartao IN ('valido','vencido','pendente','nao_verificado','divergente','ilegivel'));
+  EXCEPTION WHEN duplicate_object THEN NULL; END $$;`);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_analises_cnpj_empresa_empresa_id ON public.analises_cnpj_empresa (empresa_id)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_analises_cnpj_empresa_criado_em ON public.analises_cnpj_empresa (criado_em DESC)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_analises_cnpj_empresa_score ON public.analises_cnpj_empresa (score_cnpj)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_analises_cnpj_empresa_resultado_gin ON public.analises_cnpj_empresa USING GIN (resultado)');
+  analisesCnpjSchemaReady = true;
+}
+
+// Remove (de forma definitiva, pois são apenas resultados derivados e recalculáveis
+// pela IA — não dados primários do cliente) o histórico de análises de CNPJ de uma
+// empresa, permitindo "limpar a análise da IA" e gerar um laudo novo do zero.
+export async function limparAnalisesCnpjEmpresa(empresaId: string): Promise<number> {
+  const exists = await tableExists('analises_cnpj_empresa');
+  if (!exists) return 0;
+  const { rowCount } = await pool.query('DELETE FROM public.analises_cnpj_empresa WHERE empresa_id = $1', [empresaId]);
+  return rowCount || 0;
+}
+
 async function buscarUltimoCartaoCnpj(empresaId: string): Promise<DocCartao | null> {
   const exists = await tableExists('documentos_arquivos');
   if (!exists) return null;
@@ -714,6 +794,7 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
     diagnostico,
   };
 
+  await ensureAnalisesCnpjSchema();
   const { rows } = await pool.query(
     `INSERT INTO public.analises_cnpj_empresa
       (empresa_id, cartao_cnpj_arquivo_id, status, score_cnpj, risco_cnpj, cnpj, matriz_filial, data_abertura,
