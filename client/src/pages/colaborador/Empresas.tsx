@@ -790,11 +790,11 @@ export default function Empresas() {
     } catch { toast.error("Erro."); }
   }
 
-  // ── Sincronizar dados via Receita no backend (salva de forma atômica) ──
+  // ── Sincronizar dados via CNPJ (atualiza empresa com dados frescos da Receita) ──
   async function sincronizarDados(empresa: Empresa, opts: { silencioso?: boolean } = {}) {
     if (!empresa.cnpj || sincronizando) return;
     setSincronizando(true);
-    if (!opts.silencioso) toast.loading("Consultando Receita e salvando cadastro...", { id: "sync" });
+    if (!opts.silencioso) toast.loading("Sincronizando Receita Federal e salvando no cadastro...", { id: "sync" });
     try {
       const result = await apiFetch(`/api/empresas/${empresa.id}/sincronizar-receita`, {
         method: "POST",
@@ -805,16 +805,21 @@ export default function Empresas() {
       setSelecionada(atualizada);
       setEmpresas(prev => prev.map(e => e.id === empresa.id ? atualizada : e));
 
+      // Sócios/QSA não podem travar a atualização cadastral. Se já existirem, recarrega; se falhar, segue.
       const sociosReload = await apiFetch(`/api/empresas/${empresa.id}/socios`).catch(() => []);
-      const sociosReceita = Array.isArray(result?.qsa) ? result.qsa : [];
-      setSociosEmpresa(Array.isArray(sociosReload) && sociosReload.length > 0 ? sociosReload : sociosReceita);
+      if (Array.isArray(sociosReload)) setSociosEmpresa(sociosReload);
 
       if (!opts.silencioso) {
-        toast.success("Dados da Receita sincronizados e salvos.", { id: "sync" });
+        const cidadeUf = [atualizada?.cidade, atualizada?.estado].filter(Boolean).join(" / ");
+        toast.success(
+          cidadeUf
+            ? `Receita sincronizada e salva: ${cidadeUf}.`
+            : "Receita sincronizada e salva no cadastro.",
+          { id: "sync" }
+        );
       }
     } catch (err: any) {
-      const msg = err?.message || "Erro ao sincronizar Receita";
-      if (!opts.silencioso) toast.error(msg, { id: "sync" });
+      if (!opts.silencioso) toast.error(err?.message || "Erro ao sincronizar Receita", { id: "sync" });
       else console.error('[auto-sync empresa]', err);
     } finally {
       setSincronizando(false);
@@ -913,10 +918,11 @@ export default function Empresas() {
   async function handleExcluir(id: string) {
     try {
       const result = await apiFetch(`/api/empresas/${id}`, { method: "DELETE" });
-      toast.success(result?.message || "Empresa arquivada sem apagar documentos.");
+      toast.success(result?.message || "Empresa arquivada. Documentos preservados.");
       setConfirmDelete(null);
       if (selecionada?.id === id) { setSelecionada(null); setShowDetail(false); }
-      carregarEmpresas();
+      setEmpresas(prev => prev.filter(e => e.id !== id));
+      await carregarEmpresas();
     } catch (err: any) {
       toast.error(err?.message || "Erro ao arquivar empresa.");
     }

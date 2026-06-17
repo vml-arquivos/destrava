@@ -950,7 +950,9 @@ router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
       }
     }
 
-    if (enriquecer_cpfhub !== false) {
+    // CPFHub automático só roda se explicitamente solicitado. Sincronização Receita não pode
+    // falhar por enriquecimento externo ou custo/timeout de terceiro.
+    if (enriquecer_cpfhub === true) {
       const { rows: candidatosCpfHub } = await pool.query(
         `SELECT * FROM public.socios_empresa
           WHERE empresa_id=$1 AND COALESCE(ativo, true)=true
@@ -958,8 +960,13 @@ router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
         [req.params.id]
       );
       for (const row of candidatosCpfHub) {
-        const enriched = await enriquecerSocioComCPFHubAutomatico(req.params.id, row);
-        if (enriched?.id && !inserted.some((s: any) => s.id === enriched.id)) inserted.push(enriched);
+        try {
+          const enriched = await enriquecerSocioComCPFHubAutomatico(req.params.id, row);
+          if (enriched?.id && !inserted.some((s: any) => s.id === enriched.id)) inserted.push(enriched);
+        } catch (err) {
+          failed.push({ nome: row?.nome, error: pgErrorDetails(err) });
+          console.error('[CPFHub automatico socio]', row?.nome, pgErrorDetails(err));
+        }
       }
     }
 
@@ -980,16 +987,14 @@ router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
       cpfcnpj: cpfcnpjResult ? { success: cpfcnpjResult.success, status: cpfcnpjResult.status, error: cpfcnpjResult.error, socios: cpfcnpjResult.socios?.length || 0 } : null,
     });
   } catch (err) {
-    const details = pgErrorDetails(err);
-    console.error('[POST /api/empresas/:id/socios/bulk]', details);
-    // Sincronização de empresa não pode falhar por causa do quadro societário.
-    // Retorna 200 com aviso para não quebrar botão Sincronizar/Salvar.
+    // Não derrubar o fluxo de sincronização da empresa por falha no QSA.
+    // Retorna 200 com erro detalhado para a tela seguir salvando os dados da Receita.
+    console.error('[POST /api/empresas/:id/socios/bulk]', pgErrorDetails(err));
     res.status(200).json({
       inserted: 0,
       socios: [],
-      failed: [{ error: details }],
-      warning: 'Quadro societário não importado; dados principais da empresa foram preservados.',
-      cpfcnpj: null,
+      failed: [{ error: pgErrorDetails(err) }],
+      warning: 'Falha ao importar sócios. Dados cadastrais da empresa não foram revertidos.',
     });
   }
 });

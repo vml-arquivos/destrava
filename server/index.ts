@@ -427,181 +427,6 @@ async function registrarHistoricoEmpresaSeguro(empresaId: string, tipo: string, 
   }
 }
 
-
-function firstReceitaValue<T = any>(...values: T[]): T | null {
-  for (const value of values) {
-    if (value === undefined || value === null) continue;
-    if (typeof value === "string" && value.trim() === "") continue;
-    if (Array.isArray(value) && value.length === 0) continue;
-    return value;
-  }
-  return null;
-}
-
-function telefoneReceitaBackend(...values: unknown[]): string | null {
-  for (const value of values) {
-    const digits = onlyDigits(value);
-    if (digits.length >= 8) return digits;
-  }
-  return null;
-}
-
-function formatCepReceitaBackend(value: unknown): string | null {
-  const digits = onlyDigits(value);
-  if (digits.length !== 8) return emptyToNull(value) as string | null;
-  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
-}
-
-function normalizarCnaeCodigoReceita(value: unknown): string {
-  return onlyDigits(value).padStart(7, "0").slice(-7);
-}
-
-function formatCnaeReceita(codigo: unknown, descricao: unknown): string | null {
-  const desc = String(descricao || "").trim();
-  const code = normalizarCnaeCodigoReceita(codigo);
-  if (!desc && !onlyDigits(codigo)) return null;
-  const formatted = code.length === 7 ? `${code.slice(0, 2)}.${code.slice(2, 4)}-${code.slice(4, 5)}-${code.slice(5)}` : String(codigo || "").trim();
-  return desc ? `${formatted} — ${desc}` : formatted;
-}
-
-function mapPorteReceitaBackend(value: unknown, fallback?: unknown): string {
-  const text = String(value || "").trim().toLowerCase();
-  if (text.includes("mei")) return "mei";
-  if (text === "me" || text.includes("micro")) return "me";
-  if (text.includes("epp") || text.includes("pequeno")) return "epp";
-  if (text.includes("medio") || text.includes("médio")) return "medio";
-  if (text.includes("grande")) return "grande";
-  return String(fallback || "me").trim() || "me";
-}
-
-function normalizarSociosReceitaBackend(value: unknown): any[] {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set<string>();
-  const out: any[] = [];
-  for (const raw of value as any[]) {
-    const nome = String(firstReceitaValue(raw?.nome_socio, raw?.nome, raw?.nome_do_socio, raw?.name) || "").trim();
-    if (!nome) continue;
-    const doc = String(firstReceitaValue(raw?.cnpj_cpf_do_socio, raw?.cpf_cnpj, raw?.cnpj_cpf, raw?.cpf, raw?.cnpj, raw?.documento) || "").trim();
-    const key = `${nome.toLowerCase()}|${onlyDigits(doc)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({
-      nome,
-      nome_socio: nome,
-      cpf_cnpj: doc || null,
-      cnpj_cpf_do_socio: doc || null,
-      qualificacao_socio: firstReceitaValue(raw?.qualificacao_socio, raw?.descricao_qualificacao_socio, raw?.qualificacao, raw?.cargo) || "Sócio",
-      descricao_qualificacao_socio: firstReceitaValue(raw?.descricao_qualificacao_socio, raw?.qualificacao_socio, raw?.qualificacao, raw?.cargo) || "Sócio",
-      data_entrada_sociedade: normalizeDate(firstReceitaValue(raw?.data_entrada_sociedade, raw?.data_entrada)),
-      pais: firstReceitaValue(raw?.pais, raw?.country) || null,
-      representante_legal: Boolean(raw?.representante_legal),
-      nome_representante: firstReceitaValue(raw?.nome_representante_legal, raw?.nome_representante, raw?.nome_do_representante) || null,
-      fonte_dados: raw?.fonte_dados || "brasilapi_receita",
-      dados_extra: raw,
-    });
-  }
-  return out;
-}
-
-async function consultarBrasilApiReceita(cnpj: string): Promise<any> {
-  const clean = onlyDigits(cnpj);
-  if (clean.length !== 14) throw new Error("CNPJ inválido para consulta Receita.");
-  const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`, {
-    headers: { "User-Agent": "destrava-credito/1.0", Accept: "application/json" },
-    signal: AbortSignal.timeout(Number(process.env.CNPJ_API_TIMEOUT_MS || 15000)),
-  });
-  if (response.status === 404) throw new Error("CNPJ não encontrado na Receita/BrasilAPI.");
-  if (!response.ok) throw new Error(`BrasilAPI Receita indisponível: HTTP ${response.status}`);
-  const data = await response.json();
-  if (!data || !data.cnpj) throw new Error("Receita/BrasilAPI retornou resposta inválida.");
-  return data;
-}
-
-function montarPayloadEmpresaReceita(empresaAtual: any, receita: any): Record<string, unknown> {
-  const cnaePrincipal = formatCnaeReceita(receita.cnae_fiscal, receita.cnae_fiscal_descricao);
-  const cnaesSecundarios = Array.isArray(receita.cnaes_secundarios)
-    ? receita.cnaes_secundarios
-        .map((c: any) => formatCnaeReceita(firstReceitaValue(c?.codigo, c?.cnae_fiscal), firstReceitaValue(c?.descricao, c?.cnae_fiscal_descricao)))
-        .filter(Boolean)
-    : [];
-  const socios = normalizarSociosReceitaBackend(receita.qsa);
-  const socioPrincipal = socios[0] || null;
-  const capital = normalizeNumeric(receita.capital_social);
-  const payload: Record<string, unknown> = {
-    razao_social: firstReceitaValue(receita.razao_social, empresaAtual?.razao_social),
-    nome_fantasia: firstReceitaValue(receita.nome_fantasia, empresaAtual?.nome_fantasia),
-    cnpj: onlyDigits(firstReceitaValue(receita.cnpj, empresaAtual?.cnpj)),
-    email: firstReceitaValue(receita.email, empresaAtual?.email),
-    telefone: telefoneReceitaBackend(receita.ddd_telefone_1, receita.telefone, empresaAtual?.telefone),
-    telefone_2: telefoneReceitaBackend(receita.ddd_telefone_2, empresaAtual?.telefone_2),
-    cep: firstReceitaValue(formatCepReceitaBackend(receita.cep), empresaAtual?.cep),
-    logradouro: firstReceitaValue(receita.logradouro, empresaAtual?.logradouro),
-    numero: firstReceitaValue(receita.numero, empresaAtual?.numero),
-    complemento: firstReceitaValue(receita.complemento, empresaAtual?.complemento),
-    bairro: firstReceitaValue(receita.bairro, empresaAtual?.bairro),
-    cidade: firstReceitaValue(receita.municipio, empresaAtual?.cidade),
-    estado: firstReceitaValue(receita.uf, empresaAtual?.estado),
-    porte: mapPorteReceitaBackend(firstReceitaValue(receita.porte, receita.descricao_porte), empresaAtual?.porte),
-    segmento: firstReceitaValue(receita.cnae_fiscal_descricao, empresaAtual?.segmento),
-    natureza_juridica: firstReceitaValue(receita.natureza_juridica, empresaAtual?.natureza_juridica),
-    capital_social: capital ?? normalizeNumeric(empresaAtual?.capital_social),
-    cnae_principal: firstReceitaValue(cnaePrincipal, empresaAtual?.cnae_principal),
-    cnaes_secundarios: cnaesSecundarios.length ? cnaesSecundarios : normalizeTextArray(empresaAtual?.cnaes_secundarios),
-    data_abertura: normalizeDate(firstReceitaValue(receita.data_inicio_atividade, empresaAtual?.data_abertura)),
-    situacao_cadastral: firstReceitaValue(receita.descricao_situacao_cadastral, empresaAtual?.situacao_cadastral),
-    data_situacao_cadastral: normalizeDate(firstReceitaValue(receita.data_situacao_cadastral, empresaAtual?.data_situacao_cadastral)),
-    motivo_situacao_cadastral: firstReceitaValue(receita.motivo_situacao_cadastral, empresaAtual?.motivo_situacao_cadastral),
-    matriz_filial: receita.identificador_matriz_filial === 1 ? "Matriz" : receita.identificador_matriz_filial === 2 ? "Filial" : firstReceitaValue(empresaAtual?.matriz_filial, "Matriz"),
-    ultima_sincronizacao_receita: new Date().toISOString(),
-    dados_extra_receita: JSON.stringify({
-      provedor_principal: "brasilapi",
-      fonte_autoritativa: "brasilapi_receita",
-      sincronizado_em: new Date().toISOString(),
-      qsa_count: socios.length,
-      payload_normalizado: receita,
-    }),
-    responsavel_nome: firstReceitaValue(empresaAtual?.responsavel_nome, socioPrincipal?.nome_socio),
-    responsavel_cpf: firstReceitaValue(empresaAtual?.responsavel_cpf, socioPrincipal?.cpf_cnpj),
-    responsavel_cargo: firstReceitaValue(empresaAtual?.responsavel_cargo, socioPrincipal?.qualificacao_socio),
-    status: "ativo",
-    arquivado_por_duplicidade: false,
-    bloqueado_operacional: false,
-  };
-
-  const pendencias = pendenciasEmpresa(payload as Record<string, any>);
-  payload.cadastro_status = statusCadastroFromPendencias(pendencias);
-  payload.cadastro_pendencias = pendencias;
-  payload.cadastro_completo = pendencias.length === 0;
-  payload.bloqueado_operacional = pendencias.length > 0 ? true : false;
-  return payload;
-}
-
-async function arquivarEmpresaSemApagarDocumentos(empresaId: string, colaborador: any): Promise<any> {
-  const columns = await getTableColumns("empresas");
-  const updates: Record<string, unknown> = {};
-  if (columns.has("status")) updates.status = "arquivado";
-  if (columns.has("ativo")) updates.ativo = false;
-  if (columns.has("arquivado_por_duplicidade")) updates.arquivado_por_duplicidade = true;
-  if (columns.has("bloqueado_operacional")) updates.bloqueado_operacional = true;
-  if (columns.has("cadastro_completo")) updates.cadastro_completo = false;
-  if (columns.has("cadastro_status")) updates.cadastro_status = "arquivado";
-  if (columns.has("cadastro_pendencias")) updates.cadastro_pendencias = ["Cadastro arquivado sem apagar documentos anexados"];
-  if (columns.has("updated_at")) updates.updated_at = new Date().toISOString();
-  const keys = Object.keys(updates);
-  if (!keys.length) throw new Error("Schema de empresas não possui campos seguros para arquivamento lógico.");
-  const values = keys.map((k) => updates[k]);
-  const set = keys.map((k, i) => `"${k}"=$${i + 1}`).join(", ");
-  const { rows } = await pool.query(`UPDATE empresas SET ${set} WHERE id=$${keys.length + 1} RETURNING *`, [...values, empresaId]);
-  if (!rows.length) return null;
-  await registrarHistoricoEmpresaSeguro(
-    empresaId,
-    "empresa_arquivada",
-    "Empresa arquivada/ocultada. Documentos, anexos e análises foram preservados.",
-    colaborador?.nome || "Sistema"
-  ).catch(() => null);
-  return rows[0];
-}
-
 function aplicarFiltroVisibilidadeLead({
   conditions,
   params,
@@ -3719,7 +3544,7 @@ async function startServer() {
 
       if (tipo === "todos" || tipo === "empresas") {
         const params: any[] = [];
-        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`];
+        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`, `COALESCE(cadastro_status, '') <> 'arquivado'`];
         if (busca) { params.push(term); conds.push(`(razao_social ILIKE $1 OR nome_fantasia ILIKE $1 OR cnpj ILIKE $1)`); }
         const { rows } = await pool.query(
           `SELECT id, 'empresa' AS tipo, razao_social AS nome, nome_fantasia, cnpj AS documento,
@@ -3734,7 +3559,7 @@ async function startServer() {
 
       if (tipo === "todos" || tipo === "clientes_pf") {
         const params: any[] = [];
-        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`];
+        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`, `COALESCE(cadastro_status, '') <> 'arquivado'`];
         if (busca) { params.push(term); conds.push(`(nome ILIKE $1 OR cpf ILIKE $1 OR email ILIKE $1)`); }
         const { rows } = await pool.query(
           `SELECT id, 'cliente_pf' AS tipo, nome, cpf AS documento, email, telefone,
@@ -3749,7 +3574,7 @@ async function startServer() {
 
       if (tipo === "todos" || tipo === "leads") {
         const params: any[] = [];
-        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`];
+        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`, `COALESCE(cadastro_status, '') <> 'arquivado'`];
         if (busca) { params.push(term); conds.push(`(nome ILIKE $1 OR empresa ILIKE $1 OR cpf_cnpj ILIKE $1 OR email ILIKE $1)`); }
         const { rows } = await pool.query(
           `SELECT id, 'lead' AS tipo, nome, empresa, cpf_cnpj AS documento, email, telefone, tipo_pessoa,
@@ -3858,20 +3683,52 @@ async function startServer() {
         return;
       }
       const { tipo, id } = req.params;
+
+      // Regra de segurança: nunca apagar fisicamente cadastro que pode ter documentos/anexos.
       if (tipo === "empresa") {
-        const empresa = await arquivarEmpresaSemApagarDocumentos(id, colaborador);
-        if (!empresa) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
+        const columns = await getTableColumns("empresas");
+        const updates: Record<string, unknown> = {};
+        if (columns.has("status")) updates.status = "arquivado";
+        if (columns.has("ativo")) updates.ativo = false;
+        if (columns.has("arquivado_por_duplicidade")) updates.arquivado_por_duplicidade = true;
+        if (columns.has("bloqueado_operacional")) updates.bloqueado_operacional = true;
+        if (columns.has("cadastro_completo")) updates.cadastro_completo = false;
+        if (columns.has("cadastro_status")) updates.cadastro_status = "arquivado";
+        if (columns.has("cadastro_pendencias")) updates.cadastro_pendencias = ["Cadastro arquivado sem apagar documentos anexados"];
+        if (columns.has("updated_at")) updates.updated_at = new Date().toISOString();
+        const keys = Object.keys(updates);
+        if (!keys.length) { res.status(409).json({ error: "Não foi possível arquivar empresa com segurança." }); return; }
+        const values = keys.map((k) => updates[k]);
+        const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+        await pool.query(`UPDATE empresas SET ${set} WHERE id = $${keys.length + 1}`, [...values, id]);
       } else if (tipo === "cliente_pf") {
-        await pool.query("UPDATE clientes_pf SET ativo=false, cadastro_status='arquivado', bloqueado_operacional=true, updated_at=NOW() WHERE id=$1", [id]);
+        await pool.query(
+          `UPDATE clientes_pf
+              SET ativo=false,
+                  cadastro_status='arquivado',
+                  bloqueado_operacional=true,
+                  updated_at=NOW()
+            WHERE id=$1`,
+          [id]
+        );
       } else if (tipo === "lead") {
-        await pool.query("UPDATE leads SET arquivado_por_duplicidade=true, cadastro_status='arquivado', bloqueado_operacional=true, updated_at=NOW() WHERE id=$1", [id]);
+        await pool.query(
+          `UPDATE leads
+              SET arquivado_por_duplicidade=true,
+                  cadastro_status='arquivado',
+                  bloqueado_operacional=true,
+                  updated_at=NOW()
+            WHERE id=$1`,
+          [id]
+        );
       } else {
         res.status(400).json({ error: "Tipo de cadastro inválido" });
         return;
       }
+
       res.json({ success: true, arquivado: true, removido_definitivo: false, message: "Cadastro arquivado. Documentos preservados." });
     } catch (err: any) {
-      console.error("[DELETE /api/cadastros-incompletos/:tipo/:id]", { message: err?.message, code: err?.code, detail: err?.detail });
+      console.error("[DELETE /api/cadastros-incompletos/:tipo/:id]", err);
       res.status(500).json({ error: err?.message || "Erro ao arquivar cadastro" });
     }
   });
@@ -3883,29 +3740,233 @@ async function startServer() {
         res.status(403).json({ error: "Somente gestor/admin pode remover duplicados" });
         return;
       }
+
+      // Remover duplicados = arquivar/ocultar. Nunca DELETE físico.
       const emp = await pool.query(
         `UPDATE empresas
-            SET cadastro_status='arquivado', bloqueado_operacional=true, cadastro_completo=false,
-                arquivado_por_duplicidade=true, status='arquivado', updated_at=NOW()
+            SET cadastro_status='arquivado',
+                bloqueado_operacional=true,
+                cadastro_completo=false,
+                arquivado_por_duplicidade=true,
+                status='arquivado',
+                updated_at=NOW()
           WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'`
       );
       const cpf = await pool.query(
-        `UPDATE clientes_pf SET ativo=false, cadastro_status='arquivado', bloqueado_operacional=true, updated_at=NOW()
+        `UPDATE clientes_pf
+            SET ativo=false,
+                cadastro_status='arquivado',
+                bloqueado_operacional=true,
+                updated_at=NOW()
           WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'`
       );
       const leads = await pool.query(
-        `UPDATE leads SET cadastro_status='arquivado', bloqueado_operacional=true, arquivado_por_duplicidade=true, updated_at=NOW()
+        `UPDATE leads
+            SET cadastro_status='arquivado',
+                bloqueado_operacional=true,
+                arquivado_por_duplicidade=true,
+                updated_at=NOW()
           WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'`
       );
-      res.json({ success: true, empresas: emp.rowCount || 0, clientes_pf: cpf.rowCount || 0, leads: leads.rowCount || 0, removido_definitivo: false });
+
+      res.json({
+        success: true,
+        empresas: emp.rowCount || 0,
+        clientes_pf: cpf.rowCount || 0,
+        leads: leads.rowCount || 0,
+        total_arquivados: (emp.rowCount || 0) + (cpf.rowCount || 0) + (leads.rowCount || 0),
+        removido_definitivo: false,
+        message: "Duplicados arquivados sem apagar documentos/anexos.",
+      });
     } catch (err: any) {
-      console.error("[POST /api/cadastros-incompletos/remover-duplicados]", { message: err?.message, code: err?.code, detail: err?.detail });
+      console.error("[POST /api/cadastros-incompletos/remover-duplicados]", err);
       res.status(500).json({ error: err?.message || "Erro ao arquivar duplicados" });
     }
   });
 
 
   // ─── EMPRESAS API ─────────────────────────────────────────────────────────
+  // ─── RECEITA FEDERAL / BRASILAPI — sincronização autoritativa ──────────────
+  function onlyDigitsEmpresa(value: unknown): string {
+    return String(value || "").replace(/\D/g, "");
+  }
+
+  function cleanTextEmpresa(value: unknown): string | null {
+    const text = String(value ?? "").trim();
+    if (!text || text === "********" || text === "*****") return null;
+    return text;
+  }
+
+  function telefoneBrasilApi(...values: unknown[]): string | null {
+    for (const value of values) {
+      const digits = onlyDigitsEmpresa(value);
+      if (digits.length >= 8) return digits;
+    }
+    return null;
+  }
+
+  function dataBrasilApi(value: unknown): string | null {
+    const text = cleanTextEmpresa(value);
+    if (!text) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+    const m = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  }
+
+  function capitalBrasilApi(value: unknown): number | null {
+    if (value === null || value === undefined || value === "") return null;
+    const n = Number(String(value).replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function porteBrasilApi(data: any): string | null {
+    const text = String(data?.porte || data?.descricao_porte || "").toLowerCase();
+    if (text.includes("mei")) return "mei";
+    if (text === "me" || text.includes("micro")) return "me";
+    if (text.includes("epp") || text.includes("pequeno")) return "epp";
+    if (text.includes("médio") || text.includes("medio")) return "medio";
+    if (text.includes("grande")) return "grande";
+    return null;
+  }
+
+  function cnaeFormatadoBrasilApi(data: any): string | null {
+    const codigo = cleanTextEmpresa(data?.cnae_fiscal);
+    const descricao = cleanTextEmpresa(data?.cnae_fiscal_descricao);
+    if (codigo && descricao) return `${codigo} — ${descricao}`;
+    return descricao || codigo;
+  }
+
+  function cnaesSecundariosBrasilApi(data: any): string[] {
+    if (!Array.isArray(data?.cnaes_secundarios)) return [];
+    return data.cnaes_secundarios
+      .map((c: any) => {
+        const codigo = cleanTextEmpresa(c?.codigo);
+        const descricao = cleanTextEmpresa(c?.descricao);
+        if (codigo && descricao) return `${codigo} — ${descricao}`;
+        return descricao || codigo;
+      })
+      .filter(Boolean) as string[];
+  }
+
+  async function consultarBrasilApiEmpresa(cnpj: string): Promise<any> {
+    const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
+      method: "GET",
+      headers: { "Accept": "application/json" },
+      signal: AbortSignal.timeout(20000),
+    });
+    const text = await response.text();
+    let payload: any = null;
+    try { payload = text ? JSON.parse(text) : null; } catch { payload = null; }
+    if (!response.ok) {
+      throw new Error(payload?.message || payload?.error || `BrasilAPI retornou HTTP ${response.status}`);
+    }
+    if (!payload || payload?.cnpj === undefined) throw new Error("BrasilAPI não retornou dados válidos do CNPJ.");
+    return payload;
+  }
+
+  function montarPayloadEmpresaBrasilApi(data: any, empresaAtual: any, columns: Set<string>): Record<string, unknown> {
+    const qsa = Array.isArray(data?.qsa) ? data.qsa : [];
+    const socio = qsa[0] || null;
+    const payload: Record<string, unknown> = {};
+    const setIfColumn = (key: string, value: unknown) => {
+      if (!columns.has(key)) return;
+      if (value === undefined) return;
+      payload[key] = value;
+    };
+
+    setIfColumn("razao_social", cleanTextEmpresa(data?.razao_social) || empresaAtual?.razao_social);
+    setIfColumn("nome_fantasia", cleanTextEmpresa(data?.nome_fantasia) || empresaAtual?.nome_fantasia || null);
+    setIfColumn("cnpj", cleanTextEmpresa(data?.cnpj) || empresaAtual?.cnpj);
+    setIfColumn("email", cleanTextEmpresa(data?.email) || empresaAtual?.email || null);
+    setIfColumn("telefone", telefoneBrasilApi(data?.ddd_telefone_1, data?.telefone, empresaAtual?.telefone));
+    setIfColumn("telefone_2", telefoneBrasilApi(data?.ddd_telefone_2, empresaAtual?.telefone_2));
+    setIfColumn("cep", cleanTextEmpresa(data?.cep) || empresaAtual?.cep || null);
+    setIfColumn("logradouro", cleanTextEmpresa(data?.logradouro) || empresaAtual?.logradouro || null);
+    setIfColumn("numero", cleanTextEmpresa(data?.numero) || empresaAtual?.numero || null);
+    setIfColumn("complemento", cleanTextEmpresa(data?.complemento) || empresaAtual?.complemento || null);
+    setIfColumn("bairro", cleanTextEmpresa(data?.bairro) || empresaAtual?.bairro || null);
+    setIfColumn("cidade", cleanTextEmpresa(data?.municipio) || empresaAtual?.cidade || null);
+    setIfColumn("estado", cleanTextEmpresa(data?.uf) || empresaAtual?.estado || null);
+    setIfColumn("porte", porteBrasilApi(data) || empresaAtual?.porte || null);
+    setIfColumn("segmento", cleanTextEmpresa(data?.cnae_fiscal_descricao) || empresaAtual?.segmento || null);
+    setIfColumn("natureza_juridica", cleanTextEmpresa(data?.natureza_juridica) || empresaAtual?.natureza_juridica || null);
+    setIfColumn("capital_social", capitalBrasilApi(data?.capital_social) ?? capitalBrasilApi(empresaAtual?.capital_social));
+    setIfColumn("cnae_principal", cnaeFormatadoBrasilApi(data) || empresaAtual?.cnae_principal || null);
+    setIfColumn("cnaes_secundarios", cnaesSecundariosBrasilApi(data));
+    setIfColumn("data_abertura", dataBrasilApi(data?.data_inicio_atividade) || empresaAtual?.data_abertura || null);
+    setIfColumn("situacao_cadastral", cleanTextEmpresa(data?.descricao_situacao_cadastral) || cleanTextEmpresa(data?.situacao_cadastral) || empresaAtual?.situacao_cadastral || null);
+    setIfColumn("data_situacao_cadastral", dataBrasilApi(data?.data_situacao_cadastral) || empresaAtual?.data_situacao_cadastral || null);
+    setIfColumn("motivo_situacao_cadastral", cleanTextEmpresa(data?.motivo_situacao_cadastral) || empresaAtual?.motivo_situacao_cadastral || null);
+    setIfColumn("matriz_filial", data?.identificador_matriz_filial === 2 ? "Filial" : "Matriz");
+    setIfColumn("ultima_sincronizacao_receita", new Date().toISOString());
+    setIfColumn("dados_extra_receita", JSON.stringify({
+      provedor_principal: "brasilapi",
+      fontes_consulta: [{ name: "brasilapi", ok: true }],
+      payload_brasilapi: data,
+      qsa_count: qsa.length,
+    }));
+
+    // A sincronização com Receita deve reativar/regularizar o cadastro visível.
+    setIfColumn("status", "ativo");
+    setIfColumn("arquivado_por_duplicidade", false);
+    setIfColumn("bloqueado_operacional", false);
+    setIfColumn("cadastro_completo", true);
+    setIfColumn("cadastro_status", "completo");
+    setIfColumn("cadastro_pendencias", []);
+    setIfColumn("updated_at", new Date().toISOString());
+
+    if (socio) {
+      setIfColumn("responsavel_nome", empresaAtual?.responsavel_nome || cleanTextEmpresa(socio?.nome_socio || socio?.nome) || null);
+      setIfColumn("responsavel_cpf", empresaAtual?.responsavel_cpf || cleanTextEmpresa(socio?.cnpj_cpf_do_socio || socio?.cpf_cnpj) || null);
+      setIfColumn("responsavel_cargo", empresaAtual?.responsavel_cargo || cleanTextEmpresa(socio?.qualificacao_socio) || null);
+    }
+
+    return payload;
+  }
+
+  app.post("/api/empresas/:id/sincronizar-receita", auth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
+      const { rows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [req.params.id]);
+      const empresaAtual = rows[0];
+      if (!empresaAtual) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
+
+      const cnpj = onlyDigitsEmpresa(req.body?.cnpj || empresaAtual.cnpj);
+      if (cnpj.length !== 14) { res.status(400).json({ error: "CNPJ inválido para sincronizar Receita." }); return; }
+
+      const data = await consultarBrasilApiEmpresa(cnpj);
+      const columns = await getTableColumns("empresas");
+      const payload = montarPayloadEmpresaBrasilApi(data, empresaAtual, columns);
+      const keys = Object.keys(payload);
+      if (!keys.length) { res.status(409).json({ error: "Nenhum campo disponível para atualizar empresa." }); return; }
+      const values = keys.map((k) => payload[k]);
+      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+      const { rows: updated } = await pool.query(
+        `UPDATE empresas SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
+        [...values, req.params.id]
+      );
+
+      await registrarHistoricoEmpresaSeguro(
+        req.params.id,
+        "sincronizacao_receita_brasilapi",
+        "Dados cadastrais sincronizados pela Receita Federal via BrasilAPI. Documentos preservados.",
+        (req as any).colaborador?.nome || "Sistema"
+      ).catch(() => null);
+
+      res.json({
+        success: true,
+        empresa: updated[0],
+        receita: data,
+        socios_receita: Array.isArray(data?.qsa) ? data.qsa : [],
+        message: "Empresa sincronizada com dados da Receita Federal.",
+      });
+    } catch (err: any) {
+      console.error("[POST /api/empresas/:id/sincronizar-receita]", err);
+      res.status(500).json({ error: err?.message || "Erro ao sincronizar Receita Federal" });
+    }
+  });
+
   app.get("/api/empresas", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
@@ -3955,8 +4016,8 @@ async function startServer() {
       }
       const incluirIncompletos = ["1", "true", "sim"].includes(String(req.query.incluir_incompletos || "").toLowerCase());
       if (!incluirIncompletos) {
+        conditions.push(`COALESCE(e.status, 'ativo') NOT IN ('arquivado','removido','excluido','cancelado')`);
         conditions.push(`COALESCE(e.arquivado_por_duplicidade, false) = false`);
-        conditions.push(`COALESCE(e.status, 'ativo') <> 'arquivado'`);
         conditions.push(`COALESCE(e.bloqueado_operacional, false) = false`);
         // Empresas vinculadas a acompanhamentos bancários ativos ficam sempre visíveis,
         // independente de cadastro_completo — elas foram criadas pelo fluxo de acompanhamento.
@@ -4183,50 +4244,6 @@ async function startServer() {
     }
   });
 
-
-  app.post("/api/empresas/:id/sincronizar-receita", auth, async (req: Request, res: Response) => {
-    try {
-      const { id } = req.params;
-      if (!(await requireEmpresaAccess(req, res, id))) return;
-      const { rows: empresaRows } = await pool.query("SELECT * FROM empresas WHERE id=$1 LIMIT 1", [id]);
-      const empresaAtual = empresaRows[0];
-      if (!empresaAtual) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
-      const clean = onlyDigits(empresaAtual.cnpj || req.body?.cnpj);
-      if (clean.length !== 14) { res.status(400).json({ error: "CNPJ inválido para sincronização" }); return; }
-
-      const receita = await consultarBrasilApiReceita(clean);
-      const payload = montarPayloadEmpresaReceita(empresaAtual, receita);
-      const columns = await getTableColumns("empresas");
-      const safeEntries = Object.entries(payload).filter(([key]) => columns.has(key));
-      const keys = safeEntries.map(([key]) => key);
-      const values = safeEntries.map(([, value]) => value);
-      if (!keys.length) { res.status(500).json({ error: "Nenhum campo de empresa disponível para atualizar" }); return; }
-      const set = keys.map((k, i) => `"${k}"=$${i + 1}`).join(", ");
-      const { rows } = await pool.query(
-        `UPDATE empresas SET ${set} WHERE id=$${keys.length + 1} RETURNING *`,
-        [...values, id]
-      );
-
-      await registrarHistoricoEmpresaSeguro(
-        id,
-        "sincronizacao_receita",
-        `Dados cadastrais sincronizados pela Receita/BrasilAPI. Município: ${receita.municipio || "não informado"}/${receita.uf || ""}`,
-        (req as any).colaborador?.nome || "Sistema"
-      ).catch(() => null);
-
-      res.json({
-        success: true,
-        empresa: rows[0],
-        fonte: "brasilapi_receita",
-        qsa: normalizarSociosReceitaBackend(receita.qsa),
-        message: "Dados da Receita sincronizados e salvos.",
-      });
-    } catch (err: any) {
-      console.error("[POST /api/empresas/:id/sincronizar-receita]", { message: err?.message, code: err?.code, detail: err?.detail, column: err?.column });
-      res.status(500).json({ error: err?.message || "Erro ao sincronizar dados da Receita" });
-    }
-  });
-
   app.delete("/api/empresas/:id", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
@@ -4234,17 +4251,44 @@ async function startServer() {
         res.status(403).json({ error: "Somente gestor/admin pode excluir empresa" });
         return;
       }
-      const empresa = await arquivarEmpresaSemApagarDocumentos(req.params.id, colaborador);
-      if (!empresa) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
+
+      // Exclusão lógica: nunca apagar documentos/anexos/análises por DELETE físico.
+      const columns = await getTableColumns("empresas");
+      const updates: Record<string, unknown> = {};
+      if (columns.has("status")) updates.status = "arquivado";
+      if (columns.has("ativo")) updates.ativo = false;
+      if (columns.has("arquivado_por_duplicidade")) updates.arquivado_por_duplicidade = true;
+      if (columns.has("bloqueado_operacional")) updates.bloqueado_operacional = true;
+      if (columns.has("cadastro_completo")) updates.cadastro_completo = false;
+      if (columns.has("cadastro_status")) updates.cadastro_status = "arquivado";
+      if (columns.has("cadastro_pendencias")) updates.cadastro_pendencias = ["Empresa arquivada sem apagar documentos anexados"];
+      if (columns.has("updated_at")) updates.updated_at = new Date().toISOString();
+      const keys = Object.keys(updates);
+      if (!keys.length) { res.status(409).json({ error: "Não foi possível arquivar empresa com segurança." }); return; }
+      const values = keys.map((k) => updates[k]);
+      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+      const { rows } = await pool.query(
+        `UPDATE empresas SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
+        [...values, req.params.id]
+      );
+      if (!rows.length) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
+
+      await registrarHistoricoEmpresaSeguro(
+        req.params.id,
+        "empresa_arquivada",
+        "Empresa arquivada/ocultada. Documentos, anexos e análises preservados.",
+        colaborador?.nome || "Sistema"
+      ).catch(() => null);
+
       res.json({
         success: true,
         arquivado: true,
         removido_definitivo: false,
-        message: "Empresa arquivada. Documentos, anexos e análises preservados.",
-        empresa,
+        message: "Empresa arquivada. Documentos e análises preservados.",
+        empresa: rows[0],
       });
     } catch (err: any) {
-      console.error("[DELETE /api/empresas/:id]", { message: err?.message, code: err?.code, detail: err?.detail, column: err?.column });
+      console.error("[DELETE /api/empresas/:id]", err);
       res.status(500).json({ error: err?.message || "Erro ao arquivar empresa" });
     }
   });
