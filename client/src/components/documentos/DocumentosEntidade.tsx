@@ -515,11 +515,11 @@ export default function DocumentosEntidade({
       <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2"><Paperclip className="w-4 h-4" /> {titulo}</h3>
-          <p className="text-xs text-slate-400 mt-0.5">Cada documento fica no seu local correto. A data do Cartão CNPJ será identificada pela IA/OCR, não digitada manualmente.</p>
+          <p className="text-xs text-slate-400 mt-0.5">Cada documento fica no seu local correto. Os arquivos permanecem salvos no repositório documental e alimentam o laudo/dossiê gerado pela IA.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => toast.info("A geração do relatório de análise será feita pela etapa de IA/OCR usando os documentos anexados e os campos extraídos.")} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">
-            <FileText className="w-3.5 h-3.5" /> Relatório da análise
+          <button type="button" onClick={() => toast.info("O laudo/dossiê será gerado pela etapa de IA/OCR com base no acervo documental, dados extraídos e validações do sistema.")} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">
+            <FileText className="w-3.5 h-3.5" /> Laudo / dossiê IA
           </button>
           <button type="button" onClick={abrirChecklistExportacao} disabled={docs.length === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 disabled:opacity-50">
             <FileArchive className="w-3.5 h-3.5" /> Exportar documentos
@@ -531,7 +531,7 @@ export default function DocumentosEntidade({
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
           <div>
             <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><FolderOpen className="w-3.5 h-3.5" /> Documentação anexada</p>
-            <p className="text-[11px] text-slate-400">Visualize todos os documentos anexados, abra o arquivo desejado ou clique em Exportar documentos para escolher em checklist.</p>
+            <p className="text-[11px] text-slate-400">Visualize os documentos anexados, pesquise, filtre ou exporte em checklist. Os arquivos físicos seguem preservados mesmo com atualizações do cadastro.</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative">
@@ -559,7 +559,7 @@ export default function DocumentosEntidade({
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className="text-slate-400">{docsFiltrados.length} documento(s) visível(is)</span>
               <button type="button" onClick={abrirChecklistExportacao} className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-semibold text-slate-600 hover:bg-slate-50">
-                Abrir checklist de exportação
+                Checklist de exportação
               </button>
             </div>
 
@@ -616,22 +616,22 @@ export default function DocumentosEntidade({
       {permitirUpload && (
         <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
           <div>
-            <p className="text-xs font-bold text-slate-700">Anexar novo arquivo no local correto</p>
-            <p className="text-[11px] text-slate-400">Use os campos abaixo como checklist documental. O arquivo anexado aparecerá no mesmo grupo acima.</p>
+            <p className="text-xs font-bold text-slate-700">Checklist de inclusão de documentos</p>
+            <p className="text-[11px] text-slate-400">Use os campos abaixo como checklist documental organizado. O arquivo anexado aparecerá automaticamente no grupo correspondente acima.</p>
           </div>
           <div className="space-y-3">
             {secoesDaTela.map((secao) => (
-              <div key={secao.titulo} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+              <div key={secao.titulo} className="rounded-xl border border-slate-100 bg-slate-50 p-2.5">
                 <p className="text-xs font-bold text-slate-700 mb-1">{secao.titulo}</p>
                 {secao.descricao && <p className="text-[11px] text-slate-400 mb-2">{secao.descricao}</p>}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-2">
                   {secao.slots.map((documentoSlot) => {
                     const tipo = documentoSlot.tipoUpload;
                     const docsTipo = docs.filter((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento));
                     const uploading = uploadingTipo === tipo;
                     const exigeNome = Boolean(documentoSlot.exigeNome);
                     return (
-                      <div key={tipo} className="rounded-xl border border-slate-100 bg-white p-3 space-y-2">
+                      <div key={tipo} className="rounded-xl border border-slate-100 bg-white p-2.5 space-y-2">
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
                             <p className="text-xs font-bold text-slate-700 truncate">{documentoSlot.titulo}</p>
@@ -700,7 +700,7 @@ export default function DocumentosEntidade({
             </div>
             <div className="p-4 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-2">
               <button type="button" onClick={() => exportar(docs.map((doc) => doc.id), "acervo-documental-destrava.zip")} disabled={exportando || docs.length === 0} className="h-10 px-4 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-                Exportar todos os anexados
+                Exportar todo o acervo
               </button>
               <button type="button" onClick={() => exportar(selecionadosIds, "documentos-selecionados-destrava.zip")} disabled={exportando || selecionadosIds.length === 0} className="h-10 px-4 rounded-lg bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 disabled:opacity-50">
                 {exportando ? <Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1" /> : <FileArchive className="w-3.5 h-3.5 inline mr-1" />} Exportar selecionados

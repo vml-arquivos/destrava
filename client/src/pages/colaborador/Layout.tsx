@@ -134,8 +134,8 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
 
   return (
     <div className="destrava-shell min-h-screen flex bg-[radial-gradient(circle_at_top_left,#eff6ff_0,#f8fafc_32%,#f8fafc_100%)] text-slate-900">
-      <aside className="hidden lg:flex flex-col w-[270px] border-r border-slate-200/80 bg-white/88 backdrop-blur-xl shadow-[8px_0_30px_rgba(15,23,42,0.04)]">
-        <div className="p-5 border-b border-slate-100">
+      <aside className="hidden lg:flex flex-col w-[244px] border-r border-slate-200/80 bg-white/88 backdrop-blur-xl shadow-[8px_0_30px_rgba(15,23,42,0.04)]">
+        <div className="p-4 border-b border-slate-100">
           <a href="/" className="flex items-center gap-2">
             <img
               src="/destrava-logo.svg"
@@ -149,8 +149,8 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
           </div>
         </div>
 
-        <div className="p-4 border-b border-slate-100 bg-slate-50/70">
-          <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="p-3 border-b border-slate-100 bg-slate-50/70">
+          <div className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-100">
                 <User className="h-5 w-5 text-white" />
@@ -167,7 +167,7 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
           </div>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto destrava-nav-scroll">
+        <nav className="flex-1 p-2.5 space-y-1 overflow-y-auto destrava-nav-scroll">
           {navItems.map((item) => {
             const isActive =
               location === item.href ||
@@ -177,7 +177,7 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
             return (
               <Link key={item.href} href={item.href}>
                 <a
-                  className={`group flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-semibold transition-all ${
+                  className={`group flex items-center gap-2.5 px-3 py-2.5 rounded-2xl text-sm font-semibold transition-all ${
                     isActive
                       ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"

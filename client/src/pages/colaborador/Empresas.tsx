@@ -12,7 +12,7 @@ import {
   User, DollarSign, Tag, RefreshCw, CheckCircle,
   XCircle, Clock, Star, TrendingUp, FileText,
   ChevronDown, ChevronUp, Calculator, AlertTriangle,
-  ShieldCheck, ShieldAlert, ShieldOff, Paperclip, Upload,
+  ShieldCheck, ShieldAlert, ShieldOff, Upload,
   MessageSquare, History, Bell, Send, PlusCircle,
   Building, CreditCard, Hash, Calendar, Users, Briefcase,
   ArrowLeft, MoreVertical, ExternalLink, Copy, CheckCheck,
@@ -1040,7 +1040,7 @@ export default function Empresas() {
       <div className="emp-page min-h-screen bg-[#f8f9fc]">
 
         {/* ── Top Bar ── */}
-        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3">
+        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
             <div>
               <h1 className="text-[1.75rem] font-black text-slate-900 tracking-tight">Empresas</h1>
@@ -1060,11 +1060,11 @@ export default function Empresas() {
         </div>
 
         {/* ── Layout 2 colunas ── */}
-        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 pt-4 pb-8">
-          <div className="flex gap-5" style={{ minHeight: 'calc(100vh - 150px)' }}>
+        <div className="max-w-[1680px] mx-auto px-3 sm:px-5 pt-3 pb-6">
+          <div className="flex gap-4" style={{ minHeight: 'calc(100vh - 138px)' }}>
 
             {/* ── COLUNA ESQUERDA: Lista ── */}
-            <div className={`flex-shrink-0 w-full sm:w-72 lg:w-80 ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
+            <div className={`flex-shrink-0 w-full sm:w-[280px] lg:w-[300px] ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
               {/* Filtros */}
               <div className="mb-3 space-y-2">
                 <div className="relative">
@@ -1324,14 +1324,6 @@ export default function Empresas() {
                         <span>Novo Contrato</span>
                       </button>
                       <button
-                        onClick={() => { setAbaAtiva("documentos"); }}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors"
-                        title="Adicionar Documento"
-                      >
-                        <Paperclip className="w-3.5 h-3.5" />
-                        <span>Adicionar arquivo</span>
-                      </button>
-                      <button
                         onClick={() => { setAbaAtiva("followup"); setShowFollowupForm(true); }}
                         className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors"
                         title="Iniciar conversa"
@@ -1393,14 +1385,13 @@ export default function Empresas() {
                   <div className="mt-3 border-b border-slate-200 px-5 py-2">
                     <div className="flex flex-wrap gap-1">
                       {([
-                        { id: "visao_geral",  label: "Visão Geral" },
-                        { id: "socios",       label: "QSA",      badge: sociosExibicao.length },
-                        { id: "dossie_credito", label: "Dossiê de Crédito" },
-                        { id: "documentos",   label: "Acervo Documental",  badge: documentos.length + contratosSociais.length },
-                        { id: "followup",     label: "Conversas",   badge: followups.filter(f=>!f.concluido).length },
-                        { id: "simulacoes",   label: "Simulações",  badge: simulacoesEmpresa.length },
-                        { id: "contratos",    label: "Contratos Firmados",   badge: contratosEmpresa.length },
-                        { id: "historico",    label: "Histórico",   badge: historico.length },
+                        { id: "visao_geral", label: "Visão Geral + QSA", badge: sociosExibicao.length || undefined },
+                        { id: "dossie_credito", label: "Dossiê / Laudo IA" },
+                        { id: "documentos", label: "Acervo Documental", badge: documentos.length + contratosSociais.length || undefined },
+                        { id: "followup", label: "Conversas", badge: followups.filter(f => !f.concluido).length || undefined },
+                        { id: "simulacoes", label: "Simulações", badge: simulacoesEmpresa.length || undefined },
+                        { id: "contratos", label: "Contratos Firmados", badge: contratosEmpresa.length || undefined },
+                        { id: "historico", label: "Histórico", badge: historico.length || undefined },
                       ] as const).map(aba => (
                         <button
                           key={aba.id}
@@ -1677,6 +1668,73 @@ export default function Empresas() {
                             <p className="text-sm text-amber-900 whitespace-pre-wrap leading-relaxed">{selecionada.observacoes}</p>
                           </div>
                         )}
+
+
+                        <SectionCard title="QSA e administração" icon={<Users className="w-4 h-4" />}>
+                          <div className="py-3 space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-800">Quadro societário resumido</p>
+                                <p className="text-xs text-slate-500">A visão geral já incorpora o QSA para reduzir navegação e facilitar a análise da empresa.</p>
+                              </div>
+                              {selecionada.cnpj && (
+                                <button
+                                  onClick={() => sincronizarDados(selecionada)}
+                                  disabled={sincronizando}
+                                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200 bg-white px-3 py-1.5 rounded-lg hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                                  title="Atualizar dados societários"
+                                >
+                                  <RotateCw className={`w-3.5 h-3.5 ${sincronizando ? "animate-spin" : ""}`} />
+                                  Atualizar QSA
+                                </button>
+                              )}
+                            </div>
+
+                            {sociosExibicao.length === 0 ? (
+                              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                                Nenhum sócio retornado para esta empresa até o momento.
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                                {sociosExibicao.map((s: any) => {
+                                  const pendencias = Array.isArray(s.pendencias_contrato) ? s.pendencias_contrato : pendenciasSocioContrato(s);
+                                  const completo = pendencias.length === 0;
+                                  return (
+                                    <div key={s.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                                      <div className="flex items-start gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                                          {(s.nome?.charAt(0) ?? "?").toUpperCase()}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <p className="text-sm font-bold text-slate-800 truncate">{s.nome}</p>
+                                            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${completo ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                              {completo ? 'Completo' : `${pendencias.length} pendência(s)`}
+                                            </span>
+                                          </div>
+                                          <div className="flex flex-wrap gap-1.5 mt-1">
+                                            {s.qualificacao_socio && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{s.qualificacao_socio}</span>}
+                                            {s.representante_legal && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Administrador</span>}
+                                          </div>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 text-xs">
+                                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+                                              <span className="block text-slate-400 text-[11px] mb-0.5">CPF/CNPJ</span>
+                                              <span className="font-mono text-slate-700">{s.cpf_cnpj || 'Não informado'}</span>
+                                            </div>
+                                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+                                              <span className="block text-slate-400 text-[11px] mb-0.5">Participação</span>
+                                              <span className="text-slate-700">{s.percentual_capital_social || s.faixa_etaria || 'Não informado'}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </SectionCard>
                       </div>
                     )
 
@@ -1693,7 +1751,7 @@ export default function Empresas() {
                       <div className="p-5 fade-in space-y-4">
                         <div className="flex items-center justify-between mb-1">
                           <div>
-                            <h3 className="text-sm font-bold text-slate-700">QSA</h3>
+                            <h3 className="text-sm font-bold text-slate-700">QSA e administração</h3>
                             <p className="text-xs text-slate-400 mt-0.5">
                               Quadro de Sócios e Administradores da empresa.
                             </p>
@@ -1925,10 +1983,7 @@ export default function Empresas() {
 
                     /* ── ACERVO DOCUMENTAL ── */
                     : abaAtiva === "documentos" ? (
-                      <div className="p-5 fade-in space-y-4">
-                        <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 leading-relaxed">
-                          Guarda segura dos documentos oficiais e fiscais utilizados na análise de crédito da empresa.
-                        </div>
+                      <div className="p-4 fade-in">
                         <DocumentosEntidade
                           entidadeTipo="empresa"
                           entidadeId={selecionada?.id}
