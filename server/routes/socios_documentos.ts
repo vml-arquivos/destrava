@@ -345,10 +345,28 @@ let sociosColumnsCache: Set<string> | null = null;
 async function ensureSociosEmpresaSchema(): Promise<Set<string>> {
   if (sociosColumnsCache) return sociosColumnsCache;
 
-  // AUTO-CREATE idempotente: cria a tabela/colunas automaticamente se não existirem,
-  // sem depender de variável de ambiente. Isso evita que a sincronização com a Receita
-  // e o cadastro de sócios quebrem em qualquer ambiente onde a migration manual não
-  // tenha sido executada (deploy novo, restore de schema, etc).
+  // Produção: NÃO executar DDL em request.
+  // A migration 052 já cria/ajusta a tabela. Rodar CREATE/ALTER dentro do endpoint
+  // pode derrubar GET/POST com 500 quando o usuário do backend não é owner/superuser
+  // (comum em Coolify/PostgreSQL gerenciado). Aqui apenas lemos o schema existente.
+  const current = await pool.query(
+    `SELECT column_name
+       FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'socios_empresa'`
+  );
+
+  if (current.rows.length > 0) {
+    sociosColumnsCache = new Set(current.rows.map((r: { column_name: string }) => r.column_name));
+    sociosSchemaReady = true;
+    return sociosColumnsCache;
+  }
+
+  const allowRuntimeDDL = String(process.env.SOCIOS_SCHEMA_AUTO_MIGRATE || '').toLowerCase() === 'true';
+  if (!allowRuntimeDDL) {
+    throw new Error('Tabela public.socios_empresa não encontrada. Execute as migrations 047, 049, 050, 051 e 052 antes do deploy.');
+  }
+
   await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
   await pool.query(`
     CREATE TABLE IF NOT EXISTS public.socios_empresa (
@@ -815,7 +833,13 @@ async function ensureContratosSociaisSchema(): Promise<void> {
   );
   if (existing.rows.length > 0) return;
 
-  // AUTO-CREATE idempotente: cria a tabela automaticamente, sem depender de env.
+  const allowRuntimeDDL = String(process.env.CONTRATO_SOCIAL_SCHEMA_AUTO_MIGRATE || '').toLowerCase() === 'true';
+  if (!allowRuntimeDDL) {
+    const err: any = new Error('Tabela public.empresas_contratos_sociais não encontrada. Execute a migration 053 antes do deploy.');
+    err.code = '42P01';
+    throw err;
+  }
+
   await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
   await pool.query(`CREATE TABLE IF NOT EXISTS public.empresas_contratos_sociais (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -956,8 +980,17 @@ router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
       cpfcnpj: cpfcnpjResult ? { success: cpfcnpjResult.success, status: cpfcnpjResult.status, error: cpfcnpjResult.error, socios: cpfcnpjResult.socios?.length || 0 } : null,
     });
   } catch (err) {
-    console.error('[POST /api/empresas/:id/socios/bulk]', pgErrorDetails(err));
-    res.status(500).json({ error: 'Erro ao importar sócios', details: pgErrorDetails(err) });
+    const details = pgErrorDetails(err);
+    console.error('[POST /api/empresas/:id/socios/bulk]', details);
+    // Sincronização de empresa não pode falhar por causa do quadro societário.
+    // Retorna 200 com aviso para não quebrar botão Sincronizar/Salvar.
+    res.status(200).json({
+      inserted: 0,
+      socios: [],
+      failed: [{ error: details }],
+      warning: 'Quadro societário não importado; dados principais da empresa foram preservados.',
+      cpfcnpj: null,
+    });
   }
 });
 
