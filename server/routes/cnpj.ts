@@ -409,12 +409,12 @@ function mergeNormalized(rawCnpj: string, brasil: AnyRecord, cnpja: AnyRecord, o
 
   for (const key of keys) {
     if (key === 'qsa' || key === 'cnaes_secundarios') continue;
-    // OpenCNPJ é a fonte principal gratuita; BrasilAPI é fallback de compatibilidade.
-    merged[key] = firstNonEmpty(opencnpj[key], brasil[key], cnpja[key]);
+    // BrasilAPI/Receita é a fonte principal de cadastro. OpenCNPJ fica como enriquecimento/fallback.
+    merged[key] = firstNonEmpty(brasil[key], opencnpj[key], cnpja[key]);
   }
 
-  merged.qsa = mergeArrays(opencnpj.qsa || [], mergeArrays(brasil.qsa || [], cnpja.qsa || []));
-  merged.cnaes_secundarios = mergeArrays(opencnpj.cnaes_secundarios || [], mergeArrays(brasil.cnaes_secundarios || [], cnpja.cnaes_secundarios || []));
+  merged.qsa = mergeArrays(brasil.qsa || [], mergeArrays(opencnpj.qsa || [], cnpja.qsa || []));
+  merged.cnaes_secundarios = mergeArrays(brasil.cnaes_secundarios || [], mergeArrays(opencnpj.cnaes_secundarios || [], cnpja.cnaes_secundarios || []));
 
   return merged;
 }
@@ -434,27 +434,23 @@ router.get('/:cnpj', async (req: Request, res: Response) => {
 
   const results: ProviderResult[] = [];
 
-  if (ENABLE_OPENCNPJ) {
+  // A tela de Empresas precisa de resposta rápida e previsível. BrasilAPI é a
+  // primeira fonte consultada para não travar a sincronização quando OpenCNPJ
+  // estiver lento/instável. OpenCNPJ fica como enriquecimento quando necessário.
+  const brasilResult = await fetchJson('brasilapi', `https://brasilapi.com.br/api/cnpj/v1/${raw}`);
+  results.push(brasilResult);
+  const brasilQsaCount = normalizeBrasilApi(brasilResult.data).qsa?.length || 0;
+  console.log(`[CNPJ] BrasilAPI ${raw}: ${brasilResult.ok ? `OK (${brasilQsaCount} sócio(s))` : brasilResult.error || brasilResult.status}`);
+
+  const shouldUseOpenCnpj =
+    ENABLE_OPENCNPJ &&
+    (!brasilResult.ok || brasilQsaCount === 0 || String(req.query.enriquecer || '').toLowerCase() === 'true');
+
+  if (shouldUseOpenCnpj) {
     const openResult = await fetchJson('opencnpj', `${OPENCNPJ_BASE_URL}/${raw}`);
     results.push(openResult);
     const openQsaCount = normalizeOpenCnpj(openResult.data).qsa?.length || 0;
     console.log(`[CNPJ] OpenCNPJ ${raw}: ${openResult.ok ? `OK (${openQsaCount} sócio(s))` : openResult.error || openResult.status}`);
-  }
-
-  // BrasilAPI é fallback gratuito/compatível. Além de falha total do OpenCNPJ,
-  // também consultamos quando OpenCNPJ responde sem QSA, pois isso era a causa
-  // da aba Sócios ficar vazia mesmo com sócios disponíveis na fonte fallback.
-  const openResult = results.find((r) => r.name === 'opencnpj');
-  const shouldUseBrasilApi =
-    !results.some((r) => r.ok && r.data) ||
-    !openResult?.ok ||
-    (openResult?.ok && (normalizeOpenCnpj(openResult.data).qsa || []).length === 0);
-
-  if (shouldUseBrasilApi) {
-    const brasilResult = await fetchJson('brasilapi', `https://brasilapi.com.br/api/cnpj/v1/${raw}`);
-    results.push(brasilResult);
-    const brasilQsaCount = normalizeBrasilApi(brasilResult.data).qsa?.length || 0;
-    console.log(`[CNPJ] BrasilAPI ${raw}: ${brasilResult.ok ? `OK (${brasilQsaCount} sócio(s))` : brasilResult.error || brasilResult.status}`);
   }
 
   const success = results.filter((r) => r.ok && r.data);
