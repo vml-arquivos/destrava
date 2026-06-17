@@ -1,7 +1,7 @@
 # ─── Stage 1: Build ────────────────────────────────────────────────────────────
 FROM node:20-slim AS builder
 
-RUN npm install -g pnpm@10.4.1
+RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
 
 WORKDIR /app
 
@@ -68,11 +68,11 @@ RUN set -eu; \
     exit "$APT_STATUS"
 
 RUN set -eu; \
-    (while true; do echo "[destrava-build] instalando pnpm runtime..."; sleep 20; done) & \
+    (while true; do echo "[destrava-build] preparando pnpm runtime..."; sleep 20; done) & \
     HEARTBEAT_PID=$!; \
-    npm install -g pnpm@10.4.1; \
+    corepack enable; \
+    corepack prepare pnpm@10.4.1 --activate; \
     NPM_STATUS=$?; \
-    npm cache clean --force; \
     kill "$HEARTBEAT_PID" 2>/dev/null || true; \
     wait "$HEARTBEAT_PID" 2>/dev/null || true; \
     exit "$NPM_STATUS"
