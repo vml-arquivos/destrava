@@ -3544,7 +3544,7 @@ async function startServer() {
 
       if (tipo === "todos" || tipo === "empresas") {
         const params: any[] = [];
-        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`];
+        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`, `COALESCE(cadastro_status, '') NOT IN ('arquivado', 'removido', 'excluido', 'cancelado')`, `COALESCE(status, 'ativo') NOT IN ('arquivado', 'removido', 'excluido', 'cancelado')`];
         if (busca) { params.push(term); conds.push(`(razao_social ILIKE $1 OR nome_fantasia ILIKE $1 OR cnpj ILIKE $1)`); }
         const { rows } = await pool.query(
           `SELECT id, 'empresa' AS tipo, razao_social AS nome, nome_fantasia, cnpj AS documento,
@@ -3559,7 +3559,7 @@ async function startServer() {
 
       if (tipo === "todos" || tipo === "clientes_pf") {
         const params: any[] = [];
-        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`];
+        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`, `COALESCE(cadastro_status, '') NOT IN ('arquivado', 'removido', 'excluido', 'cancelado')`];
         if (busca) { params.push(term); conds.push(`(nome ILIKE $1 OR cpf ILIKE $1 OR email ILIKE $1)`); }
         const { rows } = await pool.query(
           `SELECT id, 'cliente_pf' AS tipo, nome, cpf AS documento, email, telefone,
@@ -3574,7 +3574,7 @@ async function startServer() {
 
       if (tipo === "todos" || tipo === "leads") {
         const params: any[] = [];
-        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`];
+        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`, `COALESCE(cadastro_status, '') NOT IN ('arquivado', 'removido', 'excluido', 'cancelado')`];
         if (busca) { params.push(term); conds.push(`(nome ILIKE $1 OR empresa ILIKE $1 OR cpf_cnpj ILIKE $1 OR email ILIKE $1)`); }
         const { rows } = await pool.query(
           `SELECT id, 'lead' AS tipo, nome, empresa, cpf_cnpj AS documento, email, telefone, tipo_pessoa,
@@ -3679,41 +3679,58 @@ async function startServer() {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       if (!colaboradorPodeVerTudo(colaborador)) {
-        res.status(403).json({ error: "Somente gestor/admin pode apagar cadastros incompletos" });
+        res.status(403).json({ error: "Somente gestor/admin pode arquivar cadastros incompletos" });
         return;
       }
       const { tipo, id } = req.params;
-      let removido = false;
 
+      // Arquivamento lógico: remove da lista de desatualizados/incompletos,
+      // mas preserva toda referência documental e histórico operacional.
       if (tipo === "empresa") {
-        try { await pool.query("DELETE FROM empresas WHERE id = $1", [id]); removido = true; }
-        catch {
-          await pool.query(
-            `UPDATE empresas
-                SET arquivado_por_duplicidade = true,
-                    bloqueado_operacional = true,
-                    cadastro_completo = false,
-                    cadastro_status = 'removido',
-                    cadastro_pendencias = ARRAY['Cadastro removido/ocultado por saneamento'],
-                    updated_at = NOW()
-              WHERE id = $1`, [id]
-          );
-        }
+        await pool.query(
+          `UPDATE empresas
+              SET arquivado_por_duplicidade = true,
+                  bloqueado_operacional = true,
+                  cadastro_completo = false,
+                  cadastro_status = 'arquivado',
+                  cadastro_pendencias = ARRAY['Cadastro arquivado sem apagar documentos anexados'],
+                  status = CASE WHEN EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema='public' AND table_name='empresas' AND column_name='status'
+                  ) THEN 'arquivado' ELSE status END,
+                  updated_at = NOW()
+            WHERE id = $1`,
+          [id]
+        );
       } else if (tipo === "cliente_pf") {
-        try { await pool.query("DELETE FROM clientes_pf WHERE id = $1", [id]); removido = true; }
-        catch { await pool.query("UPDATE clientes_pf SET ativo=false, cadastro_status='removido', bloqueado_operacional=true, updated_at=NOW() WHERE id=$1", [id]); }
+        await pool.query(
+          `UPDATE clientes_pf
+              SET ativo=false,
+                  cadastro_status='arquivado',
+                  bloqueado_operacional=true,
+                  updated_at=NOW()
+            WHERE id=$1`,
+          [id]
+        );
       } else if (tipo === "lead") {
-        try { await pool.query("DELETE FROM leads WHERE id = $1", [id]); removido = true; }
-        catch { await pool.query("UPDATE leads SET arquivado_por_duplicidade=true, cadastro_status='removido', bloqueado_operacional=true, updated_at=NOW() WHERE id=$1", [id]); }
+        await pool.query(
+          `UPDATE leads
+              SET arquivado_por_duplicidade=true,
+                  cadastro_status='arquivado',
+                  bloqueado_operacional=true,
+                  updated_at=NOW()
+            WHERE id=$1`,
+          [id]
+        );
       } else {
         res.status(400).json({ error: "Tipo de cadastro inválido" });
         return;
       }
 
-      res.json({ success: true, removido_definitivo: removido });
+      res.json({ success: true, arquivado: true, removido_definitivo: false, message: "Cadastro removido da lista sem apagar documentos." });
     } catch (err: any) {
       console.error("[DELETE /api/cadastros-incompletos/:tipo/:id]", err);
-      res.status(500).json({ error: err?.message || "Erro ao apagar cadastro" });
+      res.status(500).json({ error: err?.message || "Erro ao arquivar cadastro" });
     }
   });
 
@@ -3725,22 +3742,50 @@ async function startServer() {
         return;
       }
 
-      let empresas = 0, clientes_pf = 0, leads = 0;
-      try { const r = await pool.query("DELETE FROM empresas WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); empresas = r.rowCount || 0; }
-      catch { const r = await pool.query("UPDATE empresas SET cadastro_status='removido', bloqueado_operacional=true WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); empresas = r.rowCount || 0; }
+      // Remover duplicados = arquivar/ocultar. Nunca DELETE físico.
+      const emp = await pool.query(
+        `UPDATE empresas
+            SET cadastro_status='arquivado',
+                bloqueado_operacional=true,
+                cadastro_completo=false,
+                arquivado_por_duplicidade=true,
+                status='arquivado',
+                updated_at=NOW()
+          WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'`
+      );
+      const cpf = await pool.query(
+        `UPDATE clientes_pf
+            SET ativo=false,
+                cadastro_status='arquivado',
+                bloqueado_operacional=true,
+                updated_at=NOW()
+          WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'`
+      );
+      const leads = await pool.query(
+        `UPDATE leads
+            SET cadastro_status='arquivado',
+                bloqueado_operacional=true,
+                arquivado_por_duplicidade=true,
+                updated_at=NOW()
+          WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'`
+      );
 
-      try { const r = await pool.query("DELETE FROM clientes_pf WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); clientes_pf = r.rowCount || 0; }
-      catch { const r = await pool.query("UPDATE clientes_pf SET ativo=false, cadastro_status='removido', bloqueado_operacional=true WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); clientes_pf = r.rowCount || 0; }
-
-      try { const r = await pool.query("DELETE FROM leads WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); leads = r.rowCount || 0; }
-      catch { const r = await pool.query("UPDATE leads SET cadastro_status='removido', bloqueado_operacional=true WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); leads = r.rowCount || 0; }
-
-      res.json({ success: true, empresas, clientes_pf, leads, total_removidos: empresas + clientes_pf + leads });
+      res.json({
+        success: true,
+        empresas: emp.rowCount || 0,
+        clientes_pf: cpf.rowCount || 0,
+        leads: leads.rowCount || 0,
+        total_removidos: (emp.rowCount || 0) + (cpf.rowCount || 0) + (leads.rowCount || 0),
+        total_arquivados: (emp.rowCount || 0) + (cpf.rowCount || 0) + (leads.rowCount || 0),
+        removido_definitivo: false,
+        message: "Duplicados arquivados sem apagar documentos.",
+      });
     } catch (err: any) {
       console.error("[POST /api/cadastros-incompletos/remover-duplicados]", err);
-      res.status(500).json({ error: err?.message || "Erro ao remover duplicados" });
+      res.status(500).json({ error: err?.message || "Erro ao arquivar duplicados" });
     }
   });
+
 
   // ─── EMPRESAS API ─────────────────────────────────────────────────────────
   app.get("/api/empresas", auth, async (req: Request, res: Response) => {
@@ -3791,6 +3836,11 @@ async function startServer() {
         conditions.push(`(e.razao_social ILIKE $${idx} OR e.nome_fantasia ILIKE $${idx} OR e.cnpj ILIKE $${idx} OR e.responsavel_nome ILIKE $${idx} OR e.telefone ILIKE $${idx})`);
       }
       const incluirIncompletos = ["1", "true", "sim"].includes(String(req.query.incluir_incompletos || "").toLowerCase());
+      const incluirArquivados = ["1", "true", "sim"].includes(String(req.query.incluir_arquivados || "").toLowerCase());
+      if (!incluirArquivados) {
+        conditions.push(`COALESCE(e.status, 'ativo') NOT IN ('arquivado', 'removido', 'excluido', 'cancelado')`);
+        conditions.push(`COALESCE(e.cadastro_status, '') NOT IN ('arquivado', 'removido', 'excluido', 'cancelado')`);
+      }
       if (!incluirIncompletos) {
         conditions.push(`COALESCE(e.arquivado_por_duplicidade, false) = false`);
         conditions.push(`COALESCE(e.bloqueado_operacional, false) = false`);
@@ -4026,18 +4076,52 @@ async function startServer() {
         res.status(403).json({ error: "Somente gestor/admin pode excluir empresa" });
         return;
       }
-      await pool.query("DELETE FROM empresas WHERE id = $1", [req.params.id]);
-      res.json({ success: true });
-    } catch (err: any) {
-      if (err?.code === "23503") {
-        res.status(409).json({
-          error: "Não é possível excluir esta empresa porque ela possui contrato(s) gerado(s) vinculado(s). Remova ou reatribua os contratos antes de excluir.",
-          detail: err?.detail,
-        });
+
+      // Zero regressão documental: excluir empresa significa arquivar/ocultar.
+      // Nunca fazemos DELETE físico em empresa, porque documentos, análises,
+      // acompanhamentos, contratos e anexos podem depender desse ID.
+      const columns = await getTableColumns("empresas");
+      const updates: Record<string, unknown> = {};
+      if (columns.has("status")) updates.status = "arquivado";
+      if (columns.has("ativo")) updates.ativo = false;
+      if (columns.has("arquivado_por_duplicidade")) updates.arquivado_por_duplicidade = true;
+      if (columns.has("bloqueado_operacional")) updates.bloqueado_operacional = true;
+      if (columns.has("cadastro_completo")) updates.cadastro_completo = false;
+      if (columns.has("cadastro_status")) updates.cadastro_status = "arquivado";
+      if (columns.has("cadastro_pendencias")) updates.cadastro_pendencias = ["Empresa arquivada. Documentos e análises preservados."];
+      if (columns.has("updated_at")) updates.updated_at = new Date().toISOString();
+
+      const keys = Object.keys(updates);
+      if (!keys.length) {
+        res.status(409).json({ error: "Exclusão física bloqueada para preservar documentos. Não há colunas disponíveis para arquivamento seguro." });
         return;
       }
+
+      const values = keys.map((k) => updates[k]);
+      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+      const { rows } = await pool.query(
+        `UPDATE empresas SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
+        [...values, req.params.id]
+      );
+      if (rows.length === 0) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
+
+      await registrarHistoricoEmpresaSeguro(
+        req.params.id,
+        "empresa_arquivada",
+        "Empresa arquivada/removida da lista sem apagar documentos, anexos ou análises.",
+        colaborador?.nome || "Sistema"
+      ).catch(() => null);
+
+      res.json({
+        success: true,
+        arquivado: true,
+        removido_definitivo: false,
+        message: "Empresa arquivada/removida da lista. Documentos e análises preservados.",
+        empresa: rows[0],
+      });
+    } catch (err) {
       console.error("[DELETE /api/empresas/:id]", err);
-      res.status(500).json({ error: "Erro ao excluir empresa" });
+      res.status(500).json({ error: "Erro ao arquivar empresa sem apagar documentos" });
     }
   });
 
@@ -9160,15 +9244,21 @@ async function registrarDocumentoContratoGerado(params: {
         return;
       }
       const contrato = rows[0];
-      // Remover arquivo PDF do disco se existir
-      if (contrato.pdf_path) {
-        const filePath = path.resolve(contrato.pdf_path);
-        if (fs.existsSync(filePath)) {
-          try { fs.unlinkSync(filePath); } catch (e) { console.warn('[DELETE contrato] Não foi possível remover PDF:', e); }
-        }
-      }
-      await pool.query('DELETE FROM contratos_gerados WHERE id = $1', [req.params.id]);
-      res.json({ success: true, message: 'Contrato excluído com sucesso.' });
+      // Zero regressão documental: contrato/PDF não é apagado fisicamente.
+      const { rows: updated } = await pool.query(
+        `UPDATE contratos_gerados
+            SET status='cancelado', updated_at=NOW()
+          WHERE id = $1
+          RETURNING id, status, pdf_path`,
+        [req.params.id]
+      );
+      res.json({
+        success: true,
+        arquivado: true,
+        removido_definitivo: false,
+        message: 'Contrato cancelado/arquivado. PDF e anexos preservados.',
+        contrato: updated[0] || contrato,
+      });
     } catch (err) {
       console.error('[DELETE /api/contratos/:id]', err);
       res.status(500).json({ error: 'Erro ao excluir contrato' });
@@ -9417,9 +9507,10 @@ async function registrarDocumentoContratoGerado(params: {
 
   async function listarAnexosOrcamento(id: string) {
     const { rows } = await pool.query(
-      `SELECT id, orcamento_id, tipo, descricao, nome_original, mime_type, tamanho_bytes, url, criado_em
+      `SELECT id, orcamento_id, tipo, descricao, nome_original, mime_type, tamanho_bytes, url, status, criado_em
          FROM orcamentos_timbrados_anexos
         WHERE orcamento_id = $1
+          AND COALESCE(status, 'ativo') <> 'arquivado'
         ORDER BY criado_em DESC`,
       [id]
     );
@@ -9690,7 +9781,7 @@ async function registrarDocumentoContratoGerado(params: {
 
   app.get("/api/orcamentos/anexos/:hash/download", auth, async (req: Request, res: Response) => {
     try {
-      const { rows } = await pool.query("SELECT * FROM orcamentos_timbrados_anexos WHERE hash_sha256=$1 LIMIT 1", [req.params.hash]);
+      const { rows } = await pool.query("SELECT * FROM orcamentos_timbrados_anexos WHERE hash_sha256=$1 AND COALESCE(status, 'ativo') <> 'arquivado' LIMIT 1", [req.params.hash]);
       const anexo = rows[0];
       if (!anexo || !fs.existsSync(anexo.storage_path)) { res.status(404).json({ error: "Anexo não encontrado" }); return; }
       res.download(anexo.storage_path, anexo.nome_original || "anexo");
@@ -9702,17 +9793,22 @@ async function registrarDocumentoContratoGerado(params: {
 
   app.delete("/api/orcamentos/anexos/:id", auth, async (req: Request, res: Response) => {
     try {
-      const { rows } = await pool.query("DELETE FROM orcamentos_timbrados_anexos WHERE id=$1 RETURNING *", [req.params.id]);
+      const colaborador = (req as any).colaborador;
+      // Zero regressão documental: anexo é arquivado, nunca apagado do disco.
+      const { rows } = await pool.query(
+        `UPDATE orcamentos_timbrados_anexos
+            SET status='arquivado', arquivado_em=NOW(), arquivado_por=$2
+          WHERE id=$1
+          RETURNING *`,
+        [req.params.id, colaborador?.id || null]
+      );
       const anexo = rows[0];
       if (!anexo) { res.status(404).json({ error: "Anexo não encontrado" }); return; }
-      if (anexo.storage_path && fs.existsSync(anexo.storage_path)) {
-        try { fs.unlinkSync(anexo.storage_path); } catch {}
-      }
-      await pool.query("UPDATE orcamentos_timbrados SET anexos_count = (SELECT COUNT(*) FROM orcamentos_timbrados_anexos WHERE orcamento_id=$1), pdf_path=NULL WHERE id=$1", [anexo.orcamento_id]);
-      res.json({ success: true });
+      await pool.query("UPDATE orcamentos_timbrados SET anexos_count = (SELECT COUNT(*) FROM orcamentos_timbrados_anexos WHERE orcamento_id=$1 AND COALESCE(status, 'ativo') <> 'arquivado'), pdf_path=NULL WHERE id=$1", [anexo.orcamento_id]);
+      res.json({ success: true, arquivado: true, removido_definitivo: false, message: "Anexo arquivado. Arquivo físico preservado." });
     } catch (err: any) {
       console.error("[DELETE /api/orcamentos/anexos/:id]", err);
-      res.status(500).json({ error: "Erro ao excluir anexo" });
+      res.status(500).json({ error: "Erro ao arquivar anexo sem apagar arquivo" });
     }
   });
 
