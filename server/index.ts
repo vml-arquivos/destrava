@@ -11537,21 +11537,46 @@ async function registrarDocumentoContratoGerado(params: {
 
       await client.query("BEGIN");
 
-      const deleted = await client.query(
-        `DELETE FROM acompanhamento_bancario_atualizacoes
+      const atualizacao = await client.query(
+        `SELECT id, acompanhamento_id, numero_semana,
+                data_referencia_inicio, data_referencia_fim, data_atualizacao,
+                total_entradas, total_saidas, saldo_semanal, status_semana
+           FROM acompanhamento_bancario_atualizacoes
           WHERE acompanhamento_id = $1
             AND numero_semana = $2
-          RETURNING id, acompanhamento_id, numero_semana,
-            data_referencia_inicio, data_referencia_fim, data_atualizacao,
-            total_entradas, total_saidas, saldo_semanal, status_semana`,
+          LIMIT 1`,
         [req.params.id, numeroSemana]
       );
 
-      if (!deleted.rows.length) {
+      if (!atualizacao.rows.length) {
         await client.query("ROLLBACK");
         res.status(404).json({ error: "Atualização semanal não encontrada." });
         return;
       }
+
+      const atualizacaoId = atualizacao.rows[0].id;
+
+      // A semana pode ter alertas/diagnósticos vinculados. Em alguns bancos antigos,
+      // a FK foi criada sem cascade efetivo; por isso a limpeza precisa ser explícita
+      // antes do DELETE da atualização semanal.
+      await client.query(
+        `DELETE FROM acompanhamento_bancario_alertas
+          WHERE acompanhamento_id = $1
+            AND (
+              numero_semana = $2
+              OR atualizacao_id = $3
+            )`,
+        [req.params.id, numeroSemana, atualizacaoId]
+      );
+
+      const deleted = await client.query(
+        `DELETE FROM acompanhamento_bancario_atualizacoes
+          WHERE id = $1
+          RETURNING id, acompanhamento_id, numero_semana,
+            data_referencia_inicio, data_referencia_fim, data_atualizacao,
+            total_entradas, total_saidas, saldo_semanal, status_semana`,
+        [atualizacaoId]
+      );
 
       const ultima = await client.query(
         `SELECT id, numero_semana, data_referencia_inicio, data_referencia_fim,
@@ -11630,16 +11655,16 @@ async function registrarDocumentoContratoGerado(params: {
       }
 
       await client.query(
-        `DELETE FROM acompanhamento_bancario_atualizacoes
-          WHERE acompanhamento_id = $1`,
-        [req.params.id]
-      );
-
-      await client.query(
         `DELETE FROM acompanhamento_bancario_alertas
           WHERE acompanhamento_id = $1`,
         [req.params.id]
       ).catch(() => null);
+
+      await client.query(
+        `DELETE FROM acompanhamento_bancario_atualizacoes
+          WHERE acompanhamento_id = $1`,
+        [req.params.id]
+      );
 
       const deleted = await client.query(
         `DELETE FROM acompanhamentos_bancarios
