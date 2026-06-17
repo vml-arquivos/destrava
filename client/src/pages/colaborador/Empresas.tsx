@@ -1044,8 +1044,8 @@ export default function Empresas() {
           <div className="flex gap-4 items-stretch h-full min-h-0">
 
             {/* ── COLUNA ESQUERDA: Lista ── */}
-            <div className={`flex-shrink-0 w-full sm:w-[280px] lg:w-[300px] xl:w-[320px] h-full min-h-0 ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
-              <div className="mb-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className={`flex-shrink-0 w-full sm:w-[280px] lg:w-[300px] xl:w-[320px] h-full min-h-0 overflow-hidden ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
+              <div className="mb-2 rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h1 className="text-xl font-black text-slate-900 tracking-tight leading-tight">Empresas</h1>
@@ -1063,7 +1063,7 @@ export default function Empresas() {
                 </div>
               </div>
               {/* Filtros */}
-              <div className="mb-3 space-y-2">
+              <div className="mb-2 space-y-2 shrink-0">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
@@ -1197,7 +1197,7 @@ export default function Empresas() {
             </div>
 
             {/* ── COLUNA DIREITA: Detalhe ── */}
-            <div className={`flex-1 min-w-0 h-full min-h-0 ${!showDetail && !selecionada ? "hidden sm:block" : "block"}`}>
+            <div className={`flex-1 min-w-0 h-full min-h-0 overflow-hidden ${!showDetail && !selecionada ? "hidden sm:block" : "block"}`}>
               {!selecionada ? (
                 <div className="hidden sm:flex flex-col items-center justify-center h-full min-h-[520px] gap-4 rounded-2xl border-2 border-dashed border-slate-200 bg-white">
                   <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
@@ -1212,7 +1212,7 @@ export default function Empresas() {
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden slide-up h-full min-h-0 flex flex-col min-w-0">
 
                   {/* ── Header detalhe ── */}
-                  <div className="px-4 sm:px-5 py-3 border-b border-slate-100">
+                  <div className="px-4 sm:px-5 py-3 border-b border-slate-100 shrink-0">
                     <div className="flex items-start gap-4">
                       {/* Botão voltar mobile */}
                       <button
@@ -1308,7 +1308,7 @@ export default function Empresas() {
                   </div>
 
                   {/* ── Quick Actions ── */}
-                  <div className="px-4 sm:px-5 py-2 border-b border-slate-100 bg-slate-50/60">
+                  <div className="px-4 sm:px-5 py-2 border-b border-slate-100 bg-slate-50/60 shrink-0">
                     <div className="flex flex-wrap gap-2">
                       <button
                         onClick={() => {
@@ -1355,7 +1355,7 @@ export default function Empresas() {
                       critico: { label: "Crítico", wrap: "bg-red-50 border-red-200",       badge: "bg-red-100 text-red-700",       Icon: ShieldOff,    ic: "text-red-600" },
                     }[risco] || { label: "—", wrap: "bg-slate-50 border-slate-200", badge: "bg-slate-100 text-slate-600", Icon: ShieldCheck, ic: "text-slate-500" };
                     return (
-                      <div className={`mx-4 mt-2 rounded-xl border px-3 py-2 ${rCfg.wrap}`}>
+                      <div className={`mx-4 mt-2 rounded-xl border px-3 py-2 shrink-0 ${rCfg.wrap}`}>
                         <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                           <div className="flex items-center gap-3 min-w-[210px]">
                             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/90 border border-white shadow-sm">
@@ -1393,7 +1393,7 @@ export default function Empresas() {
                   })()}
 
                   {/* ── Abas ── */}
-                  <div className="border-b border-slate-200 px-4 sm:px-5 py-1.5 bg-white sticky top-0 z-10">
+                  <div className="border-b border-slate-200 px-4 sm:px-5 py-1.5 bg-white shrink-0">
                     <div className="flex flex-wrap gap-1">
                       {([
                         { id: "visao_geral", label: "Dados da Empresa", badge: sociosExibicao.length || undefined },
@@ -1425,7 +1425,7 @@ export default function Empresas() {
                   </div>
 
                   {/* ── Conteúdo das abas ── */}
-                  <div className="scroll-area overflow-y-auto flex-1 min-h-0" style={{ minHeight: 0 }}>
+                  <div className="scroll-area overflow-y-auto overscroll-contain flex-1 min-h-0" style={{ minHeight: 0 }}>
                     {loadingDetalhe ? (
                       <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
                     ) : (

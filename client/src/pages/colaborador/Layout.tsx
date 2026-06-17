@@ -133,8 +133,8 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
   const primeiroNome = colaborador?.nome?.split(" ")[0] || "Colaborador";
 
   return (
-    <div className="destrava-shell min-h-screen flex bg-[radial-gradient(circle_at_top_left,#eff6ff_0,#f8fafc_32%,#f8fafc_100%)] text-slate-900">
-      <aside className="hidden lg:flex flex-col w-[244px] border-r border-slate-200/80 bg-white/88 backdrop-blur-xl shadow-[8px_0_30px_rgba(15,23,42,0.04)]">
+    <div className="destrava-shell h-screen max-h-screen overflow-hidden flex bg-[radial-gradient(circle_at_top_left,#eff6ff_0,#f8fafc_32%,#f8fafc_100%)] text-slate-900">
+      <aside className="hidden lg:flex flex-col w-[244px] h-screen max-h-screen sticky top-0 shrink-0 border-r border-slate-200/80 bg-white/88 backdrop-blur-xl shadow-[8px_0_30px_rgba(15,23,42,0.04)]">
         <div className="p-4 border-b border-slate-100">
           <a href="/" className="flex items-center gap-2">
             <img
@@ -288,23 +288,23 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
         </div>
       )}
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <div className="hidden lg:flex items-center justify-between px-5 py-2 bg-white/82 backdrop-blur-xl border-b border-slate-200/80 shadow-sm shadow-slate-200/40">
+      <main className="flex-1 h-screen max-h-screen flex flex-col min-w-0 overflow-hidden">
+        <div className="hidden lg:flex items-center justify-between px-6 py-3.5 bg-white/82 backdrop-blur-xl border-b border-slate-200/80 shadow-sm shadow-slate-200/40">
           <div className="flex items-center gap-3">
-            <div className="h-7 w-1.5 rounded-full bg-blue-600" />
+            <div className="h-9 w-1.5 rounded-full bg-blue-600" />
             <div>
-              <h2 className="text-sm font-black tracking-tight text-slate-900">{title || "Painel"}</h2>
-              <p className="text-[10px] font-medium text-slate-400 leading-none">Destrava Crédito</p>
+              <h2 className="text-base font-black tracking-tight text-slate-900">{title || "Painel"}</h2>
+              <p className="text-[11px] font-medium text-slate-400">Destrava Crédito</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 border border-slate-200">
+          <div className="flex items-center gap-3">
+            <span className="rounded-full bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-700 border border-slate-200">
               {primeiroNome}
             </span>
             <NotificacoesFollowup />
             <Link href="/colaborador/meu-perfil">
-              <a className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950">
-                <User className="h-3.5 w-3.5 mr-1" />
+              <a className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950">
+                <User className="h-4 w-4 mr-1" />
                 Perfil
               </a>
             </Link>
@@ -312,15 +312,15 @@ export default function ColaboradorLayout({ children, title }: ColaboradorLayout
               variant="outline"
               size="sm"
               onClick={handleSignOut}
-              className="rounded-xl text-slate-500 hover:text-red-600 h-8 text-xs"
+              className="rounded-xl text-slate-500 hover:text-red-600"
             >
-              <LogOut className="h-3.5 w-3.5 mr-1" />
+              <LogOut className="h-4 w-4 mr-1" />
               Sair
             </Button>
           </div>
         </div>
 
-        <div className="destrava-page flex-1 mt-16 lg:mt-0 overflow-auto">
+        <div className="destrava-page flex-1 min-h-0 mt-16 lg:mt-0 overflow-hidden">
           {children}
         </div>
       </main>
