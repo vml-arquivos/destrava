@@ -1212,8 +1212,8 @@ export default function Empresas() {
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden slide-up h-full min-h-0 flex flex-col min-w-0">
 
                   {/* ── Header detalhe ── */}
-                  <div className="px-4 sm:px-5 py-3 border-b border-slate-100 shrink-0">
-                    <div className="flex items-start gap-4">
+                  <div className="px-3 sm:px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
+                    <div className="flex items-start gap-3">
                       {/* Botão voltar mobile */}
                       <button
                         onClick={() => { setSelecionada(null); setShowDetail(false); }}
@@ -1222,51 +1222,51 @@ export default function Empresas() {
                         <ArrowLeft className="w-4 h-4" />
                       </button>
                       {/* Avatar grande */}
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white text-lg font-black shrink-0 shadow-md shadow-blue-100">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white text-base font-black shrink-0 shadow-sm shadow-blue-100">
                         {getInitials(selecionada.razao_social)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <h2 className="text-lg font-bold text-slate-900 leading-tight truncate">{selecionada.razao_social}</h2>
+                            <h2 className="text-base lg:text-lg font-black text-slate-900 leading-tight truncate">{selecionada.razao_social}</h2>
                             {selecionada.nome_fantasia && (
-                              <p className="text-sm text-slate-500 mt-0.5">{selecionada.nome_fantasia}</p>
+                              <p className="text-xs text-slate-500 mt-0.5 truncate">{selecionada.nome_fantasia}</p>
                             )}
-                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                               <StatusBadge status={selecionada.status} />
                               {selecionada.porte && (
-                                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${PORTE_CFG[selecionada.porte]?.color || "bg-slate-100 text-slate-500"}`}>
+                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${PORTE_CFG[selecionada.porte]?.color || "bg-slate-100 text-slate-500"}`}>
                                   {PORTE_CFG[selecionada.porte]?.label}
                                 </span>
                               )}
                               {selecionada.natureza_juridica && (
-                                <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">
+                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
                                   {selecionada.natureza_juridica}
                                 </span>
                               )}
                               {selecionada.situacao_cadastral && (
-                                <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700">
+                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
                                   Receita: {selecionada.situacao_cadastral}
                                 </span>
                               )}
                               {selecionada.segmento && (
-                                <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
+                                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
                                   {selecionada.segmento}
                                 </span>
                               )}
                             </div>
-                            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">CNPJ</p>
-                                <p className="text-sm font-semibold text-slate-700 mt-0.5 truncate">{selecionada.cnpj || "Não informado"}</p>
+                            <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-1.5 max-w-[820px]">
+                              <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5">
+                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">CNPJ</p>
+                                <p className="text-xs font-bold text-slate-700 mt-0.5 truncate">{selecionada.cnpj || "Não informado"}</p>
                               </div>
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Localização</p>
-                                <p className="text-sm font-semibold text-slate-700 mt-0.5 truncate">{[selecionada.cidade, selecionada.estado].filter(Boolean).join(" / ") || "Não informado"}</p>
+                              <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5">
+                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Localização</p>
+                                <p className="text-xs font-bold text-slate-700 mt-0.5 truncate">{[selecionada.cidade, selecionada.estado].filter(Boolean).join(" / ") || "Não informado"}</p>
                               </div>
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Contato principal</p>
-                                <p className="text-sm font-semibold text-slate-700 mt-0.5 truncate">{selecionada.responsavel_nome || selecionada.telefone || selecionada.whatsapp || "Não informado"}</p>
+                              <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5">
+                                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Contato principal</p>
+                                <p className="text-xs font-bold text-slate-700 mt-0.5 truncate">{selecionada.responsavel_nome || selecionada.telefone || selecionada.whatsapp || "Não informado"}</p>
                               </div>
                             </div>
                           </div>
@@ -1277,7 +1277,7 @@ export default function Empresas() {
                               <button
                                 onClick={() => sincronizarDados(selecionada)}
                                 disabled={sincronizando}
-                                className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200 bg-emerald-50 px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                                className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50"
                                 title="Atualizar dados da Receita Federal"
                               >
                                 <RotateCw className={`w-3.5 h-3.5 ${sincronizando ? "animate-spin" : ""}`} />
@@ -1286,7 +1286,7 @@ export default function Empresas() {
                             )}
                             <button
                               onClick={() => selecionada && abrirEditar(selecionada)}
-                              className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"
+                              className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 border border-slate-200 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                               <span className="hidden md:inline">Editar</span>
@@ -1308,8 +1308,8 @@ export default function Empresas() {
                   </div>
 
                   {/* ── Quick Actions ── */}
-                  <div className="px-4 sm:px-5 py-2 border-b border-slate-100 bg-slate-50/60 shrink-0">
-                    <div className="flex flex-wrap gap-2">
+                  <div className="px-3 sm:px-4 py-1.5 border-b border-slate-100 bg-slate-50/70 shrink-0">
+                    <div className="flex flex-wrap gap-1.5">
                       <button
                         onClick={() => {
                           sessionStorage.setItem("calculadora_empresa", JSON.stringify({
@@ -1320,7 +1320,7 @@ export default function Empresas() {
                           }));
                           window.location.href = "/colaborador/calculadora";
                         }}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+                        className="flex items-center gap-1.5 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
                         title="Nova Simulação"
                       >
                         <Calculator className="w-3.5 h-3.5" />
@@ -1328,7 +1328,7 @@ export default function Empresas() {
                       </button>
                       <button
                         onClick={() => window.location.href = "/colaborador/contratos"}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-3 py-1.5 rounded-lg hover:bg-violet-100 transition-colors"
+                        className="flex items-center gap-1.5 text-[11px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-2.5 py-1.5 rounded-lg hover:bg-violet-100 transition-colors"
                         title="Novo Contrato"
                       >
                         <FileText className="w-3.5 h-3.5" />
@@ -1336,7 +1336,7 @@ export default function Empresas() {
                       </button>
                       <button
                         onClick={() => { setAbaAtiva("followup"); setShowFollowupForm(true); }}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors"
+                        className="flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-lg hover:bg-amber-100 transition-colors"
                         title="Iniciar conversa"
                       >
                         <Bell className="w-3.5 h-3.5" />
@@ -1355,34 +1355,34 @@ export default function Empresas() {
                       critico: { label: "Crítico", wrap: "bg-red-50 border-red-200",       badge: "bg-red-100 text-red-700",       Icon: ShieldOff,    ic: "text-red-600" },
                     }[risco] || { label: "—", wrap: "bg-slate-50 border-slate-200", badge: "bg-slate-100 text-slate-600", Icon: ShieldCheck, ic: "text-slate-500" };
                     return (
-                      <div className={`mx-4 mt-2 rounded-xl border px-3 py-2 shrink-0 ${rCfg.wrap}`}>
-                        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-                          <div className="flex items-center gap-3 min-w-[210px]">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/90 border border-white shadow-sm">
-                              <rCfg.Icon className={`w-4 h-4 ${rCfg.ic}`} />
+                      <div className={`mx-3 sm:mx-4 mt-1.5 rounded-lg border px-2.5 py-1.5 shrink-0 ${rCfg.wrap}`}>
+                        <div className="flex flex-col gap-1.5 lg:flex-row lg:items-center">
+                          <div className="flex items-center gap-2 min-w-[190px]">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white/90 border border-white shadow-sm">
+                              <rCfg.Icon className={`w-3.5 h-3.5 ${rCfg.ic}`} />
                             </div>
                             <div>
                               <div className="flex flex-wrap items-center gap-2">
-                                <span className="text-sm font-bold text-slate-800">Score Destrava</span>
-                                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${rCfg.badge}`}>Risco {rCfg.label}</span>
+                                <span className="text-xs font-black text-slate-800">Score Destrava</span>
+                                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black ${rCfg.badge}`}>Risco {rCfg.label}</span>
                               </div>
-                              <p className="text-xs text-slate-500 mt-0.5">Resumo da situação da empresa</p>
+                              <p className="text-[10px] text-slate-500 mt-0.5 leading-none">Situação atual</p>
                             </div>
                           </div>
 
                           <div className="flex flex-1 items-center gap-3 min-w-0">
-                            <div className="min-w-[54px]">
-                              <div className="text-xl font-black text-slate-900 leading-none">{score}</div>
-                              <div className="text-[11px] font-semibold text-slate-400 mt-1">de 100</div>
+                            <div className="min-w-[44px]">
+                              <div className="text-lg font-black text-slate-900 leading-none">{score}</div>
+                              <div className="text-[10px] font-semibold text-slate-400 mt-0.5">/100</div>
                             </div>
                             <div className="flex-1 min-w-[140px]">
                               <ScoreBar score={score} risco={risco} />
                             </div>
                           </div>
 
-                          <div className="flex flex-wrap gap-1.5 lg:max-w-[420px]">
-                            {tags.slice(0, 4).map((t, i) => (
-                              <span key={i} className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${t.ok ? "bg-white text-slate-600 border border-slate-200" : "bg-white text-rose-600 border border-rose-200"}`}>
+                          <div className="flex flex-wrap gap-1 lg:max-w-[420px]">
+                            {tags.slice(0, 3).map((t, i) => (
+                              <span key={i} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${t.ok ? "bg-white text-slate-600 border border-slate-200" : "bg-white text-rose-600 border border-rose-200"}`}>
                                 {t.text}
                               </span>
                             ))}
@@ -1393,7 +1393,7 @@ export default function Empresas() {
                   })()}
 
                   {/* ── Abas ── */}
-                  <div className="border-b border-slate-200 px-4 sm:px-5 py-1.5 bg-white shrink-0">
+                  <div className="border-b border-slate-200 px-3 sm:px-4 py-1 bg-white shrink-0">
                     <div className="flex flex-wrap gap-1">
                       {([
                         { id: "visao_geral", label: "Dados da Empresa", badge: sociosExibicao.length || undefined },
@@ -1407,7 +1407,7 @@ export default function Empresas() {
                         <button
                           key={aba.id}
                           onClick={() => setAbaAtiva(aba.id)}
-                          className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold border transition-all whitespace-nowrap ${
+                          className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-bold border transition-all whitespace-nowrap ${
                             abaAtiva === aba.id
                               ? "border-blue-200 bg-blue-50 text-blue-700"
                               : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-200 hover:bg-slate-50"
@@ -1465,7 +1465,7 @@ export default function Empresas() {
                           {selecionada.cnaes_secundarios && selecionada.cnaes_secundarios.length > 0 && (
                             <div className="mt-3 pt-3 border-t border-slate-100">
                               <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">CNAEs secundários</p>
-                              <div className="flex flex-wrap gap-2">
+                              <div className="flex flex-wrap gap-1.5">
                                 {selecionada.cnaes_secundarios.map((cnae, idx) => (
                                   <span key={idx} className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">{cnae}</span>
                                 ))}
@@ -1661,7 +1661,7 @@ export default function Empresas() {
 
                         {/* Tags */}
                         {(selecionada.tags || []).length > 0 && (
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-1.5">
                             {(selecionada.tags || []).map(tag => (
                               <span key={tag} className="flex items-center gap-1 text-xs font-medium bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
                                 <Tag className="w-3 h-3" />{tag}
