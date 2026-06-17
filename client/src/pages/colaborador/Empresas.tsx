@@ -891,7 +891,7 @@ export default function Empresas() {
         toast.success(
           sociosFinal.length > 0
             ? `Dados sincronizados e salvos. ${sociosFinal.length} sócio(s) carregado(s).`
-            : "Dados sincronizados. Confira o sócio-administrador na aba QSA.",
+            : "Dados sincronizados. Confira os dados cadastrais e o quadro societário na visão da empresa.",
           { id: "sync" }
         );
       }
@@ -1040,10 +1040,10 @@ export default function Empresas() {
       <div className="emp-page min-h-screen bg-[#f8f9fc]">
 
         {/* ── Top Bar ── */}
-        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5">
+        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
             <div>
-              <h1 className="text-[1.75rem] font-black text-slate-900 tracking-tight">Empresas</h1>
+              <h1 className="text-2xl sm:text-[1.65rem] font-black text-slate-900 tracking-tight">Empresas</h1>
               <p className="text-sm text-slate-500 mt-0.5">
                 {loading ? "Carregando..." : `${empresas.length} empresa${empresas.length !== 1 ? "s" : ""} cadastrada${empresas.length !== 1 ? "s" : ""}`}
               </p>
@@ -1060,8 +1060,8 @@ export default function Empresas() {
         </div>
 
         {/* ── Layout 2 colunas ── */}
-        <div className="max-w-[1680px] mx-auto px-3 sm:px-5 pt-3 pb-6">
-          <div className="flex gap-4" style={{ minHeight: 'calc(100vh - 138px)' }}>
+        <div className="max-w-[1680px] mx-auto px-3 sm:px-5 pt-2 pb-4">
+          <div className="flex gap-4" style={{ minHeight: 'calc(100vh - 112px)' }}>
 
             {/* ── COLUNA ESQUERDA: Lista ── */}
             <div className={`flex-shrink-0 w-full sm:w-[280px] lg:w-[300px] ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
@@ -1128,7 +1128,7 @@ export default function Empresas() {
               </div>
 
               {/* Lista */}
-              <div className="scroll-area overflow-y-auto space-y-1.5 flex-1" style={{ maxHeight: "calc(100vh - 260px)" }}>
+              <div className="scroll-area overflow-y-auto space-y-1.5 flex-1 pr-1" style={{ maxHeight: "calc(100vh - 196px)" }}>
                 {loading ? (
                   <LoadingState message="Carregando empresas…" className="py-20" />
                 ) : empresas.length === 0 ? (
@@ -1212,10 +1212,10 @@ export default function Empresas() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden slide-up">
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden slide-up h-[calc(100vh-118px)] flex flex-col">
 
                   {/* ── Header detalhe ── */}
-                  <div className="px-5 py-4 border-b border-slate-100">
+                  <div className="px-4 sm:px-5 py-3.5 border-b border-slate-100">
                     <div className="flex items-start gap-4">
                       {/* Botão voltar mobile */}
                       <button
@@ -1258,6 +1258,20 @@ export default function Empresas() {
                                 </span>
                               )}
                             </div>
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">CNPJ</p>
+                                <p className="text-sm font-semibold text-slate-700 mt-0.5 truncate">{selecionada.cnpj || "Não informado"}</p>
+                              </div>
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Localização</p>
+                                <p className="text-sm font-semibold text-slate-700 mt-0.5 truncate">{[selecionada.cidade, selecionada.estado].filter(Boolean).join(" / ") || "Não informado"}</p>
+                              </div>
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Contato principal</p>
+                                <p className="text-sm font-semibold text-slate-700 mt-0.5 truncate">{selecionada.responsavel_nome || selecionada.telefone || selecionada.whatsapp || "Não informado"}</p>
+                              </div>
+                            </div>
                           </div>
                           {/* Ações */}
                           <div className="flex items-center gap-1.5 shrink-0">
@@ -1297,7 +1311,7 @@ export default function Empresas() {
                   </div>
 
                   {/* ── Quick Actions ── */}
-                  <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60">
+                  <div className="px-4 sm:px-5 py-2.5 border-b border-slate-100 bg-slate-50/60">
                     <div className="flex flex-wrap gap-2">
                       <button
                         onClick={() => {
@@ -1382,10 +1396,10 @@ export default function Empresas() {
                   })()}
 
                   {/* ── Abas ── */}
-                  <div className="mt-3 border-b border-slate-200 px-5 py-2">
+                  <div className="border-b border-slate-200 px-4 sm:px-5 py-2 bg-white sticky top-0 z-10">
                     <div className="flex flex-wrap gap-1">
                       {([
-                        { id: "visao_geral", label: "Visão Geral + QSA", badge: sociosExibicao.length || undefined },
+                        { id: "visao_geral", label: "Dados da Empresa", badge: sociosExibicao.length || undefined },
                         { id: "dossie_credito", label: "Dossiê / Laudo IA" },
                         { id: "documentos", label: "Acervo Documental", badge: documentos.length + contratosSociais.length || undefined },
                         { id: "followup", label: "Conversas", badge: followups.filter(f => !f.concluido).length || undefined },
@@ -1414,7 +1428,7 @@ export default function Empresas() {
                   </div>
 
                   {/* ── Conteúdo das abas ── */}
-                  <div className="scroll-area overflow-y-auto" style={{ maxHeight: "calc(100vh - 320px)", minHeight: 400 }}>
+                  <div className="scroll-area overflow-y-auto flex-1" style={{ maxHeight: "calc(100vh - 292px)", minHeight: 320 }}>
                     {loadingDetalhe ? (
                       <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
                     ) : (
@@ -1670,12 +1684,12 @@ export default function Empresas() {
                         )}
 
 
-                        <SectionCard title="QSA e administração" icon={<Users className="w-4 h-4" />}>
+                        <SectionCard title="Dados cadastrais e quadro societário" icon={<Users className="w-4 h-4" />}>
                           <div className="py-3 space-y-3">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5">
                               <div>
-                                <p className="text-sm font-semibold text-slate-800">Quadro societário resumido</p>
-                                <p className="text-xs text-slate-500">A visão geral já incorpora o QSA para reduzir navegação e facilitar a análise da empresa.</p>
+                                <p className="text-sm font-semibold text-slate-800">Quadro societário e administradores</p>
+                                <p className="text-xs text-slate-500">Os dados da empresa e dos sócios aparecem juntos para análise cadastral, crédito, contrato e laudo IA.</p>
                               </div>
                               {selecionada.cnpj && (
                                 <button
@@ -1685,7 +1699,7 @@ export default function Empresas() {
                                   title="Atualizar dados societários"
                                 >
                                   <RotateCw className={`w-3.5 h-3.5 ${sincronizando ? "animate-spin" : ""}`} />
-                                  Atualizar QSA
+                                  Atualizar dados societários
                                 </button>
                               )}
                             </div>
@@ -1716,7 +1730,7 @@ export default function Empresas() {
                                             {s.qualificacao_socio && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{s.qualificacao_socio}</span>}
                                             {s.representante_legal && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Administrador</span>}
                                           </div>
-                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 text-xs">
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-3 text-xs">
                                             <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
                                               <span className="block text-slate-400 text-[11px] mb-0.5">CPF/CNPJ</span>
                                               <span className="font-mono text-slate-700">{s.cpf_cnpj || 'Não informado'}</span>
@@ -1725,7 +1739,55 @@ export default function Empresas() {
                                               <span className="block text-slate-400 text-[11px] mb-0.5">Participação</span>
                                               <span className="text-slate-700">{s.percentual_capital_social || s.faixa_etaria || 'Não informado'}</span>
                                             </div>
+                                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+                                              <span className="block text-slate-400 text-[11px] mb-0.5">Entrada na sociedade</span>
+                                              <span className="text-slate-700">{s.data_entrada_sociedade ? new Date(s.data_entrada_sociedade).toLocaleDateString('pt-BR') : 'Não informado'}</span>
+                                            </div>
+                                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+                                              <span className="block text-slate-400 text-[11px] mb-0.5">Representante legal</span>
+                                              <span className="text-slate-700">{s.nome_representante || (s.representante_legal ? 'Sim' : 'Não informado')}</span>
+                                            </div>
+                                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+                                              <span className="block text-slate-400 text-[11px] mb-0.5">Nascimento</span>
+                                              <span className="text-slate-700">{s.data_nascimento ? new Date(s.data_nascimento).toLocaleDateString('pt-BR') : 'Pendente'}</span>
+                                            </div>
+                                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+                                              <span className="block text-slate-400 text-[11px] mb-0.5">Contato</span>
+                                              <span className="text-slate-700">{s.whatsapp || s.telefone || s.email || 'Pendente'}</span>
+                                            </div>
                                           </div>
+
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-xs">
+                                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+                                              <span className="block text-slate-400 text-[11px] mb-0.5">Estado civil / cônjuge</span>
+                                              <span className="text-slate-700">{[s.estado_civil, s.conjuge_nome].filter(Boolean).join(' • ') || 'Pendente'}</span>
+                                            </div>
+                                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
+                                              <span className="block text-slate-400 text-[11px] mb-0.5">Endereço</span>
+                                              <span className="text-slate-700">{[s.logradouro, s.numero, s.bairro, s.cidade, s.uf].filter(Boolean).join(', ') || 'Pendente'}</span>
+                                            </div>
+                                          </div>
+
+                                          <div className="flex flex-wrap gap-2 mt-3">
+                                            {s.inferido_empresa ? (
+                                              <button onClick={() => selecionada && abrirEditar(selecionada)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><Edit2 className="w-3 h-3" /> Completar dados</button>
+                                            ) : (
+                                              <>
+                                                <button onClick={() => abrirEdicaoSocio(s)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><Edit2 className="w-3 h-3" /> Editar sócio</button>
+                                                <button onClick={() => atualizarSocioIndividual(s)} disabled={sincronizando} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50"><RotateCw className="w-3 h-3" /> Atualizar</button>
+                                                {!s.cpf_cnpj && <button onClick={() => { const cpf = prompt('Informe o CPF completo do sócio'); if (cpf) atualizarCpfManualSocio(s, cpf); }} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100">Informar CPF</button>}
+                                              </>
+                                            )}
+                                          </div>
+
+                                          {pendencias.length > 0 && (
+                                            <div className="rounded-lg bg-amber-50 border border-amber-100 p-2 mt-3">
+                                              <p className="text-[11px] font-bold text-amber-700 mb-1">Pendências para contratos/análises</p>
+                                              <div className="flex flex-wrap gap-1">
+                                                {pendencias.slice(0, 8).map((p: string) => <span key={p} className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-amber-200 text-amber-700">{p}</span>)}
+                                              </div>
+                                            </div>
+                                          )}
                                         </div>
                                       </div>
                                     </div>
