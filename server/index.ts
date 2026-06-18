@@ -1022,6 +1022,39 @@ async function startServer() {
     console.error('[AUTO-CREATE Company Hub]', err);
   }
 
+  // ─── FIX: CHECK constraints legados de empresas.status / cadastro_status ────
+  // Causa raiz confirmada em produção: o banco tinha um CHECK constraint legado
+  // em "status" que não incluía 'arquivado', quebrando o arquivamento/exclusão
+  // lógica com "new row for relation empresas violates check constraint
+  // empresas_status_check". O mesmo padrão de risco existe em "cadastro_status"
+  // (usado com 'completo'/'incompleto'/'arquivado' pelo restante do sistema).
+  // Recria os dois constraints sempre com a lista completa de valores realmente
+  // usados pelo código, de forma idempotente (DROP IF EXISTS + ADD), sem tocar
+  // em nenhum dado existente.
+  try {
+    await pool.query(`
+      ALTER TABLE public.empresas DROP CONSTRAINT IF EXISTS empresas_status_check;
+      ALTER TABLE public.empresas ADD CONSTRAINT empresas_status_check
+        CHECK (status IS NULL OR status IN (
+          'ativo','inativo','pendente','prospeccao','negociacao',
+          'cliente','suspenso','arquivado','bloqueado'
+        ));
+    `);
+  } catch (err) {
+    console.error('[FIX empresas_status_check]', err);
+  }
+  try {
+    await pool.query(`
+      ALTER TABLE public.empresas DROP CONSTRAINT IF EXISTS empresas_cadastro_status_check;
+      ALTER TABLE public.empresas ADD CONSTRAINT empresas_cadastro_status_check
+        CHECK (cadastro_status IS NULL OR cadastro_status IN (
+          'completo','incompleto','arquivado','duplicado','pendente'
+        ));
+    `);
+  } catch (err) {
+    console.error('[FIX empresas_cadastro_status_check]', err);
+  }
+
   // ─── AUTO-CREATE: Módulos de Faturamento e Contratos ─────────────────────────
   // Garante que as tabelas existam mesmo sem executar a migration manual.
   // Idempotente: usa CREATE TABLE IF NOT EXISTS e ADD COLUMN IF NOT EXISTS.
@@ -3975,8 +4008,9 @@ async function startServer() {
         message: "Empresa sincronizada com dados da Receita Federal.",
       });
     } catch (err: any) {
-      console.error("[POST /api/empresas/:id/sincronizar-receita]", err);
-      res.status(500).json({ error: err?.message || "Erro ao sincronizar Receita Federal" });
+      const details = pgErrorDetails(err);
+      console.error("[POST /api/empresas/:id/sincronizar-receita]", details);
+      res.status(500).json({ error: details.message || err?.message || "Erro ao sincronizar Receita Federal", details });
     }
   });
 
