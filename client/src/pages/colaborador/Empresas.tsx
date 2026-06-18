@@ -489,6 +489,34 @@ function montarSocioAdministradorPadrao(empresa: Empresa | null): any | null {
 
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
+function formatarCnaeCodigoTela(value: any): string {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length === 7) return `${digits.slice(0, 2)}.${digits.slice(2, 4)}-${digits.slice(4, 5)}-${digits.slice(5)}`;
+  return String(value || "").trim();
+}
+
+function montarCnaeTela(codigo: any, descricao: any): string {
+  const c = formatarCnaeCodigoTela(codigo);
+  const d = String(descricao || "").trim();
+  if (c && d) return `${c} — ${d}`;
+  return d || c;
+}
+
+function mensagemErroApi(err: any, fallback: string): string {
+  if (!err) return fallback;
+  if (typeof err === "string") return err;
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err?.message === "string") return err.message;
+  if (typeof err?.error === "string") return err.error;
+  if (typeof err?.details?.message === "string") return err.details.message;
+  try {
+    const json = JSON.stringify(err);
+    return json && json !== "{}" ? json : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export default function Empresas() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(true);
@@ -754,9 +782,6 @@ export default function Empresas() {
   function selecionar(emp: Empresa) {
     setSelecionada(emp);
     setShowDetail(true);
-    if (emp.cnpj) {
-      setTimeout(() => sincronizarDados(emp, { silencioso: true }), 50);
-    }
   }
 
   // ── Histórico ──────────────────────────────────────────────────────────────
@@ -801,11 +826,16 @@ export default function Empresas() {
         body: JSON.stringify({ cnpj: empresa.cnpj }),
       });
 
-      const atualizada = result?.empresa || await apiFetch(`/api/empresas/${empresa.id}`);
+      if (!result?.success || !result?.empresa) {
+        throw new Error(mensagemErroApi(result, "A Receita respondeu, mas a empresa não foi atualizada."));
+      }
+
+      const atualizada = result.empresa;
       setSelecionada(atualizada);
       setEmpresas(prev => prev.map(e => e.id === empresa.id ? atualizada : e));
+      await carregarEmpresas();
 
-      // Sócios/QSA não podem travar a atualização cadastral. Se já existirem, recarrega; se falhar, segue.
+      // Sócios/QSA não podem travar a atualização cadastral. Se falhar, a empresa continua sincronizada.
       const sociosReload = await apiFetch(`/api/empresas/${empresa.id}/socios`).catch(() => []);
       if (Array.isArray(sociosReload)) setSociosEmpresa(sociosReload);
 
@@ -814,13 +844,14 @@ export default function Empresas() {
         toast.success(
           cidadeUf
             ? `Receita sincronizada e salva: ${cidadeUf}.`
-            : "Receita sincronizada e salva no cadastro.",
+            : (result?.message || "Receita sincronizada e salva no cadastro."),
           { id: "sync" }
         );
       }
     } catch (err: any) {
-      if (!opts.silencioso) toast.error(err?.message || "Erro ao sincronizar Receita", { id: "sync" });
-      else console.error('[auto-sync empresa]', err);
+      const msg = mensagemErroApi(err, "Erro ao sincronizar Receita Federal.");
+      if (!opts.silencioso) toast.error(msg, { id: "sync" });
+      else console.error('[auto-sync empresa]', msg, err);
     } finally {
       setSincronizando(false);
     }
@@ -924,7 +955,7 @@ export default function Empresas() {
       setEmpresas(prev => prev.filter(e => e.id !== id));
       await carregarEmpresas();
     } catch (err: any) {
-      toast.error(err?.message || "Erro ao arquivar empresa.");
+      toast.error(mensagemErroApi(err, "Erro ao arquivar empresa."));
     }
   }
 
@@ -2287,10 +2318,10 @@ export default function Empresas() {
                             natureza_juridica: data.natureza_juridica ?? prev.natureza_juridica,
                             capital_social: parseCapitalSocial(data.capital_social) ?? prev.capital_social,
                             cnae_principal: data.cnae_fiscal_descricao
-                              ? `${data.cnae_fiscal || ""} — ${data.cnae_fiscal_descricao}`.trim()
+                              ? montarCnaeTela(data.cnae_fiscal, data.cnae_fiscal_descricao)
                               : prev.cnae_principal,
                             cnaes_secundarios: Array.isArray((data as any).cnaes_secundarios)
-                              ? (data as any).cnaes_secundarios.map((c: any) => c.descricao ? `${c.codigo || ""} — ${c.descricao}`.trim() : String(c)).filter(Boolean)
+                              ? (data as any).cnaes_secundarios.map((c: any) => c?.descricao ? montarCnaeTela(c?.codigo, c?.descricao) : String(c)).filter(Boolean)
                               : prev.cnaes_secundarios,
                             data_abertura: data.data_inicio_atividade ?? prev.data_abertura,
                             situacao_cadastral: data.descricao_situacao_cadastral ?? prev.situacao_cadastral,
