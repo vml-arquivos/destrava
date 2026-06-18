@@ -42,6 +42,13 @@ type ExtracaoCartao = {
   natureza_juridica?: string | null;
   porte?: string | null;
   endereco_completo?: string | null;
+  cep?: string | null;
+  logradouro?: string | null;
+  numero?: string | null;
+  complemento?: string | null;
+  bairro?: string | null;
+  municipio?: string | null;
+  uf?: string | null;
   situacao_cadastral?: string | null;
   data_emissao?: string | null;
   data_situacao_cadastral?: string | null;
@@ -427,6 +434,13 @@ Responda SOMENTE JSON válido, sem markdown, sem comentários, com exatamente es
   "natureza_juridica": "código - descrição ou null",
   "porte": "texto ou null",
   "endereco_completo": "texto ou null",
+  "cep": "00.000-000 ou null",
+  "logradouro": "texto ou null",
+  "numero": "texto ou null",
+  "complemento": "texto ou null",
+  "bairro": "texto ou null",
+  "municipio": "texto ou null",
+  "uf": "UF ou null",
   "situacao_cadastral": "texto ou null",
   "data_situacao_cadastral": "YYYY-MM-DD ou null",
   "data_emissao": "YYYY-MM-DD ou null",
@@ -439,6 +453,7 @@ Regras:
 - Se o arquivo não for Cartão CNPJ, use documento_e_cartao_cnpj=false.
 - Se a data de emissão não estiver visível, data_emissao=null.
 - Preserve números, códigos CNAE e natureza jurídica.
+- Para endereço, extraia também os campos separados exatamente como aparecem no Cartão CNPJ: CEP, logradouro, número, complemento, bairro/distrito, município e UF.
 - Não invente campos. Se não estiver visível, use null.
 - Confianca deve ir de 0 a 1.`;
 }
@@ -481,6 +496,13 @@ async function gerarGeminiCartao(modelName: string, doc: DocCartao, buffer: Buff
     natureza_juridica: firstNonEmpty(json.natureza_juridica, json.naturezaJuridica),
     porte: firstNonEmpty(json.porte),
     endereco_completo: firstNonEmpty(json.endereco_completo, json.endereco),
+    cep: firstNonEmpty(json.cep),
+    logradouro: firstNonEmpty(json.logradouro),
+    numero: firstNonEmpty(json.numero),
+    complemento: firstNonEmpty(json.complemento),
+    bairro: firstNonEmpty(json.bairro, json.bairro_distrito, json.bairroDistrito),
+    municipio: firstNonEmpty(json.municipio, json.cidade),
+    uf: firstNonEmpty(json.uf),
     situacao_cadastral: firstNonEmpty(json.situacao_cadastral, json.situacaoCadastral),
     data_situacao_cadastral: parseDate(json.data_situacao_cadastral || json.dataSituacaoCadastral),
     data_emissao: parseDate(json.data_emissao || json.dataEmissao),
@@ -653,6 +675,16 @@ async function buscarUltimoCartaoCnpj(empresaId: string): Promise<DocCartao | nu
     [empresaId]
   );
   return rows[0] || null;
+}
+
+
+// Usado pela sincronização cadastral da empresa: quando existe Cartão CNPJ oficial
+// anexado, a leitura OCR/IA do documento oficial deve prevalecer sobre APIs gratuitas
+// cacheadas/desatualizadas como BrasilAPI/OpenCNPJ.
+export async function extrairCamposUltimoCartaoCnpjEmpresa(empresaId: string): Promise<{ cartao: DocCartao | null; extracao: ExtracaoCartao | null }> {
+  const cartao = await buscarUltimoCartaoCnpj(empresaId);
+  const extracao = await tentarExtrairCartaoComGemini(cartao);
+  return { cartao, extracao };
 }
 
 function classificarSituacao(situacao: unknown): { risco: string; alerta?: AlertaAnalise } {

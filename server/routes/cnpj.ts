@@ -409,14 +409,14 @@ function mergeNormalized(rawCnpj: string, brasil: AnyRecord, cnpja: AnyRecord, o
 
   for (const key of keys) {
     if (key === 'qsa' || key === 'cnaes_secundarios') continue;
-    // Regra sem regressão: BrasilAPI/Receita é a fonte autoritativa para dados cadastrais.
-    // OpenCNPJ/CNPJá só enriquecem campos ausentes e nunca sobrescrevem cidade, UF, CNAE,
-    // natureza, endereço, porte ou situação quando BrasilAPI retornou valor.
-    merged[key] = firstNonEmpty(brasil[key], opencnpj[key], cnpja[key]);
+    // APIs gratuitas podem estar cacheadas em momentos diferentes. Para reduzir defasagem,
+    // priorize CNPJá/OpenCNPJ quando trouxerem campo, e use BrasilAPI como fallback.
+    // A fonte oficial anexada (Cartão CNPJ) é tratada na rota de sincronização da empresa.
+    merged[key] = firstNonEmpty(cnpja[key], opencnpj[key], brasil[key]);
   }
 
-  merged.qsa = mergeArrays(brasil.qsa || [], mergeArrays(opencnpj.qsa || [], cnpja.qsa || []));
-  merged.cnaes_secundarios = mergeArrays(brasil.cnaes_secundarios || [], mergeArrays(opencnpj.cnaes_secundarios || [], cnpja.cnaes_secundarios || []));
+  merged.qsa = mergeArrays(cnpja.qsa || [], mergeArrays(opencnpj.qsa || [], brasil.qsa || []));
+  merged.cnaes_secundarios = mergeArrays(cnpja.cnaes_secundarios || [], mergeArrays(opencnpj.cnaes_secundarios || [], brasil.cnaes_secundarios || []));
 
   return merged;
 }
@@ -442,6 +442,11 @@ router.get('/:cnpj', async (req: Request, res: Response) => {
   results.push(brasilResult);
   const brasilQsaCount = normalizeBrasilApi(brasilResult.data).qsa?.length || 0;
   console.log(`[CNPJ] BrasilAPI ${raw}: ${brasilResult.ok ? `OK (${brasilQsaCount} sócio(s))` : brasilResult.error || brasilResult.status}`);
+
+  const cnpjaResult = await fetchJson('cnpja_open', `https://open.cnpja.com/office/${raw}`);
+  results.push(cnpjaResult);
+  const cnpjaQsaCount = normalizeCnpja(cnpjaResult.data).qsa?.length || 0;
+  console.log(`[CNPJ] CNPJá Open ${raw}: ${cnpjaResult.ok ? `OK (${cnpjaQsaCount} sócio(s))` : cnpjaResult.error || cnpjaResult.status}`);
 
   if (ENABLE_OPENCNPJ) {
     const openResult = await fetchJson('opencnpj', `${OPENCNPJ_BASE_URL}/${raw}`);
