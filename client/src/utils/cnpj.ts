@@ -128,12 +128,12 @@ export interface CNPJData {
   [key: string]: unknown;
 }
 
-// ─── API de consulta via backend ───────────────────────────────────────────
+// ─── API de pré-preenchimento via backend ──────────────────────────────────
 
 /**
- * Consulta dados de CNPJ através do endpoint `/api/cnpj/:cnpj` do backend.
- * Esse proxy evita expor a chamada externa no frontend e permite cachear.
- * Lança erro para códigos de status 400 e 404 ou quando a chamada falha.
+ * Busca dados de CNPJ para pré-preencher formulários.
+ * Esta função NÃO é a sincronização final do cadastro.
+ * A gravação/atualização persistente deve passar por `/api/empresas/:id/sincronizar-receita`.
  */
 export async function fetchCNPJData(cnpj: string): Promise<CNPJData> {
   const clean = cleanDigits(cnpj);

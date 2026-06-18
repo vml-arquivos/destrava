@@ -815,11 +815,11 @@ export default function Empresas() {
     } catch { toast.error("Erro."); }
   }
 
-  // ── Sincronizar dados via CNPJ (atualiza empresa com dados frescos da Receita) ──
+  // ── Atualizar cadastro via CNPJ/Receita (busca, decide fonte confiável, salva no banco e atualiza a tela) ──
   async function sincronizarDados(empresa: Empresa, opts: { silencioso?: boolean } = {}) {
     if (!empresa.cnpj || sincronizando) return;
     setSincronizando(true);
-    if (!opts.silencioso) toast.loading("Sincronizando Receita Federal e salvando no cadastro...", { id: "sync" });
+    if (!opts.silencioso) toast.loading("Atualizando cadastro com dados da Receita e salvando no banco...", { id: "sync" });
     try {
       const result = await apiFetch(`/api/empresas/${empresa.id}/sincronizar-receita`, {
         method: "POST",
@@ -843,13 +843,13 @@ export default function Empresas() {
         const cidadeUf = [atualizada?.cidade, atualizada?.estado].filter(Boolean).join(" / ");
         toast.success(
           cidadeUf
-            ? `Receita sincronizada e salva: ${cidadeUf}.`
-            : (result?.message || "Receita sincronizada e salva no cadastro."),
+            ? `Cadastro atualizado e salvo: ${cidadeUf}.`
+            : (result?.message || "Cadastro atualizado e salvo com dados da Receita."),
           { id: "sync" }
         );
       }
     } catch (err: any) {
-      const msg = mensagemErroApi(err, "Erro ao sincronizar Receita Federal.");
+      const msg = mensagemErroApi(err, "Erro ao atualizar e salvar cadastro pela Receita Federal.");
       if (!opts.silencioso) toast.error(msg, { id: "sync" });
       else console.error('[auto-sync empresa]', msg, err);
     } finally {
@@ -933,13 +933,32 @@ export default function Empresas() {
         toast.success("Empresa atualizada!");
       } else {
         const criada = await apiFetch("/api/empresas", { method: "POST", body: JSON.stringify(payload) });
-        if (criada?.id && socios.length > 0) {
-          await apiFetch(`/api/empresas/${criada.id}/socios/bulk`, {
+        let empresaFinal = criada;
+        let sociosFinal = socios as any[];
+
+        // Criar empresa não pode ficar apenas no pré-preenchimento/consulta.
+        // Depois de criar o registro, a rota oficial atualiza e salva o cadastro no banco.
+        if (criada?.id) {
+          const sync = await apiFetch(`/api/empresas/${criada.id}/sincronizar-receita`, {
             method: "POST",
-            body: JSON.stringify({ socios: normalizarSociosReceita(socios as any[]), replace: true }),
+            body: JSON.stringify({ cnpj: payload.cnpj }),
+          }).catch((err) => {
+            console.warn('[Empresas] Empresa criada, mas atualização cadastral Receita falhou:', err);
+            return null;
+          });
+          if (sync?.success && sync?.empresa) {
+            empresaFinal = sync.empresa;
+            if (Array.isArray(sync.socios_receita) && sync.socios_receita.length > 0) sociosFinal = sync.socios_receita;
+          }
+        }
+
+        if (empresaFinal?.id && sociosFinal.length > 0) {
+          await apiFetch(`/api/empresas/${empresaFinal.id}/socios/bulk`, {
+            method: "POST",
+            body: JSON.stringify({ socios: normalizarSociosReceita(sociosFinal as any[]), replace: true }),
           }).catch(() => null);
         }
-        toast.success("Empresa cadastrada!");
+        toast.success("Empresa cadastrada e cadastro atualizado pela Receita.");
       }
       fecharModal(); carregarEmpresas();
     } catch (err: any) { toast.error(err?.message || "Erro ao salvar."); }
@@ -1289,10 +1308,10 @@ export default function Empresas() {
                                 onClick={() => sincronizarDados(selecionada)}
                                 disabled={sincronizando}
                                 className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50"
-                                title="Atualizar dados da Receita Federal"
+                                title="Atualizar e salvar cadastro pela Receita Federal"
                               >
                                 <RotateCw className={`w-3.5 h-3.5 ${sincronizando ? "animate-spin" : ""}`} />
-                                <span className="hidden md:inline">{sincronizando ? "Sincronizando..." : "Sincronizar"}</span>
+                                <span className="hidden md:inline">{sincronizando ? "Atualizando..." : "Atualizar cadastro"}</span>
                               </button>
                             )}
                             <button
@@ -1460,7 +1479,7 @@ export default function Empresas() {
                         {/* Receita Federal / Junta Comercial */}
                         <SectionCard title="Receita Federal e Junta Comercial" icon={<Briefcase className="w-4 h-4" />}>
                           <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 flex flex-col gap-1">
-                            <div><b>Sincronização:</b> dados cadastrais atualizados pela Receita Federal.</div>
+                            <div><b>Atualização cadastral:</b> busca dados nas fontes confiáveis, salva no banco e atualiza a tela.</div>
                             <div><b>Última atualização:</b> {selecionada.ultima_sincronizacao_receita ? new Date(selecionada.ultima_sincronizacao_receita).toLocaleString('pt-BR') : 'Não sincronizada'}</div>
                           </div>
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 py-2">
@@ -1489,7 +1508,7 @@ export default function Empresas() {
                             className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 text-white py-2.5 text-sm font-bold hover:bg-blue-700 disabled:opacity-50"
                           >
                             <RotateCw className={`w-4 h-4 ${sincronizando ? "animate-spin" : ""}`} />
-                            Atualizar dados da Receita Federal
+                            Atualizar e salvar cadastro pela Receita Federal
                           </button>
                         </SectionCard>
 
@@ -1508,7 +1527,7 @@ export default function Empresas() {
                                     onClick={() => sincronizarDados(selecionada)}
                                     disabled={sincronizando}
                                     className="p-1 rounded hover:bg-emerald-100 text-emerald-600 transition-colors disabled:opacity-40"
-                                    title="Sincronizar dados com a Receita Federal"
+                                    title="Atualizar e salvar cadastro pela Receita Federal"
                                   >
                                     <RotateCw className={`w-3.5 h-3.5 ${sincronizando ? "animate-spin" : ""}`} />
                                   </button>
@@ -1845,7 +1864,7 @@ export default function Empresas() {
                         </div>
 
                         <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 leading-relaxed">
-                          Dados sincronizados com a Receita Federal. Complete manualmente as informações pendentes quando necessário.
+                          Cadastro atualizado e salvo com dados da Receita/fontes confiáveis. Complete manualmente apenas o que não vier das fontes.
                         </div>
 
                         {sociosExibicao.length === 0 ? (
@@ -2402,9 +2421,9 @@ export default function Empresas() {
                       className="flex-1 bg-transparent font-mono text-xl font-bold tracking-widest text-slate-900 focus:outline-none placeholder:text-slate-300 placeholder:text-base placeholder:tracking-wide"
                     />
                   </div>
-                  {cnpjStatus === "loading" && <p className="text-xs text-slate-400 mt-2 text-center">🔎 Consultando Receita Federal...</p>}
+                  {cnpjStatus === "loading" && <p className="text-xs text-slate-400 mt-2 text-center">🔎 Buscando dados para atualizar o cadastro...</p>}
                   {cnpjError && <p className="text-xs text-red-500 font-medium mt-2 text-center">{cnpjError}</p>}
-                  {cnpjStatus === "found" && <p className="text-xs text-emerald-600 font-medium mt-2 text-center">✓ Dados carregados com sucesso!</p>}
+                  {cnpjStatus === "found" && <p className="text-xs text-emerald-600 font-medium mt-2 text-center">✓ Dados carregados para preenchimento. Ao salvar, o cadastro será atualizado no banco.</p>}
                 </div>
                 <p className="text-xs text-amber-600 text-center max-w-xs">
                   O CNPJ é obrigatório. Empresas sem CNPJ válido ficam bloqueadas em Dados Incompletos e não entram nas telas operacionais.

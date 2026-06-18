@@ -418,6 +418,20 @@ export default function CadastroEmpresa() {
         }
       }
 
+      // Esta etapa garante que o cadastro não fique apenas com dados de consulta/pré-preenchimento.
+      // Após criar e anexar documentos, a rota oficial busca a melhor fonte disponível e salva no banco.
+      try {
+        const sync = await apiFetch(`/api/empresas/${empresa.id}/sincronizar-receita`, {
+          method: 'POST',
+          body: JSON.stringify({ cnpj: form.cnpj }),
+        });
+        if (!sync?.success) {
+          console.warn('[CadastroEmpresa] Atualização cadastral Receita não confirmou sucesso:', sync);
+        }
+      } catch (syncErr) {
+        console.error('[CadastroEmpresa] Empresa salva, mas falhou atualização cadastral Receita:', syncErr);
+      }
+
       if (failedUploads.length > 0) {
         alert(`Empresa cadastrada, mas ${failedUploads.length} documento(s) não foram enviados. Você poderá anexar depois na aba Documentos.`);
       }

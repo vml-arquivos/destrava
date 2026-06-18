@@ -4324,7 +4324,7 @@ async function startServer() {
       await registrarHistoricoEmpresaSeguro(
         req.params.id,
         "sincronizacao_receita_automatica",
-        `Dados cadastrais sincronizados. Fonte final: ${fonteFinal}. Documentos preservados.`,
+        `Cadastro atualizado e salvo automaticamente. Fonte final: ${fonteFinal}. Documentos preservados.`,
         (req as any).colaborador?.nome || "Sistema"
       ).catch(() => null);
 
@@ -4337,13 +4337,13 @@ async function startServer() {
         cartao_oficial_usado: !!cartaoOficial,
         socios_receita: Array.isArray(data?.qsa) ? data.qsa : [],
         message: cartaoOficial
-          ? "Empresa sincronizada e salva usando Cartão CNPJ oficial anexado como fonte prioritária."
-          : "Empresa sincronizada e salva usando APIs gratuitas de CNPJ.",
+          ? "Cadastro atualizado e salvo usando Cartão CNPJ oficial anexado como fonte prioritária."
+          : "Cadastro atualizado e salvo usando APIs gratuitas de CNPJ.",
       });
     } catch (err: any) {
       const details = pgErrorDetails(err);
       console.error("[POST /api/empresas/:id/sincronizar-receita]", details);
-      res.status(500).json({ error: details.message || err?.message || "Erro ao sincronizar Receita Federal", details });
+      res.status(500).json({ error: details.message || err?.message || "Erro ao atualizar e salvar cadastro pela Receita Federal", details });
     }
   });
 
