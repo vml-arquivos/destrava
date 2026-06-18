@@ -4228,8 +4228,10 @@ async function startServer() {
     setIfColumn("numero", cleanTextEmpresa(data?.numero) || empresaAtual?.numero || null);
     setIfColumn("complemento", cleanTextEmpresa(data?.complemento) || empresaAtual?.complemento || null);
     setIfColumn("bairro", cleanTextEmpresa(data?.bairro) || empresaAtual?.bairro || null);
+    const ufSincronizada = cleanTextEmpresa(data?.uf) || empresaAtual?.estado || empresaAtual?.uf || null;
     setIfColumn("cidade", cleanTextEmpresa(data?.municipio) || empresaAtual?.cidade || null);
-    setIfColumn("estado", cleanTextEmpresa(data?.uf) || empresaAtual?.estado || null);
+    setIfColumn("estado", ufSincronizada);
+    setIfColumn("uf", ufSincronizada);
     setIfColumn("porte", porteBrasilApi(data) || empresaAtual?.porte || null);
     setIfColumn("segmento", cleanTextEmpresa(data?.cnae_fiscal_descricao) || empresaAtual?.segmento || null);
     setIfColumn("natureza_juridica", cleanTextEmpresa(data?.natureza_juridica) || empresaAtual?.natureza_juridica || null);
@@ -10017,7 +10019,7 @@ async function registrarDocumentoContratoGerado(params: {
     if (payload.tipo_cliente === "empresa" && payload.empresa_id) {
       const { rows } = await pool.query(
         `SELECT id, razao_social, nome_fantasia, cnpj, email, telefone, whatsapp,
-                logradouro, numero, complemento, bairro, cidade, estado, uf, cep,
+                logradouro, numero, complemento, bairro, cidade, estado, estado AS uf, cep,
                 responsavel_nome, responsavel_cpf
            FROM empresas
           WHERE id = $1
