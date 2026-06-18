@@ -16,7 +16,7 @@ import {
   MessageSquare, History, Bell, Send, PlusCircle,
   Building, CreditCard, Hash, Calendar, Users, Briefcase,
   ArrowLeft, MoreVertical, ExternalLink, Copy, CheckCheck,
-  BarChart3, Banknote, AlertCircle, Info, RotateCw, Zap,
+  BarChart3, Banknote, AlertCircle, Info, RotateCw, Zap, FileDown,
 } from "lucide-react";
 import { EmptyState, LoadingState, ErrorState } from "@/components/ui/states";
 import { RiscoBadge, ScoreIndicator, StatusCadastroBadge } from "@/components/ui/risco-badge";
@@ -959,6 +959,29 @@ export default function Empresas() {
     }
   }
 
+  async function exportarRelatorio(formato: 'csv' | 'json' = 'csv') {
+    try {
+      const params = new URLSearchParams({ formato });
+      if (filtroStatus && filtroStatus !== 'todos') params.set('status', filtroStatus);
+      if (filtroPorte && filtroPorte !== 'todos') params.set('porte', filtroPorte);
+      if (busca && busca.trim()) params.set('busca', busca.trim());
+      const url = `/api/empresas/relatorio?${params.toString()}`;
+      if (formato === 'csv') {
+        const token = localStorage.getItem('destrava_token') || localStorage.getItem('token') || '';
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) throw new Error('Erro ao gerar relatório');
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `relatorio-empresas-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        toast.success('Relatório exportado com sucesso!');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao exportar relatório.');
+    }
+  }
   async function buscarCEP(cep: string) {
     const n = cep.replace(/\D/g, "");
     if (n.length !== 8) return;
@@ -992,6 +1015,27 @@ export default function Empresas() {
         .slide-up { animation: slideUp 0.25s ease forwards; }
         @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
         .fade-in { animation: fadeIn 0.2s ease forwards; }
+        /* ── Responsividade mobile ── */
+        @media (max-width: 639px) {
+          .emp-detail-header { flex-direction: column; gap: 8px; }
+          .emp-action-btns { flex-wrap: wrap; gap: 4px; }
+          .emp-action-btns button { font-size: 10px; padding: 4px 8px; }
+          .emp-tiles-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          .emp-info-grid { grid-template-columns: 1fr !important; }
+        }
+        /* ── Desktop wide ── */
+        @media (min-width: 1280px) {
+          .emp-tiles-grid { grid-template-columns: repeat(4, 1fr) !important; }
+        }
+        /* ── Tablet ── */
+        @media (min-width: 640px) and (max-width: 1023px) {
+          .emp-tiles-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+        /* ── Melhorias gerais ── */
+        .emp-list-item { transition: background-color 0.15s ease, transform 0.1s ease; }
+        .emp-list-item:hover { transform: translateX(1px); }
+        .emp-badge { white-space: nowrap; }
+        .emp-tab-btn { transition: all 0.15s ease; }
       `}</style>
 
       <div className="emp-page h-full min-h-0 overflow-hidden bg-[#f8f9fc]">
@@ -1001,7 +1045,7 @@ export default function Empresas() {
           <div className="flex gap-4 items-stretch h-full min-h-0">
 
             {/* ── COLUNA ESQUERDA: Lista ── */}
-            <div className={`flex-shrink-0 w-full sm:w-[280px] lg:w-[300px] xl:w-[320px] h-full min-h-0 overflow-hidden ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
+            <div className={`flex-shrink-0 w-full sm:w-[260px] md:w-[280px] lg:w-[300px] xl:w-[320px] h-full min-h-0 overflow-hidden ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
               <div className="mb-2 rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -1010,13 +1054,23 @@ export default function Empresas() {
                       {loading ? "Carregando..." : `${empresas.length} cadastrada${empresas.length !== 1 ? "s" : ""}`}
                     </p>
                   </div>
-                  <button
-                    onClick={abrirNova}
-                    className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl font-bold text-xs transition-colors shadow-sm shadow-blue-200 shrink-0"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Nova
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => exportarRelatorio('csv')}
+                      className="inline-flex items-center gap-1 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 px-2.5 py-2 rounded-xl font-bold text-xs transition-colors shrink-0"
+                      title="Exportar relatório CSV"
+                    >
+                      <FileDown className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">CSV</span>
+                    </button>
+                    <button
+                      onClick={abrirNova}
+                      className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl font-bold text-xs transition-colors shadow-sm shadow-blue-200 shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Nova
+                    </button>
+                  </div>
                 </div>
               </div>
               {/* Filtros */}
@@ -1212,7 +1266,7 @@ export default function Empresas() {
                                 </span>
                               )}
                             </div>
-                            <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-1.5 max-w-[820px]">
+                            <div className="emp-info-grid mt-2 grid grid-cols-1 sm:grid-cols-3 gap-1.5 max-w-[820px]">
                               <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5">
                                 <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">CNPJ</p>
                                 <p className="text-xs font-bold text-slate-700 mt-0.5 truncate">{selecionada.cnpj || "Não informado"}</p>
@@ -1228,7 +1282,7 @@ export default function Empresas() {
                             </div>
                           </div>
                           {/* Ações */}
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="emp-action-btns flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                             {/* Botão Sincronizar — só aparece se tem CNPJ */}
                             {selecionada.cnpj && (
                               <button
@@ -1392,7 +1446,7 @@ export default function Empresas() {
                       <div className="p-4 space-y-3 fade-in">
 
                         {/* Painel executivo ampliado para análise de crédito */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                        <div className="emp-tiles-grid grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
                           <InfoTile label="Capital Social" value={normalizarCapitalSocial(selecionada.capital_social)} icon={<Banknote className="w-3.5 h-3.5" />} tone="emerald" />
                           <InfoTile label="Natureza Jurídica" value={selecionada.natureza_juridica || "Não informado"} icon={<Briefcase className="w-3.5 h-3.5" />} tone="blue" />
                           <InfoTile label="CNAE Principal" value={selecionada.cnae_principal || selecionada.segmento || "Não informado"} icon={<Tag className="w-3.5 h-3.5" />} tone="violet" />

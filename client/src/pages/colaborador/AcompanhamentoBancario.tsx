@@ -1734,30 +1734,30 @@ export default function AcompanhamentoBancario() {
   const renderActionButtons = (row: Acompanhamento) => {
     const whats = whatsappUrl(row);
     return (
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         <button
-          className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50"
+          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
           onClick={() => carregarDetalhe(row.id)}
         >Detalhes</button>
         <button
-          className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
           onClick={() => abrirEditarAcompanhamento(row)}
         >Editar</button>
         <button
-          className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
+          className="rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
           disabled={saving}
           onClick={() => sincronizarCadastroEmpresa(row)}
           title="Puxa para este acompanhamento os mesmos dados cadastrais já atualizados no módulo Empresas"
         >Atualizar cadastro</button>
         <button
-          className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+          className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
           onClick={() => abrirAtualizacao(row)}
         >Atualizar semana</button>
         <button
-          className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
+          className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
           onClick={() => adicionarOutroBanco(row)}
           title="Criar acompanhamento separado para outro banco da mesma empresa"
-        >+ Outro banco</button>
+        >+ Banco</button>
         {whats && (
           <a
             className="rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 transition hover:bg-green-100"
@@ -1823,25 +1823,24 @@ export default function AcompanhamentoBancario() {
   // ─── Render principal ─────────────────────────────────────────────────────────
   return (
     <ColaboradorLayout title="Acompanhamento Bancário">
-      <div className="w-full space-y-4 overflow-x-hidden p-4 md:p-6">
+      <div className="w-full space-y-3 overflow-x-hidden p-3 md:p-4">
 
         {/* Header */}
-        <div className="flex flex-col items-start justify-between gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm md:flex-row">
+        <div className="flex flex-col items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-center">
           <div>
-            <h1 className="text-2xl font-bold">Acompanhamento Bancário</h1>
-            <p className="mt-1 max-w-3xl text-sm text-gray-600">
-              Monitoramento semanal de empresas em relacionamento bancário para
-              evolução de rating, movimentação e preparação para crédito.
+            <h1 className="text-lg font-black text-slate-900 tracking-tight">Acompanhamento Bancário</h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Monitoramento semanal · evolução de rating · preparação para crédito
             </p>
           </div>
           <button
-            className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200 shrink-0"
             onClick={() => {
               setEditandoId(null);
               setNovo({ nome_empresa: "", banco_observado: "", data_inicio: hojeISO() });
               setNovoOpen(true);
             }}
-          >Novo Acompanhamento</button>
+          >+ Novo Acompanhamento</button>
         </div>
 
         {/* Alertas */}
@@ -1857,41 +1856,41 @@ export default function AcompanhamentoBancario() {
         )}
 
         {/* Cards resumo */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
           {(
             [
-              ["Em acompanhamento", resumo.acompanhamento],
-              ["Atualizações pendentes", resumo.pendentes],
-              ["Semanas positivas", resumo.positivas],
-              ["Semanas negativas", resumo.negativas],
-              ["Prontos para análise", resumo.prontos],
-              ["Prorrogados", resumo.prorrogados],
-            ] as [string, number][]
-          ).map(([label, value]) => (
-            <div key={label} className="rounded-lg border border-gray-200 bg-white p-3">
-              <div className="text-xs text-gray-500">{label}</div>
-              <div className="mt-1 text-2xl font-bold">{value}</div>
+              { label: "Ativos", value: resumo.acompanhamento, color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-100" },
+              { label: "Pendentes", value: resumo.pendentes, color: "text-orange-700", bg: "bg-orange-50", border: "border-orange-100" },
+              { label: "Positivas", value: resumo.positivas, color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-100" },
+              { label: "Negativas", value: resumo.negativas, color: "text-red-700", bg: "bg-red-50", border: "border-red-100" },
+              { label: "Prontos", value: resumo.prontos, color: "text-violet-700", bg: "bg-violet-50", border: "border-violet-100" },
+              { label: "Prorrogados", value: resumo.prorrogados, color: "text-slate-700", bg: "bg-slate-50", border: "border-slate-200" },
+            ]
+          ).map(({ label, value, color, bg, border }) => (
+            <div key={label} className={`rounded-xl border ${border} ${bg} px-3 py-2.5`}>
+              <div className="text-[9px] font-bold uppercase tracking-wide text-slate-500">{label}</div>
+              <div className={`mt-0.5 text-xl font-black ${color}`}>{value}</div>
             </div>
           ))}
         </div>
 
         {/* Filtros */}
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+          <div className="flex flex-wrap gap-2 items-center">
             <input
-              className="rounded border border-gray-300 p-2 text-sm"
-              placeholder="Buscar empresa/CNPJ"
+              className="h-8 rounded-lg border border-slate-200 px-3 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-48"
+              placeholder="Buscar empresa/CNPJ..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
             <input
-              className="rounded border border-gray-300 p-2 text-sm"
-              placeholder="Banco observado"
+              className="h-8 rounded-lg border border-slate-200 px-3 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-36"
+              placeholder="Banco..."
               value={banco}
               onChange={(e) => setBanco(e.target.value)}
             />
             <select
-              className="rounded border border-gray-300 p-2 text-sm"
+              className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={statusFiltro}
               onChange={(e) => setStatusFiltro(e.target.value)}
             >
@@ -1901,28 +1900,29 @@ export default function AcompanhamentoBancario() {
               <option value="encerrado">Encerrado</option>
               <option value="pronto_credito">Pronto para crédito</option>
             </select>
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
               <input
                 type="checkbox"
+                className="rounded"
                 checked={pendentes}
                 onChange={(e) => setPendentes(e.target.checked)}
               />
               Apenas pendentes
             </label>
             <button
-              className="rounded border border-gray-300 px-3 py-2 text-sm"
+              className="h-8 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
               onClick={fetchData}
-            >Aplicar filtros</button>
+            >Filtrar</button>
           </div>
         </div>
 
         {/* Tabela */}
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-4 py-3">
-            <h2 className="text-sm font-semibold text-gray-900">Acompanhamentos cadastrados</h2>
-            <p className="mt-1 text-xs text-gray-500">
-              As ações ficam abaixo de cada registro para manter a planilha alinhada e legível.
-            </p>
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-4 py-2.5 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Acompanhamentos cadastrados</h2>
+              <p className="text-[10px] text-slate-400">{filtered.length} registro(s) · ações disponíveis em cada linha</p>
+            </div>
           </div>
 
           {/* Desktop */}

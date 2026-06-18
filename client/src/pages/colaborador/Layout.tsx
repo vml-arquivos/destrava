@@ -23,6 +23,7 @@ import {
   Activity,
   BarChart2,
   DatabaseZap,
+  BarChart3,
 } from "lucide-react";
 
 interface NavItem {
@@ -44,6 +45,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { href: "/colaborador/triagem",     label: "Triagem",            icon: ShieldAlert },
   { href: "/colaborador/clientes",    label: "Clientes",           icon: Users },
   { href: "/colaborador/empresas",    label: "Empresas",           icon: Building2 },
+  { href: "/colaborador/relatorio-empresas", label: "Relatório Empresas", icon: BarChart3 },
   { href: "/colaborador/cadastros-incompletos", label: "Cadastros Incompletos", icon: DatabaseZap },
   { href: "/colaborador/acompanhamento-bancario",    label: "Acomp. Bancário",   icon: Activity },
   { href: "/colaborador/acompanhamento-financeiro",  label: "Acomp. Financeiro", icon: BarChart2 },

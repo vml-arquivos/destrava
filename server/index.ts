@@ -4100,20 +4100,77 @@ async function startServer() {
     if (brasil?.ok) porFonte.brasilapi = brasil.data;
     if (open?.ok) porFonte.opencnpj = open.data;
     if (cnpja?.ok) porFonte.cnpja_open = cnpja.data;
-
     const brasilNorm = brasil?.ok ? brasil.data : null;
     const openNorm = open?.ok ? normalizarOpenCnpjEmpresa(open.data) : null;
     const cnpjaNorm = cnpja?.ok ? normalizarCnpjaOpenEmpresa(cnpja.data) : null;
-
-    // Para evitar dados defasados da BrasilAPI, priorize fontes alternativas gratuitas quando elas trouxerem endereço/CNAE completos.
-    const data = cnpjaNorm?.municipio || cnpjaNorm?.cnae_fiscal ? cnpjaNorm : (openNorm?.municipio || openNorm?.cnae_fiscal ? openNorm : brasilNorm);
+    // ── Estratégia de fontes confiáveis ──────────────────────────────────────
+    // Prioridade: Cartão CNPJ oficial (tratado em sincronizar-receita) >
+    //   CNPJá Open > OpenCNPJ > BrasilAPI (mais sujeita a cache).
+    // Para cada campo, usa o primeiro valor não-vazio na ordem de prioridade.
+    // QSA/sócios: usa a fonte com maior número de sócios (geralmente BrasilAPI).
+    // CNAEs secundários: usa a fonte com maior lista.
+    function primeiroValorConfiavel(...vals: any[]): any {
+      for (const v of vals) {
+        if (v === undefined || v === null) continue;
+        if (typeof v === 'string' && v.trim() === '') continue;
+        if (Array.isArray(v) && v.length === 0) continue;
+        return v;
+      }
+      return null;
+    }
+    // Campos de endereço: prioridade cnpja > opencnpj > brasilapi
+    const camposEndereco = ['municipio', 'logradouro', 'numero', 'complemento', 'bairro', 'cep', 'uf'];
+    // Campos cadastrais: prioridade cnpja > opencnpj > brasilapi
+    const camposCadastro = [
+      'razao_social', 'nome_fantasia', 'email', 'telefone',
+      'cnae_fiscal', 'cnae_fiscal_descricao', 'natureza_juridica', 'porte',
+      'capital_social', 'data_inicio_atividade', 'descricao_situacao_cadastral',
+      'data_situacao_cadastral', 'identificador_matriz_filial',
+    ];
+    const merged: any = { cnpj };
+    // Campos de endereço e cadastro com prioridade explícita
+    for (const campo of [...camposEndereco, ...camposCadastro]) {
+      merged[campo] = primeiroValorConfiavel(cnpjaNorm?.[campo], openNorm?.[campo], brasilNorm?.[campo]);
+    }
+    // QSA/sócios: usa a fonte com mais sócios (BrasilAPI costuma ser mais completa)
+    const qsaBrasil = Array.isArray(brasilNorm?.qsa) ? brasilNorm.qsa : [];
+    const qsaCnpja = Array.isArray(cnpjaNorm?.qsa) ? cnpjaNorm.qsa : [];
+    const qsaOpen = Array.isArray(openNorm?.qsa) ? openNorm.qsa : [];
+    merged.qsa = qsaBrasil.length >= qsaCnpja.length && qsaBrasil.length >= qsaOpen.length
+      ? qsaBrasil
+      : qsaCnpja.length >= qsaOpen.length ? qsaCnpja : qsaOpen;
+    // CNAEs secundários: usa a fonte com mais CNAEs
+    const cnaeBrasil = Array.isArray(brasilNorm?.cnaes_secundarios) ? brasilNorm.cnaes_secundarios : [];
+    const cnaeCnpja = Array.isArray(cnpjaNorm?.cnaes_secundarios) ? cnpjaNorm.cnaes_secundarios : [];
+    const cnaeOpen = Array.isArray(openNorm?.cnaes_secundarios) ? openNorm.cnaes_secundarios : [];
+    merged.cnaes_secundarios = cnaeBrasil.length >= cnaeCnpja.length && cnaeBrasil.length >= cnaeOpen.length
+      ? cnaeBrasil
+      : cnaeCnpja.length >= cnaeOpen.length ? cnaeCnpja : cnaeOpen;
+    // Campos extras não cobertos acima
+    const todosOsCampos = new Set([
+      ...Object.keys(brasilNorm || {}),
+      ...Object.keys(openNorm || {}),
+      ...Object.keys(cnpjaNorm || {}),
+    ]);
+    for (const campo of todosOsCampos) {
+      if (!(campo in merged)) {
+        merged[campo] = primeiroValorConfiavel(cnpjaNorm?.[campo], openNorm?.[campo], brasilNorm?.[campo]);
+      }
+    }
+    // Fonte final: determinada pela melhor cobertura de endereço
+    const fonteFinalNome = (cnpjaNorm?.municipio && String(cnpjaNorm.municipio).trim())
+      ? 'cnpja_open'
+      : (openNorm?.municipio && String(openNorm.municipio).trim())
+        ? 'opencnpj'
+        : 'brasilapi';
+    merged._fonte_final = fonteFinalNome;
+    merged._fontes_disponiveis = consultas.filter((c) => c.ok).map((c) => c.nome);
     return {
-      data,
+      data: merged,
       fontes: consultas.map(({ nome, ok, status, error }) => ({ nome, ok, status, error })),
       porFonte,
     };
   }
-
   function mesclarReceitaComCartao(apiData: any, cartaoData: any | null): any {
     if (!cartaoData) return apiData;
     return {
@@ -4287,6 +4344,108 @@ async function startServer() {
       const details = pgErrorDetails(err);
       console.error("[POST /api/empresas/:id/sincronizar-receita]", details);
       res.status(500).json({ error: details.message || err?.message || "Erro ao sincronizar Receita Federal", details });
+    }
+  });
+
+  // ─── RELATÓRIO CSV / JSON DE EMPRESAS ──────────────────────────────────────
+  app.get("/api/empresas/relatorio", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const isGestor = isGestorCargo(colaborador?.cargo || '');
+      const formato = (req.query.formato as string || 'json').toLowerCase();
+      const status = req.query.status as string | undefined;
+      const porte = req.query.porte as string | undefined;
+      const estado = req.query.estado as string | undefined;
+      const cidade = req.query.cidade as string | undefined;
+      const busca = req.query.busca as string | undefined;
+      const params: any[] = [];
+      const conditions: string[] = [];
+      if (!isGestor && colaborador?.id) {
+        params.push(colaborador.id);
+        conditions.push(`(e.responsavel_id = $${params.length} OR e.analista_id = $${params.length})`);
+      }
+      if (status && status !== 'todos') {
+        params.push(status);
+        conditions.push(`e.status = $${params.length}`);
+      }
+      if (porte && porte !== 'todos') {
+        params.push(porte);
+        conditions.push(`e.porte = $${params.length}`);
+      }
+      if (estado && estado.trim()) {
+        params.push(estado.trim().toUpperCase());
+        conditions.push(`UPPER(e.estado) = $${params.length}`);
+      }
+      if (cidade && cidade.trim()) {
+        params.push(`%${cidade.trim()}%`);
+        conditions.push(`e.cidade ILIKE $${params.length}`);
+      }
+      if (busca && busca.trim()) {
+        const term = `%${busca.trim()}%`;
+        params.push(term);
+        const idx2 = params.length;
+        conditions.push(`(e.razao_social ILIKE $${idx2} OR e.nome_fantasia ILIKE $${idx2} OR e.cnpj ILIKE $${idx2})`);
+      }
+      conditions.push(`COALESCE(e.status, 'ativo') NOT IN ('arquivado','removido','excluido','cancelado')`);
+      conditions.push(`COALESCE(e.arquivado_por_duplicidade, false) = false`);
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const { rows } = await pool.query(
+        `SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.status, e.porte,
+                e.cidade, e.estado, e.email, e.telefone, e.responsavel_nome,
+                e.faturamento_anual, e.capital_social, e.natureza_juridica,
+                e.cnae_principal, e.segmento, e.data_abertura, e.situacao_cadastral,
+                e.score_serasa, e.score_spc, e.limite_credito_atual,
+                e.ultima_sincronizacao_receita, e.created_at, e.updated_at,
+                cap.nome AS captador_nome, ana.nome AS analista_nome
+         FROM empresas e
+         LEFT JOIN colaboradores cap ON cap.id = e.captador_id
+         LEFT JOIN colaboradores ana ON ana.id = e.analista_id
+         ${where} ORDER BY e.razao_social ASC`,
+        params
+      );
+      if (formato === 'csv') {
+        const cabecalho = [
+          'ID', 'Razão Social', 'Nome Fantasia', 'CNPJ', 'Status', 'Porte',
+          'Cidade', 'Estado', 'E-mail', 'Telefone', 'Responsável',
+          'Faturamento Anual', 'Capital Social', 'Natureza Jurídica',
+          'CNAE Principal', 'Segmento', 'Data Abertura', 'Situação Cadastral',
+          'Score Serasa', 'Score SPC', 'Limite Crédito Atual',
+          'Última Sincronização', 'Criado em', 'Atualizado em',
+          'Captador', 'Analista',
+        ].join(';');
+        const linhas = rows.map((r: any) => [
+          r.id, r.razao_social || '', r.nome_fantasia || '', r.cnpj || '',
+          r.status || '', r.porte || '', r.cidade || '', r.estado || '',
+          r.email || '', r.telefone || '', r.responsavel_nome || '',
+          r.faturamento_anual != null ? String(r.faturamento_anual).replace('.', ',') : '',
+          r.capital_social != null ? String(r.capital_social).replace('.', ',') : '',
+          r.natureza_juridica || '', r.cnae_principal || '', r.segmento || '',
+          r.data_abertura ? String(r.data_abertura).slice(0, 10) : '',
+          r.situacao_cadastral || '',
+          r.score_serasa != null ? String(r.score_serasa) : '',
+          r.score_spc != null ? String(r.score_spc) : '',
+          r.limite_credito_atual != null ? String(r.limite_credito_atual).replace('.', ',') : '',
+          r.ultima_sincronizacao_receita ? String(r.ultima_sincronizacao_receita).slice(0, 19) : '',
+          r.created_at ? String(r.created_at).slice(0, 19) : '',
+          r.updated_at ? String(r.updated_at).slice(0, 19) : '',
+          r.captador_nome || '', r.analista_nome || '',
+        ].map((v: any) => `"${String(v).replace(/"/g, '""')}"`).join(';'));
+        const csv = [cabecalho, ...linhas].join('\n');
+        const nomeArquivo = `relatorio-empresas-${new Date().toISOString().slice(0, 10)}.csv`;
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
+        res.send('﻿' + csv); // BOM para Excel reconhecer UTF-8
+        return;
+      }
+      // Formato JSON (padrão)
+      res.json({
+        total: rows.length,
+        gerado_em: new Date().toISOString(),
+        empresas: rows,
+      });
+    } catch (err: any) {
+      console.error('[GET /api/empresas/relatorio]', err);
+      res.status(500).json({ error: 'Erro ao gerar relatório de empresas' });
     }
   });
 
@@ -4486,6 +4645,55 @@ async function startServer() {
         `Empresa cadastrada${payload.origem ? ` via ${payload.origem}` : ""}. Dados principais salvos no cadastro.`,
         colaborador?.nome || "Sistema"
       );
+      // Sincronização automática de Receita Federal após criação com CNPJ válido.
+      // Garante que os dados cadastrais (endereço, CNAE, sócios) sejam sempre atualizados
+      // via APIs confiáveis, sem depender de cache ou dados antigos.
+      const cnpjParaSync = onlyDigitsEmpresa(String(payload.cnpj || ''));
+      if (cnpjParaSync.length === 14) {
+        // Executa em background para não bloquear a resposta ao frontend
+        setImmediate(async () => {
+          try {
+            const consultas = await consultarApisGratuitasCnpj(cnpjParaSync);
+            const cartaoOficial = await obterCartaoOficialEmpresa(empresa.id, cnpjParaSync);
+            const dadosSincronizados = mesclarReceitaComCartao(consultas.data, cartaoOficial);
+            if (dadosSincronizados?.cnpj) {
+              const colsSync = await getTableColumns("empresas");
+              const colTypesSync = await getTableColumnTypes("empresas");
+              const fonteFinalSync = dadosSincronizados?._fonte_final || consultas.fontes.find((f: any) => f.ok)?.nome || 'apis_gratuitas';
+              const payloadSync = montarPayloadEmpresaBrasilApi(dadosSincronizados, empresa, colsSync, {
+                fontesConsulta: consultas.fontes,
+                porFonte: consultas.porFonte,
+                fonteFinal: fonteFinalSync,
+                cartaoOficial,
+              });
+              const keysSync = Object.keys(payloadSync);
+              if (keysSync.length > 0) {
+                const valuesSync = keysSync.map((k) => {
+                  const tipo = String(colTypesSync.get(k) || '').toLowerCase();
+                  const value = payloadSync[k];
+                  if ((tipo === 'jsonb' || tipo === 'json') && typeof value !== 'string') return JSON.stringify(value ?? {});
+                  if ((tipo === '_text' || tipo === 'text[]') && !Array.isArray(value)) return value ? [String(value)] : [];
+                  return value;
+                });
+                const setSync = keysSync.map((k, i) => `"${k}" = $${i + 1}${castSqlForColumn(colTypesSync.get(k))}`).join(', ');
+                await pool.query(
+                  `UPDATE empresas SET ${setSync} WHERE id = $${keysSync.length + 1}`,
+                  [...valuesSync, empresa.id]
+                );
+                await registrarHistoricoEmpresaSeguro(
+                  empresa.id,
+                  "sincronizacao_receita_automatica",
+                  `Dados sincronizados automaticamente após criação. Fonte: ${fonteFinalSync}.`,
+                  colaborador?.nome || "Sistema"
+                ).catch(() => null);
+                console.log(`[POST /api/empresas] Auto-sync OK para ${cnpjParaSync} (fonte: ${fonteFinalSync})`);
+              }
+            }
+          } catch (syncErr: any) {
+            console.warn(`[POST /api/empresas] Auto-sync falhou para ${cnpjParaSync}:`, syncErr?.message || syncErr);
+          }
+        });
+      }
 
       res.status(201).json(empresa);
     } catch (err: any) {
