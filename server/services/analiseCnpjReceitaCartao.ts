@@ -661,20 +661,63 @@ export async function limparAnalisesCnpjEmpresa(empresaId: string): Promise<numb
 }
 
 async function buscarUltimoCartaoCnpj(empresaId: string): Promise<DocCartao | null> {
-  const exists = await tableExists('documentos_arquivos');
-  if (!exists) return null;
-  const { rows } = await pool.query(
-    `SELECT id, nome_original, mime_type, caminho_arquivo, data_emissao_documento, status_validade, resultado_validacao, criado_em
-       FROM public.documentos_arquivos
-      WHERE empresa_id = $1
-        AND tipo_documento = 'cartao_cnpj'
-        AND excluido_em IS NULL
-        AND status <> 'excluido'
-      ORDER BY criado_em DESC
-      LIMIT 1`,
-    [empresaId]
-  );
-  return rows[0] || null;
+  // Fonte principal: acervo documental novo. Aceita sinônimos porque versões
+  // anteriores/classificação IA usavam "cnpj_cartao".
+  const existsCentral = await tableExists('documentos_arquivos');
+  if (existsCentral) {
+    const { rows } = await pool.query(
+      `SELECT id, nome_original, mime_type, caminho_arquivo, data_emissao_documento, status_validade, resultado_validacao, criado_em
+         FROM public.documentos_arquivos
+        WHERE empresa_id = $1
+          AND (tipo_documento IN ('cartao_cnpj','cnpj_cartao')
+               OR lower(COALESCE(nome_original, '')) LIKE '%cartao%cnpj%'
+               OR lower(COALESCE(nome_original, '')) LIKE '%comprovante%inscricao%'
+               OR lower(COALESCE(nome_original, '')) LIKE '%receita%')
+          AND excluido_em IS NULL
+          AND COALESCE(status, 'ativo') <> 'excluido'
+        ORDER BY
+          CASE WHEN tipo_documento IN ('cartao_cnpj','cnpj_cartao') THEN 0 ELSE 1 END,
+          criado_em DESC
+        LIMIT 1`,
+      [empresaId]
+    );
+    if (rows[0]) return rows[0];
+  }
+
+  // Fallback legado: documentos antigos anexados na aba antiga de empresas
+  // ficavam em empresa_documentos e por isso a sincronização não encontrava o
+  // Cartão CNPJ oficial, caindo em APIs cacheadas/desatualizadas.
+  const existsLegacy = await tableExists('empresa_documentos');
+  if (existsLegacy) {
+    const { rows } = await pool.query(
+      `SELECT id,
+              nome AS nome_original,
+              CASE
+                WHEN lower(COALESCE(nome, url, '')) LIKE '%.pdf%' THEN 'application/pdf'
+                WHEN lower(COALESCE(nome, url, '')) LIKE '%.png%' THEN 'image/png'
+                WHEN lower(COALESCE(nome, url, '')) LIKE '%.webp%' THEN 'image/webp'
+                WHEN lower(COALESCE(nome, url, '')) LIKE '%.jpg%' OR lower(COALESCE(nome, url, '')) LIKE '%.jpeg%' THEN 'image/jpeg'
+                ELSE NULL
+              END AS mime_type,
+              url AS caminho_arquivo,
+              NULL::date AS data_emissao_documento,
+              NULL::text AS status_validade,
+              NULL::jsonb AS resultado_validacao,
+              created_at AS criado_em
+         FROM public.empresa_documentos
+        WHERE empresa_id = $1
+          AND (tipo IN ('cartao_cnpj','cnpj_cartao')
+               OR lower(COALESCE(nome, '')) LIKE '%cartao%cnpj%'
+               OR lower(COALESCE(nome, '')) LIKE '%comprovante%inscricao%'
+               OR lower(COALESCE(nome, '')) LIKE '%receita%')
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [empresaId]
+    );
+    if (rows[0]) return rows[0];
+  }
+
+  return null;
 }
 
 

@@ -10201,9 +10201,10 @@ async function registrarDocumentoContratoGerado(params: {
 
   async function listarAnexosOrcamento(id: string) {
     const { rows } = await pool.query(
-      `SELECT id, orcamento_id, tipo, descricao, nome_original, mime_type, tamanho_bytes, url, criado_em
+      `SELECT id, orcamento_id, tipo, descricao, nome_original, mime_type, tamanho_bytes, url, status, criado_em
          FROM orcamentos_timbrados_anexos
         WHERE orcamento_id = $1
+          AND COALESCE(status, 'ativo') <> 'arquivado'
         ORDER BY criado_em DESC`,
       [id]
     );
@@ -10455,7 +10456,7 @@ async function registrarDocumentoContratoGerado(params: {
         );
         salvos.push(rows[0]);
       }
-      await pool.query("UPDATE orcamentos_timbrados SET anexos_count = (SELECT COUNT(*) FROM orcamentos_timbrados_anexos WHERE orcamento_id=$1), pdf_path=NULL WHERE id=$1", [req.params.id]);
+      await pool.query("UPDATE orcamentos_timbrados SET anexos_count = (SELECT COUNT(*) FROM orcamentos_timbrados_anexos WHERE orcamento_id=$1 AND COALESCE(status, 'ativo') <> 'arquivado'), pdf_path=NULL WHERE id=$1", [req.params.id]);
       res.status(201).json({ success: true, anexos: salvos });
     } catch (err: any) {
       console.error("[POST /api/orcamentos/:id/anexos]", err);
@@ -10474,7 +10475,7 @@ async function registrarDocumentoContratoGerado(params: {
 
   app.get("/api/orcamentos/anexos/:hash/download", auth, async (req: Request, res: Response) => {
     try {
-      const { rows } = await pool.query("SELECT * FROM orcamentos_timbrados_anexos WHERE hash_sha256=$1 LIMIT 1", [req.params.hash]);
+      const { rows } = await pool.query("SELECT * FROM orcamentos_timbrados_anexos WHERE hash_sha256=$1 AND COALESCE(status, 'ativo') <> 'arquivado' LIMIT 1", [req.params.hash]);
       const anexo = rows[0];
       if (!anexo || !fs.existsSync(anexo.storage_path)) { res.status(404).json({ error: "Anexo não encontrado" }); return; }
       res.download(anexo.storage_path, anexo.nome_original || "anexo");
@@ -10486,17 +10487,24 @@ async function registrarDocumentoContratoGerado(params: {
 
   app.delete("/api/orcamentos/anexos/:id", auth, async (req: Request, res: Response) => {
     try {
-      const { rows } = await pool.query("DELETE FROM orcamentos_timbrados_anexos WHERE id=$1 RETURNING *", [req.params.id]);
+      // REGRA INQUEBRÁVEL: remover anexo do orçamento arquiva/oculta, não apaga fisicamente.
+      const { rows } = await pool.query(
+        `UPDATE orcamentos_timbrados_anexos
+            SET status='arquivado', arquivado_em=NOW(), arquivado_por=$2
+          WHERE id=$1 AND COALESCE(status, 'ativo') <> 'arquivado'
+          RETURNING *`,
+        [req.params.id, (req as any).colaborador?.id || null]
+      );
       const anexo = rows[0];
       if (!anexo) { res.status(404).json({ error: "Anexo não encontrado" }); return; }
-      if (anexo.storage_path && fs.existsSync(anexo.storage_path)) {
-        try { fs.unlinkSync(anexo.storage_path); } catch {}
-      }
-      await pool.query("UPDATE orcamentos_timbrados SET anexos_count = (SELECT COUNT(*) FROM orcamentos_timbrados_anexos WHERE orcamento_id=$1), pdf_path=NULL WHERE id=$1", [anexo.orcamento_id]);
-      res.json({ success: true });
+      await pool.query(
+        "UPDATE orcamentos_timbrados SET anexos_count = (SELECT COUNT(*) FROM orcamentos_timbrados_anexos WHERE orcamento_id=$1 AND COALESCE(status, 'ativo') <> 'arquivado'), pdf_path=NULL WHERE id=$1",
+        [anexo.orcamento_id]
+      );
+      res.json({ success: true, arquivado: true, removido_definitivo: false, message: "Anexo arquivado. Arquivo físico preservado." });
     } catch (err: any) {
       console.error("[DELETE /api/orcamentos/anexos/:id]", err);
-      res.status(500).json({ error: "Erro ao excluir anexo" });
+      res.status(500).json({ error: "Erro ao arquivar anexo" });
     }
   });
 
