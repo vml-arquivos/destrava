@@ -16,10 +16,10 @@ import cnpjRouter from './routes/cnpj';
 import sociosDocumentosRouter from './routes/socios_documentos';
 import documentosRouter from './routes/documentos';
 import documentacaoRouter from './routes/documentacao';
+import createOrcamentosOperacoesRouter from './routes/orcamentos_operacoes';
 import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
 import { gerarHtmlTimbrado, getPuppeteerHeaderTemplate, getPuppeteerFooterTemplate, getDocumentStyles, CONTRATADA_DADOS, getHtmlHeaderEmbutido, getHtmlFooterEmbutido } from "./letterhead.ts";
 import { DESTRAVA_LOGO_B64, PERMUPAY_LOGO_B64 } from "./logo_constants.ts";
-import { extrairCamposUltimoCartaoCnpjEmpresa } from "./services/analiseCnpjReceitaCartao.ts";
 import {
   calcularReferenciasAcompanhamento,
   calcularTotaisSemana as calcTotaisSem,
@@ -362,44 +362,6 @@ async function getTableColumns(tableName: string): Promise<Set<string>> {
     [tableName]
   );
   return new Set(rows.map((r: { column_name: string }) => r.column_name));
-}
-
-async function getTableColumnTypes(tableName: string): Promise<Map<string, string>> {
-  const { rows } = await pool.query(
-    `SELECT column_name, data_type, udt_name
-       FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND table_name = $1`,
-    [tableName]
-  );
-  return new Map(rows.map((r: { column_name: string; data_type: string; udt_name: string }) => [r.column_name, r.udt_name || r.data_type]));
-}
-
-function castSqlForColumn(columnType?: string): string {
-  const t = String(columnType || '').toLowerCase();
-  if (!t) return '';
-  if (t === 'jsonb') return '::jsonb';
-  if (t === 'json') return '::json';
-  if (t === '_text' || t === 'text[]') return '::text[]';
-  if (t === 'uuid') return '::uuid';
-  if (t === 'date') return '::date';
-  if (t === 'timestamp' || t === 'timestamptz' || t.includes('timestamp')) return '::timestamptz';
-  if (['numeric', 'int4', 'int8', 'int2', 'float4', 'float8'].includes(t)) return t === 'numeric' ? '::numeric' : '';
-  if (t === 'bool' || t === 'boolean') return '::boolean';
-  return '';
-}
-
-function pgErrorDetails(err: unknown) {
-  if (!err || typeof err !== "object") return { message: String(err) };
-  const e = err as { message?: string; code?: string; detail?: string; constraint?: string; table?: string; column?: string };
-  return {
-    message: e.message,
-    code: e.code,
-    detail: e.detail,
-    constraint: e.constraint,
-    table: e.table,
-    column: e.column,
-  };
 }
 
 async function empresaExiste(empresaId: string): Promise<boolean> {
@@ -1046,39 +1008,6 @@ async function startServer() {
     `);
   } catch (err) {
     console.error('[AUTO-CREATE Company Hub]', err);
-  }
-
-  // ─── FIX: CHECK constraints legados de empresas.status / cadastro_status ────
-  // Causa raiz confirmada em produção: o banco tinha um CHECK constraint legado
-  // em "status" que não incluía 'arquivado', quebrando o arquivamento/exclusão
-  // lógica com "new row for relation empresas violates check constraint
-  // empresas_status_check". O mesmo padrão de risco existe em "cadastro_status"
-  // (usado com 'completo'/'incompleto'/'arquivado' pelo restante do sistema).
-  // Recria os dois constraints sempre com a lista completa de valores realmente
-  // usados pelo código, de forma idempotente (DROP IF EXISTS + ADD), sem tocar
-  // em nenhum dado existente.
-  try {
-    await pool.query(`
-      ALTER TABLE public.empresas DROP CONSTRAINT IF EXISTS empresas_status_check;
-      ALTER TABLE public.empresas ADD CONSTRAINT empresas_status_check
-        CHECK (status IS NULL OR status IN (
-          'ativo','inativo','pendente','prospeccao','negociacao',
-          'cliente','suspenso','arquivado','bloqueado'
-        ));
-    `);
-  } catch (err) {
-    console.error('[FIX empresas_status_check]', err);
-  }
-  try {
-    await pool.query(`
-      ALTER TABLE public.empresas DROP CONSTRAINT IF EXISTS empresas_cadastro_status_check;
-      ALTER TABLE public.empresas ADD CONSTRAINT empresas_cadastro_status_check
-        CHECK (cadastro_status IS NULL OR cadastro_status IN (
-          'completo','incompleto','arquivado','duplicado','pendente'
-        ));
-    `);
-  } catch (err) {
-    console.error('[FIX empresas_cadastro_status_check]', err);
   }
 
   // ─── AUTO-CREATE: Módulos de Faturamento e Contratos ─────────────────────────
@@ -1750,18 +1679,12 @@ async function startServer() {
   ];
   for (const sql of alteracoesParceiros016) { try { await pool.query(sql); } catch { /* compat */ } }
   console.log('[startup] Patches de banco (contratos_gerados) aplicados/verificados.');
-
-  // ── Migration 066: Coluna itens nos orçamentos timbrados ──────────────────
-  try {
-    await pool.query(`ALTER TABLE public.orcamentos_timbrados ADD COLUMN IF NOT EXISTS itens JSONB NOT NULL DEFAULT '[]'::jsonb`);
-    console.log('[startup] Migration 066: coluna itens em orcamentos_timbrados OK.');
-  } catch (err: any) { console.warn('[startup] Migration 066 (itens):', err?.message); }
-  // ─────────────────────────────────────────────────────────────────────────────
   // ─────────────────────────────────────────────────────────────────────────────
 
   app.use(express.json({ limit: "5mb" }));
   app.use(express.urlencoded({ extended: true }));
   app.use('/api/documentos', documentosRouter);
+  app.use('/api/orcamentos', auth, createOrcamentosOperacoesRouter(pool));
 
   // CORS
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -3623,7 +3546,7 @@ async function startServer() {
 
       if (tipo === "todos" || tipo === "empresas") {
         const params: any[] = [];
-        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`, `COALESCE(cadastro_status, '') <> 'arquivado'`];
+        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`];
         if (busca) { params.push(term); conds.push(`(razao_social ILIKE $1 OR nome_fantasia ILIKE $1 OR cnpj ILIKE $1)`); }
         const { rows } = await pool.query(
           `SELECT id, 'empresa' AS tipo, razao_social AS nome, nome_fantasia, cnpj AS documento,
@@ -3638,7 +3561,7 @@ async function startServer() {
 
       if (tipo === "todos" || tipo === "clientes_pf") {
         const params: any[] = [];
-        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`, `COALESCE(cadastro_status, '') <> 'arquivado'`];
+        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`];
         if (busca) { params.push(term); conds.push(`(nome ILIKE $1 OR cpf ILIKE $1 OR email ILIKE $1)`); }
         const { rows } = await pool.query(
           `SELECT id, 'cliente_pf' AS tipo, nome, cpf AS documento, email, telefone,
@@ -3653,7 +3576,7 @@ async function startServer() {
 
       if (tipo === "todos" || tipo === "leads") {
         const params: any[] = [];
-        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`, `COALESCE(cadastro_status, '') <> 'arquivado'`];
+        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true)`];
         if (busca) { params.push(term); conds.push(`(nome ILIKE $1 OR empresa ILIKE $1 OR cpf_cnpj ILIKE $1 OR email ILIKE $1)`); }
         const { rows } = await pool.query(
           `SELECT id, 'lead' AS tipo, nome, empresa, cpf_cnpj AS documento, email, telefone, tipo_pessoa,
@@ -3758,57 +3681,41 @@ async function startServer() {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       if (!colaboradorPodeVerTudo(colaborador)) {
-        res.status(403).json({ error: "Somente gestor/admin pode arquivar cadastros incompletos" });
+        res.status(403).json({ error: "Somente gestor/admin pode apagar cadastros incompletos" });
         return;
       }
       const { tipo, id } = req.params;
+      let removido = false;
 
-      // Regra de segurança: nunca apagar fisicamente cadastro que pode ter documentos/anexos.
       if (tipo === "empresa") {
-        const columns = await getTableColumns("empresas");
-        const updates: Record<string, unknown> = {};
-        if (columns.has("status")) updates.status = "arquivado";
-        if (columns.has("ativo")) updates.ativo = false;
-        if (columns.has("arquivado_por_duplicidade")) updates.arquivado_por_duplicidade = true;
-        if (columns.has("bloqueado_operacional")) updates.bloqueado_operacional = true;
-        if (columns.has("cadastro_completo")) updates.cadastro_completo = false;
-        if (columns.has("cadastro_status")) updates.cadastro_status = "arquivado";
-        if (columns.has("cadastro_pendencias")) updates.cadastro_pendencias = ["Cadastro arquivado sem apagar documentos anexados"];
-        if (columns.has("updated_at")) updates.updated_at = new Date().toISOString();
-        const keys = Object.keys(updates);
-        if (!keys.length) { res.status(409).json({ error: "Não foi possível arquivar empresa com segurança." }); return; }
-        const values = keys.map((k) => updates[k]);
-        const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
-        await pool.query(`UPDATE empresas SET ${set} WHERE id = $${keys.length + 1}`, [...values, id]);
+        try { await pool.query("DELETE FROM empresas WHERE id = $1", [id]); removido = true; }
+        catch {
+          await pool.query(
+            `UPDATE empresas
+                SET arquivado_por_duplicidade = true,
+                    bloqueado_operacional = true,
+                    cadastro_completo = false,
+                    cadastro_status = 'removido',
+                    cadastro_pendencias = ARRAY['Cadastro removido/ocultado por saneamento'],
+                    updated_at = NOW()
+              WHERE id = $1`, [id]
+          );
+        }
       } else if (tipo === "cliente_pf") {
-        await pool.query(
-          `UPDATE clientes_pf
-              SET ativo=false,
-                  cadastro_status='arquivado',
-                  bloqueado_operacional=true,
-                  updated_at=NOW()
-            WHERE id=$1`,
-          [id]
-        );
+        try { await pool.query("DELETE FROM clientes_pf WHERE id = $1", [id]); removido = true; }
+        catch { await pool.query("UPDATE clientes_pf SET ativo=false, cadastro_status='removido', bloqueado_operacional=true, updated_at=NOW() WHERE id=$1", [id]); }
       } else if (tipo === "lead") {
-        await pool.query(
-          `UPDATE leads
-              SET arquivado_por_duplicidade=true,
-                  cadastro_status='arquivado',
-                  bloqueado_operacional=true,
-                  updated_at=NOW()
-            WHERE id=$1`,
-          [id]
-        );
+        try { await pool.query("DELETE FROM leads WHERE id = $1", [id]); removido = true; }
+        catch { await pool.query("UPDATE leads SET arquivado_por_duplicidade=true, cadastro_status='removido', bloqueado_operacional=true, updated_at=NOW() WHERE id=$1", [id]); }
       } else {
         res.status(400).json({ error: "Tipo de cadastro inválido" });
         return;
       }
 
-      res.json({ success: true, arquivado: true, removido_definitivo: false, message: "Cadastro arquivado. Documentos preservados." });
+      res.json({ success: true, removido_definitivo: removido });
     } catch (err: any) {
       console.error("[DELETE /api/cadastros-incompletos/:tipo/:id]", err);
-      res.status(500).json({ error: err?.message || "Erro ao arquivar cadastro" });
+      res.status(500).json({ error: err?.message || "Erro ao apagar cadastro" });
     }
   });
 
@@ -3820,644 +3727,24 @@ async function startServer() {
         return;
       }
 
-      // Remover duplicados = arquivar/ocultar. Nunca DELETE físico.
-      const emp = await pool.query(
-        `UPDATE empresas
-            SET cadastro_status='arquivado',
-                bloqueado_operacional=true,
-                cadastro_completo=false,
-                arquivado_por_duplicidade=true,
-                status='arquivado',
-                updated_at=NOW()
-          WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'`
-      );
-      const cpf = await pool.query(
-        `UPDATE clientes_pf
-            SET ativo=false,
-                cadastro_status='arquivado',
-                bloqueado_operacional=true,
-                updated_at=NOW()
-          WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'`
-      );
-      const leads = await pool.query(
-        `UPDATE leads
-            SET cadastro_status='arquivado',
-                bloqueado_operacional=true,
-                arquivado_por_duplicidade=true,
-                updated_at=NOW()
-          WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'`
-      );
+      let empresas = 0, clientes_pf = 0, leads = 0;
+      try { const r = await pool.query("DELETE FROM empresas WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); empresas = r.rowCount || 0; }
+      catch { const r = await pool.query("UPDATE empresas SET cadastro_status='removido', bloqueado_operacional=true WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); empresas = r.rowCount || 0; }
 
-      res.json({
-        success: true,
-        empresas: emp.rowCount || 0,
-        clientes_pf: cpf.rowCount || 0,
-        leads: leads.rowCount || 0,
-        total_arquivados: (emp.rowCount || 0) + (cpf.rowCount || 0) + (leads.rowCount || 0),
-        removido_definitivo: false,
-        message: "Duplicados arquivados sem apagar documentos/anexos.",
-      });
+      try { const r = await pool.query("DELETE FROM clientes_pf WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); clientes_pf = r.rowCount || 0; }
+      catch { const r = await pool.query("UPDATE clientes_pf SET ativo=false, cadastro_status='removido', bloqueado_operacional=true WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); clientes_pf = r.rowCount || 0; }
+
+      try { const r = await pool.query("DELETE FROM leads WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); leads = r.rowCount || 0; }
+      catch { const r = await pool.query("UPDATE leads SET cadastro_status='removido', bloqueado_operacional=true WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); leads = r.rowCount || 0; }
+
+      res.json({ success: true, empresas, clientes_pf, leads, total_removidos: empresas + clientes_pf + leads });
     } catch (err: any) {
       console.error("[POST /api/cadastros-incompletos/remover-duplicados]", err);
-      res.status(500).json({ error: err?.message || "Erro ao arquivar duplicados" });
+      res.status(500).json({ error: err?.message || "Erro ao remover duplicados" });
     }
   });
-
 
   // ─── EMPRESAS API ─────────────────────────────────────────────────────────
-  // ─── RECEITA FEDERAL / BRASILAPI — sincronização autoritativa ──────────────
-  function onlyDigitsEmpresa(value: unknown): string {
-    return String(value || "").replace(/\D/g, "");
-  }
-
-  function cleanTextEmpresa(value: unknown): string | null {
-    const text = String(value ?? "").trim();
-    if (!text || text === "********" || text === "*****") return null;
-    return text;
-  }
-
-  function telefoneBrasilApi(...values: unknown[]): string | null {
-    for (const value of values) {
-      const digits = onlyDigitsEmpresa(value);
-      if (digits.length >= 8) return digits;
-    }
-    return null;
-  }
-
-  function dataBrasilApi(value: unknown): string | null {
-    const text = cleanTextEmpresa(value);
-    if (!text) return null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
-    const m = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-    return null;
-  }
-
-  function capitalBrasilApi(value: unknown): number | null {
-    if (value === null || value === undefined || value === "") return null;
-    const n = Number(String(value).replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", "."));
-    return Number.isFinite(n) ? n : null;
-  }
-
-  function porteBrasilApi(data: any): string | null {
-    const text = String(data?.porte || data?.descricao_porte || "").toLowerCase();
-    if (text.includes("mei")) return "mei";
-    if (text === "me" || text.includes("micro")) return "me";
-    if (text.includes("epp") || text.includes("pequeno")) return "epp";
-    if (text.includes("médio") || text.includes("medio")) return "medio";
-    if (text.includes("grande")) return "grande";
-    return null;
-  }
-
-  function cnaeFormatadoBrasilApi(data: any): string | null {
-    const codigo = cleanTextEmpresa(data?.cnae_fiscal);
-    const descricao = cleanTextEmpresa(data?.cnae_fiscal_descricao);
-    if (codigo && descricao) return `${codigo} — ${descricao}`;
-    return descricao || codigo;
-  }
-
-  function cnaesSecundariosBrasilApi(data: any): string[] {
-    if (!Array.isArray(data?.cnaes_secundarios)) return [];
-    return data.cnaes_secundarios
-      .map((c: any) => {
-        const codigo = cleanTextEmpresa(c?.codigo);
-        const descricao = cleanTextEmpresa(c?.descricao);
-        if (codigo && descricao) return `${codigo} — ${descricao}`;
-        return descricao || codigo;
-      })
-      .filter(Boolean) as string[];
-  }
-
-  async function consultarBrasilApiEmpresa(cnpj: string): Promise<any> {
-    const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
-      method: "GET",
-      headers: { "Accept": "application/json" },
-      signal: AbortSignal.timeout(20000),
-    });
-    const text = await response.text();
-    let payload: any = null;
-    try { payload = text ? JSON.parse(text) : null; } catch { payload = null; }
-    if (!response.ok) {
-      throw new Error(payload?.message || payload?.error || `BrasilAPI retornou HTTP ${response.status}`);
-    }
-    if (!payload || payload?.cnpj === undefined) throw new Error("BrasilAPI não retornou dados válidos do CNPJ.");
-    return payload;
-  }
-
-
-  async function consultarJsonCnpjGratis(nome: string, url: string, timeoutMs = 12000): Promise<{ nome: string; ok: boolean; status?: number; data?: any; error?: string }> {
-    try {
-      const response = await fetch(url, {
-        method: "GET",
-        headers: { "Accept": "application/json", "User-Agent": "destrava-credito/1.0" },
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      const text = await response.text();
-      let data: any = null;
-      try { data = text ? JSON.parse(text) : null; } catch { data = null; }
-      if (!response.ok) return { nome, ok: false, status: response.status, error: data?.message || data?.error || `HTTP ${response.status}` };
-      return { nome, ok: true, status: response.status, data };
-    } catch (err: any) {
-      return { nome, ok: false, error: err?.name === 'TimeoutError' ? 'timeout' : err?.message || 'erro de consulta' };
-    }
-  }
-
-  function normalizarCnpjaOpenEmpresa(data: any): any {
-    if (!data || typeof data !== 'object') return null;
-    const company = data.company || {};
-    const address = data.address || data.office?.address || {};
-    const status = data.status || data.registrationStatus || {};
-    const nature = company.nature || data.nature || {};
-    const size = company.size || data.size || {};
-    const mainActivity = data.mainActivity || data.primaryActivity || data.main_activity || {};
-    const sideActivities = Array.isArray(data.sideActivities) ? data.sideActivities : Array.isArray(data.secondaryActivities) ? data.secondaryActivities : [];
-    const phones = Array.isArray(data.phones) ? data.phones : [];
-    const emails = Array.isArray(data.emails) ? data.emails : [];
-    return {
-      cnpj: onlyDigitsEmpresa(data.taxId || data.cnpj || data.tax_id),
-      razao_social: cleanTextEmpresa(company.name || data.companyName || data.name || data.razao_social),
-      nome_fantasia: cleanTextEmpresa(data.alias || data.tradeName || data.nome_fantasia),
-      email: cleanTextEmpresa(emails[0]?.address || data.email),
-      telefone: cleanTextEmpresa(phones[0] ? `${phones[0]?.area || ''}${phones[0]?.number || ''}` : data.phone),
-      cep: cleanTextEmpresa(address.zip || address.zipCode || address.cep),
-      logradouro: cleanTextEmpresa(address.street || address.logradouro),
-      numero: cleanTextEmpresa(address.number || address.numero),
-      complemento: cleanTextEmpresa(address.details || address.complement || address.complemento),
-      bairro: cleanTextEmpresa(address.district || address.neighborhood || address.bairro),
-      municipio: cleanTextEmpresa(address.city || address.municipality || address.municipio),
-      uf: cleanTextEmpresa(address.state || address.uf),
-      natureza_juridica: cleanTextEmpresa(nature.text || nature.name || data.natureza_juridica),
-      porte: cleanTextEmpresa(size.acronym || size.text || size.name || data.porte),
-      cnae_fiscal: cleanTextEmpresa(mainActivity.id || mainActivity.code || data.cnae_fiscal),
-      cnae_fiscal_descricao: cleanTextEmpresa(mainActivity.text || mainActivity.description || data.cnae_fiscal_descricao),
-      cnaes_secundarios: sideActivities.map((item: any) => ({ codigo: item.id || item.code || item.codigo, descricao: item.text || item.description || item.descricao })).filter((i: any) => i.codigo || i.descricao),
-      data_inicio_atividade: dataBrasilApi(data.founded || data.opened || data.data_inicio_atividade),
-      descricao_situacao_cadastral: cleanTextEmpresa(status.text || status.name || data.statusText || data.situacao_cadastral),
-      data_situacao_cadastral: dataBrasilApi(data.statusDate || data.status_date || data.data_situacao_cadastral),
-      capital_social: capitalBrasilApi(company.equity ?? data.equity ?? data.capital_social),
-      identificador_matriz_filial: data.head === false ? 2 : 1,
-      qsa: Array.isArray(company.members) ? company.members : Array.isArray(data.members) ? data.members : [],
-    };
-  }
-
-  function normalizarOpenCnpjEmpresa(data: any): any {
-    if (!data || typeof data !== 'object') return null;
-    const e = data.estabelecimento || data.office || data.empresa || data;
-    const atividade = e.atividade_principal || e.cnae_principal || data.atividade_principal || {};
-    const secundarias = e.atividades_secundarias || e.cnaes_secundarios || data.cnaes_secundarios || [];
-    return {
-      cnpj: onlyDigitsEmpresa(data.cnpj || e.cnpj),
-      razao_social: cleanTextEmpresa(data.razao_social || data.nome || e.razao_social || e.nome_empresarial),
-      nome_fantasia: cleanTextEmpresa(e.nome_fantasia || data.nome_fantasia),
-      email: cleanTextEmpresa(e.email || data.email),
-      telefone: cleanTextEmpresa(e.telefone1 || e.telefone || data.telefone),
-      cep: cleanTextEmpresa(e.cep || data.cep),
-      logradouro: cleanTextEmpresa(e.logradouro || data.logradouro),
-      numero: cleanTextEmpresa(e.numero || data.numero),
-      complemento: cleanTextEmpresa(e.complemento || data.complemento),
-      bairro: cleanTextEmpresa(e.bairro || data.bairro),
-      municipio: cleanTextEmpresa(e.cidade?.nome || e.municipio?.nome || e.municipio || data.municipio),
-      uf: cleanTextEmpresa(e.estado?.sigla || e.uf || data.uf),
-      natureza_juridica: cleanTextEmpresa(data.natureza_juridica?.descricao || data.natureza_juridica || e.natureza_juridica),
-      porte: cleanTextEmpresa(data.porte?.sigla || data.porte?.descricao || data.porte),
-      cnae_fiscal: cleanTextEmpresa(atividade.codigo || atividade.id || e.cnae_fiscal || data.cnae_fiscal),
-      cnae_fiscal_descricao: cleanTextEmpresa(atividade.descricao || atividade.text || e.cnae_fiscal_descricao || data.cnae_fiscal_descricao),
-      cnaes_secundarios: Array.isArray(secundarias) ? secundarias.map((item: any) => ({ codigo: item.codigo || item.id || item.cnae_fiscal, descricao: item.descricao || item.text || item.cnae_fiscal_descricao })).filter((i: any) => i.codigo || i.descricao) : [],
-      data_inicio_atividade: dataBrasilApi(e.data_inicio_atividade || data.data_inicio_atividade),
-      descricao_situacao_cadastral: cleanTextEmpresa(e.situacao_cadastral || e.situacao?.descricao || data.situacao_cadastral),
-      data_situacao_cadastral: dataBrasilApi(e.data_situacao_cadastral || data.data_situacao_cadastral),
-      capital_social: capitalBrasilApi(data.capital_social ?? e.capital_social),
-      identificador_matriz_filial: e.matriz === false ? 2 : 1,
-      qsa: data.socios || data.qsa || e.socios || e.qsa || [],
-    };
-  }
-
-  function normalizarCartaoOficialEmpresa(extracao: any): any | null {
-    if (!extracao || typeof extracao !== 'object') return null;
-    return {
-      cnpj: onlyDigitsEmpresa(extracao.cnpj),
-      razao_social: cleanTextEmpresa(extracao.nome_empresarial || extracao.razao_social),
-      nome_fantasia: cleanTextEmpresa(extracao.nome_fantasia),
-      cep: cleanTextEmpresa(extracao.cep),
-      logradouro: cleanTextEmpresa(extracao.logradouro),
-      numero: cleanTextEmpresa(extracao.numero),
-      complemento: cleanTextEmpresa(extracao.complemento),
-      bairro: cleanTextEmpresa(extracao.bairro),
-      municipio: cleanTextEmpresa(extracao.municipio || extracao.cidade),
-      uf: cleanTextEmpresa(extracao.uf),
-      porte: cleanTextEmpresa(extracao.porte),
-      natureza_juridica: cleanTextEmpresa(extracao.natureza_juridica),
-      cnae_fiscal: cleanTextEmpresa(String(extracao.cnae_principal || '').split('—')[0].split(' - ')[0]),
-      cnae_fiscal_descricao: cleanTextEmpresa(String(extracao.cnae_principal || '').replace(/^\s*[0-9.\/-]+\s*[—-]\s*/, '')),
-      cnae_principal_texto: cleanTextEmpresa(extracao.cnae_principal),
-      data_inicio_atividade: dataBrasilApi(extracao.data_abertura),
-      descricao_situacao_cadastral: cleanTextEmpresa(extracao.situacao_cadastral),
-      data_situacao_cadastral: dataBrasilApi(extracao.data_situacao_cadastral),
-      identificador_matriz_filial: String(extracao.matriz_filial || '').toLowerCase().includes('filial') ? 2 : 1,
-      data_emissao_cartao: dataBrasilApi(extracao.data_emissao),
-      endereco_completo: cleanTextEmpresa(extracao.endereco_completo),
-    };
-  }
-
-  async function buscarCamposCartaoAnaliseEmpresa(empresaId: string, cnpj: string): Promise<any | null> {
-    try {
-      const { rows } = await pool.query(
-        `SELECT campos_cartao, resultado, cartao_cnpj_arquivo_id, criado_em
-           FROM public.analises_cnpj_empresa
-          WHERE empresa_id = $1
-          ORDER BY criado_em DESC
-          LIMIT 3`,
-        [empresaId]
-      );
-      for (const row of rows) {
-        const campos = row.campos_cartao || row.resultado?.campos_cartao || null;
-        const normalizado = normalizarCartaoOficialEmpresa(campos);
-        if (normalizado?.cnpj && normalizado.cnpj === cnpj) return { ...normalizado, _fonte: 'cartao_cnpj_analise_ia', _raw: campos };
-      }
-    } catch {
-      return null;
-    }
-    return null;
-  }
-
-  async function obterCartaoOficialEmpresa(empresaId: string, cnpj: string): Promise<any | null> {
-    const daAnalise = await buscarCamposCartaoAnaliseEmpresa(empresaId, cnpj);
-    if (daAnalise) return daAnalise;
-    try {
-      const { cartao, extracao } = await extrairCamposUltimoCartaoCnpjEmpresa(empresaId);
-      const normalizado = normalizarCartaoOficialEmpresa(extracao);
-      if (normalizado?.cnpj && normalizado.cnpj === cnpj) return { ...normalizado, _fonte: 'cartao_cnpj_oficial_ocr', _cartao_id: cartao?.id || null, _raw: extracao };
-    } catch (err: any) {
-      console.warn('[sincronizar-receita] Falha ao ler Cartão CNPJ oficial:', err?.message || err);
-    }
-    return null;
-  }
-
-  async function consultarApisGratuitasCnpj(cnpj: string): Promise<{ data: any | null; fontes: any[]; porFonte: Record<string, any> }> {
-    const openBase = String(process.env.OPENCNPJ_BASE_URL || 'https://api.opencnpj.org').replace(/\/$/, '');
-    const consultas = await Promise.all([
-      consultarJsonCnpjGratis('brasilapi', `https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, 16000),
-      consultarJsonCnpjGratis('opencnpj', `${openBase}/${cnpj}`, 12000),
-      consultarJsonCnpjGratis('cnpja_open', `https://open.cnpja.com/office/${cnpj}`, 12000),
-    ]);
-    const porFonte: Record<string, any> = {};
-    const brasil = consultas.find((c) => c.nome === 'brasilapi');
-    const open = consultas.find((c) => c.nome === 'opencnpj');
-    const cnpja = consultas.find((c) => c.nome === 'cnpja_open');
-    if (brasil?.ok) porFonte.brasilapi = brasil.data;
-    if (open?.ok) porFonte.opencnpj = open.data;
-    if (cnpja?.ok) porFonte.cnpja_open = cnpja.data;
-    const brasilNorm = brasil?.ok ? brasil.data : null;
-    const openNorm = open?.ok ? normalizarOpenCnpjEmpresa(open.data) : null;
-    const cnpjaNorm = cnpja?.ok ? normalizarCnpjaOpenEmpresa(cnpja.data) : null;
-    // ── Estratégia de fontes confiáveis ──────────────────────────────────────
-    // Prioridade: Cartão CNPJ oficial (tratado em sincronizar-receita) >
-    //   CNPJá Open > OpenCNPJ > BrasilAPI (mais sujeita a cache).
-    // Para cada campo, usa o primeiro valor não-vazio na ordem de prioridade.
-    // QSA/sócios: usa a fonte com maior número de sócios (geralmente BrasilAPI).
-    // CNAEs secundários: usa a fonte com maior lista.
-    function primeiroValorConfiavel(...vals: any[]): any {
-      for (const v of vals) {
-        if (v === undefined || v === null) continue;
-        if (typeof v === 'string' && v.trim() === '') continue;
-        if (Array.isArray(v) && v.length === 0) continue;
-        return v;
-      }
-      return null;
-    }
-    // Campos de endereço: prioridade cnpja > opencnpj > brasilapi
-    const camposEndereco = ['municipio', 'logradouro', 'numero', 'complemento', 'bairro', 'cep', 'uf'];
-    // Campos cadastrais: prioridade cnpja > opencnpj > brasilapi
-    const camposCadastro = [
-      'razao_social', 'nome_fantasia', 'email', 'telefone',
-      'cnae_fiscal', 'cnae_fiscal_descricao', 'natureza_juridica', 'porte',
-      'capital_social', 'data_inicio_atividade', 'descricao_situacao_cadastral',
-      'data_situacao_cadastral', 'identificador_matriz_filial',
-    ];
-    const merged: any = { cnpj };
-    // Campos de endereço e cadastro com prioridade explícita
-    for (const campo of [...camposEndereco, ...camposCadastro]) {
-      merged[campo] = primeiroValorConfiavel(cnpjaNorm?.[campo], openNorm?.[campo], brasilNorm?.[campo]);
-    }
-    // QSA/sócios: usa a fonte com mais sócios (BrasilAPI costuma ser mais completa)
-    const qsaBrasil = Array.isArray(brasilNorm?.qsa) ? brasilNorm.qsa : [];
-    const qsaCnpja = Array.isArray(cnpjaNorm?.qsa) ? cnpjaNorm.qsa : [];
-    const qsaOpen = Array.isArray(openNorm?.qsa) ? openNorm.qsa : [];
-    merged.qsa = qsaBrasil.length >= qsaCnpja.length && qsaBrasil.length >= qsaOpen.length
-      ? qsaBrasil
-      : qsaCnpja.length >= qsaOpen.length ? qsaCnpja : qsaOpen;
-    // CNAEs secundários: usa a fonte com mais CNAEs
-    const cnaeBrasil = Array.isArray(brasilNorm?.cnaes_secundarios) ? brasilNorm.cnaes_secundarios : [];
-    const cnaeCnpja = Array.isArray(cnpjaNorm?.cnaes_secundarios) ? cnpjaNorm.cnaes_secundarios : [];
-    const cnaeOpen = Array.isArray(openNorm?.cnaes_secundarios) ? openNorm.cnaes_secundarios : [];
-    merged.cnaes_secundarios = cnaeBrasil.length >= cnaeCnpja.length && cnaeBrasil.length >= cnaeOpen.length
-      ? cnaeBrasil
-      : cnaeCnpja.length >= cnaeOpen.length ? cnaeCnpja : cnaeOpen;
-    // Campos extras não cobertos acima
-    const todosOsCampos = new Set([
-      ...Object.keys(brasilNorm || {}),
-      ...Object.keys(openNorm || {}),
-      ...Object.keys(cnpjaNorm || {}),
-    ]);
-    for (const campo of todosOsCampos) {
-      if (!(campo in merged)) {
-        merged[campo] = primeiroValorConfiavel(cnpjaNorm?.[campo], openNorm?.[campo], brasilNorm?.[campo]);
-      }
-    }
-    // Fonte final: determinada pela melhor cobertura de endereço
-    const fonteFinalNome = (cnpjaNorm?.municipio && String(cnpjaNorm.municipio).trim())
-      ? 'cnpja_open'
-      : (openNorm?.municipio && String(openNorm.municipio).trim())
-        ? 'opencnpj'
-        : 'brasilapi';
-    merged._fonte_final = fonteFinalNome;
-    merged._fontes_disponiveis = consultas.filter((c) => c.ok).map((c) => c.nome);
-    return {
-      data: merged,
-      fontes: consultas.map(({ nome, ok, status, error }) => ({ nome, ok, status, error })),
-      porFonte,
-    };
-  }
-  function mesclarReceitaComCartao(apiData: any, cartaoData: any | null): any {
-    if (!cartaoData) return apiData;
-    return {
-      ...(apiData || {}),
-      ...Object.fromEntries(Object.entries(cartaoData).filter(([, v]) => v !== undefined && v !== null && String(v).trim?.() !== '')),
-      qsa: Array.isArray(apiData?.qsa) ? apiData.qsa : [],
-      cnaes_secundarios: Array.isArray(apiData?.cnaes_secundarios) ? apiData.cnaes_secundarios : [],
-      _fonte_final: cartaoData._fonte || 'cartao_cnpj_oficial',
-      _cartao_oficial: cartaoData,
-    };
-  }
-
-  async function arquivarDuplicadasMesmoCnpj(cnpj: string, manterEmpresaId: string): Promise<number> {
-    try {
-      const { rowCount } = await pool.query(
-        `UPDATE public.empresas
-            SET status = 'arquivado',
-                arquivado_por_duplicidade = true,
-                bloqueado_operacional = true,
-                cadastro_completo = false,
-                cadastro_status = 'duplicado_arquivado',
-                cadastro_pendencias = ARRAY['Empresa duplicada arquivada automaticamente para preservar CNPJ único ativo'],
-                updated_at = NOW()
-          WHERE id <> $1
-            AND regexp_replace(COALESCE(cnpj, ''), '[^0-9]', '', 'g') = $2
-            AND (COALESCE(status, 'ativo') NOT IN ('arquivado','removido','excluido','cancelado')
-                 OR COALESCE(arquivado_por_duplicidade, false) = false)`,
-        [manterEmpresaId, cnpj]
-      );
-      return rowCount || 0;
-    } catch (err: any) {
-      console.warn('[sincronizar-receita] Não foi possível arquivar duplicadas antes do update:', err?.message || err);
-      return 0;
-    }
-  }
-
-  function montarPayloadEmpresaBrasilApi(data: any, empresaAtual: any, columns: Set<string>, options: { fontesConsulta?: any[]; porFonte?: Record<string, any>; fonteFinal?: string; cartaoOficial?: any } = {}): Record<string, unknown> {
-    const qsa = Array.isArray(data?.qsa) ? data.qsa : [];
-    const socio = qsa[0] || null;
-    const payload: Record<string, unknown> = {};
-    const setIfColumn = (key: string, value: unknown) => {
-      if (!columns.has(key)) return;
-      if (value === undefined) return;
-      payload[key] = value;
-    };
-
-    setIfColumn("razao_social", cleanTextEmpresa(data?.razao_social) || empresaAtual?.razao_social);
-    setIfColumn("nome_fantasia", cleanTextEmpresa(data?.nome_fantasia) || empresaAtual?.nome_fantasia || null);
-    setIfColumn("cnpj", cleanTextEmpresa(data?.cnpj) || empresaAtual?.cnpj);
-    setIfColumn("email", cleanTextEmpresa(data?.email) || empresaAtual?.email || null);
-    setIfColumn("telefone", telefoneBrasilApi(data?.ddd_telefone_1, data?.telefone, empresaAtual?.telefone));
-    setIfColumn("telefone_2", telefoneBrasilApi(data?.ddd_telefone_2, empresaAtual?.telefone_2));
-    setIfColumn("cep", cleanTextEmpresa(data?.cep) || empresaAtual?.cep || null);
-    setIfColumn("logradouro", cleanTextEmpresa(data?.logradouro) || empresaAtual?.logradouro || null);
-    setIfColumn("numero", cleanTextEmpresa(data?.numero) || empresaAtual?.numero || null);
-    setIfColumn("complemento", cleanTextEmpresa(data?.complemento) || empresaAtual?.complemento || null);
-    setIfColumn("bairro", cleanTextEmpresa(data?.bairro) || empresaAtual?.bairro || null);
-    const ufSincronizada = cleanTextEmpresa(data?.uf) || empresaAtual?.estado || empresaAtual?.uf || null;
-    setIfColumn("cidade", cleanTextEmpresa(data?.municipio) || empresaAtual?.cidade || null);
-    setIfColumn("estado", ufSincronizada);
-    setIfColumn("uf", ufSincronizada);
-    setIfColumn("porte", porteBrasilApi(data) || empresaAtual?.porte || null);
-    setIfColumn("segmento", cleanTextEmpresa(data?.cnae_fiscal_descricao) || empresaAtual?.segmento || null);
-    setIfColumn("natureza_juridica", cleanTextEmpresa(data?.natureza_juridica) || empresaAtual?.natureza_juridica || null);
-    setIfColumn("capital_social", capitalBrasilApi(data?.capital_social) ?? capitalBrasilApi(empresaAtual?.capital_social));
-    setIfColumn("cnae_principal", cleanTextEmpresa(data?.cnae_principal_texto) || cnaeFormatadoBrasilApi(data) || empresaAtual?.cnae_principal || null);
-    setIfColumn("cnaes_secundarios", cnaesSecundariosBrasilApi(data));
-    setIfColumn("data_abertura", dataBrasilApi(data?.data_inicio_atividade) || empresaAtual?.data_abertura || null);
-    setIfColumn("situacao_cadastral", cleanTextEmpresa(data?.descricao_situacao_cadastral) || cleanTextEmpresa(data?.situacao_cadastral) || empresaAtual?.situacao_cadastral || null);
-    setIfColumn("data_situacao_cadastral", dataBrasilApi(data?.data_situacao_cadastral) || empresaAtual?.data_situacao_cadastral || null);
-    setIfColumn("motivo_situacao_cadastral", cleanTextEmpresa(data?.motivo_situacao_cadastral) || empresaAtual?.motivo_situacao_cadastral || null);
-    setIfColumn("matriz_filial", data?.identificador_matriz_filial === 2 ? "Filial" : "Matriz");
-    setIfColumn("ultima_sincronizacao_receita", new Date().toISOString());
-    setIfColumn("dados_extra_receita", JSON.stringify({
-      provedor_principal: options.fonteFinal || data?._fonte_final || "apis_gratuitas",
-      fontes_consulta: options.fontesConsulta || [{ nome: "brasilapi", ok: true }],
-      fonte_final: options.fonteFinal || data?._fonte_final || "apis_gratuitas",
-      payload_brasilapi: options.porFonte?.brasilapi || null,
-      payload_opencnpj: options.porFonte?.opencnpj || null,
-      payload_cnpja_open: options.porFonte?.cnpja_open || null,
-      cartao_cnpj_oficial: options.cartaoOficial || data?._cartao_oficial || null,
-      qsa_count: qsa.length,
-    }));
-
-    // A sincronização com Receita deve reativar/regularizar o cadastro visível.
-    setIfColumn("status", "ativo");
-    setIfColumn("arquivado_por_duplicidade", false);
-    setIfColumn("bloqueado_operacional", false);
-    setIfColumn("cadastro_completo", true);
-    setIfColumn("cadastro_status", "completo");
-    setIfColumn("cadastro_pendencias", []);
-    setIfColumn("updated_at", new Date().toISOString());
-
-    if (socio) {
-      setIfColumn("responsavel_nome", empresaAtual?.responsavel_nome || cleanTextEmpresa(socio?.nome_socio || socio?.nome) || null);
-      setIfColumn("responsavel_cpf", empresaAtual?.responsavel_cpf || cleanTextEmpresa(socio?.cnpj_cpf_do_socio || socio?.cpf_cnpj) || null);
-      setIfColumn("responsavel_cargo", empresaAtual?.responsavel_cargo || cleanTextEmpresa(socio?.qualificacao_socio) || null);
-    }
-
-    return payload;
-  }
-
-  app.post("/api/empresas/:id/sincronizar-receita", auth, async (req: Request, res: Response) => {
-    try {
-      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
-      const { rows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [req.params.id]);
-      const empresaAtual = rows[0];
-      if (!empresaAtual) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
-
-      const cnpj = onlyDigitsEmpresa(req.body?.cnpj || empresaAtual.cnpj);
-      if (cnpj.length !== 14) { res.status(400).json({ error: "CNPJ inválido para sincronizar Receita." }); return; }
-
-      const consultas = await consultarApisGratuitasCnpj(cnpj);
-      const cartaoOficial = await obterCartaoOficialEmpresa(req.params.id, cnpj);
-      const data = mesclarReceitaComCartao(consultas.data, cartaoOficial);
-
-      if (!data || !data.cnpj) {
-        res.status(502).json({
-          success: false,
-          error: "Nenhuma API gratuita retornou dados válidos e não há Cartão CNPJ oficial legível no acervo.",
-          fontes_consulta: consultas.fontes,
-        });
-        return;
-      }
-
-      const columns = await getTableColumns("empresas");
-      const columnTypes = await getTableColumnTypes("empresas");
-      const fonteFinal = data?._fonte_final || consultas.fontes.find((f) => f.ok)?.nome || "apis_gratuitas";
-      const payload = montarPayloadEmpresaBrasilApi(data, empresaAtual, columns, {
-        fontesConsulta: consultas.fontes,
-        porFonte: consultas.porFonte,
-        fonteFinal,
-        cartaoOficial,
-      });
-      const keys = Object.keys(payload);
-      if (!keys.length) { res.status(409).json({ error: "Nenhum campo disponível para atualizar empresa." }); return; }
-
-      await arquivarDuplicadasMesmoCnpj(cnpj, req.params.id);
-
-      const values = keys.map((k) => {
-        const tipo = String(columnTypes.get(k) || '').toLowerCase();
-        const value = payload[k];
-        if ((tipo === 'jsonb' || tipo === 'json') && typeof value !== 'string') return JSON.stringify(value ?? {});
-        if ((tipo === '_text' || tipo === 'text[]') && !Array.isArray(value)) return value ? [String(value)] : [];
-        return value;
-      });
-      const set = keys.map((k, i) => `"${k}" = $${i + 1}${castSqlForColumn(columnTypes.get(k))}`).join(", ");
-      const { rows: updated } = await pool.query(
-        `UPDATE empresas SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
-        [...values, req.params.id]
-      );
-
-      await registrarHistoricoEmpresaSeguro(
-        req.params.id,
-        "sincronizacao_receita_automatica",
-        `Cadastro atualizado e salvo automaticamente. Fonte final: ${fonteFinal}. Documentos preservados.`,
-        (req as any).colaborador?.nome || "Sistema"
-      ).catch(() => null);
-
-      res.json({
-        success: true,
-        empresa: updated[0],
-        receita: data,
-        fonte_final: fonteFinal,
-        fontes_consulta: consultas.fontes,
-        cartao_oficial_usado: !!cartaoOficial,
-        socios_receita: Array.isArray(data?.qsa) ? data.qsa : [],
-        message: cartaoOficial
-          ? "Cadastro atualizado e salvo usando Cartão CNPJ oficial anexado como fonte prioritária."
-          : "Cadastro atualizado e salvo usando APIs gratuitas de CNPJ.",
-      });
-    } catch (err: any) {
-      const details = pgErrorDetails(err);
-      console.error("[POST /api/empresas/:id/sincronizar-receita]", details);
-      res.status(500).json({ error: details.message || err?.message || "Erro ao atualizar e salvar cadastro pela Receita Federal", details });
-    }
-  });
-
-  // ─── RELATÓRIO CSV / JSON DE EMPRESAS ──────────────────────────────────────
-  app.get("/api/empresas/relatorio", auth, async (req: Request, res: Response) => {
-    try {
-      const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const isGestor = isGestorCargo(colaborador?.cargo || '');
-      const formato = (req.query.formato as string || 'json').toLowerCase();
-      const status = req.query.status as string | undefined;
-      const porte = req.query.porte as string | undefined;
-      const estado = req.query.estado as string | undefined;
-      const cidade = req.query.cidade as string | undefined;
-      const busca = req.query.busca as string | undefined;
-      const params: any[] = [];
-      const conditions: string[] = [];
-      if (!isGestor && colaborador?.id) {
-        params.push(colaborador.id);
-        conditions.push(`(e.responsavel_id = $${params.length} OR e.analista_id = $${params.length})`);
-      }
-      if (status && status !== 'todos') {
-        params.push(status);
-        conditions.push(`e.status = $${params.length}`);
-      }
-      if (porte && porte !== 'todos') {
-        params.push(porte);
-        conditions.push(`e.porte = $${params.length}`);
-      }
-      if (estado && estado.trim()) {
-        params.push(estado.trim().toUpperCase());
-        conditions.push(`UPPER(e.estado) = $${params.length}`);
-      }
-      if (cidade && cidade.trim()) {
-        params.push(`%${cidade.trim()}%`);
-        conditions.push(`e.cidade ILIKE $${params.length}`);
-      }
-      if (busca && busca.trim()) {
-        const term = `%${busca.trim()}%`;
-        params.push(term);
-        const idx2 = params.length;
-        conditions.push(`(e.razao_social ILIKE $${idx2} OR e.nome_fantasia ILIKE $${idx2} OR e.cnpj ILIKE $${idx2})`);
-      }
-      conditions.push(`COALESCE(e.status, 'ativo') NOT IN ('arquivado','removido','excluido','cancelado')`);
-      conditions.push(`COALESCE(e.arquivado_por_duplicidade, false) = false`);
-      const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-      const { rows } = await pool.query(
-        `SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.status, e.porte,
-                e.cidade, e.estado, e.email, e.telefone, e.responsavel_nome,
-                e.faturamento_anual, e.capital_social, e.natureza_juridica,
-                e.cnae_principal, e.segmento, e.data_abertura, e.situacao_cadastral,
-                e.score_serasa, e.score_spc, e.limite_credito_atual,
-                e.ultima_sincronizacao_receita, e.created_at, e.updated_at,
-                cap.nome AS captador_nome, ana.nome AS analista_nome
-         FROM empresas e
-         LEFT JOIN colaboradores cap ON cap.id = e.captador_id
-         LEFT JOIN colaboradores ana ON ana.id = e.analista_id
-         ${where} ORDER BY e.razao_social ASC`,
-        params
-      );
-      if (formato === 'csv') {
-        const cabecalho = [
-          'ID', 'Razão Social', 'Nome Fantasia', 'CNPJ', 'Status', 'Porte',
-          'Cidade', 'Estado', 'E-mail', 'Telefone', 'Responsável',
-          'Faturamento Anual', 'Capital Social', 'Natureza Jurídica',
-          'CNAE Principal', 'Segmento', 'Data Abertura', 'Situação Cadastral',
-          'Score Serasa', 'Score SPC', 'Limite Crédito Atual',
-          'Última Sincronização', 'Criado em', 'Atualizado em',
-          'Captador', 'Analista',
-        ].join(';');
-        const linhas = rows.map((r: any) => [
-          r.id, r.razao_social || '', r.nome_fantasia || '', r.cnpj || '',
-          r.status || '', r.porte || '', r.cidade || '', r.estado || '',
-          r.email || '', r.telefone || '', r.responsavel_nome || '',
-          r.faturamento_anual != null ? String(r.faturamento_anual).replace('.', ',') : '',
-          r.capital_social != null ? String(r.capital_social).replace('.', ',') : '',
-          r.natureza_juridica || '', r.cnae_principal || '', r.segmento || '',
-          r.data_abertura ? String(r.data_abertura).slice(0, 10) : '',
-          r.situacao_cadastral || '',
-          r.score_serasa != null ? String(r.score_serasa) : '',
-          r.score_spc != null ? String(r.score_spc) : '',
-          r.limite_credito_atual != null ? String(r.limite_credito_atual).replace('.', ',') : '',
-          r.ultima_sincronizacao_receita ? String(r.ultima_sincronizacao_receita).slice(0, 19) : '',
-          r.created_at ? String(r.created_at).slice(0, 19) : '',
-          r.updated_at ? String(r.updated_at).slice(0, 19) : '',
-          r.captador_nome || '', r.analista_nome || '',
-        ].map((v: any) => `"${String(v).replace(/"/g, '""')}"`).join(';'));
-        const csv = [cabecalho, ...linhas].join('\n');
-        const nomeArquivo = `relatorio-empresas-${new Date().toISOString().slice(0, 10)}.csv`;
-        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-        res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
-        res.send('﻿' + csv); // BOM para Excel reconhecer UTF-8
-        return;
-      }
-      // Formato JSON (padrão)
-      res.json({
-        total: rows.length,
-        gerado_em: new Date().toISOString(),
-        empresas: rows,
-      });
-    } catch (err: any) {
-      console.error('[GET /api/empresas/relatorio]', err);
-      res.status(500).json({ error: 'Erro ao gerar relatório de empresas' });
-    }
-  });
-
   app.get("/api/empresas", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
@@ -4507,7 +3794,6 @@ async function startServer() {
       }
       const incluirIncompletos = ["1", "true", "sim"].includes(String(req.query.incluir_incompletos || "").toLowerCase());
       if (!incluirIncompletos) {
-        conditions.push(`COALESCE(e.status, 'ativo') NOT IN ('arquivado','removido','excluido','cancelado')`);
         conditions.push(`COALESCE(e.arquivado_por_duplicidade, false) = false`);
         conditions.push(`COALESCE(e.bloqueado_operacional, false) = false`);
         // Empresas vinculadas a acompanhamentos bancários ativos ficam sempre visíveis,
@@ -4654,55 +3940,6 @@ async function startServer() {
         `Empresa cadastrada${payload.origem ? ` via ${payload.origem}` : ""}. Dados principais salvos no cadastro.`,
         colaborador?.nome || "Sistema"
       );
-      // Sincronização automática de Receita Federal após criação com CNPJ válido.
-      // Garante que os dados cadastrais (endereço, CNAE, sócios) sejam sempre atualizados
-      // via APIs confiáveis, sem depender de cache ou dados antigos.
-      const cnpjParaSync = onlyDigitsEmpresa(String(payload.cnpj || ''));
-      if (cnpjParaSync.length === 14) {
-        // Executa em background para não bloquear a resposta ao frontend
-        setImmediate(async () => {
-          try {
-            const consultas = await consultarApisGratuitasCnpj(cnpjParaSync);
-            const cartaoOficial = await obterCartaoOficialEmpresa(empresa.id, cnpjParaSync);
-            const dadosSincronizados = mesclarReceitaComCartao(consultas.data, cartaoOficial);
-            if (dadosSincronizados?.cnpj) {
-              const colsSync = await getTableColumns("empresas");
-              const colTypesSync = await getTableColumnTypes("empresas");
-              const fonteFinalSync = dadosSincronizados?._fonte_final || consultas.fontes.find((f: any) => f.ok)?.nome || 'apis_gratuitas';
-              const payloadSync = montarPayloadEmpresaBrasilApi(dadosSincronizados, empresa, colsSync, {
-                fontesConsulta: consultas.fontes,
-                porFonte: consultas.porFonte,
-                fonteFinal: fonteFinalSync,
-                cartaoOficial,
-              });
-              const keysSync = Object.keys(payloadSync);
-              if (keysSync.length > 0) {
-                const valuesSync = keysSync.map((k) => {
-                  const tipo = String(colTypesSync.get(k) || '').toLowerCase();
-                  const value = payloadSync[k];
-                  if ((tipo === 'jsonb' || tipo === 'json') && typeof value !== 'string') return JSON.stringify(value ?? {});
-                  if ((tipo === '_text' || tipo === 'text[]') && !Array.isArray(value)) return value ? [String(value)] : [];
-                  return value;
-                });
-                const setSync = keysSync.map((k, i) => `"${k}" = $${i + 1}${castSqlForColumn(colTypesSync.get(k))}`).join(', ');
-                await pool.query(
-                  `UPDATE empresas SET ${setSync} WHERE id = $${keysSync.length + 1}`,
-                  [...valuesSync, empresa.id]
-                );
-                await registrarHistoricoEmpresaSeguro(
-                  empresa.id,
-                  "sincronizacao_receita_automatica",
-                  `Dados sincronizados automaticamente após criação. Fonte: ${fonteFinalSync}.`,
-                  colaborador?.nome || "Sistema"
-                ).catch(() => null);
-                console.log(`[POST /api/empresas] Auto-sync OK para ${cnpjParaSync} (fonte: ${fonteFinalSync})`);
-              }
-            }
-          } catch (syncErr: any) {
-            console.warn(`[POST /api/empresas] Auto-sync falhou para ${cnpjParaSync}:`, syncErr?.message || syncErr);
-          }
-        });
-      }
 
       res.status(201).json(empresa);
     } catch (err: any) {
@@ -4791,46 +4028,11 @@ async function startServer() {
         res.status(403).json({ error: "Somente gestor/admin pode excluir empresa" });
         return;
       }
-
-      // Exclusão lógica: nunca apagar documentos/anexos/análises por DELETE físico.
-      const columns = await getTableColumns("empresas");
-      const updates: Record<string, unknown> = {};
-      if (columns.has("status")) updates.status = "arquivado";
-      if (columns.has("ativo")) updates.ativo = false;
-      if (columns.has("arquivado_por_duplicidade")) updates.arquivado_por_duplicidade = true;
-      if (columns.has("bloqueado_operacional")) updates.bloqueado_operacional = true;
-      if (columns.has("cadastro_completo")) updates.cadastro_completo = false;
-      if (columns.has("cadastro_status")) updates.cadastro_status = "arquivado";
-      if (columns.has("cadastro_pendencias")) updates.cadastro_pendencias = ["Empresa arquivada sem apagar documentos anexados"];
-      if (columns.has("updated_at")) updates.updated_at = new Date().toISOString();
-      const keys = Object.keys(updates);
-      if (!keys.length) { res.status(409).json({ error: "Não foi possível arquivar empresa com segurança." }); return; }
-      const values = keys.map((k) => updates[k]);
-      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
-      const { rows } = await pool.query(
-        `UPDATE empresas SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
-        [...values, req.params.id]
-      );
-      if (!rows.length) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
-
-      await registrarHistoricoEmpresaSeguro(
-        req.params.id,
-        "empresa_arquivada",
-        "Empresa arquivada/ocultada. Documentos, anexos e análises preservados.",
-        colaborador?.nome || "Sistema"
-      ).catch(() => null);
-
-      res.json({
-        success: true,
-        arquivado: true,
-        removido_definitivo: false,
-        message: "Empresa arquivada. Documentos e análises preservados.",
-        empresa: rows[0],
-      });
-    } catch (err: any) {
-      const details = pgErrorDetails(err);
-      console.error("[DELETE /api/empresas/:id]", details);
-      res.status(500).json({ error: details.message || "Erro ao arquivar empresa", details });
+      await pool.query("DELETE FROM empresas WHERE id = $1", [req.params.id]);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[DELETE /api/empresas/:id]", err);
+      res.status(500).json({ error: "Erro ao excluir empresa" });
     }
   });
 
@@ -9968,605 +9170,6 @@ async function registrarDocumentoContratoGerado(params: {
     }
   });
 
-
-
-  // ─── ORÇAMENTOS TIMBRADOS DESTRAVA / PERMUPAY ─────────────────────────────
-  const uploadOrcamentoAnexos = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 35 * 1024 * 1024, files: 20 },
-  });
-
-  function escapeHtmlOrcamento(value: unknown): string {
-    return String(value ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
-
-  function dinheiroOrcamento(value: unknown): string {
-    const n = Number(value || 0);
-    return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  }
-
-  function limparDescricaoItemOrcamento(value: unknown): string {
-    return String(value ?? "")
-      .replace(/^\s*descri[cç][aã]o\s+do\s+item\s*\/\s*servi[cç]o\s*:\s*/i, "")
-      .trim();
-  }
-
-  function numeroOrcamento(): string {
-    const d = new Date();
-    const y = d.getFullYear();
-    const stamp = `${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}${String(d.getSeconds()).padStart(2, "0")}`;
-    return `ORC-${y}-${stamp}`;
-  }
-
-  function normalizarOrcamentoBody(body: any) {
-    const tipoCliente = ["empresa", "pessoa_fisica", "livre"].includes(String(body?.tipo_cliente)) ? String(body.tipo_cliente) : "empresa";
-    const marca = ["destrava", "permupay"].includes(String(body?.marca)) ? String(body.marca) : "destrava";
-    const validadeDias = Number.parseInt(String(body?.validade_dias || 30), 10);
-    const assinaturas = Array.isArray(body?.assinaturas) ? body.assinaturas : [];
-    // Normalizar itens
-    const itens = Array.isArray(body?.itens)
-      ? body.itens
-          .filter((it: any) => String(it?.descricao || "").trim())
-          .map((it: any) => ({
-            descricao: String(it.descricao || "").trim(),
-            quantidade: Math.max(1, Number(it.quantidade) || 1),
-            valor_unitario: Math.max(0, Number(it.valor_unitario) || 0),
-          }))
-      : [];
-    // Calcular valor_total automaticamente pelos itens; se não há itens, usa valor_total manual
-    const valorItens = itens.reduce((acc: number, it: any) => acc + it.quantidade * it.valor_unitario, 0);
-    const valorManual = Number(String(body?.valor_total ?? 0).replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", "."));
-    const valor = itens.length > 0 ? valorItens : (Number.isFinite(valorManual) ? valorManual : 0);
-    return {
-      tipo_cliente: tipoCliente,
-      empresa_id: body?.empresa_id || null,
-      cliente_pf_id: body?.cliente_pf_id || null,
-      cliente_nome: String(body?.cliente_nome || "").trim() || null,
-      cliente_documento: String(body?.cliente_documento || "").trim() || null,
-      cliente_email: String(body?.cliente_email || "").trim() || null,
-      cliente_telefone: String(body?.cliente_telefone || "").trim() || null,
-      marca,
-      titulo: String(body?.titulo || "Orçamento de Serviços").trim(),
-      descricao: String(body?.descricao || "").trim() || null,
-      conteudo: String(body?.conteudo || "").trim(),
-      itens,
-      valor_total: valor,
-      validade_dias: Number.isFinite(validadeDias) && validadeDias > 0 ? validadeDias : 30,
-      validade_ate: body?.validade_ate || null,
-      assinaturas,
-      payload: body?.payload && typeof body.payload === "object" ? body.payload : {},
-    };
-  }
-
-  async function hidratarClienteOrcamento(payload: any) {
-    if (payload.tipo_cliente === "empresa" && payload.empresa_id) {
-      const { rows } = await pool.query(
-        `SELECT id, razao_social, nome_fantasia, cnpj, email, telefone, whatsapp,
-                logradouro, numero, complemento, bairro, cidade, estado, estado AS uf, cep,
-                responsavel_nome, responsavel_cpf
-           FROM empresas
-          WHERE id = $1
-          LIMIT 1`,
-        [payload.empresa_id]
-      );
-      const e = rows[0];
-      if (e) {
-        return {
-          ...payload,
-          cliente_nome: payload.cliente_nome || e.razao_social || e.nome_fantasia,
-          cliente_documento: payload.cliente_documento || e.cnpj,
-          cliente_email: payload.cliente_email || e.email,
-          cliente_telefone: payload.cliente_telefone || e.whatsapp || e.telefone,
-          payload: {
-            ...(payload.payload || {}),
-            cliente_origem: "empresa",
-            empresa: {
-              id: e.id,
-              razao_social: e.razao_social,
-              nome_fantasia: e.nome_fantasia,
-              cnpj: e.cnpj,
-              endereco: [e.logradouro, e.numero, e.complemento, e.bairro, e.cidade, e.estado || e.uf, e.cep].filter(Boolean).join(", "),
-              responsavel_nome: e.responsavel_nome,
-              responsavel_cpf: e.responsavel_cpf,
-            },
-          },
-        };
-      }
-    }
-
-    if (payload.tipo_cliente === "pessoa_fisica" && payload.cliente_pf_id) {
-      const { rows } = await pool.query(
-        `SELECT id, nome, cpf, email, telefone, endereco, cidade, uf, cep
-           FROM clientes_pf
-          WHERE id = $1
-          LIMIT 1`,
-        [payload.cliente_pf_id]
-      );
-      const c = rows[0];
-      if (c) {
-        return {
-          ...payload,
-          cliente_nome: payload.cliente_nome || c.nome,
-          cliente_documento: payload.cliente_documento || c.cpf,
-          cliente_email: payload.cliente_email || c.email,
-          cliente_telefone: payload.cliente_telefone || c.telefone,
-          payload: {
-            ...(payload.payload || {}),
-            cliente_origem: "pessoa_fisica",
-            cliente_pf: {
-              id: c.id,
-              nome: c.nome,
-              cpf: c.cpf,
-              endereco: [c.endereco, c.cidade, c.uf, c.cep].filter(Boolean).join(", "),
-            },
-          },
-        };
-      }
-    }
-
-    return payload;
-  }
-
-  function htmlOrcamentoTimbrado(orcamento: any, anexos: any[] = []): string {
-    const marca = String(orcamento.marca || "destrava");
-    const isPermuPay = marca === "permupay";
-    const cor = isPermuPay ? "#0066CC" : "#1B3A8C";
-    const nomeMarca = isPermuPay ? "PermuPay" : "Destrava Crédito";
-    const clienteDocumento = orcamento.cliente_documento ? ` · ${escapeHtmlOrcamento(orcamento.cliente_documento)}` : "";
-    const conteudo = String(orcamento.conteudo || "")
-      .split(/\n{2,}/)
-      .map((p) => `<p>${escapeHtmlOrcamento(p).replace(/\n/g, "<br/>")}</p>`)
-      .join("\n");
-    const assinaturas = Array.isArray(orcamento.assinaturas) ? orcamento.assinaturas : [];
-    const assinaturaHtml = assinaturas.length
-      ? assinaturas.map((a: any) => `
-        <div class="assinatura">
-          <div class="linha"></div>
-          <strong>${escapeHtmlOrcamento(a.nome || "Assinante")}</strong>
-          <span>${escapeHtmlOrcamento(a.cargo || a.tipo || "")}</span>
-          <small>${escapeHtmlOrcamento(a.documento || "")}</small>
-        </div>`).join("")
-      : `
-        <div class="assinatura"><div class="linha"></div><strong>${escapeHtmlOrcamento(nomeMarca)}</strong><span>Contratada</span></div>
-        <div class="assinatura"><div class="linha"></div><strong>${escapeHtmlOrcamento(orcamento.cliente_nome || "Cliente")}</strong><span>Cliente</span></div>`;
-
-    const anexosHtml = anexos.length
-      ? `<section><h3>Documentos anexados</h3><ul>${anexos.map((a) => `<li>${escapeHtmlOrcamento(a.nome_original)}${a.descricao ? " — " + escapeHtmlOrcamento(a.descricao) : ""}</li>`).join("")}</ul></section>`
-      : "";
-
-    // Tabela de itens (se houver)
-    const itens = Array.isArray(orcamento.itens) ? orcamento.itens.filter((it: any) => String(it?.descricao || "").trim()) : [];
-    const itensHtml = itens.length > 0
-      ? `<section>
-          <h3>Itens</h3>
-          <table class="tabela-itens">
-            <thead>
-              <tr>
-                <th class="th-desc">Descrição</th>
-                <th class="th-num">Qtd</th>
-                <th class="th-num">Valor unit.</th>
-                <th class="th-num">Subtotal</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itens.map((it: any) => {
-                const sub = (Number(it.quantidade) || 1) * (Number(it.valor_unitario) || 0);
-                return `<tr>
-                  <td>${escapeHtmlOrcamento(limparDescricaoItemOrcamento(it.descricao))}</td>
-                  <td class="td-num">${Number(it.quantidade) || 1}</td>
-                  <td class="td-num">${dinheiroOrcamento(it.valor_unitario)}</td>
-                  <td class="td-num"><strong>${dinheiroOrcamento(sub)}</strong></td>
-                </tr>`;
-              }).join("")}
-            </tbody>
-          </table>
-        </section>`
-      : "";
-
-    return `<!doctype html>
-<html>
-<head>
-<meta charset="utf-8"/>
-<title>${escapeHtmlOrcamento(orcamento.titulo || "Orçamento")}</title>
-<style>
-  * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; margin: 0; background: #fff; font-size: 11pt; line-height: 1.55; }
-  h1 { color:${cor}; font-size:22pt; margin:0 0 6px; line-height:1.15; }
-  h2 { font-size:13pt; margin:0; color:#334155; font-weight:700; }
-  h3 { font-size:12pt; color:${cor}; margin:22px 0 8px; border-bottom:1px solid #e2e8f0; padding-bottom:4px; }
-  .cliente, .valor { border:1px solid #e2e8f0; background:#f8fafc; border-radius:12px; padding:12px 14px; margin:12px 0; }
-  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-  .label { display:block; font-size:8.5pt; color:#64748b; text-transform:uppercase; letter-spacing:.04em; font-weight:700; }
-  .valor-final { font-size:19pt; color:${cor}; font-weight:800; }
-  p { margin:0 0 10px; }
-  ul { margin-top:6px; }
-  /* Tabela de itens */
-  .tabela-itens { width:100%; border-collapse:collapse; margin:0; font-size:10pt; }
-  .tabela-itens thead { background:${cor}; color:#fff; }
-  .tabela-itens th { padding:7px 10px; text-align:left; font-size:9pt; font-weight:700; }
-  .tabela-itens td { padding:6px 10px; border-bottom:1px solid #e2e8f0; }
-  .tabela-itens tbody tr:nth-child(even) { background:#f8fafc; }
-  .th-num, .td-num { text-align:right; white-space:nowrap; }
-  /* Assinaturas */
-  .assinaturas { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:28px; margin-top:34px; break-inside: avoid; }
-  .assinatura { text-align:center; padding-top:16px; }
-  .linha { border-top:1px solid #0f172a; margin-bottom:8px; }
-  .assinatura strong { display:block; font-size:10pt; }
-  .assinatura span, .assinatura small { display:block; color:#64748b; font-size:8.8pt; }
-  .rodape-local { margin-top:28px; font-size:9pt; color:#475569; }
-  .watermark { position:fixed; right:0; bottom:0; color:#f1f5f9; font-size:72pt; font-weight:800; transform:rotate(-18deg); z-index:-1; }
-</style>
-</head>
-<body>
-  <div class="watermark">${escapeHtmlOrcamento(nomeMarca)}</div>
-
-  <h1>${escapeHtmlOrcamento(orcamento.titulo || "Orçamento de Serviços")}</h1>
-  ${orcamento.descricao ? `<h2>${escapeHtmlOrcamento(orcamento.descricao)}</h2>` : ""}
-
-  <section class="cliente">
-    <span class="label">Cliente</span>
-    <strong>${escapeHtmlOrcamento(orcamento.cliente_nome || "Cliente não informado")}${clienteDocumento}</strong><br/>
-    ${orcamento.cliente_email ? `E-mail: ${escapeHtmlOrcamento(orcamento.cliente_email)}<br/>` : ""}
-    ${orcamento.cliente_telefone ? `Telefone: ${escapeHtmlOrcamento(orcamento.cliente_telefone)}<br/>` : ""}
-  </section>
-
-  ${itensHtml}
-
-  <section>
-    <h3>Escopo do orçamento</h3>
-    ${conteudo || "<p>Descreva aqui o escopo, condições comerciais, entregáveis e observações do orçamento.</p>"}
-  </section>
-
-  <section class="valor">
-    <div class="grid">
-      <div>
-        <span class="label">Valor total</span>
-        <div class="valor-final">${dinheiroOrcamento(orcamento.valor_total)}</div>
-      </div>
-      <div>
-        <span class="label">Status</span>
-        <strong>${escapeHtmlOrcamento(String(orcamento.status || "rascunho").toUpperCase())}</strong><br/>
-        <span class="label" style="margin-top:8px">Validade</span>
-        <strong>${orcamento.validade_ate ? new Date(orcamento.validade_ate).toLocaleDateString("pt-BR") : `${orcamento.validade_dias || 30} dias`}</strong>
-      </div>
-    </div>
-  </section>
-
-  ${anexosHtml}
-
-  <section>
-    <h3>Assinaturas</h3>
-    <div class="assinaturas">${assinaturaHtml}</div>
-  </section>
-
-  <div class="rodape-local">
-    Documento gerado pelo sistema Destrava Crédito. Anexos e documentos complementares podem acompanhar este orçamento no acervo interno.
-  </div>
-</body>
-</html>`;
-  }
-
-  async function carregarOrcamentoPorId(id: string) {
-    const { rows } = await pool.query("SELECT * FROM orcamentos_timbrados WHERE id = $1 LIMIT 1", [id]);
-    return rows[0] || null;
-  }
-
-  async function listarAnexosOrcamento(id: string) {
-    const { rows } = await pool.query(
-      `SELECT id, orcamento_id, tipo, descricao, nome_original, mime_type, tamanho_bytes, url, status, criado_em
-         FROM orcamentos_timbrados_anexos
-        WHERE orcamento_id = $1
-          AND COALESCE(status, 'ativo') <> 'arquivado'
-        ORDER BY criado_em DESC`,
-      [id]
-    );
-    return rows;
-  }
-
-  async function gerarPdfOrcamento(orcamentoId: string): Promise<string> {
-    const orcamento = await carregarOrcamentoPorId(orcamentoId);
-    if (!orcamento) throw new Error("Orçamento não encontrado");
-    const anexos = await listarAnexosOrcamento(orcamentoId);
-    const dataDir = process.env.DATA_DIR || "/var/data/destrava";
-    const uploadsDir = path.join(dataDir, "uploads", "orcamentos", orcamentoId);
-    fs.mkdirSync(uploadsDir, { recursive: true });
-    const fileName = `${String(orcamento.numero || orcamentoId).replace(/[^a-zA-Z0-9_-]/g, "-")}.pdf`;
-    const filePath = path.join(uploadsDir, fileName);
-    const html = htmlOrcamentoTimbrado(orcamento, anexos);
-    await gerarPdfComLayout(html, {
-      contratada: {
-        razao_social: orcamento.marca === "permupay" ? "PERMUPAY" : "DESTRAVA CREDITO LTDA",
-        nome_fantasia: orcamento.marca === "permupay" ? "PermuPay" : "Destrava Crédito",
-      },
-    }, filePath);
-    await pool.query("UPDATE orcamentos_timbrados SET pdf_path=$1 WHERE id=$2", [filePath, orcamentoId]);
-    return filePath;
-  }
-
-  app.get("/api/orcamentos/clientes", auth, async (_req: Request, res: Response) => {
-    try {
-      const [empresas, clientesPf] = await Promise.all([
-        pool.query(
-          `SELECT id, razao_social, nome_fantasia, cnpj, email, telefone, whatsapp
-             FROM empresas
-            ORDER BY COALESCE(razao_social, nome_fantasia) ASC
-            LIMIT 500`
-        ),
-        pool.query(
-          `SELECT id, nome, cpf, email, telefone
-             FROM clientes_pf
-            WHERE ativo = true
-            ORDER BY nome ASC
-            LIMIT 500`
-        ).catch(() => ({ rows: [] as any[] })),
-      ]);
-      res.json({ empresas: empresas.rows, clientes_pf: clientesPf.rows });
-    } catch (err: any) {
-      console.error("[GET /api/orcamentos/clientes]", err);
-      res.status(500).json({ error: "Erro ao carregar clientes para orçamento" });
-    }
-  });
-
-  app.get("/api/orcamentos", auth, async (req: Request, res: Response) => {
-    try {
-      const busca = String(req.query.busca || "").trim();
-      const status = String(req.query.status || "").trim();
-      const params: any[] = [];
-      let where = "WHERE 1=1";
-      if (busca) {
-        params.push(`%${busca}%`);
-        where += ` AND (cliente_nome ILIKE $${params.length} OR cliente_documento ILIKE $${params.length} OR titulo ILIKE $${params.length} OR numero ILIKE $${params.length})`;
-      }
-      if (status) {
-        params.push(status);
-        where += ` AND status = $${params.length}`;
-      }
-      const { rows } = await pool.query(
-        `SELECT id, numero, tipo_cliente, empresa_id, cliente_pf_id, cliente_nome, cliente_documento,
-                marca, titulo, valor_total, validade_ate, status, anexos_count, criado_em, atualizado_em, finalizado_em
-           FROM orcamentos_timbrados
-          ${where}
-          ORDER BY atualizado_em DESC, criado_em DESC
-          LIMIT 200`,
-        params
-      );
-      res.json(rows);
-    } catch (err: any) {
-      console.error("[GET /api/orcamentos]", err);
-      res.status(500).json({ error: "Erro ao listar orçamentos" });
-    }
-  });
-
-  app.get("/api/orcamentos/:id", auth, async (req: Request, res: Response) => {
-    try {
-      const orcamento = await carregarOrcamentoPorId(req.params.id);
-      if (!orcamento) { res.status(404).json({ error: "Orçamento não encontrado" }); return; }
-      const anexos = await listarAnexosOrcamento(req.params.id);
-      res.json({ ...orcamento, anexos });
-    } catch (err: any) {
-      console.error("[GET /api/orcamentos/:id]", err);
-      res.status(500).json({ error: "Erro ao carregar orçamento" });
-    }
-  });
-
-  app.post("/api/orcamentos", auth, async (req: Request, res: Response) => {
-    try {
-      const colaborador = (req as any).colaborador;
-      const body = await hidratarClienteOrcamento(normalizarOrcamentoBody(req.body || {}));
-      const validadeAte = body.validade_ate || new Date(Date.now() + body.validade_dias * 86400000).toISOString().slice(0, 10);
-      const { rows } = await pool.query(
-        `INSERT INTO orcamentos_timbrados (
-           numero, tipo_cliente, empresa_id, cliente_pf_id, cliente_nome, cliente_documento, cliente_email,
-           cliente_telefone, marca, titulo, descricao, conteudo, itens, valor_total, validade_dias, validade_ate,
-           status, assinaturas, payload, criado_por
-         ) VALUES (
-           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16,'rascunho',$17::jsonb,$18::jsonb,$19
-         )
-         RETURNING *`,
-        [
-          numeroOrcamento(),
-          body.tipo_cliente,
-          body.empresa_id,
-          body.cliente_pf_id,
-          body.cliente_nome,
-          body.cliente_documento,
-          body.cliente_email,
-          body.cliente_telefone,
-          body.marca,
-          body.titulo,
-          body.descricao,
-          body.conteudo,
-          JSON.stringify(body.itens || []),
-          body.valor_total,
-          body.validade_dias,
-          validadeAte,
-          JSON.stringify(body.assinaturas),
-          JSON.stringify(body.payload || {}),
-          colaborador?.id || null,
-        ]
-      );
-      res.status(201).json(rows[0]);
-    } catch (err: any) {
-      console.error("[POST /api/orcamentos]", err);
-      res.status(500).json({ error: err?.message || "Erro ao criar orçamento" });
-    }
-  });
-
-  app.put("/api/orcamentos/:id", auth, async (req: Request, res: Response) => {
-    try {
-      const existente = await carregarOrcamentoPorId(req.params.id);
-      if (!existente) { res.status(404).json({ error: "Orçamento não encontrado" }); return; }
-      if (existente.status === "finalizado") {
-        res.status(409).json({ error: "Orçamento finalizado não pode ser editado. Duplique ou crie novo orçamento." });
-        return;
-      }
-      const body = await hidratarClienteOrcamento(normalizarOrcamentoBody(req.body || {}));
-      const validadeAte = body.validade_ate || new Date(Date.now() + body.validade_dias * 86400000).toISOString().slice(0, 10);
-      const { rows } = await pool.query(
-        `UPDATE orcamentos_timbrados SET
-           tipo_cliente=$1, empresa_id=$2, cliente_pf_id=$3, cliente_nome=$4, cliente_documento=$5,
-           cliente_email=$6, cliente_telefone=$7, marca=$8, titulo=$9, descricao=$10, conteudo=$11,
-           itens=$12::jsonb, valor_total=$13, validade_dias=$14, validade_ate=$15, assinaturas=$16::jsonb, payload=$17::jsonb,
-           pdf_path=NULL
-         WHERE id=$18
-         RETURNING *`,
-        [
-          body.tipo_cliente,
-          body.empresa_id,
-          body.cliente_pf_id,
-          body.cliente_nome,
-          body.cliente_documento,
-          body.cliente_email,
-          body.cliente_telefone,
-          body.marca,
-          body.titulo,
-          body.descricao,
-          body.conteudo,
-          JSON.stringify(body.itens || []),
-          body.valor_total,
-          body.validade_dias,
-          validadeAte,
-          JSON.stringify(body.assinaturas),
-          JSON.stringify(body.payload || {}),
-          req.params.id,
-        ]
-      );
-      res.json(rows[0]);
-    } catch (err: any) {
-      console.error("[PUT /api/orcamentos/:id]", err);
-      res.status(500).json({ error: err?.message || "Erro ao atualizar orçamento" });
-    }
-  });
-
-  app.post("/api/orcamentos/:id/finalizar", auth, async (req: Request, res: Response) => {
-    try {
-      const existente = await carregarOrcamentoPorId(req.params.id);
-      if (!existente) { res.status(404).json({ error: "Orçamento não encontrado" }); return; }
-      const filePath = await gerarPdfOrcamento(req.params.id);
-      const { rows } = await pool.query(
-        `UPDATE orcamentos_timbrados
-            SET status='finalizado', finalizado_em=NOW(), pdf_path=$1
-          WHERE id=$2
-          RETURNING *`,
-        [filePath, req.params.id]
-      );
-      res.json({ success: true, orcamento: rows[0] });
-    } catch (err: any) {
-      console.error("[POST /api/orcamentos/:id/finalizar]", err);
-      res.status(500).json({ error: err?.message || "Erro ao finalizar orçamento" });
-    }
-  });
-
-  app.get("/api/orcamentos/:id/download", auth, async (req: Request, res: Response) => {
-    try {
-      const orcamento = await carregarOrcamentoPorId(req.params.id);
-      if (!orcamento) { res.status(404).json({ error: "Orçamento não encontrado" }); return; }
-      let filePath = orcamento.pdf_path;
-      if (!filePath || !fs.existsSync(filePath)) filePath = await gerarPdfOrcamento(req.params.id);
-      res.download(filePath, `${String(orcamento.numero || "orcamento").replace(/[^a-zA-Z0-9_-]/g, "-")}.pdf`);
-    } catch (err: any) {
-      console.error("[GET /api/orcamentos/:id/download]", err);
-      res.status(500).json({ error: err?.message || "Erro ao baixar orçamento" });
-    }
-  });
-
-  app.post("/api/orcamentos/:id/anexos", auth, uploadOrcamentoAnexos.array("arquivos", 20), async (req: Request, res: Response) => {
-    try {
-      const colaborador = (req as any).colaborador;
-      const orcamento = await carregarOrcamentoPorId(req.params.id);
-      if (!orcamento) { res.status(404).json({ error: "Orçamento não encontrado" }); return; }
-      const files = (req.files || []) as Express.Multer.File[];
-      if (!files.length) { res.status(400).json({ error: "Nenhum arquivo enviado" }); return; }
-      const dataDir = process.env.DATA_DIR || "/var/data/destrava";
-      const dir = path.join(dataDir, "uploads", "orcamentos", req.params.id, "anexos");
-      fs.mkdirSync(dir, { recursive: true });
-      const descricao = String(req.body?.descricao || "").trim() || null;
-      const tipo = String(req.body?.tipo || "anexo").trim() || "anexo";
-      const salvos: any[] = [];
-      for (const file of files) {
-        const ext = path.extname(file.originalname || "");
-        const safeBase = path.basename(file.originalname || "documento", ext).replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80);
-        const fileName = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}-${safeBase}${ext}`;
-        const filePath = path.join(dir, fileName);
-        fs.writeFileSync(filePath, file.buffer);
-        const hash = crypto.createHash("sha256").update(file.buffer).digest("hex");
-        const { rows } = await pool.query(
-          `INSERT INTO orcamentos_timbrados_anexos (
-             orcamento_id, tipo, descricao, nome_original, mime_type, tamanho_bytes, storage_path, url, hash_sha256, criado_por
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-           RETURNING id, orcamento_id, tipo, descricao, nome_original, mime_type, tamanho_bytes, url, criado_em`,
-          [
-            req.params.id,
-            tipo,
-            descricao,
-            file.originalname,
-            file.mimetype,
-            file.size,
-            filePath,
-            `/api/orcamentos/anexos/${hash}/download`,
-            hash,
-            colaborador?.id || null,
-          ]
-        );
-        salvos.push(rows[0]);
-      }
-      await pool.query("UPDATE orcamentos_timbrados SET anexos_count = (SELECT COUNT(*) FROM orcamentos_timbrados_anexos WHERE orcamento_id=$1 AND COALESCE(status, 'ativo') <> 'arquivado'), pdf_path=NULL WHERE id=$1", [req.params.id]);
-      res.status(201).json({ success: true, anexos: salvos });
-    } catch (err: any) {
-      console.error("[POST /api/orcamentos/:id/anexos]", err);
-      res.status(500).json({ error: err?.message || "Erro ao anexar documentos" });
-    }
-  });
-
-  app.get("/api/orcamentos/:id/anexos", auth, async (req: Request, res: Response) => {
-    try {
-      res.json(await listarAnexosOrcamento(req.params.id));
-    } catch (err: any) {
-      console.error("[GET /api/orcamentos/:id/anexos]", err);
-      res.status(500).json({ error: "Erro ao listar anexos" });
-    }
-  });
-
-  app.get("/api/orcamentos/anexos/:hash/download", auth, async (req: Request, res: Response) => {
-    try {
-      const { rows } = await pool.query("SELECT * FROM orcamentos_timbrados_anexos WHERE hash_sha256=$1 AND COALESCE(status, 'ativo') <> 'arquivado' LIMIT 1", [req.params.hash]);
-      const anexo = rows[0];
-      if (!anexo || !fs.existsSync(anexo.storage_path)) { res.status(404).json({ error: "Anexo não encontrado" }); return; }
-      res.download(anexo.storage_path, anexo.nome_original || "anexo");
-    } catch (err: any) {
-      console.error("[GET /api/orcamentos/anexos/:hash/download]", err);
-      res.status(500).json({ error: "Erro ao baixar anexo" });
-    }
-  });
-
-  app.delete("/api/orcamentos/anexos/:id", auth, async (req: Request, res: Response) => {
-    try {
-      // REGRA INQUEBRÁVEL: remover anexo do orçamento arquiva/oculta, não apaga fisicamente.
-      const { rows } = await pool.query(
-        `UPDATE orcamentos_timbrados_anexos
-            SET status='arquivado', arquivado_em=NOW(), arquivado_por=$2
-          WHERE id=$1 AND COALESCE(status, 'ativo') <> 'arquivado'
-          RETURNING *`,
-        [req.params.id, (req as any).colaborador?.id || null]
-      );
-      const anexo = rows[0];
-      if (!anexo) { res.status(404).json({ error: "Anexo não encontrado" }); return; }
-      await pool.query(
-        "UPDATE orcamentos_timbrados SET anexos_count = (SELECT COUNT(*) FROM orcamentos_timbrados_anexos WHERE orcamento_id=$1 AND COALESCE(status, 'ativo') <> 'arquivado'), pdf_path=NULL WHERE id=$1",
-        [anexo.orcamento_id]
-      );
-      res.json({ success: true, arquivado: true, removido_definitivo: false, message: "Anexo arquivado. Arquivo físico preservado." });
-    } catch (err: any) {
-      console.error("[DELETE /api/orcamentos/anexos/:id]", err);
-      res.status(500).json({ error: "Erro ao arquivar anexo" });
-    }
-  });
-
-
   // Servir arquivos de contratos gerados e contratos sociais enviados
   app.use('/uploads/contratos', express.static(path.resolve('uploads', 'contratos')));
   app.use('/uploads/contratos-sociais', express.static(path.join(process.env.DATA_DIR || '/data', 'uploads', 'contratos-sociais')));
@@ -12394,46 +10997,21 @@ async function registrarDocumentoContratoGerado(params: {
 
       await client.query("BEGIN");
 
-      const atualizacao = await client.query(
-        `SELECT id, acompanhamento_id, numero_semana,
-                data_referencia_inicio, data_referencia_fim, data_atualizacao,
-                total_entradas, total_saidas, saldo_semanal, status_semana
-           FROM acompanhamento_bancario_atualizacoes
+      const deleted = await client.query(
+        `DELETE FROM acompanhamento_bancario_atualizacoes
           WHERE acompanhamento_id = $1
             AND numero_semana = $2
-          LIMIT 1`,
+          RETURNING id, acompanhamento_id, numero_semana,
+            data_referencia_inicio, data_referencia_fim, data_atualizacao,
+            total_entradas, total_saidas, saldo_semanal, status_semana`,
         [req.params.id, numeroSemana]
       );
 
-      if (!atualizacao.rows.length) {
+      if (!deleted.rows.length) {
         await client.query("ROLLBACK");
         res.status(404).json({ error: "Atualização semanal não encontrada." });
         return;
       }
-
-      const atualizacaoId = atualizacao.rows[0].id;
-
-      // A semana pode ter alertas/diagnósticos vinculados. Em alguns bancos antigos,
-      // a FK foi criada sem cascade efetivo; por isso a limpeza precisa ser explícita
-      // antes do DELETE da atualização semanal.
-      await client.query(
-        `DELETE FROM acompanhamento_bancario_alertas
-          WHERE acompanhamento_id = $1
-            AND (
-              numero_semana = $2
-              OR atualizacao_id = $3
-            )`,
-        [req.params.id, numeroSemana, atualizacaoId]
-      );
-
-      const deleted = await client.query(
-        `DELETE FROM acompanhamento_bancario_atualizacoes
-          WHERE id = $1
-          RETURNING id, acompanhamento_id, numero_semana,
-            data_referencia_inicio, data_referencia_fim, data_atualizacao,
-            total_entradas, total_saidas, saldo_semanal, status_semana`,
-        [atualizacaoId]
-      );
 
       const ultima = await client.query(
         `SELECT id, numero_semana, data_referencia_inicio, data_referencia_fim,
@@ -12512,16 +11090,16 @@ async function registrarDocumentoContratoGerado(params: {
       }
 
       await client.query(
-        `DELETE FROM acompanhamento_bancario_alertas
-          WHERE acompanhamento_id = $1`,
-        [req.params.id]
-      ).catch(() => null);
-
-      await client.query(
         `DELETE FROM acompanhamento_bancario_atualizacoes
           WHERE acompanhamento_id = $1`,
         [req.params.id]
       );
+
+      await client.query(
+        `DELETE FROM acompanhamento_bancario_alertas
+          WHERE acompanhamento_id = $1`,
+        [req.params.id]
+      ).catch(() => null);
 
       const deleted = await client.query(
         `DELETE FROM acompanhamentos_bancarios

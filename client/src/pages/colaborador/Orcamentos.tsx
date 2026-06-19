@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 
 type TipoCliente = "empresa" | "pessoa_fisica" | "livre";
-type MarcaOrcamento = "destrava" | "permupay";
+type MarcaOrcamento = "destrava" | "permupay" | "aragao";
 
 type AbaOrcamento = "editor" | "servicos" | "anexos" | "preview";
 
@@ -445,7 +445,7 @@ export default function Orcamentos() {
         result || { ...saved, status: "finalizado" };
       setSelecionado(finalizado);
       setEdicaoFinalizadoLiberada(false);
-      toast.success("Orçamento finalizado com papel timbrado");
+      toast.success("Orçamento finalizado");
       await carregarTudo();
       return finalizado;
     } catch (err: any) {
@@ -559,10 +559,10 @@ export default function Orcamentos() {
               </div>
               <div>
                 <h1 className="text-xl font-black tracking-tight text-slate-900">
-                  Orçamentos timbrados
+                  Orçamentos
                 </h1>
                 <p className="text-sm text-slate-500">
-                  Propostas de serviços · valor direto ou serviços prestados com
+                  Propostas de assessoria empresarial e financeira · valor direto ou serviços prestados com
                   cálculo automático.
                 </p>
               </div>
@@ -757,7 +757,7 @@ export default function Orcamentos() {
 
                         <label className="block">
                           <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
-                            Papel timbrado
+                            Empresa prestadora
                           </span>
                           <select
                             value={form.marca}
@@ -772,6 +772,7 @@ export default function Orcamentos() {
                           >
                             <option value="destrava">Destrava Crédito</option>
                             <option value="permupay">PermuPay</option>
+                            <option value="aragao">Aragão Serviços</option>
                           </select>
                         </label>
 
@@ -1390,19 +1391,21 @@ export default function Orcamentos() {
                 {aba === "preview" && (
                   <div className="mx-auto max-w-4xl rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
                     <div
-                      className={`mb-6 flex items-center justify-between border-b-4 pb-4 ${marca === "permupay" ? "border-blue-600" : "border-[#1B3A8C]"}`}
+                      className={`mb-6 flex items-center justify-between border-b-4 pb-4 ${marca === "permupay" ? "border-blue-600" : marca === "aragao" ? "border-amber-600" : "border-[#1B3A8C]"}`}
                     >
                       <img
                         src={
                           marca === "permupay"
                             ? "/logo-permupay.png"
-                            : "/destrava-logo.svg"
+                            : marca === "aragao"
+                              ? "/logo-aragao-servicos.svg"
+                              : "/destrava-logo.svg"
                         }
                         onError={(e) => {
                           (e.currentTarget as HTMLImageElement).src =
                             "/destrava-logo.svg";
                         }}
-                        className="h-12 max-w-[190px] object-contain"
+                        className={`${marca === "permupay" ? "h-20 max-w-[280px]" : marca === "aragao" ? "h-16 max-w-[260px]" : "h-12 max-w-[190px]"} object-contain`}
                       />
                       <div className="text-right text-xs text-slate-500">
                         <div className="font-black text-slate-800">
