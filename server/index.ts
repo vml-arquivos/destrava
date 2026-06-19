@@ -1750,6 +1750,13 @@ async function startServer() {
   ];
   for (const sql of alteracoesParceiros016) { try { await pool.query(sql); } catch { /* compat */ } }
   console.log('[startup] Patches de banco (contratos_gerados) aplicados/verificados.');
+
+  // ── Migration 066: Coluna itens nos orçamentos timbrados ──────────────────
+  try {
+    await pool.query(`ALTER TABLE public.orcamentos_timbrados ADD COLUMN IF NOT EXISTS itens JSONB NOT NULL DEFAULT '[]'::jsonb`);
+    console.log('[startup] Migration 066: coluna itens em orcamentos_timbrados OK.');
+  } catch (err: any) { console.warn('[startup] Migration 066 (itens):', err?.message); }
+  // ─────────────────────────────────────────────────────────────────────────────
   // ─────────────────────────────────────────────────────────────────────────────
 
   app.use(express.json({ limit: "5mb" }));
@@ -9992,9 +9999,22 @@ async function registrarDocumentoContratoGerado(params: {
   function normalizarOrcamentoBody(body: any) {
     const tipoCliente = ["empresa", "pessoa_fisica", "livre"].includes(String(body?.tipo_cliente)) ? String(body.tipo_cliente) : "empresa";
     const marca = ["destrava", "permupay"].includes(String(body?.marca)) ? String(body.marca) : "destrava";
-    const valor = Number(String(body?.valor_total ?? 0).replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", "."));
-    const validadeDias = Number.parseInt(String(body?.validade_dias || 7), 10);
+    const validadeDias = Number.parseInt(String(body?.validade_dias || 30), 10);
     const assinaturas = Array.isArray(body?.assinaturas) ? body.assinaturas : [];
+    // Normalizar itens
+    const itens = Array.isArray(body?.itens)
+      ? body.itens
+          .filter((it: any) => String(it?.descricao || "").trim())
+          .map((it: any) => ({
+            descricao: String(it.descricao || "").trim(),
+            quantidade: Math.max(1, Number(it.quantidade) || 1),
+            valor_unitario: Math.max(0, Number(it.valor_unitario) || 0),
+          }))
+      : [];
+    // Calcular valor_total automaticamente pelos itens; se não há itens, usa valor_total manual
+    const valorItens = itens.reduce((acc: number, it: any) => acc + it.quantidade * it.valor_unitario, 0);
+    const valorManual = Number(String(body?.valor_total ?? 0).replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", "."));
+    const valor = itens.length > 0 ? valorItens : (Number.isFinite(valorManual) ? valorManual : 0);
     return {
       tipo_cliente: tipoCliente,
       empresa_id: body?.empresa_id || null,
@@ -10007,8 +10027,9 @@ async function registrarDocumentoContratoGerado(params: {
       titulo: String(body?.titulo || "Orçamento de Serviços").trim(),
       descricao: String(body?.descricao || "").trim() || null,
       conteudo: String(body?.conteudo || "").trim(),
-      valor_total: Number.isFinite(valor) ? valor : 0,
-      validade_dias: Number.isFinite(validadeDias) && validadeDias > 0 ? validadeDias : 7,
+      itens,
+      valor_total: valor,
+      validade_dias: Number.isFinite(validadeDias) && validadeDias > 0 ? validadeDias : 30,
       validade_ate: body?.validade_ate || null,
       assinaturas,
       payload: body?.payload && typeof body.payload === "object" ? body.payload : {},
@@ -10087,7 +10108,6 @@ async function registrarDocumentoContratoGerado(params: {
   function htmlOrcamentoTimbrado(orcamento: any, anexos: any[] = []): string {
     const marca = String(orcamento.marca || "destrava");
     const isPermuPay = marca === "permupay";
-    const logo = isPermuPay ? PERMUPAY_LOGO_B64 : DESTRAVA_LOGO_B64;
     const cor = isPermuPay ? "#0066CC" : "#1B3A8C";
     const nomeMarca = isPermuPay ? "PermuPay" : "Destrava Crédito";
     const clienteDocumento = orcamento.cliente_documento ? ` · ${escapeHtmlOrcamento(orcamento.cliente_documento)}` : "";
@@ -10112,6 +10132,35 @@ async function registrarDocumentoContratoGerado(params: {
       ? `<section><h3>Documentos anexados</h3><ul>${anexos.map((a) => `<li>${escapeHtmlOrcamento(a.nome_original)}${a.descricao ? " — " + escapeHtmlOrcamento(a.descricao) : ""}</li>`).join("")}</ul></section>`
       : "";
 
+    // Tabela de itens (se houver)
+    const itens = Array.isArray(orcamento.itens) ? orcamento.itens.filter((it: any) => String(it?.descricao || "").trim()) : [];
+    const itensHtml = itens.length > 0
+      ? `<section>
+          <h3>Itens do orçamento</h3>
+          <table class="tabela-itens">
+            <thead>
+              <tr>
+                <th class="th-desc">Descrição</th>
+                <th class="th-num">Qtd</th>
+                <th class="th-num">Valor unit.</th>
+                <th class="th-num">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itens.map((it: any) => {
+                const sub = (Number(it.quantidade) || 1) * (Number(it.valor_unitario) || 0);
+                return `<tr>
+                  <td>${escapeHtmlOrcamento(it.descricao)}</td>
+                  <td class="td-num">${Number(it.quantidade) || 1}</td>
+                  <td class="td-num">${dinheiroOrcamento(it.valor_unitario)}</td>
+                  <td class="td-num"><strong>${dinheiroOrcamento(sub)}</strong></td>
+                </tr>`;
+              }).join("")}
+            </tbody>
+          </table>
+        </section>`
+      : "";
+
     return `<!doctype html>
 <html>
 <head>
@@ -10120,9 +10169,6 @@ async function registrarDocumentoContratoGerado(params: {
 <style>
   * { box-sizing: border-box; }
   body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; margin: 0; background: #fff; font-size: 11pt; line-height: 1.55; }
-  .topo { display:flex; align-items:center; justify-content:space-between; gap:24px; border-bottom:3px solid ${cor}; padding-bottom:14px; margin-bottom:22px; }
-  .topo img { height: 52px; max-width: 190px; object-fit: contain; }
-  .meta { text-align:right; color:#475569; font-size:9.5pt; }
   h1 { color:${cor}; font-size:22pt; margin:0 0 6px; line-height:1.15; }
   h2 { font-size:13pt; margin:0; color:#334155; font-weight:700; }
   h3 { font-size:12pt; color:${cor}; margin:22px 0 8px; border-bottom:1px solid #e2e8f0; padding-bottom:4px; }
@@ -10132,6 +10178,14 @@ async function registrarDocumentoContratoGerado(params: {
   .valor-final { font-size:19pt; color:${cor}; font-weight:800; }
   p { margin:0 0 10px; }
   ul { margin-top:6px; }
+  /* Tabela de itens */
+  .tabela-itens { width:100%; border-collapse:collapse; margin:0; font-size:10pt; }
+  .tabela-itens thead { background:${cor}; color:#fff; }
+  .tabela-itens th { padding:7px 10px; text-align:left; font-size:9pt; font-weight:700; }
+  .tabela-itens td { padding:6px 10px; border-bottom:1px solid #e2e8f0; }
+  .tabela-itens tbody tr:nth-child(even) { background:#f8fafc; }
+  .th-num, .td-num { text-align:right; white-space:nowrap; }
+  /* Assinaturas */
   .assinaturas { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:28px; margin-top:34px; break-inside: avoid; }
   .assinatura { text-align:center; padding-top:16px; }
   .linha { border-top:1px solid #0f172a; margin-bottom:8px; }
@@ -10143,14 +10197,6 @@ async function registrarDocumentoContratoGerado(params: {
 </head>
 <body>
   <div class="watermark">${escapeHtmlOrcamento(nomeMarca)}</div>
-  <header class="topo">
-    <img src="${logo}" alt="${escapeHtmlOrcamento(nomeMarca)}"/>
-    <div class="meta">
-      <strong>${escapeHtmlOrcamento(orcamento.numero || "")}</strong><br/>
-      Emitido em ${new Date(orcamento.criado_em || Date.now()).toLocaleDateString("pt-BR")}<br/>
-      Validade: ${orcamento.validade_ate ? new Date(orcamento.validade_ate).toLocaleDateString("pt-BR") : `${orcamento.validade_dias || 7} dias`}
-    </div>
-  </header>
 
   <h1>${escapeHtmlOrcamento(orcamento.titulo || "Orçamento de Serviços")}</h1>
   ${orcamento.descricao ? `<h2>${escapeHtmlOrcamento(orcamento.descricao)}</h2>` : ""}
@@ -10161,6 +10207,8 @@ async function registrarDocumentoContratoGerado(params: {
     ${orcamento.cliente_email ? `E-mail: ${escapeHtmlOrcamento(orcamento.cliente_email)}<br/>` : ""}
     ${orcamento.cliente_telefone ? `Telefone: ${escapeHtmlOrcamento(orcamento.cliente_telefone)}<br/>` : ""}
   </section>
+
+  ${itensHtml}
 
   <section>
     <h3>Escopo do orçamento</h3>
@@ -10176,8 +10224,8 @@ async function registrarDocumentoContratoGerado(params: {
       <div>
         <span class="label">Status</span>
         <strong>${escapeHtmlOrcamento(String(orcamento.status || "rascunho").toUpperCase())}</strong><br/>
-        <span class="label" style="margin-top:8px">Marca</span>
-        <strong>${escapeHtmlOrcamento(nomeMarca)}</strong>
+        <span class="label" style="margin-top:8px">Validade</span>
+        <strong>${orcamento.validade_ate ? new Date(orcamento.validade_ate).toLocaleDateString("pt-BR") : `${orcamento.validade_dias || 30} dias`}</strong>
       </div>
     </div>
   </section>
@@ -10307,10 +10355,10 @@ async function registrarDocumentoContratoGerado(params: {
       const { rows } = await pool.query(
         `INSERT INTO orcamentos_timbrados (
            numero, tipo_cliente, empresa_id, cliente_pf_id, cliente_nome, cliente_documento, cliente_email,
-           cliente_telefone, marca, titulo, descricao, conteudo, valor_total, validade_dias, validade_ate,
+           cliente_telefone, marca, titulo, descricao, conteudo, itens, valor_total, validade_dias, validade_ate,
            status, assinaturas, payload, criado_por
          ) VALUES (
-           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'rascunho',$16::jsonb,$17::jsonb,$18
+           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$16,'rascunho',$17::jsonb,$18::jsonb,$19
          )
          RETURNING *`,
         [
@@ -10326,6 +10374,7 @@ async function registrarDocumentoContratoGerado(params: {
           body.titulo,
           body.descricao,
           body.conteudo,
+          JSON.stringify(body.itens || []),
           body.valor_total,
           body.validade_dias,
           validadeAte,
@@ -10355,9 +10404,9 @@ async function registrarDocumentoContratoGerado(params: {
         `UPDATE orcamentos_timbrados SET
            tipo_cliente=$1, empresa_id=$2, cliente_pf_id=$3, cliente_nome=$4, cliente_documento=$5,
            cliente_email=$6, cliente_telefone=$7, marca=$8, titulo=$9, descricao=$10, conteudo=$11,
-           valor_total=$12, validade_dias=$13, validade_ate=$14, assinaturas=$15::jsonb, payload=$16::jsonb,
+           itens=$12::jsonb, valor_total=$13, validade_dias=$14, validade_ate=$15, assinaturas=$16::jsonb, payload=$17::jsonb,
            pdf_path=NULL
-         WHERE id=$17
+         WHERE id=$18
          RETURNING *`,
         [
           body.tipo_cliente,
@@ -10371,6 +10420,7 @@ async function registrarDocumentoContratoGerado(params: {
           body.titulo,
           body.descricao,
           body.conteudo,
+          JSON.stringify(body.itens || []),
           body.valor_total,
           body.validade_dias,
           validadeAte,

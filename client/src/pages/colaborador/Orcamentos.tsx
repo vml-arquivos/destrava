@@ -17,6 +17,7 @@ import {
   RefreshCw,
   FileText,
   PenLine,
+  PackagePlus,
 } from "lucide-react";
 
 type TipoCliente = "empresa" | "pessoa_fisica" | "livre";
@@ -40,6 +41,12 @@ interface ClientePfOpcao {
   telefone?: string;
 }
 
+interface ItemOrcamento {
+  descricao: string;
+  quantidade: number;
+  valor_unitario: number;
+}
+
 interface Orcamento {
   id: string;
   numero?: string;
@@ -54,6 +61,7 @@ interface Orcamento {
   titulo: string;
   descricao?: string | null;
   conteudo: string;
+  itens?: ItemOrcamento[];
   valor_total?: number | string | null;
   validade_dias?: number | null;
   validade_ate?: string | null;
@@ -84,18 +92,13 @@ const ASSINATURAS_PADRAO = [
 const CONTEUDO_PADRAO = `1. Objeto do orçamento
 Prestação de serviços de organização, análise, estruturação e acompanhamento para soluções financeiras, crédito empresarial, meios de pagamento ou serviços correlatos, conforme necessidade do cliente selecionado.
 
-2. Escopo previsto
-- Diagnóstico inicial das informações cadastrais e documentais;
-- Orientação sobre documentos necessários;
-- Organização do processo para análise interna;
-- Acompanhamento das etapas comerciais e operacionais;
-- Suporte na preparação para envio a parceiros, bancos ou instituições, quando aplicável.
-
-3. Condições comerciais
+2. Condições comerciais
 As condições finais podem variar conforme documentação apresentada, escopo contratado, complexidade da operação e aprovação interna.
 
-4. Observações
+3. Observações
 Este orçamento é editável antes da finalização. Documentos complementares podem ser anexados ao orçamento para conferência, comprovação ou suporte da proposta.`;
+
+const ITEM_VAZIO: ItemOrcamento = { descricao: "", quantidade: 1, valor_unitario: 0 };
 
 function moneyBR(value: any): string {
   const n = Number(value || 0);
@@ -109,8 +112,8 @@ function fmtDate(date?: string | null): string {
   return d.toLocaleDateString("pt-BR");
 }
 
-function normalizeMoneyInput(value: string): string {
-  return value.replace(/[^\d,.-]/g, "");
+function calcularTotalItens(itens: ItemOrcamento[]): number {
+  return itens.reduce((acc, item) => acc + (Number(item.quantidade) || 0) * (Number(item.valor_unitario) || 0), 0);
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -136,8 +139,9 @@ const estadoInicial = {
   titulo: "Orçamento de Serviços",
   descricao: "",
   conteudo: CONTEUDO_PADRAO,
+  itens: [{ ...ITEM_VAZIO }] as ItemOrcamento[],
   valor_total: "0",
-  validade_dias: 7,
+  validade_dias: 30,
   validade_ate: "",
   assinaturas: ASSINATURAS_PADRAO,
 };
@@ -151,13 +155,23 @@ export default function Orcamentos() {
   const [busca, setBusca] = useState("");
   const [loading, setLoading] = useState(false);
   const [salvando, setSalvando] = useState(false);
-  const [aba, setAba] = useState<"editor" | "anexos" | "preview">("editor");
+  const [aba, setAba] = useState<"editor" | "itens" | "anexos" | "preview">("editor");
   const [arquivos, setArquivos] = useState<FileList | null>(null);
   const [descricaoAnexo, setDescricaoAnexo] = useState("");
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const marca = form.marca as MarcaOrcamento;
   const isFinalizado = selecionado?.status === "finalizado";
+  const itens: ItemOrcamento[] = Array.isArray(form.itens) && form.itens.length > 0 ? form.itens : [{ ...ITEM_VAZIO }];
+  const totalItens = calcularTotalItens(itens);
+  const hasItens = itens.some((it) => it.descricao?.trim() || Number(it.valor_unitario) > 0);
+
+  // Sincronizar valor_total com total dos itens automaticamente
+  useEffect(() => {
+    if (hasItens) {
+      setForm((f: any) => ({ ...f, valor_total: String(totalItens) }));
+    }
+  }, [totalItens, hasItens]);
 
   async function carregarTudo() {
     setLoading(true);
@@ -186,7 +200,7 @@ export default function Orcamentos() {
 
   function novoOrcamento() {
     setSelecionado(null);
-    setForm({ ...estadoInicial, assinaturas: ASSINATURAS_PADRAO.map((a) => ({ ...a })) });
+    setForm({ ...estadoInicial, itens: [{ ...ITEM_VAZIO }], assinaturas: ASSINATURAS_PADRAO.map((a) => ({ ...a })) });
     setAba("editor");
   }
 
@@ -194,6 +208,7 @@ export default function Orcamentos() {
     try {
       const full = await apiFetch(`/api/orcamentos/${orc.id}`);
       setSelecionado(full);
+      const itensCarregados = Array.isArray(full.itens) && full.itens.length > 0 ? full.itens : [{ ...ITEM_VAZIO }];
       setForm({
         tipo_cliente: full.tipo_cliente || "empresa",
         empresa_id: full.empresa_id || "",
@@ -206,8 +221,9 @@ export default function Orcamentos() {
         titulo: full.titulo || "Orçamento de Serviços",
         descricao: full.descricao || "",
         conteudo: full.conteudo || CONTEUDO_PADRAO,
+        itens: itensCarregados,
         valor_total: String(full.valor_total ?? "0"),
-        validade_dias: full.validade_dias || 7,
+        validade_dias: full.validade_dias || 30,
         validade_ate: full.validade_ate || "",
         assinaturas: Array.isArray(full.assinaturas) && full.assinaturas.length ? full.assinaturas : ASSINATURAS_PADRAO.map((a) => ({ ...a })),
       });
@@ -249,6 +265,27 @@ export default function Orcamentos() {
     }));
   }
 
+  // ── Itens ────────────────────────────────────────────────────────────────
+  function addItem() {
+    setForm((f: any) => ({ ...f, itens: [...(f.itens || []), { ...ITEM_VAZIO }] }));
+  }
+
+  function removeItem(idx: number) {
+    setForm((f: any) => {
+      const novos = (f.itens || []).filter((_: any, i: number) => i !== idx);
+      return { ...f, itens: novos.length > 0 ? novos : [{ ...ITEM_VAZIO }] };
+    });
+  }
+
+  function updateItem(idx: number, key: keyof ItemOrcamento, value: string | number) {
+    setForm((f: any) => {
+      const itensNovos = [...(f.itens || [])];
+      itensNovos[idx] = { ...(itensNovos[idx] || ITEM_VAZIO), [key]: value };
+      return { ...f, itens: itensNovos };
+    });
+  }
+
+  // ── Assinaturas ───────────────────────────────────────────────────────────
   function updateAssinatura(index: number, key: string, value: string) {
     const assinaturas = [...(form.assinaturas || [])];
     assinaturas[index] = { ...(assinaturas[index] || {}), [key]: value };
@@ -269,6 +306,7 @@ export default function Orcamentos() {
     }));
   }
 
+  // ── Persistência ─────────────────────────────────────────────────────────
   async function salvar() {
     if (!form.cliente_nome?.trim()) {
       toast.error("Informe ou selecione o cliente do orçamento");
@@ -276,9 +314,12 @@ export default function Orcamentos() {
     }
     setSalvando(true);
     try {
+      const itensValidos = (form.itens || []).filter((it: ItemOrcamento) => it.descricao?.trim());
+      const valorFinal = itensValidos.length > 0 ? calcularTotalItens(itensValidos) : Number(String(form.valor_total || 0).replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", "."));
       const payload = {
         ...form,
-        valor_total: normalizeMoneyInput(String(form.valor_total || "0")),
+        itens: itensValidos,
+        valor_total: valorFinal,
       };
       const saved = selecionado
         ? await apiFetch(`/api/orcamentos/${selecionado.id}`, { method: "PUT", body: JSON.stringify(payload) })
@@ -378,7 +419,7 @@ export default function Orcamentos() {
               </div>
               <div>
                 <h1 className="text-xl font-black tracking-tight text-slate-900">Orçamentos timbrados</h1>
-                <p className="text-sm text-slate-500">Destrava e PermuPay, empresa ou pessoa física, texto editável, assinaturas e anexos livres.</p>
+                <p className="text-sm text-slate-500">Destrava e PermuPay · Clientes PJ ou PF · Itens configuráveis com cálculo automático.</p>
               </div>
             </div>
             <button
@@ -391,6 +432,7 @@ export default function Orcamentos() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+            {/* Lista lateral */}
             <aside className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <div className="relative flex-1">
@@ -442,11 +484,13 @@ export default function Orcamentos() {
               </div>
             </aside>
 
+            {/* Painel editor */}
             <section className="min-w-0 rounded-3xl border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-3">
                 <div className="flex flex-wrap gap-1">
                   {[
                     ["editor", "Editor"],
+                    ["itens", `Itens (${itens.filter(it => it.descricao?.trim()).length || 0})`],
                     ["anexos", "Anexos"],
                     ["preview", "Prévia"],
                   ].map(([id, label]) => (
@@ -481,21 +525,22 @@ export default function Orcamentos() {
                   </div>
                 )}
 
+                {/* ── Aba Editor ─────────────────────────────────────────── */}
                 {aba === "editor" && (
                   <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                         <label className="block">
-                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Cliente</span>
+                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Tipo de cliente</span>
                           <select
                             value={form.tipo_cliente}
                             disabled={isFinalizado}
                             onChange={(e) => setForm((f: any) => ({ ...f, tipo_cliente: e.target.value, empresa_id: "", cliente_pf_id: "", cliente_nome: "", cliente_documento: "" }))}
                             className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
                           >
-                            <option value="empresa">Empresa</option>
-                            <option value="pessoa_fisica">Pessoa Física</option>
-                            <option value="livre">Livre/manual</option>
+                            <option value="empresa">Clientes PJ (Empresa)</option>
+                            <option value="pessoa_fisica">Clientes PF (Pessoa Física)</option>
+                            <option value="livre">Livre / manual</option>
                           </select>
                         </label>
 
@@ -513,20 +558,28 @@ export default function Orcamentos() {
                         </label>
 
                         <label className="block">
-                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Valor total</span>
+                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                            Validade (dias)
+                          </span>
                           <input
-                            value={form.valor_total}
+                            type="number"
+                            value={form.validade_dias}
                             disabled={isFinalizado}
-                            onChange={(e) => setForm((f: any) => ({ ...f, valor_total: e.target.value }))}
-                            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-blue-300"
-                            placeholder="0,00"
+                            onChange={(e) => setForm((f: any) => ({ ...f, validade_dias: Number(e.target.value || 30) }))}
+                            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                            placeholder="30"
+                            min={1}
                           />
                         </label>
                       </div>
 
+                      {/* Seleção de cliente PJ */}
                       {form.tipo_cliente === "empresa" && (
                         <label className="block">
-                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Selecionar empresa</span>
+                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                            <Building2 className="mr-1 inline h-3.5 w-3.5" />
+                            Selecionar cliente PJ
+                          </span>
                           <select
                             value={form.empresa_id}
                             disabled={isFinalizado}
@@ -541,9 +594,13 @@ export default function Orcamentos() {
                         </label>
                       )}
 
+                      {/* Seleção de cliente PF */}
                       {form.tipo_cliente === "pessoa_fisica" && (
                         <label className="block">
-                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Selecionar pessoa física</span>
+                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                            <User className="mr-1 inline h-3.5 w-3.5" />
+                            Selecionar cliente PF
+                          </span>
                           <select
                             value={form.cliente_pf_id}
                             disabled={isFinalizado}
@@ -558,36 +615,35 @@ export default function Orcamentos() {
                         </label>
                       )}
 
+                      {/* Dados do cliente */}
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <input disabled={isFinalizado} value={form.cliente_nome} onChange={(e) => setForm((f: any) => ({ ...f, cliente_nome: e.target.value }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300" placeholder="Nome/Razão social do cliente" />
-                        <input disabled={isFinalizado} value={form.cliente_documento} onChange={(e) => setForm((f: any) => ({ ...f, cliente_documento: e.target.value }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300" placeholder="CPF/CNPJ" />
+                        <input disabled={isFinalizado} value={form.cliente_nome} onChange={(e) => setForm((f: any) => ({ ...f, cliente_nome: e.target.value }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300" placeholder="Nome / Razão social do cliente" />
+                        <input disabled={isFinalizado} value={form.cliente_documento} onChange={(e) => setForm((f: any) => ({ ...f, cliente_documento: e.target.value }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300" placeholder="CPF / CNPJ" />
                         <input disabled={isFinalizado} value={form.cliente_email} onChange={(e) => setForm((f: any) => ({ ...f, cliente_email: e.target.value }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300" placeholder="E-mail" />
-                        <input disabled={isFinalizado} value={form.cliente_telefone} onChange={(e) => setForm((f: any) => ({ ...f, cliente_telefone: e.target.value }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300" placeholder="Telefone/WhatsApp" />
+                        <input disabled={isFinalizado} value={form.cliente_telefone} onChange={(e) => setForm((f: any) => ({ ...f, cliente_telefone: e.target.value }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300" placeholder="Telefone / WhatsApp" />
                       </div>
 
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_160px]">
-                        <input disabled={isFinalizado} value={form.titulo} onChange={(e) => setForm((f: any) => ({ ...f, titulo: e.target.value }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-blue-300" placeholder="Título do orçamento" />
-                        <input disabled={isFinalizado} type="number" value={form.validade_dias} onChange={(e) => setForm((f: any) => ({ ...f, validade_dias: Number(e.target.value || 7) }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300" placeholder="Validade dias" />
-                      </div>
+                      <input disabled={isFinalizado} value={form.titulo} onChange={(e) => setForm((f: any) => ({ ...f, titulo: e.target.value }))} className="h-11 w-full rounded-2xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-blue-300" placeholder="Título do orçamento" />
 
-                      <textarea disabled={isFinalizado} value={form.descricao} onChange={(e) => setForm((f: any) => ({ ...f, descricao: e.target.value }))} rows={2} className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-300" placeholder="Descrição curta/subtítulo do orçamento" />
+                      <textarea disabled={isFinalizado} value={form.descricao} onChange={(e) => setForm((f: any) => ({ ...f, descricao: e.target.value }))} rows={2} className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-300" placeholder="Descrição curta / subtítulo do orçamento" />
 
                       <div>
                         <div className="mb-2 flex items-center gap-2 text-sm font-black text-slate-800">
                           <PenLine className="h-4 w-4 text-blue-600" />
-                          Texto livre editável do orçamento
+                          Texto livre do orçamento
                         </div>
                         <textarea
                           disabled={isFinalizado}
                           value={form.conteudo}
                           onChange={(e) => setForm((f: any) => ({ ...f, conteudo: e.target.value }))}
-                          rows={18}
+                          rows={14}
                           className="w-full rounded-3xl border border-slate-200 bg-slate-50/60 px-4 py-4 text-sm leading-relaxed outline-none focus:border-blue-300 focus:bg-white"
-                          placeholder="Escreva livremente o escopo, itens, condições, observações e demais informações do orçamento..."
+                          placeholder="Escreva livremente o escopo, condições, observações e demais informações do orçamento..."
                         />
                       </div>
                     </div>
 
+                    {/* Coluna lateral — resumo + assinaturas */}
                     <div className="space-y-4">
                       <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
                         <div className="mb-3 flex items-center gap-2 text-sm font-black text-slate-900">
@@ -597,7 +653,12 @@ export default function Orcamentos() {
                         <div className="space-y-3 text-sm">
                           <div><span className="text-xs font-bold uppercase text-slate-400">Cliente</span><p className="font-bold text-slate-900">{form.cliente_nome || "Não informado"}</p></div>
                           <div><span className="text-xs font-bold uppercase text-slate-400">Marca</span><p className="font-bold text-slate-900">{marca === "permupay" ? "PermuPay" : "Destrava Crédito"}</p></div>
-                          <div><span className="text-xs font-bold uppercase text-slate-400">Valor</span><p className="text-xl font-black text-blue-700">{moneyBR(String(form.valor_total).replace(",", "."))}</p></div>
+                          <div>
+                            <span className="text-xs font-bold uppercase text-slate-400">Valor total</span>
+                            <p className="text-xl font-black text-blue-700">{moneyBR(hasItens ? totalItens : String(form.valor_total).replace(",", "."))}</p>
+                            {hasItens && <p className="mt-0.5 text-xs text-slate-400">Calculado automaticamente pelos itens</p>}
+                          </div>
+                          <div><span className="text-xs font-bold uppercase text-slate-400">Validade</span><p className="font-bold text-slate-900">{form.validade_dias || 30} dias</p></div>
                         </div>
                       </div>
 
@@ -614,8 +675,8 @@ export default function Orcamentos() {
                                 {!isFinalizado && idx > 1 && <button onClick={() => removeAssinatura(idx)} className="text-rose-500"><Trash2 className="h-3.5 w-3.5" /></button>}
                               </div>
                               <input disabled={isFinalizado} value={a.nome || ""} onChange={(e) => updateAssinatura(idx, "nome", e.target.value)} className="mb-2 h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold outline-none" placeholder="Nome" />
-                              <input disabled={isFinalizado} value={a.cargo || ""} onChange={(e) => updateAssinatura(idx, "cargo", e.target.value)} className="mb-2 h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs outline-none" placeholder="Cargo/qualificação" />
-                              <input disabled={isFinalizado} value={a.documento || ""} onChange={(e) => updateAssinatura(idx, "documento", e.target.value)} className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs outline-none" placeholder="CPF/CNPJ" />
+                              <input disabled={isFinalizado} value={a.cargo || ""} onChange={(e) => updateAssinatura(idx, "cargo", e.target.value)} className="mb-2 h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs outline-none" placeholder="Cargo / qualificação" />
+                              <input disabled={isFinalizado} value={a.documento || ""} onChange={(e) => updateAssinatura(idx, "documento", e.target.value)} className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs outline-none" placeholder="CPF / CNPJ" />
                             </div>
                           ))}
                         </div>
@@ -624,6 +685,113 @@ export default function Orcamentos() {
                   </div>
                 )}
 
+                {/* ── Aba Itens ─────────────────────────────────────────── */}
+                {aba === "itens" && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm font-black text-slate-900">
+                        <PackagePlus className="h-5 w-5 text-blue-600" />
+                        Itens do orçamento
+                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-black text-blue-700">
+                          O valor total é calculado automaticamente
+                        </span>
+                      </div>
+                      {!isFinalizado && (
+                        <button onClick={addItem} className="inline-flex items-center gap-1.5 rounded-2xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">
+                          <Plus className="h-3.5 w-3.5" /> Adicionar item
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Cabeçalho da tabela */}
+                    <div className="hidden grid-cols-[2fr_80px_140px_36px] gap-2 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-500 md:grid">
+                      <span>Descrição do item / serviço</span>
+                      <span className="text-center">Qtd</span>
+                      <span className="text-right">Valor unitário</span>
+                      <span></span>
+                    </div>
+
+                    {/* Linhas de itens */}
+                    <div className="space-y-2">
+                      {itens.map((item, idx) => (
+                        <div key={idx} className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-[2fr_80px_140px_36px] md:items-center">
+                          <div>
+                            <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">Descrição</span>
+                            <input
+                              disabled={isFinalizado}
+                              value={item.descricao}
+                              onChange={(e) => updateItem(idx, "descricao", e.target.value)}
+                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                              placeholder={`Item ${idx + 1} — descreva o serviço ou produto`}
+                            />
+                          </div>
+                          <div>
+                            <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">Qtd</span>
+                            <input
+                              disabled={isFinalizado}
+                              type="number"
+                              min={1}
+                              value={item.quantidade}
+                              onChange={(e) => updateItem(idx, "quantidade", Number(e.target.value) || 1)}
+                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold outline-none focus:border-blue-300"
+                            />
+                          </div>
+                          <div>
+                            <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">Valor unitário (R$)</span>
+                            <input
+                              disabled={isFinalizado}
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              value={item.valor_unitario}
+                              onChange={(e) => updateItem(idx, "valor_unitario", Number(e.target.value) || 0)}
+                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-right text-sm font-bold outline-none focus:border-blue-300"
+                              placeholder="0,00"
+                            />
+                          </div>
+                          <div className="flex items-center justify-end">
+                            {!isFinalizado && (
+                              <button
+                                onClick={() => removeItem(idx)}
+                                className="rounded-xl p-2 text-rose-400 hover:bg-rose-50 hover:text-rose-600"
+                                title="Remover item"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                          {/* Total por linha */}
+                          {(item.descricao || Number(item.valor_unitario) > 0) && (
+                            <div className="col-span-full -mt-1 flex justify-end">
+                              <span className="rounded-lg bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
+                                Subtotal: {moneyBR((Number(item.quantidade) || 0) * (Number(item.valor_unitario) || 0))}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Total geral */}
+                    {itens.length > 0 && (
+                      <div className="flex justify-end">
+                        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-6 py-4">
+                          <div className="text-xs font-bold uppercase text-blue-500">Total do orçamento</div>
+                          <div className="text-3xl font-black text-blue-700">{moneyBR(totalItens)}</div>
+                          <div className="mt-0.5 text-xs text-blue-400">Calculado automaticamente • {itens.filter(it => it.descricao?.trim()).length} item(ns)</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {!isFinalizado && (
+                      <button onClick={addItem} className="w-full rounded-2xl border-2 border-dashed border-blue-200 py-3 text-sm font-bold text-blue-500 hover:border-blue-400 hover:text-blue-700 hover:bg-blue-50 transition">
+                        <Plus className="mr-1.5 inline h-4 w-4" /> Adicionar mais um item
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Aba Anexos ────────────────────────────────────────── */}
                 {aba === "anexos" && (
                   <div className="space-y-4">
                     <div className="rounded-3xl border border-dashed border-blue-200 bg-blue-50/60 p-4">
@@ -660,13 +828,14 @@ export default function Orcamentos() {
                   </div>
                 )}
 
+                {/* ── Aba Prévia ────────────────────────────────────────── */}
                 {aba === "preview" && (
                   <div className="mx-auto max-w-4xl rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
                     <div className={`mb-6 flex items-center justify-between border-b-4 pb-4 ${marca === "permupay" ? "border-blue-600" : "border-[#1B3A8C]"}`}>
                       <img src={marca === "permupay" ? "/logo-permupay.png" : "/destrava-logo.svg"} onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/destrava-logo.svg"; }} className="h-12 max-w-[190px] object-contain" />
                       <div className="text-right text-xs text-slate-500">
                         <div className="font-black text-slate-800">{selecionado?.numero || "Rascunho"}</div>
-                        <div>Validade: {form.validade_dias || 7} dias</div>
+                        <div>Validade: {form.validade_dias || 30} dias</div>
                       </div>
                     </div>
                     <h2 className="text-2xl font-black text-slate-900">{form.titulo}</h2>
@@ -676,10 +845,29 @@ export default function Orcamentos() {
                       <div className="font-black text-slate-900">{form.cliente_nome || "Cliente não informado"}</div>
                       <div className="text-sm text-slate-600">{form.cliente_documento}</div>
                     </div>
+
+                    {/* Itens na prévia */}
+                    {hasItens && (
+                      <div className="my-5">
+                        <div className="mb-3 border-b border-slate-200 pb-2 text-sm font-black text-slate-800">Itens do orçamento</div>
+                        <div className="space-y-2">
+                          {itens.filter(it => it.descricao?.trim()).map((item, idx) => (
+                            <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                              <span className="text-sm text-slate-700">{item.descricao}</span>
+                              <div className="text-right text-sm">
+                                <span className="text-slate-400">{item.quantidade}x {moneyBR(item.valor_unitario)} = </span>
+                                <span className="font-bold text-slate-900">{moneyBR(Number(item.quantidade) * Number(item.valor_unitario))}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="prose prose-sm max-w-none whitespace-pre-wrap text-slate-700">{form.conteudo}</div>
                     <div className="my-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <div className="text-xs font-bold uppercase text-slate-400">Valor total</div>
-                      <div className="text-2xl font-black text-blue-700">{moneyBR(String(form.valor_total).replace(",", "."))}</div>
+                      <div className="text-2xl font-black text-blue-700">{moneyBR(hasItens ? totalItens : String(form.valor_total).replace(",", "."))}</div>
                     </div>
                     <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-2">
                       {(form.assinaturas || []).map((a: any, idx: number) => (
