@@ -88,7 +88,12 @@ interface Anexo {
 }
 
 const ASSINATURAS_PADRAO = [
-  { tipo: "contratada", nome: "DESTRAVA CRÉDITO LTDA", cargo: "Contratada", documento: "CNPJ 35.427.182/0001-66" },
+  {
+    tipo: "contratada",
+    nome: "DESTRAVA CRÉDITO LTDA",
+    cargo: "Contratada",
+    documento: "CNPJ 35.427.182/0001-66",
+  },
   { tipo: "cliente", nome: "", cargo: "Cliente / Contratante", documento: "" },
 ];
 
@@ -101,7 +106,11 @@ Os honorários e condições de pagamento serão definidos conforme complexidade
 3. Observações
 Este orçamento é editável antes da finalização. Serviços prestados, documentos complementares e anexos podem acompanhar esta proposta para conferência, aceite e formalização.`;
 
-const SERVICO_VAZIO: ServicoOrcamento = { descricao: "", quantidade: 1, valor_unitario: 0 };
+const SERVICO_VAZIO: ServicoOrcamento = {
+  descricao: "",
+  quantidade: 1,
+  valor_unitario: 0,
+};
 
 function moneyBR(value: any): string {
   const n = Number(value || 0);
@@ -110,7 +119,14 @@ function moneyBR(value: any): string {
 
 function parseMoney(value: any): number {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-  return Number(String(value || 0).replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", ".")) || 0;
+  return (
+    Number(
+      String(value || 0)
+        .replace(/[R$\s]/g, "")
+        .replace(/\./g, "")
+        .replace(",", "."),
+    ) || 0
+  );
 }
 
 function fmtDate(date?: string | null): string {
@@ -121,7 +137,12 @@ function fmtDate(date?: string | null): string {
 }
 
 function calcularTotalServicos(servicos: ServicoOrcamento[]): number {
-  return servicos.reduce((acc, servico) => acc + (Number(servico.quantidade) || 0) * (Number(servico.valor_unitario) || 0), 0);
+  return servicos.reduce(
+    (acc, servico) =>
+      acc +
+      (Number(servico.quantidade) || 0) * (Number(servico.valor_unitario) || 0),
+    0,
+  );
 }
 
 function limparDescricaoServico(value: any): string {
@@ -170,6 +191,8 @@ export default function Orcamentos() {
   const [busca, setBusca] = useState("");
   const [loading, setLoading] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [edicaoFinalizadoLiberada, setEdicaoFinalizadoLiberada] =
+    useState(false);
   const [aba, setAba] = useState<AbaOrcamento>("editor");
   const [arquivos, setArquivos] = useState<FileList | null>(null);
   const [descricaoAnexo, setDescricaoAnexo] = useState("");
@@ -177,8 +200,13 @@ export default function Orcamentos() {
 
   const marca = form.marca as MarcaOrcamento;
   const isFinalizado = selecionado?.status === "finalizado";
-  const servicos: ServicoOrcamento[] = Array.isArray(form.itens) ? form.itens : [];
-  const servicosValidos = servicos.filter((servico) => servico.descricao?.trim());
+  const camposBloqueados = isFinalizado && !edicaoFinalizadoLiberada;
+  const servicos: ServicoOrcamento[] = Array.isArray(form.itens)
+    ? form.itens
+    : [];
+  const servicosValidos = servicos.filter((servico) =>
+    servico.descricao?.trim(),
+  );
   const hasServicos = servicosValidos.length > 0;
   const totalServicos = calcularTotalServicos(servicosValidos);
   const valorManual = parseMoney(form.valor_total);
@@ -194,12 +222,16 @@ export default function Orcamentos() {
     setLoading(true);
     try {
       const [lista, clientes] = await Promise.all([
-        apiFetch(`/api/orcamentos${busca ? `?busca=${encodeURIComponent(busca)}` : ""}`),
+        apiFetch(
+          `/api/orcamentos${busca ? `?busca=${encodeURIComponent(busca)}` : ""}`,
+        ),
         apiFetch("/api/orcamentos/clientes"),
       ]);
       setOrcamentos(Array.isArray(lista) ? lista : []);
       setEmpresas(Array.isArray(clientes?.empresas) ? clientes.empresas : []);
-      setClientesPf(Array.isArray(clientes?.clientes_pf) ? clientes.clientes_pf : []);
+      setClientesPf(
+        Array.isArray(clientes?.clientes_pf) ? clientes.clientes_pf : [],
+      );
     } catch (err: any) {
       toast.error(err.message || "Erro ao carregar orçamentos");
     } finally {
@@ -217,7 +249,12 @@ export default function Orcamentos() {
 
   function novoOrcamento() {
     setSelecionado(null);
-    setForm({ ...estadoInicial, itens: [], assinaturas: ASSINATURAS_PADRAO.map((a) => ({ ...a })) });
+    setEdicaoFinalizadoLiberada(false);
+    setForm({
+      ...estadoInicial,
+      itens: [],
+      assinaturas: ASSINATURAS_PADRAO.map((a) => ({ ...a })),
+    });
     setAba("editor");
   }
 
@@ -225,6 +262,7 @@ export default function Orcamentos() {
     try {
       const full = await apiFetch(`/api/orcamentos/${orc.id}`);
       setSelecionado(full);
+      setEdicaoFinalizadoLiberada(false);
       const servicosCarregados = Array.isArray(full.itens) ? full.itens : [];
       setForm({
         tipo_cliente: full.tipo_cliente || "empresa",
@@ -242,7 +280,10 @@ export default function Orcamentos() {
         valor_total: String(full.valor_total ?? "0"),
         validade_dias: full.validade_dias || 30,
         validade_ate: full.validade_ate || "",
-        assinaturas: Array.isArray(full.assinaturas) && full.assinaturas.length ? full.assinaturas : ASSINATURAS_PADRAO.map((a) => ({ ...a })),
+        assinaturas:
+          Array.isArray(full.assinaturas) && full.assinaturas.length
+            ? full.assinaturas
+            : ASSINATURAS_PADRAO.map((a) => ({ ...a })),
       });
       setAba("editor");
     } catch (err: any) {
@@ -261,7 +302,13 @@ export default function Orcamentos() {
       cliente_email: emp?.email || "",
       cliente_telefone: emp?.whatsapp || emp?.telefone || "",
       assinaturas: (f.assinaturas || ASSINATURAS_PADRAO).map((a: any) =>
-        a.tipo === "cliente" ? { ...a, nome: emp?.razao_social || emp?.nome_fantasia || "", documento: emp?.cnpj || "" } : a
+        a.tipo === "cliente"
+          ? {
+              ...a,
+              nome: emp?.razao_social || emp?.nome_fantasia || "",
+              documento: emp?.cnpj || "",
+            }
+          : a,
       ),
     }));
   }
@@ -277,21 +324,33 @@ export default function Orcamentos() {
       cliente_email: cli?.email || "",
       cliente_telefone: cli?.telefone || "",
       assinaturas: (f.assinaturas || ASSINATURAS_PADRAO).map((a: any) =>
-        a.tipo === "cliente" ? { ...a, nome: cli?.nome || "", documento: cli?.cpf || "" } : a
+        a.tipo === "cliente"
+          ? { ...a, nome: cli?.nome || "", documento: cli?.cpf || "" }
+          : a,
       ),
     }));
   }
 
   function adicionarServico() {
-    setForm((f: any) => ({ ...f, itens: [...(f.itens || []), { ...SERVICO_VAZIO }] }));
+    setForm((f: any) => ({
+      ...f,
+      itens: [...(f.itens || []), { ...SERVICO_VAZIO }],
+    }));
     setAba("servicos");
   }
 
   function removerServico(idx: number) {
-    setForm((f: any) => ({ ...f, itens: (f.itens || []).filter((_: any, i: number) => i !== idx) }));
+    setForm((f: any) => ({
+      ...f,
+      itens: (f.itens || []).filter((_: any, i: number) => i !== idx),
+    }));
   }
 
-  function atualizarServico(idx: number, key: keyof ServicoOrcamento, value: string | number) {
+  function atualizarServico(
+    idx: number,
+    key: keyof ServicoOrcamento,
+    value: string | number,
+  ) {
     setForm((f: any) => {
       const atual = Array.isArray(f.itens) ? [...f.itens] : [];
       atual[idx] = { ...(atual[idx] || SERVICO_VAZIO), [key]: value };
@@ -314,14 +373,19 @@ export default function Orcamentos() {
   function addAssinatura() {
     setForm((f: any) => ({
       ...f,
-      assinaturas: [...(f.assinaturas || []), { tipo: "testemunha", nome: "", cargo: "Testemunha", documento: "" }],
+      assinaturas: [
+        ...(f.assinaturas || []),
+        { tipo: "testemunha", nome: "", cargo: "Testemunha", documento: "" },
+      ],
     }));
   }
 
   function removeAssinatura(index: number) {
     setForm((f: any) => ({
       ...f,
-      assinaturas: (f.assinaturas || []).filter((_: any, i: number) => i !== index),
+      assinaturas: (f.assinaturas || []).filter(
+        (_: any, i: number) => i !== index,
+      ),
     }));
   }
 
@@ -339,15 +403,24 @@ export default function Orcamentos() {
           quantidade: Number(servico.quantidade) || 1,
           valor_unitario: Number(servico.valor_unitario) || 0,
         }));
-      const valorFinal = servicosParaSalvar.length > 0 ? calcularTotalServicos(servicosParaSalvar) : parseMoney(form.valor_total);
+      const valorFinal =
+        servicosParaSalvar.length > 0
+          ? calcularTotalServicos(servicosParaSalvar)
+          : parseMoney(form.valor_total);
       const payload = {
         ...form,
         itens: servicosParaSalvar,
         valor_total: valorFinal,
       };
       const saved = selecionado
-        ? await apiFetch(`/api/orcamentos/${selecionado.id}`, { method: "PUT", body: JSON.stringify(payload) })
-        : await apiFetch("/api/orcamentos", { method: "POST", body: JSON.stringify(payload) });
+        ? await apiFetch(`/api/orcamentos/${selecionado.id}`, {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          })
+        : await apiFetch("/api/orcamentos", {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
       setSelecionado(saved);
       toast.success("Orçamento salvo");
       await carregarTudo();
@@ -361,29 +434,67 @@ export default function Orcamentos() {
   }
 
   async function finalizar() {
-    const saved = selecionado || (await salvar());
-    if (!saved?.id) return;
+    const saved = await salvar();
+    if (!saved?.id) return null;
     setSalvando(true);
     try {
-      const result = await apiFetch(`/api/orcamentos/${saved.id}/finalizar`, { method: "POST" });
-      setSelecionado(result?.orcamento || saved);
+      const result = await apiFetch(`/api/orcamentos/${saved.id}/finalizar`, {
+        method: "POST",
+      });
+      const finalizado = result?.orcamento ||
+        result || { ...saved, status: "finalizado" };
+      setSelecionado(finalizado);
+      setEdicaoFinalizadoLiberada(false);
       toast.success("Orçamento finalizado com papel timbrado");
       await carregarTudo();
+      return finalizado;
     } catch (err: any) {
       toast.error(err.message || "Erro ao finalizar orçamento");
+      return null;
     } finally {
       setSalvando(false);
     }
   }
 
   async function baixarPdf() {
-    const saved = selecionado || (await salvar());
-    if (!saved?.id) return;
+    let base = selecionado || (await salvar());
+    if (!base?.id) return;
+    if (base.status !== "finalizado") {
+      const finalizado = await finalizar();
+      if (!finalizado?.id) return;
+      base = finalizado;
+    }
     try {
-      const { blob, filename } = await apiFetchBlob(`/api/orcamentos/${saved.id}/download`);
-      downloadBlob(blob, filename || `${saved.numero || "orcamento"}.pdf`);
+      const { blob, filename } = await apiFetchBlob(
+        `/api/orcamentos/${base.id}/download?status=finalizado&t=${Date.now()}`,
+      );
+      downloadBlob(blob, filename || `${base.numero || "orcamento"}.pdf`);
     } catch (err: any) {
       toast.error(err.message || "Erro ao baixar PDF");
+    }
+  }
+
+  function editarOrcamento(orc: Orcamento) {
+    void abrirOrcamento(orc).then(() => {
+      setEdicaoFinalizadoLiberada(true);
+      setAba("editor");
+    });
+  }
+
+  async function excluirOrcamento(orc: Orcamento) {
+    const nome = orc.numero || orc.cliente_nome || "este orçamento";
+    if (!window.confirm(`Excluir ${nome}? Esta ação não pode ser desfeita.`))
+      return;
+    setSalvando(true);
+    try {
+      await apiFetch(`/api/orcamentos/${orc.id}`, { method: "DELETE" });
+      toast.success("Orçamento excluído");
+      if (selecionado?.id === orc.id) novoOrcamento();
+      await carregarTudo();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao excluir orçamento");
+    } finally {
+      setSalvando(false);
     }
   }
 
@@ -396,9 +507,14 @@ export default function Orcamentos() {
     setSalvando(true);
     try {
       const fd = new FormData();
-      Array.from(arquivos).forEach((file) => fd.append("arquivos", file, file.name));
+      Array.from(arquivos).forEach((file) =>
+        fd.append("arquivos", file, file.name),
+      );
       if (descricaoAnexo) fd.append("descricao", descricaoAnexo);
-      await apiFetch(`/api/orcamentos/${saved.id}/anexos`, { method: "POST", body: fd });
+      await apiFetch(`/api/orcamentos/${saved.id}/anexos`, {
+        method: "POST",
+        body: fd,
+      });
       toast.success("Documentos anexados ao orçamento");
       setArquivos(null);
       setDescricaoAnexo("");
@@ -442,8 +558,13 @@ export default function Orcamentos() {
                 <FileSignature className="h-6 w-6" />
               </div>
               <div>
-                <h1 className="text-xl font-black tracking-tight text-slate-900">Orçamentos timbrados</h1>
-                <p className="text-sm text-slate-500">Propostas de serviços · valor direto ou serviços prestados com cálculo automático.</p>
+                <h1 className="text-xl font-black tracking-tight text-slate-900">
+                  Orçamentos timbrados
+                </h1>
+                <p className="text-sm text-slate-500">
+                  Propostas de serviços · valor direto ou serviços prestados com
+                  cálculo automático.
+                </p>
               </div>
             </div>
             <button
@@ -470,8 +591,13 @@ export default function Orcamentos() {
                     className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
-                <button onClick={carregarTudo} className="rounded-2xl border border-slate-200 bg-white p-2.5 text-slate-500 hover:bg-slate-50">
-                  <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                <button
+                  onClick={carregarTudo}
+                  className="rounded-2xl border border-slate-200 bg-white p-2.5 text-slate-500 hover:bg-slate-50"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+                  />
                 </button>
               </div>
 
@@ -482,26 +608,61 @@ export default function Orcamentos() {
                   </div>
                 ) : (
                   orcamentos.map((orc) => (
-                    <button
+                    <div
                       key={orc.id}
-                      onClick={() => abrirOrcamento(orc)}
-                      className={`w-full rounded-2xl border p-3 text-left transition ${
-                        selecionado?.id === orc.id ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                      className={`rounded-2xl border p-3 text-left transition ${
+                        selecionado?.id === orc.id
+                          ? "border-blue-200 bg-blue-50"
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
                       }`}
                     >
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <span className="truncate text-xs font-bold uppercase tracking-wide text-slate-400">{orc.numero || "Rascunho"}</span>
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${orc.status === "finalizado" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                          {orc.status}
-                        </span>
+                      <button
+                        type="button"
+                        onClick={() => abrirOrcamento(orc)}
+                        className="w-full text-left"
+                      >
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <span className="truncate text-xs font-bold uppercase tracking-wide text-slate-400">
+                            {orc.numero || "Rascunho"}
+                          </span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-black ${orc.status === "finalizado" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}
+                          >
+                            {orc.status}
+                          </span>
+                        </div>
+                        <p className="truncate text-sm font-black text-slate-900">
+                          {orc.cliente_nome || "Cliente não informado"}
+                        </p>
+                        <p className="mt-1 truncate text-xs text-slate-500">
+                          {orc.titulo}
+                        </p>
+                        <div className="mt-2 flex items-center justify-between text-xs">
+                          <span className="font-bold text-slate-700">
+                            {moneyBR(orc.valor_total)}
+                          </span>
+                          <span className="text-slate-400">
+                            {fmtDate(orc.atualizado_em || orc.criado_em)}
+                          </span>
+                        </div>
+                      </button>
+                      <div className="mt-3 flex gap-2 border-t border-slate-100 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => editarOrcamento(orc)}
+                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-blue-100 bg-white px-2 py-1.5 text-[11px] font-black text-blue-700 hover:bg-blue-50"
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => excluirOrcamento(orc)}
+                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-rose-100 bg-white px-2 py-1.5 text-[11px] font-black text-rose-600 hover:bg-rose-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Excluir
+                        </button>
                       </div>
-                      <p className="truncate text-sm font-black text-slate-900">{orc.cliente_nome || "Cliente não informado"}</p>
-                      <p className="mt-1 truncate text-xs text-slate-500">{orc.titulo}</p>
-                      <div className="mt-2 flex items-center justify-between text-xs">
-                        <span className="font-bold text-slate-700">{moneyBR(orc.valor_total)}</span>
-                        <span className="text-slate-400">{fmtDate(orc.atualizado_em || orc.criado_em)}</span>
-                      </div>
-                    </button>
+                    </div>
                   ))
                 )}
               </div>
@@ -526,13 +687,25 @@ export default function Orcamentos() {
                   ))}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={salvar} disabled={salvando || isFinalizado} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                  <button
+                    onClick={salvar}
+                    disabled={salvando || camposBloqueados}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
                     <Save className="h-4 w-4" /> Salvar rascunho
                   </button>
-                  <button onClick={finalizar} disabled={salvando} className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
+                  <button
+                    onClick={finalizar}
+                    disabled={salvando}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
                     <CheckCircle2 className="h-4 w-4" /> Finalizar
                   </button>
-                  <button onClick={baixarPdf} disabled={salvando} className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50">
+                  <button
+                    onClick={baixarPdf}
+                    disabled={salvando}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50"
+                  >
                     <Download className="h-4 w-4" /> PDF
                   </button>
                 </div>
@@ -540,8 +713,12 @@ export default function Orcamentos() {
 
               <div className="p-4">
                 {isFinalizado && (
-                  <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
-                    Orçamento finalizado. Para alterar texto, serviços ou valores, crie um novo orçamento.
+                  <div
+                    className={`mb-4 rounded-2xl border px-4 py-3 text-sm font-semibold ${edicaoFinalizadoLiberada ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}
+                  >
+                    {edicaoFinalizadoLiberada
+                      ? "Edição liberada para este orçamento finalizado. Salve e finalize novamente para atualizar o PDF."
+                      : "Orçamento finalizado. Use Editar para liberar alterações ou PDF para baixar a versão finalizada."}
                   </div>
                 )}
 
@@ -550,25 +727,47 @@ export default function Orcamentos() {
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                         <label className="block">
-                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Tipo de cliente</span>
+                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                            Tipo de cliente
+                          </span>
                           <select
                             value={form.tipo_cliente}
-                            disabled={isFinalizado}
-                            onChange={(e) => setForm((f: any) => ({ ...f, tipo_cliente: e.target.value, empresa_id: "", cliente_pf_id: "", cliente_nome: "", cliente_documento: "" }))}
+                            disabled={camposBloqueados}
+                            onChange={(e) =>
+                              setForm((f: any) => ({
+                                ...f,
+                                tipo_cliente: e.target.value,
+                                empresa_id: "",
+                                cliente_pf_id: "",
+                                cliente_nome: "",
+                                cliente_documento: "",
+                              }))
+                            }
                             className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
                           >
-                            <option value="empresa">Clientes PJ (Empresa)</option>
-                            <option value="pessoa_fisica">Clientes PF (Pessoa Física)</option>
+                            <option value="empresa">
+                              Clientes PJ (Empresa)
+                            </option>
+                            <option value="pessoa_fisica">
+                              Clientes PF (Pessoa Física)
+                            </option>
                             <option value="livre">Livre / manual</option>
                           </select>
                         </label>
 
                         <label className="block">
-                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Papel timbrado</span>
+                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                            Papel timbrado
+                          </span>
                           <select
                             value={form.marca}
-                            disabled={isFinalizado}
-                            onChange={(e) => setForm((f: any) => ({ ...f, marca: e.target.value }))}
+                            disabled={camposBloqueados}
+                            onChange={(e) =>
+                              setForm((f: any) => ({
+                                ...f,
+                                marca: e.target.value,
+                              }))
+                            }
                             className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
                           >
                             <option value="destrava">Destrava Crédito</option>
@@ -577,12 +776,19 @@ export default function Orcamentos() {
                         </label>
 
                         <label className="block">
-                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Validade (dias)</span>
+                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                            Validade (dias)
+                          </span>
                           <input
                             type="number"
                             value={form.validade_dias}
-                            disabled={isFinalizado}
-                            onChange={(e) => setForm((f: any) => ({ ...f, validade_dias: Number(e.target.value || 30) }))}
+                            disabled={camposBloqueados}
+                            onChange={(e) =>
+                              setForm((f: any) => ({
+                                ...f,
+                                validade_dias: Number(e.target.value || 30),
+                              }))
+                            }
                             className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
                             min={1}
                             placeholder="30"
@@ -593,12 +799,20 @@ export default function Orcamentos() {
                       {form.tipo_cliente === "empresa" && (
                         <label className="block">
                           <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
-                            <Building2 className="mr-1 inline h-3.5 w-3.5" /> Selecionar cliente PJ
+                            <Building2 className="mr-1 inline h-3.5 w-3.5" />{" "}
+                            Selecionar cliente PJ
                           </span>
-                          <select value={form.empresa_id} disabled={isFinalizado} onChange={(e) => aplicarEmpresa(e.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300">
+                          <select
+                            value={form.empresa_id}
+                            disabled={camposBloqueados}
+                            onChange={(e) => aplicarEmpresa(e.target.value)}
+                            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                          >
                             <option value="">Selecione uma empresa...</option>
                             {empresasFiltradas.map((e) => (
-                              <option key={e.id} value={e.id}>{e.razao_social || e.nome_fantasia} — {e.cnpj}</option>
+                              <option key={e.id} value={e.id}>
+                                {e.razao_social || e.nome_fantasia} — {e.cnpj}
+                              </option>
                             ))}
                           </select>
                         </label>
@@ -607,77 +821,179 @@ export default function Orcamentos() {
                       {form.tipo_cliente === "pessoa_fisica" && (
                         <label className="block">
                           <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
-                            <User className="mr-1 inline h-3.5 w-3.5" /> Selecionar cliente PF
+                            <User className="mr-1 inline h-3.5 w-3.5" />{" "}
+                            Selecionar cliente PF
                           </span>
-                          <select value={form.cliente_pf_id} disabled={isFinalizado} onChange={(e) => aplicarClientePf(e.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300">
-                            <option value="">Selecione uma pessoa física...</option>
+                          <select
+                            value={form.cliente_pf_id}
+                            disabled={camposBloqueados}
+                            onChange={(e) => aplicarClientePf(e.target.value)}
+                            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                          >
+                            <option value="">
+                              Selecione uma pessoa física...
+                            </option>
                             {clientesPfFiltrados.map((c) => (
-                              <option key={c.id} value={c.id}>{c.nome} — {c.cpf}</option>
+                              <option key={c.id} value={c.id}>
+                                {c.nome} — {c.cpf}
+                              </option>
                             ))}
                           </select>
                         </label>
                       )}
 
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <input disabled={isFinalizado} value={form.cliente_nome} onChange={(e) => setForm((f: any) => ({ ...f, cliente_nome: e.target.value }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300" placeholder="Nome / Razão social do cliente" />
-                        <input disabled={isFinalizado} value={form.cliente_documento} onChange={(e) => setForm((f: any) => ({ ...f, cliente_documento: e.target.value }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300" placeholder="CPF / CNPJ" />
-                        <input disabled={isFinalizado} value={form.cliente_email} onChange={(e) => setForm((f: any) => ({ ...f, cliente_email: e.target.value }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300" placeholder="E-mail" />
-                        <input disabled={isFinalizado} value={form.cliente_telefone} onChange={(e) => setForm((f: any) => ({ ...f, cliente_telefone: e.target.value }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300" placeholder="Telefone / WhatsApp" />
+                        <input
+                          disabled={camposBloqueados}
+                          value={form.cliente_nome}
+                          onChange={(e) =>
+                            setForm((f: any) => ({
+                              ...f,
+                              cliente_nome: e.target.value,
+                            }))
+                          }
+                          className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300"
+                          placeholder="Nome / Razão social do cliente"
+                        />
+                        <input
+                          disabled={camposBloqueados}
+                          value={form.cliente_documento}
+                          onChange={(e) =>
+                            setForm((f: any) => ({
+                              ...f,
+                              cliente_documento: e.target.value,
+                            }))
+                          }
+                          className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300"
+                          placeholder="CPF / CNPJ"
+                        />
+                        <input
+                          disabled={camposBloqueados}
+                          value={form.cliente_email}
+                          onChange={(e) =>
+                            setForm((f: any) => ({
+                              ...f,
+                              cliente_email: e.target.value,
+                            }))
+                          }
+                          className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300"
+                          placeholder="E-mail"
+                        />
+                        <input
+                          disabled={camposBloqueados}
+                          value={form.cliente_telefone}
+                          onChange={(e) =>
+                            setForm((f: any) => ({
+                              ...f,
+                              cliente_telefone: e.target.value,
+                            }))
+                          }
+                          className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300"
+                          placeholder="Telefone / WhatsApp"
+                        />
                       </div>
 
-                      <input disabled={isFinalizado} value={form.titulo} onChange={(e) => setForm((f: any) => ({ ...f, titulo: e.target.value }))} className="h-11 w-full rounded-2xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-blue-300" placeholder="Título do orçamento" />
+                      <input
+                        disabled={camposBloqueados}
+                        value={form.titulo}
+                        onChange={(e) =>
+                          setForm((f: any) => ({
+                            ...f,
+                            titulo: e.target.value,
+                          }))
+                        }
+                        className="h-11 w-full rounded-2xl border border-slate-200 px-3 text-sm font-bold outline-none focus:border-blue-300"
+                        placeholder="Título do orçamento"
+                      />
 
-                      <textarea disabled={isFinalizado} value={form.descricao} onChange={(e) => setForm((f: any) => ({ ...f, descricao: e.target.value }))} rows={2} className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-300" placeholder="Descrição curta / subtítulo do orçamento" />
+                      <textarea
+                        disabled={camposBloqueados}
+                        value={form.descricao}
+                        onChange={(e) =>
+                          setForm((f: any) => ({
+                            ...f,
+                            descricao: e.target.value,
+                          }))
+                        }
+                        rows={2}
+                        className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-300"
+                        placeholder="Descrição curta / subtítulo do orçamento"
+                      />
 
                       <div className="rounded-3xl border border-blue-100 bg-blue-50/60 p-4">
                         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <div>
                             <div className="flex items-center gap-2 text-sm font-black text-slate-900">
-                              <BadgeDollarSign className="h-4 w-4 text-blue-600" /> Valor do orçamento
+                              <BadgeDollarSign className="h-4 w-4 text-blue-600" />{" "}
+                              Valor do orçamento
                             </div>
-                            <p className="mt-0.5 text-xs text-slate-500">Use valor direto quando a proposta não precisar detalhar serviços prestados.</p>
+                            <p className="mt-0.5 text-xs text-slate-500">
+                              Use valor direto quando a proposta não precisar
+                              detalhar serviços prestados.
+                            </p>
                           </div>
-                          {!isFinalizado && (
-                            <button onClick={adicionarServico} className="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">
-                              <Plus className="h-3.5 w-3.5" /> Adicionar serviços
+                          {!camposBloqueados && (
+                            <button
+                              onClick={adicionarServico}
+                              className="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
+                            >
+                              <Plus className="h-3.5 w-3.5" /> Adicionar
+                              serviços
                             </button>
                           )}
                         </div>
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto] md:items-end">
                           <label className="block">
-                            <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Valor direto</span>
+                            <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                              Valor direto
+                            </span>
                             <input
-                              disabled={isFinalizado || hasServicos}
+                              disabled={camposBloqueados || hasServicos}
                               type="number"
                               min={0}
                               step={0.01}
                               value={form.valor_total}
-                              onChange={(e) => setForm((f: any) => ({ ...f, valor_total: e.target.value }))}
+                              onChange={(e) =>
+                                setForm((f: any) => ({
+                                  ...f,
+                                  valor_total: e.target.value,
+                                }))
+                              }
                               className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-blue-300 disabled:bg-slate-100 disabled:text-slate-400"
                               placeholder="0,00"
                             />
                           </label>
-                          {hasServicos && !isFinalizado && (
-                            <button onClick={limparServicosUsarValorDireto} className="h-11 rounded-2xl border border-amber-200 bg-white px-4 text-xs font-bold text-amber-700 hover:bg-amber-50">
+                          {hasServicos && !camposBloqueados && (
+                            <button
+                              onClick={limparServicosUsarValorDireto}
+                              className="h-11 rounded-2xl border border-amber-200 bg-white px-4 text-xs font-bold text-amber-700 hover:bg-amber-50"
+                            >
                               Usar valor direto
                             </button>
                           )}
                         </div>
                         {hasServicos && (
                           <p className="mt-2 text-xs font-semibold text-blue-700">
-                            Valor calculado automaticamente pelos serviços prestados: {moneyBR(totalServicos)}.
+                            Valor calculado automaticamente pelos serviços
+                            prestados: {moneyBR(totalServicos)}.
                           </p>
                         )}
                       </div>
 
                       <div>
                         <div className="mb-2 flex items-center gap-2 text-sm font-black text-slate-800">
-                          <PenLine className="h-4 w-4 text-blue-600" /> Texto livre do orçamento
+                          <PenLine className="h-4 w-4 text-blue-600" /> Texto
+                          livre do orçamento
                         </div>
                         <textarea
-                          disabled={isFinalizado}
+                          disabled={camposBloqueados}
                           value={form.conteudo}
-                          onChange={(e) => setForm((f: any) => ({ ...f, conteudo: e.target.value }))}
+                          onChange={(e) =>
+                            setForm((f: any) => ({
+                              ...f,
+                              conteudo: e.target.value,
+                            }))
+                          }
                           rows={14}
                           className="w-full rounded-3xl border border-slate-200 bg-slate-50/60 px-4 py-4 text-sm leading-relaxed outline-none focus:border-blue-300 focus:bg-white"
                           placeholder="Escreva livremente o escopo, condições, observações e demais informações do orçamento..."
@@ -691,31 +1007,129 @@ export default function Orcamentos() {
                           <FileText className="h-4 w-4 text-blue-600" /> Resumo
                         </div>
                         <div className="space-y-3 text-sm">
-                          <div><span className="text-xs font-bold uppercase text-slate-400">Cliente</span><p className="font-bold text-slate-900">{form.cliente_nome || "Não informado"}</p></div>
-                          <div><span className="text-xs font-bold uppercase text-slate-400">Marca</span><p className="font-bold text-slate-900">{marca === "permupay" ? "PermuPay" : "Destrava Crédito"}</p></div>
-                          <div><span className="text-xs font-bold uppercase text-slate-400">Modelo de valor</span><p className="font-bold text-slate-900">{hasServicos ? "Serviços prestados" : "Valor direto"}</p></div>
-                          <div><span className="text-xs font-bold uppercase text-slate-400">Valor total</span><p className="text-xl font-black text-blue-700">{moneyBR(valorTotalExibicao)}</p></div>
-                          <div><span className="text-xs font-bold uppercase text-slate-400">Validade</span><p className="font-bold text-slate-900">{form.validade_dias || 30} dias</p></div>
+                          <div>
+                            <span className="text-xs font-bold uppercase text-slate-400">
+                              Cliente
+                            </span>
+                            <p className="font-bold text-slate-900">
+                              {form.cliente_nome || "Não informado"}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold uppercase text-slate-400">
+                              Marca
+                            </span>
+                            <p className="font-bold text-slate-900">
+                              {marca === "permupay"
+                                ? "PermuPay"
+                                : "Destrava Crédito"}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold uppercase text-slate-400">
+                              Modelo de valor
+                            </span>
+                            <p className="font-bold text-slate-900">
+                              {hasServicos
+                                ? "Serviços prestados"
+                                : "Valor direto"}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold uppercase text-slate-400">
+                              Valor total
+                            </span>
+                            <p className="text-xl font-black text-blue-700">
+                              {moneyBR(valorTotalExibicao)}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold uppercase text-slate-400">
+                              Validade
+                            </span>
+                            <p className="font-bold text-slate-900">
+                              {form.validade_dias || 30} dias
+                            </p>
+                          </div>
                         </div>
                       </div>
 
                       <div className="rounded-3xl border border-slate-200 bg-white p-4">
                         <div className="mb-3 flex items-center justify-between">
-                          <div className="text-sm font-black text-slate-900">Assinaturas</div>
-                          {!isFinalizado && <button onClick={addAssinatura} className="text-xs font-bold text-blue-600 hover:underline">+ adicionar</button>}
+                          <div className="text-sm font-black text-slate-900">
+                            Assinaturas
+                          </div>
+                          {!camposBloqueados && (
+                            <button
+                              onClick={addAssinatura}
+                              className="text-xs font-bold text-blue-600 hover:underline"
+                            >
+                              + adicionar
+                            </button>
+                          )}
                         </div>
                         <div className="space-y-3">
-                          {(form.assinaturas || []).map((a: any, idx: number) => (
-                            <div key={idx} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                              <div className="mb-2 flex items-center justify-between">
-                                <span className="text-xs font-bold uppercase text-slate-400">{a.tipo || "assinatura"}</span>
-                                {!isFinalizado && idx > 1 && <button onClick={() => removeAssinatura(idx)} className="text-rose-500"><Trash2 className="h-3.5 w-3.5" /></button>}
+                          {(form.assinaturas || []).map(
+                            (a: any, idx: number) => (
+                              <div
+                                key={idx}
+                                className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
+                              >
+                                <div className="mb-2 flex items-center justify-between">
+                                  <span className="text-xs font-bold uppercase text-slate-400">
+                                    {a.tipo || "assinatura"}
+                                  </span>
+                                  {!camposBloqueados && idx > 1 && (
+                                    <button
+                                      onClick={() => removeAssinatura(idx)}
+                                      className="text-rose-500"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                                <input
+                                  disabled={camposBloqueados}
+                                  value={a.nome || ""}
+                                  onChange={(e) =>
+                                    updateAssinatura(
+                                      idx,
+                                      "nome",
+                                      e.target.value,
+                                    )
+                                  }
+                                  className="mb-2 h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold outline-none"
+                                  placeholder="Nome"
+                                />
+                                <input
+                                  disabled={camposBloqueados}
+                                  value={a.cargo || ""}
+                                  onChange={(e) =>
+                                    updateAssinatura(
+                                      idx,
+                                      "cargo",
+                                      e.target.value,
+                                    )
+                                  }
+                                  className="mb-2 h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs outline-none"
+                                  placeholder="Cargo / qualificação"
+                                />
+                                <input
+                                  disabled={camposBloqueados}
+                                  value={a.documento || ""}
+                                  onChange={(e) =>
+                                    updateAssinatura(
+                                      idx,
+                                      "documento",
+                                      e.target.value,
+                                    )
+                                  }
+                                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs outline-none"
+                                  placeholder="CPF / CNPJ"
+                                />
                               </div>
-                              <input disabled={isFinalizado} value={a.nome || ""} onChange={(e) => updateAssinatura(idx, "nome", e.target.value)} className="mb-2 h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold outline-none" placeholder="Nome" />
-                              <input disabled={isFinalizado} value={a.cargo || ""} onChange={(e) => updateAssinatura(idx, "cargo", e.target.value)} className="mb-2 h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs outline-none" placeholder="Cargo / qualificação" />
-                              <input disabled={isFinalizado} value={a.documento || ""} onChange={(e) => updateAssinatura(idx, "documento", e.target.value)} className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs outline-none" placeholder="CPF / CNPJ" />
-                            </div>
-                          ))}
+                            ),
+                          )}
                         </div>
                       </div>
                     </div>
@@ -727,12 +1141,19 @@ export default function Orcamentos() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <div className="flex items-center gap-2 text-sm font-black text-slate-900">
-                          <PackagePlus className="h-5 w-5 text-blue-600" /> Serviços prestados
+                          <PackagePlus className="h-5 w-5 text-blue-600" />{" "}
+                          Serviços prestados
                         </div>
-                        <p className="mt-1 text-xs text-slate-500">Descreva assessoria, consultoria, diagnóstico, acompanhamento ou qualquer serviço contratado.</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Descreva assessoria, consultoria, diagnóstico,
+                          acompanhamento ou qualquer serviço contratado.
+                        </p>
                       </div>
-                      {!isFinalizado && (
-                        <button onClick={adicionarServico} className="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">
+                      {!camposBloqueados && (
+                        <button
+                          onClick={adicionarServico}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
+                        >
                           <Plus className="h-3.5 w-3.5" /> Adicionar serviço
                         </button>
                       )}
@@ -743,10 +1164,18 @@ export default function Orcamentos() {
                         <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
                           <BadgeDollarSign className="h-6 w-6" />
                         </div>
-                        <p className="text-sm font-bold text-slate-800">Nenhum serviço detalhado.</p>
-                        <p className="mt-1 text-sm text-slate-500">Você pode usar somente o valor direto no Editor ou detalhar os serviços prestados aqui.</p>
-                        {!isFinalizado && (
-                          <button onClick={adicionarServico} className="mt-4 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
+                        <p className="text-sm font-bold text-slate-800">
+                          Nenhum serviço detalhado.
+                        </p>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Você pode usar somente o valor direto no Editor ou
+                          detalhar os serviços prestados aqui.
+                        </p>
+                        {!camposBloqueados && (
+                          <button
+                            onClick={adicionarServico}
+                            className="mt-4 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700"
+                          >
                             Adicionar primeiro serviço
                           </button>
                         )}
@@ -762,55 +1191,96 @@ export default function Orcamentos() {
 
                         <div className="space-y-2">
                           {servicos.map((servico, idx) => (
-                            <div key={idx} className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-[2fr_80px_140px_80px] md:items-center">
+                            <div
+                              key={idx}
+                              className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-[2fr_80px_140px_80px] md:items-center"
+                            >
                               <div>
-                                <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">Serviço prestado</span>
+                                <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">
+                                  Serviço prestado
+                                </span>
                                 <input
-                                  disabled={isFinalizado}
+                                  disabled={camposBloqueados}
                                   value={servico.descricao}
-                                  onChange={(e) => atualizarServico(idx, "descricao", e.target.value)}
+                                  onChange={(e) =>
+                                    atualizarServico(
+                                      idx,
+                                      "descricao",
+                                      e.target.value,
+                                    )
+                                  }
                                   className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
                                   placeholder={`Ex.: Assessoria de crédito empresarial`}
                                 />
                               </div>
                               <div>
-                                <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">Qtd</span>
+                                <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">
+                                  Qtd
+                                </span>
                                 <input
-                                  disabled={isFinalizado}
+                                  disabled={camposBloqueados}
                                   type="number"
                                   min={1}
                                   value={servico.quantidade}
-                                  onChange={(e) => atualizarServico(idx, "quantidade", Number(e.target.value) || 1)}
+                                  onChange={(e) =>
+                                    atualizarServico(
+                                      idx,
+                                      "quantidade",
+                                      Number(e.target.value) || 1,
+                                    )
+                                  }
                                   className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold outline-none focus:border-blue-300"
                                 />
                               </div>
                               <div>
-                                <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">Valor unitário (R$)</span>
+                                <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">
+                                  Valor unitário (R$)
+                                </span>
                                 <input
-                                  disabled={isFinalizado}
+                                  disabled={camposBloqueados}
                                   type="number"
                                   min={0}
                                   step={0.01}
                                   value={servico.valor_unitario}
-                                  onChange={(e) => atualizarServico(idx, "valor_unitario", Number(e.target.value) || 0)}
+                                  onChange={(e) =>
+                                    atualizarServico(
+                                      idx,
+                                      "valor_unitario",
+                                      Number(e.target.value) || 0,
+                                    )
+                                  }
                                   className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-right text-sm font-bold outline-none focus:border-blue-300"
                                   placeholder="0,00"
                                 />
                               </div>
                               <div className="flex items-center justify-end gap-1">
-                                <button type="button" onClick={() => setAba("servicos")} className="rounded-xl p-2 text-slate-400" title="Atualização automática">
+                                <button
+                                  type="button"
+                                  onClick={() => setAba("servicos")}
+                                  className="rounded-xl p-2 text-slate-400"
+                                  title="Atualização automática"
+                                >
                                   <Pencil className="h-4 w-4" />
                                 </button>
-                                {!isFinalizado && (
-                                  <button onClick={() => removerServico(idx)} className="rounded-xl p-2 text-rose-400 hover:bg-rose-50 hover:text-rose-600" title="Remover serviço">
+                                {!camposBloqueados && (
+                                  <button
+                                    onClick={() => removerServico(idx)}
+                                    className="rounded-xl p-2 text-rose-400 hover:bg-rose-50 hover:text-rose-600"
+                                    title="Remover serviço"
+                                  >
                                     <Trash2 className="h-4 w-4" />
                                   </button>
                                 )}
                               </div>
-                              {(servico.descricao || Number(servico.valor_unitario) > 0) && (
+                              {(servico.descricao ||
+                                Number(servico.valor_unitario) > 0) && (
                                 <div className="col-span-full -mt-1 flex justify-end">
                                   <span className="rounded-lg bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
-                                    Subtotal: {moneyBR((Number(servico.quantidade) || 0) * (Number(servico.valor_unitario) || 0))}
+                                    Subtotal:{" "}
+                                    {moneyBR(
+                                      (Number(servico.quantidade) || 0) *
+                                        (Number(servico.valor_unitario) || 0),
+                                    )}
                                   </span>
                                 </div>
                               )}
@@ -819,14 +1289,22 @@ export default function Orcamentos() {
                         </div>
 
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          {!isFinalizado && (
-                            <button onClick={adicionarServico} className="rounded-2xl border-2 border-dashed border-blue-200 px-4 py-3 text-sm font-bold text-blue-500 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700">
-                              <Plus className="mr-1.5 inline h-4 w-4" /> Adicionar mais um serviço
+                          {!camposBloqueados && (
+                            <button
+                              onClick={adicionarServico}
+                              className="rounded-2xl border-2 border-dashed border-blue-200 px-4 py-3 text-sm font-bold text-blue-500 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700"
+                            >
+                              <Plus className="mr-1.5 inline h-4 w-4" />{" "}
+                              Adicionar mais um serviço
                             </button>
                           )}
                           <div className="rounded-2xl border border-blue-200 bg-blue-50 px-6 py-4 sm:ml-auto">
-                            <div className="text-xs font-bold uppercase text-blue-500">Total dos serviços</div>
-                            <div className="text-3xl font-black text-blue-700">{moneyBR(totalServicos)}</div>
+                            <div className="text-xs font-bold uppercase text-blue-500">
+                              Total dos serviços
+                            </div>
+                            <div className="text-3xl font-black text-blue-700">
+                              {moneyBR(totalServicos)}
+                            </div>
                           </div>
                         </div>
                       </>
@@ -838,30 +1316,68 @@ export default function Orcamentos() {
                   <div className="space-y-4">
                     <div className="rounded-3xl border border-dashed border-blue-200 bg-blue-50/60 p-4">
                       <div className="mb-3 flex items-center gap-2 text-sm font-black text-slate-900">
-                        <Paperclip className="h-4 w-4 text-blue-600" /> Anexar documentos livremente
+                        <Paperclip className="h-4 w-4 text-blue-600" /> Anexar
+                        documentos livremente
                       </div>
-                      <input ref={fileRef} type="file" multiple onChange={(e) => setArquivos(e.target.files)} className="mb-3 block w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm" />
-                      <input value={descricaoAnexo} onChange={(e) => setDescricaoAnexo(e.target.value)} placeholder="Descrição opcional dos anexos" className="mb-3 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300" />
-                      <button onClick={enviarAnexos} disabled={salvando || !arquivos?.length} className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
+                      <input
+                        ref={fileRef}
+                        type="file"
+                        multiple
+                        onChange={(e) => setArquivos(e.target.files)}
+                        className="mb-3 block w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                      />
+                      <input
+                        value={descricaoAnexo}
+                        onChange={(e) => setDescricaoAnexo(e.target.value)}
+                        placeholder="Descrição opcional dos anexos"
+                        className="mb-3 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                      />
+                      <button
+                        onClick={enviarAnexos}
+                        disabled={salvando || !arquivos?.length}
+                        className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+                      >
                         <Paperclip className="h-4 w-4" /> Enviar anexos
                       </button>
                     </div>
 
                     <div className="rounded-3xl border border-slate-200 bg-white">
-                      <div className="border-b border-slate-100 px-4 py-3 text-sm font-black text-slate-900">Documentos anexados</div>
+                      <div className="border-b border-slate-100 px-4 py-3 text-sm font-black text-slate-900">
+                        Documentos anexados
+                      </div>
                       <div className="divide-y divide-slate-100">
                         {(selecionado?.anexos || []).length === 0 ? (
-                          <div className="p-8 text-center text-sm text-slate-500">Nenhum documento anexado a este orçamento.</div>
+                          <div className="p-8 text-center text-sm text-slate-500">
+                            Nenhum documento anexado a este orçamento.
+                          </div>
                         ) : (
                           (selecionado?.anexos || []).map((anexo) => (
-                            <div key={anexo.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div
+                              key={anexo.id}
+                              className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
+                            >
                               <div className="min-w-0">
-                                <p className="truncate text-sm font-bold text-slate-900">{anexo.nome_original}</p>
-                                <p className="text-xs text-slate-500">{anexo.descricao || "Anexo"} · {fmtDate(anexo.criado_em)}</p>
+                                <p className="truncate text-sm font-bold text-slate-900">
+                                  {anexo.nome_original}
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  {anexo.descricao || "Anexo"} ·{" "}
+                                  {fmtDate(anexo.criado_em)}
+                                </p>
                               </div>
                               <div className="flex gap-2">
-                                <button onClick={() => baixarAnexo(anexo)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Baixar</button>
-                                <button onClick={() => excluirAnexo(anexo.id)} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50">Excluir</button>
+                                <button
+                                  onClick={() => baixarAnexo(anexo)}
+                                  className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                                >
+                                  Baixar
+                                </button>
+                                <button
+                                  onClick={() => excluirAnexo(anexo.id)}
+                                  className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                                >
+                                  Excluir
+                                </button>
                               </div>
                             </div>
                           ))
@@ -873,31 +1389,73 @@ export default function Orcamentos() {
 
                 {aba === "preview" && (
                   <div className="mx-auto max-w-4xl rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-                    <div className={`mb-6 flex items-center justify-between border-b-4 pb-4 ${marca === "permupay" ? "border-blue-600" : "border-[#1B3A8C]"}`}>
-                      <img src={marca === "permupay" ? "/logo-permupay.png" : "/destrava-logo.svg"} onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/destrava-logo.svg"; }} className="h-12 max-w-[190px] object-contain" />
+                    <div
+                      className={`mb-6 flex items-center justify-between border-b-4 pb-4 ${marca === "permupay" ? "border-blue-600" : "border-[#1B3A8C]"}`}
+                    >
+                      <img
+                        src={
+                          marca === "permupay"
+                            ? "/logo-permupay.png"
+                            : "/destrava-logo.svg"
+                        }
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src =
+                            "/destrava-logo.svg";
+                        }}
+                        className="h-12 max-w-[190px] object-contain"
+                      />
                       <div className="text-right text-xs text-slate-500">
-                        <div className="font-black text-slate-800">{selecionado?.numero || "Rascunho"}</div>
+                        <div className="font-black text-slate-800">
+                          {selecionado?.numero || "Rascunho"}
+                        </div>
                         <div>Validade: {form.validade_dias || 30} dias</div>
                       </div>
                     </div>
-                    <h2 className="text-2xl font-black text-slate-900">{form.titulo}</h2>
-                    {form.descricao && <p className="mt-1 text-sm font-semibold text-slate-500">{form.descricao}</p>}
+                    <h2 className="text-2xl font-black text-slate-900">
+                      {form.titulo}
+                    </h2>
+                    {form.descricao && (
+                      <p className="mt-1 text-sm font-semibold text-slate-500">
+                        {form.descricao}
+                      </p>
+                    )}
                     <div className="my-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="text-xs font-bold uppercase text-slate-400">Cliente</div>
-                      <div className="font-black text-slate-900">{form.cliente_nome || "Cliente não informado"}</div>
-                      <div className="text-sm text-slate-600">{form.cliente_documento}</div>
+                      <div className="text-xs font-bold uppercase text-slate-400">
+                        Cliente
+                      </div>
+                      <div className="font-black text-slate-900">
+                        {form.cliente_nome || "Cliente não informado"}
+                      </div>
+                      <div className="text-sm text-slate-600">
+                        {form.cliente_documento}
+                      </div>
                     </div>
 
                     {hasServicos && (
                       <div className="my-5">
-                        <div className="mb-3 border-b border-slate-200 pb-2 text-sm font-black text-slate-800">Serviços prestados</div>
+                        <div className="mb-3 border-b border-slate-200 pb-2 text-sm font-black text-slate-800">
+                          Serviços prestados
+                        </div>
                         <div className="space-y-2">
                           {servicosValidos.map((servico, idx) => (
-                            <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                              <span className="text-sm text-slate-700">{limparDescricaoServico(servico.descricao)}</span>
+                            <div
+                              key={idx}
+                              className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2"
+                            >
+                              <span className="text-sm text-slate-700">
+                                {limparDescricaoServico(servico.descricao)}
+                              </span>
                               <div className="text-right text-sm">
-                                <span className="text-slate-400">{servico.quantidade}x {moneyBR(servico.valor_unitario)} = </span>
-                                <span className="font-bold text-slate-900">{moneyBR(Number(servico.quantidade) * Number(servico.valor_unitario))}</span>
+                                <span className="text-slate-400">
+                                  {servico.quantidade}x{" "}
+                                  {moneyBR(servico.valor_unitario)} ={" "}
+                                </span>
+                                <span className="font-bold text-slate-900">
+                                  {moneyBR(
+                                    Number(servico.quantidade) *
+                                      Number(servico.valor_unitario),
+                                  )}
+                                </span>
                               </div>
                             </div>
                           ))}
@@ -907,22 +1465,35 @@ export default function Orcamentos() {
 
                     {!hasServicos && (
                       <div className="my-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
-                        Orçamento lançado por valor direto, sem detalhamento de serviços na proposta.
+                        Orçamento lançado por valor direto, sem detalhamento de
+                        serviços na proposta.
                       </div>
                     )}
 
-                    <div className="prose prose-sm max-w-none whitespace-pre-wrap text-slate-700">{form.conteudo}</div>
+                    <div className="prose prose-sm max-w-none whitespace-pre-wrap text-slate-700">
+                      {form.conteudo}
+                    </div>
                     <div className="my-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="text-xs font-bold uppercase text-slate-400">Valor total</div>
-                      <div className="text-2xl font-black text-blue-700">{moneyBR(valorTotalExibicao)}</div>
+                      <div className="text-xs font-bold uppercase text-slate-400">
+                        Valor total
+                      </div>
+                      <div className="text-2xl font-black text-blue-700">
+                        {moneyBR(valorTotalExibicao)}
+                      </div>
                     </div>
                     <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-2">
                       {(form.assinaturas || []).map((a: any, idx: number) => (
                         <div key={idx} className="text-center">
                           <div className="mb-2 border-t border-slate-900 pt-2" />
-                          <div className="text-sm font-black text-slate-900">{a.nome || "Assinante"}</div>
-                          <div className="text-xs text-slate-500">{a.cargo}</div>
-                          <div className="text-xs text-slate-400">{a.documento}</div>
+                          <div className="text-sm font-black text-slate-900">
+                            {a.nome || "Assinante"}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {a.cargo}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {a.documento}
+                          </div>
                         </div>
                       ))}
                     </div>
