@@ -9989,6 +9989,12 @@ async function registrarDocumentoContratoGerado(params: {
     return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   }
 
+  function limparDescricaoItemOrcamento(value: unknown): string {
+    return String(value ?? "")
+      .replace(/^\s*descri[cç][aã]o\s+do\s+item\s*\/\s*servi[cç]o\s*:\s*/i, "")
+      .trim();
+  }
+
   function numeroOrcamento(): string {
     const d = new Date();
     const y = d.getFullYear();
@@ -10136,7 +10142,7 @@ async function registrarDocumentoContratoGerado(params: {
     const itens = Array.isArray(orcamento.itens) ? orcamento.itens.filter((it: any) => String(it?.descricao || "").trim()) : [];
     const itensHtml = itens.length > 0
       ? `<section>
-          <h3>Itens do orçamento</h3>
+          <h3>Itens</h3>
           <table class="tabela-itens">
             <thead>
               <tr>
@@ -10150,7 +10156,7 @@ async function registrarDocumentoContratoGerado(params: {
               ${itens.map((it: any) => {
                 const sub = (Number(it.quantidade) || 1) * (Number(it.valor_unitario) || 0);
                 return `<tr>
-                  <td>${escapeHtmlOrcamento(it.descricao)}</td>
+                  <td>${escapeHtmlOrcamento(limparDescricaoItemOrcamento(it.descricao))}</td>
                   <td class="td-num">${Number(it.quantidade) || 1}</td>
                   <td class="td-num">${dinheiroOrcamento(it.valor_unitario)}</td>
                   <td class="td-num"><strong>${dinheiroOrcamento(sub)}</strong></td>
