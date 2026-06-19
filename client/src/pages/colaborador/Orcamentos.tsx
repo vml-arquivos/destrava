@@ -116,6 +116,12 @@ function calcularTotalItens(itens: ItemOrcamento[]): number {
   return itens.reduce((acc, item) => acc + (Number(item.quantidade) || 0) * (Number(item.valor_unitario) || 0), 0);
 }
 
+function limparDescricaoItemOrcamento(value: any): string {
+  return String(value ?? "")
+    .replace(/^\s*descri[cç][aã]o\s+do\s+item\s*\/\s*servi[cç]o\s*:\s*/i, "")
+    .trim();
+}
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -656,7 +662,6 @@ export default function Orcamentos() {
                           <div>
                             <span className="text-xs font-bold uppercase text-slate-400">Valor total</span>
                             <p className="text-xl font-black text-blue-700">{moneyBR(hasItens ? totalItens : String(form.valor_total).replace(",", "."))}</p>
-                            {hasItens && <p className="mt-0.5 text-xs text-slate-400">Calculado automaticamente pelos itens</p>}
                           </div>
                           <div><span className="text-xs font-bold uppercase text-slate-400">Validade</span><p className="font-bold text-slate-900">{form.validade_dias || 30} dias</p></div>
                         </div>
@@ -691,10 +696,7 @@ export default function Orcamentos() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-sm font-black text-slate-900">
                         <PackagePlus className="h-5 w-5 text-blue-600" />
-                        Itens do orçamento
-                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-black text-blue-700">
-                          O valor total é calculado automaticamente
-                        </span>
+                        Itens
                       </div>
                       {!isFinalizado && (
                         <button onClick={addItem} className="inline-flex items-center gap-1.5 rounded-2xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">
@@ -705,7 +707,7 @@ export default function Orcamentos() {
 
                     {/* Cabeçalho da tabela */}
                     <div className="hidden grid-cols-[2fr_80px_140px_36px] gap-2 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-500 md:grid">
-                      <span>Descrição do item / serviço</span>
+                      <span>Item</span>
                       <span className="text-center">Qtd</span>
                       <span className="text-right">Valor unitário</span>
                       <span></span>
@@ -722,7 +724,7 @@ export default function Orcamentos() {
                               value={item.descricao}
                               onChange={(e) => updateItem(idx, "descricao", e.target.value)}
                               className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
-                              placeholder={`Item ${idx + 1} — descreva o serviço ou produto`}
+                              placeholder={`Item ${idx + 1}`}
                             />
                           </div>
                           <div>
@@ -778,7 +780,6 @@ export default function Orcamentos() {
                         <div className="rounded-2xl border border-blue-200 bg-blue-50 px-6 py-4">
                           <div className="text-xs font-bold uppercase text-blue-500">Total do orçamento</div>
                           <div className="text-3xl font-black text-blue-700">{moneyBR(totalItens)}</div>
-                          <div className="mt-0.5 text-xs text-blue-400">Calculado automaticamente • {itens.filter(it => it.descricao?.trim()).length} item(ns)</div>
                         </div>
                       </div>
                     )}
@@ -849,11 +850,11 @@ export default function Orcamentos() {
                     {/* Itens na prévia */}
                     {hasItens && (
                       <div className="my-5">
-                        <div className="mb-3 border-b border-slate-200 pb-2 text-sm font-black text-slate-800">Itens do orçamento</div>
+                        <div className="mb-3 border-b border-slate-200 pb-2 text-sm font-black text-slate-800">Itens</div>
                         <div className="space-y-2">
                           {itens.filter(it => it.descricao?.trim()).map((item, idx) => (
                             <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                              <span className="text-sm text-slate-700">{item.descricao}</span>
+                              <span className="text-sm text-slate-700">{limparDescricaoItemOrcamento(item.descricao)}</span>
                               <div className="text-right text-sm">
                                 <span className="text-slate-400">{item.quantidade}x {moneyBR(item.valor_unitario)} = </span>
                                 <span className="font-bold text-slate-900">{moneyBR(Number(item.quantidade) * Number(item.valor_unitario))}</span>
