@@ -244,7 +244,7 @@ export default function Orcamentos() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const empresasFiltradas = useMemo(() => empresas, [empresas]);
+  const clientesPjFiltrados = useMemo(() => empresas, [empresas]);
   const clientesPfFiltrados = useMemo(() => clientesPf, [clientesPf]);
 
   function novoOrcamento() {
@@ -746,7 +746,7 @@ export default function Orcamentos() {
                             className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
                           >
                             <option value="empresa">
-                              Clientes PJ (Empresa)
+                              Cliente PJ
                             </option>
                             <option value="pessoa_fisica">
                               Clientes PF (Pessoa Física)
@@ -809,8 +809,8 @@ export default function Orcamentos() {
                             onChange={(e) => aplicarEmpresa(e.target.value)}
                             className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
                           >
-                            <option value="">Selecione uma empresa...</option>
-                            {empresasFiltradas.map((e) => (
+                            <option value="">Selecione um cliente PJ...</option>
+                            {clientesPjFiltrados.map((e) => (
                               <option key={e.id} value={e.id}>
                                 {e.razao_social || e.nome_fantasia} — {e.cnpj}
                               </option>
@@ -1018,7 +1018,7 @@ export default function Orcamentos() {
                           </div>
                           <div>
                             <span className="text-xs font-bold uppercase text-slate-400">
-                              Marca
+                              Empresa prestadora
                             </span>
                             <p className="font-bold text-slate-900">
                               {marca === "permupay"
@@ -1434,7 +1434,23 @@ export default function Orcamentos() {
                       </div>
                     </div>
 
-                    {hasServicos && (
+                    <div className="my-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-xs font-bold uppercase text-slate-400">
+                        Valor total
+                      </div>
+                      <div className="text-2xl font-black text-blue-700">
+                        {moneyBR(valorTotalExibicao)}
+                      </div>
+                    </div>
+
+                    <div className="mb-3 text-sm font-black text-slate-800">
+                      Escopo e condições
+                    </div>
+                    <div className="prose prose-sm max-w-none whitespace-pre-wrap text-slate-700">
+                      {form.conteudo}
+                    </div>
+
+                    {hasServicos ? (
                       <div className="my-5">
                         <div className="mb-3 border-b border-slate-200 pb-2 text-sm font-black text-slate-800">
                           Serviços prestados
@@ -1464,26 +1480,12 @@ export default function Orcamentos() {
                           ))}
                         </div>
                       </div>
-                    )}
-
-                    {!hasServicos && (
+                    ) : (
                       <div className="my-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
                         Orçamento lançado por valor direto, sem detalhamento de
                         serviços na proposta.
                       </div>
                     )}
-
-                    <div className="prose prose-sm max-w-none whitespace-pre-wrap text-slate-700">
-                      {form.conteudo}
-                    </div>
-                    <div className="my-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="text-xs font-bold uppercase text-slate-400">
-                        Valor total
-                      </div>
-                      <div className="text-2xl font-black text-blue-700">
-                        {moneyBR(valorTotalExibicao)}
-                      </div>
-                    </div>
                     <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-2">
                       {(form.assinaturas || []).map((a: any, idx: number) => (
                         <div key={idx} className="text-center">
