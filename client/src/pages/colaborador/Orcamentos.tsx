@@ -13,15 +13,18 @@ import {
   Trash2,
   Building2,
   User,
-  BadgeDollarSign,
   RefreshCw,
   FileText,
   PenLine,
   PackagePlus,
+  BadgeDollarSign,
+  Pencil,
 } from "lucide-react";
 
 type TipoCliente = "empresa" | "pessoa_fisica" | "livre";
 type MarcaOrcamento = "destrava" | "permupay";
+
+type AbaOrcamento = "editor" | "servicos" | "anexos" | "preview";
 
 interface EmpresaOpcao {
   id: string;
@@ -41,7 +44,7 @@ interface ClientePfOpcao {
   telefone?: string;
 }
 
-interface ItemOrcamento {
+interface ServicoOrcamento {
   descricao: string;
   quantidade: number;
   valor_unitario: number;
@@ -61,7 +64,7 @@ interface Orcamento {
   titulo: string;
   descricao?: string | null;
   conteudo: string;
-  itens?: ItemOrcamento[];
+  itens?: ServicoOrcamento[];
   valor_total?: number | string | null;
   validade_dias?: number | null;
   validade_ate?: string | null;
@@ -90,19 +93,24 @@ const ASSINATURAS_PADRAO = [
 ];
 
 const CONTEUDO_PADRAO = `1. Objeto do orçamento
-Prestação de serviços de organização, análise, estruturação e acompanhamento para soluções financeiras, crédito empresarial, meios de pagamento ou serviços correlatos, conforme necessidade do cliente selecionado.
+Prestação de serviços especializados de assessoria, consultoria, diagnóstico, estruturação documental, estratégia financeira, captação de crédito, acompanhamento bancário ou serviços correlatos, conforme o escopo definido com o cliente.
 
 2. Condições comerciais
-As condições finais podem variar conforme documentação apresentada, escopo contratado, complexidade da operação e aprovação interna.
+Os honorários e condições de pagamento serão definidos conforme complexidade, prazo, documentação apresentada, volume da operação e escopo contratado.
 
 3. Observações
-Este orçamento é editável antes da finalização. Documentos complementares podem ser anexados ao orçamento para conferência, comprovação ou suporte da proposta.`;
+Este orçamento é editável antes da finalização. Serviços prestados, documentos complementares e anexos podem acompanhar esta proposta para conferência, aceite e formalização.`;
 
-const ITEM_VAZIO: ItemOrcamento = { descricao: "", quantidade: 1, valor_unitario: 0 };
+const SERVICO_VAZIO: ServicoOrcamento = { descricao: "", quantidade: 1, valor_unitario: 0 };
 
 function moneyBR(value: any): string {
   const n = Number(value || 0);
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function parseMoney(value: any): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  return Number(String(value || 0).replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", ".")) || 0;
 }
 
 function fmtDate(date?: string | null): string {
@@ -112,13 +120,14 @@ function fmtDate(date?: string | null): string {
   return d.toLocaleDateString("pt-BR");
 }
 
-function calcularTotalItens(itens: ItemOrcamento[]): number {
-  return itens.reduce((acc, item) => acc + (Number(item.quantidade) || 0) * (Number(item.valor_unitario) || 0), 0);
+function calcularTotalServicos(servicos: ServicoOrcamento[]): number {
+  return servicos.reduce((acc, servico) => acc + (Number(servico.quantidade) || 0) * (Number(servico.valor_unitario) || 0), 0);
 }
 
-function limparDescricaoItemOrcamento(value: any): string {
+function limparDescricaoServico(value: any): string {
   return String(value ?? "")
     .replace(/^\s*descri[cç][aã]o\s+do\s+item\s*\/\s*servi[cç]o\s*:\s*/i, "")
+    .replace(/^\s*item\s*\d*\s*[-–—:]\s*/i, "")
     .trim();
 }
 
@@ -145,7 +154,7 @@ const estadoInicial = {
   titulo: "Orçamento de Serviços",
   descricao: "",
   conteudo: CONTEUDO_PADRAO,
-  itens: [{ ...ITEM_VAZIO }] as ItemOrcamento[],
+  itens: [] as ServicoOrcamento[],
   valor_total: "0",
   validade_dias: 30,
   validade_ate: "",
@@ -161,23 +170,25 @@ export default function Orcamentos() {
   const [busca, setBusca] = useState("");
   const [loading, setLoading] = useState(false);
   const [salvando, setSalvando] = useState(false);
-  const [aba, setAba] = useState<"editor" | "itens" | "anexos" | "preview">("editor");
+  const [aba, setAba] = useState<AbaOrcamento>("editor");
   const [arquivos, setArquivos] = useState<FileList | null>(null);
   const [descricaoAnexo, setDescricaoAnexo] = useState("");
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const marca = form.marca as MarcaOrcamento;
   const isFinalizado = selecionado?.status === "finalizado";
-  const itens: ItemOrcamento[] = Array.isArray(form.itens) && form.itens.length > 0 ? form.itens : [{ ...ITEM_VAZIO }];
-  const totalItens = calcularTotalItens(itens);
-  const hasItens = itens.some((it) => it.descricao?.trim() || Number(it.valor_unitario) > 0);
+  const servicos: ServicoOrcamento[] = Array.isArray(form.itens) ? form.itens : [];
+  const servicosValidos = servicos.filter((servico) => servico.descricao?.trim());
+  const hasServicos = servicosValidos.length > 0;
+  const totalServicos = calcularTotalServicos(servicosValidos);
+  const valorManual = parseMoney(form.valor_total);
+  const valorTotalExibicao = hasServicos ? totalServicos : valorManual;
 
-  // Sincronizar valor_total com total dos itens automaticamente
   useEffect(() => {
-    if (hasItens) {
-      setForm((f: any) => ({ ...f, valor_total: String(totalItens) }));
+    if (hasServicos && String(form.valor_total) !== String(totalServicos)) {
+      setForm((f: any) => ({ ...f, valor_total: String(totalServicos) }));
     }
-  }, [totalItens, hasItens]);
+  }, [hasServicos, totalServicos]);
 
   async function carregarTudo() {
     setLoading(true);
@@ -206,7 +217,7 @@ export default function Orcamentos() {
 
   function novoOrcamento() {
     setSelecionado(null);
-    setForm({ ...estadoInicial, itens: [{ ...ITEM_VAZIO }], assinaturas: ASSINATURAS_PADRAO.map((a) => ({ ...a })) });
+    setForm({ ...estadoInicial, itens: [], assinaturas: ASSINATURAS_PADRAO.map((a) => ({ ...a })) });
     setAba("editor");
   }
 
@@ -214,7 +225,7 @@ export default function Orcamentos() {
     try {
       const full = await apiFetch(`/api/orcamentos/${orc.id}`);
       setSelecionado(full);
-      const itensCarregados = Array.isArray(full.itens) && full.itens.length > 0 ? full.itens : [{ ...ITEM_VAZIO }];
+      const servicosCarregados = Array.isArray(full.itens) ? full.itens : [];
       setForm({
         tipo_cliente: full.tipo_cliente || "empresa",
         empresa_id: full.empresa_id || "",
@@ -227,7 +238,7 @@ export default function Orcamentos() {
         titulo: full.titulo || "Orçamento de Serviços",
         descricao: full.descricao || "",
         conteudo: full.conteudo || CONTEUDO_PADRAO,
-        itens: itensCarregados,
+        itens: servicosCarregados,
         valor_total: String(full.valor_total ?? "0"),
         validade_dias: full.validade_dias || 30,
         validade_ate: full.validade_ate || "",
@@ -271,27 +282,29 @@ export default function Orcamentos() {
     }));
   }
 
-  // ── Itens ────────────────────────────────────────────────────────────────
-  function addItem() {
-    setForm((f: any) => ({ ...f, itens: [...(f.itens || []), { ...ITEM_VAZIO }] }));
+  function adicionarServico() {
+    setForm((f: any) => ({ ...f, itens: [...(f.itens || []), { ...SERVICO_VAZIO }] }));
+    setAba("servicos");
   }
 
-  function removeItem(idx: number) {
+  function removerServico(idx: number) {
+    setForm((f: any) => ({ ...f, itens: (f.itens || []).filter((_: any, i: number) => i !== idx) }));
+  }
+
+  function atualizarServico(idx: number, key: keyof ServicoOrcamento, value: string | number) {
     setForm((f: any) => {
-      const novos = (f.itens || []).filter((_: any, i: number) => i !== idx);
-      return { ...f, itens: novos.length > 0 ? novos : [{ ...ITEM_VAZIO }] };
+      const atual = Array.isArray(f.itens) ? [...f.itens] : [];
+      atual[idx] = { ...(atual[idx] || SERVICO_VAZIO), [key]: value };
+      return { ...f, itens: atual };
     });
   }
 
-  function updateItem(idx: number, key: keyof ItemOrcamento, value: string | number) {
-    setForm((f: any) => {
-      const itensNovos = [...(f.itens || [])];
-      itensNovos[idx] = { ...(itensNovos[idx] || ITEM_VAZIO), [key]: value };
-      return { ...f, itens: itensNovos };
-    });
+  function limparServicosUsarValorDireto() {
+    setForm((f: any) => ({ ...f, itens: [] }));
+    setAba("editor");
+    toast.success("Serviços removidos. Informe o valor direto no editor.");
   }
 
-  // ── Assinaturas ───────────────────────────────────────────────────────────
   function updateAssinatura(index: number, key: string, value: string) {
     const assinaturas = [...(form.assinaturas || [])];
     assinaturas[index] = { ...(assinaturas[index] || {}), [key]: value };
@@ -312,7 +325,6 @@ export default function Orcamentos() {
     }));
   }
 
-  // ── Persistência ─────────────────────────────────────────────────────────
   async function salvar() {
     if (!form.cliente_nome?.trim()) {
       toast.error("Informe ou selecione o cliente do orçamento");
@@ -320,11 +332,17 @@ export default function Orcamentos() {
     }
     setSalvando(true);
     try {
-      const itensValidos = (form.itens || []).filter((it: ItemOrcamento) => it.descricao?.trim());
-      const valorFinal = itensValidos.length > 0 ? calcularTotalItens(itensValidos) : Number(String(form.valor_total || 0).replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", "."));
+      const servicosParaSalvar = (form.itens || [])
+        .filter((servico: ServicoOrcamento) => servico.descricao?.trim())
+        .map((servico: ServicoOrcamento) => ({
+          descricao: limparDescricaoServico(servico.descricao),
+          quantidade: Number(servico.quantidade) || 1,
+          valor_unitario: Number(servico.valor_unitario) || 0,
+        }));
+      const valorFinal = servicosParaSalvar.length > 0 ? calcularTotalServicos(servicosParaSalvar) : parseMoney(form.valor_total);
       const payload = {
         ...form,
-        itens: itensValidos,
+        itens: servicosParaSalvar,
         valor_total: valorFinal,
       };
       const saved = selecionado
@@ -343,7 +361,7 @@ export default function Orcamentos() {
   }
 
   async function finalizar() {
-    const saved = selecionado || await salvar();
+    const saved = selecionado || (await salvar());
     if (!saved?.id) return;
     setSalvando(true);
     try {
@@ -359,7 +377,7 @@ export default function Orcamentos() {
   }
 
   async function baixarPdf() {
-    const saved = selecionado || await salvar();
+    const saved = selecionado || (await salvar());
     if (!saved?.id) return;
     try {
       const { blob, filename } = await apiFetchBlob(`/api/orcamentos/${saved.id}/download`);
@@ -370,7 +388,7 @@ export default function Orcamentos() {
   }
 
   async function enviarAnexos() {
-    const saved = selecionado || await salvar();
+    const saved = selecionado || (await salvar());
     if (!saved?.id || !arquivos?.length) {
       toast.error("Selecione arquivos para anexar");
       return;
@@ -425,7 +443,7 @@ export default function Orcamentos() {
               </div>
               <div>
                 <h1 className="text-xl font-black tracking-tight text-slate-900">Orçamentos timbrados</h1>
-                <p className="text-sm text-slate-500">Destrava e PermuPay · Clientes PJ ou PF · Itens configuráveis com cálculo automático.</p>
+                <p className="text-sm text-slate-500">Propostas de serviços · valor direto ou serviços prestados com cálculo automático.</p>
               </div>
             </div>
             <button
@@ -438,7 +456,6 @@ export default function Orcamentos() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-            {/* Lista lateral */}
             <aside className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
               <div className="mb-3 flex items-center gap-2">
                 <div className="relative flex-1">
@@ -446,7 +463,9 @@ export default function Orcamentos() {
                   <input
                     value={busca}
                     onChange={(e) => setBusca(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") void carregarTudo(); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void carregarTudo();
+                    }}
                     placeholder="Buscar orçamento..."
                     className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
                   />
@@ -461,51 +480,46 @@ export default function Orcamentos() {
                   <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
                     Nenhum orçamento encontrado.
                   </div>
-                ) : orcamentos.map((orc) => (
-                  <button
-                    key={orc.id}
-                    onClick={() => abrirOrcamento(orc)}
-                    className={`w-full rounded-2xl border p-3 text-left transition ${
-                      selecionado?.id === orc.id
-                        ? "border-blue-200 bg-blue-50"
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                    }`}
-                  >
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <span className="truncate text-xs font-bold uppercase tracking-wide text-slate-400">{orc.numero || "Rascunho"}</span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
-                        orc.status === "finalizado" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-                      }`}>
-                        {orc.status}
-                      </span>
-                    </div>
-                    <p className="truncate text-sm font-black text-slate-900">{orc.cliente_nome || "Cliente não informado"}</p>
-                    <p className="mt-1 truncate text-xs text-slate-500">{orc.titulo}</p>
-                    <div className="mt-2 flex items-center justify-between text-xs">
-                      <span className="font-bold text-slate-700">{moneyBR(orc.valor_total)}</span>
-                      <span className="text-slate-400">{fmtDate(orc.atualizado_em || orc.criado_em)}</span>
-                    </div>
-                  </button>
-                ))}
+                ) : (
+                  orcamentos.map((orc) => (
+                    <button
+                      key={orc.id}
+                      onClick={() => abrirOrcamento(orc)}
+                      className={`w-full rounded-2xl border p-3 text-left transition ${
+                        selecionado?.id === orc.id ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <span className="truncate text-xs font-bold uppercase tracking-wide text-slate-400">{orc.numero || "Rascunho"}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${orc.status === "finalizado" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                          {orc.status}
+                        </span>
+                      </div>
+                      <p className="truncate text-sm font-black text-slate-900">{orc.cliente_nome || "Cliente não informado"}</p>
+                      <p className="mt-1 truncate text-xs text-slate-500">{orc.titulo}</p>
+                      <div className="mt-2 flex items-center justify-between text-xs">
+                        <span className="font-bold text-slate-700">{moneyBR(orc.valor_total)}</span>
+                        <span className="text-slate-400">{fmtDate(orc.atualizado_em || orc.criado_em)}</span>
+                      </div>
+                    </button>
+                  ))
+                )}
               </div>
             </aside>
 
-            {/* Painel editor */}
             <section className="min-w-0 rounded-3xl border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-3">
                 <div className="flex flex-wrap gap-1">
                   {[
                     ["editor", "Editor"],
-                    ["itens", `Itens (${itens.filter(it => it.descricao?.trim()).length || 0})`],
+                    ["servicos", `Serviços (${servicosValidos.length})`],
                     ["anexos", "Anexos"],
                     ["preview", "Prévia"],
                   ].map(([id, label]) => (
                     <button
                       key={id}
-                      onClick={() => setAba(id as any)}
-                      className={`rounded-2xl px-3 py-2 text-xs font-black transition ${
-                        aba === id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-600 hover:bg-slate-100"
-                      }`}
+                      onClick={() => setAba(id as AbaOrcamento)}
+                      className={`rounded-2xl px-3 py-2 text-xs font-black transition ${aba === id ? "bg-blue-600 text-white shadow-md shadow-blue-100" : "bg-slate-50 text-slate-600 hover:bg-slate-100"}`}
                     >
                       {label}
                     </button>
@@ -527,11 +541,10 @@ export default function Orcamentos() {
               <div className="p-4">
                 {isFinalizado && (
                   <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
-                    Orçamento finalizado. Para alterar texto ou valores, crie um novo orçamento.
+                    Orçamento finalizado. Para alterar texto, serviços ou valores, crie um novo orçamento.
                   </div>
                 )}
 
-                {/* ── Aba Editor ─────────────────────────────────────────── */}
                 {aba === "editor" && (
                   <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
                     <div className="space-y-4">
@@ -564,34 +577,25 @@ export default function Orcamentos() {
                         </label>
 
                         <label className="block">
-                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
-                            Validade (dias)
-                          </span>
+                          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Validade (dias)</span>
                           <input
                             type="number"
                             value={form.validade_dias}
                             disabled={isFinalizado}
                             onChange={(e) => setForm((f: any) => ({ ...f, validade_dias: Number(e.target.value || 30) }))}
                             className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
-                            placeholder="30"
                             min={1}
+                            placeholder="30"
                           />
                         </label>
                       </div>
 
-                      {/* Seleção de cliente PJ */}
                       {form.tipo_cliente === "empresa" && (
                         <label className="block">
                           <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
-                            <Building2 className="mr-1 inline h-3.5 w-3.5" />
-                            Selecionar cliente PJ
+                            <Building2 className="mr-1 inline h-3.5 w-3.5" /> Selecionar cliente PJ
                           </span>
-                          <select
-                            value={form.empresa_id}
-                            disabled={isFinalizado}
-                            onChange={(e) => aplicarEmpresa(e.target.value)}
-                            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
-                          >
+                          <select value={form.empresa_id} disabled={isFinalizado} onChange={(e) => aplicarEmpresa(e.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300">
                             <option value="">Selecione uma empresa...</option>
                             {empresasFiltradas.map((e) => (
                               <option key={e.id} value={e.id}>{e.razao_social || e.nome_fantasia} — {e.cnpj}</option>
@@ -600,19 +604,12 @@ export default function Orcamentos() {
                         </label>
                       )}
 
-                      {/* Seleção de cliente PF */}
                       {form.tipo_cliente === "pessoa_fisica" && (
                         <label className="block">
                           <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
-                            <User className="mr-1 inline h-3.5 w-3.5" />
-                            Selecionar cliente PF
+                            <User className="mr-1 inline h-3.5 w-3.5" /> Selecionar cliente PF
                           </span>
-                          <select
-                            value={form.cliente_pf_id}
-                            disabled={isFinalizado}
-                            onChange={(e) => aplicarClientePf(e.target.value)}
-                            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
-                          >
+                          <select value={form.cliente_pf_id} disabled={isFinalizado} onChange={(e) => aplicarClientePf(e.target.value)} className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300">
                             <option value="">Selecione uma pessoa física...</option>
                             {clientesPfFiltrados.map((c) => (
                               <option key={c.id} value={c.id}>{c.nome} — {c.cpf}</option>
@@ -621,7 +618,6 @@ export default function Orcamentos() {
                         </label>
                       )}
 
-                      {/* Dados do cliente */}
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                         <input disabled={isFinalizado} value={form.cliente_nome} onChange={(e) => setForm((f: any) => ({ ...f, cliente_nome: e.target.value }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300" placeholder="Nome / Razão social do cliente" />
                         <input disabled={isFinalizado} value={form.cliente_documento} onChange={(e) => setForm((f: any) => ({ ...f, cliente_documento: e.target.value }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-300" placeholder="CPF / CNPJ" />
@@ -633,10 +629,50 @@ export default function Orcamentos() {
 
                       <textarea disabled={isFinalizado} value={form.descricao} onChange={(e) => setForm((f: any) => ({ ...f, descricao: e.target.value }))} rows={2} className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none focus:border-blue-300" placeholder="Descrição curta / subtítulo do orçamento" />
 
+                      <div className="rounded-3xl border border-blue-100 bg-blue-50/60 p-4">
+                        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <div className="flex items-center gap-2 text-sm font-black text-slate-900">
+                              <BadgeDollarSign className="h-4 w-4 text-blue-600" /> Valor do orçamento
+                            </div>
+                            <p className="mt-0.5 text-xs text-slate-500">Use valor direto quando a proposta não precisar detalhar serviços prestados.</p>
+                          </div>
+                          {!isFinalizado && (
+                            <button onClick={adicionarServico} className="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">
+                              <Plus className="h-3.5 w-3.5" /> Adicionar serviços
+                            </button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto] md:items-end">
+                          <label className="block">
+                            <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Valor direto</span>
+                            <input
+                              disabled={isFinalizado || hasServicos}
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              value={form.valor_total}
+                              onChange={(e) => setForm((f: any) => ({ ...f, valor_total: e.target.value }))}
+                              className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold outline-none focus:border-blue-300 disabled:bg-slate-100 disabled:text-slate-400"
+                              placeholder="0,00"
+                            />
+                          </label>
+                          {hasServicos && !isFinalizado && (
+                            <button onClick={limparServicosUsarValorDireto} className="h-11 rounded-2xl border border-amber-200 bg-white px-4 text-xs font-bold text-amber-700 hover:bg-amber-50">
+                              Usar valor direto
+                            </button>
+                          )}
+                        </div>
+                        {hasServicos && (
+                          <p className="mt-2 text-xs font-semibold text-blue-700">
+                            Valor calculado automaticamente pelos serviços prestados: {moneyBR(totalServicos)}.
+                          </p>
+                        )}
+                      </div>
+
                       <div>
                         <div className="mb-2 flex items-center gap-2 text-sm font-black text-slate-800">
-                          <PenLine className="h-4 w-4 text-blue-600" />
-                          Texto livre do orçamento
+                          <PenLine className="h-4 w-4 text-blue-600" /> Texto livre do orçamento
                         </div>
                         <textarea
                           disabled={isFinalizado}
@@ -649,20 +685,16 @@ export default function Orcamentos() {
                       </div>
                     </div>
 
-                    {/* Coluna lateral — resumo + assinaturas */}
                     <div className="space-y-4">
                       <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
                         <div className="mb-3 flex items-center gap-2 text-sm font-black text-slate-900">
-                          <FileText className="h-4 w-4 text-blue-600" />
-                          Resumo
+                          <FileText className="h-4 w-4 text-blue-600" /> Resumo
                         </div>
                         <div className="space-y-3 text-sm">
                           <div><span className="text-xs font-bold uppercase text-slate-400">Cliente</span><p className="font-bold text-slate-900">{form.cliente_nome || "Não informado"}</p></div>
                           <div><span className="text-xs font-bold uppercase text-slate-400">Marca</span><p className="font-bold text-slate-900">{marca === "permupay" ? "PermuPay" : "Destrava Crédito"}</p></div>
-                          <div>
-                            <span className="text-xs font-bold uppercase text-slate-400">Valor total</span>
-                            <p className="text-xl font-black text-blue-700">{moneyBR(hasItens ? totalItens : String(form.valor_total).replace(",", "."))}</p>
-                          </div>
+                          <div><span className="text-xs font-bold uppercase text-slate-400">Modelo de valor</span><p className="font-bold text-slate-900">{hasServicos ? "Serviços prestados" : "Valor direto"}</p></div>
+                          <div><span className="text-xs font-bold uppercase text-slate-400">Valor total</span><p className="text-xl font-black text-blue-700">{moneyBR(valorTotalExibicao)}</p></div>
                           <div><span className="text-xs font-bold uppercase text-slate-400">Validade</span><p className="font-bold text-slate-900">{form.validade_dias || 30} dias</p></div>
                         </div>
                       </div>
@@ -690,115 +722,123 @@ export default function Orcamentos() {
                   </div>
                 )}
 
-                {/* ── Aba Itens ─────────────────────────────────────────── */}
-                {aba === "itens" && (
+                {aba === "servicos" && (
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm font-black text-slate-900">
-                        <PackagePlus className="h-5 w-5 text-blue-600" />
-                        Itens
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 text-sm font-black text-slate-900">
+                          <PackagePlus className="h-5 w-5 text-blue-600" /> Serviços prestados
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">Descreva assessoria, consultoria, diagnóstico, acompanhamento ou qualquer serviço contratado.</p>
                       </div>
                       {!isFinalizado && (
-                        <button onClick={addItem} className="inline-flex items-center gap-1.5 rounded-2xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">
-                          <Plus className="h-3.5 w-3.5" /> Adicionar item
+                        <button onClick={adicionarServico} className="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700">
+                          <Plus className="h-3.5 w-3.5" /> Adicionar serviço
                         </button>
                       )}
                     </div>
 
-                    {/* Cabeçalho da tabela */}
-                    <div className="hidden grid-cols-[2fr_80px_140px_36px] gap-2 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-500 md:grid">
-                      <span>Item</span>
-                      <span className="text-center">Qtd</span>
-                      <span className="text-right">Valor unitário</span>
-                      <span></span>
-                    </div>
-
-                    {/* Linhas de itens */}
-                    <div className="space-y-2">
-                      {itens.map((item, idx) => (
-                        <div key={idx} className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-[2fr_80px_140px_36px] md:items-center">
-                          <div>
-                            <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">Descrição</span>
-                            <input
-                              disabled={isFinalizado}
-                              value={item.descricao}
-                              onChange={(e) => updateItem(idx, "descricao", e.target.value)}
-                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
-                              placeholder={`Item ${idx + 1}`}
-                            />
-                          </div>
-                          <div>
-                            <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">Qtd</span>
-                            <input
-                              disabled={isFinalizado}
-                              type="number"
-                              min={1}
-                              value={item.quantidade}
-                              onChange={(e) => updateItem(idx, "quantidade", Number(e.target.value) || 1)}
-                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold outline-none focus:border-blue-300"
-                            />
-                          </div>
-                          <div>
-                            <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">Valor unitário (R$)</span>
-                            <input
-                              disabled={isFinalizado}
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              value={item.valor_unitario}
-                              onChange={(e) => updateItem(idx, "valor_unitario", Number(e.target.value) || 0)}
-                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-right text-sm font-bold outline-none focus:border-blue-300"
-                              placeholder="0,00"
-                            />
-                          </div>
-                          <div className="flex items-center justify-end">
-                            {!isFinalizado && (
-                              <button
-                                onClick={() => removeItem(idx)}
-                                className="rounded-xl p-2 text-rose-400 hover:bg-rose-50 hover:text-rose-600"
-                                title="Remover item"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            )}
-                          </div>
-                          {/* Total por linha */}
-                          {(item.descricao || Number(item.valor_unitario) > 0) && (
-                            <div className="col-span-full -mt-1 flex justify-end">
-                              <span className="rounded-lg bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
-                                Subtotal: {moneyBR((Number(item.quantidade) || 0) * (Number(item.valor_unitario) || 0))}
-                              </span>
-                            </div>
-                          )}
+                    {servicos.length === 0 ? (
+                      <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+                        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                          <BadgeDollarSign className="h-6 w-6" />
                         </div>
-                      ))}
-                    </div>
-
-                    {/* Total geral */}
-                    {itens.length > 0 && (
-                      <div className="flex justify-end">
-                        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-6 py-4">
-                          <div className="text-xs font-bold uppercase text-blue-500">Total do orçamento</div>
-                          <div className="text-3xl font-black text-blue-700">{moneyBR(totalItens)}</div>
-                        </div>
+                        <p className="text-sm font-bold text-slate-800">Nenhum serviço detalhado.</p>
+                        <p className="mt-1 text-sm text-slate-500">Você pode usar somente o valor direto no Editor ou detalhar os serviços prestados aqui.</p>
+                        {!isFinalizado && (
+                          <button onClick={adicionarServico} className="mt-4 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
+                            Adicionar primeiro serviço
+                          </button>
+                        )}
                       </div>
-                    )}
+                    ) : (
+                      <>
+                        <div className="hidden grid-cols-[2fr_80px_140px_80px] gap-2 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-500 md:grid">
+                          <span>Serviço prestado</span>
+                          <span className="text-center">Qtd</span>
+                          <span className="text-right">Valor unitário</span>
+                          <span className="text-right">Ações</span>
+                        </div>
 
-                    {!isFinalizado && (
-                      <button onClick={addItem} className="w-full rounded-2xl border-2 border-dashed border-blue-200 py-3 text-sm font-bold text-blue-500 hover:border-blue-400 hover:text-blue-700 hover:bg-blue-50 transition">
-                        <Plus className="mr-1.5 inline h-4 w-4" /> Adicionar mais um item
-                      </button>
+                        <div className="space-y-2">
+                          {servicos.map((servico, idx) => (
+                            <div key={idx} className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-[2fr_80px_140px_80px] md:items-center">
+                              <div>
+                                <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">Serviço prestado</span>
+                                <input
+                                  disabled={isFinalizado}
+                                  value={servico.descricao}
+                                  onChange={(e) => atualizarServico(idx, "descricao", e.target.value)}
+                                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
+                                  placeholder={`Ex.: Assessoria de crédito empresarial`}
+                                />
+                              </div>
+                              <div>
+                                <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">Qtd</span>
+                                <input
+                                  disabled={isFinalizado}
+                                  type="number"
+                                  min={1}
+                                  value={servico.quantidade}
+                                  onChange={(e) => atualizarServico(idx, "quantidade", Number(e.target.value) || 1)}
+                                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-center text-sm font-bold outline-none focus:border-blue-300"
+                                />
+                              </div>
+                              <div>
+                                <span className="mb-1 block text-[10px] font-bold uppercase text-slate-400 md:hidden">Valor unitário (R$)</span>
+                                <input
+                                  disabled={isFinalizado}
+                                  type="number"
+                                  min={0}
+                                  step={0.01}
+                                  value={servico.valor_unitario}
+                                  onChange={(e) => atualizarServico(idx, "valor_unitario", Number(e.target.value) || 0)}
+                                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-right text-sm font-bold outline-none focus:border-blue-300"
+                                  placeholder="0,00"
+                                />
+                              </div>
+                              <div className="flex items-center justify-end gap-1">
+                                <button type="button" onClick={() => setAba("servicos")} className="rounded-xl p-2 text-slate-400" title="Atualização automática">
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                                {!isFinalizado && (
+                                  <button onClick={() => removerServico(idx)} className="rounded-xl p-2 text-rose-400 hover:bg-rose-50 hover:text-rose-600" title="Remover serviço">
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </div>
+                              {(servico.descricao || Number(servico.valor_unitario) > 0) && (
+                                <div className="col-span-full -mt-1 flex justify-end">
+                                  <span className="rounded-lg bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
+                                    Subtotal: {moneyBR((Number(servico.quantidade) || 0) * (Number(servico.valor_unitario) || 0))}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          {!isFinalizado && (
+                            <button onClick={adicionarServico} className="rounded-2xl border-2 border-dashed border-blue-200 px-4 py-3 text-sm font-bold text-blue-500 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700">
+                              <Plus className="mr-1.5 inline h-4 w-4" /> Adicionar mais um serviço
+                            </button>
+                          )}
+                          <div className="rounded-2xl border border-blue-200 bg-blue-50 px-6 py-4 sm:ml-auto">
+                            <div className="text-xs font-bold uppercase text-blue-500">Total dos serviços</div>
+                            <div className="text-3xl font-black text-blue-700">{moneyBR(totalServicos)}</div>
+                          </div>
+                        </div>
+                      </>
                     )}
                   </div>
                 )}
 
-                {/* ── Aba Anexos ────────────────────────────────────────── */}
                 {aba === "anexos" && (
                   <div className="space-y-4">
                     <div className="rounded-3xl border border-dashed border-blue-200 bg-blue-50/60 p-4">
                       <div className="mb-3 flex items-center gap-2 text-sm font-black text-slate-900">
-                        <Paperclip className="h-4 w-4 text-blue-600" />
-                        Anexar documentos livremente
+                        <Paperclip className="h-4 w-4 text-blue-600" /> Anexar documentos livremente
                       </div>
                       <input ref={fileRef} type="file" multiple onChange={(e) => setArquivos(e.target.files)} className="mb-3 block w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm" />
                       <input value={descricaoAnexo} onChange={(e) => setDescricaoAnexo(e.target.value)} placeholder="Descrição opcional dos anexos" className="mb-3 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300" />
@@ -812,24 +852,25 @@ export default function Orcamentos() {
                       <div className="divide-y divide-slate-100">
                         {(selecionado?.anexos || []).length === 0 ? (
                           <div className="p-8 text-center text-sm text-slate-500">Nenhum documento anexado a este orçamento.</div>
-                        ) : (selecionado?.anexos || []).map((anexo) => (
-                          <div key={anexo.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-bold text-slate-900">{anexo.nome_original}</p>
-                              <p className="text-xs text-slate-500">{anexo.descricao || "Anexo"} · {fmtDate(anexo.criado_em)}</p>
+                        ) : (
+                          (selecionado?.anexos || []).map((anexo) => (
+                            <div key={anexo.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-bold text-slate-900">{anexo.nome_original}</p>
+                                <p className="text-xs text-slate-500">{anexo.descricao || "Anexo"} · {fmtDate(anexo.criado_em)}</p>
+                              </div>
+                              <div className="flex gap-2">
+                                <button onClick={() => baixarAnexo(anexo)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Baixar</button>
+                                <button onClick={() => excluirAnexo(anexo.id)} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50">Excluir</button>
+                              </div>
                             </div>
-                            <div className="flex gap-2">
-                              <button onClick={() => baixarAnexo(anexo)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Baixar</button>
-                              <button onClick={() => excluirAnexo(anexo.id)} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50">Excluir</button>
-                            </div>
-                          </div>
-                        ))}
+                          ))
+                        )}
                       </div>
                     </div>
                   </div>
                 )}
 
-                {/* ── Aba Prévia ────────────────────────────────────────── */}
                 {aba === "preview" && (
                   <div className="mx-auto max-w-4xl rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
                     <div className={`mb-6 flex items-center justify-between border-b-4 pb-4 ${marca === "permupay" ? "border-blue-600" : "border-[#1B3A8C]"}`}>
@@ -847,17 +888,16 @@ export default function Orcamentos() {
                       <div className="text-sm text-slate-600">{form.cliente_documento}</div>
                     </div>
 
-                    {/* Itens na prévia */}
-                    {hasItens && (
+                    {hasServicos && (
                       <div className="my-5">
-                        <div className="mb-3 border-b border-slate-200 pb-2 text-sm font-black text-slate-800">Itens</div>
+                        <div className="mb-3 border-b border-slate-200 pb-2 text-sm font-black text-slate-800">Serviços prestados</div>
                         <div className="space-y-2">
-                          {itens.filter(it => it.descricao?.trim()).map((item, idx) => (
+                          {servicosValidos.map((servico, idx) => (
                             <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
-                              <span className="text-sm text-slate-700">{limparDescricaoItemOrcamento(item.descricao)}</span>
+                              <span className="text-sm text-slate-700">{limparDescricaoServico(servico.descricao)}</span>
                               <div className="text-right text-sm">
-                                <span className="text-slate-400">{item.quantidade}x {moneyBR(item.valor_unitario)} = </span>
-                                <span className="font-bold text-slate-900">{moneyBR(Number(item.quantidade) * Number(item.valor_unitario))}</span>
+                                <span className="text-slate-400">{servico.quantidade}x {moneyBR(servico.valor_unitario)} = </span>
+                                <span className="font-bold text-slate-900">{moneyBR(Number(servico.quantidade) * Number(servico.valor_unitario))}</span>
                               </div>
                             </div>
                           ))}
@@ -865,10 +905,16 @@ export default function Orcamentos() {
                       </div>
                     )}
 
+                    {!hasServicos && (
+                      <div className="my-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
+                        Orçamento lançado por valor direto, sem detalhamento de serviços na proposta.
+                      </div>
+                    )}
+
                     <div className="prose prose-sm max-w-none whitespace-pre-wrap text-slate-700">{form.conteudo}</div>
                     <div className="my-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <div className="text-xs font-bold uppercase text-slate-400">Valor total</div>
-                      <div className="text-2xl font-black text-blue-700">{moneyBR(hasItens ? totalItens : String(form.valor_total).replace(",", "."))}</div>
+                      <div className="text-2xl font-black text-blue-700">{moneyBR(valorTotalExibicao)}</div>
                     </div>
                     <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-2">
                       {(form.assinaturas || []).map((a: any, idx: number) => (
