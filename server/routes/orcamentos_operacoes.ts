@@ -198,134 +198,183 @@ function textoHtmlComQuebras(value: unknown): string {
   return escapeHtml(value).replace(/\n/g, "<br />");
 }
 
-async function gerarPdfOrcamentoBuffer(orcamento: Row): Promise<Buffer> {
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
-  const pdf = await PDFDocument.create();
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const blue = rgb(0.06, 0.34, 0.82);
-  const dark = rgb(0.08, 0.12, 0.2);
-  const gray = rgb(0.35, 0.4, 0.5);
-  const light = rgb(0.95, 0.97, 1);
+// ── Geração de HTML do orçamento para Puppeteer ──────────────────────────────
+// Usa o mesmo pipeline de contratos (Puppeteer + pdf-lib merge) para garantir
+// suporte completo a caracteres PT-BR (ã, ç, é, etc.) e papel timbrado.
 
-  const pageWidth = 595.28;
-  const pageHeight = 841.89;
-  const margin = 52;
-  let page = pdf.addPage([pageWidth, pageHeight]);
-  let y = pageHeight - 52;
+function gerarHtmlOrcamento(orcamento: Row): string {
+  const marca = normalizeMarca(orcamento.marca);
+  const cor = marca === "permupay" ? "#0066CC" : marca === "aragao" ? "#8B4513" : "#1B3A8C";
+  const corLight = marca === "permupay" ? "#EBF5FF" : marca === "aragao" ? "#FFF8F0" : "#EEF2FF";
+  const servicos = normalizeServicos(orcamento.itens || []);
+  const valorTotal = Number(orcamento.valor_total || 0);
+  const assinaturas = normalizeAssinaturas(orcamento.assinaturas || []);
+  const numero = escapeHtml(orcamento.numero || "Rascunho");
+  const validadeTexto = orcamento.validade_ate
+    ? fmtDate(orcamento.validade_ate)
+    : `${orcamento.validade_dias || 30} dias`;
 
-  function drawText(text: string, x: number, yy: number, size = 10, f = font, color = dark, maxWidth = pageWidth - margin * 2) {
-    const clean = String(text || "");
-    page.drawText(clean.slice(0, 160), { x, y: yy, size, font: f, color, maxWidth });
-  }
+  const servicosHtml = servicos.length > 0
+    ? `<section>
+        <h3>Serviços prestados</h3>
+        <table>
+          <thead><tr>
+            <th style="text-align:left;width:55%">Descrição</th>
+            <th style="text-align:center;width:10%">Qtd</th>
+            <th style="text-align:right;width:20%">Unitário</th>
+            <th style="text-align:right;width:15%">Subtotal</th>
+          </tr></thead>
+          <tbody>
+            ${servicos.map(s => {
+              const sub = (s.quantidade || 1) * (s.valor_unitario || 0);
+              return `<tr>
+                <td>${escapeHtml(limparDescricaoServico(s.descricao))}</td>
+                <td style="text-align:center">${s.quantidade}</td>
+                <td style="text-align:right">${moneyBR(s.valor_unitario)}</td>
+                <td style="text-align:right;font-weight:700">${moneyBR(sub)}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      </section>`
+    : `<section>
+        <h3>Serviços prestados</h3>
+        <p style="color:#64748b;font-size:10pt">Orçamento lançado por valor direto, sem detalhamento de itens na proposta.</p>
+      </section>`;
 
-  function newPageIfNeeded(height = 60) {
-    if (y - height > 60) return;
-    page = pdf.addPage([pageWidth, pageHeight]);
-    y = pageHeight - 52;
-  }
+  const assinaturasHtml = assinaturas.length
+    ? assinaturas.map(a => `
+        <div class="sig-box">
+          <div class="sig-line"></div>
+          <strong>${escapeHtml(a.nome || "Assinante")}</strong>
+          <span>${escapeHtml(a.cargo || a.tipo || "")}</span>
+          <small>${escapeHtml(a.documento || "")}</small>
+        </div>`).join("")
+    : `<div class="sig-box"><div class="sig-line"></div><strong>Destrava Crédito</strong><span>Contratada</span></div>
+       <div class="sig-box"><div class="sig-line"></div><strong>${escapeHtml(orcamento.cliente_nome || "Cliente")}</strong><span>Cliente</span></div>`;
 
-  function wrap(text: string, maxChars: number) {
-    const words = String(text || "").split(/\s+/).filter(Boolean);
-    const lines: string[] = [];
-    let line = "";
-    for (const word of words) {
-      if ((line + " " + word).trim().length > maxChars) {
-        if (line) lines.push(line);
-        line = word;
-      } else {
-        line = (line + " " + word).trim();
-      }
-    }
-    if (line) lines.push(line);
-    return lines.length ? lines : [""];
+  const conteudoHtml = String(orcamento.conteudo || "")
+    .split(/\n{2,}/)
+    .map(p => `<p>${textoHtmlComQuebras(p)}</p>`)
+    .join("\n");
+
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<title>${escapeHtml(orcamento.titulo || "Orçamento")}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; margin: 0; font-size: 10.5pt; line-height: 1.6; }
+  h1 { color:${cor}; font-size:20pt; margin:0 0 4px; }
+  h2 { font-size:12pt; color:#334155; margin:0 0 16px; font-weight:600; }
+  h3 { font-size:11.5pt; color:${cor}; margin:24px 0 10px; border-bottom:1.5px solid #e2e8f0; padding-bottom:5px; }
+  p { margin:0 0 8px; }
+  .info-box { background:${corLight}; border:1px solid ${cor}22; border-radius:10px; padding:14px 16px; margin:14px 0; }
+  .info-label { font-size:8pt; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.05em; display:block; }
+  .info-val { font-weight:700; font-size:11pt; color:#0f172a; }
+  .valor-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin:14px 0; }
+  .valor-total { font-size:20pt; font-weight:800; color:${cor}; }
+  table { width:100%; border-collapse:collapse; margin:0; }
+  th { background:${cor}; color:#fff; padding:7px 9px; font-size:8.5pt; font-weight:700; }
+  td { padding:6px 9px; border-bottom:1px solid #e2e8f0; font-size:9.5pt; }
+  tr:nth-child(even) td { background:#f8fafc; }
+  .sig-grid { display:grid; grid-template-columns:1fr 1fr; gap:32px; margin-top:40px; }
+  .sig-box { text-align:center; }
+  .sig-line { border-top:1px solid #0f172a; margin-bottom:10px; }
+  .sig-box strong { display:block; font-size:10pt; }
+  .sig-box span, .sig-box small { display:block; font-size:8.5pt; color:#64748b; }
+  section { page-break-inside:avoid; }
+</style>
+</head>
+<body>
+  <h1>${escapeHtml(orcamento.titulo || "Orçamento de Serviços")}</h1>
+  ${orcamento.descricao ? `<h2>${escapeHtml(String(orcamento.descricao || ""))}</h2>` : ""}
+
+  <div class="info-box">
+    <span class="info-label">Cliente</span>
+    <span class="info-val">${escapeHtml(orcamento.cliente_nome || "Cliente não informado")}</span>
+    ${orcamento.cliente_documento ? `<span style="font-size:9.5pt;color:#475569">${escapeHtml(String(orcamento.cliente_documento))}</span>` : ""}
+    ${orcamento.cliente_email ? `<span style="font-size:9pt;color:#64748b">E-mail: ${escapeHtml(String(orcamento.cliente_email))}</span>` : ""}
+    ${orcamento.cliente_telefone ? `<span style="font-size:9pt;color:#64748b">Tel: ${escapeHtml(String(orcamento.cliente_telefone))}</span>` : ""}
+  </div>
+
+  <div class="valor-grid">
+    <div class="info-box">
+      <span class="info-label">Valor total</span>
+      <div class="valor-total">${moneyBR(valorTotal)}</div>
+    </div>
+    <div class="info-box">
+      <span class="info-label">Validade</span>
+      <span class="info-val">${escapeHtml(validadeTexto)}</span>
+    </div>
+    <div class="info-box">
+      <span class="info-label">Número</span>
+      <span class="info-val" style="font-size:9pt">${numero}</span>
+    </div>
+  </div>
+
+  <section>
+    <h3>Escopo e condições</h3>
+    ${conteudoHtml || "<p>Descrição do escopo, condições comerciais e entregáveis desta proposta.</p>"}
+  </section>
+
+  ${servicosHtml}
+
+  <section>
+    <h3>Assinaturas</h3>
+    <div class="sig-grid">${assinaturasHtml}</div>
+  </section>
+</body>
+</html>`;
+}
+
+// Gera PDF via Puppeteer (mesmo pipeline dos contratos — suporte completo a PT-BR)
+async function gerarPdfOrcamentoPuppeteer(orcamento: Row): Promise<Buffer> {
+  const puppeteerL = await import("puppeteer-core");
+  let executablePath: string;
+  if (process.env.CHROMIUM_PATH) {
+    executablePath = process.env.CHROMIUM_PATH;
+  } else {
+    try {
+      const chromiumL = await import("@sparticuz/chromium");
+      executablePath = await chromiumL.default.executablePath();
+    } catch { executablePath = "/usr/bin/chromium-browser"; }
   }
 
   const marca = normalizeMarca(orcamento.marca);
-  const empresa = marcaNome(marca);
-  const numero = orcamento.numero || "Rascunho";
-  const servicos = normalizeServicos(orcamento.itens || []);
-  const valorTotal = Number(orcamento.valor_total || 0);
+  const isPermuPay = marca === "permupay";
+  // Logos em base64 — lidas do mesmo módulo do servidor principal
+  // Fallback: usar texto simples como cabeçalho se logos não estiverem disponíveis
+  const nomeEmpresa = marcaNome(marca);
+  const corBorda = isPermuPay ? "#0066CC" : marca === "aragao" ? "#8B4513" : "#1B3A8C";
 
-  page.drawText(empresa, { x: margin, y, size: marca === "permupay" ? 20 : 17, font: bold, color: marca === "aragao" ? rgb(0.55, 0.32, 0.04) : blue });
-  drawText(numero, pageWidth - 185, y + 3, 10, bold, dark, 130);
-  y -= 20;
-  page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 3, color: marca === "aragao" ? rgb(0.8, 0.54, 0.18) : blue });
-  y -= 36;
+  const headerTemplate = `<style>*{margin:0;padding:0;box-sizing:border-box}#h{width:100%;padding:5px 22mm 7px;border-bottom:2px solid ${corBorda};display:flex;align-items:center;justify-content:center;font-family:Arial,sans-serif;font-size:11pt;font-weight:700;color:${corBorda}}</style><div id="h">${escapeHtml(nomeEmpresa)}</div>`;
+  const footerTemplate = `<style>*{margin:0;padding:0;box-sizing:border-box}#f{width:100%;padding:7px 22mm 5px;border-top:1px solid #e2e8f0;text-align:center;font-family:Arial,sans-serif;font-size:7.5pt;color:#64748b;line-height:1.5}</style><div id="f"><strong>BRASÍLIA - SEDE</strong> · St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250</div>`;
 
-  drawText(orcamento.titulo || "Orçamento de Serviços", margin, y, 24, bold, dark);
-  y -= 34;
-
-  page.drawRectangle({ x: margin, y: y - 72, width: pageWidth - margin * 2, height: 82, color: light, borderColor: rgb(0.85, 0.89, 0.96), borderWidth: 1 });
-  drawText("CLIENTE", margin + 12, y - 12, 8, bold, gray);
-  drawText(orcamento.cliente_nome || "Cliente não informado", margin + 12, y - 30, 12, bold, dark);
-  drawText(orcamento.cliente_documento || "", margin + 12, y - 48, 10, font, dark);
-  if (orcamento.cliente_email) drawText(`E-mail: ${orcamento.cliente_email}`, margin + 12, y - 64, 9, font, gray);
-  y -= 104;
-
-  page.drawRectangle({ x: margin, y: y - 62, width: pageWidth - margin * 2, height: 72, color: rgb(0.98, 0.99, 1), borderColor: rgb(0.88, 0.91, 0.96), borderWidth: 1 });
-  drawText("VALOR TOTAL", margin + 12, y - 14, 8, bold, gray);
-  drawText(moneyBR(valorTotal), margin + 12, y - 40, 20, bold, blue);
-  drawText("VALIDADE", margin + 250, y - 14, 8, bold, gray);
-  drawText(orcamento.validade_ate ? fmtDate(orcamento.validade_ate) : `${orcamento.validade_dias || 30} dias`, margin + 250, y - 40, 12, bold, dark);
-  drawText("STATUS", margin + 390, y - 14, 8, bold, gray);
-  drawText(String(orcamento.status || "rascunho").toUpperCase(), margin + 390, y - 40, 12, bold, dark);
-  y -= 96;
-
-  drawText("Escopo e condições", margin, y, 15, bold, blue);
-  y -= 22;
-  for (const paragraph of String(orcamento.conteudo || "").split(/\n+/)) {
-    for (const line of wrap(paragraph, 86)) {
-      newPageIfNeeded(18);
-      drawText(line, margin, y, 10.5, font, dark);
-      y -= 16;
-    }
-    y -= 4;
+  const html = gerarHtmlOrcamento(orcamento);
+  let browser: any;
+  try {
+    browser = await puppeteerL.default.launch({
+      executablePath,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--single-process"],
+      headless: true,
+    });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+    const pdfOpts = {
+      format: "A4" as const,
+      printBackground: true,
+      displayHeaderFooter: true,
+      margin: { top: "26mm", bottom: "24mm", left: "20mm", right: "20mm" },
+      headerTemplate,
+      footerTemplate,
+    };
+    const buf = await page.pdf(pdfOpts);
+    return Buffer.from(buf);
+  } finally {
+    if (browser) await browser.close();
   }
-
-  if (servicos.length > 0) {
-    y -= 12;
-    newPageIfNeeded(120);
-    drawText("Serviços prestados", margin, y, 15, bold, blue);
-    y -= 24;
-    for (const servico of servicos) {
-      newPageIfNeeded(50);
-      const subtotal = Number(servico.quantidade || 0) * Number(servico.valor_unitario || 0);
-      page.drawRectangle({ x: margin, y: y - 32, width: pageWidth - margin * 2, height: 42, color: rgb(0.97, 0.98, 1) });
-      const lines = wrap(limparDescricaoServico(servico.descricao), 58);
-      drawText(lines[0], margin + 10, y - 8, 9.5, bold, dark, 310);
-      if (lines[1]) drawText(lines[1], margin + 10, y - 22, 9, font, gray, 310);
-      drawText(`${servico.quantidade}x`, pageWidth - 180, y - 12, 9, font, gray);
-      drawText(moneyBR(subtotal), pageWidth - 128, y - 12, 10, bold, dark);
-      y -= 48;
-    }
-  } else {
-    y -= 10;
-    newPageIfNeeded(45);
-    drawText("Serviços prestados", margin, y, 15, bold, blue);
-    y -= 22;
-    drawText("Orçamento lançado por valor direto, sem detalhamento de serviços na proposta.", margin, y, 10, font, gray);
-    y -= 24;
-  }
-
-  y -= 36;
-  newPageIfNeeded(140);
-  drawText("Assinaturas", margin, y, 15, bold, blue);
-  y -= 68;
-  const assinaturas = normalizeAssinaturas(orcamento.assinaturas || []);
-  const sigs = assinaturas.length ? assinaturas : [];
-  const colW = (pageWidth - margin * 2 - 30) / 2;
-  sigs.slice(0, 4).forEach((a, idx) => {
-    const x = margin + (idx % 2) * (colW + 30);
-    const yy = y - Math.floor(idx / 2) * 88;
-    page.drawLine({ start: { x, y: yy }, end: { x: x + colW, y: yy }, thickness: 1, color: dark });
-    drawText(a.nome || "Assinante", x + 8, yy - 18, 10, bold, dark, colW - 16);
-    drawText(a.cargo || "", x + 8, yy - 34, 9, font, gray, colW - 16);
-    drawText(a.documento || "", x + 8, yy - 49, 8, font, gray, colW - 16);
-  });
-
-  const bytes = await pdf.save();
-  return Buffer.from(bytes);
 }
 
 export default function createOrcamentosOperacoesRouter(pool: Pool) {
@@ -558,7 +607,7 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
     try {
       const orcamento = await garantirNumeroFinalizado(pool, req.params.id);
       if (!orcamento) return res.status(404).json({ error: "Orçamento não encontrado" });
-      const pdf = await gerarPdfOrcamentoBuffer(orcamento);
+      const pdf = await gerarPdfOrcamentoPuppeteer(orcamento);
       const nome = `${String(orcamento.numero || "orcamento").replace(/[^a-zA-Z0-9_-]/g, "-")}.pdf`;
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");

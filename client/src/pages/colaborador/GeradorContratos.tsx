@@ -256,6 +256,7 @@ export default function GeradorContratos() {
 
       const tipoLabel: Record<string, string> = {
         assessoria:         'Assessoria Empresarial',
+        assessoria_pf:      'Assessoria PF',
         limpa_nome:         'Limpa Nome',
         limpa_bacen:        'Limpa BACEN',
         rating:             'Rating',
@@ -519,7 +520,8 @@ export default function GeradorContratos() {
                   className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Todos</option>
-                  <option value="assessoria">Assessoria</option>
+                  <option value="assessoria">Assessoria Empresarial</option>
+                  <option value="assessoria_pf">Assessoria PF</option>
                   <option value="limpa_nome">Limpa Nome</option>
                   <option value="limpa_bacen">Limpa BACEN</option>
                   <option value="rating">Rating</option>

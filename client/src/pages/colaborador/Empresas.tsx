@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Layout from "./Layout";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { toast } from "sonner";
 import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from "@/lib/currency";
 import { useCNPJLookup } from "../../hooks/useCNPJLookup";
@@ -16,7 +16,7 @@ import {
   MessageSquare, History, Bell, Send, PlusCircle,
   Building, CreditCard, Hash, Calendar, Users, Briefcase,
   ArrowLeft, MoreVertical, ExternalLink, Copy, CheckCheck,
-  BarChart3, Banknote, AlertCircle, Info, RotateCw, Zap, FileDown,
+  BarChart3, Banknote, AlertCircle, Info, RotateCw, Zap, FileDown, Download,
 } from "lucide-react";
 import { EmptyState, LoadingState, ErrorState } from "@/components/ui/states";
 import { RiscoBadge, ScoreIndicator, StatusCadastroBadge } from "@/components/ui/risco-badge";
@@ -732,6 +732,36 @@ export default function Empresas() {
   // ── Carregar empresas ──────────────────────────────────────────────────────
   const [filtroOrigem, setFiltroOrigem] = useState("todos");
   const [filtroPorte, setFiltroPorte] = useState("todos");
+
+  // ── Funções para abrir/baixar contratos com autenticação Bearer ──────────
+  async function handleVerContrato(contratoId: string) {
+    try {
+      const { blob, contentType } = await apiFetchBlob(`/api/contratos/${contratoId}/visualizar`);
+      const url = URL.createObjectURL(new Blob([blob], { type: contentType || "application/pdf" }));
+      const w = window.open(url, "_blank", "noopener,noreferrer");
+      if (w) setTimeout(() => URL.revokeObjectURL(url), 30000);
+      else { const a = document.createElement("a"); a.href = url; a.target = "_blank"; document.body.appendChild(a); a.click(); a.remove(); }
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao visualizar contrato");
+    }
+  }
+
+  async function handleBaixarContrato(contratoId: string, numero?: string) {
+    try {
+      const { blob, filename, contentType } = await apiFetchBlob(`/api/contratos/${contratoId}/download`);
+      const url = URL.createObjectURL(new Blob([blob], { type: contentType || "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || `${numero || `contrato-${contratoId.slice(0, 8)}`}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao baixar contrato");
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   const carregarEmpresas = useCallback(async () => {
     setLoading(true);
@@ -2204,16 +2234,23 @@ export default function Empresas() {
                                     </span>
                                   </div>
                                 </div>
-                                {cont.pdf_path && (
-                                  <a
-                                    href={cont.pdf_path}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="shrink-0 p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                    title="Ver PDF"
-                                  >
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                  </a>
+                                {(cont.pdf_path || cont.id) && (
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button
+                                      onClick={() => handleVerContrato(cont.id)}
+                                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                      title="Visualizar PDF"
+                                    >
+                                      <ExternalLink className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleBaixarContrato(cont.id, cont.numero_contrato || cont.protocolo_contrato)}
+                                      className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                      title="Baixar PDF"
+                                    >
+                                      <Download className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
                                 )}
                               </div>
                             ))}
