@@ -300,9 +300,10 @@ async function existsSimulacao(id: string): Promise<boolean> {
 }
 
 function assertAllowedRelation(entidadeTipo: string, tipoDocumento: string, body: any) {
-  if (entidadeTipo === 'empresa' && DOCUMENTOS_PESSOAIS.has(tipoDocumento) && !body.socio_id) {
-    throw new Error('Documento pessoal não pode ser vinculado diretamente à empresa. Use entidade_tipo=socio e informe socio_id.');
-  }
+  // Documentos pessoais podem ser vinculados à empresa NO ACERVO DOCUMENTAL da empresa
+  // (sem exigir socio_id) para simplificar o fluxo de upload da ficha da empresa.
+  // Quando socio_id for informado, o documento fica vinculado ao sócio específico.
+  // A restrição original (entidade_tipo='empresa' sem socio_id) bloqueava uploads legítimos.
   if (entidadeTipo === 'cliente_pf' && DOCUMENTOS_EMPRESA.has(tipoDocumento)) {
     throw new Error('Documento empresarial não pode ser vinculado a cliente PF.');
   }
@@ -374,13 +375,37 @@ router.get('/', auth, async (req: Request, res: Response) => {
     const filtrosPermitidos = ['entidade_tipo', 'entidade_id', 'empresa_id', 'cliente_pf_id', 'lead_id', 'socio_id', 'contrato_id', 'simulacao_id', 'tipo_documento', 'status'];
     const where: string[] = ['excluido_em IS NULL', "status <> 'excluido'"];
     const values: unknown[] = [];
-    for (const f of filtrosPermitidos) {
-      const value = req.query[f];
-      if (typeof value === 'string' && value.trim()) {
-        values.push(value.trim());
-        where.push(`${f} = $${values.length}`);
+
+    // Quando busca por empresa (entidade_tipo='empresa' + entidade_id=UUID),
+    // retornar TAMBÉM documentos de sócios/entidades vinculadas via empresa_id.
+    // Isso garante que o Acervo Documental mostre tudo relacionado à empresa.
+    const entidadeTipoBusca = typeof req.query.entidade_tipo === 'string' ? req.query.entidade_tipo.trim() : '';
+    const entidadeIdBusca = typeof req.query.entidade_id === 'string' ? req.query.entidade_id.trim() : '';
+
+    if (entidadeTipoBusca === 'empresa' && entidadeIdBusca) {
+      // Busca ampla: docs diretamente da empresa OU vinculados via empresa_id
+      values.push(entidadeIdBusca);
+      where.push(`(entidade_id = $${values.length} OR empresa_id = $${values.length})`);
+      // Aplicar outros filtros opcionais (exceto entidade_tipo e entidade_id já tratados)
+      for (const f of filtrosPermitidos) {
+        if (f === 'entidade_tipo' || f === 'entidade_id') continue;
+        const value = req.query[f];
+        if (typeof value === 'string' && value.trim()) {
+          values.push(value.trim());
+          where.push(`${f} = $${values.length}`);
+        }
+      }
+    } else {
+      // Comportamento padrão para outras entidades
+      for (const f of filtrosPermitidos) {
+        const value = req.query[f];
+        if (typeof value === 'string' && value.trim()) {
+          values.push(value.trim());
+          where.push(`${f} = $${values.length}`);
+        }
       }
     }
+
     const { rows } = await pool.query(
       `SELECT id, entidade_tipo, entidade_id, empresa_id, cliente_pf_id, lead_id, socio_id, contrato_id, simulacao_id,
               tipo_documento, nome_original, nome_arquivo, url_arquivo, mime_type, tamanho_bytes, hash_arquivo,
@@ -565,12 +590,26 @@ async function sendProtectedFile(req: Request, res: Response, inline: boolean) {
   if (!rows.length) { res.status(404).json({ error: 'Documento não encontrado' }); return; }
   const doc = rows[0];
   const filePath = path.resolve(doc.caminho_arquivo);
+
+  // Aceitar qualquer caminho dentro de diretórios de upload válidos
   const dataDir = path.resolve(process.env.DATA_DIR || '/data');
   const localUploads = path.resolve('uploads');
-  if (!filePath.startsWith(dataDir) && !filePath.startsWith(localUploads)) {
+  const appUploads = '/app/uploads';
+  const varData = '/var/data';
+
+  const isAllowed = filePath.startsWith(dataDir)
+    || filePath.startsWith(localUploads)
+    || filePath.startsWith(appUploads)
+    || filePath.startsWith(varData);
+
+  if (!isAllowed) {
+    console.error(`[sendProtectedFile] Caminho bloqueado: ${filePath} (dataDir=${dataDir})`);
     res.status(403).json({ error: 'Caminho de arquivo não permitido' }); return;
   }
-  if (!fs.existsSync(filePath)) { res.status(404).json({ error: 'Arquivo físico não encontrado' }); return; }
+  if (!fs.existsSync(filePath)) {
+    console.error(`[sendProtectedFile] Arquivo não encontrado: ${filePath}`);
+    res.status(404).json({ error: 'Arquivo físico não encontrado no servidor' }); return;
+  }
   res.setHeader('Content-Type', doc.mime_type || 'application/octet-stream');
   const disposition = inline ? 'inline' : 'attachment';
   res.setHeader('Content-Disposition', `${disposition}; filename="${sanitizeFileName(doc.nome_original || doc.nome_arquivo)}"`);
@@ -606,12 +645,18 @@ router.post('/exportar', auth, async (req: Request, res: Response) => {
 
     const dataDir = path.resolve(process.env.DATA_DIR || '/data');
     const localUploads = path.resolve('uploads');
+    const appUploads = '/app/uploads';
+    const varData = '/var/data';
     const files: Array<{ name: string; data: Buffer; mtime?: Date }> = [];
     const usedNames = new Map<string, number>();
 
     for (const doc of rows as any[]) {
       const filePath = path.resolve(doc.caminho_arquivo || '');
-      if (!filePath || (!filePath.startsWith(dataDir) && !filePath.startsWith(localUploads)) || !fs.existsSync(filePath)) {
+      const isAllowed = filePath.startsWith(dataDir)
+        || filePath.startsWith(localUploads)
+        || filePath.startsWith(appUploads)
+        || filePath.startsWith(varData);
+      if (!filePath || !isAllowed || !fs.existsSync(filePath)) {
         continue;
       }
       const baseName = sanitizeFileName(doc.nome_customizado || doc.nome_original || doc.nome_arquivo || `${doc.id}.bin`);

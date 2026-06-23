@@ -462,20 +462,46 @@ export default function Orcamentos() {
   }
 
   async function baixarPdf() {
-    let base = selecionado || (await salvar());
-    if (!base?.id) return;
-    if (base.status !== "finalizado") {
-      const finalizado = await finalizar();
-      if (!finalizado?.id) return;
-      base = finalizado;
-    }
+    // Sempre salvar o estado atual antes de gerar o PDF
+    // Isso garante que ocultar_conteudo e outros campos refletem o que está na tela
+    setSalvando(true);
     try {
+      let base = selecionado;
+      if (base?.id) {
+        // Se já existe, atualiza silenciosamente com o estado atual do form
+        const servicosParaSalvar = (form.itens || [])
+          .filter((s: ServicoOrcamento) => s.descricao?.trim())
+          .map((s: ServicoOrcamento) => ({
+            descricao: limparDescricaoServico(s.descricao),
+            quantidade: Number(s.quantidade) || 1,
+            valor_unitario: Number(s.valor_unitario) || 0,
+          }));
+        const valorFinal = servicosParaSalvar.length > 0
+          ? calcularTotalServicos(servicosParaSalvar)
+          : parseMoney(form.valor_total);
+        const atualizado = await apiFetch(`/api/orcamentos/${base.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ ...form, itens: servicosParaSalvar, valor_total: valorFinal }),
+        }).catch(() => null);
+        if (atualizado) { base = atualizado; setSelecionado(atualizado); }
+      } else {
+        base = await salvar();
+        if (!base?.id) return;
+      }
+      // Garantir que está finalizado
+      if (base.status !== "finalizado") {
+        const result = await apiFetch(`/api/orcamentos/${base.id}/finalizar`, { method: "POST" });
+        base = result?.orcamento || base;
+        setSelecionado(base);
+      }
       const { blob, filename } = await apiFetchBlob(
-        `/api/orcamentos/${base.id}/download?status=finalizado&t=${Date.now()}`,
+        `/api/orcamentos/${base.id}/download?t=${Date.now()}`,
       );
       downloadBlob(blob, filename || `${base.numero || "orcamento"}.pdf`);
     } catch (err: any) {
       toast.error(err.message || "Erro ao baixar PDF");
+    } finally {
+      setSalvando(false);
     }
   }
 

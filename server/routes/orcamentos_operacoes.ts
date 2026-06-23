@@ -113,12 +113,17 @@ function parseJsonMaybe(value: any, fallback: any) {
 
 function mapOrcamento(row: Row): Row {
   if (!row) return row;
+  const payloadParsed = parseJsonMaybe(row.payload, {});
+  // ocultar_conteudo pode estar na coluna direta (se existir) ou dentro do payload JSONB
+  const ocultarConteudo = row.ocultar_conteudo === true || row.ocultar_conteudo === 'true'
+    || payloadParsed?.ocultar_conteudo === true || payloadParsed?.ocultar_conteudo === 'true';
   return {
     ...row,
     valor_total: row.valor_total === null || row.valor_total === undefined ? 0 : Number(row.valor_total),
     itens: parseJsonMaybe(row.itens, []),
     assinaturas: parseJsonMaybe(row.assinaturas, []),
-    payload: parseJsonMaybe(row.payload, {}),
+    payload: payloadParsed,
+    ocultar_conteudo: ocultarConteudo,
   };
 }
 

@@ -410,13 +410,17 @@ export default function DocumentosEntidade({
 
     setUploadingTipo(tipoDocumento);
     try {
-      await apiFetch("/api/documentos/upload", { method: "POST", body: fd });
-      toast.success(`${labelTipoDocumento(tipoDocumento)} anexado no local correto.`);
+      const resultado = await apiFetch("/api/documentos/upload", { method: "POST", body: fd });
+      toast.success(`${labelTipoDocumento(tipoDocumento)} anexado com sucesso.`);
       setObservacoesPorTipo((prev) => ({ ...prev, [tipoDocumento]: "" }));
       setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipoDocumento]: "" }));
       await carregar();
+      return resultado;
     } catch (err: any) {
-      toast.error(err?.message || "Erro ao enviar documento.");
+      const msg = err?.message || "Erro ao enviar documento.";
+      console.error(`[DocumentosEntidade] Upload falhou (${tipoDocumento}):`, msg);
+      toast.error(`Erro ao anexar ${labelTipoDocumento(tipoDocumento)}: ${msg}`);
+      return null;
     } finally {
       setUploadingTipo(null);
     }

@@ -1686,6 +1686,12 @@ async function startServer() {
     console.log('[startup] Migration 066 (itens orcamentos): OK.');
   } catch (err: any) { console.warn('[startup] Migration 066:', err?.message); }
 
+  // ── Migration 066b: coluna ocultar_conteudo em orcamentos_timbrados ───────
+  try {
+    await pool.query(`ALTER TABLE public.orcamentos_timbrados ADD COLUMN IF NOT EXISTS ocultar_conteudo BOOLEAN NOT NULL DEFAULT false`);
+    console.log('[startup] Migration 066b (ocultar_conteudo orcamentos): OK.');
+  } catch (err: any) { console.warn('[startup] Migration 066b:', err?.message); }
+
   // ── Migration 067: corrige CHECK constraint de documentos_arquivos ────────
   // O banco em produção pode ter versão antiga da constraint que rejeita tipos
   // válidos como 'irpf', 'comprovante_endereco', etc. Esta migration reconstrói.
