@@ -175,6 +175,7 @@ const estadoInicial = {
   titulo: "Orçamento de Serviços",
   descricao: "",
   conteudo: CONTEUDO_PADRAO,
+  ocultar_conteudo: false,
   itens: [] as ServicoOrcamento[],
   valor_total: "0",
   validade_dias: 30,
@@ -194,6 +195,7 @@ export default function Orcamentos() {
   const [edicaoFinalizadoLiberada, setEdicaoFinalizadoLiberada] =
     useState(false);
   const [aba, setAba] = useState<AbaOrcamento>("editor");
+  const [mostrarDescricao, setMostrarDescricao] = useState(true);
   const [arquivos, setArquivos] = useState<FileList | null>(null);
   const [descricaoAnexo, setDescricaoAnexo] = useState("");
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -264,6 +266,8 @@ export default function Orcamentos() {
       setSelecionado(full);
       setEdicaoFinalizadoLiberada(false);
       const servicosCarregados = Array.isArray(full.itens) ? full.itens : [];
+      const ocultarConteudo = full.ocultar_conteudo === true || full.ocultar_conteudo === "true";
+      setMostrarDescricao(!ocultarConteudo);
       setForm({
         tipo_cliente: full.tipo_cliente || "empresa",
         empresa_id: full.empresa_id || "",
@@ -276,6 +280,7 @@ export default function Orcamentos() {
         titulo: full.titulo || "Orçamento de Serviços",
         descricao: full.descricao || "",
         conteudo: full.conteudo || CONTEUDO_PADRAO,
+        ocultar_conteudo: ocultarConteudo,
         itens: servicosCarregados,
         valor_total: String(full.valor_total ?? "0"),
         validade_dias: full.validade_dias || 30,
@@ -982,23 +987,43 @@ export default function Orcamentos() {
                       </div>
 
                       <div>
-                        <div className="mb-2 flex items-center gap-2 text-sm font-black text-slate-800">
-                          <PenLine className="h-4 w-4 text-blue-600" /> Texto
-                          livre do orçamento
+                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 text-sm font-black text-slate-800">
+                            <PenLine className="h-4 w-4 text-blue-600" /> Texto livre do orçamento
+                          </div>
+                          <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              checked={mostrarDescricao}
+                              onChange={(e) => {
+                                setMostrarDescricao(e.target.checked);
+                                setForm((f: any) => ({ ...f, ocultar_conteudo: !e.target.checked }));
+                              }}
+                              className="h-3.5 w-3.5 rounded"
+                            />
+                            {mostrarDescricao ? "Texto visível no orçamento" : "Texto oculto no orçamento"}
+                          </label>
                         </div>
-                        <textarea
-                          disabled={camposBloqueados}
-                          value={form.conteudo}
-                          onChange={(e) =>
-                            setForm((f: any) => ({
-                              ...f,
-                              conteudo: e.target.value,
-                            }))
-                          }
-                          rows={14}
-                          className="w-full rounded-3xl border border-slate-200 bg-slate-50/60 px-4 py-4 text-sm leading-relaxed outline-none focus:border-blue-300 focus:bg-white"
-                          placeholder="Escreva livremente o escopo, condições, observações e demais informações do orçamento..."
-                        />
+                        {mostrarDescricao && (
+                          <textarea
+                            readOnly={camposBloqueados}
+                            value={form.conteudo}
+                            onChange={(e) =>
+                              !camposBloqueados && setForm((f: any) => ({
+                                ...f,
+                                conteudo: e.target.value,
+                              }))
+                            }
+                            rows={14}
+                            className={`w-full rounded-3xl border border-slate-200 bg-slate-50/60 px-4 py-4 text-sm leading-relaxed outline-none focus:border-blue-300 focus:bg-white ${camposBloqueados ? "cursor-default select-text opacity-70" : ""}`}
+                            placeholder="Escreva livremente o escopo, condições, observações e demais informações do orçamento..."
+                          />
+                        )}
+                        {!mostrarDescricao && (
+                          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-400">
+                            Texto ocultado — não aparecerá no PDF do orçamento. Marque a opção acima para incluir.
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1402,54 +1427,38 @@ export default function Orcamentos() {
                               : "/destrava-logo.svg"
                         }
                         onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src =
-                            "/destrava-logo.svg";
+                          (e.currentTarget as HTMLImageElement).src = "/destrava-logo.svg";
                         }}
                         className={`${marca === "permupay" ? "h-20 max-w-[280px]" : marca === "aragao" ? "h-16 max-w-[260px]" : "h-12 max-w-[190px]"} object-contain`}
                       />
                       <div className="text-right text-xs text-slate-500">
-                        <div className="font-black text-slate-800">
-                          {selecionado?.numero || "Rascunho"}
-                        </div>
+                        <div className="font-black text-slate-800">{selecionado?.numero || "Rascunho"}</div>
                         <div>Validade: {form.validade_dias || 30} dias</div>
                       </div>
                     </div>
-                    <h2 className="text-2xl font-black text-slate-900">
-                      {form.titulo}
-                    </h2>
+
+                    {/* Título e subtítulo */}
+                    <h2 className="text-2xl font-black text-slate-900">{form.titulo}</h2>
                     {form.descricao && (
-                      <p className="mt-1 text-sm font-semibold text-slate-500">
-                        {form.descricao}
-                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-500">{form.descricao}</p>
                     )}
+
+                    {/* Cliente */}
                     <div className="my-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="text-xs font-bold uppercase text-slate-400">
-                        Cliente
-                      </div>
-                      <div className="font-black text-slate-900">
-                        {form.cliente_nome || "Cliente não informado"}
-                      </div>
-                      <div className="text-sm text-slate-600">
-                        {form.cliente_documento}
-                      </div>
+                      <div className="text-xs font-bold uppercase text-slate-400">Cliente</div>
+                      <div className="font-black text-slate-900">{form.cliente_nome || "Cliente não informado"}</div>
+                      <div className="text-sm text-slate-600">{form.cliente_documento}</div>
                     </div>
 
-                    <div className="my-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="text-xs font-bold uppercase text-slate-400">
-                        Valor total
+                    {/* Texto livre (se habilitado) */}
+                    {mostrarDescricao && form.conteudo && (
+                      <div className="mb-5">
+                        <div className="mb-2 text-sm font-black text-slate-800">Escopo e condições</div>
+                        <div className="prose prose-sm max-w-none whitespace-pre-wrap text-slate-700">{form.conteudo}</div>
                       </div>
-                      <div className="text-2xl font-black text-blue-700">
-                        {moneyBR(valorTotalExibicao)}
-                      </div>
-                    </div>
+                    )}
 
-                    <div className="mb-3 text-sm font-black text-slate-800">
-                      Escopo e condições
-                    </div>
-                    <div className="prose prose-sm max-w-none whitespace-pre-wrap text-slate-700">
-                      {form.conteudo}
-                    </div>
-
+                    {/* Itens / Serviços — sempre depois da descrição, antes do valor */}
                     {hasServicos ? (
                       <div className="my-5">
                         <div className="mb-3 border-b border-slate-200 pb-2 text-sm font-black text-slate-800">
@@ -1461,19 +1470,13 @@ export default function Orcamentos() {
                               key={idx}
                               className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2"
                             >
-                              <span className="text-sm text-slate-700">
-                                {limparDescricaoServico(servico.descricao)}
-                              </span>
+                              <span className="text-sm text-slate-700">{limparDescricaoServico(servico.descricao)}</span>
                               <div className="text-right text-sm">
                                 <span className="text-slate-400">
-                                  {servico.quantidade}x{" "}
-                                  {moneyBR(servico.valor_unitario)} ={" "}
+                                  {servico.quantidade}x {moneyBR(servico.valor_unitario)} ={" "}
                                 </span>
                                 <span className="font-bold text-slate-900">
-                                  {moneyBR(
-                                    Number(servico.quantidade) *
-                                      Number(servico.valor_unitario),
-                                  )}
+                                  {moneyBR(Number(servico.quantidade) * Number(servico.valor_unitario))}
                                 </span>
                               </div>
                             </div>
@@ -1482,23 +1485,27 @@ export default function Orcamentos() {
                       </div>
                     ) : (
                       <div className="my-5 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
-                        Orçamento lançado por valor direto, sem detalhamento de
-                        serviços na proposta.
+                        Orçamento lançado por valor direto, sem detalhamento de serviços na proposta.
                       </div>
                     )}
+
+                    {/* Valor total — sempre por último antes das assinaturas */}
+                    <div className="my-6 rounded-2xl border-2 border-blue-200 bg-blue-50 p-4">
+                      <div className="text-xs font-bold uppercase text-blue-500">Valor total do orçamento</div>
+                      <div className="text-3xl font-black text-blue-700">{moneyBR(valorTotalExibicao)}</div>
+                      {form.validade_dias && (
+                        <div className="mt-1 text-xs text-blue-400">Válido por {form.validade_dias} dias</div>
+                      )}
+                    </div>
+
+                    {/* Assinaturas */}
                     <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-2">
                       {(form.assinaturas || []).map((a: any, idx: number) => (
                         <div key={idx} className="text-center">
                           <div className="mb-2 border-t border-slate-900 pt-2" />
-                          <div className="text-sm font-black text-slate-900">
-                            {a.nome || "Assinante"}
-                          </div>
-                          <div className="text-xs text-slate-500">
-                            {a.cargo}
-                          </div>
-                          <div className="text-xs text-slate-400">
-                            {a.documento}
-                          </div>
+                          <div className="text-sm font-black text-slate-900">{a.nome || "Assinante"}</div>
+                          <div className="text-xs text-slate-500">{a.cargo}</div>
+                          <div className="text-xs text-slate-400">{a.documento}</div>
                         </div>
                       ))}
                     </div>

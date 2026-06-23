@@ -144,6 +144,7 @@ function buildPayload(body: any) {
       titulo: body.titulo || "Orçamento de Serviços",
       descricao: body.descricao || null,
       conteudo: body.conteudo || "",
+      ocultar_conteudo: body.ocultar_conteudo === true || body.ocultar_conteudo === "true" ? true : false,
       valor_total: valorTotal,
       validade_dias: Number(body.validade_dias) || 30,
       validade_ate: safeDate(body.validade_ate),
@@ -258,6 +259,9 @@ function gerarHtmlOrcamento(orcamento: Row): string {
     .map(p => `<p>${textoHtmlComQuebras(p)}</p>`)
     .join("\n");
 
+  // ocultar_conteudo flag vem do payload quando usuário desmarcou "texto visível"
+  const ocultarConteudo = orcamento.ocultar_conteudo === true || orcamento.ocultar_conteudo === 'true';
+
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -273,8 +277,9 @@ function gerarHtmlOrcamento(orcamento: Row): string {
   .info-box { background:${corLight}; border:1px solid ${cor}22; border-radius:10px; padding:14px 16px; margin:14px 0; }
   .info-label { font-size:8pt; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.05em; display:block; }
   .info-val { font-weight:700; font-size:11pt; color:#0f172a; }
-  .valor-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin:14px 0; }
-  .valor-total { font-size:20pt; font-weight:800; color:${cor}; }
+  .valor-final-box { background:${corLight}; border:2px solid ${cor}44; border-radius:10px; padding:16px 18px; margin:20px 0; }
+  .valor-total { font-size:22pt; font-weight:800; color:${cor}; }
+  .metainfo { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:14px 0; }
   table { width:100%; border-collapse:collapse; margin:0; }
   th { background:${cor}; color:#fff; padding:7px 9px; font-size:8.5pt; font-weight:700; }
   td { padding:6px 9px; border-bottom:1px solid #e2e8f0; font-size:9.5pt; }
@@ -299,27 +304,29 @@ function gerarHtmlOrcamento(orcamento: Row): string {
     ${orcamento.cliente_telefone ? `<span style="font-size:9pt;color:#64748b">Tel: ${escapeHtml(String(orcamento.cliente_telefone))}</span>` : ""}
   </div>
 
-  <div class="valor-grid">
+  <div class="metainfo">
     <div class="info-box">
-      <span class="info-label">Valor total</span>
-      <div class="valor-total">${moneyBR(valorTotal)}</div>
+      <span class="info-label">Número</span>
+      <span class="info-val" style="font-size:9pt">${numero}</span>
     </div>
     <div class="info-box">
       <span class="info-label">Validade</span>
       <span class="info-val">${escapeHtml(validadeTexto)}</span>
     </div>
-    <div class="info-box">
-      <span class="info-label">Número</span>
-      <span class="info-val" style="font-size:9pt">${numero}</span>
-    </div>
   </div>
 
+  ${!ocultarConteudo && String(orcamento.conteudo || "").trim() ? `
   <section>
     <h3>Escopo e condições</h3>
-    ${conteudoHtml || "<p>Descrição do escopo, condições comerciais e entregáveis desta proposta.</p>"}
-  </section>
+    ${conteudoHtml}
+  </section>` : ""}
 
   ${servicosHtml}
+
+  <div class="valor-final-box">
+    <span class="info-label">Valor total do orçamento</span>
+    <div class="valor-total">${moneyBR(valorTotal)}</div>
+  </div>
 
   <section>
     <h3>Assinaturas</h3>

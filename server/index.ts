@@ -1679,6 +1679,50 @@ async function startServer() {
   ];
   for (const sql of alteracoesParceiros016) { try { await pool.query(sql); } catch { /* compat */ } }
   console.log('[startup] Patches de banco (contratos_gerados) aplicados/verificados.');
+
+  // ── Migration 066: coluna itens em orcamentos_timbrados ───────────────────
+  try {
+    await pool.query(`ALTER TABLE public.orcamentos_timbrados ADD COLUMN IF NOT EXISTS itens JSONB NOT NULL DEFAULT '[]'::jsonb`);
+    console.log('[startup] Migration 066 (itens orcamentos): OK.');
+  } catch (err: any) { console.warn('[startup] Migration 066:', err?.message); }
+
+  // ── Migration 067: corrige CHECK constraint de documentos_arquivos ────────
+  // O banco em produção pode ter versão antiga da constraint que rejeita tipos
+  // válidos como 'irpf', 'comprovante_endereco', etc. Esta migration reconstrói.
+  try {
+    await pool.query(`
+      DO $$
+      BEGIN
+        ALTER TABLE public.documentos_arquivos DROP CONSTRAINT IF EXISTS documentos_arquivos_tipo_documento_check;
+        ALTER TABLE public.documentos_arquivos DROP CONSTRAINT IF EXISTS documentos_arquivos_tipo_chk;
+      EXCEPTION WHEN OTHERS THEN NULL;
+      END$$;
+    `);
+    await pool.query(`
+      ALTER TABLE public.documentos_arquivos
+        ADD CONSTRAINT documentos_arquivos_tipo_chk CHECK (tipo_documento IN (
+          'contrato_prestacao_servicos','contrato_assessoria','contrato_social','alteracao_contratual',
+          'contrato_gerado','contrato_assinado',
+          'cartao_cnpj','qsa','atos_junta_comercial','nire','estatuto','procuracao',
+          'documento_socio','rg','cpf','cnh','comprovante_residencia','comprovante_endereco',
+          'imposto_renda','irpf','recibo_irpf',
+          'certidao_casamento','averbacao_divorcio','certidao_obito',
+          'rating_bacen_cnpj','cenprot_cnpj','cnd_rfb_cnpj','cadin_cnpj','pgfn_cnpj',
+          'scr_cnpj','ccs_cnpj','ccf_cnpj','consulta_serasa_cnpj',
+          'rating_bacen_cpf','cenprot_cpf','cnd_rfb_cpf','cadin_cpf','pgfn_cpf',
+          'scr_cpf','ccs_cpf','ccf_cpf','consulta_serasa_cpf',
+          'simples_nacional','pgdas','pgmei','ecf',
+          'recibo_ecf','recibo_pgdas','recibo_pgmei',
+          'defis','dasn_simei','recibo_defis','recibo_dasn_simei',
+          'faturamento_12_meses','comprovante_faturamento','declaracao_faturamento',
+          'extrato_bancario','balanco','dre','certidao',
+          'compartilhamento_ecac',
+          'foto_fachada','foto_interna_1','foto_interna_2','foto_interna_3',
+          'outros'
+        ))
+    `);
+    console.log('[startup] Migration 067 (documentos CHECK constraint): OK.');
+  } catch (err: any) { console.warn('[startup] Migration 067:', err?.message); }
   // ─────────────────────────────────────────────────────────────────────────────
 
   app.use(express.json({ limit: "5mb" }));

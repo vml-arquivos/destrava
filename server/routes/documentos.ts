@@ -26,19 +26,32 @@ const STATUS = ['ativo', 'arquivado', 'substituido', 'excluido', 'pendente_valid
 const ORIGENS = ['upload_manual', 'gerado_sistema', 'importado_api', 'sincronizacao', 'migracao'];
 
 const TIPOS_DOCUMENTO = [
-  'contrato_prestacao_servicos', 'contrato_assessoria',
-  'cartao_cnpj', 'qsa', 'atos_junta_comercial', 'contrato_social', 'alteracao_contratual',
+  // Contratos
+  'contrato_prestacao_servicos', 'contrato_assessoria', 'contrato_social', 'alteracao_contratual',
+  'contrato_gerado', 'contrato_assinado',
+  // Empresa
+  'cartao_cnpj', 'qsa', 'atos_junta_comercial', 'nire', 'estatuto', 'procuracao',
+  // Sócios / Pessoal
   'documento_socio', 'rg', 'cpf', 'cnh', 'comprovante_residencia', 'comprovante_endereco',
   'imposto_renda', 'irpf', 'recibo_irpf', 'certidao_casamento', 'averbacao_divorcio', 'certidao_obito',
-  'rating_bacen_cnpj', 'rating_bacen_cpf', 'cenprot_cnpj', 'cenprot_cpf',
-  'cnd_rfb_cnpj', 'cnd_rfb_cpf', 'cadin_cnpj', 'cadin_cpf', 'pgfn_cnpj', 'pgfn_cpf',
-  'simples_nacional', 'pgdas', 'pgmei', 'ecf', 'recibo_ecf', 'recibo_pgdas', 'recibo_pgmei',
+  // Certidões CNPJ
+  'rating_bacen_cnpj', 'cenprot_cnpj', 'cnd_rfb_cnpj', 'cadin_cnpj', 'pgfn_cnpj',
+  'scr_cnpj', 'ccs_cnpj', 'ccf_cnpj', 'consulta_serasa_cnpj',
+  // Certidões CPF
+  'rating_bacen_cpf', 'cenprot_cpf', 'cnd_rfb_cpf', 'cadin_cpf', 'pgfn_cpf',
+  'scr_cpf', 'ccs_cpf', 'ccf_cpf', 'consulta_serasa_cpf',
+  // Fiscal / Tributário
+  'simples_nacional', 'pgdas', 'pgmei', 'ecf',
+  'recibo_ecf', 'recibo_pgdas', 'recibo_pgmei',
   'defis', 'dasn_simei', 'recibo_defis', 'recibo_dasn_simei',
-  'scr_cnpj', 'ccs_cnpj', 'ccf_cnpj', 'scr_cpf', 'ccs_cpf', 'ccf_cpf',
-  'consulta_serasa_cnpj', 'consulta_serasa_cpf', 'compartilhamento_ecac',
+  // Financeiro
+  'faturamento_12_meses', 'comprovante_faturamento', 'declaracao_faturamento',
+  'extrato_bancario', 'balanco', 'dre', 'certidao',
+  // eCAC / Fotos
+  'compartilhamento_ecac',
   'foto_fachada', 'foto_interna_1', 'foto_interna_2', 'foto_interna_3',
-  'faturamento_12_meses', 'comprovante_faturamento', 'declaracao_faturamento', 'extrato_bancario',
-  'balanco', 'dre', 'certidao', 'procuracao', 'nire', 'estatuto', 'contrato_gerado', 'contrato_assinado', 'outros',
+  // Outros
+  'outros',
 ];
 
 const DOCUMENTOS_PESSOAIS = new Set([

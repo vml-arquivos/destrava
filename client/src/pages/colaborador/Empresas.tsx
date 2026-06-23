@@ -1467,16 +1467,16 @@ export default function Empresas() {
                         <button
                           key={aba.id}
                           onClick={() => setAbaAtiva(aba.id)}
-                          className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-bold border transition-all whitespace-nowrap ${
+                          className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all whitespace-nowrap ${
                             abaAtiva === aba.id
-                              ? "border-blue-200 bg-blue-50 text-blue-700"
-                              : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-200 hover:bg-slate-50"
+                              ? "border-blue-300 bg-blue-600 text-white shadow-md shadow-blue-100"
+                              : "border-slate-200 text-slate-600 bg-white hover:text-slate-800 hover:border-slate-300 hover:bg-slate-50"
                           }`}
                         >
                           {aba.label}
                           {(aba as any).badge > 0 && (
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center ${
-                              abaAtiva === aba.id ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"
+                            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center ${
+                              abaAtiva === aba.id ? "bg-white/20 text-white" : "bg-blue-100 text-blue-700"
                             }`}>{(aba as any).badge}</span>
                           )}
                         </button>
