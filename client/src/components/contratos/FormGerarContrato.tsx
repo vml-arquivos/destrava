@@ -51,7 +51,7 @@ interface Props {
   userCargo?: string;
 }
 
-type TipoContrato = 'assessoria' | 'limpa_nome' | 'limpa_bacen' | 'rating' | 'parceria_comercial';
+type TipoContrato = 'assessoria' | 'assessoria_pf' | 'limpa_nome' | 'limpa_bacen' | 'rating' | 'parceria_comercial';
 type ApiPayload = Record<string, any> | any[];
 
 function withCacheBuster(path: string): string {
@@ -162,6 +162,7 @@ function normalizarSocioContrato(socio: SocioEmpresaContrato): SocioEmpresaContr
 export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const tiposDisponiveis: { value: TipoContrato; label: string }[] = [
     { value: 'assessoria',         label: 'Contrato de Assessoria Empresarial' },
+    { value: 'assessoria_pf',      label: 'Contrato de Assessoria — Pessoa Física' },
     { value: 'limpa_nome',         label: 'Contrato Limpa Nome / Não Exposição de Restrições' },
     { value: 'limpa_bacen',        label: 'Contrato Limpa BACEN / SCR' },
     { value: 'rating',             label: 'Contrato de Rating / Algoritmo Financeiro' },
@@ -186,6 +187,25 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [sociosEmpresaAssessoria, setSociosEmpresaAssessoria] = useState<SocioEmpresaContrato[]>([]);
   const [sociosAssinantesIds, setSociosAssinantesIds] = useState<string[]>([]);
   const [carregandoSociosAssessoria, setCarregandoSociosAssessoria] = useState(false);
+
+  // ── Assessoria PF ──
+  const [clientePfIdAssessoriaPF, setClientePfIdAssessoriaPF]   = useState('');
+  const [pfNome, setPfNome]                                       = useState('');
+  const [pfCpf, setPfCpf]                                         = useState('');
+  const [pfRg, setPfRg]                                           = useState('');
+  const [pfEstadoCivil, setPfEstadoCivil]                         = useState('');
+  const [pfProfissao, setPfProfissao]                             = useState('');
+  const [pfDomicilio, setPfDomicilio]                             = useState('');
+  const [pfEmail, setPfEmail]                                     = useState('');
+  const [pfTelefone, setPfTelefone]                               = useState('');
+  const [valorReferenciaPF, setValorReferenciaPF]                 = useState('');
+  const [taxaComissaoPF, setTaxaComissaoPF]                       = useState('10');
+  const [taxaDesistenciaPF, setTaxaDesistenciaPF]                 = useState('5');
+  const [custeioMensalPF, setCusteioMensalPF]                     = useState(formatBRLCurrency(250));
+  const [prazoAssessoriaPF, setPrazoAssessoriaPF]                 = useState('12');
+  const [contratadaIdAssessoriaPF, setContratadaIdAssessoriaPF]   = useState('');
+  const [responsavelContratoIdPF, setResponsavelContratoIdPF]     = useState('');
+  const [parceiroIdAssessoriaPF, setParceiroIdAssessoriaPF]       = useState('');
 
   // ── Limpa Nome ──
   const [clienteTipo, setClienteTipo]         = useState<'empresa' | 'lead' | 'pf'>('lead');
@@ -388,6 +408,13 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
       }
     }
 
+    if (tipoContrato === 'assessoria_pf') {
+      if (!pfNome.trim() && !clientePfIdAssessoriaPF) errs.pfNome = 'Informe o nome do cliente ou selecione um cliente PF cadastrado';
+      if (!pfCpf.trim() && !clientePfIdAssessoriaPF) errs.pfCpf = 'Informe o CPF';
+      if (!valorReferenciaPF || unmaskCurrencyInput(valorReferenciaPF) < 1000) errs.valorReferenciaPF = 'Valor mínimo: R$ 1.000,00';
+      if (!prazoAssessoriaPF || Number.parseInt(prazoAssessoriaPF, 10) <= 0) errs.prazoAssessoriaPF = 'Informe o prazo do contrato';
+    }
+
     if (tipoContrato === 'limpa_nome') {
       if (!clienteId) errs.clienteId = 'Selecione o cliente';
       if (!contratadaIdLimpaNome) errs.contratadaIdLimpaNome = 'Selecione a contratada/prestadora';
@@ -450,6 +477,31 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         _documentosAnexos: documentosAnexos,
         data_assinatura: dataAssinatura,
         foro_eleito: foroEleito,
+      });
+    } else if (tipoContrato === 'assessoria_pf') {
+      await onSubmit({
+        tipo_contrato: 'assessoria_pf',
+        _documentosAnexos: documentosAnexos,
+        cliente_pf_id: clientePfIdAssessoriaPF || undefined,
+        contratante_nome: pfNome.trim(),
+        contratante_cpf: pfCpf.trim(),
+        contratante_rg: pfRg.trim() || undefined,
+        contratante_estado_civil: pfEstadoCivil.trim() || undefined,
+        contratante_profissao: pfProfissao.trim() || undefined,
+        contratante_domicilio: pfDomicilio.trim() || undefined,
+        contratante_email: pfEmail.trim() || undefined,
+        contratante_telefone: pfTelefone.trim() || undefined,
+        parceiro_id: parceiroIdAssessoriaPF || undefined,
+        contratada_id: contratadaIdAssessoriaPF || undefined,
+        responsavel_contrato_id: responsavelContratoIdPF || undefined,
+        valor_referencia: unmaskCurrencyInput(valorReferenciaPF),
+        taxa_comissao: Number(taxaComissaoPF),
+        taxa_desistencia: Number(taxaDesistenciaPF),
+        custeio_mensal: unmaskCurrencyInput(custeioMensalPF),
+        prazo_contrato_meses: Number.parseInt(prazoAssessoriaPF, 10),
+        data_assinatura: dataAssinatura,
+        foro_eleito: foroEleito,
+        cidade_assinatura: 'BRASÍLIA – DF',
       });
     } else if (tipoContrato === 'limpa_nome') {
       await onSubmit({
@@ -783,6 +835,146 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 className={`${cls} text-right font-mono tabular-nums`}
               />
               <p className="text-[11px] text-gray-500 mt-1">Valor mensal quando Rating inferior a "C". Padrão: R$ 250,00.</p>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── ASSESSORIA PESSOA FÍSICA ── */}
+      {tipoContrato === 'assessoria_pf' && (
+        <>
+          <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800">
+            <strong>Assessoria para Pessoa Física</strong> — O CONTRATANTE é uma pessoa física. Preencha os dados pessoais abaixo.
+          </div>
+
+          {/* Seleção de cliente PF cadastrado */}
+          <div>
+            <label className={lbl}>Cliente PF cadastrado (opcional)</label>
+            <select
+              value={clientePfIdAssessoriaPF}
+              onChange={e => {
+                const id = e.target.value;
+                setClientePfIdAssessoriaPF(id);
+                if (id) {
+                  const pf = clientesPF.find((c: ClientePF) => c.id === id);
+                  if (pf) {
+                    if (pf.nome) setPfNome(pf.nome);
+                    if (pf.cpf) setPfCpf(pf.cpf);
+                    if ((pf as any).rg) setPfRg((pf as any).rg);
+                    if ((pf as any).estado_civil) setPfEstadoCivil((pf as any).estado_civil);
+                    if ((pf as any).profissao) setPfProfissao((pf as any).profissao);
+                    if ((pf as any).email || pf.email) setPfEmail((pf as any).email || pf.email || '');
+                    if ((pf as any).telefone || pf.telefone) setPfTelefone((pf as any).telefone || pf.telefone || '');
+                    const end = [(pf as any).endereco, (pf as any).cidade, (pf as any).uf, (pf as any).cep].filter(Boolean).join(', ');
+                    if (end) setPfDomicilio(end);
+                  }
+                }
+              }}
+              className={cls}
+            >
+              <option value="">Digitar dados manualmente</option>
+              {clientesPF.map((c: ClientePF) => (
+                <option key={c.id} value={c.id}>{c.nome}{c.cpf ? ` — ${c.cpf}` : ''}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-500 mt-1">Selecionar um cliente preenche os campos abaixo automaticamente. Você pode editar antes de gerar.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Nome completo *</label>
+              <input value={pfNome} onChange={e => setPfNome(e.target.value)} className={cls} placeholder="Nome conforme CPF" />
+              {errors.pfNome && <p className="text-red-500 text-xs mt-1">{errors.pfNome}</p>}
+            </div>
+            <div>
+              <label className={lbl}>CPF *</label>
+              <input value={pfCpf} onChange={e => setPfCpf(e.target.value)} className={cls} placeholder="000.000.000-00" />
+              {errors.pfCpf && <p className="text-red-500 text-xs mt-1">{errors.pfCpf}</p>}
+            </div>
+            <div>
+              <label className={lbl}>RG (opcional)</label>
+              <input value={pfRg} onChange={e => setPfRg(e.target.value)} className={cls} placeholder="Número do RG" />
+            </div>
+            <div>
+              <label className={lbl}>Estado civil (opcional)</label>
+              <select value={pfEstadoCivil} onChange={e => setPfEstadoCivil(e.target.value)} className={cls}>
+                <option value="">Não informar</option>
+                <option value="solteiro(a)">Solteiro(a)</option>
+                <option value="casado(a)">Casado(a)</option>
+                <option value="divorciado(a)">Divorciado(a)</option>
+                <option value="viúvo(a)">Viúvo(a)</option>
+                <option value="união estável">União estável</option>
+              </select>
+            </div>
+            <div>
+              <label className={lbl}>Profissão (opcional)</label>
+              <input value={pfProfissao} onChange={e => setPfProfissao(e.target.value)} className={cls} placeholder="Ex: Empresário, Médico" />
+            </div>
+            <div>
+              <label className={lbl}>E-mail (opcional)</label>
+              <input value={pfEmail} onChange={e => setPfEmail(e.target.value)} className={cls} placeholder="email@exemplo.com" />
+            </div>
+            <div>
+              <label className={lbl}>Telefone (opcional)</label>
+              <input value={pfTelefone} onChange={e => setPfTelefone(e.target.value)} className={cls} placeholder="(61) 99999-9999" />
+            </div>
+          </div>
+          <div>
+            <label className={lbl}>Endereço / Domicílio (opcional)</label>
+            <input value={pfDomicilio} onChange={e => setPfDomicilio(e.target.value)} className={cls} placeholder="Rua, número, bairro, cidade – UF, CEP" />
+          </div>
+
+          <SelectParceiro value={parceiroIdAssessoriaPF} onChange={setParceiroIdAssessoriaPF} />
+          <SelectContratadaResponsavel
+            contratadaId={contratadaIdAssessoriaPF}
+            onContratadaChange={setContratadaIdAssessoriaPF}
+            responsavelId={responsavelContratoIdPF}
+            onResponsavelChange={setResponsavelContratoIdPF}
+            errorKey="contratadaIdAssessoriaPF"
+            obrigatoria={false}
+          />
+
+          {/* Financeiro */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>Prazo do contrato *</label>
+                <div className="flex items-center gap-2">
+                  <input type="number" min="1" step="1" value={prazoAssessoriaPF} onChange={e => setPrazoAssessoriaPF(e.target.value)} className={cls} placeholder="12" />
+                  <span className="text-sm text-gray-600 whitespace-nowrap">meses</span>
+                </div>
+                {errors.prazoAssessoriaPF && <p className="text-red-500 text-xs mt-1">{errors.prazoAssessoriaPF}</p>}
+              </div>
+              <div>
+                <label className={lbl}>Valor de referência (crédito pretendido) *</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={valorReferenciaPF}
+                  onChange={e => setValorReferenciaPF(maskCurrencyInput(e.target.value))}
+                  className={`${cls} text-right font-mono tabular-nums`}
+                  placeholder="R$ 0,00"
+                />
+                {errors.valorReferenciaPF && <p className="text-red-500 text-xs mt-1">{errors.valorReferenciaPF}</p>}
+              </div>
+              <div>
+                <label className={lbl}>Taxa de comissão (%)</label>
+                <input type="number" min="0" step="0.5" value={taxaComissaoPF} onChange={e => setTaxaComissaoPF(e.target.value)} className={`${cls} text-right font-mono`} placeholder="10" />
+              </div>
+              <div>
+                <label className={lbl}>Honorário mínimo (% sobre valor de ref.)</label>
+                <input type="number" min="0" step="0.5" value={taxaDesistenciaPF} onChange={e => setTaxaDesistenciaPF(e.target.value)} className={`${cls} text-right font-mono`} placeholder="5" />
+              </div>
+              <div>
+                <label className={lbl}>Custeio mensal (Rating abaixo de C)</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={custeioMensalPF}
+                  onChange={e => setCusteioMensalPF(maskCurrencyInput(e.target.value))}
+                  className={`${cls} text-right font-mono tabular-nums`}
+                />
+              </div>
             </div>
           </div>
         </>
