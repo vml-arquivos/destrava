@@ -13049,7 +13049,13 @@ ${canal === "whatsapp"
 
   app.get('/api/nexus/catalogo', requireNexusIntegration, async (req: Request, res: Response) => {
     try {
-      const tipo = String(req.query.tipo || 'empresa').toLowerCase();
+      // Normaliza o tipo solicitado pelo Nexus. O menu do Destrava foi renomeado de “Empresas” para
+      // “Clientes PJ”, mas o comportamento da API continua o mesmo. Para garantir compatibilidade,
+      // aceitamos aliases como "cliente_pj" e "clientes_pj" e tratamos como "empresa".
+      let tipo = String(req.query.tipo || 'empresa').toLowerCase();
+      if (tipo === 'cliente_pj' || tipo === 'clientes_pj' || tipo === 'cliente-pj' || tipo === 'clientes-pj') {
+        tipo = 'empresa';
+      }
       const q = String(req.query.q || '').trim();
       const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 50);
       const like = `%${q}%`;
@@ -13131,7 +13137,12 @@ ${canal === "whatsapp"
   app.post('/api/nexus/eventos', requireNexusIntegration, async (req: Request, res: Response) => {
     try {
       const body = req.body || {};
-      const externalType = String(body.external_type || 'empresa');
+      let externalType = String(body.external_type || 'empresa');
+      // Permitir aliases de Cliente PJ para compatibilidade com a nova nomenclatura no frontend.
+      const extLower = externalType.toLowerCase().trim();
+      if (extLower === 'cliente_pj' || extLower === 'clientes_pj' || extLower === 'cliente-pj' || extLower === 'clientes-pj') {
+        externalType = 'empresa';
+      }
       const externalId = String(body.external_id || '').trim();
       const evento = String(body.evento || 'nexus.evento');
       if (!externalId) { res.status(400).json({ error: 'external_id é obrigatório.' }); return; }

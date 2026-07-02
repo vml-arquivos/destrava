@@ -2,6 +2,10 @@ import { Router, Request, Response } from 'express';
 import pkg from 'pg';
 import { auth } from '../middleware/auth';
 import { analisarCnpjReceitaCartaoEmpresa, buscarUltimaAnaliseCnpjEmpresa, limparAnalisesCnpjEmpresa } from '../services/analiseCnpjReceitaCartao';
+// Importa serviço de IA externo (Gemini). Ao concentrar a chamada em um serviço
+// separado, mantemos o código das rotas mais limpo e é possível trocar o
+// provedor de IA alterando apenas este módulo.
+import { callGemini } from '../services/gemini';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -768,6 +772,61 @@ router.post('/ia/empresa/:empresaId/analisar', auth, async (req: Request, res: R
   } catch (err: any) {
     console.error('[POST /api/documentacao/ia/empresa/:empresaId/analisar]', err);
     res.status(500).json({ error: 'Erro ao registrar parecer' });
+  }
+});
+
+/**
+ * Rota: POST /api/documentacao/ia/empresa/:empresaId/analisar-gemini
+ *
+ * Esta rota executa uma análise de crédito utilizando um serviço externo de IA
+ * (Gemini). Ela monta o dossiê da empresa, serializa o resumo e os blocos
+ * relevantes em um único prompt JSON e envia ao serviço configurado em
+ * `GEMINI_API_URL`. Caso a chamada seja bem-sucedida, armazena o resultado
+ * diretamente na tabela documentacao_analises_ia com status finalizado.
+ * Se o serviço falhar, registra a análise como pendente para processamento
+ * posterior (para não causar regressão de funcionalidade). Nenhuma
+ * funcionalidade existente é alterada; trata‑se de uma rota adicional.
+ */
+router.post('/ia/empresa/:empresaId/analisar-gemini', auth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).colaborador || (req as any).user;
+    const empresaId = req.params.empresaId;
+    const dossie = await montarDossieCreditoEmpresa(empresaId);
+    if (!dossie) {
+      res.status(404).json({ error: 'Empresa não encontrada' });
+      return;
+    }
+    // Monta prompt JSON com resumo e blocos. Isto garante que o LLM receba
+    // dados estruturados e evita hallucinações por strings soltas.
+    const prompt = JSON.stringify({ resumo: dossie.resumo, blocos: dossie.blocos });
+    let resultado: any | null = null;
+    try {
+      resultado = await callGemini(prompt, {});
+    } catch (err) {
+      // Caso o serviço de IA externo falhe, registra como null. A rotina
+      // continuará registrando pendências para que um analista possa
+      // processar manualmente ou acionar outra IA.
+      console.warn('[documentacao] Gemini indisponível, analisando como pendente:', (err as Error).message);
+    }
+    // Insere registro na tabela de análises IA. Caso resultado seja null,
+    // status = 'aguardando', caso contrário 'finalizado'.
+    const status = resultado ? 'finalizado' : 'aguardando';
+    const { rows } = await pool.query(
+      `INSERT INTO public.documentacao_analises_ia
+        (entidade_tipo, entidade_id, empresa_id, tipo_analise, status, prompt_codigo, prompt_versao, entrada_contexto, resultado, pendencias, criado_por)
+       VALUES ('empresa',$1,$1,'analise_credito_gemini',$2,'analise_consolidada_credito_gemini','1.0.0',$3::jsonb,$4::jsonb,$5::jsonb,$6)
+       RETURNING *`,
+      [empresaId, status, JSON.stringify({ resumo: dossie.resumo, blocos: dossie.blocos.map((b: any) => ({ codigo: b.codigo, status: b.status, pendencias: b.pendencias })) }), JSON.stringify(resultado || {}), JSON.stringify(dossie.pendencias), user?.id || null]
+    );
+    // Resposta 200 ou 202 conforme disponibilidade
+    if (resultado) {
+      res.status(200).json({ message: 'Parecer Gemini concluído com sucesso.', analise: rows[0] });
+    } else {
+      res.status(202).json({ message: 'Parecer Gemini registrado como aguardando processamento.', analise: rows[0] });
+    }
+  } catch (err: any) {
+    console.error('[POST /api/documentacao/ia/empresa/:empresaId/analisar-gemini]', err);
+    res.status(500).json({ error: 'Erro ao registrar parecer Gemini' });
   }
 });
 
