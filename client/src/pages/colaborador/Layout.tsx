@@ -2,333 +2,342 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import NotificacoesFollowup from "@/components/NotificacoesFollowup";
 import {
-  LayoutDashboard,
-  Calculator,
-  FileText,
-  FileSignature,
-  LogOut,
-  Menu,
-  X,
-  ChevronRight,
-  User,
-  Users,
-  Workflow,
-  Kanban,
-  Building2,
-  ShieldAlert,
-  TrendingUp,
-  BookUser,
-  Activity,
-  BarChart2,
-  DatabaseZap,
-  BarChart3,
+  LayoutDashboard, Calculator, FileText, FileSignature, LogOut, Menu, X,
+  ChevronRight, ChevronDown, User, Users, Workflow, Kanban, Building2,
+  ShieldAlert, TrendingUp, BookUser, Activity, BarChart2, DatabaseZap,
+  BarChart3, Sparkles, BrainCircuit, ClipboardCheck, Scale,
+  Banknote, Settings, UserCog, PlugZap,
 } from "lucide-react";
 
+const CARGOS_GESTAO = ["administrador", "diretor", "gerente comercial"];
+
+// ── Definição de módulos do menu ──────────────────────────────────────────────
 interface NavItem {
   href: string;
   label: string;
   icon: React.ElementType;
-  badge?: string;
   allowedCargos?: string[];
-  managementOnly?: boolean;
+  badge?: string;
+}
+interface NavModule {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  color: string;        // cor do ícone do módulo
+  items: NavItem[];
+  allowedCargos?: string[];
 }
 
-const CARGOS_GESTAO = ["administrador", "diretor", "gerente comercial"];
+const NAV_MODULES: NavModule[] = [
+  // ── 1. Visão geral ──────────────────────────────────────────────────────────
+  {
+    id: "visao",
+    label: "Visão Geral",
+    icon: LayoutDashboard,
+    color: "text-slate-600",
+    items: [
+      { href: "/colaborador/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    ],
+  },
 
-const ALL_NAV_ITEMS: NavItem[] = [
-  { href: "/colaborador/dashboard",   label: "Dashboard",          icon: LayoutDashboard },
-  { href: "/colaborador/crm",         label: "Funil Comercial",    icon: Kanban },
-  { href: "/colaborador/calculadora", label: "Calculadora",        icon: Calculator },
-  { href: "/colaborador/simulacoes",  label: "Simulações",         icon: FileText },
-  { href: "/colaborador/triagem",     label: "Triagem",            icon: ShieldAlert },
-  { href: "/colaborador/clientes",    label: "Clientes PF",        icon: Users },
-  { href: "/colaborador/empresas",    label: "Clientes PJ",        icon: Building2 },
-  { href: "/colaborador/relatorio-empresas", label: "Relatório Clientes PJ", icon: BarChart3 },
-  { href: "/colaborador/cadastros-incompletos", label: "Cadastros Incompletos", icon: DatabaseZap },
-  { href: "/colaborador/acompanhamento-bancario",    label: "Acomp. Bancário",   icon: Activity },
-  { href: "/colaborador/acompanhamento-financeiro",  label: "Acomp. Financeiro", icon: BarChart2 },
-  { href: "/colaborador/previsao-faturamento", label: "Faturamento", icon: TrendingUp },
-  { href: "/colaborador/contratos",   label: "Contratos",          icon: FileText },
-  { href: "/colaborador/orcamentos",  label: "Orçamentos",        icon: FileSignature },
-  { href: "/colaborador/contadores",  label: "Contadores",         icon: BookUser, allowedCargos: ["administrador", "diretor"] },
-  { href: "/colaborador/integracoes", label: "Integrações n8n",    icon: Workflow, allowedCargos: ["administrador"] },
-  { href: "/colaborador/usuarios",    label: "Usuários",           icon: User, allowedCargos: CARGOS_GESTAO },
+  // ── 2. Comercial ────────────────────────────────────────────────────────────
+  {
+    id: "comercial",
+    label: "Comercial",
+    icon: Kanban,
+    color: "text-blue-600",
+    items: [
+      { href: "/colaborador/crm",       label: "Funil de Vendas",   icon: Kanban },
+      { href: "/colaborador/triagem",   label: "Triagem de Leads",  icon: ShieldAlert },
+      { href: "/colaborador/simulacoes",label: "Simulações",        icon: Calculator },
+      { href: "/colaborador/calculadora", label: "Calculadora",     icon: Calculator },
+      { href: "/colaborador/orcamentos",label: "Orçamentos",        icon: FileSignature },
+    ],
+  },
+
+  // ── 3. Clientes ─────────────────────────────────────────────────────────────
+  {
+    id: "clientes",
+    label: "Clientes",
+    icon: Users,
+    color: "text-violet-600",
+    items: [
+      { href: "/colaborador/empresas",  label: "Clientes PJ",           icon: Building2 },
+      { href: "/colaborador/clientes",  label: "Clientes PF",           icon: Users },
+      { href: "/colaborador/relatorio-empresas", label: "Relatórios PJ", icon: BarChart3 },
+      { href: "/colaborador/cadastros-incompletos", label: "Cadastros Incompletos", icon: DatabaseZap },
+    ],
+  },
+
+  // ── 4. Assessoria Inteligente (NOVO) ────────────────────────────────────────
+  {
+    id: "assessoria",
+    label: "Assessoria IA",
+    icon: BrainCircuit,
+    color: "text-emerald-600",
+    items: [
+      { href: "/colaborador/assessoria",        label: "Central de Assessoria", icon: BrainCircuit },
+      { href: "/colaborador/diagnostico-credito", label: "Diagnóstico de Crédito", icon: ClipboardCheck },
+    ],
+  },
+
+  // ── 5. Financeiro ───────────────────────────────────────────────────────────
+  {
+    id: "financeiro",
+    label: "Financeiro",
+    icon: Banknote,
+    color: "text-amber-600",
+    items: [
+      { href: "/colaborador/acompanhamento-bancario",   label: "Acomp. Bancário",   icon: Activity },
+      { href: "/colaborador/acompanhamento-financeiro", label: "Acomp. Financeiro", icon: BarChart2 },
+      { href: "/colaborador/previsao-faturamento",      label: "Faturamento",       icon: TrendingUp },
+    ],
+  },
+
+  // ── 6. Documentos e Contratos ───────────────────────────────────────────────
+  {
+    id: "documentos",
+    label: "Contratos",
+    icon: FileText,
+    color: "text-orange-600",
+    items: [
+      { href: "/colaborador/contratos", label: "Contratos",   icon: FileText },
+    ],
+  },
+
+  // ── 7. Gestão (admin) ───────────────────────────────────────────────────────
+  {
+    id: "gestao",
+    label: "Gestão",
+    icon: Settings,
+    color: "text-slate-500",
+    allowedCargos: CARGOS_GESTAO,
+    items: [
+      { href: "/colaborador/contadores",   label: "Contadores",     icon: BookUser,  allowedCargos: ["administrador", "diretor"] },
+      { href: "/colaborador/integracoes",  label: "Integrações n8n", icon: PlugZap,  allowedCargos: ["administrador"] },
+      { href: "/colaborador/usuarios",     label: "Usuários",        icon: UserCog,  allowedCargos: CARGOS_GESTAO },
+    ],
+  },
 ];
 
-function normalizePermValue(value?: string | null): string {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, "_")
-    .replace(/-/g, "_");
+// ── Componente principal ─────────────────────────────────────────────────────
+function podeAcessarAcompanhamentoBancario(colab: any) {
+  const cargo = (colab?.cargo || "").toLowerCase();
+  return ["administrador", "diretor", "gerente comercial", "consultor sênior", "analista de crédito"].includes(cargo);
+}
+function podeAcessarFinanceiro(colab: any) {
+  const cargo = (colab?.cargo || "").toLowerCase();
+  return ["administrador", "diretor", "gerente comercial"].includes(cargo);
 }
 
-function podeAcessarAcompanhamentoBancario(user: any): boolean {
-  if (!user) return false;
-  if (user?.acesso_acompanhamento_bancario === true) return true;
-  const permitidos = new Set([
-    "admin",
-    "administrador",
-    "super_admin",
-    "superadmin",
-    "gestor_credito",
-    "gestor_de_credito",
-    "diretor",
-  ]);
-  return (
-    permitidos.has(normalizePermValue(user?.cargo)) ||
-    permitidos.has(normalizePermValue(user?.perfil)) ||
-    permitidos.has(normalizePermValue(user?.role))
-  );
+function filtrarItems(items: NavItem[], colab: any) {
+  return items.filter(item => {
+    if (item.allowedCargos && !item.allowedCargos.includes((colab?.cargo || "").toLowerCase())) return false;
+    if (item.href === "/colaborador/acompanhamento-bancario" && !podeAcessarAcompanhamentoBancario(colab)) return false;
+    if (item.href === "/colaborador/acompanhamento-financeiro" && !podeAcessarFinanceiro(colab)) return false;
+    return true;
+  });
 }
 
-function podeAcessarFinanceiro(user: any): boolean {
-  if (!user) return false;
-  if (user?.acesso_acompanhamento_financeiro === true) return true;
-  const permitidos = new Set([
-    "admin",
-    "administrador",
-    "super_admin",
-    "superadmin",
-    "diretor",
-    "gestor_credito",
-    "gestor_de_credito",
-  ]);
-  return (
-    permitidos.has(normalizePermValue(user?.cargo)) ||
-    permitidos.has(normalizePermValue(user?.perfil)) ||
-    permitidos.has(normalizePermValue(user?.role))
-  );
+function filtrarModulos(modules: NavModule[], colab: any) {
+  return modules
+    .filter(mod => !mod.allowedCargos || mod.allowedCargos.includes((colab?.cargo || "").toLowerCase()))
+    .map(mod => ({ ...mod, items: filtrarItems(mod.items, colab) }))
+    .filter(mod => mod.items.length > 0);
 }
 
-interface ColaboradorLayoutProps {
-  children: React.ReactNode;
-  title?: string;
-}
-
-export default function ColaboradorLayout({ children, title }: ColaboradorLayoutProps) {
+export default function Layout({ children, title }: { children: React.ReactNode; title?: string }) {
   const [location] = useLocation();
-  const [menuAberto, setMenuAberto] = useState(false);
-  const { colaborador, signOut } = useAuth();
-
-  const cargoLower = normalizePermValue(colaborador?.cargo);
-
-  const navItems = ALL_NAV_ITEMS.filter((item) => {
-    if (item.managementOnly) {
-      const isGestor = CARGOS_GESTAO.map(normalizePermValue).includes(cargoLower);
-      if (!isGestor) return false;
-    }
-    if (item.href === "/colaborador/acompanhamento-bancario" && !podeAcessarAcompanhamentoBancario(colaborador)) return false;
-    if (item.href === "/colaborador/acompanhamento-financeiro" && !podeAcessarFinanceiro(colaborador)) return false;
-    if (!item.allowedCargos) return true;
-    return item.allowedCargos.map(normalizePermValue).includes(cargoLower);
+  const { colaborador, logout } = useAuth();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  // Módulos expandidos — inicializa com o módulo ativo aberto
+  const modulos = filtrarModulos(NAV_MODULES, colaborador);
+  const moduloAtivo = modulos.find(m => m.items.some(i =>
+    location === i.href || location.startsWith(i.href + "/")));
+  const [expandidos, setExpandidos] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    if (moduloAtivo) init[moduloAtivo.id] = true;
+    return init;
   });
 
-  const handleSignOut = async () => {
-    await signOut();
-    window.location.href = "/colaborador/login";
-  };
+  function toggleModulo(id: string) {
+    setExpandidos(prev => ({ ...prev, [id]: !prev[id] }));
+  }
 
-  const primeiroNome = colaborador?.nome?.split(" ")[0] || "Colaborador";
-  const isTelaEmpresas = location.startsWith("/colaborador/empresas");
+  const isTelaEmpresas = location.startsWith("/colaborador/empresas") || location.startsWith("/colaborador/assessoria");
 
-  return (
-    <div className="destrava-shell h-screen max-h-screen overflow-hidden flex bg-[radial-gradient(circle_at_top_left,#eff6ff_0,#f8fafc_32%,#f8fafc_100%)] text-slate-900">
-      <aside className="hidden lg:flex flex-col w-[244px] h-screen max-h-screen sticky top-0 shrink-0 border-r border-slate-200/80 bg-white/88 backdrop-blur-xl shadow-[8px_0_30px_rgba(15,23,42,0.04)]">
-        <div className="p-4 border-b border-slate-100">
-          <a href="/" className="flex items-center gap-2">
-            <img
-              src="/destrava-logo.svg"
-              alt="Destrava Crédito"
-              className="h-8"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-            />
-          </a>
-          <div className="mt-3">
-            <Badge variant="secondary" className="rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-[11px] font-black text-amber-800 shadow-sm">Área do Colaborador</Badge>
-          </div>
+  const sidebar = (
+    <nav className="flex h-full flex-col">
+      {/* Logo */}
+      <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-4">
+        <img src="/destrava-logo.svg" alt="Destrava" className="h-8 w-auto" onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+        <div className="min-w-0">
+          <div className="text-xs font-black text-slate-800 leading-tight">Destrava Crédito</div>
+          <div className="text-[10px] text-slate-400 font-medium">Área do Colaborador</div>
         </div>
-
-        <div className="p-3 border-b border-slate-100 bg-slate-50/70">
-          <div className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-100">
-                <User className="h-5 w-5 text-white" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-black text-slate-900 truncate">
-                  {colaborador?.nome || "Colaborador"}
-                </p>
-                <p className="text-xs font-medium text-slate-500 truncate">
-                  {colaborador?.cargo || ""}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <nav className="flex-1 p-2.5 space-y-1 overflow-y-auto destrava-nav-scroll">
-          {navItems.map((item) => {
-            const isActive =
-              location === item.href ||
-              location.startsWith(item.href + "/") ||
-              (item.href.includes("?") && location.startsWith(item.href.split("?")[0]));
-            const Icon = item.icon;
-            return (
-              <Link key={item.href} href={item.href}>
-                <a
-                  className={`group flex items-center gap-2.5 px-3 py-2.5 rounded-2xl text-sm font-semibold transition-all ${
-                    isActive
-                      ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-                  }`}
-                >
-                  <span className={`flex h-8 w-8 items-center justify-center rounded-xl transition-all ${isActive ? "bg-white/16" : "bg-white border border-slate-200 group-hover:border-blue-100 group-hover:text-blue-700"}`}>
-                    <Icon className="h-4 w-4 flex-shrink-0" />
-                  </span>
-                  <span className="flex-1 truncate">{item.label}</span>
-                  {item.badge && (
-                    <span className="text-xs bg-yellow-400 text-yellow-900 px-1.5 py-0.5 rounded-full font-bold">
-                      {item.badge}
-                    </span>
-                  )}
-                  {isActive && <ChevronRight className="h-3 w-3 opacity-75" />}
-                </a>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="p-3 border-t border-slate-100 bg-white/70">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start rounded-2xl text-slate-500 hover:bg-red-50 hover:text-red-600"
-            onClick={handleSignOut}
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            Sair
-          </Button>
-        </div>
-      </aside>
-
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 h-16 border-b border-slate-200 bg-white/92 px-4 flex items-center justify-between shadow-sm backdrop-blur-xl">
-        <a href="/" className="flex items-center gap-2">
-          <img
-            src="/destrava-logo.svg"
-            alt="Destrava Crédito"
-            className="h-7"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-          />
-          <Badge variant="secondary" className="rounded-full text-xs">Colaborador</Badge>
-        </a>
-        <button
-          onClick={() => setMenuAberto(!menuAberto)}
-          className="p-2 rounded-xl hover:bg-slate-100"
-        >
-          {menuAberto ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
       </div>
 
-      {menuAberto && (
-        <div
-          className="lg:hidden fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-sm"
-          onClick={() => setMenuAberto(false)}
-        >
-          <div
-            className="absolute left-0 top-16 bottom-0 w-[280px] bg-white shadow-2xl overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 border-b border-slate-100 bg-slate-50">
-              <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3">
-                <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center">
-                  <User className="h-5 w-5 text-white" />
+      {/* Módulos */}
+      <div className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
+        {modulos.map(mod => {
+          const ModIcon = mod.icon;
+          const isExpanded = expandidos[mod.id] ?? false;
+          const hasActive = mod.items.some(i => location === i.href || location.startsWith(i.href + "/"));
+
+          // Módulo com item único: link direto sem accordion
+          if (mod.items.length === 1) {
+            const item = mod.items[0];
+            const ItemIcon = item.icon;
+            const isActive = location === item.href || location.startsWith(item.href + "/");
+            return (
+              <Link key={mod.id} href={item.href} onClick={() => setMobileOpen(false)}>
+                <div className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold transition-all cursor-pointer ${
+                  isActive ? "bg-blue-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}>
+                  <ItemIcon className={`h-4 w-4 shrink-0 ${isActive ? "text-white" : mod.color}`} />
+                  <span className="truncate">{item.label}</span>
                 </div>
-                <div>
-                  <p className="text-sm font-black text-slate-900">{colaborador?.nome || "Colaborador"}</p>
-                  <p className="text-xs text-slate-500">{colaborador?.cargo || ""}</p>
-                </div>
-              </div>
-            </div>
-            <nav className="p-3 space-y-1">
-              {navItems.map((item) => {
-                const isActive =
-                  location === item.href ||
-                  (item.href.includes("?") && location.startsWith(item.href.split("?")[0]));
-                const Icon = item.icon;
-                return (
-                  <Link key={item.href} href={item.href}>
-                    <a
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-semibold transition-all ${
-                        isActive
-                          ? "bg-blue-600 text-white shadow-md shadow-blue-100"
-                          : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-                      }`}
-                      onClick={() => setMenuAberto(false)}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {item.label}
-                    </a>
-                  </Link>
-                );
-              })}
-            </nav>
-            <div className="p-3 border-t border-slate-200">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start rounded-2xl text-slate-500 hover:text-red-600"
-                onClick={handleSignOut}
+              </Link>
+            );
+          }
+
+          return (
+            <div key={mod.id}>
+              {/* Cabeçalho do módulo */}
+              <button
+                onClick={() => toggleModulo(mod.id)}
+                className={`w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-bold transition-all ${
+                  hasActive && !isExpanded
+                    ? "bg-blue-50 text-blue-700"
+                    : "text-slate-700 hover:bg-slate-100"
+                }`}
               >
-                <LogOut className="h-4 w-4 mr-2" />
-                Sair
-              </Button>
+                <ModIcon className={`h-4 w-4 shrink-0 ${mod.color}`} />
+                <span className="flex-1 text-left truncate">{mod.label}</span>
+                {hasActive && !isExpanded && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />
+                )}
+                {isExpanded
+                  ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                  : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                }
+              </button>
+
+              {/* Itens do módulo */}
+              {isExpanded && (
+                <div className="ml-3 mt-0.5 space-y-0.5 border-l border-slate-100 pl-3">
+                  {mod.items.map(item => {
+                    const ItemIcon = item.icon;
+                    const isActive = location === item.href || location.startsWith(item.href + "/");
+                    return (
+                      <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)}>
+                        <div className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                          isActive
+                            ? "bg-blue-600 text-white"
+                            : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                        }`}>
+                          <ItemIcon className={`h-3.5 w-3.5 shrink-0 ${isActive ? "text-white" : "text-slate-400"}`} />
+                          <span className="truncate">{item.label}</span>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer com perfil */}
+      <div className="border-t border-slate-100 p-3 space-y-1">
+        <Link href="/colaborador/meu-perfil" onClick={() => setMobileOpen(false)}>
+          <div className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer">
+            <div className="h-7 w-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-black text-xs shrink-0">
+              {(colaborador?.nome || "?").charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <div className="truncate font-bold text-slate-800">{colaborador?.nome || "Colaborador"}</div>
+              <div className="truncate text-slate-400 capitalize">{colaborador?.cargo || ""}</div>
             </div>
           </div>
+        </Link>
+        <button
+          onClick={logout}
+          className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          Sair
+        </button>
+      </div>
+    </nav>
+  );
+
+  return (
+    <div className="flex h-screen bg-slate-50 overflow-hidden">
+      {/* Sidebar desktop */}
+      <aside className="hidden lg:flex w-56 shrink-0 flex-col bg-white border-r border-slate-100 shadow-sm">
+        {sidebar}
+      </aside>
+
+      {/* Drawer mobile */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
+          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-2xl flex flex-col">
+            <div className="flex justify-end p-3">
+              <button onClick={() => setMobileOpen(false)} className="rounded-xl p-2 hover:bg-slate-100">
+                <X className="h-5 w-5 text-slate-600" />
+              </button>
+            </div>
+            {sidebar}
+          </aside>
         </div>
       )}
 
-      <main className={`flex-1 h-screen max-h-screen flex flex-col min-w-0 ${isTelaEmpresas ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden"}`}> 
-        <div className="hidden lg:flex items-center justify-between px-6 py-3.5 bg-white/82 backdrop-blur-xl border-b border-slate-200/80 shadow-sm shadow-slate-200/40">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-1.5 rounded-full bg-blue-600" />
-            <div>
-              <h2 className="text-base font-black tracking-tight text-slate-900">{title || "Painel"}</h2>
-              <p className="text-[11px] font-medium text-slate-400">Destrava Crédito</p>
-            </div>
+      {/* Conteúdo principal */}
+      <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
+        {/* Header mobile */}
+        <header className="flex lg:hidden items-center justify-between border-b border-slate-100 bg-white px-4 py-3 shadow-sm">
+          <button onClick={() => setMobileOpen(true)} className="rounded-xl p-2 hover:bg-slate-100">
+            <Menu className="h-5 w-5 text-slate-600" />
+          </button>
+          <span className="text-sm font-black text-slate-800">{title || "Destrava Crédito"}</span>
+          <NotificacoesFollowup />
+        </header>
+
+        {/* Header desktop */}
+        <header className="hidden lg:flex items-center justify-between border-b border-slate-100 bg-white px-6 py-3 shadow-sm">
+          <div>
+            <h1 className="text-base font-black text-slate-800">{title || "Destrava Crédito"}</h1>
+            <p className="text-xs text-slate-400">Destrava Crédito</p>
           </div>
           <div className="flex items-center gap-3">
-            <span className="rounded-full bg-slate-50 px-3 py-1.5 text-sm font-semibold text-slate-700 border border-slate-200">
-              {primeiroNome}
-            </span>
             <NotificacoesFollowup />
             <Link href="/colaborador/meu-perfil">
-              <a className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950">
-                <User className="h-4 w-4 mr-1" />
-                Perfil
-              </a>
+              <button className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all">
+                <div className="h-7 w-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-black text-xs">
+                  {(colaborador?.nome || "?").charAt(0).toUpperCase()}
+                </div>
+                {colaborador?.nome?.split(" ")[0] || "Perfil"}
+              </button>
             </Link>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSignOut}
-              className="rounded-xl text-slate-500 hover:text-red-600"
-            >
-              <LogOut className="h-4 w-4 mr-1" />
+            <button onClick={logout} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all">
+              <LogOut className="h-4 w-4" />
               Sair
-            </Button>
+            </button>
           </div>
-        </div>
+        </header>
 
-        <div className={`destrava-page mt-16 lg:mt-0 ${isTelaEmpresas ? "flex-1 min-h-0 overflow-hidden" : "flex-none min-h-0 overflow-visible"}`}>
-          {children}
-        </div>
-      </main>
+        {/* Conteúdo */}
+        <main className={`flex-1 min-w-0 ${isTelaEmpresas ? "overflow-hidden flex flex-col" : "overflow-y-auto"}`}>
+          <div className={`destrava-page ${isTelaEmpresas ? "flex-1 min-h-0 overflow-hidden flex flex-col" : "min-h-0 overflow-visible"}`}>
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

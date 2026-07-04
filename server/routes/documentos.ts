@@ -6,12 +6,6 @@ import crypto from 'crypto';
 import pkg from 'pg';
 import { auth } from '../middleware/auth';
 
-// Importa utilitários de validação/sanitização centralizados. Estas funções
-// fornecem validações padrão como isUuid, safeJson e sanitizeFileName. A
-// presença deste import permite futura refatoração para remover as
-// implementações duplicadas neste arquivo.
-import { isUuid as uuidValidator, safeJson as toSafeJson, sanitizeFileName as normalizeFileName } from '../utils/validators';
-
 const { Pool } = pkg;
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -318,7 +312,7 @@ function assertAllowedRelation(entidadeTipo: string, tipoDocumento: string, body
 
 async function validarEntidade(entidadeTipo: string, entidadeId: string, body: any) {
   if (!ENTIDADES.includes(entidadeTipo as any)) throw new Error('entidade_tipo inválido.');
-  if (!uuidValidator(entidadeId)) throw new Error('entidade_id inválido ou ausente.');
+  if (!isUuid(entidadeId)) throw new Error('entidade_id inválido ou ausente.');
 
   if (entidadeTipo === 'empresa') {
     if (!(await existsIn('empresas', entidadeId))) throw new Error('Empresa não encontrada.');
@@ -447,7 +441,7 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
     validarArquivo(file, tipoDocumento);
 
     const hash = crypto.createHash('sha256').update(file.buffer).digest('hex');
-    const safeOriginal = normalizeFileName(file.originalname || 'arquivo');
+    const safeOriginal = sanitizeFileName(file.originalname || 'arquivo');
     const ext = path.extname(safeOriginal).toLowerCase();
     const nomeArquivo = `${crypto.randomUUID()}${ext}`;
     const dataDir = process.env.DATA_DIR || '/data';
@@ -509,7 +503,7 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
         (refs as any).contrato_id || req.body.contrato_id || null, (refs as any).simulacao_id || req.body.simulacao_id || null,
         tipoDocumento, file.originalname || safeOriginal, nomeArquivo, caminhoArquivo, file.mimetype, file.size,
         hash, status, origem, String(req.body.obrigatorio) === 'true', status === 'validado', req.body.observacoes || null,
-        JSON.stringify(toSafeJson(req.body.metadados)), user.id,
+        JSON.stringify(safeJson(req.body.metadados)), user.id,
         dataEmissaoDocumento, dataValidadeDocumento, tipoDocumento === 'cartao_cnpj' ? 30 : null, statusValidade,
         exigeRevisaoHumana, nomeCustomizado, JSON.stringify(resultadoValidacao),
       ]
@@ -524,7 +518,7 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
 
 router.patch('/:id', auth, async (req: Request, res: Response) => {
   try {
-    if (!uuidValidator(req.params.id)) { res.status(400).json({ error: 'ID inválido' }); return; }
+    if (!isUuid(req.params.id)) { res.status(400).json({ error: 'ID inválido' }); return; }
     const user = (req as any).colaborador || (req as any).user;
     const before = await pool.query('SELECT * FROM public.documentos_arquivos WHERE id=$1 AND excluido_em IS NULL', [req.params.id]);
     if (!before.rows.length) { res.status(404).json({ error: 'Documento não encontrado' }); return; }
@@ -544,8 +538,8 @@ router.patch('/:id', auth, async (req: Request, res: Response) => {
     if (body.nome_customizado !== undefined) { values.push(String(body.nome_customizado || '').trim() || null); fields.push(`nome_customizado=$${values.length}`); }
     if (body.data_emissao_documento !== undefined) { values.push(body.data_emissao_documento || null); fields.push(`data_emissao_documento=$${values.length}`); }
     if (body.status_validade !== undefined) { values.push(String(body.status_validade || 'nao_verificado')); fields.push(`status_validade=$${values.length}`); }
-    if (body.resultado_validacao !== undefined) { values.push(JSON.stringify(toSafeJson(body.resultado_validacao))); fields.push(`resultado_validacao=$${values.length}::jsonb`); }
-    if (body.metadados !== undefined) { values.push(JSON.stringify(toSafeJson(body.metadados))); fields.push(`metadados=$${values.length}::jsonb`); }
+    if (body.resultado_validacao !== undefined) { values.push(JSON.stringify(safeJson(body.resultado_validacao))); fields.push(`resultado_validacao=$${values.length}::jsonb`); }
+    if (body.metadados !== undefined) { values.push(JSON.stringify(safeJson(body.metadados))); fields.push(`metadados=$${values.length}::jsonb`); }
     if (body.obrigatorio !== undefined) { values.push(Boolean(body.obrigatorio)); fields.push(`obrigatorio=$${values.length}`); }
     if (body.validado !== undefined) {
       values.push(Boolean(body.validado)); fields.push(`validado=$${values.length}`);
@@ -569,7 +563,7 @@ router.patch('/:id', auth, async (req: Request, res: Response) => {
 
 router.delete('/:id', auth, async (req: Request, res: Response) => {
   try {
-    if (!uuidValidator(req.params.id)) { res.status(400).json({ error: 'ID inválido' }); return; }
+    if (!isUuid(req.params.id)) { res.status(400).json({ error: 'ID inválido' }); return; }
     const user = (req as any).colaborador || (req as any).user;
     const before = await pool.query('SELECT * FROM public.documentos_arquivos WHERE id=$1 AND excluido_em IS NULL', [req.params.id]);
     if (!before.rows.length) { res.status(404).json({ error: 'Documento não encontrado' }); return; }
@@ -588,7 +582,7 @@ router.delete('/:id', auth, async (req: Request, res: Response) => {
 });
 
 async function sendProtectedFile(req: Request, res: Response, inline: boolean) {
-  if (!uuidValidator(req.params.id)) { res.status(400).json({ error: 'ID inválido' }); return; }
+  if (!isUuid(req.params.id)) { res.status(400).json({ error: 'ID inválido' }); return; }
   const { rows } = await pool.query(
     `SELECT * FROM public.documentos_arquivos WHERE id=$1 AND excluido_em IS NULL AND status <> 'excluido' LIMIT 1`,
     [req.params.id]
@@ -618,7 +612,7 @@ async function sendProtectedFile(req: Request, res: Response, inline: boolean) {
   }
   res.setHeader('Content-Type', doc.mime_type || 'application/octet-stream');
   const disposition = inline ? 'inline' : 'attachment';
-  res.setHeader('Content-Disposition', `${disposition}; filename="${normalizeFileName(doc.nome_original || doc.nome_arquivo)}"`);
+  res.setHeader('Content-Disposition', `${disposition}; filename="${sanitizeFileName(doc.nome_original || doc.nome_arquivo)}"`);
   fs.createReadStream(filePath).pipe(res);
 }
 
@@ -665,8 +659,8 @@ router.post('/exportar', auth, async (req: Request, res: Response) => {
       if (!filePath || !isAllowed || !fs.existsSync(filePath)) {
         continue;
       }
-      const baseName = normalizeFileName(doc.nome_customizado || doc.nome_original || doc.nome_arquivo || `${doc.id}.bin`);
-      const folder = normalizeFileName(exportFolderForTipo(doc.tipo_documento || 'documento'));
+      const baseName = sanitizeFileName(doc.nome_customizado || doc.nome_original || doc.nome_arquivo || `${doc.id}.bin`);
+      const folder = sanitizeFileName(exportFolderForTipo(doc.tipo_documento || 'documento'));
       const key = `${folder}/${baseName}`;
       const count = usedNames.get(key) || 0;
       usedNames.set(key, count + 1);
@@ -698,7 +692,7 @@ router.get('/pendencias/:entidadeTipo/:entidadeId', auth, async (req: Request, r
 });
 
 export async function calcularPendenciasDocumentais(entidadeTipo: string, entidadeId: string) {
-  if (!ENTIDADES.includes(entidadeTipo as any) || !uuidValidator(entidadeId)) throw new Error('Entidade inválida');
+  if (!ENTIDADES.includes(entidadeTipo as any) || !isUuid(entidadeId)) throw new Error('Entidade inválida');
 
   const obrigatoriosPorEntidade: Record<string, string[]> = {
     empresa: ['contrato_social'],

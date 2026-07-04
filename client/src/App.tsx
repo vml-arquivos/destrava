@@ -43,6 +43,8 @@ import ColaboradorSimulacoes from "./pages/colaborador/Simulacoes";
 import ColaboradorUsuarios from "./pages/colaborador/Usuarios";
 import ColaboradorClientes from "./pages/colaborador/Clientes";
 import ColaboradorIntegracoes from "./pages/colaborador/Integracoes";
+import AssessoriaIA from "./pages/colaborador/AssessoriaIA";
+import DiagnosticoCredito from "./pages/colaborador/DiagnosticoCredito";
 import PrevisaoFaturamento from "./pages/colaborador/PrevisaoFaturamento";
 import GeradorContratos from "./pages/colaborador/GeradorContratos";
 import ColaboradorOrcamentos from "./pages/colaborador/Orcamentos";
@@ -218,6 +220,20 @@ function Router() {
             <CargoRoute allowedCargos={['administrador']}>
               <ColaboradorIntegracoes />
             </CargoRoute>
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/assessoria">
+        {() => (
+          <ProtectedRoute>
+            <AssessoriaIA />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/diagnostico-credito">
+        {() => (
+          <ProtectedRoute>
+            <DiagnosticoCredito />
           </ProtectedRoute>
         )}
       </Route>
