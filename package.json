@@ -15,7 +15,8 @@
     "db:inspect": "node scripts/db-inspect.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "migrate:nexus-catalog": "node scripts/migrate-nexus-catalog.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

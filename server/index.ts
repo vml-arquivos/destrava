@@ -27,6 +27,7 @@ import {
   gerarDiagnosticoSemana,
   calcularAcumulados,
 } from "./funcoes_acompanhamento.ts";
+import { normalizarPaginacaoCatalogo, normalizarTipoCatalogo } from "./lib/nexusCatalogo";
 
 const { Pool } = pkg;
 
@@ -13049,65 +13050,133 @@ ${canal === "whatsapp"
 
   app.get('/api/nexus/catalogo', requireNexusIntegration, async (req: Request, res: Response) => {
     try {
-      const tipo = String(req.query.tipo || 'empresa').toLowerCase();
+      const tipo = normalizarTipoCatalogo(req.query.tipo);
       const q = String(req.query.q || '').trim();
-      const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 50);
-      const like = `%${q}%`;
+      const { page, limit, offset } = normalizarPaginacaoCatalogo(req.query.page, req.query.limit);
+      const like = `%${q.toLowerCase()}%`;
 
-      if (tipo === 'cliente' || tipo === 'clientes') {
-        const { rows } = await pool.query(
-          `SELECT id, nome, cpf, email, telefone, status, created_at
-             FROM clientes_pf
-            WHERE ($1 = '' OR nome ILIKE $2 OR COALESCE(cpf,'') ILIKE $2 OR COALESCE(email,'') ILIKE $2 OR COALESCE(telefone,'') ILIKE $2)
-            ORDER BY nome ASC
-            LIMIT $3`,
-          [q, like, limit]
-        ).catch(async () => ({ rows: [] as any[] }));
-        res.json({ items: rows.map((r: any) => ({
-          id: r.id,
-          tipo: 'cliente',
-          nome: r.nome,
-          documento: r.cpf || null,
-          email: r.email || null,
-          telefone: r.telefone || null,
-          status: r.status || null,
-          subtitulo: [r.cpf, r.email, r.telefone].filter(Boolean).join(' · '),
-          url: `${process.env.FRONTEND_URL || ''}/colaborador/clientes/${r.id}`,
-          metadata: { created_at: r.created_at || null },
-        })) });
-        return;
+      let total = 0;
+      let rows: any[] = [];
+
+      if (tipo === 'empresa') {
+        const buscaEmpresa = `lower(
+          COALESCE(e.razao_social,'') || ' ' || COALESCE(e.nome_fantasia,'') || ' ' ||
+          COALESCE(e.cnpj,'') || ' ' || COALESCE(e.email,'') || ' ' || COALESCE(e.telefone,'')
+        )`;
+        const totalResult = await pool.query(
+          `SELECT COUNT(*)::int AS total FROM empresas e WHERE ($1 = '' OR ${buscaEmpresa} LIKE $2)`,
+          [q, like]
+        );
+        total = Number(totalResult.rows[0]?.total || 0);
+        const result = await pool.query(
+          `SELECT 'empresa'::text AS entidade_tipo, e.id::text AS id,
+                  COALESCE(NULLIF(e.razao_social,''), NULLIF(e.nome_fantasia,''), 'Empresa sem nome') AS nome,
+                  e.cnpj AS documento, e.email, e.telefone, e.status,
+                  e.created_at, NULL::timestamptz AS updated_at,
+                  e.nome_fantasia, e.cidade, e.estado, e.responsavel_nome
+             FROM empresas e
+            WHERE ($1 = '' OR ${buscaEmpresa} LIKE $2)
+            ORDER BY lower(COALESCE(NULLIF(e.razao_social,''), NULLIF(e.nome_fantasia,''), 'Empresa sem nome')), e.id
+            LIMIT $3 OFFSET $4`,
+          [q, like, limit, offset]
+        );
+        rows = result.rows;
+      } else if (tipo === 'pessoa_fisica') {
+        const buscaPf = `lower(
+          COALESCE(c.nome,'') || ' ' || COALESCE(c.cpf,'') || ' ' ||
+          COALESCE(c.email,'') || ' ' || COALESCE(c.telefone,'')
+        )`;
+        const totalResult = await pool.query(
+          `SELECT COUNT(*)::int AS total FROM clientes_pf c WHERE ($1 = '' OR ${buscaPf} LIKE $2)`,
+          [q, like]
+        );
+        total = Number(totalResult.rows[0]?.total || 0);
+        const result = await pool.query(
+          `SELECT 'pessoa_fisica'::text AS entidade_tipo, c.id::text AS id,
+                  COALESCE(NULLIF(c.nome,''), 'Pessoa física sem nome') AS nome,
+                  c.cpf AS documento, c.email, c.telefone, c.status,
+                  c.created_at, NULL::timestamptz AS updated_at,
+                  NULL::text AS nome_fantasia, NULL::text AS cidade, NULL::text AS estado, NULL::text AS responsavel_nome
+             FROM clientes_pf c
+            WHERE ($1 = '' OR ${buscaPf} LIKE $2)
+            ORDER BY lower(COALESCE(NULLIF(c.nome,''), 'Pessoa física sem nome')), c.id
+            LIMIT $3 OFFSET $4`,
+          [q, like, limit, offset]
+        );
+        rows = result.rows;
+      } else {
+        const baseSql = `
+          SELECT 'empresa'::text AS entidade_tipo, e.id::text AS id,
+                 COALESCE(NULLIF(e.razao_social,''), NULLIF(e.nome_fantasia,''), 'Empresa sem nome') AS nome,
+                 e.cnpj AS documento, e.email, e.telefone, e.status,
+                 e.created_at, NULL::timestamptz AS updated_at,
+                 e.nome_fantasia, e.cidade, e.estado, e.responsavel_nome
+            FROM empresas e
+          UNION ALL
+          SELECT 'pessoa_fisica'::text AS entidade_tipo, c.id::text AS id,
+                 COALESCE(NULLIF(c.nome,''), 'Pessoa física sem nome') AS nome,
+                 c.cpf AS documento, c.email, c.telefone, c.status,
+                 c.created_at, NULL::timestamptz AS updated_at,
+                 NULL::text AS nome_fantasia, NULL::text AS cidade, NULL::text AS estado, NULL::text AS responsavel_nome
+            FROM clientes_pf c`;
+        const buscaTodos = `lower(
+          COALESCE(nome,'') || ' ' || COALESCE(documento,'') || ' ' ||
+          COALESCE(email,'') || ' ' || COALESCE(telefone,'')
+        )`;
+        const totalResult = await pool.query(
+          `SELECT COUNT(*)::int AS total FROM (${baseSql}) catalogo WHERE ($1 = '' OR ${buscaTodos} LIKE $2)`,
+          [q, like]
+        );
+        total = Number(totalResult.rows[0]?.total || 0);
+        const result = await pool.query(
+          `SELECT * FROM (${baseSql}) catalogo
+            WHERE ($1 = '' OR ${buscaTodos} LIKE $2)
+            ORDER BY lower(nome), entidade_tipo, id
+            LIMIT $3 OFFSET $4`,
+          [q, like, limit, offset]
+        );
+        rows = result.rows;
       }
 
-      const { rows } = await pool.query(
-        `SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.email, e.telefone, e.status, e.cidade, e.estado, e.responsavel_nome, e.created_at
-           FROM empresas e
-          WHERE ($1 = '' OR e.razao_social ILIKE $2 OR COALESCE(e.nome_fantasia,'') ILIKE $2 OR COALESCE(e.cnpj,'') ILIKE $2 OR COALESCE(e.telefone,'') ILIKE $2 OR COALESCE(e.email,'') ILIKE $2)
-          ORDER BY e.razao_social ASC
-          LIMIT $3`,
-        [q, like, limit]
-      );
-
-      res.json({ items: rows.map((r: any) => ({
+      const frontendUrl = String(process.env.FRONTEND_URL || '').replace(/\/$/, '');
+      const items = rows.map((r: any) => ({
         id: r.id,
-        tipo: 'empresa',
-        nome: r.razao_social || r.nome_fantasia || 'Empresa sem nome',
-        documento: r.cnpj || null,
+        tipo: r.entidade_tipo,
+        nome: r.nome,
+        documento: r.documento || null,
         email: r.email || null,
         telefone: r.telefone || null,
         status: r.status || null,
-        subtitulo: [r.cnpj, r.cidade && r.estado ? `${r.cidade}/${r.estado}` : null, r.responsavel_nome].filter(Boolean).join(' · '),
-        url: `${process.env.FRONTEND_URL || ''}/colaborador/empresas/${r.id}`,
+        subtitulo: r.entidade_tipo === 'empresa'
+          ? [r.documento, r.cidade && r.estado ? `${r.cidade}/${r.estado}` : null, r.responsavel_nome].filter(Boolean).join(' · ')
+          : [r.documento, r.email, r.telefone].filter(Boolean).join(' · '),
+        url: r.entidade_tipo === 'empresa'
+          ? `${frontendUrl}/colaborador/empresas/${r.id}`
+          : `${frontendUrl}/colaborador/clientes/${r.id}`,
+        updated_at: r.updated_at || r.created_at || null,
         metadata: {
+          entidade_tipo: r.entidade_tipo,
           nome_fantasia: r.nome_fantasia || null,
           cidade: r.cidade || null,
           estado: r.estado || null,
           responsavel_nome: r.responsavel_nome || null,
           created_at: r.created_at || null,
         },
-      })) });
+      }));
+
+      res.json({
+        items,
+        pagination: {
+          page,
+          limit,
+          total,
+          total_pages: Math.max(1, Math.ceil(total / limit)),
+          has_more: offset + items.length < total,
+        },
+      });
     } catch (err) {
       console.error('[NEXUS] Erro no catálogo:', err);
-      res.status(500).json({ error: 'Erro ao buscar catálogo para o Nexus.' });
+      res.status(500).json({ error: 'Erro ao buscar catálogo completo para o Nexus.' });
     }
   });
 

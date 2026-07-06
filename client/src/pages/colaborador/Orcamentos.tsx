@@ -488,11 +488,19 @@ export default function Orcamentos() {
         base = await salvar();
         if (!base?.id) return;
       }
+      if (!base?.id) {
+        toast.error("Não foi possível preparar o orçamento para gerar o PDF.");
+        return;
+      }
       // Garantir que está finalizado
       if (base.status !== "finalizado") {
         const result = await apiFetch(`/api/orcamentos/${base.id}/finalizar`, { method: "POST" });
         base = result?.orcamento || base;
         setSelecionado(base);
+      }
+      if (!base?.id) {
+        toast.error("O orçamento não retornou um identificador válido para gerar o PDF.");
+        return;
       }
       const { blob, filename } = await apiFetchBlob(
         `/api/orcamentos/${base.id}/download?t=${Date.now()}`,

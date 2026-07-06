@@ -23,7 +23,20 @@ interface SocioEmpresaContrato {
   data_entrada_sociedade?: string;
 }
 interface Lead     { id: string; nome?: string; razao_social?: string; cpf?: string; cnpj?: string; }
-interface ClientePF { id: string; nome: string; cpf?: string; telefone?: string; cidade?: string; uf?: string; }
+interface ClientePF {
+  id: string;
+  nome: string;
+  cpf?: string;
+  rg?: string;
+  email?: string;
+  telefone?: string;
+  endereco?: string;
+  cidade?: string;
+  uf?: string;
+  cep?: string;
+  estado_civil?: string;
+  profissao?: string;
+}
 interface Parceiro { id: string; nome: string; cpf?: string; }
 interface PrestadorServico {
   id: string;
@@ -614,7 +627,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     onContratadaChange: (v: string) => void;
     responsavelId: string;
     onResponsavelChange: (v: string) => void;
-    errorKey: 'contratadaIdAssessoria' | 'contratadaIdLimpaNome' | 'contratadaIdBacen' | 'contratadaIdRating';
+    errorKey: 'contratadaIdAssessoria' | 'contratadaIdAssessoriaPF' | 'contratadaIdLimpaNome' | 'contratadaIdBacen' | 'contratadaIdRating';
     obrigatoria?: boolean;
   }) => (
     <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 space-y-3">
@@ -863,8 +876,8 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                     if ((pf as any).rg) setPfRg((pf as any).rg);
                     if ((pf as any).estado_civil) setPfEstadoCivil((pf as any).estado_civil);
                     if ((pf as any).profissao) setPfProfissao((pf as any).profissao);
-                    if ((pf as any).email || pf.email) setPfEmail((pf as any).email || pf.email || '');
-                    if ((pf as any).telefone || pf.telefone) setPfTelefone((pf as any).telefone || pf.telefone || '');
+                    if (pf.email) setPfEmail(pf.email);
+                    if (pf.telefone) setPfTelefone(pf.telefone);
                     const end = [(pf as any).endereco, (pf as any).cidade, (pf as any).uf, (pf as any).cep].filter(Boolean).join(', ');
                     if (end) setPfDomicilio(end);
                   }

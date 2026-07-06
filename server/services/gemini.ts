@@ -1,5 +1,3 @@
-import { RequestInit } from 'node-fetch';
-
 /**
  * callGemini – Faz uma chamada para um serviço externo de IA (Gemini)
  *

@@ -46,6 +46,7 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   signIn: (email: string, password: string) => Promise<{ data: unknown; error: unknown }>;
   signOut: () => Promise<{ error: unknown }>;
+  logout: () => Promise<{ error: unknown }>;
   refreshColaborador: () => Promise<void>;
 }
 
@@ -135,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signOut, refreshColaborador }}>
+    <AuthContext.Provider value={{ ...state, signIn, signOut, logout: signOut, refreshColaborador }}>
       {children}
     </AuthContext.Provider>
   );
