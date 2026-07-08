@@ -4,7 +4,8 @@ import multer from "multer";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { ChromiumLaunchError, closeChromium, launchChromium } from "../services/chromiumLauncher";
+import { ChromiumLaunchError } from "../services/chromiumLauncher";
+import { generateBrandedPdfBuffer } from "../services/brandedPdfLayout";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -347,37 +348,12 @@ function gerarHtmlOrcamento(orcamento: Row): string {
 </html>`;
 }
 
-// Gera PDF via Puppeteer (mesmo pipeline dos contratos — suporte completo a PT-BR)
+// Gera o orçamento com o MESMO papel timbrado e o MESMO comportamento dos contratos:
+// logomarca na primeira página e rodapé institucional completo na última página.
 async function gerarPdfOrcamentoPuppeteer(orcamento: Row): Promise<Buffer> {
-  const marca = normalizeMarca(orcamento.marca);
-  const isPermuPay = marca === "permupay";
-  // Logos em base64 — lidas do mesmo módulo do servidor principal
-  // Fallback: usar texto simples como cabeçalho se logos não estiverem disponíveis
-  const nomeEmpresa = marcaNome(marca);
-  const corBorda = isPermuPay ? "#0066CC" : marca === "aragao" ? "#8B4513" : "#1B3A8C";
-
-  const headerTemplate = `<style>*{margin:0;padding:0;box-sizing:border-box}#h{width:100%;padding:5px 22mm 7px;border-bottom:2px solid ${corBorda};display:flex;align-items:center;justify-content:center;font-family:Arial,sans-serif;font-size:11pt;font-weight:700;color:${corBorda}}</style><div id="h">${escapeHtml(nomeEmpresa)}</div>`;
-  const footerTemplate = `<style>*{margin:0;padding:0;box-sizing:border-box}#f{width:100%;padding:7px 22mm 5px;border-top:1px solid #e2e8f0;text-align:center;font-family:Arial,sans-serif;font-size:7.5pt;color:#64748b;line-height:1.5}</style><div id="f"><strong>BRASÍLIA - SEDE</strong> · St. D Norte QND 25 LOTE 40 - Taguatinga, Brasília - DF, 72120-250</div>`;
-
-  const html = gerarHtmlOrcamento(orcamento);
-  let browser: any;
-  try {
-    browser = await launchChromium();
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
-    const pdfOpts = {
-      format: "A4" as const,
-      printBackground: true,
-      displayHeaderFooter: true,
-      margin: { top: "26mm", bottom: "24mm", left: "20mm", right: "20mm" },
-      headerTemplate,
-      footerTemplate,
-    };
-    const buf = await page.pdf(pdfOpts);
-    return Buffer.from(buf);
-  } finally {
-    await closeChromium(browser);
-  }
+  return generateBrandedPdfBuffer(gerarHtmlOrcamento(orcamento), {
+    brand: normalizeMarca(orcamento.marca),
+  });
 }
 
 function uploadsOrcamentosDir(orcamentoId: string): string {
