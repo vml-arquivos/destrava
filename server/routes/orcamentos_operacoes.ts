@@ -4,6 +4,7 @@ import multer from "multer";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { ChromiumLaunchError, closeChromium, launchChromium } from "../services/chromiumLauncher";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -167,7 +168,12 @@ function gerarNumeroOrcamento(): string {
 }
 
 async function garantirNumeroFinalizado(pool: Pool, id: string): Promise<Row | null> {
-  const atual = await pool.query(`SELECT * FROM public.orcamentos_timbrados WHERE id = $1 LIMIT 1`, [id]);
+  const filtrosAtivo = await filtroOrcamentoAtivo(pool);
+  const whereAtivo = filtrosAtivo.length ? ` AND ${filtrosAtivo.join(" AND ")}` : "";
+  const atual = await pool.query(
+    `SELECT * FROM public.orcamentos_timbrados WHERE id = $1${whereAtivo} LIMIT 1`,
+    [id],
+  );
   if (!atual.rows.length) return null;
   const row = atual.rows[0];
   if (row.status === "finalizado" && row.numero) return mapOrcamento(row);
@@ -184,7 +190,7 @@ async function garantirNumeroFinalizado(pool: Pool, id: string): Promise<Row | n
             validade_ate = COALESCE(validade_ate, $3::date),
             finalizado_em = COALESCE(finalizado_em, NOW()),
             atualizado_em = NOW()
-      WHERE id = $1
+      WHERE id = $1${whereAtivo}
       RETURNING *`,
     [id, numero, validadeAte.toISOString().slice(0, 10)],
   );
@@ -343,17 +349,6 @@ function gerarHtmlOrcamento(orcamento: Row): string {
 
 // Gera PDF via Puppeteer (mesmo pipeline dos contratos — suporte completo a PT-BR)
 async function gerarPdfOrcamentoPuppeteer(orcamento: Row): Promise<Buffer> {
-  const puppeteerL = await import("puppeteer-core");
-  let executablePath: string;
-  if (process.env.CHROMIUM_PATH) {
-    executablePath = process.env.CHROMIUM_PATH;
-  } else {
-    try {
-      const chromiumL = await import("@sparticuz/chromium");
-      executablePath = await chromiumL.default.executablePath();
-    } catch { executablePath = "/usr/bin/chromium-browser"; }
-  }
-
   const marca = normalizeMarca(orcamento.marca);
   const isPermuPay = marca === "permupay";
   // Logos em base64 — lidas do mesmo módulo do servidor principal
@@ -367,11 +362,7 @@ async function gerarPdfOrcamentoPuppeteer(orcamento: Row): Promise<Buffer> {
   const html = gerarHtmlOrcamento(orcamento);
   let browser: any;
   try {
-    browser = await puppeteerL.default.launch({
-      executablePath,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--no-zygote", "--disable-crash-reporter", "--disable-breakpad"],
-      headless: true,
-    });
+    browser = await launchChromium();
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0" });
     const pdfOpts = {
@@ -385,8 +376,22 @@ async function gerarPdfOrcamentoPuppeteer(orcamento: Row): Promise<Buffer> {
     const buf = await page.pdf(pdfOpts);
     return Buffer.from(buf);
   } finally {
-    if (browser) await browser.close();
+    await closeChromium(browser);
   }
+}
+
+function uploadsOrcamentosDir(orcamentoId: string): string {
+  const dataDir = process.env.DATA_DIR || "/var/data/destrava";
+  return path.join(dataDir, "uploads", "orcamentos", orcamentoId);
+}
+
+async function filtroOrcamentoAtivo(pool: Pool, alias = ""): Promise<string[]> {
+  const columns = await getColumns(pool, "orcamentos_timbrados");
+  const prefix = alias ? `${alias}.` : "";
+  const conditions: string[] = [];
+  if (columns.has("arquivado_em")) conditions.push(`${prefix}arquivado_em IS NULL`);
+  if (columns.has("payload")) conditions.push(`COALESCE(${prefix}payload->>'_arquivado', 'false') <> 'true'`);
+  return conditions;
 }
 
 export default function createOrcamentosOperacoesRouter(pool: Pool) {
@@ -419,7 +424,11 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
   router.get("/anexos/:id/download", async (req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
-        `SELECT nome_original, mime_type, storage_path FROM public.orcamentos_timbrados_anexos WHERE id = $1 LIMIT 1`,
+        `SELECT nome_original, mime_type, storage_path
+           FROM public.orcamentos_timbrados_anexos
+          WHERE id = $1
+            AND COALESCE(status, 'ativo') <> 'arquivado'
+          LIMIT 1`,
         [req.params.id],
       );
       if (!rows.length) return res.status(404).json({ error: "Anexo não encontrado" });
@@ -439,24 +448,39 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
   router.delete("/anexos/:id", async (req: Request, res: Response) => {
     try {
       const result = await pool.query(
-        `DELETE FROM public.orcamentos_timbrados_anexos WHERE id = $1 RETURNING orcamento_id, storage_path`,
-        [req.params.id],
+        `UPDATE public.orcamentos_timbrados_anexos
+            SET status = 'arquivado',
+                arquivado_em = NOW(),
+                arquivado_por = $2
+          WHERE id = $1
+            AND COALESCE(status, 'ativo') <> 'arquivado'
+          RETURNING orcamento_id, storage_path`,
+        [req.params.id, (req as any)?.colaborador?.id || null],
       );
       if (!result.rows.length) return res.status(404).json({ error: "Anexo não encontrado" });
       const row = result.rows[0];
-      if (row.storage_path && fs.existsSync(row.storage_path)) {
-        try { await fs.promises.unlink(row.storage_path); } catch { /* ignora */ }
-      }
       await pool.query(
         `UPDATE public.orcamentos_timbrados
-            SET anexos_count = GREATEST(COALESCE(anexos_count, 0) - 1, 0), atualizado_em = NOW()
+            SET anexos_count = (
+                  SELECT COUNT(*)
+                    FROM public.orcamentos_timbrados_anexos
+                   WHERE orcamento_id = $1
+                     AND COALESCE(status, 'ativo') <> 'arquivado'
+                ),
+                atualizado_em = NOW(),
+                pdf_path = NULL
           WHERE id = $1`,
         [row.orcamento_id],
       );
-      res.json({ ok: true });
+      res.json({
+        ok: true,
+        arquivado: true,
+        removido_definitivo: false,
+        arquivo_fisico_preservado: true,
+      });
     } catch (err: any) {
-      console.error("[orcamentos][anexo delete]", err);
-      res.status(500).json({ error: err?.message || "Erro ao excluir anexo" });
+      console.error("[orcamentos][anexo arquivar]", err);
+      res.status(500).json({ error: err?.message || "Erro ao arquivar anexo" });
     }
   });
 
@@ -464,11 +488,12 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
     try {
       const busca = String(req.query.busca || "").trim();
       const params: any[] = [];
-      let where = "";
+      const conditions = await filtroOrcamentoAtivo(pool);
       if (busca) {
         params.push(`%${busca.toLowerCase()}%`);
-        where = `WHERE lower(COALESCE(numero,'') || ' ' || COALESCE(cliente_nome,'') || ' ' || COALESCE(titulo,'')) LIKE $1`;
+        conditions.push(`lower(COALESCE(numero,'') || ' ' || COALESCE(cliente_nome,'') || ' ' || COALESCE(titulo,'')) LIKE $1`);
       }
+      const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
       const { rows } = await pool.query(
         `SELECT id, numero, tipo_cliente, empresa_id, cliente_pf_id, cliente_nome, cliente_documento,
                 cliente_email, cliente_telefone, marca, titulo, descricao, valor_total, validade_dias,
@@ -513,8 +538,10 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
 
   router.get("/:id", async (req: Request, res: Response) => {
     try {
+      const filtrosAtivo = await filtroOrcamentoAtivo(pool);
+      const whereAtivo = filtrosAtivo.length ? ` AND ${filtrosAtivo.join(" AND ")}` : "";
       const { rows } = await pool.query(
-        `SELECT * FROM public.orcamentos_timbrados WHERE id = $1 LIMIT 1`,
+        `SELECT * FROM public.orcamentos_timbrados WHERE id = $1${whereAtivo} LIMIT 1`,
         [req.params.id],
       );
       if (!rows.length) return res.status(404).json({ error: "Orçamento não encontrado" });
@@ -524,6 +551,7 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
                 criado_em
            FROM public.orcamentos_timbrados_anexos
           WHERE orcamento_id = $1
+            AND COALESCE(status, 'ativo') <> 'arquivado'
           ORDER BY criado_em DESC`,
         [req.params.id],
       ).catch(() => ({ rows: [] }));
@@ -540,8 +568,10 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
 
     try {
       const columns = await getColumns(pool, "orcamentos_timbrados");
+      const filtrosAtivo = await filtroOrcamentoAtivo(pool);
+      const whereAtivo = filtrosAtivo.length ? ` AND ${filtrosAtivo.join(" AND ")}` : "";
       const atual = await pool.query(
-        `SELECT id, status FROM public.orcamentos_timbrados WHERE id = $1 LIMIT 1`,
+        `SELECT id, status FROM public.orcamentos_timbrados WHERE id = $1${whereAtivo} LIMIT 1`,
         [id],
       );
       if (!atual.rows.length) return res.status(404).json({ error: "Orçamento não encontrado" });
@@ -566,7 +596,7 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
       const result = await pool.query(
         `UPDATE public.orcamentos_timbrados
             SET ${sets.join(", ")}
-          WHERE id = $${values.length}
+          WHERE id = $${values.length}${whereAtivo}
           RETURNING *`,
         values,
       );
@@ -583,24 +613,46 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
     if (!id) return res.status(400).json({ error: "ID do orçamento é obrigatório" });
 
     try {
-      const anexos = await pool.query(
-        `SELECT storage_path FROM public.orcamentos_timbrados_anexos WHERE orcamento_id = $1`,
-        [id],
-      ).catch(() => ({ rows: [] }));
+      const columns = await getColumns(pool, "orcamentos_timbrados");
+      const filtrosAtivo = await filtroOrcamentoAtivo(pool);
+      const whereAtivo = filtrosAtivo.length ? ` AND ${filtrosAtivo.join(" AND ")}` : "";
+      const updates: string[] = ["status = 'cancelado'", "atualizado_em = NOW()"];
+      const values: any[] = [id];
+      const colaboradorId = (req as any)?.colaborador?.id || null;
+
+      if (columns.has("arquivado_em")) updates.push("arquivado_em = NOW()");
+      if (columns.has("arquivado_por")) {
+        values.push(colaboradorId);
+        updates.push(`arquivado_por = $${values.length}`);
+      }
+      if (columns.has("payload")) {
+        values.push(colaboradorId);
+        updates.push(
+          `payload = COALESCE(payload, '{}'::jsonb) || jsonb_build_object(
+             '_arquivado', true,
+             '_arquivado_em', NOW()::text,
+             '_arquivado_por', $${values.length}::text
+           )`,
+        );
+      }
+
       const result = await pool.query(
-        `DELETE FROM public.orcamentos_timbrados WHERE id = $1 RETURNING id, numero`,
-        [id],
+        `UPDATE public.orcamentos_timbrados
+            SET ${updates.join(", ")}
+          WHERE id = $1${whereAtivo}
+          RETURNING id, numero`,
+        values,
       );
       if (!result.rows.length) return res.status(404).json({ error: "Orçamento não encontrado" });
-      for (const anexo of anexos.rows) {
-        if (anexo.storage_path && fs.existsSync(anexo.storage_path)) {
-          try { await fs.promises.unlink(anexo.storage_path); } catch { /* ignora */ }
-        }
-      }
-      res.json({ ok: true, excluido: result.rows[0] });
+      res.json({
+        ok: true,
+        arquivado: result.rows[0],
+        removido_definitivo: false,
+        anexos_preservados: true,
+      });
     } catch (err: any) {
-      console.error("[orcamentos][DELETE]", err);
-      res.status(500).json({ error: err?.message || "Erro ao excluir orçamento" });
+      console.error("[orcamentos][ARQUIVAR]", err);
+      res.status(500).json({ error: err?.message || "Erro ao arquivar orçamento" });
     }
   });
 
@@ -627,19 +679,31 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
       res.send(pdf);
     } catch (err: any) {
       console.error("[orcamentos][download]", err);
-      res.status(500).json({ error: err?.message || "Erro ao gerar PDF" });
+      if (err instanceof ChromiumLaunchError) {
+        res.status(503).json({
+          error: "Não foi possível iniciar o mecanismo de PDF no servidor. Verifique o deploy do Chromium.",
+          code: err.code,
+        });
+        return;
+      }
+      res.status(500).json({ error: "Erro ao gerar PDF", code: "PDF_GENERATION_FAILED" });
     }
   });
 
   router.post("/:id/anexos", upload.array("arquivos", 10), async (req: Request, res: Response) => {
     try {
       const id = String(req.params.id || "").trim();
-      const exists = await pool.query(`SELECT id FROM public.orcamentos_timbrados WHERE id = $1 LIMIT 1`, [id]);
+      const filtrosAtivo = await filtroOrcamentoAtivo(pool);
+      const whereAtivo = filtrosAtivo.length ? ` AND ${filtrosAtivo.join(" AND ")}` : "";
+      const exists = await pool.query(
+        `SELECT id FROM public.orcamentos_timbrados WHERE id = $1${whereAtivo} LIMIT 1`,
+        [id],
+      );
       if (!exists.rows.length) return res.status(404).json({ error: "Orçamento não encontrado" });
       const files = (req.files || []) as Express.Multer.File[];
       if (!files.length) return res.status(400).json({ error: "Nenhum arquivo enviado" });
 
-      const dir = path.resolve("uploads", "orcamentos", id);
+      const dir = uploadsOrcamentosDir(id);
       await fs.promises.mkdir(dir, { recursive: true });
       const inseridos: Row[] = [];
       for (const file of files) {
@@ -650,8 +714,8 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
         const hash = crypto.createHash("sha256").update(file.buffer).digest("hex");
         const result = await pool.query(
           `INSERT INTO public.orcamentos_timbrados_anexos
-             (orcamento_id, tipo, descricao, nome_original, mime_type, tamanho_bytes, storage_path, url, hash_sha256, criado_por)
-           VALUES ($1, 'anexo', $2, $3, $4, $5, $6, '/api/orcamentos/anexos/' || gen_random_uuid() || '/download', $7, $8)
+             (orcamento_id, tipo, descricao, nome_original, mime_type, tamanho_bytes, storage_path, hash_sha256, criado_por)
+           VALUES ($1, 'anexo', $2, $3, $4, $5, $6, $7, $8)
            RETURNING id, nome_original, descricao, mime_type, tamanho_bytes,
                      '/api/orcamentos/anexos/' || id || '/download' AS url,
                      criado_em`,

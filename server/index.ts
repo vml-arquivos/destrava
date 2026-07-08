@@ -31,6 +31,7 @@ import {
 } from "./funcoes_acompanhamento.ts";
 import { normalizarPaginacaoCatalogo, normalizarTipoCatalogo } from "./lib/nexusCatalogo";
 import { loginInputSchema, leadInputSchema, validateBody } from "./lib/inputValidation";
+import { closeChromium, launchChromium } from "./services/chromiumLauncher";
 
 const { Pool } = pkg;
 
@@ -7103,23 +7104,9 @@ ${(temTest1 || temTest2) ? `
   // Usa a técnica de dois PDFs + merge com pdf-lib para contornar a limitação
   // do Puppeteer que NÃO executa JavaScript em headerTemplate/footerTemplate.
   async function gerarPdfComLayout(html: string, payload: any, filePath: string): Promise<void> {
-    const puppeteerL = await import('puppeteer-core');
-    let executablePathL: string;
-    if (process.env.CHROMIUM_PATH) {
-      executablePathL = process.env.CHROMIUM_PATH;
-    } else {
-      try {
-        const chromiumL = await import('@sparticuz/chromium');
-        executablePathL = await chromiumL.default.executablePath();
-      } catch { executablePathL = '/usr/bin/chromium-browser'; }
-    }
     let browserL: any;
     try {
-      browserL = await puppeteerL.default.launch({
-        executablePath: executablePathL,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--no-zygote', '--disable-crash-reporter', '--disable-breakpad'],
-        headless: true,
-      });
+      browserL = await launchChromium();
       const pageL = await browserL.newPage();
       await pageL.setContent(html, { waitUntil: 'networkidle0' });
       // Detectar contratada para escolher logo e cor
@@ -7163,7 +7150,7 @@ ${(temTest1 || temTest2) ? `
       }
       fs.writeFileSync(filePath, finalBufL);
     } finally {
-      if (browserL) await browserL.close();
+      await closeChromium(browserL);
     }
   }
 
@@ -7502,23 +7489,7 @@ ${(temTest1 || temTest2) ? `
 
       let browser;
       try {
-        const puppeteer = await import('puppeteer-core');
-        let executablePath: string;
-        if (process.env.CHROMIUM_PATH) {
-          executablePath = process.env.CHROMIUM_PATH;
-        } else {
-          try {
-            const chromium = await import('@sparticuz/chromium');
-            executablePath = await chromium.default.executablePath();
-          } catch {
-            executablePath = '/usr/bin/chromium-browser';
-          }
-        }
-        browser = await puppeteer.default.launch({
-          executablePath,
-          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--no-zygote', '--disable-crash-reporter', '--disable-breakpad'],
-          headless: true,
-        });
+        browser = await launchChromium();
         const page = await browser.newPage();
         await page.setContent(html, { waitUntil: 'networkidle0' });
         await page.pdf({
@@ -7529,7 +7500,7 @@ ${(temTest1 || temTest2) ? `
           margin: { top: '18mm', bottom: '18mm', left: '20mm', right: '20mm' },
         });
       } finally {
-        if (browser) await (browser as any).close();
+        await closeChromium(browser as any);
       }
 
       res.setHeader('Content-Type', 'application/pdf');
@@ -7891,25 +7862,7 @@ ${(temTest1 || temTest2) ? `
 
       let browser;
       try {
-        const puppeteer = await import('puppeteer-core');
-        let executablePath: string;
-
-        if (process.env.CHROMIUM_PATH) {
-          executablePath = process.env.CHROMIUM_PATH;
-        } else {
-          try {
-            const chromium = await import('@sparticuz/chromium');
-            executablePath = await chromium.default.executablePath();
-          } catch {
-            executablePath = '/usr/bin/chromium-browser';
-          }
-        }
-
-        browser = await puppeteer.default.launch({
-          executablePath,
-          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--no-zygote', '--disable-crash-reporter', '--disable-breakpad'],
-          headless: true,
-        });
+        browser = await launchChromium();
 
         const page = await browser.newPage();
         await page.setContent(htmlFinal, { waitUntil: 'networkidle0' });
@@ -7921,7 +7874,7 @@ ${(temTest1 || temTest2) ? `
           margin: { top: '18mm', bottom: '18mm', left: '20mm', right: '20mm' },
         });
       } finally {
-        if (browser) await (browser as any).close();
+        await closeChromium(browser as any);
       }
 
       const nomeArquivoEmpresa = (empRows[0].razao_social || 'empresa').replace(/[^a-zA-Z0-9]/g, '-');
@@ -10886,24 +10839,7 @@ async function registrarDocumentoContratoGerado(params: {
 
       let browser: any;
       try {
-        const puppeteer = await import("puppeteer-core");
-        let executablePath: string;
-        if (process.env.CHROMIUM_PATH) {
-          executablePath = process.env.CHROMIUM_PATH;
-        } else {
-          try {
-            const chromium = await import("@sparticuz/chromium");
-            executablePath = await chromium.default.executablePath();
-          } catch {
-            executablePath = "/usr/bin/chromium-browser";
-          }
-        }
-
-        browser = await puppeteer.default.launch({
-          executablePath,
-          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--no-zygote", "--disable-crash-reporter", "--disable-breakpad"],
-          headless: true,
-        });
+        browser = await launchChromium();
 
         const page = await browser.newPage();
         await page.setContent(html, { waitUntil: "networkidle0" });
@@ -10914,7 +10850,7 @@ async function registrarDocumentoContratoGerado(params: {
           margin: { top: "10mm", bottom: "10mm", left: "8mm", right: "8mm" },
         });
       } finally {
-        if (browser) await browser.close();
+        await closeChromium(browser);
       }
 
       res.setHeader("Content-Type", "application/pdf");
@@ -12640,23 +12576,7 @@ async function registrarDocumentoContratoGerado(params: {
       const filePath = path.join(uploadsDir, fileName);
       let browser: any;
       try {
-        const puppeteer = await import('puppeteer-core');
-        let executablePath: string;
-        if (process.env.CHROMIUM_PATH) {
-          executablePath = process.env.CHROMIUM_PATH;
-        } else {
-          try {
-            const chromium = await import('@sparticuz/chromium');
-            executablePath = await chromium.default.executablePath();
-          } catch {
-            executablePath = '/usr/bin/chromium-browser';
-          }
-        }
-        browser = await puppeteer.default.launch({
-          executablePath,
-          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--no-zygote', '--disable-crash-reporter', '--disable-breakpad'],
-          headless: true,
-        });
+        browser = await launchChromium();
         const page = await browser.newPage();
         await page.setContent(html, { waitUntil: 'networkidle0' });
         await page.pdf({
@@ -12667,7 +12587,7 @@ async function registrarDocumentoContratoGerado(params: {
           margin: { top: '6mm', bottom: '6mm', left: '0mm', right: '0mm' },
         });
       } finally {
-        if (browser) await browser.close();
+        await closeChromium(browser);
       }
       const nomeArquivo = `relatorio-financeiro-${semana.razao_social.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}-sem${semana.numero_semana}-${semana.mes}-${semana.ano}.pdf`;
       res.setHeader('Content-Type', 'application/pdf');
