@@ -50,6 +50,7 @@ import GeradorContratos from "./pages/colaborador/GeradorContratos";
 import ColaboradorOrcamentos from "./pages/colaborador/Orcamentos";
 import ColaboradorCRM from "./pages/colaborador/CRM";
 import ColaboradorEmpresas from "./pages/colaborador/Empresas";
+import EmpresaDocumentos from "./pages/colaborador/EmpresaDocumentos";
 import RelatorioEmpresas from "./pages/colaborador/RelatorioEmpresas";
 import ColaboradorTriagem from "./pages/colaborador/Triagem";
 import ColaboradorFila from "./pages/colaborador/Fila";
@@ -169,6 +170,13 @@ function Router() {
         {() => (
           <ProtectedRoute>
             <ColaboradorEmpresas />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/empresas/:id/documentos">
+        {() => (
+          <ProtectedRoute>
+            <EmpresaDocumentos />
           </ProtectedRoute>
         )}
       </Route>

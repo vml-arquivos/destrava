@@ -91,7 +91,7 @@ COPY --from=builder --chown=node:node /app/scripts ./scripts
 
 ENV NODE_ENV=production
 ENV PORT=4000
-ENV DATA_DIR=/var/data/destrava
+ENV DATA_DIR=/app
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_BROWSER_PROVIDER=sparticuz
 ENV HOME=/tmp

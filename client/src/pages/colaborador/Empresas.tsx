@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { Link } from "wouter";
 import Layout from "./Layout";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { toast } from "sonner";
@@ -2126,6 +2127,14 @@ export default function Empresas() {
                     /* ── ACERVO DOCUMENTAL ── */
                     : abaAtiva === "documentos" ? (
                       <div className="p-4 fade-in">
+                        <div className="mb-3 flex justify-end">
+                          <Link
+                            href={`/colaborador/empresas/${selecionada?.id}/documentos`}
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                          >
+                            Abrir em página exclusiva ↗
+                          </Link>
+                        </div>
                         <DocumentosEntidade
                           entidadeTipo="empresa"
                           entidadeId={selecionada?.id}

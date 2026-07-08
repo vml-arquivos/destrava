@@ -444,7 +444,7 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
     const safeOriginal = sanitizeFileName(file.originalname || 'arquivo');
     const ext = path.extname(safeOriginal).toLowerCase();
     const nomeArquivo = `${crypto.randomUUID()}${ext}`;
-    const dataDir = process.env.DATA_DIR || '/data';
+    const dataDir = process.env.DATA_DIR || path.resolve(".");
     const uploadDir = path.join(dataDir, 'uploads', 'documentos', entidadeTipo, entidadeId);
     await fs.promises.mkdir(uploadDir, { recursive: true });
     const caminhoArquivo = path.join(uploadDir, nomeArquivo);
@@ -592,7 +592,7 @@ async function sendProtectedFile(req: Request, res: Response, inline: boolean) {
   const filePath = path.resolve(doc.caminho_arquivo);
 
   // Aceitar qualquer caminho dentro de diretórios de upload válidos
-  const dataDir = path.resolve(process.env.DATA_DIR || '/data');
+  const dataDir = path.resolve(process.env.DATA_DIR || path.resolve("."));
   const localUploads = path.resolve('uploads');
   const appUploads = '/app/uploads';
   const varData = '/var/data';
@@ -643,7 +643,7 @@ router.post('/exportar', auth, async (req: Request, res: Response) => {
     );
     if (!rows.length) { res.status(404).json({ error: 'Nenhum documento encontrado para exportação.' }); return; }
 
-    const dataDir = path.resolve(process.env.DATA_DIR || '/data');
+    const dataDir = path.resolve(process.env.DATA_DIR || path.resolve("."));
     const localUploads = path.resolve('uploads');
     const appUploads = '/app/uploads';
     const varData = '/var/data';

@@ -604,7 +604,7 @@ async function gerarPdfOrcamentoPuppeteer(orcamento: Row): Promise<Buffer> {
 }
 
 function uploadsOrcamentosDir(orcamentoId: string): string {
-  const dataDir = process.env.DATA_DIR || "/var/data/destrava";
+  const dataDir = process.env.DATA_DIR || path.resolve(".");
   return path.join(dataDir, "uploads", "orcamentos", orcamentoId);
 }
 

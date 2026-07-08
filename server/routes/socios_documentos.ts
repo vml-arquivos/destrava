@@ -1320,7 +1320,7 @@ router.post('/:id/contrato-social/upload', auth, uploadContratoSocial.single('fi
     if (!file) { res.status(400).json({ error: 'Arquivo PDF é obrigatório' }); return; }
     if (file.mimetype !== 'application/pdf') { res.status(400).json({ error: 'Apenas PDF é permitido' }); return; }
 
-    const dataDir = process.env.DATA_DIR || '/data';
+    const dataDir = process.env.DATA_DIR || path.resolve(".");
     const uploadDir = path.join(dataDir, 'uploads', 'contratos-sociais', req.params.id);
     await fs.promises.mkdir(uploadDir, { recursive: true });
     const safeName = path.basename(file.originalname || 'contrato_social.pdf').replace(/[^a-zA-Z0-9_.-]+/g, '_').slice(0, 120);
