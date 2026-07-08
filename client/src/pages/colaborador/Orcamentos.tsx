@@ -252,6 +252,7 @@ export default function Orcamentos() {
   function novoOrcamento() {
     setSelecionado(null);
     setEdicaoFinalizadoLiberada(false);
+    setMostrarDescricao(true);
     setForm({
       ...estadoInicial,
       itens: [],
@@ -1486,9 +1487,10 @@ export default function Orcamentos() {
 
                     {/* Texto livre (se habilitado) */}
                     {mostrarDescricao && form.conteudo && (
-                      <div className="mb-5">
-                        <div className="mb-2 text-sm font-black text-slate-800">Escopo e condições</div>
-                        <div className="prose prose-sm max-w-none whitespace-pre-wrap text-slate-700">{form.conteudo}</div>
+                      <div className="mb-5 border-b border-slate-200 pb-4">
+                        <div className="max-w-none whitespace-pre-wrap text-[13px] leading-6 text-slate-700">
+                          {form.conteudo}
+                        </div>
                       </div>
                     )}
 

@@ -135,6 +135,8 @@ function buildPayload(body: any) {
     ? servicos.reduce((acc, item) => acc + item.quantidade * item.valor_unitario, 0)
     : parseMoney(body.valor_total);
   const assinaturas = normalizeAssinaturas(body.assinaturas);
+  const ocultarConteudo = body.ocultar_conteudo === true || body.ocultar_conteudo === "true";
+  const payloadAnterior = parseJsonMaybe(body.payload, {});
 
   return {
     servicos,
@@ -151,12 +153,19 @@ function buildPayload(body: any) {
       titulo: body.titulo || "Orçamento de Serviços",
       descricao: body.descricao || null,
       conteudo: body.conteudo || "",
-      ocultar_conteudo: body.ocultar_conteudo === true || body.ocultar_conteudo === "true" ? true : false,
+      ocultar_conteudo: ocultarConteudo,
       valor_total: valorTotal,
       validade_dias: Number(body.validade_dias) || 30,
       validade_ate: safeDate(body.validade_ate),
       assinaturas: JSON.stringify(assinaturas),
-      payload: JSON.stringify({ ...(body.payload || {}), origem_painel_orcamentos: true }),
+      // Mantém a preferência do checkbox também no JSONB. Isso preserva o
+      // comportamento mesmo em bancos antigos que ainda não tenham a coluna
+      // física ocultar_conteudo.
+      payload: JSON.stringify({
+        ...(payloadAnterior && typeof payloadAnterior === "object" ? payloadAnterior : {}),
+        origem_painel_orcamentos: true,
+        ocultar_conteudo: ocultarConteudo,
+      }),
     } as Record<string, unknown>,
   };
 }
@@ -235,6 +244,8 @@ function gerarHtmlOrcamento(orcamento: Row): string {
     ? fmtDate(orcamento.validade_ate)
     : `${orcamento.validade_dias || 30} dias`;
   const titulo = tituloPdfOrcamento(orcamento.titulo);
+  const ocultarConteudo = orcamento.ocultar_conteudo === true || orcamento.ocultar_conteudo === "true";
+  const conteudoLivre = String(orcamento.conteudo || "").trim();
 
   const dadosContato = [
     orcamento.cliente_email ? `E-mail: ${escapeHtml(String(orcamento.cliente_email))}` : "",
@@ -279,6 +290,15 @@ function gerarHtmlOrcamento(orcamento: Row): string {
         </div>
         <p>Proposta cadastrada por valor direto, sem detalhamento de itens.</p>
       </section>`;
+
+  // O texto livre continua opcional e controlado pelo checkbox da tela.
+  // Quando visível, ele entra sem o antigo título "Escopo e condições", com
+  // tipografia discreta para manter o documento compacto e profissional.
+  const conteudoLivreHtml = !ocultarConteudo && conteudoLivre
+    ? `<section class="proposal-copy">
+         <div class="proposal-copy-text">${textoHtmlComQuebras(conteudoLivre)}</div>
+       </section>`
+    : "";
 
   const assinaturasHtml = assinaturas.length
     ? assinaturas.map(a => `
@@ -380,6 +400,20 @@ function gerarHtmlOrcamento(orcamento: Row): string {
     overflow-wrap: anywhere;
   }
   .detail-value.contact { color: #526078; }
+  .proposal-copy {
+    margin: 10px 1px 13px;
+    padding: 0 1px 11px;
+    border-bottom: 1px solid ${borda};
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .proposal-copy-text {
+    color: #37445A;
+    font-size: 8.35pt;
+    line-height: 1.48;
+    font-weight: 400;
+    overflow-wrap: anywhere;
+  }
   .services-section { margin-top: 13px; }
   .section-heading {
     display: flex;
@@ -558,6 +592,8 @@ function gerarHtmlOrcamento(orcamento: Row): string {
       </div>
     </div>
   </section>
+
+  ${conteudoLivreHtml}
 
   ${servicosHtml}
 
