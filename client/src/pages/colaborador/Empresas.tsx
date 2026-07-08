@@ -581,6 +581,7 @@ export default function Empresas() {
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [selecionada, setSelecionada] = useState<Empresa | null>(null);
   const [showDetail, setShowDetail] = useState(false); // mobile toggle
+  const [comboAberto, setComboAberto] = useState(false);
   const [abaAtiva, setAbaAtiva] = useState<"visao_geral" | "socios" | "dossie_credito" | "followup" | "historico" | "documentos" | "simulacoes" | "contratos">("visao_geral");
   const [followups, setFollowups] = useState<EmpresaFollowup[]>([]);
   const [historico, setHistorico] = useState<EmpresaHistorico[]>([]);
@@ -611,6 +612,15 @@ export default function Empresas() {
   const [cnpjInput, setCnpjInput] = useState("");
   const { lookup: cnpjLookup, status: cnpjStatus, error: cnpjError, reset: cnpjReset } = useCNPJLookup();
   const searchRef = useRef<HTMLInputElement>(null);
+  const comboRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (comboRef.current && !comboRef.current.contains(e.target as Node)) setComboAberto(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
   const [sincronizando, setSincronizando] = useState(false);
   const [socioEditando, setSocioEditando] = useState<any | null>(null);
   const [socioForm, setSocioForm] = useState<any>({ ...SOCIO_FORM_VAZIO });
@@ -1130,181 +1140,155 @@ export default function Empresas() {
 
         {/* ── Layout principal em tela cheia útil ── */}
         <div className="max-w-none w-full h-full min-h-0 px-3 sm:px-4 py-2 overflow-hidden">
-          <div className="flex gap-4 items-stretch h-full min-h-0">
+          <div className="flex flex-col gap-3 h-full min-h-0">
 
-            {/* ── COLUNA ESQUERDA: Lista ── */}
-            <div className={`flex-shrink-0 w-full sm:w-[260px] md:w-[280px] lg:w-[300px] xl:w-[320px] h-full min-h-0 overflow-hidden ${showDetail ? "hidden sm:flex flex-col" : "flex flex-col"}`}>
-              <div className="mb-2 rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h1 className="text-xl font-black text-slate-900 tracking-tight leading-tight">Empresas</h1>
-                    <p className="text-xs font-medium text-slate-500 mt-0.5">
-                      {loading ? "Carregando..." : `${empresas.length} cadastrada${empresas.length !== 1 ? "s" : ""}`}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      onClick={() => exportarRelatorio('csv')}
-                      className="inline-flex items-center gap-1 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 px-2.5 py-2 rounded-xl font-bold text-xs transition-colors shrink-0"
-                      title="Exportar relatório CSV"
-                    >
-                      <FileDown className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">CSV</span>
-                    </button>
-                    <button
-                      onClick={abrirNova}
-                      className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl font-bold text-xs transition-colors shadow-sm shadow-blue-200 shrink-0"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Nova
-                    </button>
-                  </div>
+            {/* ── BARRA SUPERIOR: seletor de empresa com busca ── */}
+            <div className={`shrink-0 rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm ${showDetail ? "hidden sm:block" : ""}`}>
+              <div className="flex items-start justify-between gap-3 mb-2.5">
+                <div className="min-w-0">
+                  <h1 className="text-xl font-black text-slate-900 tracking-tight leading-tight">Empresas</h1>
+                  <p className="text-xs font-medium text-slate-500 mt-0.5">
+                    {loading ? "Carregando..." : `${empresas.length} encontrada${empresas.length !== 1 ? "s" : ""}`}
+                  </p>
                 </div>
-              </div>
-              {/* Filtros */}
-              <div className="mb-2 space-y-2 shrink-0">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    ref={searchRef}
-                    value={busca}
-                    onChange={e => setBusca(e.target.value)}
-                    placeholder="Buscar empresa, CNPJ..."
-                    className="w-full pl-9 pr-4 h-10 border border-slate-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  {busca && (
-                    <button onClick={() => setBusca("")} className="absolute right-3 top-1/2 -translate-y-1/2">
-                      <X className="w-4 h-4 text-slate-400" />
-                    </button>
-                  )}
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  <select
-                    value={filtroStatus}
-                    onChange={e => setFiltroStatus(e.target.value)}
-                    className="flex-1 h-9 border border-slate-200 rounded-xl px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="todos">Todos os status</option>
-                    {Object.entries(STATUS_CFG).map(([k, v]) => (
-                      <option key={k} value={k}>{v.label}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={filtroPorte}
-                    onChange={e => setFiltroPorte(e.target.value)}
-                    className="h-9 border border-slate-200 rounded-xl px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="todos">Todos os portes</option>
-                    <option value="MEI">MEI</option>
-                    <option value="ME">ME</option>
-                    <option value="EPP">EPP</option>
-                    <option value="Médio">Médio</option>
-                    <option value="Grande">Grande</option>
-                  </select>
-                  <select
-                    value={filtroOrigem}
-                    onChange={e => setFiltroOrigem(e.target.value)}
-                    className="h-9 border border-slate-200 rounded-xl px-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="todos">Todas as origens</option>
-                    <option value="simulador">Simulador</option>
-                    <option value="indicacao">Indicação</option>
-                    <option value="campanha">Campanha</option>
-                    <option value="site">Site</option>
-                    <option value="manual">Manual</option>
-                  </select>
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button
-                    onClick={carregarEmpresas}
-                    className="h-9 px-3 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 text-slate-500 transition-colors"
-                    title="Atualizar"
+                    onClick={() => exportarRelatorio('csv')}
+                    className="inline-flex items-center gap-1 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 px-2.5 py-2 rounded-xl font-bold text-xs transition-colors shrink-0"
+                    title="Exportar relatório CSV"
                   >
-                    <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                    <FileDown className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">CSV</span>
+                  </button>
+                  <button
+                    onClick={abrirNova}
+                    className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl font-bold text-xs transition-colors shadow-sm shadow-blue-200 shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Nova
                   </button>
                 </div>
               </div>
 
-              {/* Lista */}
-              <div className="scroll-area overflow-y-auto space-y-1.5 flex-1 min-h-0 pr-1">
-                {loading ? (
-                  <LoadingState message="Carregando empresas…" className="py-20" />
-                ) : empresas.length === 0 ? (
-                  <EmptyState
-                    preset="empresas"
-                    title="Nenhuma empresa encontrada"
-                    description="Cadastre a primeira empresa para começar."
-                    action={
-                      <button onClick={abrirNova} className="text-xs text-blue-600 hover:underline">
-                        + Cadastrar primeira empresa
-                      </button>
-                    }
-                    className="py-20"
-                  />
-                ) : empresas.map(emp => {
-                  const sc = STATUS_CFG[emp.status] || STATUS_CFG.ativo;
-                  const ativa = selecionada?.id === emp.id;
-                  return (
-                    <button
-                      key={emp.id}
-                      onClick={() => selecionar(emp)}
-                      className={`list-item w-full text-left p-3.5 rounded-xl border transition-all ${
-                        ativa
-                          ? "border-blue-200 bg-blue-50 shadow-sm shadow-blue-100"
-                          : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        {/* Avatar */}
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white text-sm font-black shrink-0 ${
-                          ativa ? "bg-blue-600" : "bg-slate-700"
-                        }`}>
-                          {getInitials(emp.razao_social)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-900 truncate leading-tight">{emp.razao_social}</p>
-                          {emp.nome_fantasia && (
-                            <p className="text-xs text-slate-400 truncate mt-0.5">{emp.nome_fantasia}</p>
-                          )}
-                          <div className="flex items-center gap-2 mt-1.5">
-                            <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${sc.badge}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
-                              {sc.label}
-                            </span>
-                            {emp.porte && (
-                              <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${PORTE_CFG[emp.porte]?.color || "bg-slate-100 text-slate-500"}`}>
-                                {PORTE_CFG[emp.porte]?.label}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <ChevronRight className={`arrow-icon w-4 h-4 shrink-0 ${ativa ? "text-blue-500 opacity-100" : "text-slate-300"}`} />
+              {/* Select com busca */}
+              <div ref={comboRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => { setComboAberto(v => !v); setTimeout(() => searchRef.current?.focus(), 0); }}
+                  className="w-full flex items-center gap-2.5 h-11 px-3 border border-slate-200 rounded-xl bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors text-left"
+                >
+                  {selecionada ? (
+                    <>
+                      <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-[11px] font-black shrink-0">
+                        {getInitials(selecionada.razao_social)}
                       </div>
-                      <div className="flex items-center justify-between mt-2 pl-12">
-                        {(emp.cidade || emp.estado) && (
-                          <p className="text-xs text-slate-400 flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            {[emp.cidade, emp.estado].filter(Boolean).join(", ")}
-                          </p>
-                        )}
-                        {emp.cnpj && (
-                          <p className="text-[10px] text-slate-300 font-mono ml-auto">{emp.cnpj.slice(0,8)}...</p>
+                      <span className="flex-1 min-w-0 text-sm font-semibold text-slate-900 truncate">{selecionada.razao_social}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-4 h-4 text-slate-400 shrink-0" />
+                      <span className="flex-1 text-sm text-slate-400">Selecione ou busque uma empresa...</span>
+                    </>
+                  )}
+                  <ChevronRight className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${comboAberto ? "rotate-90" : ""}`} />
+                </button>
+
+                {comboAberto && (
+                  <div className="absolute z-30 mt-1.5 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden fade-in">
+                    <div className="p-2 border-b border-slate-100 space-y-1.5">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input
+                          ref={searchRef}
+                          value={busca}
+                          onChange={e => setBusca(e.target.value)}
+                          placeholder="Buscar empresa, CNPJ..."
+                          className="w-full pl-9 pr-8 h-9 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {busca && (
+                          <button onClick={() => setBusca("")} className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                            <X className="w-3.5 h-3.5 text-slate-400" />
+                          </button>
                         )}
                       </div>
-                    </button>
-                  );
-                })}
+                      <div className="flex gap-1.5 flex-wrap">
+                        <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)} className="flex-1 h-8 border border-slate-200 rounded-lg px-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                          <option value="todos">Todos os status</option>
+                          {Object.entries(STATUS_CFG).map(([k, v]) => (<option key={k} value={k}>{v.label}</option>))}
+                        </select>
+                        <select value={filtroPorte} onChange={e => setFiltroPorte(e.target.value)} className="h-8 border border-slate-200 rounded-lg px-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                          <option value="todos">Todos os portes</option>
+                          <option value="MEI">MEI</option><option value="ME">ME</option><option value="EPP">EPP</option>
+                          <option value="Médio">Médio</option><option value="Grande">Grande</option>
+                        </select>
+                        <select value={filtroOrigem} onChange={e => setFiltroOrigem(e.target.value)} className="h-8 border border-slate-200 rounded-lg px-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                          <option value="todos">Todas as origens</option>
+                          <option value="simulador">Simulador</option><option value="indicacao">Indicação</option>
+                          <option value="campanha">Campanha</option><option value="site">Site</option><option value="manual">Manual</option>
+                        </select>
+                        <button onClick={carregarEmpresas} className="h-8 px-2 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 text-slate-500 transition-colors" title="Atualizar">
+                          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="scroll-area overflow-y-auto max-h-[360px] p-1.5 space-y-1">
+                      {loading ? (
+                        <LoadingState message="Carregando empresas…" className="py-10" />
+                      ) : empresas.length === 0 ? (
+                        <EmptyState
+                          preset="empresas"
+                          title="Nenhuma empresa encontrada"
+                          description="Cadastre a primeira empresa para começar."
+                          action={<button onClick={abrirNova} className="text-xs text-blue-600 hover:underline">+ Cadastrar primeira empresa</button>}
+                          className="py-10"
+                        />
+                      ) : empresas.map(emp => {
+                        const sc = STATUS_CFG[emp.status] || STATUS_CFG.ativo;
+                        const ativa = selecionada?.id === emp.id;
+                        return (
+                          <button
+                            key={emp.id}
+                            onClick={() => { selecionar(emp); setComboAberto(false); }}
+                            className={`list-item w-full text-left p-2.5 rounded-lg border transition-all ${
+                              ativa ? "border-blue-200 bg-blue-50" : "border-transparent hover:bg-slate-50"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-black shrink-0 ${ativa ? "bg-blue-600" : "bg-slate-700"}`}>
+                                {getInitials(emp.razao_social)}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-slate-900 truncate leading-tight">{emp.razao_social}</p>
+                                <div className="flex items-center gap-1.5 mt-1">
+                                  <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${sc.badge}`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />{sc.label}
+                                  </span>
+                                  {(emp.cidade || emp.estado) && (
+                                    <span className="text-[10px] text-slate-400 truncate">{[emp.cidade, emp.estado].filter(Boolean).join(", ")}</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* ── COLUNA DIREITA: Detalhe ── */}
-            <div className={`flex-1 min-w-0 h-full min-h-0 overflow-hidden ${!showDetail && !selecionada ? "hidden sm:block" : "block"}`}>
+
+            {/* ── Detalhe ── */}
+            <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
               {!selecionada ? (
-                <div className="hidden sm:flex flex-col items-center justify-center h-full min-h-[520px] gap-4 rounded-2xl border-2 border-dashed border-slate-200 bg-white">
+                <div className="flex flex-col items-center justify-center h-full min-h-[420px] gap-4 rounded-2xl border-2 border-dashed border-slate-200 bg-white">
                   <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
                     <Building2 className="w-8 h-8 text-slate-300" />
                   </div>
                   <div className="text-center">
                     <p className="text-sm font-semibold text-slate-500">Selecione uma empresa</p>
-                    <p className="text-xs text-slate-400 mt-1">Clique na lista à esquerda para ver os detalhes</p>
+                    <p className="text-xs text-slate-400 mt-1">Use o campo de busca acima para encontrar e abrir os detalhes</p>
                   </div>
                 </div>
               ) : (

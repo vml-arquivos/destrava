@@ -52,7 +52,7 @@ USER root
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates fonts-freefont-ttf \
+    && apt-get install -y --no-install-recommends ca-certificates fonts-freefont-ttf chromium \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -70,6 +70,7 @@ ENV NODE_ENV=production
 ENV PORT=4000
 ENV DATA_DIR=/var/data/destrava
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV CHROMIUM_PATH=/usr/bin/chromium
 
 USER node
 
