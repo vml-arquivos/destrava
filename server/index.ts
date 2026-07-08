@@ -1,4 +1,6 @@
 import express, { Request, Response, NextFunction } from "express";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -28,6 +30,7 @@ import {
   calcularAcumulados,
 } from "./funcoes_acompanhamento.ts";
 import { normalizarPaginacaoCatalogo, normalizarTipoCatalogo } from "./lib/nexusCatalogo";
+import { loginInputSchema, leadInputSchema, validateBody } from "./lib/inputValidation";
 
 const { Pool } = pkg;
 
@@ -969,6 +972,56 @@ async function listarConversasChatwoot({
 // ─── App ─────────────────────────────────────────────────────────────────────
 async function startServer() {
   const app = express();
+
+  // ─── Middlewares globais (DEVEM vir antes de qualquer app.use de router) ───
+  // Correção 2026-07: body parser e CORS estavam registrados depois dos
+  // routers /api/cnpj, /api/empresas e /api/documentacao (e depois de
+  // /api/documentos e /api/orcamentos), fazendo com que POST/PUT/PATCH
+  // nessas rotas chegassem com req.body indefinido e sem headers de CORS.
+  // Headers de segurança básicos (X-Frame-Options, X-Content-Type-Options, HSTS, etc.).
+  // CSP, COEP e CORP ficam desligados de propósito: o mesmo app Express serve o
+  // build estático do React (linha ~13k) e uploads em domínios/portas diferentes
+  // em dev (Vite em :5173 vs API em :4000); uma CSP/CORP padrão do helmet
+  // quebraria scripts inline do bundle e o carregamento de documentos/imagens
+  // cross-origin. Pode ser habilitada depois com uma política desenhada e testada.
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: false,
+  }));
+
+  app.use(express.json({ limit: "5mb" }));
+  app.use(express.urlencoded({ extended: true }));
+
+  // CORS
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const siteDomain = process.env.SITE_DOMAIN || "destravacredito.com";
+    const allowedOrigins = [
+      `https://${siteDomain}`,
+      `http://${siteDomain}`,
+      "http://localhost:5173",
+      "http://localhost:4000",
+    ];
+    const origin = req.headers.origin ?? "";
+    if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== "production") {
+      res.header("Access-Control-Allow-Origin", origin || "*");
+    }
+    res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type,Authorization");
+    if (req.method === "OPTIONS") { res.sendStatus(200); return; }
+    next();
+  });
+
+  // Evita cache/304 em respostas de API e impede que listas do painel fiquem presas em bundle/cache antigo.
+  app.use("/api", (_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("Surrogate-Control", "no-store");
+    next();
+  });
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Rota para consulta de CNPJ (proxy para BrasilAPI)
   app.use('/api/cnpj', cnpjRouter);
   app.use('/api/empresas', sociosDocumentosRouter);
@@ -1732,38 +1785,9 @@ async function startServer() {
   } catch (err: any) { console.warn('[startup] Migration 067:', err?.message); }
   // ─────────────────────────────────────────────────────────────────────────────
 
-  app.use(express.json({ limit: "5mb" }));
-  app.use(express.urlencoded({ extended: true }));
+  // body parser, CORS e no-cache já registrados no topo de startServer()
   app.use('/api/documentos', documentosRouter);
   app.use('/api/orcamentos', auth, createOrcamentosOperacoesRouter(pool));
-
-  // CORS
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    const siteDomain = process.env.SITE_DOMAIN || "destravacredito.com";
-    const allowedOrigins = [
-      `https://${siteDomain}`,
-      `http://${siteDomain}`,
-      "http://localhost:5173",
-      "http://localhost:4000",
-    ];
-    const origin = req.headers.origin ?? "";
-    if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== "production") {
-      res.header("Access-Control-Allow-Origin", origin || "*");
-    }
-    res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Content-Type,Authorization");
-    if (req.method === "OPTIONS") { res.sendStatus(200); return; }
-    next();
-  });
-
-  // Evita cache/304 em respostas de API e impede que listas do painel fiquem presas em bundle/cache antigo.
-  app.use("/api", (_req: Request, res: Response, next: NextFunction) => {
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Expires", "0");
-    res.setHeader("Surrogate-Control", "no-store");
-    next();
-  });
 
   // ─── Health check ──────────────────────────────────────────────────────────
   app.get("/api/health", async (_req: Request, res: Response) => {
@@ -1778,8 +1802,25 @@ async function startServer() {
     });
   });
 
+  // ─── Rate limiting para rotas públicas sensíveis (força bruta / spam) ──────
+  const loginRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    limit: 10, // 10 tentativas de login por IP a cada 15 min
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Muitas tentativas de login. Tente novamente em alguns minutos." },
+  });
+  const leadsRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    limit: 30, // 30 leads por IP a cada 15 min (cobre uso legítimo do simulador público)
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: "Muitas requisições. Tente novamente em alguns minutos." },
+  });
+  // ─────────────────────────────────────────────────────────────────────────
+
   // ─── LOGIN ────────────────────────────────────────────────────────────────
-  app.post("/api/login", async (req: Request, res: Response) => {
+  app.post("/api/login", loginRateLimiter, validateBody(loginInputSchema), async (req: Request, res: Response) => {
     try {
       const { email, password } = req.body;
       if (!email || !password) {
@@ -1854,7 +1895,7 @@ async function startServer() {
   });
 
   // ─── LEADS API ─────────────────────────────────────────────────────────────
-  app.post("/api/leads", async (req: Request, res: Response) => {
+  app.post("/api/leads", leadsRateLimiter, validateBody(leadInputSchema, "message", { success: false }), async (req: Request, res: Response) => {
     try {
       const b = req.body;
       const now = new Date().toISOString();
