@@ -58,12 +58,16 @@ function isDedicatedPersistentMount(root: string, mountPoint: string | null): bo
   const normalizedRoot = normalizePath(root);
   const normalizedMount = normalizePath(mountPoint);
   if (normalizedMount === '/') return false;
-  if (normalizedMount === '/app' || normalizedMount.startsWith('/app/')) return false;
+  // Exclui a raiz do app (código-fonte, node_modules, etc.), mas permite explicitamente
+  // '/app/uploads' -- é o Destination Path real configurado no volume persistente do Coolify
+  // nesta implantação (confirmado na tela de Persistent Storage do Coolify).
+  if (normalizedMount === '/app') return false;
   return normalizedRoot === normalizedMount || normalizedRoot.startsWith(`${normalizedMount}/`);
 }
 
 export async function getDocumentStorageHealth(): Promise<StorageHealth> {
   const root = getDataDir();
+  const uploadsRoot = path.join(root, 'uploads');
   const required = process.env.NODE_ENV === 'production' && process.env.REQUIRE_PERSISTENT_STORAGE !== 'false';
   let writable = false;
   let writeError = '';
@@ -78,16 +82,19 @@ export async function getDocumentStorageHealth(): Promise<StorageHealth> {
     writeError = err?.message || String(err);
   }
 
-  const mountPoint = findMountPoint(root);
+  // A montagem real de volume acontece na subpasta 'uploads' (é o Destination Path configurado
+  // no Coolify), não necessariamente na raiz de DATA_DIR -- por isso verificamos uploadsRoot,
+  // não root diretamente.
+  const mountPoint = findMountPoint(uploadsRoot);
   const configured = process.env.PERSISTENT_STORAGE_CONFIGURED === 'true';
-  const mounted = isDedicatedPersistentMount(root, mountPoint);
+  const mounted = isDedicatedPersistentMount(uploadsRoot, mountPoint);
   const persistent = mounted && configured;
 
   let message = 'Armazenamento documental disponível.';
   if (!writable) {
     message = `O diretório documental não está gravável: ${writeError || root}`;
   } else if (required && !mounted) {
-    message = `O diretório ${root} não está em um volume persistente dedicado. Configure um volume no Coolify antes de anexar arquivos.`;
+    message = `O diretório ${uploadsRoot} não está em um volume persistente dedicado. Configure um volume no Coolify antes de anexar arquivos.`;
   } else if (required && mounted && !configured) {
     message = `O volume está montado em ${mountPoint}, mas falta confirmar a configuração com PERSISTENT_STORAGE_CONFIGURED=true.`;
   } else if (persistent) {
