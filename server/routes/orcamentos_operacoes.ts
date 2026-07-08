@@ -224,12 +224,6 @@ function textoHtmlComQuebras(value: unknown): string {
 // Usa o mesmo pipeline de contratos (Puppeteer + pdf-lib merge) para garantir
 // suporte completo a caracteres PT-BR (ã, ç, é, etc.) e papel timbrado.
 
-function tituloPdfOrcamento(value: unknown): string {
-  const titulo = String(value || "").trim();
-  if (!titulo || /^orçamento(?:\s+de\s+serviços)?$/i.test(titulo)) return "Orçamento";
-  return titulo;
-}
-
 function gerarHtmlOrcamento(orcamento: Row): string {
   const marca = normalizeMarca(orcamento.marca);
   const cor = marca === "permupay" ? "#075FAE" : marca === "aragao" ? "#7A4328" : "#173A79";
@@ -243,7 +237,6 @@ function gerarHtmlOrcamento(orcamento: Row): string {
   const validadeTexto = orcamento.validade_ate
     ? fmtDate(orcamento.validade_ate)
     : `${orcamento.validade_dias || 30} dias`;
-  const titulo = tituloPdfOrcamento(orcamento.titulo);
   const ocultarConteudo = orcamento.ocultar_conteudo === true || orcamento.ocultar_conteudo === "true";
   const conteudoLivre = String(orcamento.conteudo || "").trim();
 
@@ -255,10 +248,7 @@ function gerarHtmlOrcamento(orcamento: Row): string {
   const servicosHtml = servicos.length > 0
     ? `<section class="services-section">
         <div class="section-heading">
-          <div>
-            <span class="section-eyebrow">COMPOSIÇÃO DA PROPOSTA</span>
-            <h2>Itens e valores</h2>
-          </div>
+          <div><h2>Orçamento</h2></div>
           <span class="item-count">${servicos.length} ${servicos.length === 1 ? "item" : "itens"}</span>
         </div>
         <table>
@@ -282,12 +272,7 @@ function gerarHtmlOrcamento(orcamento: Row): string {
         </table>
       </section>`
     : `<section class="services-section empty-services">
-        <div class="section-heading">
-          <div>
-            <span class="section-eyebrow">COMPOSIÇÃO DA PROPOSTA</span>
-            <h2>Valor contratado</h2>
-          </div>
-        </div>
+        <div class="section-heading"><div><h2>Orçamento</h2></div></div>
         <p>Proposta cadastrada por valor direto, sem detalhamento de itens.</p>
       </section>`;
 
@@ -315,7 +300,7 @@ function gerarHtmlOrcamento(orcamento: Row): string {
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8"/>
-<title>${escapeHtml(titulo)}</title>
+<title>Proposta Comercial - ${numero}</title>
 <style>
   @page { size: A4; }
   * { box-sizing: border-box; }
@@ -337,8 +322,6 @@ function gerarHtmlOrcamento(orcamento: Row): string {
     margin-bottom: 13px;
     border-bottom: 1px solid ${borda};
   }
-  .document-kicker,
-  .section-eyebrow,
   .meta-label {
     display: block;
     color: #68758A;
@@ -349,12 +332,12 @@ function gerarHtmlOrcamento(orcamento: Row): string {
     text-transform: uppercase;
   }
   h1 {
-    margin: 3px 0 0;
+    margin: 0;
     color: ${corEscura};
-    font-size: 15.5pt;
+    font-size: 14.2pt;
     line-height: 1.12;
-    font-weight: 700;
-    letter-spacing: -.015em;
+    font-weight: 800;
+    letter-spacing: .01em;
   }
   .document-number {
     max-width: 47%;
@@ -564,10 +547,7 @@ function gerarHtmlOrcamento(orcamento: Row): string {
 </head>
 <body>
   <header class="document-head">
-    <div>
-      <span class="document-kicker">Proposta comercial</span>
-      <h1>${escapeHtml(titulo)}</h1>
-    </div>
+    <div><h1>Proposta Comercial</h1></div>
     <div class="document-number">
       <span class="meta-label">Número da proposta</span>
       <strong>${numero}</strong>
