@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 
-const DEFAULT_DATA_DIR = '/var/data/destrava';
+const DEFAULT_DATA_DIR = '/app/uploads';
 
 export class PersistentStorageError extends Error {
   statusCode = 503;
@@ -25,7 +25,24 @@ export type StorageHealth = {
 };
 
 export function getDataDir(): string {
-  return path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
+  const configured = String(process.env.DATA_DIR || '').trim();
+  const configuredPath = configured ? path.resolve(configured) : '';
+  const coolifyUploads = path.resolve('/app/uploads');
+
+  // Produção atual no Coolify: volume persistente montado em /app/uploads.
+  // Se DATA_DIR ficou apontando para o padrão antigo (/var/data/destrava),
+  // priorizamos o volume realmente montado para não bloquear upload nem perder arquivos.
+  if (process.env.DOCUMENT_STORAGE_ALLOW_COOLIFY_UPLOADS_FALLBACK !== 'false'
+    && configuredPath
+    && normalizePath(configuredPath) !== normalizePath(coolifyUploads)
+    && fs.existsSync(coolifyUploads)) {
+    const mountPoint = findMountPoint(coolifyUploads);
+    if (isDedicatedPersistentMount(coolifyUploads, mountPoint) || process.env.PERSISTENT_STORAGE_CONFIGURED === 'true') {
+      return coolifyUploads;
+    }
+  }
+
+  return path.resolve(configured || DEFAULT_DATA_DIR);
 }
 
 function normalizePath(value: string): string {
@@ -58,7 +75,8 @@ function isDedicatedPersistentMount(root: string, mountPoint: string | null): bo
   const normalizedRoot = normalizePath(root);
   const normalizedMount = normalizePath(mountPoint);
   if (normalizedMount === '/') return false;
-  if (normalizedMount === '/app' || normalizedMount.startsWith('/app/')) return false;
+  // /app inteiro não é volume dedicado, mas /app/uploads pode ser um mount persistente do Coolify.
+  if (normalizedMount === '/app') return false;
   return normalizedRoot === normalizedMount || normalizedRoot.startsWith(`${normalizedMount}/`);
 }
 
