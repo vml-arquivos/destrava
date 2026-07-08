@@ -4403,7 +4403,7 @@ async function startServer() {
         return;
       }
 
-      const dataDir = process.env.DATA_DIR || path.resolve(".");
+      const dataDir = process.env.DATA_DIR || "/data";
       const uploadDir = path.join(dataDir, "uploads", "empresas", req.params.id);
       await fs.promises.mkdir(uploadDir, { recursive: true });
 
@@ -4535,7 +4535,7 @@ async function startServer() {
         res.status(400).json({ error: "Tipo de documento não permitido aqui. Use: " + tiposPermitidos.join(", ") }); return;
       }
 
-      const dataDir = process.env.DATA_DIR || path.resolve(".");
+      const dataDir = process.env.DATA_DIR || "/var/data/destrava";
       const uploadDir = path.join(dataDir, "uploads", "documentos", "empresa", empresaId);
       await fs.promises.mkdir(uploadDir, { recursive: true });
 
@@ -9760,10 +9760,10 @@ async function registrarDocumentoContratoGerado(params: {
 
   // Servir arquivos de contratos gerados e contratos sociais enviados
   app.use('/uploads/contratos', express.static(path.resolve('uploads', 'contratos')));
-  app.use('/uploads/contratos-sociais', express.static(path.join(process.env.DATA_DIR || path.resolve("."), 'uploads', 'contratos-sociais')));
+  app.use('/uploads/contratos-sociais', express.static(path.join(process.env.DATA_DIR || '/data', 'uploads', 'contratos-sociais')));
   app.use('/uploads/empresas', express.static(path.resolve('uploads', 'empresas')));
   app.use('/uploads/orcamentos', express.static(path.resolve('uploads', 'orcamentos')));
-  app.use('/uploads/documentos', express.static(path.join(process.env.DATA_DIR || path.resolve("."), 'uploads', 'documentos')));
+  app.use('/uploads/documentos', express.static(path.join(process.env.DATA_DIR || '/var/data/destrava', 'uploads', 'documentos')));
 
   app.patch('/api/me', auth, async (req: Request, res: Response) => {
     try {
@@ -12863,7 +12863,7 @@ Histórico: ${historico.rows.slice(0, 10).map((h: any) => `${h.tipo}: ${h.descri
 
       if (isImage && docRow.url) {
         // Gemini suporta visão nativamente via inlineData
-        const dataDir = process.env.DATA_DIR || path.resolve(".");
+        const dataDir = process.env.DATA_DIR || "/data";
         const filePath = path.join(dataDir, docRow.url.replace(/^\//, ""));
         const mimeType = (ext === "png" ? "image/png" : "image/jpeg") as any;
 

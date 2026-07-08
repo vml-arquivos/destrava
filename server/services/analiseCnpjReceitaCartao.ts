@@ -397,7 +397,7 @@ async function resolverCaminhoDocumento(caminhoArquivo?: string | null): Promise
   if (!raw) return null;
 
   const cwd = process.cwd();
-  const dataDir = path.resolve(process.env.DATA_DIR || path.resolve("."));
+  const dataDir = path.resolve(process.env.DATA_DIR || '/data');
   const uploadDir = path.resolve(process.env.UPLOAD_DIR || path.join(dataDir, 'uploads'));
   const candidatos = new Set<string>();
 

@@ -5,6 +5,12 @@ import path from 'path';
 import crypto from 'crypto';
 import pkg from 'pg';
 import { auth } from '../middleware/auth';
+import {
+  PersistentStorageError,
+  getDocumentStorageHealth,
+  resolveDocumentPath,
+  saveDocumentBuffer,
+} from '../services/documentStorage';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -425,6 +431,24 @@ router.get('/', auth, async (req: Request, res: Response) => {
   }
 });
 
+router.get('/storage-health', auth, async (_req: Request, res: Response) => {
+  try {
+    const health = await getDocumentStorageHealth();
+    res.status(health.writable && (!health.required || health.persistent) ? 200 : 503).json(health);
+  } catch (err: any) {
+    console.error('[GET /api/documentos/storage-health]', err);
+    res.status(503).json({
+      root: process.env.DATA_DIR || '/var/data/destrava',
+      writable: false,
+      persistent: false,
+      configured: false,
+      required: true,
+      mountPoint: null,
+      message: err?.message || 'Não foi possível validar o armazenamento documental.',
+    });
+  }
+});
+
 router.post('/upload', auth, upload.single('file'), async (req: Request, res: Response) => {
   try {
     const user = (req as any).colaborador || (req as any).user;
@@ -444,12 +468,16 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
     const safeOriginal = sanitizeFileName(file.originalname || 'arquivo');
     const ext = path.extname(safeOriginal).toLowerCase();
     const nomeArquivo = `${crypto.randomUUID()}${ext}`;
-    const dataDir = process.env.DATA_DIR || path.resolve(".");
-    const uploadDir = path.join(dataDir, 'uploads', 'documentos', entidadeTipo, entidadeId);
-    await fs.promises.mkdir(uploadDir, { recursive: true });
-    const caminhoArquivo = path.join(uploadDir, nomeArquivo);
-    if (!caminhoArquivo.startsWith(uploadDir)) throw new Error('Caminho de arquivo inválido.');
-    await fs.promises.writeFile(caminhoArquivo, file.buffer, { flag: 'wx' });
+    const arquivoSalvo = await saveDocumentBuffer({
+      entidadeTipo,
+      entidadeId,
+      filename: nomeArquivo,
+      buffer: file.buffer,
+      expectedSha256: hash,
+    });
+    // O banco guarda caminho relativo ao DATA_DIR. Assim, o mesmo registro continua
+    // válido em novos containers, desde que /var/data/destrava esteja em volume persistente.
+    const caminhoArquivo = arquivoSalvo.relativePath;
 
     const origem = ORIGENS.includes(String(req.body.origem)) ? String(req.body.origem) : 'upload_manual';
     let status = STATUS.includes(String(req.body.status)) ? String(req.body.status) : 'ativo';
@@ -507,12 +535,20 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
         dataEmissaoDocumento, dataValidadeDocumento, tipoDocumento === 'cartao_cnpj' ? 30 : null, statusValidade,
         exigeRevisaoHumana, nomeCustomizado, JSON.stringify(resultadoValidacao),
       ]
-    );
+    ).catch(async (err) => {
+      // Se o banco falhar, remove o arquivo recém-gravado para não deixar órfão.
+      await fs.promises.unlink(arquivoSalvo.absolutePath).catch(() => undefined);
+      throw err;
+    });
     await auditar(rows[0].id, 'upload', null, rows[0], user.id);
     res.status(201).json(rows[0]);
   } catch (err: any) {
     console.error('[POST /api/documentos/upload]', err);
-    res.status(400).json({ error: err.message || 'Erro ao enviar documento' });
+    const status = err instanceof PersistentStorageError ? err.statusCode : 400;
+    res.status(status).json({
+      error: err.message || 'Erro ao enviar documento',
+      code: err?.code || undefined,
+    });
   }
 });
 
@@ -589,27 +625,30 @@ async function sendProtectedFile(req: Request, res: Response, inline: boolean) {
   );
   if (!rows.length) { res.status(404).json({ error: 'Documento não encontrado' }); return; }
   const doc = rows[0];
-  const filePath = path.resolve(doc.caminho_arquivo);
+  const resolved = resolveDocumentPath(doc);
+  const filePath = resolved.absolutePath;
 
-  // Aceitar qualquer caminho dentro de diretórios de upload válidos
-  const dataDir = path.resolve(process.env.DATA_DIR || path.resolve("."));
-  const localUploads = path.resolve('uploads');
-  const appUploads = '/app/uploads';
-  const varData = '/var/data';
-
-  const isAllowed = filePath.startsWith(dataDir)
-    || filePath.startsWith(localUploads)
-    || filePath.startsWith(appUploads)
-    || filePath.startsWith(varData);
-
-  if (!isAllowed) {
-    console.error(`[sendProtectedFile] Caminho bloqueado: ${filePath} (dataDir=${dataDir})`);
-    res.status(403).json({ error: 'Caminho de arquivo não permitido' }); return;
+  if (!filePath) {
+    console.error('[sendProtectedFile] Arquivo físico não encontrado.', {
+      documentoId: doc.id,
+      caminhoRegistrado: doc.caminho_arquivo,
+      candidatos: resolved.candidates,
+    });
+    res.status(404).json({
+      error: 'Arquivo físico não encontrado no volume persistente.',
+      code: 'DOCUMENT_FILE_MISSING',
+    });
+    return;
   }
-  if (!fs.existsSync(filePath)) {
-    console.error(`[sendProtectedFile] Arquivo não encontrado: ${filePath}`);
-    res.status(404).json({ error: 'Arquivo físico não encontrado no servidor' }); return;
+
+  // Normaliza registros antigos que guardavam caminho absoluto do container.
+  if (resolved.relativePath && doc.caminho_arquivo !== resolved.relativePath) {
+    pool.query(
+      'UPDATE public.documentos_arquivos SET caminho_arquivo=$1, atualizado_em=NOW() WHERE id=$2',
+      [resolved.relativePath, doc.id],
+    ).catch((err) => console.warn('[documentos] Não foi possível normalizar caminho legado:', err?.message || err));
   }
+
   res.setHeader('Content-Type', doc.mime_type || 'application/octet-stream');
   const disposition = inline ? 'inline' : 'attachment';
   res.setHeader('Content-Disposition', `${disposition}; filename="${sanitizeFileName(doc.nome_original || doc.nome_arquivo)}"`);
@@ -643,21 +682,18 @@ router.post('/exportar', auth, async (req: Request, res: Response) => {
     );
     if (!rows.length) { res.status(404).json({ error: 'Nenhum documento encontrado para exportação.' }); return; }
 
-    const dataDir = path.resolve(process.env.DATA_DIR || path.resolve("."));
-    const localUploads = path.resolve('uploads');
-    const appUploads = '/app/uploads';
-    const varData = '/var/data';
     const files: Array<{ name: string; data: Buffer; mtime?: Date }> = [];
     const usedNames = new Map<string, number>();
 
     for (const doc of rows as any[]) {
-      const filePath = path.resolve(doc.caminho_arquivo || '');
-      const isAllowed = filePath.startsWith(dataDir)
-        || filePath.startsWith(localUploads)
-        || filePath.startsWith(appUploads)
-        || filePath.startsWith(varData);
-      if (!filePath || !isAllowed || !fs.existsSync(filePath)) {
-        continue;
+      const resolved = resolveDocumentPath(doc);
+      const filePath = resolved.absolutePath;
+      if (!filePath) continue;
+      if (resolved.relativePath && doc.caminho_arquivo !== resolved.relativePath) {
+        pool.query(
+          'UPDATE public.documentos_arquivos SET caminho_arquivo=$1, atualizado_em=NOW() WHERE id=$2',
+          [resolved.relativePath, doc.id],
+        ).catch(() => undefined);
       }
       const baseName = sanitizeFileName(doc.nome_customizado || doc.nome_original || doc.nome_arquivo || `${doc.id}.bin`);
       const folder = sanitizeFileName(exportFolderForTipo(doc.tipo_documento || 'documento'));

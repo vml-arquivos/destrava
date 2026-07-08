@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Link } from "wouter";
 import Layout from "./Layout";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { toast } from "sonner";
+import { useLocation } from "wouter";
 import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from "@/lib/currency";
 import { useCNPJLookup } from "../../hooks/useCNPJLookup";
 import { formatCNPJ as fmtCNPJBrasil, cleanDigits } from "../../utils/cnpj";
@@ -576,6 +576,7 @@ function mapCnpjDataParaEmpresa(data: any, prev: Record<string, any> = {}): Reco
 }
 
 export default function Empresas() {
+  const [, setLocation] = useLocation();
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
@@ -2126,25 +2127,45 @@ export default function Empresas() {
 
                     /* ── ACERVO DOCUMENTAL ── */
                     : abaAtiva === "documentos" ? (
-                      <div className="p-4 fade-in">
-                        <div className="mb-3 flex justify-end">
-                          <Link
-                            href={`/colaborador/empresas/${selecionada?.id}/documentos`}
-                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
-                          >
-                            Abrir em página exclusiva ↗
-                          </Link>
+                      <div className="p-5 fade-in">
+                        <div className="rounded-3xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+                          <div className="p-6 lg:p-8 bg-gradient-to-br from-blue-50 via-white to-slate-50">
+                            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+                              <div className="max-w-2xl">
+                                <div className="h-14 w-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
+                                  <FileText className="h-7 w-7" />
+                                </div>
+                                <p className="mt-5 text-[11px] font-black uppercase tracking-[0.12em] text-blue-600">Central documental da empresa</p>
+                                <h3 className="mt-1 text-2xl font-black text-slate-950">Anexação e visualização em página exclusiva</h3>
+                                <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                                  Para manter o cadastro da empresa limpo e fácil de usar, todos os documentos agora são administrados em uma área própria, com lista completa, filtros, upload individual e visualização ampla.
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                disabled={!selecionada?.id}
+                                onClick={() => selecionada?.id && setLocation(`/colaborador/empresas/${selecionada.id}/acervo`)}
+                                className="h-12 px-6 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-sm hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 shrink-0"
+                              >
+                                <ExternalLink className="h-4 w-4" /> Abrir acervo documental
+                              </button>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 border-t border-slate-200 divide-y md:divide-y-0 md:divide-x divide-slate-200">
+                            <div className="p-5">
+                              <p className="font-bold text-slate-800">Upload individual</p>
+                              <p className="mt-1 text-xs leading-relaxed text-slate-500">Cada arquivo é anexado no tipo correto, com nome, observação e data de emissão.</p>
+                            </div>
+                            <div className="p-5">
+                              <p className="font-bold text-slate-800">Visualização ampla</p>
+                              <p className="mt-1 text-xs leading-relaxed text-slate-500">PDFs e imagens abrem em painel grande, ao lado da lista completa do acervo.</p>
+                            </div>
+                            <div className="p-5">
+                              <p className="font-bold text-slate-800">Preservação física</p>
+                              <p className="mt-1 text-xs leading-relaxed text-slate-500">Arquivamento lógico, verificação de integridade e volume persistente entre redeploys.</p>
+                            </div>
+                          </div>
                         </div>
-                        <DocumentosEntidade
-                          entidadeTipo="empresa"
-                          entidadeId={selecionada?.id}
-                          empresaId={selecionada?.id}
-                          tiposPermitidos={["contrato_prestacao_servicos", "cartao_cnpj", "qsa", "atos_junta_comercial", "contrato_social", "alteracao_contratual", "documento_socio", "rg", "cnh", "cpf", "comprovante_residencia", "irpf", "recibo_irpf", "certidao_casamento", "averbacao_divorcio", "certidao_obito", "rating_bacen_cnpj", "rating_bacen_cpf", "cenprot_cnpj", "cenprot_cpf", "cnd_rfb_cnpj", "cnd_rfb_cpf", "cadin_cnpj", "cadin_cpf", "pgfn_cnpj", "pgfn_cpf", "simples_nacional", "pgdas", "pgmei", "ecf", "recibo_ecf", "recibo_pgdas", "recibo_pgmei", "defis", "dasn_simei", "recibo_defis", "recibo_dasn_simei", "scr_cnpj", "ccs_cnpj", "ccf_cnpj", "scr_cpf", "ccs_cpf", "ccf_cpf", "consulta_serasa_cpf", "compartilhamento_ecac", "foto_fachada", "foto_interna_1", "foto_interna_2", "foto_interna_3", "faturamento_12_meses", "outros"]}
-                          titulo="Acervo Documental"
-                          permitirUpload
-                          permitirExcluir
-                          permitirValidar
-                        />
                       </div>
                     ) : abaAtiva === "simulacoes" ? (
                       <div className="p-4 space-y-3">
