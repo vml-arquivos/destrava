@@ -296,6 +296,7 @@ export default function DocumentosEntidade({
   const [modalExportacao, setModalExportacao] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentoArquivo | null>(null);
+  const [secaoAtiva, setSecaoAtiva] = useState<string | null>(null);
 
   const query = useMemo(() => {
     if (!entidadeId) return "";
@@ -513,6 +514,15 @@ export default function DocumentosEntidade({
     });
   }
 
+  const secaoAtivaTitulo = (secaoAtiva && secoesDaTela.some((secao) => secao.titulo === secaoAtiva))
+    ? secaoAtiva
+    : secoesDaTela[0]?.titulo;
+  const secaoAtivaObj = secoesDaTela.find((secao) => secao.titulo === secaoAtivaTitulo);
+
+  function contarPreenchidos(secao: SecaoDocumento) {
+    return secao.slots.filter((documentoSlot) => docs.some((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento))).length;
+  }
+
   if (!entidadeId) {
     return <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Selecione ou salve o cadastro antes de anexar documentos.</div>;
   }
@@ -649,24 +659,39 @@ export default function DocumentosEntidade({
             <p className="text-[10px] text-slate-400">Use os campos abaixo como checklist documental organizado. O arquivo anexado aparecerá automaticamente no grupo correspondente acima e ficará visível também no respectivo bloco.</p>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {secoesDaTela.map((secao, index) => (
-              <a key={secao.titulo} href={`#secao-upload-${index}`} className="px-2.5 py-1 rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600 hover:bg-slate-200 transition-colors">
-                {secao.titulo}
-              </a>
-            ))}
+            {secoesDaTela.map((secao) => {
+              const preenchidos = contarPreenchidos(secao);
+              const ativa = secao.titulo === secaoAtivaTitulo;
+              return (
+                <button
+                  key={secao.titulo}
+                  type="button"
+                  onClick={() => setSecaoAtiva(secao.titulo)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                    ativa
+                      ? "bg-blue-600 border-blue-600 text-white"
+                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {secao.titulo}
+                  <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${ativa ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>
+                    {preenchidos}/{secao.slots.length}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-          <div className="space-y-2.5">
-            {secoesDaTela.map((secao, index) => (
-              <div key={secao.titulo} id={`secao-upload-${index}`} className="rounded-lg border border-slate-100 bg-slate-50 p-2.5 scroll-mt-6">
-                <div className="flex items-start justify-between gap-2.5 mb-1.5">
-                  <div>
-                    <p className="text-xs font-bold text-slate-700">{secao.titulo}</p>
-                    {secao.descricao && <p className="text-[10px] text-slate-400 mt-0.5">{secao.descricao}</p>}
-                  </div>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-500">{secao.slots.length} campo(s)</span>
+          {secaoAtivaObj && (
+            <div key={secaoAtivaObj.titulo} className="rounded-lg border border-slate-100 bg-slate-50 p-2.5">
+              <div className="flex items-start justify-between gap-2.5 mb-1.5">
+                <div>
+                  <p className="text-xs font-bold text-slate-700">{secaoAtivaObj.titulo}</p>
+                  {secaoAtivaObj.descricao && <p className="text-[10px] text-slate-400 mt-0.5">{secaoAtivaObj.descricao}</p>}
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-                  {secao.slots.map((documentoSlot) => {
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-500">{secaoAtivaObj.slots.length} campo(s)</span>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+                {secaoAtivaObj.slots.map((documentoSlot) => {
                     const tipo = documentoSlot.tipoUpload;
                     const docsTipo = docs.filter((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento));
                     const uploading = uploadingTipo === tipo;
@@ -713,9 +738,8 @@ export default function DocumentosEntidade({
                   })}
                 </div>
               </div>
-            ))}
+            )}
           </div>
-        </div>
       )}
 
       {modalExportacao && (

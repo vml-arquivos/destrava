@@ -517,6 +517,63 @@ function mensagemErroApi(err: any, fallback: string): string {
   }
 }
 
+// Mapeia o retorno de GET /api/cnpj/:cnpj (formato "cru" das fontes — BrasilAPI/CNPJá/OpenCNPJ)
+// para o formato de colunas usado pela tabela `empresas` / PATCH /api/empresas/:id.
+// Extraído do fluxo de "Nova empresa" para ser reaproveitado também por "Atualizar cadastro",
+// garantindo que os dois caminhos preencham os campos exatamente da mesma forma.
+function mapCnpjDataParaEmpresa(data: any, prev: Record<string, any> = {}): Record<string, unknown> {
+  const sociosList = data.qsa ?? [];
+  const socio = sociosList[0];
+  const porteRaw = (data.porte || data.descricao_porte || "").toLowerCase();
+  let porteMap: FormEmpresa["porte"] = "mei";
+  if (porteRaw.includes("mei")) porteMap = "mei";
+  else if (porteRaw.includes("micro") || porteRaw === "me") porteMap = "me";
+  else if (porteRaw.includes("pequeno") || porteRaw.includes("epp")) porteMap = "epp";
+  else if (porteRaw.includes("medio") || porteRaw.includes("médio")) porteMap = "medio";
+  else if (porteRaw.includes("grande")) porteMap = "grande";
+
+  return {
+    razao_social: data.razao_social ?? "",
+    nome_fantasia: data.nome_fantasia ?? "",
+    email: data.email ?? "",
+    telefone: telefoneReceita(data.ddd_telefone_1),
+    telefone_2: telefoneReceita((data as any).ddd_telefone_2) || (prev as any).telefone_2,
+    cep: data.cep?.replace(/\D/g, "").replace(/(\d{5})(\d)/, "$1-$2") ?? "",
+    logradouro: data.logradouro ?? "", numero: data.numero ?? "",
+    complemento: data.complemento ?? "", bairro: data.bairro ?? "",
+    cidade: data.municipio ?? "", estado: data.uf ?? "",
+    responsavel_nome: socio?.nome_socio ?? "",
+    responsavel_cpf: socio?.cnpj_cpf_do_socio ?? "",
+    responsavel_cargo: socio?.descricao_qualificacao_socio ?? "",
+    porte: porteMap,
+    segmento: data.cnae_fiscal_descricao ?? prev.segmento,
+    inscricao_estadual: primeiraInscricaoEstadualReceita(data) || prev.inscricao_estadual,
+    natureza_juridica: data.natureza_juridica ?? prev.natureza_juridica,
+    capital_social: parseCapitalSocial(data.capital_social) ?? prev.capital_social,
+    cnae_principal: data.cnae_fiscal_descricao
+      ? montarCnaeTela(data.cnae_fiscal, data.cnae_fiscal_descricao)
+      : prev.cnae_principal,
+    cnaes_secundarios: Array.isArray((data as any).cnaes_secundarios)
+      ? (data as any).cnaes_secundarios.map((c: any) => c?.descricao ? montarCnaeTela(c?.codigo, c?.descricao) : String(c)).filter(Boolean)
+      : prev.cnaes_secundarios,
+    data_abertura: data.data_inicio_atividade ?? prev.data_abertura,
+    situacao_cadastral: data.descricao_situacao_cadastral ?? prev.situacao_cadastral,
+    data_situacao_cadastral: (data as any).data_situacao_cadastral ?? (prev as any).data_situacao_cadastral,
+    motivo_situacao_cadastral: (data as any).motivo_situacao_cadastral ?? (prev as any).motivo_situacao_cadastral,
+    regime_tributario: regimeTributarioReceita(data) || (prev as any).regime_tributario,
+    matriz_filial: (data as any).identificador_matriz_filial === 1 ? "Matriz" : (data as any).identificador_matriz_filial === 2 ? "Filial" : prev.matriz_filial,
+    ultima_sincronizacao_receita: new Date().toISOString(),
+    dados_extra_receita: {
+      provedor_principal: (data as any).provedor_principal || null,
+      fontes_consulta: (data as any).fontes_consulta || [],
+      dados_fontes: (data as any).dados_fontes || {},
+      inscricoes_estaduais: (data as any).inscricoes_estaduais || [],
+      suframa: (data as any).suframa || [],
+      payload_normalizado: data,
+    },
+  };
+}
+
 export default function Empresas() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(true);
@@ -851,16 +908,14 @@ export default function Empresas() {
     setSincronizando(true);
     if (!opts.silencioso) toast.loading("Atualizando cadastro com dados da Receita e salvando no banco...", { id: "sync" });
     try {
-      const result = await apiFetch(`/api/empresas/${empresa.id}/sincronizar-receita`, {
-        method: "POST",
-        body: JSON.stringify({ cnpj: empresa.cnpj }),
+      const cnpjDigits = empresa.cnpj.replace(/\D/g, "");
+      const dadosReceita = await apiFetch(`/api/cnpj/${cnpjDigits}`);
+      const camposAtualizados = mapCnpjDataParaEmpresa(dadosReceita, empresa);
+      const atualizada = await apiFetch(`/api/empresas/${empresa.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(camposAtualizados),
       });
 
-      if (!result?.success || !result?.empresa) {
-        throw new Error(mensagemErroApi(result, "A Receita respondeu, mas a empresa não foi atualizada."));
-      }
-
-      const atualizada = result.empresa;
       setSelecionada(atualizada);
       setEmpresas(prev => prev.map(e => e.id === empresa.id ? atualizada : e));
       await carregarEmpresas();
@@ -874,7 +929,7 @@ export default function Empresas() {
         toast.success(
           cidadeUf
             ? `Cadastro atualizado e salvo: ${cidadeUf}.`
-            : (result?.message || "Cadastro atualizado e salvo com dados da Receita."),
+            : "Cadastro atualizado e salvo com dados da Receita.",
           { id: "sync" }
         );
       }
@@ -2398,57 +2453,9 @@ export default function Empresas() {
                         const d = cleanDigits(f);
                         if (d.length < 14) { cnpjReset(); return; }
                         cnpjLookup(f, (data) => {
-                          const sociosList = data.qsa ?? [];
-                          setSocios(sociosList);
-                          const socio = sociosList[0];
-                          const porteRaw = (data.porte || data.descricao_porte || "").toLowerCase();
-                          let porteMap: FormEmpresa["porte"] = "mei";
-                          if (porteRaw.includes("mei")) porteMap = "mei";
-                          else if (porteRaw.includes("micro") || porteRaw === "me") porteMap = "me";
-                          else if (porteRaw.includes("pequeno") || porteRaw.includes("epp")) porteMap = "epp";
-                          else if (porteRaw.includes("medio") || porteRaw.includes("médio")) porteMap = "medio";
-                          else if (porteRaw.includes("grande")) porteMap = "grande";
-                          setForm(prev => ({
-                            ...prev, cnpj: f,
-                            razao_social: data.razao_social ?? "",
-                            nome_fantasia: data.nome_fantasia ?? "",
-                            email: data.email ?? "",
-                            telefone: telefoneReceita(data.ddd_telefone_1),
-                            telefone_2: telefoneReceita((data as any).ddd_telefone_2) || (prev as any).telefone_2,
-                            cep: data.cep?.replace(/\D/g,"").replace(/(\d{5})(\d)/,"$1-$2") ?? "",
-                            logradouro: data.logradouro ?? "", numero: data.numero ?? "",
-                            complemento: data.complemento ?? "", bairro: data.bairro ?? "",
-                            cidade: data.municipio ?? "", estado: data.uf ?? "",
-                            responsavel_nome: socio?.nome_socio ?? "",
-                            responsavel_cpf: socio?.cnpj_cpf_do_socio ?? "",
-                            responsavel_cargo: socio?.descricao_qualificacao_socio ?? "",
-                            porte: porteMap,
-                            segmento: data.cnae_fiscal_descricao ?? prev.segmento,
-                            inscricao_estadual: primeiraInscricaoEstadualReceita(data) || prev.inscricao_estadual,
-                            natureza_juridica: data.natureza_juridica ?? prev.natureza_juridica,
-                            capital_social: parseCapitalSocial(data.capital_social) ?? prev.capital_social,
-                            cnae_principal: data.cnae_fiscal_descricao
-                              ? montarCnaeTela(data.cnae_fiscal, data.cnae_fiscal_descricao)
-                              : prev.cnae_principal,
-                            cnaes_secundarios: Array.isArray((data as any).cnaes_secundarios)
-                              ? (data as any).cnaes_secundarios.map((c: any) => c?.descricao ? montarCnaeTela(c?.codigo, c?.descricao) : String(c)).filter(Boolean)
-                              : prev.cnaes_secundarios,
-                            data_abertura: data.data_inicio_atividade ?? prev.data_abertura,
-                            situacao_cadastral: data.descricao_situacao_cadastral ?? prev.situacao_cadastral,
-                            data_situacao_cadastral: (data as any).data_situacao_cadastral ?? (prev as any).data_situacao_cadastral,
-                            motivo_situacao_cadastral: (data as any).motivo_situacao_cadastral ?? (prev as any).motivo_situacao_cadastral,
-                            regime_tributario: regimeTributarioReceita(data) || (prev as any).regime_tributario,
-                            matriz_filial: (data as any).identificador_matriz_filial === 1 ? "Matriz" : (data as any).identificador_matriz_filial === 2 ? "Filial" : prev.matriz_filial,
-                            ultima_sincronizacao_receita: new Date().toISOString(),
-                            dados_extra_receita: {
-                              provedor_principal: (data as any).provedor_principal || null,
-                              fontes_consulta: (data as any).fontes_consulta || [],
-                              dados_fontes: (data as any).dados_fontes || {},
-                              inscricoes_estaduais: (data as any).inscricoes_estaduais || [],
-                              suframa: (data as any).suframa || [],
-                              payload_normalizado: data,
-                            },
-                          }));
+                          setSocios(data.qsa ?? []);
+                          const campos = mapCnpjDataParaEmpresa(data, form);
+                          setForm(prev => ({ ...prev, cnpj: f, ...campos }));
                           setTimeout(() => setEtapaModal("form"), 500);
                         });
                       }}
