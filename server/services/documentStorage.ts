@@ -58,16 +58,12 @@ function isDedicatedPersistentMount(root: string, mountPoint: string | null): bo
   const normalizedRoot = normalizePath(root);
   const normalizedMount = normalizePath(mountPoint);
   if (normalizedMount === '/') return false;
-  // Exclui a raiz do app (código-fonte, node_modules, etc.), mas permite explicitamente
-  // '/app/uploads' -- é o Destination Path real configurado no volume persistente do Coolify
-  // nesta implantação (confirmado na tela de Persistent Storage do Coolify).
-  if (normalizedMount === '/app') return false;
+  if (normalizedMount === '/app' || normalizedMount.startsWith('/app/')) return false;
   return normalizedRoot === normalizedMount || normalizedRoot.startsWith(`${normalizedMount}/`);
 }
 
 export async function getDocumentStorageHealth(): Promise<StorageHealth> {
   const root = getDataDir();
-  const uploadsRoot = path.join(root, 'uploads');
   const required = process.env.NODE_ENV === 'production' && process.env.REQUIRE_PERSISTENT_STORAGE !== 'false';
   let writable = false;
   let writeError = '';
@@ -82,19 +78,16 @@ export async function getDocumentStorageHealth(): Promise<StorageHealth> {
     writeError = err?.message || String(err);
   }
 
-  // A montagem real de volume acontece na subpasta 'uploads' (é o Destination Path configurado
-  // no Coolify), não necessariamente na raiz de DATA_DIR -- por isso verificamos uploadsRoot,
-  // não root diretamente.
-  const mountPoint = findMountPoint(uploadsRoot);
+  const mountPoint = findMountPoint(root);
   const configured = process.env.PERSISTENT_STORAGE_CONFIGURED === 'true';
-  const mounted = isDedicatedPersistentMount(uploadsRoot, mountPoint);
+  const mounted = isDedicatedPersistentMount(root, mountPoint);
   const persistent = mounted && configured;
 
   let message = 'Armazenamento documental disponível.';
   if (!writable) {
     message = `O diretório documental não está gravável: ${writeError || root}`;
   } else if (required && !mounted) {
-    message = `O diretório ${uploadsRoot} não está em um volume persistente dedicado. Configure um volume no Coolify antes de anexar arquivos.`;
+    message = `O diretório ${root} não está em um volume persistente dedicado. Configure um volume no Coolify antes de anexar arquivos.`;
   } else if (required && mounted && !configured) {
     message = `O volume está montado em ${mountPoint}, mas falta confirmar a configuração com PERSISTENT_STORAGE_CONFIGURED=true.`;
   } else if (persistent) {
@@ -118,6 +111,83 @@ function sanitizeSegment(value: string): string {
     .replace(/[^a-zA-Z0-9_-]+/g, '_')
     .replace(/^_+|_+$/g, '')
     .slice(0, 120) || 'sem-id';
+}
+
+
+const LEGACY_SEARCH_ROOTS = [
+  '/var/data/destrava',
+  '/data',
+  '/app',
+  process.cwd(),
+  '/tmp',
+];
+
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(values.map((value) => String(value || '').trim()).filter(Boolean)));
+}
+
+function looksLikeUploadRoot(value: string): boolean {
+  const normalized = normalizePath(value);
+  return normalized.includes('/uploads') || normalized.includes('/documentos') || normalized.includes('/data');
+}
+
+function scanForLegacyFile(names: string[]): string | null {
+  const safeNames = new Set(
+    names
+      .map((name) => path.basename(String(name || '').trim()))
+      .filter((name) => Boolean(name) && name !== '.' && name !== '..')
+  );
+  if (!safeNames.size) return null;
+
+  const roots = uniqueStrings([
+    getDataDir(),
+    ...LEGACY_SEARCH_ROOTS,
+    process.env.LEGACY_UPLOADS_DIR,
+    process.env.UPLOADS_DIR,
+  ]);
+
+  const queue: Array<{ dir: string; depth: number }> = [];
+  const visited = new Set<string>();
+
+  for (const root of roots) {
+    const normalized = path.resolve(root);
+    if (!visited.has(normalized) && fs.existsSync(normalized)) queue.push({ dir: normalized, depth: 0 });
+  }
+
+  let inspected = 0;
+  const maxInspected = Number(process.env.DOCUMENT_SEARCH_MAX_FILES || 12000);
+  const maxDepth = Number(process.env.DOCUMENT_SEARCH_MAX_DEPTH || 7);
+
+  while (queue.length && inspected < maxInspected) {
+    const current = queue.shift()!;
+    if (visited.has(current.dir)) continue;
+    visited.add(current.dir);
+
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(current.dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (inspected++ >= maxInspected) break;
+      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist') continue;
+      const full = path.join(current.dir, entry.name);
+
+      if (entry.isFile() && safeNames.has(entry.name)) return full;
+
+      if (entry.isDirectory() && current.depth < maxDepth) {
+        // Evita varredura ampla demais: após o primeiro nível, seguimos apenas por
+        // árvores que parecem conter uploads/documentos.
+        if (current.depth === 0 || looksLikeUploadRoot(full)) {
+          queue.push({ dir: full, depth: current.depth + 1 });
+        }
+      }
+    }
+  }
+
+  return null;
 }
 
 export async function saveDocumentBuffer(params: {
@@ -161,6 +231,8 @@ function candidateFromUploadsSuffix(storedPath: string): string | null {
 export function resolveDocumentPath(doc: {
   caminho_arquivo?: string | null;
   nome_arquivo?: string | null;
+  nome_original?: string | null;
+  hash_arquivo?: string | null;
   entidade_tipo?: string | null;
   entidade_id?: string | null;
 }): { absolutePath: string | null; relativePath: string | null; candidates: string[] } {
@@ -204,6 +276,20 @@ export function resolveDocumentPath(doc: {
     } catch {
       // Continua para o próximo candidato.
     }
+  }
+
+  const recovered = scanForLegacyFile(uniqueStrings([
+    doc.nome_arquivo,
+    doc.nome_original,
+    stored ? path.basename(stored) : null,
+  ]));
+  if (recovered) {
+    const normalizedRecovered = path.resolve(recovered);
+    candidates.add(normalizedRecovered);
+    const relative = normalizedRecovered.startsWith(`${root}${path.sep}`)
+      ? path.relative(root, normalizedRecovered).replace(/\\/g, '/')
+      : candidateFromUploadsSuffix(normalizedRecovered);
+    return { absolutePath: normalizedRecovered, relativePath: relative || null, candidates: Array.from(candidates) };
   }
 
   return { absolutePath: null, relativePath: null, candidates: Array.from(candidates) };

@@ -6,9 +6,9 @@ import {
   Archive,
   Check,
   CheckCircle2,
-  ChevronRight,
   Download,
   Eye,
+  ExternalLink,
   File,
   FileImage,
   FileSpreadsheet,
@@ -19,6 +19,7 @@ import {
   Loader2,
   Plus,
   Printer,
+  RefreshCw,
   Search,
   ShieldCheck,
   UploadCloud,
@@ -32,6 +33,12 @@ import {
   formatDate,
   labelTipoDocumento,
 } from "./DocumentosEntidade";
+
+type DocumentoAcervo = DocumentoArquivo & {
+  arquivo_disponivel?: boolean;
+  arquivo_relativo?: string | null;
+  armazenamento_mensagem?: string | null;
+};
 
 type StorageHealth = {
   root: string;
@@ -52,8 +59,6 @@ type Props = {
   permitirExcluir?: boolean;
   permitirValidar?: boolean;
 };
-
-type WorkspaceTab = "documentos" | "adicionar";
 
 type UploadDraft = {
   file: File | null;
@@ -88,14 +93,16 @@ function documentIcon(doc?: DocumentoArquivo | null) {
   return File;
 }
 
-function statusLabel(doc: DocumentoArquivo) {
+function statusLabel(doc: DocumentoAcervo) {
+  if (doc.arquivo_disponivel === false) return "Arquivo não localizado";
   if (doc.validado || doc.status === "validado") return "Validado";
   if (doc.status === "recusado") return "Recusado";
-  if (doc.status === "pendente_validacao") return "Pendente de validação";
+  if (doc.status === "pendente_validacao") return "Pendente";
   return "Disponível";
 }
 
-function statusClass(doc: DocumentoArquivo) {
+function statusClass(doc: DocumentoAcervo) {
+  if (doc.arquivo_disponivel === false) return "bg-red-50 text-red-700 border-red-200";
   if (doc.validado || doc.status === "validado") return "bg-emerald-50 text-emerald-700 border-emerald-200";
   if (doc.status === "recusado") return "bg-red-50 text-red-700 border-red-200";
   if (doc.status === "pendente_validacao") return "bg-amber-50 text-amber-700 border-amber-200";
@@ -115,6 +122,10 @@ function buildSlots(tiposPermitidos: string[]): Array<{ secao: string; slot: Doc
   return rows;
 }
 
+function sectionForDoc(slots: Array<{ secao: string; slot: DocumentoSlot }>, doc: DocumentoArquivo) {
+  return slots.find((item) => item.slot.matchTipos.includes(doc.tipo_documento))?.secao || "Outros";
+}
+
 export default function AcervoDocumentalWorkspace({
   entidadeTipo,
   entidadeId,
@@ -124,17 +135,18 @@ export default function AcervoDocumentalWorkspace({
   permitirExcluir = true,
   permitirValidar = true,
 }: Props) {
-  const [docs, setDocs] = useState<DocumentoArquivo[]>([]);
+  const [docs, setDocs] = useState<DocumentoAcervo[]>([]);
   const [loading, setLoading] = useState(true);
   const [storageHealth, setStorageHealth] = useState<StorageHealth | null>(null);
-  const [tab, setTab] = useState<WorkspaceTab>("documentos");
+  const [mode, setMode] = useState<"documentos" | "upload">("documentos");
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState("todos");
   const [secaoFiltro, setSecaoFiltro] = useState("todos");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [selectedUploadType, setSelectedUploadType] = useState<string>("");
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [selectedUploadType, setSelectedUploadType] = useState("");
   const [uploadDraft, setUploadDraft] = useState<UploadDraft>(EMPTY_UPLOAD);
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -171,7 +183,7 @@ export default function AcervoDocumentalWorkspace({
       const list = Array.isArray(documentos) ? documentos : [];
       setDocs(list);
       setStorageHealth(health as StorageHealth);
-      setSelectedId((current) => current && list.some((doc: DocumentoArquivo) => doc.id === current) ? current : list[0]?.id || null);
+      setSelectedId((current) => (current && list.some((doc: DocumentoAcervo) => doc.id === current)) ? current : list[0]?.id || null);
     } catch (err: any) {
       toast.error(err?.message || "Erro ao carregar o acervo documental.");
     } finally {
@@ -180,6 +192,7 @@ export default function AcervoDocumentalWorkspace({
   }, [query]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
   useEffect(() => {
     if (!selectedUploadType && slots[0]?.slot.tipoUpload) setSelectedUploadType(slots[0].slot.tipoUpload);
   }, [selectedUploadType, slots]);
@@ -188,12 +201,26 @@ export default function AcervoDocumentalWorkspace({
 
   useEffect(() => {
     let cancelled = false;
+
     async function loadPreview() {
+      setPreviewError(null);
       if (!selectedDoc) {
-        if (previewUrl) URL.revokeObjectURL(previewUrl);
-        setPreviewUrl(null);
+        setPreviewUrl((current) => {
+          if (current) URL.revokeObjectURL(current);
+          return null;
+        });
         return;
       }
+
+      if (selectedDoc.arquivo_disponivel === false) {
+        setPreviewUrl((current) => {
+          if (current) URL.revokeObjectURL(current);
+          return null;
+        });
+        setPreviewError(selectedDoc.armazenamento_mensagem || "O registro existe, mas o arquivo físico ainda não foi encontrado no servidor.");
+        return;
+      }
+
       setPreviewLoading(true);
       try {
         const { blob } = await apiFetchBlob(`/api/documentos/${selectedDoc.id}/view`);
@@ -209,17 +236,16 @@ export default function AcervoDocumentalWorkspace({
             if (current) URL.revokeObjectURL(current);
             return null;
           });
-          toast.error(err?.message || "Não foi possível abrir o arquivo físico.");
+          setPreviewError(err?.message || "Não foi possível abrir o arquivo físico.");
         }
       } finally {
         if (!cancelled) setPreviewLoading(false);
       }
     }
+
     loadPreview();
     return () => { cancelled = true; };
-    // previewUrl não entra na dependência para evitar recarregar em loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDoc?.id]);
+  }, [selectedDoc?.id, selectedDoc?.arquivo_disponivel]);
 
   useEffect(() => () => {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -228,11 +254,12 @@ export default function AcervoDocumentalWorkspace({
   const docsFiltrados = useMemo(() => {
     const term = busca.trim().toLowerCase();
     return docs.filter((doc) => {
-      const section = slots.find((item) => item.slot.matchTipos.includes(doc.tipo_documento))?.secao || "Outros";
+      const section = sectionForDoc(slots, doc);
       const matchesSection = secaoFiltro === "todos" || section === secaoFiltro;
       const matchesStatus = statusFiltro === "todos"
         || (statusFiltro === "validados" && Boolean(doc.validado || doc.status === "validado"))
-        || (statusFiltro === "pendentes" && !doc.validado && doc.status !== "validado");
+        || (statusFiltro === "pendentes" && !doc.validado && doc.status !== "validado")
+        || (statusFiltro === "faltando_arquivo" && doc.arquivo_disponivel === false);
       const haystack = `${doc.nome_customizado || ""} ${doc.nome_original || ""} ${doc.observacoes || ""} ${labelTipoDocumento(doc.tipo_documento)}`.toLowerCase();
       return matchesSection && matchesStatus && (!term || haystack.includes(term));
     });
@@ -240,9 +267,9 @@ export default function AcervoDocumentalWorkspace({
 
   const preenchidos = useMemo(() => slots.filter(({ slot }) => docs.some((doc) => slot.matchTipos.includes(doc.tipo_documento))).length, [slots, docs]);
   const validados = useMemo(() => docs.filter((doc) => doc.validado || doc.status === "validado").length, [docs]);
-  const pendentes = Math.max(docs.length - validados, 0);
+  const faltandoArquivo = useMemo(() => docs.filter((doc) => doc.arquivo_disponivel === false).length, [docs]);
 
-  async function baixar(doc: DocumentoArquivo) {
+  async function baixar(doc: DocumentoAcervo) {
     try {
       const { blob, filename } = await apiFetchBlob(`/api/documentos/${doc.id}/download`);
       saveBlob(blob, filename || doc.nome_original || "documento");
@@ -251,7 +278,7 @@ export default function AcervoDocumentalWorkspace({
     }
   }
 
-  async function imprimir(doc: DocumentoArquivo) {
+  async function imprimir(doc: DocumentoAcervo) {
     try {
       const { blob } = await apiFetchBlob(`/api/documentos/${doc.id}/view`);
       const url = URL.createObjectURL(blob);
@@ -264,7 +291,7 @@ export default function AcervoDocumentalWorkspace({
     }
   }
 
-  async function validar(doc: DocumentoArquivo) {
+  async function validar(doc: DocumentoAcervo) {
     try {
       const next = !Boolean(doc.validado || doc.status === "validado");
       await apiFetch(`/api/documentos/${doc.id}`, {
@@ -278,7 +305,7 @@ export default function AcervoDocumentalWorkspace({
     }
   }
 
-  async function arquivar(doc: DocumentoArquivo) {
+  async function arquivar(doc: DocumentoAcervo) {
     if (!confirm(`Arquivar “${doc.nome_customizado || doc.nome_original}”? O arquivo físico será preservado.`)) return;
     try {
       await apiFetch(`/api/documentos/${doc.id}`, { method: "DELETE" });
@@ -319,7 +346,7 @@ export default function AcervoDocumentalWorkspace({
       return toast.error("Informe um nome para este documento.");
     }
     if (storageHealth?.required && (!storageHealth.persistent || !storageHealth.writable)) {
-      return toast.error("O volume persistente precisa ser configurado antes de anexar novos arquivos.");
+      return toast.error("Configure o volume persistente antes de anexar novos arquivos.");
     }
 
     const form = new FormData();
@@ -335,11 +362,11 @@ export default function AcervoDocumentalWorkspace({
     setUploading(true);
     try {
       const result = await apiFetch("/api/documentos/upload", { method: "POST", body: form });
-      toast.success("Documento anexado e confirmado no acervo persistente.");
+      toast.success("Documento anexado e confirmado no acervo.");
       setUploadDraft(EMPTY_UPLOAD);
       await carregar();
       if (result?.id) setSelectedId(result.id);
-      setTab("documentos");
+      setMode("documentos");
     } catch (err: any) {
       toast.error(err?.message || "Erro ao anexar documento.");
     } finally {
@@ -350,283 +377,261 @@ export default function AcervoDocumentalWorkspace({
   const SelectedIcon = documentIcon(selectedDoc);
   const previewIsImage = Boolean(selectedDoc?.mime_type?.startsWith("image/"));
   const previewIsPdf = Boolean(selectedDoc?.mime_type?.includes("pdf"));
+  const uploadBloqueado = Boolean(storageHealth?.required && (!storageHealth.persistent || !storageHealth.writable));
 
-  return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
-        {[
-          { label: "Arquivos", value: docs.length, tone: "text-slate-900", icon: FolderOpen },
-          { label: "Campos preenchidos", value: `${preenchidos}/${slots.length}`, tone: "text-blue-700", icon: CheckCircle2 },
-          { label: "Validados", value: validados, tone: "text-emerald-700", icon: ShieldCheck },
-          { label: "Pendentes", value: pendentes, tone: "text-amber-700", icon: AlertTriangle },
-          { label: "Armazenamento", value: storageHealth?.persistent ? "Protegido" : "Atenção", tone: storageHealth?.persistent ? "text-emerald-700" : "text-red-700", icon: HardDrive },
-        ].map((item) => (
-          <div key={item.label} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">{item.label}</p>
-                <p className={`mt-1 text-2xl font-black ${item.tone}`}>{item.value}</p>
+  if (mode === "upload") {
+    return (
+      <div className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="border-b border-slate-200 px-5 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.12em] text-blue-600">Anexação individual</p>
+            <h2 className="text-xl font-black text-slate-950">Novo documento</h2>
+            <p className="mt-1 text-sm text-slate-500">Escolha o tipo, selecione um único arquivo e confirme a inclusão no acervo.</p>
+          </div>
+          <button type="button" onClick={() => setMode("documentos")} className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50">
+            Voltar ao acervo
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] min-h-[620px]">
+          <aside className="border-b xl:border-b-0 xl:border-r border-slate-200 bg-slate-50/70 p-4">
+            <label className="space-y-1.5 block">
+              <span className="text-xs font-bold text-slate-600">Categoria</span>
+              <select value={selectedUploadType} onChange={(e) => setSelectedUploadType(e.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700">
+                {slots.map(({ secao, slot }) => (
+                  <option key={slot.tipoUpload} value={slot.tipoUpload}>{secao} · {slot.titulo}</option>
+                ))}
+              </select>
+            </label>
+
+            {selectedSlot && (
+              <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                <p className="text-sm font-black text-blue-950">{selectedSlot.titulo}</p>
+                <p className="mt-1 text-xs leading-relaxed text-blue-700">{selectedSlot.descricao || "Documento vinculado individualmente ao acervo da empresa."}</p>
               </div>
-              <div className="h-10 w-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center">
-                <item.icon className={`h-5 w-5 ${item.tone}`} />
+            )}
+
+            <div className={`mt-4 rounded-2xl border p-4 ${uploadBloqueado ? "border-red-200 bg-red-50" : "border-emerald-200 bg-emerald-50"}`}>
+              <div className="flex gap-2">
+                <HardDrive className={`h-5 w-5 mt-0.5 shrink-0 ${uploadBloqueado ? "text-red-600" : "text-emerald-600"}`} />
+                <div>
+                  <p className={`text-sm font-bold ${uploadBloqueado ? "text-red-800" : "text-emerald-800"}`}>{uploadBloqueado ? "Upload bloqueado" : "Armazenamento protegido"}</p>
+                  <p className={`mt-1 text-xs leading-relaxed ${uploadBloqueado ? "text-red-700" : "text-emerald-700"}`}>{storageHealth?.message || "Volume documental validado."}</p>
+                </div>
               </div>
             </div>
+          </aside>
+
+          <section className="p-5 lg:p-8">
+            <div className="max-w-4xl">
+              <div
+                onDragEnter={(e) => { e.preventDefault(); setDragging(true); }}
+                onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                onDragLeave={(e) => { e.preventDefault(); setDragging(false); }}
+                onDrop={(e) => { e.preventDefault(); setDragging(false); chooseFile(e.dataTransfer.files?.[0] || null); }}
+                className={`min-h-[260px] rounded-3xl border-2 border-dashed flex flex-col items-center justify-center text-center p-8 transition ${dragging ? "border-blue-500 bg-blue-50" : uploadDraft.file ? "border-emerald-300 bg-emerald-50/50" : "border-slate-300 bg-slate-50 hover:border-blue-300"}`}
+              >
+                {uploadDraft.file ? (
+                  <>
+                    <div className="h-16 w-16 rounded-2xl bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="h-8 w-8 text-emerald-600" /></div>
+                    <p className="mt-4 font-black text-slate-900 break-all">{uploadDraft.file.name}</p>
+                    <p className="mt-1 text-sm text-slate-500">{formatBytes(uploadDraft.file.size)}</p>
+                    <div className="mt-5 flex items-center gap-2">
+                      <button type="button" onClick={() => fileInputRef.current?.click()} className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700">Trocar arquivo</button>
+                      <button type="button" onClick={() => setUploadDraft((current) => ({ ...current, file: null }))} className="h-10 px-4 rounded-xl border border-red-200 bg-red-50 text-sm font-bold text-red-700">Remover</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="h-16 w-16 rounded-2xl bg-blue-100 flex items-center justify-center"><UploadCloud className="h-8 w-8 text-blue-600" /></div>
+                    <p className="mt-4 text-lg font-black text-slate-900">Arraste o documento aqui</p>
+                    <p className="mt-1 text-sm text-slate-500">ou selecione um arquivo do computador ou celular</p>
+                    <button type="button" onClick={() => fileInputRef.current?.click()} className="mt-5 h-11 px-5 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-sm hover:bg-blue-700">Selecionar arquivo</button>
+                    <p className="mt-3 text-xs text-slate-400">PDF, JPG, PNG, WEBP, XLSX, CSV ou DOCX · máximo 25 MB</p>
+                  </>
+                )}
+                <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" onChange={(e) => { chooseFile(e.target.files?.[0] || null); e.currentTarget.value = ""; }} />
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="space-y-1.5">
+                  <span className="text-xs font-bold text-slate-600">Nome personalizado {selectedSlot?.exigeNome ? "*" : "(opcional)"}</span>
+                  <input value={uploadDraft.nomeCustomizado} onChange={(e) => setUploadDraft((current) => ({ ...current, nomeCustomizado: e.target.value }))} placeholder={selectedSlot?.placeholderNome || "Ex.: Cartão CNPJ atualizado"} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400" />
+                </label>
+                <label className="space-y-1.5">
+                  <span className="text-xs font-bold text-slate-600">Data de emissão (opcional)</span>
+                  <input type="date" value={uploadDraft.dataEmissao} onChange={(e) => setUploadDraft((current) => ({ ...current, dataEmissao: e.target.value }))} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400" />
+                </label>
+                <label className="space-y-1.5 md:col-span-2">
+                  <span className="text-xs font-bold text-slate-600">Observações (opcional)</span>
+                  <textarea value={uploadDraft.observacoes} onChange={(e) => setUploadDraft((current) => ({ ...current, observacoes: e.target.value }))} placeholder="Informações úteis para a análise e validação deste documento." className="min-h-[110px] w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-blue-400 resize-y" />
+                </label>
+              </div>
+
+              <div className="mt-6 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
+                <button type="button" onClick={() => { setUploadDraft(EMPTY_UPLOAD); setMode("documentos"); }} className="h-11 px-5 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700">Cancelar</button>
+                <button type="button" disabled={uploading || !uploadDraft.file || uploadBloqueado} onClick={upload} className="h-11 px-6 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                  {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />} Salvar no acervo
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="border-b border-slate-200 px-5 py-4 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-[0.12em] text-blue-600">Central documental</p>
+          <div className="mt-1 flex flex-wrap items-center gap-3">
+            <h2 className="text-xl font-black text-slate-950">Documentos da empresa</h2>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{docs.length} arquivo(s)</span>
+            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">{validados} validado(s)</span>
+            {faltandoArquivo > 0 && <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-700">{faltandoArquivo} sem arquivo físico</span>}
           </div>
-        ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={carregar} className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+            <RefreshCw className="h-4 w-4" /> Atualizar
+          </button>
+          <button type="button" onClick={exportarTodos} className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+            <Download className="h-4 w-4" /> Exportar
+          </button>
+          {permitirUpload && (
+            <button type="button" onClick={() => setMode("upload")} className="h-10 px-4 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-sm hover:bg-blue-700 flex items-center gap-2">
+              <Plus className="h-4 w-4" /> Anexar documento
+            </button>
+          )}
+        </div>
       </div>
 
-      {storageHealth && (!storageHealth.writable || (storageHealth.required && !storageHealth.persistent)) && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 flex items-start gap-3">
+      {uploadBloqueado && (
+        <div className="mx-5 mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
           <div>
-            <p className="font-bold text-red-800">Upload bloqueado para proteger os arquivos</p>
-            <p className="text-sm text-red-700 mt-1">{storageHealth.message}</p>
-            <p className="text-xs text-red-600 mt-2">Configure no Coolify um volume persistente com destino <b>/var/data/destrava</b>. Documentos existentes continuam disponíveis para consulta quando estiverem nesse volume.</p>
+            <p className="text-sm font-bold text-red-800">Volume persistente não confirmado</p>
+            <p className="mt-0.5 text-xs text-red-700">{storageHealth?.message}</p>
           </div>
         </div>
       )}
 
-      <div className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="border-b border-slate-200 px-5 py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="inline-flex rounded-xl bg-slate-100 p-1 w-fit">
-            <button
-              type="button"
-              onClick={() => setTab("documentos")}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition ${tab === "documentos" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-            >
-              Documentos
-            </button>
-            {permitirUpload && (
-              <button
-                type="button"
-                onClick={() => setTab("adicionar")}
-                className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${tab === "adicionar" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
-              >
-                <Plus className="h-4 w-4" /> Anexar documento
-              </button>
-            )}
+      <div className="grid grid-cols-1 xl:grid-cols-[430px_minmax(0,1fr)] min-h-[calc(100vh-280px)]">
+        <aside className="border-b xl:border-b-0 xl:border-r border-slate-200 bg-slate-50/60 flex flex-col min-h-[520px]">
+          <div className="p-4 space-y-3 border-b border-slate-200 bg-white/70">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, tipo ou observação..." className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none focus:border-blue-400" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2 gap-2">
+              <select value={secaoFiltro} onChange={(e) => setSecaoFiltro(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700">
+                <option value="todos">Todas as categorias</option>
+                {secoes.map((secao) => <option key={secao} value={secao}>{secao}</option>)}
+              </select>
+              <select value={statusFiltro} onChange={(e) => setStatusFiltro(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700">
+                <option value="todos">Todos os status</option>
+                <option value="validados">Validados</option>
+                <option value="pendentes">Pendentes</option>
+                <option value="faltando_arquivo">Sem arquivo físico</option>
+              </select>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={exportarTodos} className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2">
-              <Download className="h-4 w-4" /> Exportar acervo
-            </button>
-          </div>
-        </div>
 
-        {tab === "documentos" ? (
-          <div className="min-h-[680px] grid grid-cols-1 lg:grid-cols-[250px_360px_minmax(0,1fr)]">
-            <aside className="border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/70 p-4">
-              <p className="px-2 text-[11px] font-black uppercase tracking-[0.1em] text-slate-400">Categorias</p>
-              <div className="mt-3 space-y-1.5">
-                <button type="button" onClick={() => setSecaoFiltro("todos")} className={`w-full rounded-xl px-3 py-2.5 text-left text-sm font-bold flex items-center justify-between ${secaoFiltro === "todos" ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-white"}`}>
-                  <span>Todos os documentos</span><span>{docs.length}</span>
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[calc(100vh-400px)] min-h-[420px]">
+            {loading ? (
+              <div className="h-full flex items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-blue-600" /></div>
+            ) : docsFiltrados.length === 0 ? (
+              <div className="h-full min-h-[320px] flex flex-col items-center justify-center text-center px-6">
+                <FolderOpen className="h-12 w-12 text-slate-200" />
+                <p className="mt-3 font-bold text-slate-700">Nenhum documento encontrado</p>
+                <p className="mt-1 text-sm text-slate-400">Altere os filtros ou anexe um novo documento.</p>
+              </div>
+            ) : docsFiltrados.map((doc) => {
+              const Icon = documentIcon(doc);
+              const selected = selectedId === doc.id;
+              return (
+                <button key={doc.id} type="button" onClick={() => setSelectedId(doc.id)} className={`w-full rounded-2xl border p-3 text-left transition ${selected ? "border-blue-300 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50"}`}>
+                  <div className="flex gap-3">
+                    <div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 ${selected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}><Icon className="h-5 w-5" /></div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-black text-slate-900 truncate">{doc.nome_customizado || doc.nome_original}</p>
+                      <p className="mt-0.5 text-xs text-slate-500 truncate">{labelTipoDocumento(doc.tipo_documento)}</p>
+                      <div className="mt-2 flex items-center gap-2 flex-wrap">
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusClass(doc)}`}>{statusLabel(doc)}</span>
+                        <span className="text-[10px] text-slate-400">{formatBytes(doc.tamanho_bytes)}</span>
+                        <span className="text-[10px] text-slate-400">{formatDate(doc.criado_em)}</span>
+                      </div>
+                    </div>
+                  </div>
                 </button>
-                {secoes.map((secao) => {
-                  const count = docs.filter((doc) => slots.some((item) => item.secao === secao && item.slot.matchTipos.includes(doc.tipo_documento))).length;
-                  return (
-                    <button key={secao} type="button" onClick={() => setSecaoFiltro(secao)} className={`w-full rounded-xl px-3 py-2.5 text-left text-xs font-semibold flex items-center justify-between gap-3 ${secaoFiltro === secao ? "bg-white text-blue-700 shadow-sm border border-blue-100" : "text-slate-600 hover:bg-white"}`}>
-                      <span>{secao}</span><span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">{count}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </aside>
-
-            <section className="border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col min-h-[680px]">
-              <div className="p-4 border-b border-slate-200 space-y-3">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar arquivo..." className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm outline-none focus:border-blue-400 focus:bg-white" />
-                </div>
-                <select value={statusFiltro} onChange={(e) => setStatusFiltro(e.target.value)} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700">
-                  <option value="todos">Todos os status</option>
-                  <option value="validados">Somente validados</option>
-                  <option value="pendentes">Pendentes de validação</option>
-                </select>
-              </div>
-              <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[720px]">
-                {loading ? (
-                  <div className="h-full flex items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-blue-600" /></div>
-                ) : docsFiltrados.length === 0 ? (
-                  <div className="h-full min-h-[360px] flex flex-col items-center justify-center text-center px-6">
-                    <FolderOpen className="h-12 w-12 text-slate-200" />
-                    <p className="mt-3 font-bold text-slate-700">Nenhum documento encontrado</p>
-                    <p className="mt-1 text-sm text-slate-400">Altere os filtros ou anexe um novo documento.</p>
-                  </div>
-                ) : docsFiltrados.map((doc) => {
-                  const Icon = documentIcon(doc);
-                  const selected = selectedId === doc.id;
-                  return (
-                    <button key={doc.id} type="button" onClick={() => setSelectedId(doc.id)} className={`w-full rounded-2xl border p-3 text-left transition ${selected ? "border-blue-300 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50"}`}>
-                      <div className="flex gap-3">
-                        <div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 ${selected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}><Icon className="h-5 w-5" /></div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold text-slate-800 truncate">{doc.nome_customizado || doc.nome_original}</p>
-                          <p className="mt-0.5 text-xs text-slate-500 line-clamp-2">{labelTipoDocumento(doc.tipo_documento)}</p>
-                          <div className="mt-2 flex items-center gap-2 flex-wrap">
-                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusClass(doc)}`}>{statusLabel(doc)}</span>
-                            <span className="text-[10px] text-slate-400">{formatBytes(doc.tamanho_bytes)}</span>
-                          </div>
-                        </div>
-                        <ChevronRight className={`h-4 w-4 mt-1 shrink-0 ${selected ? "text-blue-600" : "text-slate-300"}`} />
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section className="min-w-0 bg-slate-100/60 flex flex-col min-h-[680px]">
-              {!selectedDoc ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-                  <Eye className="h-14 w-14 text-slate-200" />
-                  <p className="mt-4 font-bold text-slate-700">Selecione um documento</p>
-                  <p className="mt-1 text-sm text-slate-400">A visualização completa aparecerá aqui.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="border-b border-slate-200 bg-white px-4 py-3 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
-                    <div className="min-w-0 flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center"><SelectedIcon className="h-5 w-5 text-blue-600" /></div>
-                      <div className="min-w-0">
-                        <p className="font-bold text-slate-900 truncate">{selectedDoc.nome_customizado || selectedDoc.nome_original}</p>
-                        <p className="text-xs text-slate-500 truncate">{labelTipoDocumento(selectedDoc.tipo_documento)}</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button type="button" onClick={() => baixar(selectedDoc)} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5"><Download className="h-3.5 w-3.5" /> Baixar</button>
-                      <button type="button" onClick={() => imprimir(selectedDoc)} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5"><Printer className="h-3.5 w-3.5" /> Imprimir</button>
-                      {permitirValidar && <button type="button" onClick={() => validar(selectedDoc)} className={`h-9 px-3 rounded-lg border text-xs font-bold flex items-center gap-1.5 ${selectedDoc.validado ? "border-amber-200 bg-amber-50 text-amber-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}><Check className="h-3.5 w-3.5" /> {selectedDoc.validado ? "Reabrir" : "Validar"}</button>}
-                      {permitirExcluir && <button type="button" onClick={() => arquivar(selectedDoc)} className="h-9 px-3 rounded-lg border border-red-200 bg-red-50 text-xs font-bold text-red-700 flex items-center gap-1.5"><Archive className="h-3.5 w-3.5" /> Arquivar</button>}
-                    </div>
-                  </div>
-
-                  <div className="flex-1 p-4 min-h-[520px]">
-                    <div className="h-full min-h-[520px] rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-inner flex items-center justify-center">
-                      {previewLoading ? (
-                        <div className="flex flex-col items-center gap-3 text-slate-500"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /><span className="text-sm">Carregando documento...</span></div>
-                      ) : previewUrl && previewIsPdf ? (
-                        <iframe title={selectedDoc.nome_original} src={previewUrl} className="w-full h-[620px] bg-white" />
-                      ) : previewUrl && previewIsImage ? (
-                        <div className="w-full h-[620px] overflow-auto bg-slate-950/5 p-4 flex items-start justify-center"><img src={previewUrl} alt={selectedDoc.nome_original} className="max-w-full h-auto rounded-lg shadow-lg" /></div>
-                      ) : previewUrl ? (
-                        <div className="text-center p-8"><File className="h-14 w-14 text-slate-300 mx-auto" /><p className="mt-3 font-bold text-slate-700">Pré-visualização não disponível</p><p className="mt-1 text-sm text-slate-400">Baixe o arquivo para abrir no aplicativo adequado.</p><button onClick={() => baixar(selectedDoc)} className="mt-4 h-10 px-4 rounded-xl bg-blue-600 text-white text-sm font-bold">Baixar arquivo</button></div>
-                      ) : (
-                        <div className="text-center p-8"><AlertTriangle className="h-14 w-14 text-red-300 mx-auto" /><p className="mt-3 font-bold text-red-700">Arquivo físico indisponível</p><p className="mt-1 text-sm text-slate-500">O registro existe, mas o arquivo não foi localizado no volume persistente.</p></div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="border-t border-slate-200 bg-white px-5 py-4 grid grid-cols-2 xl:grid-cols-4 gap-4 text-xs">
-                    <div><p className="font-bold uppercase tracking-wide text-slate-400">Arquivo</p><p className="mt-1 text-slate-700 break-all">{selectedDoc.nome_original}</p></div>
-                    <div><p className="font-bold uppercase tracking-wide text-slate-400">Tamanho</p><p className="mt-1 text-slate-700">{formatBytes(selectedDoc.tamanho_bytes)}</p></div>
-                    <div><p className="font-bold uppercase tracking-wide text-slate-400">Incluído em</p><p className="mt-1 text-slate-700">{formatDate(selectedDoc.criado_em)}</p></div>
-                    <div><p className="font-bold uppercase tracking-wide text-slate-400">Status</p><p className="mt-1 text-slate-700">{statusLabel(selectedDoc)}</p></div>
-                    {selectedDoc.observacoes && <div className="col-span-2 xl:col-span-4"><p className="font-bold uppercase tracking-wide text-slate-400">Observações</p><p className="mt-1 text-slate-700 whitespace-pre-wrap">{selectedDoc.observacoes}</p></div>}
-                  </div>
-                </>
-              )}
-            </section>
+              );
+            })}
           </div>
-        ) : (
-          <div className="min-h-[680px] grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]">
-            <aside className="border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/70 p-4">
-              <p className="px-2 text-[11px] font-black uppercase tracking-[0.1em] text-slate-400">Selecione o documento</p>
-              <div className="mt-3 space-y-5 max-h-[720px] overflow-y-auto pr-1">
-                {secoes.map((secao) => (
-                  <div key={secao}>
-                    <p className="px-2 mb-1.5 text-[11px] font-bold text-slate-500">{secao}</p>
-                    <div className="space-y-1">
-                      {slots.filter((item) => item.secao === secao).map(({ slot }) => {
-                        const count = docs.filter((doc) => slot.matchTipos.includes(doc.tipo_documento)).length;
-                        const active = selectedSlot?.tipoUpload === slot.tipoUpload;
-                        return (
-                          <button key={slot.tipoUpload} type="button" onClick={() => setSelectedUploadType(slot.tipoUpload)} className={`w-full rounded-xl border px-3 py-2.5 text-left transition flex items-center justify-between gap-3 ${active ? "border-blue-300 bg-white text-blue-700 shadow-sm" : "border-transparent text-slate-600 hover:bg-white hover:border-slate-200"}`}>
-                            <span className="text-xs font-semibold leading-snug">{slot.titulo}</span>
-                            <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">{count}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </aside>
+        </aside>
 
-            <section className="p-5 lg:p-8 bg-slate-50/30">
-              {selectedSlot && (
-                <div className="max-w-4xl mx-auto">
-                  <div className="mb-6">
-                    <p className="text-[11px] font-black uppercase tracking-[0.12em] text-blue-600">Novo documento</p>
-                    <h2 className="mt-1 text-2xl font-black text-slate-900">{selectedSlot.titulo}</h2>
-                    <p className="mt-2 text-sm text-slate-500">{selectedSlot.descricao || "Anexe o arquivo no campo correto. Cada documento permanece identificado e disponível no acervo da empresa."}</p>
-                  </div>
-
-                  <div className="rounded-3xl border border-slate-200 bg-white p-5 lg:p-7 shadow-sm space-y-6">
-                    <div
-                      onDragEnter={(e) => { e.preventDefault(); setDragging(true); }}
-                      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-                      onDragLeave={(e) => { e.preventDefault(); setDragging(false); }}
-                      onDrop={(e) => { e.preventDefault(); setDragging(false); chooseFile(e.dataTransfer.files?.[0] || null); }}
-                      className={`min-h-[240px] rounded-2xl border-2 border-dashed flex flex-col items-center justify-center text-center p-8 transition ${dragging ? "border-blue-500 bg-blue-50" : uploadDraft.file ? "border-emerald-300 bg-emerald-50/50" : "border-slate-300 bg-slate-50 hover:border-blue-300"}`}
-                    >
-                      {uploadDraft.file ? (
-                        <>
-                          <div className="h-16 w-16 rounded-2xl bg-emerald-100 flex items-center justify-center"><CheckCircle2 className="h-8 w-8 text-emerald-600" /></div>
-                          <p className="mt-4 font-black text-slate-900 break-all">{uploadDraft.file.name}</p>
-                          <p className="mt-1 text-sm text-slate-500">{formatBytes(uploadDraft.file.size)}</p>
-                          <div className="mt-5 flex items-center gap-2">
-                            <button type="button" onClick={() => fileInputRef.current?.click()} className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700">Trocar arquivo</button>
-                            <button type="button" onClick={() => setUploadDraft((current) => ({ ...current, file: null }))} className="h-10 px-4 rounded-xl border border-red-200 bg-red-50 text-sm font-bold text-red-700">Remover</button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="h-16 w-16 rounded-2xl bg-blue-100 flex items-center justify-center"><UploadCloud className="h-8 w-8 text-blue-600" /></div>
-                          <p className="mt-4 text-lg font-black text-slate-900">Arraste o arquivo aqui</p>
-                          <p className="mt-1 text-sm text-slate-500">ou selecione no computador ou celular</p>
-                          <button type="button" onClick={() => fileInputRef.current?.click()} className="mt-5 h-11 px-5 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-sm hover:bg-blue-700">Selecionar arquivo</button>
-                          <p className="mt-3 text-xs text-slate-400">PDF, JPG, PNG, WEBP, XLSX, CSV ou DOCX · máximo 25 MB</p>
-                        </>
-                      )}
-                      <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" onChange={(e) => { chooseFile(e.target.files?.[0] || null); e.currentTarget.value = ""; }} />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <label className="space-y-1.5">
-                        <span className="text-xs font-bold text-slate-600">Nome personalizado {selectedSlot.exigeNome ? "*" : "(opcional)"}</span>
-                        <input value={uploadDraft.nomeCustomizado} onChange={(e) => setUploadDraft((current) => ({ ...current, nomeCustomizado: e.target.value }))} placeholder={selectedSlot.placeholderNome || "Ex.: Cartão CNPJ atualizado"} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400" />
-                      </label>
-                      <label className="space-y-1.5">
-                        <span className="text-xs font-bold text-slate-600">Data de emissão (opcional)</span>
-                        <input type="date" value={uploadDraft.dataEmissao} onChange={(e) => setUploadDraft((current) => ({ ...current, dataEmissao: e.target.value }))} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400" />
-                      </label>
-                      <label className="space-y-1.5 md:col-span-2">
-                        <span className="text-xs font-bold text-slate-600">Observações (opcional)</span>
-                        <textarea value={uploadDraft.observacoes} onChange={(e) => setUploadDraft((current) => ({ ...current, observacoes: e.target.value }))} placeholder="Inclua informações úteis para a análise e validação deste documento." className="min-h-[110px] w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-blue-400 resize-y" />
-                      </label>
-                    </div>
-
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex items-start gap-3">
-                      <ShieldCheck className="h-5 w-5 text-emerald-600 mt-0.5 shrink-0" />
-                      <div>
-                        <p className="text-sm font-bold text-emerald-800">Armazenamento protegido</p>
-                        <p className="mt-0.5 text-xs text-emerald-700">O envio somente será aceito quando o volume persistente estiver ativo. O arquivo é validado por hash e gravado antes do registro definitivo no banco.</p>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
-                      <button type="button" onClick={() => { setUploadDraft(EMPTY_UPLOAD); setTab("documentos"); }} className="h-11 px-5 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700">Cancelar</button>
-                      <button type="button" disabled={uploading || !uploadDraft.file || Boolean(storageHealth?.required && (!storageHealth.persistent || !storageHealth.writable))} onClick={upload} className="h-11 px-6 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                        {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />} Salvar no acervo
-                      </button>
-                    </div>
+        <main className="min-w-0 bg-slate-100/60 flex flex-col min-h-[calc(100vh-280px)]">
+          {!selectedDoc ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+              <Eye className="h-14 w-14 text-slate-200" />
+              <p className="mt-4 font-bold text-slate-700">Selecione um documento</p>
+              <p className="mt-1 text-sm text-slate-400">A visualização completa aparecerá aqui.</p>
+            </div>
+          ) : (
+            <>
+              <div className="border-b border-slate-200 bg-white px-4 py-3 flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-3">
+                <div className="min-w-0 flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center"><SelectedIcon className="h-5 w-5 text-blue-600" /></div>
+                  <div className="min-w-0">
+                    <p className="font-black text-slate-950 truncate">{selectedDoc.nome_customizado || selectedDoc.nome_original}</p>
+                    <p className="text-xs text-slate-500 truncate">{labelTipoDocumento(selectedDoc.tipo_documento)}</p>
                   </div>
                 </div>
-              )}
-            </section>
-          </div>
-        )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {previewUrl && (
+                    <a href={previewUrl} target="_blank" rel="noreferrer" className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5">
+                      <ExternalLink className="h-3.5 w-3.5" /> Nova guia
+                    </a>
+                  )}
+                  <button type="button" onClick={() => baixar(selectedDoc)} disabled={selectedDoc.arquivo_disponivel === false} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1.5"><Download className="h-3.5 w-3.5" /> Baixar</button>
+                  <button type="button" onClick={() => imprimir(selectedDoc)} disabled={selectedDoc.arquivo_disponivel === false} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1.5"><Printer className="h-3.5 w-3.5" /> Imprimir</button>
+                  {permitirValidar && <button type="button" onClick={() => validar(selectedDoc)} className={`h-9 px-3 rounded-lg border text-xs font-bold flex items-center gap-1.5 ${selectedDoc.validado ? "border-amber-200 bg-amber-50 text-amber-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}><Check className="h-3.5 w-3.5" /> {selectedDoc.validado ? "Reabrir" : "Validar"}</button>}
+                  {permitirExcluir && <button type="button" onClick={() => arquivar(selectedDoc)} className="h-9 px-3 rounded-lg border border-red-200 bg-red-50 text-xs font-bold text-red-700 flex items-center gap-1.5"><Archive className="h-3.5 w-3.5" /> Arquivar</button>}
+                </div>
+              </div>
+
+              <div className="flex-1 p-4 min-h-[560px]">
+                <div className="h-full min-h-[560px] rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-inner flex items-center justify-center">
+                  {previewLoading ? (
+                    <div className="flex flex-col items-center gap-3 text-slate-500"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /><span className="text-sm">Carregando documento...</span></div>
+                  ) : previewUrl && previewIsPdf ? (
+                    <iframe title={selectedDoc.nome_original} src={previewUrl} className="w-full h-[calc(100vh-390px)] min-h-[560px] bg-white" />
+                  ) : previewUrl && previewIsImage ? (
+                    <div className="w-full h-[calc(100vh-390px)] min-h-[560px] overflow-auto bg-slate-950/5 p-4 flex items-start justify-center"><img src={previewUrl} alt={selectedDoc.nome_original} className="max-w-full h-auto rounded-lg shadow-lg" /></div>
+                  ) : previewUrl ? (
+                    <div className="text-center p-8"><File className="h-14 w-14 text-slate-300 mx-auto" /><p className="mt-3 font-bold text-slate-700">Pré-visualização não disponível</p><p className="mt-1 text-sm text-slate-400">Baixe o arquivo para abrir no aplicativo adequado.</p><button onClick={() => baixar(selectedDoc)} className="mt-4 h-10 px-4 rounded-xl bg-blue-600 text-white text-sm font-bold">Baixar arquivo</button></div>
+                  ) : (
+                    <div className="max-w-lg text-center p-8">
+                      <AlertTriangle className="h-14 w-14 text-red-300 mx-auto" />
+                      <p className="mt-3 font-black text-red-700">Arquivo físico não localizado</p>
+                      <p className="mt-2 text-sm text-slate-500">{previewError || "O banco tem o registro do documento, mas o arquivo não foi encontrado nos volumes pesquisados."}</p>
+                      <button onClick={carregar} className="mt-5 h-10 px-4 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 inline-flex items-center gap-2"><RefreshCw className="h-4 w-4" /> Tentar localizar novamente</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="border-t border-slate-200 bg-white px-5 py-4 grid grid-cols-2 xl:grid-cols-4 gap-4 text-xs">
+                <div><p className="font-bold uppercase tracking-wide text-slate-400">Arquivo</p><p className="mt-1 text-slate-700 break-all">{selectedDoc.nome_original}</p></div>
+                <div><p className="font-bold uppercase tracking-wide text-slate-400">Tamanho</p><p className="mt-1 text-slate-700">{formatBytes(selectedDoc.tamanho_bytes)}</p></div>
+                <div><p className="font-bold uppercase tracking-wide text-slate-400">Incluído em</p><p className="mt-1 text-slate-700">{formatDate(selectedDoc.criado_em)}</p></div>
+                <div><p className="font-bold uppercase tracking-wide text-slate-400">Status</p><p className="mt-1 text-slate-700">{statusLabel(selectedDoc)}</p></div>
+                {selectedDoc.observacoes && <div className="col-span-2 xl:col-span-4"><p className="font-bold uppercase tracking-wide text-slate-400">Observações</p><p className="mt-1 text-slate-700 whitespace-pre-wrap">{selectedDoc.observacoes}</p></div>}
+              </div>
+            </>
+          )}
+        </main>
       </div>
     </div>
   );

@@ -414,7 +414,7 @@ router.get('/', auth, async (req: Request, res: Response) => {
 
     const { rows } = await pool.query(
       `SELECT id, entidade_tipo, entidade_id, empresa_id, cliente_pf_id, lead_id, socio_id, contrato_id, simulacao_id,
-              tipo_documento, nome_original, nome_arquivo, url_arquivo, mime_type, tamanho_bytes, hash_arquivo,
+              tipo_documento, nome_original, nome_arquivo, caminho_arquivo, url_arquivo, mime_type, tamanho_bytes, hash_arquivo,
               status, origem, obrigatorio, validado, validado_por, validado_em, observacoes, metadados,
               data_emissao_documento, data_validade_documento, validade_dias, status_validade, exige_revisao_humana,
               nome_customizado, resultado_validacao, ultima_extracao_ia_id, ultima_indexacao_rag_id,
@@ -424,7 +424,25 @@ router.get('/', auth, async (req: Request, res: Response) => {
         ORDER BY criado_em DESC`,
       values
     );
-    res.json(rows);
+    const rowsWithStorage = rows.map((doc: any) => {
+      const resolved = resolveDocumentPath(doc);
+      if (resolved.relativePath && doc.caminho_arquivo !== resolved.relativePath) {
+        pool.query(
+          'UPDATE public.documentos_arquivos SET caminho_arquivo=$1, atualizado_em=NOW() WHERE id=$2',
+          [resolved.relativePath, doc.id],
+        ).catch((err: any) => console.warn('[documentos] Não foi possível normalizar caminho no list:', err?.message || err));
+      }
+      const { caminho_arquivo, ...safeDoc } = doc;
+      return {
+        ...safeDoc,
+        arquivo_disponivel: Boolean(resolved.absolutePath),
+        arquivo_relativo: resolved.relativePath || null,
+        armazenamento_mensagem: resolved.absolutePath
+          ? 'Arquivo físico localizado.'
+          : 'Registro encontrado, mas o arquivo físico não foi localizado nos diretórios pesquisados.',
+      };
+    });
+    res.json(rowsWithStorage);
   } catch (err: any) {
     console.error('[GET /api/documentos]', err);
     res.status(500).json({ error: 'Erro ao listar documentos' });

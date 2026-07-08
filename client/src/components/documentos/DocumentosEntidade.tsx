@@ -36,6 +36,9 @@ export type DocumentoArquivo = {
   criado_por?: string | null;
   criado_em?: string;
   atualizado_em?: string;
+  arquivo_disponivel?: boolean;
+  arquivo_relativo?: string | null;
+  armazenamento_mensagem?: string | null;
 };
 
 export type DocumentosEntidadeProps = {

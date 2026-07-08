@@ -48,45 +48,41 @@ export default function AcervoDocumentalEmpresa() {
 
   return (
     <Layout>
-      <div className="min-h-screen bg-slate-50 px-4 py-5 lg:px-6 lg:py-6">
-        <div className="max-w-[1800px] mx-auto space-y-5">
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 lg:p-6 shadow-sm">
-            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
-              <div className="flex items-start gap-4 min-w-0">
+      <div className="min-h-screen bg-slate-50 px-3 py-4 lg:px-5">
+        <div className="mx-auto max-w-[1760px] space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setLocation("/colaborador/empresas")}
-                  className="h-11 w-11 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 flex items-center justify-center shrink-0"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                   title="Voltar para empresas"
                 >
                   <ArrowLeft className="h-5 w-5" />
                 </button>
-                <div className="h-12 w-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-sm shrink-0">
-                  <FileText className="h-6 w-6" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+                  <FileText className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-[11px] font-black uppercase tracking-[0.12em] text-blue-600">Acervo documental da empresa</p>
-                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">
-                      <ShieldCheck className="h-3 w-3" /> Arquivos protegidos
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-blue-600">Acervo documental</p>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                      <ShieldCheck className="h-3 w-3" /> Preservação ativa
                     </span>
                   </div>
-                  <h1 className="mt-1 text-2xl lg:text-3xl font-black text-slate-950 truncate">
+                  <h1 className="mt-0.5 truncate text-xl font-black text-slate-950 lg:text-2xl">
                     {loading ? "Carregando empresa..." : empresa?.razao_social || "Empresa"}
                   </h1>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
-                    {empresa?.nome_fantasia && <span>{empresa.nome_fantasia}</span>}
-                    {empresa?.cnpj && <span className="font-mono">{formatCNPJ(empresa.cnpj)}</span>}
-                    {(empresa?.cidade || empresa?.estado) && (
-                      <span className="inline-flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> {[empresa.cidade, empresa.estado].filter(Boolean).join(" / ")}</span>
-                    )}
-                  </div>
                 </div>
               </div>
 
-              <div className="max-w-xl rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-                <p className="font-bold">Página exclusiva para documentos</p>
-                <p className="mt-1 text-xs leading-relaxed text-blue-700">A inclusão de arquivos e a visualização foram separadas do cadastro geral da empresa. Cada documento é anexado individualmente, identificado e validado antes de permanecer no acervo.</p>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
+                {empresa?.nome_fantasia && <span>{empresa.nome_fantasia}</span>}
+                {empresa?.cnpj && <span className="font-mono">{formatCNPJ(empresa.cnpj)}</span>}
+                {(empresa?.cidade || empresa?.estado) && (
+                  <span className="inline-flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> {[empresa.cidade, empresa.estado].filter(Boolean).join(" / ")}</span>
+                )}
               </div>
             </div>
           </div>
