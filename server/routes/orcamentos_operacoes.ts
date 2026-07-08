@@ -369,7 +369,7 @@ async function gerarPdfOrcamentoPuppeteer(orcamento: Row): Promise<Buffer> {
   try {
     browser = await puppeteerL.default.launch({
       executablePath,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--single-process"],
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
       headless: true,
     });
     const page = await browser.newPage();

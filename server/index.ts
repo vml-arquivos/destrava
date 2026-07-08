@@ -7117,7 +7117,7 @@ ${(temTest1 || temTest2) ? `
     try {
       browserL = await puppeteerL.default.launch({
         executablePath: executablePathL,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process'],
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
         headless: true,
       });
       const pageL = await browserL.newPage();
@@ -7516,7 +7516,7 @@ ${(temTest1 || temTest2) ? `
         }
         browser = await puppeteer.default.launch({
           executablePath,
-          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process'],
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
           headless: true,
         });
         const page = await browser.newPage();
@@ -7907,7 +7907,7 @@ ${(temTest1 || temTest2) ? `
 
         browser = await puppeteer.default.launch({
           executablePath,
-          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process'],
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
           headless: true,
         });
 
@@ -10901,7 +10901,7 @@ async function registrarDocumentoContratoGerado(params: {
 
         browser = await puppeteer.default.launch({
           executablePath,
-          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--single-process"],
+          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
           headless: true,
         });
 
@@ -12648,7 +12648,7 @@ async function registrarDocumentoContratoGerado(params: {
         }
         browser = await puppeteer.default.launch({
           executablePath,
-          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process'],
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
           headless: true,
         });
         const page = await browser.newPage();
