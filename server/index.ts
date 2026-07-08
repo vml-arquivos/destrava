@@ -1785,6 +1785,37 @@ async function startServer() {
   } catch (err: any) { console.warn('[startup] Migration 067:', err?.message); }
   // ─────────────────────────────────────────────────────────────────────────────
 
+  // ── Migration 069: corrige CHECK constraint de cadastro_status ────────────────
+  // O banco em produção tem uma constraint "empresas_cadastro_status_check"
+  // (e equivalentes em clientes_pf/leads) que nunca foi criada por nenhuma
+  // migration deste repositório — foi adicionada manualmente em algum momento
+  // e ficou desatualizada, rejeitando o valor 'removido' que o próprio app
+  // grava ao arquivar um cadastro que não pode ser apagado de verdade (ex:
+  // empresa com contrato_gerado vinculado, protegido por ON DELETE RESTRICT).
+  // Resultado: apagar/arquivar cadastro incompleto ou duplicado falhava sempre
+  // com "new row for relation ... violates check constraint ...".
+  // Esta migration reconstrói a constraint nas 3 tabelas com a lista completa
+  // de valores que o código realmente usa. Idempotente: seguro rodar de novo.
+  const cadastroStatusValoresValidos = `('completo','incompleto','duplicado','removido','em_uso_acompanhamento')`;
+  for (const tabela of ['empresas', 'clientes_pf', 'leads']) {
+    try {
+      await pool.query(`
+        DO $$
+        BEGIN
+          ALTER TABLE public.${tabela} DROP CONSTRAINT IF EXISTS ${tabela}_cadastro_status_check;
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END$$;
+      `);
+      await pool.query(`
+        ALTER TABLE public.${tabela}
+          ADD CONSTRAINT ${tabela}_cadastro_status_check
+          CHECK (cadastro_status IS NULL OR cadastro_status IN ${cadastroStatusValoresValidos})
+      `);
+      console.log(`[startup] Migration 069 (${tabela}.cadastro_status CHECK): OK.`);
+    } catch (err: any) { console.warn(`[startup] Migration 069 (${tabela}):`, err?.message); }
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // body parser, CORS e no-cache já registrados no topo de startServer()
   app.use('/api/documentos', documentosRouter);
   app.use('/api/orcamentos', auth, createOrcamentosOperacoesRouter(pool));
@@ -3778,33 +3809,55 @@ async function startServer() {
       }
       const { tipo, id } = req.params;
       let removido = false;
+      let modo: "apagado" | "arquivado" = "apagado";
+
+      async function apagarOuArquivar(deleteSql: string, arquivarSql: string) {
+        try {
+          await pool.query(deleteSql, [id]);
+          removido = true;
+          modo = "apagado";
+        } catch (deleteErr: any) {
+          try {
+            await pool.query(arquivarSql, [id]);
+            modo = "arquivado";
+          } catch (arquivarErr: any) {
+            console.error("[cadastros-incompletos] falha ao apagar E ao arquivar", { tipo, id, deleteErr: deleteErr?.message, arquivarErr: arquivarErr?.message });
+            throw new Error(
+              `Não foi possível apagar (provavelmente há dado vinculado, ex: contrato) nem arquivar (${arquivarErr?.message || "erro desconhecido"}). ` +
+              `Avise o time técnico com o ID ${id}.`
+            );
+          }
+        }
+      }
 
       if (tipo === "empresa") {
-        try { await pool.query("DELETE FROM empresas WHERE id = $1", [id]); removido = true; }
-        catch {
-          await pool.query(
-            `UPDATE empresas
-                SET arquivado_por_duplicidade = true,
-                    bloqueado_operacional = true,
-                    cadastro_completo = false,
-                    cadastro_status = 'removido',
-                    cadastro_pendencias = ARRAY['Cadastro removido/ocultado por saneamento'],
-                    updated_at = NOW()
-              WHERE id = $1`, [id]
-          );
-        }
+        await apagarOuArquivar(
+          "DELETE FROM empresas WHERE id = $1",
+          `UPDATE empresas
+              SET arquivado_por_duplicidade = true,
+                  bloqueado_operacional = true,
+                  cadastro_completo = false,
+                  cadastro_status = 'removido',
+                  cadastro_pendencias = ARRAY['Cadastro removido/ocultado por saneamento'],
+                  updated_at = NOW()
+            WHERE id = $1`
+        );
       } else if (tipo === "cliente_pf") {
-        try { await pool.query("DELETE FROM clientes_pf WHERE id = $1", [id]); removido = true; }
-        catch { await pool.query("UPDATE clientes_pf SET ativo=false, cadastro_status='removido', bloqueado_operacional=true, updated_at=NOW() WHERE id=$1", [id]); }
+        await apagarOuArquivar(
+          "DELETE FROM clientes_pf WHERE id = $1",
+          "UPDATE clientes_pf SET ativo=false, cadastro_status='removido', bloqueado_operacional=true, updated_at=NOW() WHERE id=$1"
+        );
       } else if (tipo === "lead") {
-        try { await pool.query("DELETE FROM leads WHERE id = $1", [id]); removido = true; }
-        catch { await pool.query("UPDATE leads SET arquivado_por_duplicidade=true, cadastro_status='removido', bloqueado_operacional=true, updated_at=NOW() WHERE id=$1", [id]); }
+        await apagarOuArquivar(
+          "DELETE FROM leads WHERE id = $1",
+          "UPDATE leads SET arquivado_por_duplicidade=true, cadastro_status='removido', bloqueado_operacional=true, updated_at=NOW() WHERE id=$1"
+        );
       } else {
         res.status(400).json({ error: "Tipo de cadastro inválido" });
         return;
       }
 
-      res.json({ success: true, removido_definitivo: removido });
+      res.json({ success: true, removido_definitivo: removido, modo });
     } catch (err: any) {
       console.error("[DELETE /api/cadastros-incompletos/:tipo/:id]", err);
       res.status(500).json({ error: err?.message || "Erro ao apagar cadastro" });
@@ -3820,16 +3873,46 @@ async function startServer() {
       }
 
       let empresas = 0, clientes_pf = 0, leads = 0;
-      try { const r = await pool.query("DELETE FROM empresas WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); empresas = r.rowCount || 0; }
-      catch { const r = await pool.query("UPDATE empresas SET cadastro_status='removido', bloqueado_operacional=true WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); empresas = r.rowCount || 0; }
+      const erros: Record<string, string> = {};
 
-      try { const r = await pool.query("DELETE FROM clientes_pf WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); clientes_pf = r.rowCount || 0; }
-      catch { const r = await pool.query("UPDATE clientes_pf SET ativo=false, cadastro_status='removido', bloqueado_operacional=true WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); clientes_pf = r.rowCount || 0; }
+      async function removerTabela(nome: string, deleteSql: string, arquivarSql: string): Promise<number> {
+        try {
+          const r = await pool.query(deleteSql);
+          return r.rowCount || 0;
+        } catch (deleteErr: any) {
+          try {
+            const r = await pool.query(arquivarSql);
+            return r.rowCount || 0;
+          } catch (arquivarErr: any) {
+            console.error(`[remover-duplicados] falha em ${nome}`, { deleteErr: deleteErr?.message, arquivarErr: arquivarErr?.message });
+            erros[nome] = arquivarErr?.message || deleteErr?.message || "erro desconhecido";
+            return 0;
+          }
+        }
+      }
 
-      try { const r = await pool.query("DELETE FROM leads WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); leads = r.rowCount || 0; }
-      catch { const r = await pool.query("UPDATE leads SET cadastro_status='removido', bloqueado_operacional=true WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"); leads = r.rowCount || 0; }
+      empresas = await removerTabela(
+        "empresas",
+        "DELETE FROM empresas WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'",
+        "UPDATE empresas SET cadastro_status='removido', bloqueado_operacional=true WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"
+      );
+      clientes_pf = await removerTabela(
+        "clientes_pf",
+        "DELETE FROM clientes_pf WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'",
+        "UPDATE clientes_pf SET ativo=false, cadastro_status='removido', bloqueado_operacional=true WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"
+      );
+      leads = await removerTabela(
+        "leads",
+        "DELETE FROM leads WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'",
+        "UPDATE leads SET cadastro_status='removido', bloqueado_operacional=true WHERE COALESCE(arquivado_por_duplicidade,false)=true OR cadastro_status='duplicado'"
+      );
 
-      res.json({ success: true, empresas, clientes_pf, leads, total_removidos: empresas + clientes_pf + leads });
+      res.json({
+        success: Object.keys(erros).length === 0,
+        empresas, clientes_pf, leads,
+        total_removidos: empresas + clientes_pf + leads,
+        ...(Object.keys(erros).length > 0 ? { erros } : {}),
+      });
     } catch (err: any) {
       console.error("[POST /api/cadastros-incompletos/remover-duplicados]", err);
       res.status(500).json({ error: err?.message || "Erro ao remover duplicados" });
