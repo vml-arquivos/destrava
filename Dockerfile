@@ -70,7 +70,7 @@ ENV NODE_ENV=production
 ENV PORT=4000
 ENV DATA_DIR=/var/data/destrava
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV CHROMIUM_PATH=/usr/bin/chromium
+ENV CHROMIUM_PATH=/usr/lib/chromium/chromium
 
 USER node
 

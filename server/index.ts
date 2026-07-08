@@ -10966,7 +10966,13 @@ async function registrarDocumentoContratoGerado(params: {
         cnpj: cnpj || null,
         nome: nome_empresa || null,
       });
-      const dadosEmpresa = empresa ? montarDadosEmpresaParaAcompanhamento(empresa) : {};
+      if (!empresa) {
+        res.status(400).json({
+          error: "Selecione uma empresa já cadastrada (Clientes → Clientes PJ) para criar o acompanhamento. Não é permitido criar um acompanhamento com empresa não cadastrada.",
+        });
+        return;
+      }
+      const dadosEmpresa = montarDadosEmpresaParaAcompanhamento(empresa);
 
       const nomeFinal = String(nome_empresa || dadosEmpresa.nome_empresa || "").trim();
       if (!nomeFinal) {

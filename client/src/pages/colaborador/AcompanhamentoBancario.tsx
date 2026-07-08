@@ -801,6 +801,53 @@ export default function AcompanhamentoBancario() {
     data_inicio: hojeISO(),
   });
 
+  const [empresasOpcoes, setEmpresasOpcoes] = useState<any[]>([]);
+  const [buscaEmpresaCombo, setBuscaEmpresaCombo] = useState("");
+  const [comboEmpresaAberto, setComboEmpresaAberto] = useState(false);
+  const [carregandoEmpresas, setCarregandoEmpresas] = useState(false);
+  const comboEmpresaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (comboEmpresaRef.current && !comboEmpresaRef.current.contains(e.target as Node)) setComboEmpresaAberto(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!comboEmpresaAberto) return;
+    const t = setTimeout(async () => {
+      setCarregandoEmpresas(true);
+      try {
+        const q = new URLSearchParams();
+        if (buscaEmpresaCombo.trim()) q.set("busca", buscaEmpresaCombo.trim());
+        const resp = await fetch(`/api/empresas?${q.toString()}`, { headers: authHeaders() });
+        setEmpresasOpcoes(resp.ok ? await resp.json() : []);
+      } catch {
+        setEmpresasOpcoes([]);
+      } finally {
+        setCarregandoEmpresas(false);
+      }
+    }, buscaEmpresaCombo ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [comboEmpresaAberto, buscaEmpresaCombo]);
+
+  function selecionarEmpresaAcompanhamento(empresa: any) {
+    setNovo((p) => ({
+      ...p,
+      empresa_id: empresa.id,
+      nome_empresa: empresa.razao_social || empresa.nome_fantasia || "",
+      cnpj: empresa.cnpj || "",
+      telefone_cliente: p.telefone_cliente || empresa.telefone || "",
+      whatsapp_cliente: p.whatsapp_cliente || empresa.whatsapp || "",
+      email_cliente: p.email_cliente || empresa.email || "",
+      faturamento_anual: p.faturamento_anual ?? empresa.faturamento_anual ?? undefined,
+    }));
+    setComboEmpresaAberto(false);
+    setBuscaEmpresaCombo("");
+  }
+
   const [upd, setUpd] = useState<AtualizacaoForm>(updFormInicial());
 
   const printFrameRef = useRef<HTMLIFrameElement>(null);
@@ -895,6 +942,7 @@ export default function AcompanhamentoBancario() {
 
     setNovo({
       id: rowCompleto.id,
+      empresa_id: rowCompleto.empresa_id || undefined,
       nome_empresa: rowCompleto.nome_empresa || "",
       cnpj: rowCompleto.cnpj || "",
       telefone_cliente: rowCompleto.telefone_cliente || "",
@@ -1008,8 +1056,12 @@ export default function AcompanhamentoBancario() {
 
   // ─── Salvar novo acompanhamento ───────────────────────────────────────────────
   const salvarNovo = async () => {
-    if (!novo.nome_empresa?.trim() || !novo.banco_observado?.trim()) {
-      alert("Informe pelo menos empresa e banco observado.");
+    if (!novo.empresa_id) {
+      alert("Selecione uma empresa já cadastrada. Não é possível criar um acompanhamento sem vincular a um cadastro existente.");
+      return;
+    }
+    if (!novo.banco_observado?.trim()) {
+      alert("Informe o banco observado.");
       return;
     }
     setSaving(true);
@@ -2071,9 +2123,63 @@ export default function AcompanhamentoBancario() {
                 <button className="rounded border px-3 py-1 text-sm" onClick={limparNovo}>Fechar</button>
               </div>
 
-              <h4 className="mb-2 text-sm font-semibold text-gray-700">Dados da empresa</h4>
+              <h4 className="mb-2 text-sm font-semibold text-gray-700">Empresa</h4>
+              <div className="mb-4">
+                <div ref={comboEmpresaRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setComboEmpresaAberto((v) => !v)}
+                    className="w-full flex items-center gap-2.5 h-11 px-3 border border-gray-300 rounded-lg bg-white hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-left"
+                  >
+                    {novo.empresa_id ? (
+                      <>
+                        <span className="flex-1 min-w-0 text-sm font-semibold text-gray-900 truncate">{novo.nome_empresa}</span>
+                        <span className="text-xs text-gray-400 shrink-0">{novo.cnpj || ""}</span>
+                      </>
+                    ) : (
+                      <span className="flex-1 text-sm text-gray-400">Busque e selecione uma empresa já cadastrada...</span>
+                    )}
+                  </button>
+                  {comboEmpresaAberto && (
+                    <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+                      <div className="p-2 border-b border-gray-100">
+                        <input
+                          autoFocus
+                          value={buscaEmpresaCombo}
+                          onChange={(e) => setBuscaEmpresaCombo(e.target.value)}
+                          placeholder="Buscar por nome ou CNPJ..."
+                          className="w-full h-9 rounded-md border border-gray-200 px-3 text-sm"
+                        />
+                      </div>
+                      <div className="max-h-64 overflow-y-auto p-1">
+                        {carregandoEmpresas ? (
+                          <div className="py-6 text-center text-xs text-gray-400">Carregando...</div>
+                        ) : empresasOpcoes.length === 0 ? (
+                          <div className="py-6 text-center text-xs text-gray-400">Nenhuma empresa encontrada no cadastro.</div>
+                        ) : (
+                          empresasOpcoes.map((emp) => (
+                            <button
+                              key={emp.id}
+                              type="button"
+                              onClick={() => selecionarEmpresaAcompanhamento(emp)}
+                              className="w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 text-sm"
+                            >
+                              <p className="font-semibold text-gray-800 truncate">{emp.razao_social || emp.nome_fantasia}</p>
+                              <p className="text-xs text-gray-400">{emp.cnpj}</p>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <p className="mt-1.5 text-[11px] text-gray-400">
+                  Não cadastramos empresa nova por aqui — se ela ainda não existe, cadastre primeiro em Clientes → Clientes PJ.
+                </p>
+              </div>
+
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                {NOVO_FIELDS.filter((f) => f.group === "empresa").map((field) => (
+                {NOVO_FIELDS.filter((f) => f.group === "empresa" && f.key !== "nome_empresa" && f.key !== "cnpj").map((field) => (
                   <FieldInput key={field.key} field={field} value={novo[field.key]} onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))} />
                 ))}
               </div>
