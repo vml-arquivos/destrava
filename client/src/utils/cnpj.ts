@@ -132,8 +132,13 @@ export interface CNPJData {
 
 /**
  * Busca dados de CNPJ para pré-preencher formulários.
- * Esta função NÃO é a sincronização final do cadastro.
- * A gravação/atualização persistente deve passar por `/api/empresas/:id/sincronizar-receita`.
+ * Esta função NÃO salva nada sozinha — ela só consulta as fontes (BrasilAPI/CNPJá/OpenCNPJ).
+ * A gravação/atualização persistente do cadastro é feita depois, mapeando o retorno
+ * desta função para os campos da empresa e chamando POST /api/empresas (criar) ou
+ * PATCH /api/empresas/:id (atualizar) — nunca existiu um endpoint
+ * "/api/empresas/:id/sincronizar-receita" no backend; se você estiver pensando em
+ * adicionar uma chamada pra essa rota, é sinal de que precisa mapear os campos e
+ * usar PATCH /api/empresas/:id em vez disso (ver mapCnpjDataParaEmpresa em Empresas.tsx).
  */
 export async function fetchCNPJData(cnpj: string): Promise<CNPJData> {
   const clean = cleanDigits(cnpj);

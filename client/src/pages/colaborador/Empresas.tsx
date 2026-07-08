@@ -1018,29 +1018,13 @@ export default function Empresas() {
         toast.success("Empresa atualizada!");
       } else {
         const criada = await apiFetch("/api/empresas", { method: "POST", body: JSON.stringify(payload) });
-        let empresaFinal = criada;
-        let sociosFinal = socios as any[];
-
-        // Criar empresa não pode ficar apenas no pré-preenchimento/consulta.
-        // Depois de criar o registro, a rota oficial atualiza e salva o cadastro no banco.
-        if (criada?.id) {
-          const sync = await apiFetch(`/api/empresas/${criada.id}/sincronizar-receita`, {
+        // Não é preciso um segundo round-trip de sincronização aqui: os dados da Receita
+        // (endereço, CNAE, sócios etc.) já vieram no passo de consulta do CNPJ, antes do
+        // formulário abrir, e já estão no `payload` que acabou de ser salvo em POST /api/empresas.
+        if (criada?.id && socios.length > 0) {
+          await apiFetch(`/api/empresas/${criada.id}/socios/bulk`, {
             method: "POST",
-            body: JSON.stringify({ cnpj: payload.cnpj }),
-          }).catch((err) => {
-            console.warn('[Empresas] Empresa criada, mas atualização cadastral Receita falhou:', err);
-            return null;
-          });
-          if (sync?.success && sync?.empresa) {
-            empresaFinal = sync.empresa;
-            if (Array.isArray(sync.socios_receita) && sync.socios_receita.length > 0) sociosFinal = sync.socios_receita;
-          }
-        }
-
-        if (empresaFinal?.id && sociosFinal.length > 0) {
-          await apiFetch(`/api/empresas/${empresaFinal.id}/socios/bulk`, {
-            method: "POST",
-            body: JSON.stringify({ socios: normalizarSociosReceita(sociosFinal as any[]), replace: true }),
+            body: JSON.stringify({ socios: normalizarSociosReceita(socios as any[]), replace: true }),
           }).catch(() => null);
         }
         toast.success("Empresa cadastrada e cadastro atualizado pela Receita.");
