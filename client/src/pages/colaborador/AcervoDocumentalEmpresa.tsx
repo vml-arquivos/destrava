@@ -48,9 +48,9 @@ export default function AcervoDocumentalEmpresa() {
 
   return (
     <Layout>
-      <div className="min-h-screen bg-slate-50 px-3 py-4 lg:px-5">
-        <div className="mx-auto max-w-[1760px] space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <div className="h-full min-h-0 overflow-y-auto bg-slate-50 px-3 py-3 lg:px-5">
+        <div className="mx-auto max-w-[1760px] space-y-3 pb-6">
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex min-w-0 items-center gap-3">
                 <button
@@ -71,7 +71,7 @@ export default function AcervoDocumentalEmpresa() {
                       <ShieldCheck className="h-3 w-3" /> Preservação ativa
                     </span>
                   </div>
-                  <h1 className="mt-0.5 truncate text-xl font-black text-slate-950 lg:text-2xl">
+                  <h1 className="mt-0.5 max-w-[980px] truncate text-lg font-black leading-tight text-slate-950 lg:text-xl">
                     {loading ? "Carregando empresa..." : empresa?.razao_social || "Empresa"}
                   </h1>
                 </div>
