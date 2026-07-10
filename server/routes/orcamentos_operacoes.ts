@@ -6,6 +6,8 @@ import path from "path";
 import crypto from "crypto";
 import { ChromiumLaunchError } from "../services/chromiumLauncher";
 import { generateBrandedPdfBuffer } from "../services/brandedPdfLayout";
+import { getDataDir } from "../services/documentStorage";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -622,9 +624,157 @@ async function gerarPdfOrcamentoPuppeteer(orcamento: Row): Promise<Buffer> {
     brand: normalizeMarca(orcamento.marca),
   });
 }
+function safePdfFileName(value: unknown, fallback = 'orcamento'): string {
+  const base = String(value || fallback)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9_.-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120);
+  return base || fallback;
+}
+
+function pdfText(value: unknown): string {
+  return String(value ?? '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, '-')
+    .replace(/[^\u0020-\u00ff]/g, '')
+    .trim();
+}
+
+function wrapLine(text: string, maxChars: number): string[] {
+  const words = pdfText(text).split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    if ((current + ' ' + word).trim().length > maxChars && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = (current + ' ' + word).trim();
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length ? lines : [''];
+}
+
+async function gerarPdfOrcamentoFallback(orcamento: Row, motivo: string): Promise<Buffer> {
+  const doc = await PDFDocument.create();
+  let page = doc.addPage([595.28, 841.89]);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const margin = 48;
+  let y = 790;
+
+  const addPageIfNeeded = (needed = 40) => {
+    if (y < 70 + needed) {
+      page = doc.addPage([595.28, 841.89]);
+      y = 790;
+    }
+  };
+
+  const draw = (text: unknown, opts: { size?: number; bold?: boolean; gap?: number; maxChars?: number; color?: any } = {}) => {
+    const lines = wrapLine(String(text ?? ''), opts.maxChars || 92);
+    for (const line of lines) {
+      addPageIfNeeded(18);
+      page.drawText(pdfText(line), {
+        x: margin,
+        y,
+        size: opts.size || 10,
+        font: opts.bold ? bold : font,
+        color: opts.color || rgb(0.12, 0.16, 0.24),
+      });
+      y -= (opts.size || 10) + 4;
+    }
+    y -= opts.gap ?? 6;
+  };
+
+  page.drawRectangle({ x: 0, y: 0, width: 595.28, height: 841.89, color: rgb(1, 1, 1) });
+  draw(marcaNome(orcamento.marca), { size: 18, bold: true, gap: 8, maxChars: 50, color: rgb(0.06, 0.18, 0.38) });
+  draw('ORÇAMENTO / PROPOSTA COMERCIAL', { size: 15, bold: true, gap: 12, maxChars: 70 });
+  draw(`Número: ${orcamento.numero || 'Rascunho'}`, { bold: true });
+  draw(`Cliente: ${orcamento.cliente_nome || 'Cliente não informado'}`);
+  draw(`Documento: ${orcamento.cliente_documento || 'Não informado'}`);
+  draw(`Contato: ${[orcamento.cliente_email, orcamento.cliente_telefone].filter(Boolean).join(' | ') || 'Não informado'}`);
+  draw(`Validade: ${orcamento.validade_ate ? fmtDate(orcamento.validade_ate) : `${orcamento.validade_dias || 30} dias`}`);
+  draw(`Valor total: ${moneyBR(orcamento.valor_total)}`, { size: 13, bold: true, gap: 12, color: rgb(0.06, 0.25, 0.48) });
+
+  if (String(orcamento.conteudo || '').trim() && orcamento.ocultar_conteudo !== true && orcamento.ocultar_conteudo !== 'true') {
+    draw('Escopo / observações:', { bold: true, gap: 4 });
+    String(orcamento.conteudo || '').split(/\n+/).forEach((line) => draw(line, { maxChars: 96, gap: 2 }));
+    y -= 8;
+  }
+
+  const servicos = normalizeServicos(orcamento.itens || []);
+  if (servicos.length) {
+    draw('Itens e serviços:', { bold: true, gap: 4 });
+    servicos.forEach((item, idx) => {
+      draw(`${idx + 1}. ${item.descricao} - qtd. ${item.quantidade} - unit. ${moneyBR(item.valor_unitario)} - subtotal ${moneyBR(item.quantidade * item.valor_unitario)}`, { maxChars: 96, gap: 2 });
+    });
+    y -= 8;
+  }
+
+  const assinaturas = normalizeAssinaturas(orcamento.assinaturas || []);
+  if (assinaturas.length) {
+    draw('Assinaturas:', { bold: true, gap: 8 });
+    assinaturas.forEach((a) => draw(`${a.nome || 'Assinante'} - ${a.cargo || a.tipo || 'assinatura'} ${a.documento ? `- ${a.documento}` : ''}`, { maxChars: 92, gap: 3 }));
+  }
+
+  addPageIfNeeded(45);
+  page.drawText(pdfText('PDF emitido em modo de contingência porque o motor Chromium não respondeu.'), { x: margin, y: 42, size: 8, font, color: rgb(0.6, 0.38, 0.05) });
+  page.drawText(pdfText(`Motivo técnico registrado: ${motivo}`.slice(0, 110)), { x: margin, y: 30, size: 7, font, color: rgb(0.55, 0.55, 0.55) });
+
+  return Buffer.from(await doc.save());
+}
+
+async function gerarPdfOrcamentoComFallback(orcamento: Row): Promise<{ pdf: Buffer; fallback: boolean; reason?: string }> {
+  try {
+    return { pdf: await gerarPdfOrcamentoPuppeteer(orcamento), fallback: false };
+  } catch (err: any) {
+    const reason = err?.message || String(err);
+    console.warn('[orcamentos][pdf] usando fallback sem Chromium:', reason);
+    return { pdf: await gerarPdfOrcamentoFallback(orcamento, reason), fallback: true, reason };
+  }
+}
+
+async function salvarPdfOrcamento(pool: Pool, orcamento: Row, pdf: Buffer): Promise<string | null> {
+  try {
+    const columns = await getColumns(pool, 'orcamentos_timbrados');
+    const dir = uploadsOrcamentosDir(orcamento.id);
+    await fs.promises.mkdir(dir, { recursive: true });
+    const nome = `${safePdfFileName(orcamento.numero || orcamento.id, 'orcamento')}.pdf`;
+    const filePath = path.join(dir, nome);
+    await fs.promises.writeFile(filePath, pdf, { mode: 0o640 });
+    if (columns.has('pdf_path')) {
+      await pool.query('UPDATE public.orcamentos_timbrados SET pdf_path=$1, atualizado_em=NOW() WHERE id=$2', [filePath, orcamento.id]);
+    }
+    return filePath;
+  } catch (err: any) {
+    console.warn('[orcamentos][pdf] não foi possível armazenar PDF:', err?.message || err);
+    return null;
+  }
+}
+
+async function carregarPdfArmazenado(filePath: unknown): Promise<Buffer | null> {
+  const raw = String(filePath || '').trim();
+  if (!raw) return null;
+  const candidates = [
+    path.resolve(raw),
+    path.join(getDataDir(), 'uploads', 'orcamentos', path.basename(raw)),
+    path.join(getDataDir(), 'uploads', 'orcamentos', path.basename(path.dirname(raw)), path.basename(raw)),
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return await fs.promises.readFile(candidate);
+    } catch {}
+  }
+  return null;
+}
 
 function uploadsOrcamentosDir(orcamentoId: string): string {
-  const dataDir = process.env.DATA_DIR || "/var/data/destrava";
+  const dataDir = getDataDir();
   return path.join(dataDir, "uploads", "orcamentos", orcamentoId);
 }
 
@@ -821,6 +971,7 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
 
       const { servicos, payload } = buildPayload(req.body || {});
       if (columns.has("itens")) payload.itens = JSON.stringify(servicos);
+      if (columns.has("pdf_path")) payload.pdf_path = null;
 
       // Ao editar um orçamento finalizado, volta para rascunho para gerar novo PDF atualizado.
       if (atual.rows[0]?.status === "finalizado") {
@@ -910,28 +1061,42 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
     }
   });
 
-  router.get("/:id/download", async (req: Request, res: Response) => {
+  async function responderPdfOrcamento(req: Request, res: Response) {
     try {
       const orcamento = await garantirNumeroFinalizado(pool, req.params.id);
       if (!orcamento) return res.status(404).json({ error: "Orçamento não encontrado" });
-      const pdf = await gerarPdfOrcamentoPuppeteer(orcamento);
-      const nome = `${String(orcamento.numero || "orcamento").replace(/[^a-zA-Z0-9_-]/g, "-")}.pdf`;
+
+      const force = ["1", "true", "sim"].includes(String(req.query.regenerar || req.query.force || "").toLowerCase());
+      let pdf = force ? null : await carregarPdfArmazenado(orcamento.pdf_path);
+      let fallback = false;
+      let fallbackReason = "";
+
+      if (!pdf) {
+        const generated = await gerarPdfOrcamentoComFallback(orcamento);
+        pdf = generated.pdf;
+        fallback = generated.fallback;
+        fallbackReason = generated.reason || "";
+        await salvarPdfOrcamento(pool, orcamento, pdf);
+      }
+
+      const nome = `${safePdfFileName(orcamento.numero || "orcamento", "orcamento")}.pdf`;
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
       res.setHeader("Content-Disposition", `attachment; filename="${nome}"`);
+      res.setHeader("X-Destrava-Pdf-Fallback", fallback ? "true" : "false");
+      if (fallbackReason) res.setHeader("X-Destrava-Pdf-Fallback-Reason", encodeURIComponent(fallbackReason.slice(0, 180)));
       res.send(pdf);
     } catch (err: any) {
       console.error("[orcamentos][download]", err);
-      if (err instanceof ChromiumLaunchError) {
-        res.status(503).json({
-          error: "Não foi possível iniciar o mecanismo de PDF no servidor. Verifique o deploy do Chromium.",
-          code: err.code,
-        });
-        return;
-      }
-      res.status(500).json({ error: "Erro ao gerar PDF", code: "PDF_GENERATION_FAILED" });
+      res.status(500).json({
+        error: "Erro ao gerar PDF do orçamento. Tente novamente e verifique os logs do servidor.",
+        code: err?.code || "PDF_GENERATION_FAILED",
+      });
     }
-  });
+  }
+
+  router.get("/:id/download", responderPdfOrcamento);
+  router.get("/:id/pdf", responderPdfOrcamento);
 
   router.post("/:id/anexos", upload.array("arquivos", 10), async (req: Request, res: Response) => {
     try {
@@ -978,7 +1143,8 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
       await pool.query(
         `UPDATE public.orcamentos_timbrados
             SET anexos_count = COALESCE(anexos_count, 0) + $2,
-                atualizado_em = NOW()
+                atualizado_em = NOW(),
+                pdf_path = NULL
           WHERE id = $1`,
         [id, inseridos.length],
       );

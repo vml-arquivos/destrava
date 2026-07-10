@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import ColaboradorLayout from "./Layout";
 import { useAuth } from "@/hooks/useAuth";
-import { getToken } from "@/lib/api";
+import { apiFetch, getToken } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -287,9 +287,8 @@ function FormConfig({
     const p = parseFloat(String(pct).replace(",", "."));
     if (!isFinite(f) || f <= 0 || !isFinite(p) || p <= 0) { setLimites(null); return; }
     try {
-      const r = await fetch("/api/acompanhamento-financeiro/calcular-limites", {
+      const data = await apiFetch("/api/acompanhamento-financeiro/calcular-limites", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           faturamento_anual_declarado: f,
           percentual_operacional: p,
@@ -297,7 +296,7 @@ function FormConfig({
           mes: new Date().getMonth() + 1,
         }),
       });
-      if (r.ok) setLimites(await r.json());
+      setLimites(data);
     } catch {}
   }, [fatNum, pct]);
 
@@ -310,15 +309,13 @@ function FormConfig({
     if (!isFinite(p) || p <= 0 || p > 100) { toast.error("Percentual deve estar entre 0,01% e 100%."); return; }
     setSaving(true);
     try {
-      const r = await fetch("/api/acompanhamento-financeiro/config", {
+      await apiFetch("/api/acompanhamento-financeiro/config", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ empresa_id: empresaId, faturamento_anual_declarado: f, percentual_operacional: p }),
       });
-      if (!r.ok) { const e = await r.json(); toast.error(e.error || "Erro ao salvar."); return; }
       toast.success("Configuração salva com sucesso.");
       onSalvo();
-    } catch { toast.error("Erro de conexão."); }
+    } catch (err: any) { toast.error(err?.message || "Erro de conexão."); }
     finally { setSaving(false); }
   };
 
@@ -501,15 +498,13 @@ function FormSemana({
       };
       if (semanaExistente?.id) body.id = semanaExistente.id;
 
-      const r = await fetch("/api/acompanhamento-financeiro/semana", {
+      await apiFetch("/api/acompanhamento-financeiro/semana", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!r.ok) { const e = await r.json(); toast.error(e.error || "Erro ao salvar."); return; }
       toast.success(semanaExistente ? "Semana atualizada com sucesso." : "Semana registrada com sucesso.");
       onSalvo();
-    } catch { toast.error("Erro de conexão."); }
+    } catch (err: any) { toast.error(err?.message || "Erro de conexão."); }
     finally { setSaving(false); }
   };
 
@@ -1228,6 +1223,7 @@ export default function AcompanhamentoFinanceiro() {
   // Estado principal
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [empresaSelecionada, setEmpresaSelecionada] = useState<string>("");
+  const [buscaEmpresa, setBuscaEmpresa] = useState<string>("");
   const [config, setConfig] = useState<Config | null>(null);
   const [semanas, setSemanas] = useState<SemanaFinanceira[]>([]);
   const [filtroAno, setFiltroAno] = useState(anoAtual);
@@ -1244,18 +1240,23 @@ export default function AcompanhamentoFinanceiro() {
   const [excluindo, setExcluindo] = useState(false);
   const [exportandoPdf, setExportandoPdf] = useState(false);
 
-  // Buscar empresas
+  // Buscar empresas por rota padronizada/autenticada.
+  // Não usa o Select customizado aqui porque este módulo foi diagnosticado com
+  // dropdown inconsistente em produção; o input + select nativo preserva o fluxo.
   useEffect(() => {
+    let mounted = true;
     setCarregandoEmpresas(true);
-    fetch("/api/empresas?limit=200")
-      .then(r => r.ok ? r.json() : [])
+    apiFetch("/api/empresas/search?limit=500&incluir_incompletos=1")
       .then(data => {
+        if (!mounted) return;
         const lista: Empresa[] = Array.isArray(data) ? data : (data.empresas || data.data || []);
         setEmpresas(lista);
-        if (lista.length > 0 && !empresaSelecionada) setEmpresaSelecionada(lista[0].id);
       })
-      .catch(() => {})
-      .finally(() => setCarregandoEmpresas(false));
+      .catch((err: any) => {
+        if (mounted) toast.error(err?.message || "Erro ao carregar empresas.");
+      })
+      .finally(() => { if (mounted) setCarregandoEmpresas(false); });
+    return () => { mounted = false; };
   }, []);
 
   // Buscar config e semanas quando empresa/filtro mudar
@@ -1263,13 +1264,17 @@ export default function AcompanhamentoFinanceiro() {
     if (!empresaSelecionada) return;
     setCarregando(true);
     try {
-      const [rConfig, rSemanas] = await Promise.all([
-        fetch(`/api/acompanhamento-financeiro/config/${empresaSelecionada}`),
-        fetch(`/api/acompanhamento-financeiro/semanas/${empresaSelecionada}?ano=${filtroAno}&mes=${filtroMes}`),
+      const [cfg, semanasData] = await Promise.all([
+        apiFetch(`/api/acompanhamento-financeiro/config/${empresaSelecionada}`),
+        apiFetch(`/api/acompanhamento-financeiro/semanas/${empresaSelecionada}?ano=${filtroAno}&mes=${filtroMes}`),
       ]);
-      if (rConfig.ok) setConfig(await rConfig.json());
-      if (rSemanas.ok) setSemanas(await rSemanas.json());
-    } catch {}
+      setConfig(cfg);
+      setSemanas(Array.isArray(semanasData) ? semanasData : (semanasData?.data || []));
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao carregar acompanhamento financeiro.");
+      setConfig(null);
+      setSemanas([]);
+    }
     finally { setCarregando(false); }
   }, [empresaSelecionada, filtroAno, filtroMes]);
 
@@ -1312,24 +1317,18 @@ export default function AcompanhamentoFinanceiro() {
     if (!semanaExcluindo) return;
     setExcluindo(true);
     try {
-      const r = await fetch(`/api/acompanhamento-financeiro/semana/${semanaExcluindo.id}`, { method: "DELETE" });
-      if (!r.ok) { const e = await r.json(); toast.error(e.error || "Erro ao excluir."); return; }
+      await apiFetch(`/api/acompanhamento-financeiro/semana/${semanaExcluindo.id}`, { method: "DELETE" });
       toast.success("Semana excluída com sucesso.");
       setSemanaExcluindo(null);
       carregarDados();
-    } catch { toast.error("Erro de conexão."); }
+    } catch (err: any) { toast.error(err?.message || "Erro de conexão."); }
     finally { setExcluindo(false); }
   };
 
   // Abrir edição de semana (busca detalhe completo)
   const abrirEdicao = async (semana: SemanaFinanceira) => {
     try {
-      const r = await fetch(`/api/acompanhamento-financeiro/semana/${semana.id}`);
-      if (r.ok) {
-        setSemanaEditando(await r.json());
-      } else {
-        setSemanaEditando(semana);
-      }
+      setSemanaEditando(await apiFetch(`/api/acompanhamento-financeiro/semana/${semana.id}`));
     } catch {
       setSemanaEditando(semana);
     }
@@ -1340,13 +1339,15 @@ export default function AcompanhamentoFinanceiro() {
   // Abrir detalhe completo
   const abrirDetalhe = async (semana: SemanaFinanceira) => {
     try {
-      const r = await fetch(`/api/acompanhamento-financeiro/semana/${semana.id}`);
-      if (r.ok) setSemanaDetalhe(await r.json());
-      else setSemanaDetalhe(semana);
+      setSemanaDetalhe(await apiFetch(`/api/acompanhamento-financeiro/semana/${semana.id}`));
     } catch { setSemanaDetalhe(semana); }
   };
 
   // Empresa selecionada
+  const termoEmpresa = buscaEmpresa.trim().toLowerCase();
+  const empresasFiltradas = termoEmpresa
+    ? empresas.filter((e) => `${e.razao_social || ""} ${e.cnpj || ""}`.toLowerCase().includes(termoEmpresa))
+    : empresas;
   const empresaAtual = empresas.find(e => e.id === empresaSelecionada);
 
   // Totais do período
@@ -1395,18 +1396,29 @@ export default function AcompanhamentoFinanceiro() {
                     <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
                   </div>
                 ) : (
-                  <Select value={empresaSelecionada} onValueChange={setEmpresaSelecionada}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Selecione uma empresa" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {empresas.map(e => (
-                        <SelectItem key={e.id} value={e.id}>
-                          {e.razao_social}
-                        </SelectItem>
+                  <div className="mt-1 space-y-2">
+                    <Input
+                      value={buscaEmpresa}
+                      onChange={(e) => setBuscaEmpresa(e.target.value)}
+                      placeholder="Buscar por razão social ou CNPJ..."
+                      className="h-9"
+                    />
+                    <select
+                      value={empresaSelecionada}
+                      onChange={(e) => setEmpresaSelecionada(e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    >
+                      <option value="">Selecione uma empresa</option>
+                      {empresasFiltradas.map(e => (
+                        <option key={e.id} value={e.id}>
+                          {e.razao_social}{e.cnpj ? ` — ${e.cnpj}` : ""}
+                        </option>
                       ))}
-                    </SelectContent>
-                  </Select>
+                    </select>
+                    {!empresasFiltradas.length && (
+                      <p className="text-xs text-amber-700">Nenhuma empresa encontrada para esta busca.</p>
+                    )}
+                  </div>
                 )}
               </div>
               <div>

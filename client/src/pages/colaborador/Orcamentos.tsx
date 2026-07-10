@@ -504,9 +504,10 @@ export default function Orcamentos() {
         return;
       }
       const { blob, filename } = await apiFetchBlob(
-        `/api/orcamentos/${base.id}/download?t=${Date.now()}`,
+        `/api/orcamentos/${base.id}/pdf?t=${Date.now()}`,
       );
       downloadBlob(blob, filename || `${base.numero || "orcamento"}.pdf`);
+      toast.success("PDF do orçamento gerado para download.");
     } catch (err: any) {
       toast.error(err.message || "Erro ao baixar PDF");
     } finally {

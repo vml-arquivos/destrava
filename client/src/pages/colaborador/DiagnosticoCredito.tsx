@@ -35,13 +35,15 @@ const STATUS_CONFIG: Record<string, { label: string; cor: string; bg: string; ic
 };
 
 function calcularStatusCredito(emp: EmpresaDiagnostico): string {
-  const score = emp.score_interno || 0;
-  const impedimentos = emp.pontos_impeditivos || 0;
-  const alertas = emp.alertas_criticos || 0;
-  if (!emp.ultima_analise) return "nao_analisado";
-  if (impedimentos >= 2 || score < 30) return "inapto";
-  if (impedimentos === 1 || alertas >= 3 || score < 50) return "pendencias_graves";
-  if (alertas >= 1 || score < 70) return "pendencias_leves";
+  if (emp.status_credito) return emp.status_credito;
+  const score = Number(emp.score_interno ?? 0);
+  const impedimentos = Number(emp.pontos_impeditivos ?? 0);
+  const alertas = Number(emp.alertas_criticos ?? 0);
+  const temAnalise = Boolean(emp.ultima_analise || emp.risco_classificacao || emp.score_interno !== undefined);
+  if (!temAnalise) return "nao_analisado";
+  if (impedimentos >= 2 || score < 30 || emp.risco_classificacao === "critico") return "inapto";
+  if (impedimentos === 1 || alertas >= 3 || score < 50 || emp.risco_classificacao === "alto") return "pendencias_graves";
+  if (alertas >= 1 || score < 70 || emp.risco_classificacao === "medio") return "pendencias_leves";
   return "apto";
 }
 
@@ -55,11 +57,11 @@ export default function DiagnosticoCredito() {
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
-      const data = await apiFetch(`/api/empresas?limite=500${busca ? `&busca=${encodeURIComponent(busca)}` : ""}`);
+      const data = await apiFetch(`/api/diagnostico-credito?limite=500${busca ? `&busca=${encodeURIComponent(busca)}` : ""}`);
       const lista = Array.isArray(data?.items || data) ? (data?.items || data) : [];
       setEmpresas(lista);
-    } catch {
-      toast.error("Erro ao carregar diagnóstico");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao carregar diagnóstico");
     } finally {
       setCarregando(false);
     }

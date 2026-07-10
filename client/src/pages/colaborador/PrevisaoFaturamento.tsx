@@ -215,6 +215,7 @@ export default function PrevisaoFaturamento() {
   // ── Estado original (preservado) ──────────────────────────────────────────
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [empresaId, setEmpresaId] = useState('');
+  const [buscaEmpresa, setBuscaEmpresa] = useState('');
   const [contadores, setContadores] = useState<Contador[]>([]);
   const [contadorId, setContadorId] = useState('');
   // historicoBanco: todos os registros carregados do banco (sem filtro de período)
@@ -250,9 +251,9 @@ export default function PrevisaoFaturamento() {
 
   // ─── Carregamento inicial ──────────────────────────────────────────────────
   useEffect(() => {
-    apiFetch('/api/empresas?limit=500')
-      .then((data: any) => setEmpresas(Array.isArray(data) ? data : data.empresas || []))
-      .catch(() => toast.error('Erro ao carregar empresas'))
+    apiFetch('/api/empresas/search?limit=500&incluir_incompletos=1')
+      .then((data: any) => setEmpresas(Array.isArray(data) ? data : data.empresas || data.data || []))
+      .catch((err: any) => toast.error(err?.message || 'Erro ao carregar empresas'))
       .finally(() => setLoadingEmpresas(false));
 
     apiFetch('/api/contadores')
@@ -515,6 +516,11 @@ export default function PrevisaoFaturamento() {
   };
 
   // ─── Render ───────────────────────────────────────────────────────────────
+  const termoEmpresa = buscaEmpresa.trim().toLowerCase();
+  const empresasFiltradas = termoEmpresa
+    ? empresas.filter((e) => `${e.razao_social || ''} ${e.cnpj || ''}`.toLowerCase().includes(termoEmpresa))
+    : empresas;
+
   return (
     <Layout title="Faturamento">
       <div className="p-6 max-w-6xl mx-auto space-y-6">
@@ -566,6 +572,13 @@ export default function PrevisaoFaturamento() {
             {/* Empresa */}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Empresa *</label>
+              <input
+                value={buscaEmpresa}
+                onChange={e => setBuscaEmpresa(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
+                placeholder="Buscar por razão social ou CNPJ..."
+                disabled={loadingEmpresas}
+              />
               <select
                 value={empresaId}
                 onChange={e => handleEmpresaChange(e.target.value)}
@@ -575,12 +588,15 @@ export default function PrevisaoFaturamento() {
                 <option value="">
                   {loadingEmpresas ? 'Carregando empresas...' : 'Selecione uma empresa...'}
                 </option>
-                {empresas.map(e => (
+                {empresasFiltradas.map(e => (
                   <option key={e.id} value={e.id}>
                     {e.razao_social}{e.cnpj ? ` — ${e.cnpj}` : ''}
                   </option>
                 ))}
               </select>
+              {!loadingEmpresas && buscaEmpresa && !empresasFiltradas.length && (
+                <p className="mt-1 text-xs text-amber-700">Nenhuma empresa encontrada para esta busca.</p>
+              )}
             </div>
 
             {/* Contador cadastrado */}

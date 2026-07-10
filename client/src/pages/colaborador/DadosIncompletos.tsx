@@ -345,9 +345,9 @@ export default function DadosIncompletos() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="rounded-2xl border bg-white p-4"><p className="text-2xl font-black text-slate-900">{itens.length}</p><p className="text-xs text-slate-500">Total para saneamento</p></div>
-            <div className="rounded-2xl border bg-white p-4"><p className="text-2xl font-black text-amber-600">{totalBloqueados}</p><p className="text-xs text-slate-500">Bloqueados operacionalmente</p></div>
-            <div className="rounded-2xl border bg-white p-4"><p className="text-2xl font-black text-red-600">{totalDuplicados}</p><p className="text-xs text-slate-500">Duplicados encontrados</p></div>
+            <div className="rounded-2xl border bg-white p-4"><p className="text-2xl font-black text-slate-900">{loading ? "…" : itens.length}</p><p className="text-xs text-slate-500">Total para saneamento</p></div>
+            <div className="rounded-2xl border bg-white p-4"><p className="text-2xl font-black text-amber-600">{loading ? "…" : totalBloqueados}</p><p className="text-xs text-slate-500">Bloqueados operacionalmente</p></div>
+            <div className="rounded-2xl border bg-white p-4"><p className="text-2xl font-black text-red-600">{loading ? "…" : totalDuplicados}</p><p className="text-xs text-slate-500">Duplicados encontrados</p></div>
           </div>
 
           <div className="rounded-2xl border bg-white p-4 flex flex-col md:flex-row gap-3">
@@ -364,7 +364,10 @@ export default function DadosIncompletos() {
           </div>
 
           {loading ? (
-            <div className="rounded-2xl border bg-white p-10 text-center text-slate-500">Carregando...</div>
+            <div className="rounded-2xl border bg-white p-10 text-center text-slate-500">
+              <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-500" />
+              Carregando cadastros incompletos...
+            </div>
           ) : itens.length === 0 ? (
             <div className="rounded-2xl border bg-white p-10 text-center">
               <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center mb-3">✓</div>

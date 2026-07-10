@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Download, CheckCircle, XCircle, Trash2, Eye, RefreshCw, Upload, MoreVertical } from 'lucide-react';
+import { Download, CheckCircle, XCircle, Trash2, Eye, RefreshCw, Upload } from 'lucide-react';
 import { apiFetch, getToken } from '../../lib/api';
 import { toast } from 'sonner';
 
@@ -111,7 +111,6 @@ const nomeArquivoContrato = (contrato: Contrato): string => {
 export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo, podeTudo, podeExcluir: podeExcluirProp }: Props) {
   const podeExcluirContrato = podeExcluirProp ?? podeExcluirCargo(userCargo);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deletingBatch, setDeletingBatch] = useState(false);
 
   // ── Deduplicação: mantém apenas o mais recente por (empresa_id|lead_id + tipo_contrato + numero_contrato) ──
@@ -328,7 +327,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
               <th className="text-left py-2 px-2 font-semibold text-gray-600 w-24">Data</th>
               <th className="text-left py-2 px-2 font-semibold text-gray-600 w-20">Status</th>
               <th className="text-left py-2 px-2 font-semibold text-gray-600 w-28">Responsável</th>
-              <th className="py-2 px-2 font-semibold text-gray-600 w-16 text-center">Ações</th>
+              <th className="py-2 px-2 font-semibold text-gray-600 w-44 text-center">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -403,86 +402,65 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                     {responsavel}
                   </td>
 
-                  {/* Ações — dropdown */}
-                  <td className="py-2 px-2 text-center relative">
-                    <button
-                      onClick={() => setOpenMenuId(openMenuId === c.id ? null : c.id)}
-                      className="inline-flex items-center justify-center w-7 h-7 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-800 transition-colors"
-                      title="Ações"
-                    >
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-
-                    {openMenuId === c.id && (
-                      <>
-                        {/* Overlay para fechar */}
-                        <div
-                          className="fixed inset-0 z-10"
-                          onClick={() => setOpenMenuId(null)}
-                        />
-                        <div className="absolute right-0 top-8 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[160px] text-left">
+                  {/* Ações — botões diretos para não depender de dropdown/portal em tabela rolável */}
+                  <td className="py-2 px-2">
+                    <div className="flex items-center justify-center gap-1 flex-wrap">
+                      <button
+                        onClick={() => abrirPdf(c.id)}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-600"
+                        title="Visualizar PDF"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDownload(c)}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-blue-200 bg-white hover:bg-blue-50 text-blue-600"
+                        title="Baixar PDF"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleRegenerar(c.id)}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-amber-200 bg-white hover:bg-amber-50 text-amber-600"
+                        title="Regenerar PDF"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleUploadAssinado(c.id)}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-purple-200 bg-white hover:bg-purple-50 text-purple-600"
+                        title="Anexar contrato assinado"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                      </button>
+                      {c.status === 'gerado' && (
+                        <>
                           <button
-                            onClick={() => { abrirPdf(c.id); setOpenMenuId(null); }}
-                            className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                            onClick={() => handleStatusChange(c.id, 'assinado')}
+                            className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-600"
+                            title="Marcar como assinado"
                           >
-                            <Eye className="w-3.5 h-3.5 text-slate-500" />
-                            Visualizar PDF
+                            <CheckCircle className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => { handleDownload(c); setOpenMenuId(null); }}
-                            className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                            onClick={() => handleStatusChange(c.id, 'cancelado')}
+                            className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-red-200 bg-white hover:bg-red-50 text-red-600"
+                            title="Cancelar contrato"
                           >
-                            <Download className="w-3.5 h-3.5 text-blue-500" />
-                            Baixar PDF
+                            <XCircle className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            onClick={() => { handleRegenerar(c.id); setOpenMenuId(null); }}
-                            className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-                          >
-                            <RefreshCw className="w-3.5 h-3.5 text-amber-500" />
-                            Regenerar PDF
-                          </button>
-                          <button
-                            onClick={() => { handleUploadAssinado(c.id); setOpenMenuId(null); }}
-                            className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
-                          >
-                            <Upload className="w-3.5 h-3.5 text-purple-500" />
-                            Anexar Assinado
-                          </button>
-                          {c.status === 'gerado' && (
-                            <>
-                              <div className="border-t border-gray-100 my-1" />
-                              <button
-                                onClick={() => { handleStatusChange(c.id, 'assinado'); setOpenMenuId(null); }}
-                                className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50"
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                Marcar Assinado
-                              </button>
-                              <button
-                                onClick={() => { handleStatusChange(c.id, 'cancelado'); setOpenMenuId(null); }}
-                                className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50"
-                              >
-                                <XCircle className="w-3.5 h-3.5" />
-                                Cancelar
-                              </button>
-                            </>
-                          )}
-                          {podeExcluirContrato && (
-                            <>
-                              <div className="border-t border-gray-100 my-1" />
-                              <button
-                                onClick={() => { handleDelete(c.id); setOpenMenuId(null); }}
-                                className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                Excluir
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </>
-                    )}
+                        </>
+                      )}
+                      {podeExcluirContrato && (
+                        <button
+                          onClick={() => handleDelete(c.id)}
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-red-200 bg-white hover:bg-red-50 text-red-600"
+                          title="Excluir contrato"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );

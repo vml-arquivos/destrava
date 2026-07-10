@@ -32,7 +32,7 @@ import {
   formatBytes,
   formatDate,
   labelTipoDocumento,
-} from "./DocumentosEntidade";
+} from "./documentos/DocumentosEntidade";
 
 type DocumentoAcervo = DocumentoArquivo & {
   arquivo_disponivel?: boolean;

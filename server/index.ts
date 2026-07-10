@@ -32,6 +32,8 @@ import {
 import { normalizarPaginacaoCatalogo, normalizarTipoCatalogo } from "./lib/nexusCatalogo";
 import { loginInputSchema, leadInputSchema, validateBody } from "./lib/inputValidation";
 import { closeChromium, launchChromium } from "./services/chromiumLauncher";
+import { generateFollowupMessage, generateLeadRecommendations, generateLeadSummary, qualifyTriagemLead } from "./services/aiService";
+import { getDataDir, resolveDocumentPath } from "./services/documentStorage";
 
 const { Pool } = pkg;
 
@@ -4001,6 +4003,152 @@ async function startServer() {
     }
   });
 
+
+  // Busca operacional unificada de empresas para selects/autocomplete.
+  // Mantém /api/empresas intacta para compatibilidade e oferece uma rota
+  // previsível para financeiro, faturamento, contratos e orçamentos.
+  app.get("/api/empresas/search", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const isGestor = isGestorCargo(colaborador?.cargo || '');
+      const q = String(req.query.q || req.query.busca || '').trim();
+      const includeIncomplete = ["1", "true", "sim"].includes(String(req.query.incluir_incompletos || req.query.include_incomplete || "true").toLowerCase());
+      const limitRaw = Number(req.query.limit || req.query.limite || 100);
+      const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 100, 1), 500);
+      const params: any[] = [];
+      const conditions: string[] = ["COALESCE(e.arquivado_por_duplicidade, false) = false"];
+
+      if (!isGestor && colaborador?.id) {
+        params.push(colaborador.id);
+        conditions.push(`(e.responsavel_id = $${params.length} OR e.analista_id = $${params.length} OR e.captador_id = $${params.length})`);
+      }
+
+      if (!includeIncomplete) {
+        conditions.push(`COALESCE(e.bloqueado_operacional, false) = false`);
+      }
+
+      if (q) {
+        const digits = onlyDigits(q);
+        params.push(`%${q}%`);
+        const idxText = params.length;
+        const searchParts = [
+          `e.razao_social ILIKE $${idxText}`,
+          `e.nome_fantasia ILIKE $${idxText}`,
+          `e.cnpj ILIKE $${idxText}`,
+          `e.responsavel_nome ILIKE $${idxText}`,
+          `e.telefone ILIKE $${idxText}`,
+          `e.email ILIKE $${idxText}`,
+        ];
+        if (digits) {
+          params.push(`%${digits}%`);
+          const idxDigits = params.length;
+          searchParts.push(`regexp_replace(COALESCE(e.cnpj,''), '[^0-9]', '', 'g') LIKE $${idxDigits}`);
+          searchParts.push(`regexp_replace(COALESCE(e.telefone,''), '[^0-9]', '', 'g') LIKE $${idxDigits}`);
+        }
+        conditions.push(`(${searchParts.join(" OR ")})`);
+      }
+
+      params.push(limit);
+      const { rows } = await pool.query(
+        `SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.email, e.telefone, e.whatsapp,
+                e.cidade, e.estado, e.status, e.cadastro_completo, e.bloqueado_operacional,
+                e.responsavel_nome, e.origem
+           FROM empresas e
+          WHERE ${conditions.join(" AND ")}
+          ORDER BY COALESCE(NULLIF(e.razao_social,''), e.nome_fantasia, e.cnpj, e.id::text) ASC
+          LIMIT $${params.length}`,
+        params,
+      );
+
+      res.json({ empresas: rows, data: rows, total: rows.length });
+    } catch (err: any) {
+      console.error("[GET /api/empresas/search]", err);
+      res.status(500).json({ error: "Erro ao buscar empresas", code: "EMPRESA_SEARCH_FAILED" });
+    }
+  });
+
+  // Diagnóstico consolidado: usa a última análise CNPJ/IA como fonte única quando disponível.
+  // Mantém compatibilidade com instalações onde a tabela de análise ainda não foi migrada.
+  app.get("/api/diagnostico-credito", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const isGestor = isGestorCargo(colaborador?.cargo || '');
+      const busca = String(req.query.busca || req.query.q || '').trim();
+      const limitRaw = Number(req.query.limit || req.query.limite || 500);
+      const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 500, 1), 500);
+      const params: any[] = [];
+      const conditions: string[] = ["COALESCE(e.arquivado_por_duplicidade, false) = false"];
+
+      if (!isGestor && colaborador?.id) {
+        params.push(colaborador.id);
+        conditions.push(`(e.responsavel_id = $${params.length} OR e.analista_id = $${params.length} OR e.captador_id = $${params.length})`);
+      }
+
+      if (busca) {
+        const digits = onlyDigits(busca);
+        params.push(`%${busca}%`);
+        const idxText = params.length;
+        const searchParts = [
+          `e.razao_social ILIKE $${idxText}`,
+          `e.nome_fantasia ILIKE $${idxText}`,
+          `e.cnpj ILIKE $${idxText}`,
+        ];
+        if (digits) {
+          params.push(`%${digits}%`);
+          const idxDigits = params.length;
+          searchParts.push(`regexp_replace(COALESCE(e.cnpj,''), '[^0-9]', '', 'g') LIKE $${idxDigits}`);
+        }
+        conditions.push(`(${searchParts.join(" OR ")})`);
+      }
+
+      const hasAnalises = await pool.query("SELECT to_regclass('public.analises_cnpj_empresa') AS table_name");
+      const includeAnalises = Boolean(hasAnalises.rows?.[0]?.table_name);
+      params.push(limit);
+      const idxLimit = params.length;
+      const where = `WHERE ${conditions.join(" AND ")}`;
+
+      const sql = includeAnalises
+        ? `SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.situacao_cadastral, e.porte, e.capital_social,
+                  COALESCE(e.score_interno, a.score_cnpj) AS score_interno,
+                  COALESCE(e.risco_classificacao, a.risco_cnpj) AS risco_classificacao,
+                  a.criado_em AS ultima_analise,
+                  COALESCE(jsonb_array_length(a.alertas), 0)::int AS alertas_criticos,
+                  COALESCE(jsonb_array_length(a.pontos_impeditivos), 0)::int AS pontos_impeditivos,
+                  COALESCE(jsonb_array_length(a.pontos_positivos), 0)::int AS pontos_positivos,
+                  a.status AS status_analise,
+                  a.diagnostico
+             FROM empresas e
+             LEFT JOIN LATERAL (
+               SELECT * FROM public.analises_cnpj_empresa ace
+                WHERE ace.empresa_id = e.id
+                ORDER BY ace.criado_em DESC
+                LIMIT 1
+             ) a ON true
+             ${where}
+             ORDER BY COALESCE(a.criado_em, e.updated_at, e.created_at) DESC NULLS LAST, e.razao_social ASC
+             LIMIT $${idxLimit}`
+        : `SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.situacao_cadastral, e.porte, e.capital_social,
+                  e.score_interno, e.risco_classificacao,
+                  COALESCE(e.updated_at, e.created_at) AS ultima_analise,
+                  0::int AS alertas_criticos,
+                  0::int AS pontos_impeditivos,
+                  0::int AS pontos_positivos,
+                  NULL::text AS status_analise,
+                  NULL::text AS diagnostico
+             FROM empresas e
+             ${where}
+             ORDER BY e.razao_social ASC
+             LIMIT $${idxLimit}`;
+
+      const { rows } = await pool.query(sql, params);
+      res.json({ items: rows, empresas: rows, total: rows.length, fonte: includeAnalises ? 'analises_cnpj_empresa' : 'empresas' });
+    } catch (err: any) {
+      console.error("[GET /api/diagnostico-credito]", err);
+      res.status(500).json({ error: "Erro ao carregar diagnóstico consolidado", code: "DIAGNOSTICO_CREDITO_FAILED" });
+    }
+  });
+
+
   app.get("/api/empresas/:id", auth, async (req: Request, res: Response) => {
     try {
       if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
@@ -4385,8 +4533,27 @@ async function startServer() {
         "SELECT * FROM empresa_documentos WHERE empresa_id=$1 ORDER BY created_at DESC",
         [req.params.id]
       );
-      res.json(r.rows);
-    } catch (err) { console.error(err); res.status(500).json({ error: "Erro" }); }
+      const rows = r.rows.map((doc: any) => {
+        const resolved = resolveDocumentPath({
+          caminho_arquivo: doc.caminho_arquivo || doc.url || null,
+          nome_arquivo: doc.nome_arquivo || (doc.url ? path.basename(doc.url) : doc.nome),
+          nome_original: doc.nome || doc.nome_original || null,
+          entidade_tipo: "empresa",
+          entidade_id: req.params.id,
+        });
+        return {
+          ...doc,
+          arquivo_disponivel: Boolean(resolved.absolutePath),
+          arquivo_relativo: resolved.relativePath,
+          armazenamento_mensagem: resolved.absolutePath
+            ? "Arquivo localizado em volume persistente."
+            : "Registro legado preservado, mas arquivo físico não localizado nos volumes pesquisados.",
+          preview_url: `/api/empresas/${req.params.id}/documentos/${doc.id}/view`,
+          download_url: `/api/empresas/${req.params.id}/documentos/${doc.id}/download`,
+        };
+      });
+      res.json(rows);
+    } catch (err) { console.error(err); res.status(500).json({ error: "Erro ao listar documentos" }); }
   });
 
   const uploadEmpresaDocumento = multer({
@@ -4403,7 +4570,7 @@ async function startServer() {
         return;
       }
 
-      const dataDir = process.env.DATA_DIR || "/data";
+      const dataDir = getDataDir();
       const uploadDir = path.join(dataDir, "uploads", "empresas", req.params.id);
       await fs.promises.mkdir(uploadDir, { recursive: true });
 
@@ -4428,6 +4595,46 @@ async function startServer() {
       console.error("[POST /api/empresas/:id/documentos]", err);
       res.status(500).json({ error: "Erro ao salvar documento" });
     }
+  });
+
+
+  async function sendLegacyEmpresaDocumento(req: Request, res: Response, inline: boolean) {
+    if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
+    const { rows } = await pool.query(
+      "SELECT * FROM empresa_documentos WHERE id=$1 AND empresa_id=$2 LIMIT 1",
+      [req.params.docId, req.params.id]
+    );
+    if (!rows.length) { res.status(404).json({ error: "Documento não encontrado" }); return; }
+    const doc = rows[0];
+    const resolved = resolveDocumentPath({
+      caminho_arquivo: doc.caminho_arquivo || doc.url || null,
+      nome_arquivo: doc.nome_arquivo || (doc.url ? path.basename(doc.url) : doc.nome),
+      nome_original: doc.nome || doc.nome_original || null,
+      entidade_tipo: "empresa",
+      entidade_id: req.params.id,
+    });
+    if (!resolved.absolutePath) {
+      res.status(404).json({
+        error: "Arquivo físico não localizado. O registro legado foi preservado para auditoria.",
+        code: "DOCUMENT_FILE_MISSING",
+      });
+      return;
+    }
+    const filename = path.basename(String(doc.nome || doc.nome_original || doc.url || "documento")).replace(/"/g, "");
+    const mime = doc.mime_type || (filename.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream");
+    res.setHeader("Content-Type", mime);
+    res.setHeader("Content-Disposition", `${inline ? "inline" : "attachment"}; filename="${filename}"`);
+    fs.createReadStream(resolved.absolutePath).pipe(res);
+  }
+
+  app.get("/api/empresas/:id/documentos/:docId/view", auth, async (req: Request, res: Response) => {
+    try { await sendLegacyEmpresaDocumento(req, res, true); }
+    catch (err) { console.error("[GET /api/empresas/:id/documentos/:docId/view]", err); res.status(500).json({ error: "Erro ao visualizar documento" }); }
+  });
+
+  app.get("/api/empresas/:id/documentos/:docId/download", auth, async (req: Request, res: Response) => {
+    try { await sendLegacyEmpresaDocumento(req, res, false); }
+    catch (err) { console.error("[GET /api/empresas/:id/documentos/:docId/download]", err); res.status(500).json({ error: "Erro ao baixar documento" }); }
   });
 
   // ─── GET /api/empresas/:id/simulacoes ────────────────────────────────────
@@ -4616,50 +4823,20 @@ async function startServer() {
       if (!r.rows[0]) return res.status(404).json({ error: "Não encontrado" });
       const lead = r.rows[0];
 
-      const prompt = `Você é um analista de crédito empresarial especializado em assessoria de crédito para PMEs.
-Analise o perfil abaixo e classifique o potencial deste lead para crédito empresarial.
+      const analise = await qualifyTriagemLead(lead);
 
-Dados do lead:
-- Nome: ${lead.nome}
-- Empresa: ${lead.empresa || "Não informado"}
-- Telefone: ${lead.telefone}
-- CNPJ: ${lead.cnpj || "Não informado"}
-- Produto de interesse: ${lead.produto_interesse || "Não informado"}
-- Prazo desejado: ${lead.prazo_meses ? lead.prazo_meses + " meses" : "Não informado"}
-- Canal de origem: ${lead.canal_origem || "simulador_publico"}
-- Data de entrada: ${new Date(lead.created_at).toLocaleDateString("pt-BR")}
-
-Responda APENAS com um JSON válido no seguinte formato:
-{
-  "classificacao": "possivel_cliente",
-  "score": 0,
-  "temperatura": "frio",
-  "resumo": "texto",
-  "pontos_positivos": [],
-  "pontos_atencao": [],
-  "proxima_acao": "texto"
-}`;
-
-      const { GoogleGenerativeAI } = await import("@google/generative-ai");
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-      const model = genAI.getGenerativeModel({
-        model: "gemini-2.0-flash",
-        generationConfig: { responseMimeType: "application/json", temperature: 0.3 },
-      });
-      const result = await model.generateContent(prompt);
-      const analise = JSON.parse(result.response.text() || "{}");
-
-      const novoStatus = analise.classificacao === "possivel_cliente" ? "possivel_cliente"
-        : analise.classificacao === "curioso" ? "curioso"
-        : analise.classificacao === "sem_perfil" ? "sem_perfil"
+      const classificacao = String(analise.classificacao || "pendente");
+      const novoStatus = classificacao === "possivel_cliente" ? "possivel_cliente"
+        : classificacao === "curioso" ? "curioso"
+        : classificacao === "sem_perfil" ? "sem_perfil"
         : "pendente";
 
       await pool.query(
         `UPDATE triagem_leads SET status=$1, observacoes_ia=$2, score_ia=$3, updated_at=NOW() WHERE id=$4`,
-        [novoStatus, JSON.stringify(analise), analise.score || null, req.params.id]
+        [novoStatus, JSON.stringify(analise), Number(analise.score) || null, req.params.id]
       );
 
-      res.json({ success: true, analise });
+      res.json({ success: true, analise, fallback_operacional: analise._ia_status === "fallback" });
     } catch (err) {
       console.error("[POST /api/triagem/:id/qualificar-ia]", err);
       res.status(500).json({ error: "Erro ao qualificar com IA" });
@@ -7108,7 +7285,7 @@ ${(temTest1 || temTest2) ? `
     try {
       browserL = await launchChromium();
       const pageL = await browserL.newPage();
-      await pageL.setContent(html, { waitUntil: 'networkidle0' });
+      await pageL.setContent(html, { waitUntil: 'networkidle0' as any });
       // Detectar contratada para escolher logo e cor
       const nomeContratadaL = String(payload?.contratada?.nome_fantasia || payload?.contratada?.razao_social || '').toLowerCase();
       const isPermuPayL = nomeContratadaL.includes('permupay') || nomeContratadaL.includes('permu pay');
@@ -7491,7 +7668,7 @@ ${(temTest1 || temTest2) ? `
       try {
         browser = await launchChromium();
         const page = await browser.newPage();
-        await page.setContent(html, { waitUntil: 'networkidle0' });
+        await page.setContent(html, { waitUntil: 'networkidle0' as any });
         await page.pdf({
           path: filePath,
           format: 'A4',
@@ -7865,7 +8042,7 @@ ${(temTest1 || temTest2) ? `
         browser = await launchChromium();
 
         const page = await browser.newPage();
-        await page.setContent(htmlFinal, { waitUntil: 'networkidle0' });
+        await page.setContent(htmlFinal, { waitUntil: 'networkidle0' as any });
         await page.pdf({
           path: filePath,
           format: 'A4',
@@ -12578,7 +12755,7 @@ async function registrarDocumentoContratoGerado(params: {
       try {
         browser = await launchChromium();
         const page = await browser.newPage();
-        await page.setContent(html, { waitUntil: 'networkidle0' });
+        await page.setContent(html, { waitUntil: 'networkidle0' as any });
         await page.pdf({
           path: filePath,
           format: 'A4',
@@ -12714,33 +12891,11 @@ async function registrarDocumentoContratoGerado(params: {
         [lead_id]
       ).catch(() => ({ rows: [] }));
 
-      const prompt = `Você é um consultor de crédito empresarial da Destrava Crédito.
-Analise os dados do lead abaixo e gere 3 a 5 recomendações práticas de ações para avançar na negociação.
-Responda em JSON com o campo "recomendacoes" (array de objetos com "titulo", "descricao", "prioridade": "alta"|"media"|"baixa", "tipo": "contato"|"documento"|"proposta"|"followup"|"alerta").
-
-Dados do lead:
-- Nome: ${lead.nome_completo || lead.nome}
-- Empresa: ${lead.razao_social || "Pessoa Física"}
-- CNPJ: ${lead.cnpj || "N/A"}
-- Etapa do funil: ${lead.etapa_funil}
-- Valor solicitado: R$ ${lead.valor_solicitado || 0}
-- Temperatura: ${lead.temperatura || "morno"}
-- Score: ${lead.score_efetivo || lead.score_ia || "N/A"}
-- Risco: ${lead.risco_classificacao || lead.risco || "N/A"}
-- Próximo follow-up: ${lead.proximo_followup || "não agendado"}
-- Histórico recente: ${historico.rows.map((h: any) => `${h.tipo}: ${h.descricao}`).join("; ") || "sem histórico"}`;
-
-      const { GoogleGenerativeAI } = await import("@google/generative-ai");
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-      const gemModel = genAI.getGenerativeModel({
-        model: "gemini-2.0-flash",
-        generationConfig: { responseMimeType: "application/json", temperature: 0.4 } as any,
-      });
-      const gemResult2 = await gemModel.generateContent(prompt);
-      const resposta = JSON.parse(gemResult2.response.text() || "{}");
+      const resposta = await generateLeadRecommendations(lead, historico.rows || []);
       res.json({
         lead_id,
-        recomendacoes: resposta.recomendacoes || [],
+        recomendacoes: Array.isArray(resposta.recomendacoes) ? resposta.recomendacoes : [],
+        fallback_operacional: resposta._ia_status === "fallback",
         gerado_em: new Date().toISOString(),
       });
     } catch (err: any) {
@@ -12777,30 +12932,12 @@ Dados do lead:
         [leadId]
       ).catch(() => ({ rows: [] }));
 
-      const prompt = `Você é um consultor de crédito empresarial da Destrava Crédito.
-Gere um resumo executivo conciso (máximo 200 palavras) sobre o lead abaixo, destacando:
-1. Situação atual no funil
-2. Principais pontos de atenção
-3. Próximos passos sugeridos
-Responda em JSON com "resumo" (texto) e "pontos_atencao" (array de strings).
-
-Lead: ${lead.nome_completo || lead.nome} | ${lead.razao_social || "PF"} | Etapa: ${lead.etapa_funil}
-Valor: R$ ${lead.valor_solicitado || 0} | Score: ${lead.score_efetivo || lead.score_ia || "N/A"} | Risco: ${lead.risco_classificacao || "N/A"}
-Contratos: ${contratos.rows.map((c: any) => c.tipo_contrato).join(", ") || "nenhum"}
-Histórico: ${historico.rows.slice(0, 10).map((h: any) => `${h.tipo}: ${h.descricao}`).join("; ") || "sem histórico"}`;
-
-      const { GoogleGenerativeAI } = await import("@google/generative-ai");
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-      const gemModel = genAI.getGenerativeModel({
-        model: "gemini-2.0-flash",
-        generationConfig: { responseMimeType: "application/json", temperature: 0.3 } as any,
-      });
-      const gemResult3 = await gemModel.generateContent(prompt);
-      const resposta = JSON.parse(gemResult3.response.text() || "{}");
+      const resposta = await generateLeadSummary(lead, historico.rows || [], contratos.rows || []);
       res.json({
-        lead_id: Number(leadId),
+        lead_id: leadId,
         resumo: resposta.resumo || "",
-        pontos_atencao: resposta.pontos_atencao || [],
+        pontos_atencao: Array.isArray(resposta.pontos_atencao) ? resposta.pontos_atencao : [],
+        fallback_operacional: resposta._ia_status === "fallback",
         gerado_em: new Date().toISOString(),
       });
     } catch (err: any) {
@@ -12946,57 +13083,18 @@ Responda em JSON com:
       const colaborador = (req as any).colaborador;
       const nomeConsultor = colaborador?.nome || "Consultor";
 
-      const contextos: Record<string, string> = {
-        primeiro_contato: "É o primeiro contato com o lead. Seja cordial, apresente a Destrava Crédito e pergunte sobre a necessidade de crédito.",
-        proposta_enviada: "Uma proposta de crédito já foi enviada. Faça follow-up para verificar se o lead analisou a proposta e se tem dúvidas.",
-        reativacao: "O lead ficou inativo por um tempo. Reative o interesse com uma abordagem personalizada e oferta relevante.",
-        pos_aprovacao: "O crédito foi aprovado. Parabenize e oriente sobre os próximos passos para liberação.",
-      };
-
-      const formatoCanal = canal === "whatsapp"
-        ? "Mensagem curta para WhatsApp (máx 3 parágrafos, tom informal mas profissional, sem markdown)"
-        : "E-mail profissional com assunto, saudação, corpo e assinatura";
-
-      const prompt = `Você é ${nomeConsultor}, consultor da Destrava Crédito.
-Gere uma mensagem de follow-up para o lead abaixo.
-Contexto: ${contextos[tipo] || contextos.primeiro_contato}
-Formato: ${formatoCanal}
-
-Lead: ${lead.nome_completo || lead.nome}
-Empresa: ${lead.razao_social || "Pessoa Física"}
-Segmento: ${lead.segmento || "N/A"}
-Valor solicitado: R$ ${lead.valor_solicitado || 0}
-Produto: ${lead.produto_interesse || "crédito empresarial"}
-Etapa: ${lead.etapa_funil}
-
-Responda em JSON com:
-${canal === "whatsapp"
-  ? '"mensagem": texto da mensagem, "link_whatsapp": URL wa.me com a mensagem codificada para o número ' + (lead.telefone || "")
-  : '"assunto": assunto do email, "mensagem": corpo completo do email'
-}`;
-
-      const { GoogleGenerativeAI } = await import("@google/generative-ai");
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-      const gemModel = genAI.getGenerativeModel({
-        model: "gemini-2.0-flash",
-        generationConfig: { responseMimeType: "application/json", temperature: 0.6 } as any,
+      const resposta = await generateFollowupMessage(lead, {
+        tipo,
+        canal,
+        nomeConsultor,
       });
-      const gemResult5 = await gemModel.generateContent(prompt);
-      const resposta = JSON.parse(gemResult5.response.text() || "{}");
-
-      // Montar link WhatsApp se canal for whatsapp
-      if (canal === "whatsapp" && lead.telefone) {
-        const tel = lead.telefone.replace(/\D/g, "");
-        const telBr = tel.startsWith("55") ? tel : `55${tel}`;
-        const msg = encodeURIComponent(resposta.mensagem || "");
-        resposta.link_whatsapp = `https://wa.me/${telBr}?text=${msg}`;
-      }
 
       res.json({
         lead_id,
         tipo,
         canal,
         ...resposta,
+        fallback_operacional: resposta._ia_status === "fallback",
         gerado_em: new Date().toISOString(),
       });
     } catch (err: any) {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, Eye, RefreshCw, AlertCircle, Paperclip } from 'lucide-react';
 import { getToken } from '../../lib/api';
+import { toast } from 'sonner';
 import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from '../../lib/currency';
 import { UploadDocumentos, type DocumentoAnexo } from './UploadDocumentos';
 
@@ -414,7 +415,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
 
     if (tipoContrato === 'assessoria') {
       if (!empresaId) errs.empresaId = 'Selecione uma empresa';
-      if (!valorReferencia || Number(valorReferencia) < 1000) errs.valorReferencia = 'Valor mínimo: R$ 1.000,00';
+      if (!valorReferencia || unmaskCurrencyInput(valorReferencia) < 1000) errs.valorReferencia = 'Valor mínimo: R$ 1.000,00';
       if (!prazoContratoAssessoria || Number.parseInt(prazoContratoAssessoria, 10) <= 0) errs.prazoContratoAssessoria = 'Informe o prazo do contrato';
       if (modoAssinaturaContratante === 'socios' && sociosEmpresaAssessoria.length > 0 && sociosAssinantesAssessoria.length === 0) {
         errs.sociosAssinantesAssessoria = 'Selecione ao menos um sócio assinante';
@@ -462,7 +463,14 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
     }
 
     setErrors(errs);
-    return Object.keys(errs).length === 0;
+    const mensagens = Object.values(errs);
+    if (mensagens.length) {
+      toast.error(`Revise os campos obrigatórios: ${mensagens.slice(0, 3).join(' • ')}`);
+      requestAnimationFrame(() => {
+        document.querySelector('[data-contrato-error="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
+    return mensagens.length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
