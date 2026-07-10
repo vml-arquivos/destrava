@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
+import PropostaBancaria from "./PropostaBancaria";
 import {
   Building2, Users, FileText, AlertTriangle, CheckCircle2,
   TrendingUp, ShieldCheck, ShieldAlert, ShieldX, ShieldOff,
@@ -781,6 +782,9 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
           </ol>
         </div>
       )}
+
+      {/* ── Proposta Bancária Inteligente ── */}
+      <PropostaBancaria empresaId={empresaId} onNavegar={onNavegar} />
 
       {/* ── Resumo de Atividade ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

@@ -35,6 +35,7 @@ import { closeChromium, launchChromium } from "./services/chromiumLauncher";
 import { generateFollowupMessage, generateLeadRecommendations, generateLeadSummary, qualifyTriagemLead } from "./services/aiService";
 import { getDataDir, resolveDocumentPath } from "./services/documentStorage";
 import { calcularInteligencia360 } from "./services/inteligencia360Service";
+import { calcularPropostaBancaria } from "./services/propostaBancariaService";
 
 const { Pool } = pkg;
 
@@ -4603,6 +4604,257 @@ async function startServer() {
         gerado_em: new Date().toISOString(),
         fonte: "deterministica",
       });
+    }
+  });
+
+  // ─── GET /api/empresas/:id/proposta-bancaria ───────────────────────────
+  // Rota FIXA — deve ficar ANTES de /api/empresas/:id.
+  // Gera proposta bancária preliminar consolidada sem alterar dados.
+  app.get("/api/empresas/:id/proposta-bancaria", auth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
+      const empresaId = req.params.id;
+
+      // Buscar empresa
+      const { rows: empresaRows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [empresaId]);
+      if (empresaRows.length === 0) {
+        res.status(404).json({ error: "Empresa não encontrada" });
+        return;
+      }
+      const empresa = empresaRows[0];
+
+      // Buscar sócios
+      let socios: any[] = [];
+      try {
+        const { rows } = await pool.query(
+          "SELECT * FROM socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true ORDER BY created_at ASC",
+          [empresaId]
+        );
+        socios = Array.isArray(rows) ? rows : [];
+      } catch { socios = []; }
+
+      // Buscar documentos
+      let documentos: any[] = [];
+      try {
+        const { rows } = await pool.query(
+          `SELECT id, tipo, nome_arquivo, arquivo_path, status, origem, created_at, updated_at
+           FROM documentos_arquivos
+           WHERE entidade_tipo = 'empresa' AND entidade_id = $1
+           AND COALESCE(status, 'ativo') NOT IN ('excluido')
+           ORDER BY created_at DESC`,
+          [empresaId]
+        );
+        documentos = Array.isArray(rows) ? rows : [];
+      } catch { documentos = []; }
+
+      // Buscar simulações
+      let simulacoes: any[] = [];
+      try {
+        const { rows } = await pool.query(
+          `SELECT id, produto, valor_solicitado, prazo_meses, status, criado_em
+           FROM simulacoes_colaborador WHERE empresa_id = $1 ORDER BY criado_em DESC`,
+          [empresaId]
+        );
+        simulacoes = Array.isArray(rows) ? rows : [];
+      } catch { simulacoes = []; }
+
+      // Buscar orçamentos
+      let orcamentos: any[] = [];
+      try {
+        const { rows } = await pool.query(
+          `SELECT id, descricao, valor_total, status, created_at
+           FROM orcamentos WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 10`,
+          [empresaId]
+        );
+        orcamentos = Array.isArray(rows) ? rows : [];
+      } catch { orcamentos = []; }
+
+      // Buscar contratos
+      let contratos: any[] = [];
+      try {
+        const { rows } = await pool.query(
+          `SELECT id, numero_contrato, tipo_contrato, status, valor_contrato, data_assinatura, created_at
+           FROM contratos_gerados WHERE empresa_id = $1 ORDER BY created_at DESC`,
+          [empresaId]
+        );
+        contratos = Array.isArray(rows) ? rows : [];
+      } catch { contratos = []; }
+
+      // Buscar histórico
+      let historico: any[] = [];
+      try {
+        const { rows } = await pool.query(
+          `SELECT id, tipo, descricao, created_at FROM empresa_historico WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 30`,
+          [empresaId]
+        );
+        historico = Array.isArray(rows) ? rows : [];
+      } catch { historico = []; }
+
+      const resultado = calcularPropostaBancaria({
+        empresa,
+        socios,
+        documentos,
+        simulacoes,
+        orcamentos,
+        contratos,
+        historico,
+      });
+
+      res.json(resultado);
+    } catch (err) {
+      console.error("[GET /api/empresas/:id/proposta-bancaria]", err);
+      res.status(500).json({
+        error: "Erro ao gerar proposta bancária",
+        empresa_id: req.params.id,
+        resumoExecutivo: "Erro ao carregar dados da empresa.",
+        perfilCredito: {},
+        capacidadeCredito: { dados_suficientes: false, observacao: "Erro ao carregar dados." },
+        documentacao: { total_documentos: 0, documentos_com_arquivo: 0, documentos_sem_arquivo: 0, documentos_validados: 0, documentos_pendentes: 0, percentual_cobertura: 0, status: "critico", lista: [] },
+        pendencias: [],
+        riscos: [],
+        pontosFortes: [],
+        simulacoes: [],
+        orcamentos: [],
+        contratos: [],
+        propostaPreliminar: { valorSugerido: null, prazoSugerido: null, produtoSugerido: null, justificativa: "Erro ao carregar dados.", observacoes: [] },
+        parecerTecnico: "Erro ao carregar dados da empresa. Tente novamente.",
+        proximosPassos: [],
+        score_destrava: 0,
+        status_proposta: "dados_insuficientes",
+        gerado_em: new Date().toISOString(),
+        fonte: "deterministica",
+      });
+    }
+  });
+
+  // ─── GET /api/empresas/:id/proposta-bancaria/pdf ──────────────────────
+  // Gera PDF da proposta bancária usando Puppeteer (mesmo padrão dos relatórios existentes).
+  app.get("/api/empresas/:id/proposta-bancaria/pdf", auth, async (req: Request, res: Response) => {
+    let browser: any;
+    try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
+      const empresaId = req.params.id;
+
+      const { rows: empresaRows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [empresaId]);
+      if (empresaRows.length === 0) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
+      const empresa = empresaRows[0];
+
+      let socios: any[] = [];
+      try { const { rows } = await pool.query("SELECT * FROM socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true", [empresaId]); socios = rows; } catch { socios = []; }
+
+      let documentos: any[] = [];
+      try { const { rows } = await pool.query(`SELECT id, tipo, nome_arquivo, arquivo_path, status FROM documentos_arquivos WHERE entidade_tipo = 'empresa' AND entidade_id = $1 AND COALESCE(status,'ativo') NOT IN ('excluido')`, [empresaId]); documentos = rows; } catch { documentos = []; }
+
+      let simulacoes: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, produto, valor_solicitado, prazo_meses, status FROM simulacoes_colaborador WHERE empresa_id = $1 ORDER BY criado_em DESC", [empresaId]); simulacoes = rows; } catch { simulacoes = []; }
+
+      let contratos: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, numero_contrato, tipo_contrato, status, valor_contrato, data_assinatura FROM contratos_gerados WHERE empresa_id = $1 ORDER BY created_at DESC", [empresaId]); contratos = rows; } catch { contratos = []; }
+
+      const proposta = calcularPropostaBancaria({ empresa, socios, documentos, simulacoes, orcamentos: [], contratos, historico: [] });
+
+      const fmtBRL = (v: number | null) => v != null ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "Não informado";
+      const fmtDate = (v: string | null) => v ? new Date(v).toLocaleDateString("pt-BR") : "Não informado";
+
+      const statusLabel: Record<string, string> = {
+        apto_analise: "Apto para análise preliminar",
+        necessita_complementacao: "Necessita complementação documental",
+        dados_insuficientes: "Dados insuficientes",
+        inapto: "Inapto — regularização necessária",
+      };
+
+      const html = gerarHtmlTimbrado(`
+        <div style="font-family: Arial, sans-serif; color: #1e293b;">
+          <div style="background: #1e40af; color: white; padding: 20px 24px; border-radius: 8px; margin-bottom: 20px;">
+            <h1 style="margin:0; font-size: 20px;">Proposta Bancária Inteligente</h1>
+            <p style="margin:4px 0 0; font-size: 13px; opacity: 0.85;">${proposta.empresa.razao_social} &mdash; ${proposta.empresa.cnpj || 'CNPJ não informado'}</p>
+            <p style="margin:4px 0 0; font-size: 11px; opacity: 0.7;">Gerado em ${fmtDate(proposta.gerado_em)} &mdash; ${statusLabel[proposta.status_proposta] || proposta.status_proposta}</p>
+          </div>
+
+          <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+            <h2 style="margin:0 0 8px; font-size: 14px; color: #0369a1;">Resumo Executivo</h2>
+            <p style="margin:0; font-size: 13px; line-height: 1.6;">${proposta.resumoExecutivo}</p>
+          </div>
+
+          <table style="width:100%; border-collapse: collapse; margin-bottom: 16px; font-size: 12px;">
+            <tr style="background:#f8fafc;"><th colspan="4" style="padding:8px 12px; text-align:left; font-size:13px; border-bottom:2px solid #e2e8f0;">Perfil de Crédito</th></tr>
+            <tr><td style="padding:6px 12px; border-bottom:1px solid #f1f5f9; color:#64748b;">Score Destrava</td><td style="padding:6px 12px; border-bottom:1px solid #f1f5f9; font-weight:bold;">${proposta.score_destrava}/100</td>
+                <td style="padding:6px 12px; border-bottom:1px solid #f1f5f9; color:#64748b;">Situação</td><td style="padding:6px 12px; border-bottom:1px solid #f1f5f9;">${proposta.perfilCredito.situacao}</td></tr>
+            <tr><td style="padding:6px 12px; border-bottom:1px solid #f1f5f9; color:#64748b;">Faturamento</td><td style="padding:6px 12px; border-bottom:1px solid #f1f5f9;">${proposta.perfilCredito.faturamento}</td>
+                <td style="padding:6px 12px; border-bottom:1px solid #f1f5f9; color:#64748b;">Capital Social</td><td style="padding:6px 12px; border-bottom:1px solid #f1f5f9;">${proposta.perfilCredito.capital_social}</td></tr>
+            <tr><td style="padding:6px 12px; border-bottom:1px solid #f1f5f9; color:#64748b;">Regime Tributário</td><td style="padding:6px 12px; border-bottom:1px solid #f1f5f9;">${proposta.perfilCredito.regime_tributario}</td>
+                <td style="padding:6px 12px; border-bottom:1px solid #f1f5f9; color:#64748b;">Porte</td><td style="padding:6px 12px; border-bottom:1px solid #f1f5f9;">${proposta.perfilCredito.porte}</td></tr>
+            <tr><td style="padding:6px 12px; color:#64748b;">CNAE</td><td style="padding:6px 12px;">${proposta.perfilCredito.cnae}</td>
+                <td style="padding:6px 12px; color:#64748b;">Natureza Jurídica</td><td style="padding:6px 12px;">${proposta.perfilCredito.natureza_juridica}</td></tr>
+          </table>
+
+          ${proposta.propostaPreliminar.valorSugerido ? `
+          <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:8px; padding:16px; margin-bottom:16px;">
+            <h2 style="margin:0 0 8px; font-size:14px; color:#166534;">Proposta Preliminar</h2>
+            <p style="margin:0 0 4px; font-size:13px;"><strong>Valor Sugerido:</strong> ${fmtBRL(proposta.propostaPreliminar.valorSugerido)}</p>
+            <p style="margin:0 0 4px; font-size:13px;"><strong>Produto:</strong> ${proposta.propostaPreliminar.produtoSugerido || 'Não definido'}</p>
+            <p style="margin:0 0 4px; font-size:13px;"><strong>Prazo:</strong> ${proposta.propostaPreliminar.prazoSugerido ? proposta.propostaPreliminar.prazoSugerido + ' meses' : 'Não definido'}</p>
+            <p style="margin:0; font-size:12px; color:#166534; font-style:italic;">${proposta.propostaPreliminar.justificativa}</p>
+          </div>` : ''}
+
+          ${proposta.pontosFortes.length > 0 ? `
+          <div style="margin-bottom:16px;">
+            <h2 style="font-size:14px; margin:0 0 8px; color:#166534;">Pontos Fortes</h2>
+            <ul style="margin:0; padding-left:20px; font-size:12px; line-height:1.8;">
+              ${proposta.pontosFortes.map(p => `<li>${p}</li>`).join('')}
+            </ul>
+          </div>` : ''}
+
+          ${proposta.pendencias.length > 0 ? `
+          <div style="margin-bottom:16px;">
+            <h2 style="font-size:14px; margin:0 0 8px; color:#dc2626;">Pendências</h2>
+            <ul style="margin:0; padding-left:20px; font-size:12px; line-height:1.8;">
+              ${proposta.pendencias.map(p => `<li><strong>${p.tipo.toUpperCase()}:</strong> ${p.descricao} &mdash; ${p.acao_requerida}</li>`).join('')}
+            </ul>
+          </div>` : ''}
+
+          <div style="margin-bottom:16px;">
+            <h2 style="font-size:14px; margin:0 0 8px; color:#1e40af;">Parecer Técnico</h2>
+            <p style="font-size:12px; line-height:1.6; margin:0;">${proposta.parecerTecnico}</p>
+          </div>
+
+          ${proposta.proximosPassos.length > 0 ? `
+          <div style="margin-bottom:16px;">
+            <h2 style="font-size:14px; margin:0 0 8px;">Próximos Passos</h2>
+            <ol style="margin:0; padding-left:20px; font-size:12px; line-height:1.8;">
+              ${proposta.proximosPassos.map(p => `<li>${p}</li>`).join('')}
+            </ol>
+          </div>` : ''}
+
+          <div style="margin-top:24px; padding-top:12px; border-top:1px solid #e2e8f0; font-size:10px; color:#94a3b8; text-align:center;">
+            Proposta preliminar e consultiva. Proposta sujeita à análise bancária e critérios da instituição financeira parceira.
+            Não constitui garantia ou promessa de aprovação de crédito. Gerado em ${fmtDate(proposta.gerado_em)}.
+          </div>
+        </div>
+      `, `Proposta Bancária — ${proposta.empresa.razao_social}`);
+
+      const uploadsDir = require('path').resolve("uploads", "propostas-bancarias");
+      if (!require('fs').existsSync(uploadsDir)) require('fs').mkdirSync(uploadsDir, { recursive: true });
+      const slug = String(proposta.empresa.razao_social).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase();
+      const fileName = `proposta-bancaria-${slug}-${Date.now()}.pdf`;
+      const filePath = require('path').join(uploadsDir, fileName);
+
+      browser = await launchChromium();
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: "networkidle0" });
+      await page.pdf({ path: filePath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "8mm", right: "8mm" } });
+      await closeChromium(browser);
+      browser = undefined;
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      const stream = require('fs').createReadStream(filePath);
+      stream.pipe(res);
+      stream.on("end", () => require('fs').unlink(filePath, () => {}));
+    } catch (err: any) {
+      if (browser) { try { await closeChromium(browser); } catch { /* ignora */ } }
+      console.error("[GET /api/empresas/:id/proposta-bancaria/pdf]", err);
+      res.status(500).json({ error: "Erro ao gerar PDF da proposta bancária", detail: err?.message });
     }
   });
 
