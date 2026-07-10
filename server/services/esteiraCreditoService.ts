@@ -18,6 +18,8 @@
  * REGRA: ZERO REGRESSÃO — apenas leitura, sem alterar dados.
  */
 
+import { isSituacaoAtiva } from "../utils/situacaoCadastral";
+
 // ─── Utilitários ──────────────────────────────────────────────────────────────
 
 function safeArr<T>(v: unknown): T[] {
@@ -128,7 +130,7 @@ function avaliarEtapa1Cadastro(empresa: any, socios: any[]): EtapaEsteira {
 
   if (safeStr(empresa?.cnpj)) pontos += 2; else bloqueios.push({ id: "e1-cnpj", titulo: "CNPJ ausente", descricao: "O CNPJ da empresa não está cadastrado.", critico: true, modulo: "cadastro_empresa" });
   if (safeStr(empresa?.razao_social)) pontos += 1; else bloqueios.push({ id: "e1-razao", titulo: "Razão social ausente", descricao: "A razão social não está informada.", critico: true, modulo: "cadastro_empresa" });
-  if (safeStr(empresa?.situacao_cadastral)?.toLowerCase().includes("ativa")) pontos += 2; else bloqueios.push({ id: "e1-situacao", titulo: "Situação cadastral não ativa", descricao: `Situação: "${safeStr(empresa?.situacao_cadastral, "não informada")}".`, critico: true, modulo: "cadastro_empresa" });
+  if (isSituacaoAtiva(empresa?.situacao_cadastral)) pontos += 2; else bloqueios.push({ id: "e1-situacao", titulo: "Situação cadastral não ativa", descricao: `Situação: "${safeStr(empresa?.situacao_cadastral, "não informada")}".`, critico: true, modulo: "cadastro_empresa" });
   if (safeStr(empresa?.cnae_principal)) pontos += 1; else acoes.push({ titulo: "Sincronizar CNAE", descricao: "Obter o CNAE principal da Receita Federal.", modulo: "cadastro_empresa", prioridade: "proxima" });
   if (safeStr(empresa?.email) || safeStr(empresa?.telefone)) pontos += 1; else acoes.push({ titulo: "Informar contato", descricao: "Cadastrar e-mail ou telefone da empresa.", modulo: "cadastro_empresa", prioridade: "proxima" });
   if (safeArr(socios).length > 0) pontos += 2; else bloqueios.push({ id: "e1-socios", titulo: "Sem sócios cadastrados", descricao: "O QSA está vazio.", critico: true, modulo: "socios_qsa" });

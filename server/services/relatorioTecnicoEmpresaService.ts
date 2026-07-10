@@ -8,6 +8,8 @@
  * Campos ausentes retornam "Não informado". Nunca quebra com dados incompletos.
  */
 
+import { isSituacaoAtiva, isSituacaoIrregular } from "../utils/situacaoCadastral";
+
 // ─── Utilitários internos ─────────────────────────────────────────────────────
 
 function safeArr<T>(v: unknown): T[] {
@@ -222,7 +224,7 @@ function calcularScoreDestrava(empresa: any, socios: any[], documentos: any[], s
   let score = 0;
   if (empresa?.cnpj) score += 10;
   if (empresa?.razao_social) score += 5;
-  if (safeStr(empresa?.situacao_cadastral).toLowerCase().includes("ativa")) score += 10;
+  if (isSituacaoAtiva(empresa?.situacao_cadastral)) score += 10;
   if (empresa?.cnae_principal) score += 5;
   const fat = safeNum(empresa?.faturamento_anual);
   if (fat && fat > 0) score += 15;
@@ -243,7 +245,7 @@ function calcularScoreDestrava(empresa: any, socios: any[], documentos: any[], s
 function calcularNivelRisco(empresa: any, socios: any[], documentos: any[]): string {
   const docs = safeArr<any>(documentos);
   const sociosArr = safeArr<any>(socios);
-  const ativa = safeStr(empresa?.situacao_cadastral).toLowerCase().includes("ativa");
+  const ativa = isSituacaoAtiva(empresa?.situacao_cadastral);
   const temCnpj = !!empresa?.cnpj;
   const temFat = safeNum(empresa?.faturamento_anual) !== null;
   const temDocs = docs.filter(d => d?.arquivo_path || d?.url || d?.file_path).length >= 3;
@@ -261,7 +263,7 @@ function gerarAnaliseCadastral(empresa: any, socios: any[]): AnaliseCadastral {
   const comCpf = sociosArr.filter(s => String(s?.cpf_cnpj || "").replace(/\D/g, "").length >= 11).length;
   const semCpf = sociosArr.length - comCpf;
   const obs: string[] = [];
-  const ativa = safeStr(empresa?.situacao_cadastral).toLowerCase().includes("ativa");
+  const ativa = isSituacaoAtiva(empresa?.situacao_cadastral);
   if (!empresa?.cnpj) obs.push("CNPJ não informado — necessário para análise completa.");
   if (!ativa) obs.push(`Situação cadastral: ${safeStr(empresa?.situacao_cadastral)} — verificar regularidade na Receita Federal.`);
   if (sociosArr.length === 0) obs.push("Nenhum sócio cadastrado no QSA.");
@@ -329,8 +331,8 @@ function gerarPendencias(empresa: any, socios: any[], documentos: any[]): Penden
   if (!empresa?.cnpj) {
     pendencias.push({ tipo: "cadastral", descricao: "CNPJ não informado", impacto: "Bloqueia análise completa", acao_requerida: "Informar CNPJ válido no cadastro", prioridade: "critica" });
   }
-  const situacao = safeStr(empresa?.situacao_cadastral).toLowerCase();
-  if (situacao && !situacao.includes("ativa") && situacao !== "não informado") {
+  const situacao = safeStr(empresa?.situacao_cadastral);
+  if (isSituacaoIrregular(situacao)) {
     pendencias.push({ tipo: "cadastral", descricao: `Situação cadastral irregular: ${safeStr(empresa?.situacao_cadastral)}`, impacto: "Bloqueia proposta bancária", acao_requerida: "Regularizar na Receita Federal", prioridade: "critica" });
   }
   if (!safeNum(empresa?.faturamento_anual)) {

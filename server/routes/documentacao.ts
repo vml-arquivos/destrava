@@ -1,3 +1,4 @@
+import { isSituacaoAtiva } from '../utils/situacaoCadastral';
 import { Router, Request, Response } from 'express';
 import pkg from 'pg';
 import { auth } from '../middleware/auth';
@@ -293,7 +294,7 @@ function pendenciasCnpj(empresa: any, docsCnpj: any[]): Pendencia[] {
   }
   if (!empresa.razao_social) pendencias.push({ codigo: 'razao_social_ausente', mensagem: 'Razão social ausente.', severidade: 'alta', origem: 'empresas.razao_social' });
   if (!empresa.situacao_cadastral) pendencias.push({ codigo: 'situacao_cadastral_ausente', mensagem: 'Situação cadastral não informada.', severidade: 'media', origem: 'empresas.situacao_cadastral' });
-  if (empresa.situacao_cadastral && !String(empresa.situacao_cadastral).toLowerCase().includes('ativa')) {
+  if (empresa.situacao_cadastral && !isSituacaoAtiva(empresa.situacao_cadastral)) {
     pendencias.push({ codigo: 'situacao_cadastral_nao_ativa', mensagem: `Situação cadastral diferente de ativa: ${empresa.situacao_cadastral}.`, severidade: 'alta', origem: 'empresas.situacao_cadastral' });
   }
   if (!empresa.data_abertura) pendencias.push({ codigo: 'data_abertura_ausente', mensagem: 'Data de abertura ausente.', severidade: 'media', origem: 'empresas.data_abertura' });

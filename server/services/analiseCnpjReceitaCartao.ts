@@ -201,10 +201,17 @@ function codigoNatureza(value: unknown): string {
 
 function normalizarSituacao(value: unknown): string {
   const t = normalizarBasico(value);
-  if (t.includes('ativa')) return 'ativa';
-  if (t.includes('baixada')) return 'baixada';
-  if (t.includes('inapta')) return 'inapta';
-  if (t.includes('suspensa')) return 'suspensa';
+
+  // Ordem explícita: valores impeditivos antes de qualquer ativo para evitar
+  // falso positivo com textos como "inativa".
+  if (t.includes('baixada') || t.includes('baixado')) return 'baixada';
+  if (t.includes('inapta') || t.includes('inapto')) return 'inapta';
+  if (t.includes('inativa') || t.includes('inativo')) return 'inativa';
+  if (t.includes('suspensa') || t.includes('suspenso')) return 'suspensa';
+  if (t.includes('nula') || t.includes('nulo')) return 'nula';
+  if (t.includes('cancelada') || t.includes('cancelado')) return 'cancelada';
+  if (isSituacaoAtiva(value)) return 'ativa';
+  if (classificarSituacaoCadastral(value) === 'irregular') return 'irregular';
   return t;
 }
 
@@ -733,8 +740,8 @@ export async function extrairCamposUltimoCartaoCnpjEmpresa(empresaId: string): P
 function classificarSituacao(situacao: unknown): { risco: string; alerta?: AlertaAnalise } {
   const s = normalizeText(situacao);
   if (!s) return { risco: 'medio', alerta: { codigo: 'situacao_cadastral_ausente', mensagem: 'Situação cadastral não informada na Receita.', severidade: 'media', recomendacao: 'Atualizar dados da Receita antes de avançar.' } };
-  if (s.includes('ativa')) return { risco: 'baixo' };
-  if (s.includes('baixada') || s.includes('inapta')) return { risco: 'critico', alerta: { codigo: 'situacao_cadastral_impeditiva', mensagem: `Situação cadastral impeditiva: ${situacao}.`, severidade: 'critica', recomendacao: 'Não enviar ao banco antes de regularizar a situação cadastral.' } };
+  if (isSituacaoAtiva(situacao)) return { risco: 'baixo' };
+  if (isSituacaoIrregular(situacao)) return { risco: 'critico', alerta: { codigo: 'situacao_cadastral_impeditiva', mensagem: `Situação cadastral impeditiva: ${situacao}.`, severidade: 'critica', recomendacao: 'Não enviar ao banco antes de regularizar a situação cadastral.' } };
   return { risco: 'alto', alerta: { codigo: 'situacao_cadastral_atencao', mensagem: `Situação cadastral requer atenção: ${situacao}.`, severidade: 'alta', recomendacao: 'Validar situação cadastral antes de seguir.' } };
 }
 
@@ -746,7 +753,7 @@ function calcularScore(input: { camposReceita: any; cartao: DocCartao | null; ex
   if (!input.camposReceita.cnae_principal) score -= 8;
   if (!input.camposReceita.natureza_juridica) score -= 6;
   if (!input.camposReceita.situacao_cadastral) score -= 10;
-  if (normalizeText(input.camposReceita.situacao_cadastral) && !normalizeText(input.camposReceita.situacao_cadastral).includes('ativa')) score -= 35;
+  if (isSituacaoIrregular(input.camposReceita.situacao_cadastral)) score -= 35;
   if ((input.camposReceita.idade_meses ?? 999) < 12) score -= 15;
   if (!input.cartao) score -= 10;
   if (input.cartao && !input.extracao && !input.cartao.data_emissao_documento) score -= 5;
@@ -795,7 +802,7 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
   if (camposReceita.cnpj_limpo?.length === 14) pontosPositivos.push('CNPJ válido e estruturado no cadastro.');
   else alertas.push({ codigo: 'cnpj_invalido', mensagem: 'CNPJ ausente ou inválido no cadastro.', severidade: 'critica', recomendacao: 'Corrigir CNPJ e sincronizar Receita.' });
 
-  if (normalizeText(camposReceita.situacao_cadastral).includes('ativa')) pontosPositivos.push('Empresa com situação cadastral ativa na Receita Federal.');
+  if (isSituacaoAtiva(camposReceita.situacao_cadastral)) pontosPositivos.push('Empresa com situação cadastral ativa na Receita Federal.');
 
   if (camposReceita.idade_meses !== null && camposReceita.idade_meses < 12) {
     alertas.push({ codigo: 'empresa_menos_12_meses', mensagem: `Empresa com apenas ${tempoAberturaDescricao(camposReceita.idade_meses)} de abertura.`, severidade: 'alta', recomendacao: 'Direcionar para linhas compatíveis com empresas novas ou aguardar maturação cadastral.' });

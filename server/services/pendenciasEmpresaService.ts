@@ -10,6 +10,8 @@
  * Calculado em tempo real, sem persistência nesta sprint.
  */
 
+import { isSituacaoAtiva, isSituacaoIrregular } from "../utils/situacaoCadastral";
+
 // ─── Utilitários ──────────────────────────────────────────────────────────────
 
 function safeArr<T>(v: unknown): T[] {
@@ -149,8 +151,8 @@ function regrasCadastrais(empresa: any): Pendencia[] {
     });
   }
 
-  const situacao = safeStr(empresa?.situacao_cadastral).toLowerCase();
-  if (situacao && !situacao.includes("ativa") && situacao !== "") {
+  const situacao = safeStr(empresa?.situacao_cadastral);
+  if (isSituacaoIrregular(situacao)) {
     pends.push({
       id: pid("cadastral", "situacao-irregular"),
       categoria: "cadastral",
@@ -633,7 +635,7 @@ function calcularScoreCompletude(empresa: any, socios: any[], documentos: any[],
 
   if (safeStr(empresa?.cnpj)) pontos += 10;
   if (safeStr(empresa?.razao_social)) pontos += 5;
-  if (safeStr(empresa?.situacao_cadastral).toLowerCase().includes("ativa")) pontos += 10;
+  if (isSituacaoAtiva(empresa?.situacao_cadastral)) pontos += 10;
   if (safeNum(empresa?.faturamento_anual)) pontos += 15;
   if (safeNum(empresa?.capital_social)) pontos += 5;
   if (safeStr(empresa?.email) || safeStr(empresa?.telefone)) pontos += 5;

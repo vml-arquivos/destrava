@@ -14,6 +14,8 @@
  *   - "capacidade estimada com base nos dados disponíveis"
  */
 
+import { isSituacaoAtiva, isSituacaoIrregular } from "../utils/situacaoCadastral";
+
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export interface EmpresaProposta {
@@ -187,7 +189,7 @@ function calcularScoreDestrava(empresa: any, socios: any[], documentos: any[], s
   // Dados cadastrais (30 pts)
   if (empresa?.cnpj) score += 10;
   if (empresa?.razao_social) score += 5;
-  if (empresa?.situacao_cadastral?.toLowerCase().includes("ativa")) score += 10;
+  if (isSituacaoAtiva(empresa?.situacao_cadastral)) score += 10;
   if (empresa?.cnae_principal) score += 5;
 
   // Dados financeiros (25 pts)
@@ -222,7 +224,7 @@ function calcularNivelRisco(empresa: any, socios: any[], documentos: any[]): "ba
   const docs = safeArr<any>(documentos);
   const sociosArr = safeArr<any>(socios);
 
-  const ativa = safeStr(empresa?.situacao_cadastral).toLowerCase().includes("ativa");
+  const ativa = isSituacaoAtiva(empresa?.situacao_cadastral);
   const temCnpj = !!empresa?.cnpj;
   const temFaturamento = safeNum(empresa?.faturamento_anual) !== null;
   const temDocumentos = docs.filter(d => d?.arquivo_path || d?.url || d?.file_path).length >= 3;
@@ -333,16 +335,14 @@ function gerarPendencias(empresa: any, socios: any[], documentos: any[]): Penden
   }
 
   // Situação cadastral
-  const situacao = safeStr(empresa?.situacao_cadastral).toLowerCase();
-  if (situacao !== "ativa" && situacao !== "não informado" && situacao !== "") {
-    if (!situacao.includes("ativa")) {
-      pendencias.push({
-        tipo: "cadastral",
-        descricao: `Situação cadastral irregular: ${safeStr(empresa?.situacao_cadastral)}`,
-        impacto: "bloqueia_proposta",
-        acao_requerida: "Regularizar situação cadastral na Receita Federal",
-      });
-    }
+  const situacao = safeStr(empresa?.situacao_cadastral);
+  if (isSituacaoIrregular(situacao)) {
+    pendencias.push({
+      tipo: "cadastral",
+      descricao: `Situação cadastral irregular: ${safeStr(empresa?.situacao_cadastral)}`,
+      impacto: "bloqueia_proposta",
+      acao_requerida: "Regularizar situação cadastral na Receita Federal",
+    });
   }
 
   // Faturamento
@@ -451,8 +451,8 @@ function gerarRiscos(empresa: any, socios: any[], documentos: any[], nivelRisco:
   }
 
   // Risco de situação cadastral
-  const situacao = safeStr(empresa?.situacao_cadastral).toLowerCase();
-  if (situacao && !situacao.includes("ativa") && situacao !== "não informado") {
+  const situacao = safeStr(empresa?.situacao_cadastral);
+  if (isSituacaoIrregular(situacao)) {
     riscos.push({
       tipo: "regulatório",
       descricao: `Situação cadastral: ${safeStr(empresa?.situacao_cadastral)} — pode impedir análise`,
@@ -487,8 +487,8 @@ function gerarPontosFortes(empresa: any, socios: any[], documentos: any[], simul
   const simsArr = safeArr<any>(simulacoes);
   const contsArr = safeArr<any>(contratos);
 
-  const situacao = safeStr(empresa?.situacao_cadastral).toLowerCase();
-  if (situacao.includes("ativa")) pontos.push("Empresa com situação cadastral ativa na Receita Federal");
+  const situacao = safeStr(empresa?.situacao_cadastral);
+  if (isSituacaoAtiva(situacao)) pontos.push("Empresa com situação cadastral ativa na Receita Federal");
 
   const fat = safeNum(empresa?.faturamento_anual);
   if (fat && fat > 0) pontos.push(`Faturamento anual informado: ${fmtBRL(fat)}`);
