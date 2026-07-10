@@ -46,23 +46,34 @@ export default function AcervoDocumentalEmpresa() {
     return () => { active = false; };
   }, [empresaId]);
 
+  function voltarParaEmpresa() {
+    if (!empresaId) return setLocation("/colaborador/empresas");
+    try {
+      sessionStorage.setItem(
+        "destrava_empresa_retorno_acervo",
+        JSON.stringify({ empresaId, aba: "documentos", ts: Date.now() }),
+      );
+    } catch {}
+    setLocation(`/colaborador/empresas?empresa=${empresaId}&aba=documentos`);
+  }
+
   return (
     <Layout>
-      <div className="h-full min-h-0 overflow-y-auto bg-slate-50 px-3 py-3 lg:px-5">
-        <div className="mx-auto max-w-[1760px] space-y-3 pb-6">
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm">
+      <div className="h-full min-h-0 overflow-y-auto bg-slate-50 px-3 py-2 lg:px-4">
+        <div className="mx-auto max-w-[1780px] space-y-2 pb-4">
+          <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex min-w-0 items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setLocation(`/colaborador/empresas?empresa=${empresaId}&aba=documentos`)}
-                  className="flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-slate-600 hover:bg-slate-50"
+                  onClick={voltarParaEmpresa}
+                  className="flex h-9 shrink-0 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 text-blue-700 hover:bg-blue-100"
                   title="Voltar para a página da empresa"
                 >
                   <ArrowLeft className="h-5 w-5" />
-                  <span className="hidden text-xs font-bold lg:inline">Voltar para empresa</span>
+                  <span className="hidden text-xs font-bold lg:inline">Voltar para a empresa</span>
                 </button>
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
                   <FileText className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
@@ -72,7 +83,7 @@ export default function AcervoDocumentalEmpresa() {
                       <ShieldCheck className="h-3 w-3" /> Preservação ativa
                     </span>
                   </div>
-                  <h1 className="mt-0.5 max-w-[980px] truncate text-lg font-black leading-tight text-slate-950 lg:text-xl">
+                  <h1 className="mt-0.5 max-w-[980px] truncate text-base font-black leading-tight text-slate-950 lg:text-lg">
                     {loading ? "Carregando empresa..." : empresa?.razao_social || "Empresa"}
                   </h1>
                 </div>

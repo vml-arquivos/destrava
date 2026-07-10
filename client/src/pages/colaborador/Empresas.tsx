@@ -867,14 +867,28 @@ export default function Empresas() {
     return () => clearTimeout(t);
   }, [carregarEmpresas]);
 
-  // ── Reabrir detalhe da empresa via URL ─────────────────────────────────────
-  // Usado pelo acervo documental para voltar exatamente para a empresa aberta,
-  // sem cair na tela vazia de seleção. Não altera dados nem rotas antigas.
+  // ── Reabrir detalhe da empresa via URL/retorno do acervo ─────────────────────
+  // Garante que o botão "Voltar para a empresa" do acervo reabra a empresa correta,
+  // mesmo se o roteador perder a query string durante a navegação. Não altera dados.
   useEffect(() => {
     const queryString = location.split("?")[1] || "";
     const params = new URLSearchParams(queryString);
-    const empresaIdParam = params.get("empresa") || params.get("empresa_id") || params.get("id");
-    const abaParam = params.get("aba");
+    let empresaIdParam = params.get("empresa") || params.get("empresa_id") || params.get("id");
+    let abaParam = params.get("aba");
+
+    if (!empresaIdParam) {
+      try {
+        const raw = sessionStorage.getItem("destrava_empresa_retorno_acervo");
+        const retorno = raw ? JSON.parse(raw) : null;
+        const recente = retorno?.ts && Date.now() - Number(retorno.ts) < 10 * 60 * 1000;
+        if (retorno?.empresaId && recente) {
+          empresaIdParam = retorno.empresaId;
+          abaParam = retorno.aba || "documentos";
+          sessionStorage.removeItem("destrava_empresa_retorno_acervo");
+          setLocation(`/colaborador/empresas?empresa=${empresaIdParam}&aba=${abaParam}`);
+        }
+      } catch {}
+    }
 
     if (!empresaIdParam) return;
 
@@ -1240,10 +1254,8 @@ export default function Empresas() {
                 >
                   {selecionada ? (
                     <>
-                      <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-[11px] font-black shrink-0">
-                        {getInitials(selecionada.razao_social)}
-                      </div>
-                      <span className="flex-1 min-w-0 text-sm font-semibold text-slate-900 truncate">{selecionada.razao_social}</span>
+                      <Search className="w-4 h-4 text-blue-500 shrink-0" />
+                      <span className="flex-1 min-w-0 text-sm font-semibold text-slate-500 truncate">Trocar empresa ou buscar outra...</span>
                     </>
                   ) : (
                     <>
@@ -1366,13 +1378,13 @@ export default function Empresas() {
                         <ArrowLeft className="w-4 h-4" />
                       </button>
                       {/* Avatar grande */}
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white text-base font-black shrink-0 shadow-sm shadow-blue-100">
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white text-sm font-black shrink-0 shadow-sm shadow-blue-100">
                         {getInitials(selecionada.razao_social)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <h2 className="text-base lg:text-lg font-black text-slate-900 leading-tight truncate">{selecionada.razao_social}</h2>
+                            <h2 className="text-base font-black text-slate-900 leading-tight truncate">{selecionada.razao_social}</h2>
                             {selecionada.nome_fantasia && (
                               <p className="text-xs text-slate-500 mt-0.5 truncate">{selecionada.nome_fantasia}</p>
                             )}
@@ -1399,16 +1411,16 @@ export default function Empresas() {
                                 </span>
                               )}
                             </div>
-                            <div className="emp-info-grid mt-2 grid grid-cols-1 sm:grid-cols-3 gap-1.5 max-w-[820px]">
-                              <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5">
+                            <div className="emp-info-grid mt-1.5 grid grid-cols-1 sm:grid-cols-3 gap-1.5 max-w-[760px]">
+                              <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-2 py-1">
                                 <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">CNPJ</p>
                                 <p className="text-xs font-bold text-slate-700 mt-0.5 truncate">{selecionada.cnpj || "Não informado"}</p>
                               </div>
-                              <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5">
+                              <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-2 py-1">
                                 <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Localização</p>
                                 <p className="text-xs font-bold text-slate-700 mt-0.5 truncate">{[selecionada.cidade, selecionada.estado].filter(Boolean).join(" / ") || "Não informado"}</p>
                               </div>
-                              <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5">
+                              <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-2 py-1">
                                 <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Contato principal</p>
                                 <p className="text-xs font-bold text-slate-700 mt-0.5 truncate">{selecionada.responsavel_nome || selecionada.telefone || selecionada.whatsapp || "Não informado"}</p>
                               </div>
@@ -1452,7 +1464,7 @@ export default function Empresas() {
                   </div>
 
                   {/* ── Quick Actions ── */}
-                  <div className="px-3 sm:px-4 py-1.5 border-b border-slate-100 bg-slate-50/70 shrink-0">
+                  <div className="px-3 sm:px-4 py-1 border-b border-slate-100 bg-slate-50/60 shrink-0">
                     <div className="flex flex-wrap gap-1.5">
                       <button
                         onClick={() => {
@@ -1464,7 +1476,7 @@ export default function Empresas() {
                           }));
                           window.location.href = "/colaborador/calculadora";
                         }}
-                        className="flex items-center gap-1.5 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+                        className="flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-1 rounded-lg hover:bg-blue-100 transition-colors"
                         title="Nova Simulação"
                       >
                         <Calculator className="w-3.5 h-3.5" />
@@ -1472,7 +1484,7 @@ export default function Empresas() {
                       </button>
                       <button
                         onClick={() => window.location.href = "/colaborador/contratos"}
-                        className="flex items-center gap-1.5 text-[11px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-2.5 py-1.5 rounded-lg hover:bg-violet-100 transition-colors"
+                        className="flex items-center gap-1 text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-1 rounded-lg hover:bg-violet-100 transition-colors"
                         title="Novo Contrato"
                       >
                         <FileText className="w-3.5 h-3.5" />
@@ -1480,7 +1492,7 @@ export default function Empresas() {
                       </button>
                       <button
                         onClick={() => { setAbaAtiva("followup"); setShowFollowupForm(true); }}
-                        className="flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-lg hover:bg-amber-100 transition-colors"
+                        className="flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg hover:bg-amber-100 transition-colors"
                         title="Iniciar conversa"
                       >
                         <Bell className="w-3.5 h-3.5" />
@@ -1499,10 +1511,10 @@ export default function Empresas() {
                       critico: { label: "Crítico", wrap: "bg-red-50 border-red-200",       badge: "bg-red-100 text-red-700",       Icon: ShieldOff,    ic: "text-red-600" },
                     }[risco] || { label: "—", wrap: "bg-slate-50 border-slate-200", badge: "bg-slate-100 text-slate-600", Icon: ShieldCheck, ic: "text-slate-500" };
                     return (
-                      <div className={`mx-3 sm:mx-4 mt-1.5 rounded-lg border px-2.5 py-1.5 shrink-0 ${rCfg.wrap}`}>
+                      <div className={`mx-3 sm:mx-4 mt-1 rounded-lg border px-2 py-1 shrink-0 ${rCfg.wrap}`}>
                         <div className="flex flex-col gap-1.5 lg:flex-row lg:items-center">
                           <div className="flex items-center gap-2 min-w-[190px]">
-                            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white/90 border border-white shadow-sm">
+                            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-white/90 border border-white shadow-sm">
                               <rCfg.Icon className={`w-3.5 h-3.5 ${rCfg.ic}`} />
                             </div>
                             <div>
@@ -1516,7 +1528,7 @@ export default function Empresas() {
 
                           <div className="flex flex-1 items-center gap-3 min-w-0">
                             <div className="min-w-[44px]">
-                              <div className="text-lg font-black text-slate-900 leading-none">{score}</div>
+                              <div className="text-base font-black text-slate-900 leading-none">{score}</div>
                               <div className="text-[10px] font-semibold text-slate-400 mt-0.5">/100</div>
                             </div>
                             <div className="flex-1 min-w-[140px]">
@@ -1550,7 +1562,10 @@ export default function Empresas() {
                       ] as const).map(aba => (
                         <button
                           key={aba.id}
-                          onClick={() => setAbaAtiva(aba.id)}
+                          onClick={() => {
+                            setAbaAtiva(aba.id);
+                            if (selecionada?.id) setLocation(`/colaborador/empresas?empresa=${selecionada.id}&aba=${aba.id}`);
+                          }}
                           className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all whitespace-nowrap ${
                             abaAtiva === aba.id
                               ? "border-blue-300 bg-blue-600 text-white shadow-md shadow-blue-100"
@@ -2188,42 +2203,29 @@ export default function Empresas() {
 
                     /* ── ACERVO DOCUMENTAL ── */
                     : abaAtiva === "documentos" ? (
-                      <div className="p-5 fade-in">
-                        <div className="rounded-3xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-                          <div className="p-6 lg:p-8 bg-gradient-to-br from-blue-50 via-white to-slate-50">
-                            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
-                              <div className="max-w-2xl">
-                                <div className="h-14 w-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
-                                  <FileText className="h-7 w-7" />
-                                </div>
-                                <p className="mt-5 text-[11px] font-black uppercase tracking-[0.12em] text-blue-600">Central documental da empresa</p>
-                                <h3 className="mt-1 text-2xl font-black text-slate-950">Anexação e visualização em página exclusiva</h3>
-                                <p className="mt-3 text-sm leading-relaxed text-slate-600">
-                                  Para manter o cadastro da empresa limpo e fácil de usar, todos os documentos agora são administrados em uma área própria, com lista completa, filtros, upload individual e visualização ampla.
-                                </p>
+                      <div className="p-3 fade-in">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="h-11 w-11 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                                <FileText className="h-5 w-5" />
                               </div>
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-600">Acervo documental</p>
+                                <h3 className="text-base font-black text-slate-950 leading-tight">Documentos da empresa</h3>
+                                <p className="mt-0.5 text-xs text-slate-500">Uploads, visualização, validação e preservação em área exclusiva.</p>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{documentos.length + contratosSociais.length} registro(s)</span>
                               <button
                                 type="button"
                                 disabled={!selecionada?.id}
                                 onClick={() => selecionada?.id && setLocation(`/colaborador/empresas/${selecionada.id}/acervo`)}
-                                className="h-12 px-6 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-sm hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 shrink-0"
+                                className="h-10 px-4 rounded-xl bg-blue-600 text-white text-xs font-bold shadow-sm hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 shrink-0"
                               >
-                                <ExternalLink className="h-4 w-4" /> Abrir acervo documental
+                                <ExternalLink className="h-4 w-4" /> Abrir acervo
                               </button>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-3 border-t border-slate-200 divide-y md:divide-y-0 md:divide-x divide-slate-200">
-                            <div className="p-5">
-                              <p className="font-bold text-slate-800">Upload individual</p>
-                              <p className="mt-1 text-xs leading-relaxed text-slate-500">Cada arquivo é anexado no tipo correto, com nome, observação e data de emissão.</p>
-                            </div>
-                            <div className="p-5">
-                              <p className="font-bold text-slate-800">Visualização ampla</p>
-                              <p className="mt-1 text-xs leading-relaxed text-slate-500">PDFs e imagens abrem em painel grande, ao lado da lista completa do acervo.</p>
-                            </div>
-                            <div className="p-5">
-                              <p className="font-bold text-slate-800">Preservação física</p>
-                              <p className="mt-1 text-xs leading-relaxed text-slate-500">Arquivamento lógico, verificação de integridade e volume persistente entre redeploys.</p>
                             </div>
                           </div>
                         </div>

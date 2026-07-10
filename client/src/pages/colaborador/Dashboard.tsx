@@ -9,7 +9,7 @@ import {
 } from "recharts";
 import {
   Calculator, FileText, TrendingUp, DollarSign,
-  CheckCircle2, XCircle, Plus, ArrowRight, Users, Zap,
+  CheckCircle2, XCircle, Plus, ArrowRight, Users,
   RefreshCw, Loader2, AlertCircle, MessageSquare, ShieldAlert,
   Building2, UserCheck, Trophy, Filter,
 } from "lucide-react";
@@ -182,12 +182,18 @@ export default function Dashboard() {
   const nomeColaborador = colaborador?.nome?.split(" ")[0] || "Colaborador";
 
   const atalhos = [
-    { href: "/colaborador/calculadora", icon: Calculator, label: "Calculadora",   desc: "Nova simulação",         color: "blue",   visivel: true },
-    { href: "/colaborador/clientes",    icon: Users,      label: "Clientes CRM",  desc: "Gestão de clientes",     color: "green",  visivel: isGestor || isAnalista },
-    { href: "/colaborador/empresas",    icon: Building2,  label: "Empresas",      desc: "Carteira de empresas",   color: "teal",   visivel: true },
-    { href: "/colaborador/simulacoes",  icon: FileText,   label: "Simulações",    desc: "Histórico completo",     color: "yellow", visivel: true },
-    { href: "/colaborador/integracoes", icon: Zap,        label: "n8n",           desc: stats?.n8n?.configured ? "✅ Conectado" : "⚠️ Configurar", color: "purple", visivel: isAdmin },
+    { href: "/colaborador/calculadora", icon: Calculator, label: "Simulação Premium", desc: "Calculadora e proposta", color: "blue",  visivel: true },
+    { href: "/colaborador/crm",         icon: TrendingUp, label: "Funil",             desc: "Pipeline comercial",    color: "green", visivel: isGestor || isAnalista },
+    { href: "/colaborador/empresas",    icon: Building2,  label: "Empresas",          desc: "Carteira PJ",           color: "teal",  visivel: true },
+    { href: "/colaborador/triagem",     icon: ShieldAlert,label: "Triagem",           desc: "Qualificar leads",      color: "yellow",visivel: isGestor || isAnalista },
   ].filter(a => a.visivel);
+
+  const atalhoStyles: Record<string, { card: string; icon: string; text: string }> = {
+    blue: { card: "hover:border-blue-300", icon: "bg-blue-100", text: "text-blue-600" },
+    green: { card: "hover:border-green-300", icon: "bg-green-100", text: "text-green-600" },
+    teal: { card: "hover:border-teal-300", icon: "bg-teal-100", text: "text-teal-600" },
+    yellow: { card: "hover:border-yellow-300", icon: "bg-yellow-100", text: "text-yellow-600" },
+  };
 
   // Dados para o gráfico de pizza (distribuição por produto)
   const pieData = stats
@@ -207,12 +213,12 @@ export default function Dashboard() {
 
   return (
     <ColaboradorLayout title="Dashboard">
-      <div className="space-y-6 p-6">
+      <div className="space-y-4 p-4 lg:p-5">
 
         {/* ── Cabeçalho ── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Olá, {nomeColaborador}! 👋</h1>
+            <h1 className="text-xl font-bold text-gray-900">Olá, {nomeColaborador}! 👋</h1>
             <p className="text-gray-500 text-sm mt-1">
               {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
             </p>
@@ -225,8 +231,8 @@ export default function Dashboard() {
               <RefreshCw className="w-4 h-4" />
             </button>
             <Link href="/colaborador/calculadora">
-              <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
-                <Plus className="w-4 h-4" /> Nova Simulação
+              <button className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-bold">
+                <Plus className="w-4 h-4" /> Simulação Premium
               </button>
             </Link>
           </div>
@@ -234,8 +240,8 @@ export default function Dashboard() {
 
         {/* ── Filtros Dinâmicos (apenas gestores) ── */}
         {isGestor && (
-          <div className="bg-white rounded-xl border shadow-sm p-4">
-            <div className="flex items-center gap-2 mb-3">
+          <div className="bg-white rounded-xl border shadow-sm p-3">
+            <div className="flex items-center gap-2 mb-2">
               <Filter className="w-4 h-4 text-gray-500" />
               <span className="text-sm font-semibold text-gray-700">Filtros do Dashboard</span>
             </div>
@@ -304,76 +310,76 @@ export default function Dashboard() {
             <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
           </div>
         ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {(isGestor || isAnalista) && (
-              <div className="bg-white rounded-xl border p-5 shadow-sm">
+              <div className="bg-white rounded-xl border p-3 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-gray-500">Total de Leads</p>
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                    <Users className="w-4 h-4 text-blue-600" />
+                  <p className="text-xs font-semibold text-gray-500">Total de Leads</p>
+                  <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
+                    <Users className="w-3.5 h-3.5 text-blue-600" />
                   </div>
                 </div>
-                <p className="text-3xl font-bold text-gray-900">{stats?.leads.total ?? leadsRecentes.length}</p>
+                <p className="text-2xl font-black text-gray-900">{stats?.leads.total ?? leadsRecentes.length}</p>
                 <p className="text-xs text-gray-400 mt-1">{stats?.leads.byStatus?.novo ?? 0} novos</p>
               </div>
             )}
             {isCaptador && (
-              <div className="bg-white rounded-xl border p-5 shadow-sm">
+              <div className="bg-white rounded-xl border p-3 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-gray-500">Minhas Captações</p>
-                  <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center">
-                    <Building2 className="w-4 h-4 text-orange-600" />
+                  <p className="text-xs font-semibold text-gray-500">Minhas Captações</p>
+                  <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center">
+                    <Building2 className="w-3.5 h-3.5 text-orange-600" />
                   </div>
                 </div>
-                <p className="text-3xl font-bold text-gray-900">{empresasRecentes.length}</p>
+                <p className="text-2xl font-black text-gray-900">{empresasRecentes.length}</p>
                 <p className="text-xs text-gray-400 mt-1">empresas captadas</p>
               </div>
             )}
             {isAnalista && (
-              <div className="bg-white rounded-xl border p-5 shadow-sm">
+              <div className="bg-white rounded-xl border p-3 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-gray-500">Minhas Empresas</p>
-                  <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center">
-                    <UserCheck className="w-4 h-4 text-teal-600" />
+                  <p className="text-xs font-semibold text-gray-500">Minhas Empresas</p>
+                  <div className="w-7 h-7 rounded-full bg-teal-100 flex items-center justify-center">
+                    <UserCheck className="w-3.5 h-3.5 text-teal-600" />
                   </div>
                 </div>
-                <p className="text-3xl font-bold text-gray-900">{empresasRecentes.length}</p>
+                <p className="text-2xl font-black text-gray-900">{empresasRecentes.length}</p>
                 <p className="text-xs text-gray-400 mt-1">em atendimento</p>
               </div>
             )}
-            <div className="bg-white rounded-xl border p-5 shadow-sm">
+            <div className="bg-white rounded-xl border p-3 shadow-sm">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-sm text-gray-500">Simulações</p>
-                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-                  <Calculator className="w-4 h-4 text-green-600" />
+                <p className="text-xs font-semibold text-gray-500">Simulações</p>
+                <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center">
+                  <Calculator className="w-3.5 h-3.5 text-green-600" />
                 </div>
               </div>
-              <p className="text-3xl font-bold text-gray-900">{stats?.simulacoes.total ?? simulacoesRecentes.length}</p>
+              <p className="text-2xl font-black text-gray-900">{stats?.simulacoes.total ?? simulacoesRecentes.length}</p>
               <p className="text-xs text-gray-400 mt-1">realizadas</p>
             </div>
             {(isGestor || isAnalista) && (
               <Link href="/colaborador/triagem">
-                <div className="bg-white rounded-xl border p-5 shadow-sm cursor-pointer hover:border-orange-300 transition-colors">
+                <div className="bg-white rounded-xl border p-3 shadow-sm cursor-pointer hover:border-orange-300 transition-colors">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm text-gray-500">Triagem Pendente</p>
-                    <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center">
-                      <ShieldAlert className="w-4 h-4 text-orange-600" />
+                    <p className="text-xs font-semibold text-gray-500">Triagem Pendente</p>
+                    <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center">
+                      <ShieldAlert className="w-3.5 h-3.5 text-orange-600" />
                     </div>
                   </div>
-                  <p className="text-3xl font-bold text-gray-900">{triagemPendente}</p>
+                  <p className="text-2xl font-black text-gray-900">{triagemPendente}</p>
                   <p className="text-xs text-gray-400 mt-1">aguardando triagem</p>
                 </div>
               </Link>
             )}
             {isGestor && (
-              <div className="bg-white rounded-xl border p-5 shadow-sm">
+              <div className="bg-white rounded-xl border p-3 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm text-gray-500">Valor Simulado</p>
-                  <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
-                    <DollarSign className="w-4 h-4 text-purple-600" />
+                  <p className="text-xs font-semibold text-gray-500">Valor Simulado</p>
+                  <div className="w-7 h-7 rounded-full bg-purple-100 flex items-center justify-center">
+                    <DollarSign className="w-3.5 h-3.5 text-purple-600" />
                   </div>
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{fmt(stats?.simulacoes.totalValorSimulado ?? 0)}</p>
+                <p className="text-xl font-black text-gray-900">{fmt(stats?.simulacoes.totalValorSimulado ?? 0)}</p>
                 <p className="text-xs text-gray-400 mt-1">total simulado</p>
               </div>
             )}
@@ -381,18 +387,21 @@ export default function Dashboard() {
         )}
 
         {/* ── Atalhos rápidos ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {atalhos.map(a => (
-            <Link key={a.href} href={a.href}>
-              <div className={`bg-white rounded-xl border p-4 shadow-sm hover:border-${a.color}-300 hover:shadow-md transition-all cursor-pointer`}>
-                <div className={`w-9 h-9 rounded-lg bg-${a.color}-100 flex items-center justify-center mb-2`}>
-                  <a.icon className={`w-5 h-5 text-${a.color}-600`} />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {atalhos.map(a => {
+            const style = atalhoStyles[a.color] || atalhoStyles.blue;
+            return (
+              <Link key={a.href} href={a.href}>
+                <div className={`bg-white rounded-xl border p-3 shadow-sm ${style.card} hover:shadow-md transition-all cursor-pointer`}>
+                  <div className={`w-8 h-8 rounded-lg ${style.icon} flex items-center justify-center mb-1.5`}>
+                    <a.icon className={`w-5 h-5 ${style.text}`} />
+                  </div>
+                  <p className="text-xs font-black text-gray-800">{a.label}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{a.desc}</p>
                 </div>
-                <p className="text-sm font-semibold text-gray-800">{a.label}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{a.desc}</p>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
 
         {/* ── Gráficos (apenas gestores) ── */}
@@ -710,8 +719,8 @@ export default function Dashboard() {
                   </div>
                 ) : leadsRecentes.map(lead => (
                   <div key={lead.id} className="flex items-center gap-3 p-3 hover:bg-gray-50">
-                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                      <Users className="w-4 h-4 text-blue-600" />
+                    <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                      <Users className="w-3.5 h-3.5 text-blue-600" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{lead.nome}</p>
@@ -757,8 +766,8 @@ export default function Dashboard() {
                   </div>
                 ) : simulacoesRecentes.slice(0, 5).map(sim => (
                   <div key={sim.id} className="flex items-center gap-3 p-3 hover:bg-gray-50">
-                    <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                      <Calculator className="w-4 h-4 text-green-600" />
+                    <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                      <Calculator className="w-3.5 h-3.5 text-green-600" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{sim.cliente_nome}</p>
@@ -810,8 +819,8 @@ export default function Dashboard() {
                 </div>
               ) : simulacoesRecentes.slice(0, 5).map(sim => (
                 <div key={sim.id} className="flex items-center gap-3 p-3 hover:bg-gray-50">
-                  <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                    <Calculator className="w-4 h-4 text-green-600" />
+                  <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                    <Calculator className="w-3.5 h-3.5 text-green-600" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{sim.cliente_nome}</p>

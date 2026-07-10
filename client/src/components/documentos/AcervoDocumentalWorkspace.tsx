@@ -512,18 +512,14 @@ export default function AcervoDocumentalWorkspace({
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="border-b border-slate-200 px-4 py-2.5 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.12em] text-blue-600">Central documental</p>
-          <div className="mt-1 flex flex-wrap items-center gap-3">
-            <h2 className="text-xl font-black text-slate-950">Documentos da empresa</h2>
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{docs.length} arquivo(s)</span>
-            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">{validados} validado(s)</span>
-            {faltandoArquivo > 0 && <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-700">{faltandoArquivo} sem arquivo físico</span>}
-          </div>
+      <div className="border-b border-slate-200 px-3 py-2 flex flex-col xl:flex-row xl:items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{docs.length} arquivo(s)</span>
+          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">{validados} validado(s)</span>
+          {faltandoArquivo > 0 && <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-700">{faltandoArquivo} sem arquivo físico</span>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={carregar} className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+          <button type="button" onClick={carregar} className="h-9 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2">
             <RefreshCw className="h-4 w-4" /> Atualizar
           </button>
           <button type="button" onClick={exportarTodos} className="h-9 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2">
@@ -547,7 +543,7 @@ export default function AcervoDocumentalWorkspace({
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] min-h-[calc(100vh-190px)]">
+      <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)] min-h-[calc(100vh-155px)]">
         <aside className="border-b xl:border-b-0 xl:border-r border-slate-200 bg-slate-50/60 flex flex-col min-h-[420px]">
           <div className="p-3 space-y-2 border-b border-slate-200 bg-white/70">
             <div className="relative">
@@ -568,7 +564,7 @@ export default function AcervoDocumentalWorkspace({
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-2.5 space-y-2 max-h-[calc(100vh-290px)] min-h-[360px]">
+          <div className="flex-1 overflow-y-auto p-2 space-y-2 max-h-[calc(100vh-250px)] min-h-[320px]">
             {loading ? (
               <div className="h-full flex items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-blue-600" /></div>
             ) : docsFiltrados.length === 0 ? (
@@ -600,7 +596,7 @@ export default function AcervoDocumentalWorkspace({
           </div>
         </aside>
 
-        <main className="min-w-0 bg-slate-100/60 flex flex-col min-h-[calc(100vh-190px)]">
+        <main className="min-w-0 bg-slate-100/60 flex flex-col min-h-[calc(100vh-155px)]">
           {!selectedDoc ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
               <Eye className="h-14 w-14 text-slate-200" />
@@ -609,13 +605,13 @@ export default function AcervoDocumentalWorkspace({
             </div>
           ) : (
             <>
-              <div className="border-b border-slate-200 bg-white px-3 py-2.5 flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-2">
+              <div className="border-b border-slate-200 bg-white px-3 py-2 flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-2">
                 <div className="min-w-0 flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center"><SelectedIcon className="h-5 w-5 text-blue-600" /></div>
+                  <div className="h-8 w-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0"><SelectedIcon className="h-4 w-4 text-blue-600" /></div>
                   <div className="min-w-0">
-                    <p className="font-black text-slate-950 truncate">{displayDocName(selectedDoc)}</p>
-                    <p className="text-xs text-slate-500 truncate">{labelTipoDocumento(selectedDoc.tipo_documento)}</p>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                    <p className="text-sm font-black text-slate-950 truncate">{displayDocName(selectedDoc)}</p>
+                    <p className="text-[11px] text-slate-500 truncate">{labelTipoDocumento(selectedDoc.tipo_documento)}</p>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
                       <span className={`rounded-full border px-2 py-0.5 font-bold ${statusClass(selectedDoc)}`}>{statusLabel(selectedDoc)}</span>
                       <span>{formatBytes(selectedDoc.tamanho_bytes)}</span>
                       <span>Incluído em {formatDate(selectedDoc.criado_em)}</span>
@@ -640,14 +636,14 @@ export default function AcervoDocumentalWorkspace({
                 </div>
               </div>
 
-              <div className="flex-1 p-3 min-h-[calc(100vh-290px)]">
-                <div ref={viewerRef} className="h-full min-h-[calc(100vh-290px)] rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-inner flex items-center justify-center fullscreen:bg-white fullscreen:p-3">
+              <div className="flex-1 p-2 min-h-[calc(100vh-235px)]">
+                <div ref={viewerRef} className="h-full min-h-[calc(100vh-235px)] rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-inner flex items-center justify-center fullscreen:bg-white fullscreen:p-3">
                   {previewLoading ? (
                     <div className="flex flex-col items-center gap-3 text-slate-500"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /><span className="text-sm">Carregando documento...</span></div>
                   ) : previewUrl && previewIsPdf ? (
-                    <iframe title={displayDocName(selectedDoc)} src={previewUrl} className="w-full h-[calc(100vh-300px)] min-h-[640px] bg-white fullscreen:h-[96vh] fullscreen:min-h-[96vh]" />
+                    <iframe title={displayDocName(selectedDoc)} src={previewUrl} className="w-full h-[calc(100vh-245px)] min-h-[560px] bg-white fullscreen:h-[96vh] fullscreen:min-h-[96vh]" />
                   ) : previewUrl && previewIsImage ? (
-                    <div className="w-full h-[calc(100vh-300px)] min-h-[640px] overflow-auto bg-slate-950/5 p-4 flex items-start justify-center fullscreen:h-[96vh] fullscreen:min-h-[96vh]"><img src={previewUrl} alt={displayDocName(selectedDoc)} className="max-w-full h-auto rounded-lg shadow-lg" /></div>
+                    <div className="w-full h-[calc(100vh-245px)] min-h-[560px] overflow-auto bg-slate-950/5 p-4 flex items-start justify-center fullscreen:h-[96vh] fullscreen:min-h-[96vh]"><img src={previewUrl} alt={displayDocName(selectedDoc)} className="max-w-full h-auto rounded-lg shadow-lg" /></div>
                   ) : previewUrl ? (
                     <div className="text-center p-8"><File className="h-14 w-14 text-slate-300 mx-auto" /><p className="mt-3 font-bold text-slate-700">Pré-visualização não disponível</p><p className="mt-1 text-sm text-slate-400">Baixe o arquivo para abrir no aplicativo adequado.</p><button onClick={() => baixar(selectedDoc)} className="mt-4 h-10 px-4 rounded-xl bg-blue-600 text-white text-sm font-bold">Baixar arquivo</button></div>
                   ) : (
