@@ -3,6 +3,7 @@ import Layout from "./Layout";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from "@/lib/currency";
 import { useCNPJLookup } from "../../hooks/useCNPJLookup";
 import { formatCNPJ as fmtCNPJBrasil, cleanDigits } from "../../utils/cnpj";
@@ -159,6 +160,23 @@ type AbaEmpresa = typeof ABAS_EMPRESA[number];
 
 function isAbaEmpresa(value: string | null): value is AbaEmpresa {
   return Boolean(value && (ABAS_EMPRESA as readonly string[]).includes(value));
+}
+
+const ABA_EMPRESA_FEATURES: Partial<Record<AbaEmpresa, string>> = {
+  visao_geral: "empresa-tab-dados",
+  socios: "empresa-tab-dados",
+  dossie_credito: "empresa-tab-dossie",
+  inteligencia_360: "empresa-tab-inteligencia-360",
+  esteira_credito: "empresa-tab-esteira-credito",
+  followup: "empresa-tab-conversas",
+  historico: "empresa-tab-historico",
+  documentos: "empresa-tab-acervo-documental",
+  simulacoes: "empresa-tab-simulacoes",
+  contratos: "empresa-tab-contratos",
+};
+
+function featureDaAbaEmpresa(aba: AbaEmpresa): string | undefined {
+  return ABA_EMPRESA_FEATURES[aba];
 }
 
 // ─── Utilitários ──────────────────────────────────────────────────────────────
@@ -471,12 +489,12 @@ function EmpresaDadosWorkspace({
   simulacoesTotal: number;
   contratosTotal: number;
   sincronizando: boolean;
-  onSincronizar: () => void;
-  onEditar: () => void;
-  onNovaSimulacao: () => void;
-  onNovoContrato: () => void;
-  onIniciarConversa: () => void;
-  onAbrirAcervo: () => void;
+  onSincronizar?: () => void;
+  onEditar?: () => void;
+  onNovaSimulacao?: () => void;
+  onNovoContrato?: () => void;
+  onIniciarConversa?: () => void;
+  onAbrirAcervo?: () => void;
 }) {
   const [painelAtivo, setPainelAtivo] = useState<"resumo" | "receita" | "cadastro" | "contato" | "endereco" | "socios" | "documentos">("resumo");
   const { score, risco, tags } = calcularScore(empresa);
@@ -509,7 +527,7 @@ function EmpresaDadosWorkspace({
                 <p className="text-sm text-blue-900 mt-1">Dados oficiais vindos das fontes confiáveis. Atualize somente quando precisar sincronizar com a Receita Federal.</p>
                 <p className="text-xs text-blue-700 mt-1">Última atualização: {empresa.ultima_sincronizacao_receita ? new Date(empresa.ultima_sincronizacao_receita).toLocaleString("pt-BR") : "Não registrada"}</p>
               </div>
-              {empresa.cnpj && (
+              {empresa.cnpj && onSincronizar && (
                 <button onClick={onSincronizar} disabled={sincronizando} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50">
                   <RotateCw className={`w-4 h-4 ${sincronizando ? "animate-spin" : ""}`} />
                   Atualizar Receita
@@ -555,10 +573,12 @@ function EmpresaDadosWorkspace({
             <DataCell label="Status" value={STATUS_CFG[empresa.status]?.label || empresa.status} icon={<CheckCircle className="w-3.5 h-3.5" />} />
           </div>
           <div className="flex flex-wrap gap-2">
+            {onEditar && (
             <button onClick={onEditar} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
               <Edit2 className="w-4 h-4" /> Editar cadastro
             </button>
-            {empresa.cnpj && (
+            )}
+            {empresa.cnpj && onSincronizar && (
               <button onClick={onSincronizar} disabled={sincronizando} className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">
                 <RotateCw className={`w-4 h-4 ${sincronizando ? "animate-spin" : ""}`} /> Atualizar cadastro
               </button>
@@ -695,9 +715,11 @@ function EmpresaDadosWorkspace({
                 </div>
               </div>
             </div>
+            {onAbrirAcervo && (
             <button onClick={onAbrirAcervo} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-black text-white shadow-sm shadow-blue-100 hover:bg-blue-700">
               <ExternalLink className="w-4 h-4" /> Abrir acervo documental
             </button>
+            )}
           </div>
         </div>
       );
@@ -730,10 +752,10 @@ function EmpresaDadosWorkspace({
           <DataCell label="Contato principal" value={empresa.responsavel_nome || empresa.telefone || empresa.whatsapp || empresa.email} icon={<Phone className="w-3.5 h-3.5" />} />
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={onNovaSimulacao} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"><Calculator className="w-4 h-4" /> Nova simulação</button>
-          <button onClick={onNovoContrato} className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-bold text-violet-700 hover:bg-violet-100"><FileText className="w-4 h-4" /> Novo contrato</button>
-          <button onClick={onIniciarConversa} className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-700 hover:bg-amber-100"><Bell className="w-4 h-4" /> Iniciar conversa</button>
-          <button onClick={onAbrirAcervo} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"><ExternalLink className="w-4 h-4" /> Acervo documental</button>
+          {onNovaSimulacao && <button onClick={onNovaSimulacao} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"><Calculator className="w-4 h-4" /> Nova simulação</button>}
+          {onNovoContrato && <button onClick={onNovoContrato} className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-bold text-violet-700 hover:bg-violet-100"><FileText className="w-4 h-4" /> Novo contrato</button>}
+          {onIniciarConversa && <button onClick={onIniciarConversa} className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-700 hover:bg-amber-100"><Bell className="w-4 h-4" /> Iniciar conversa</button>}
+          {onAbrirAcervo && <button onClick={onAbrirAcervo} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"><ExternalLink className="w-4 h-4" /> Acervo documental</button>}
         </div>
       </div>
     );
@@ -981,6 +1003,7 @@ function mapCnpjDataParaEmpresa(data: any, prev: Record<string, any> = {}): Reco
 
 export default function Empresas() {
   const [location, setLocation] = useLocation();
+  const { isFeatureEnabled } = useFeatureAccess();
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
@@ -1543,6 +1566,25 @@ export default function Empresas() {
       toast.error(err?.message || 'Erro ao exportar relatório.');
     }
   }
+  function abaPermitida(aba: AbaEmpresa): boolean {
+    const featureKey = featureDaAbaEmpresa(aba);
+    return isFeatureEnabled(featureKey);
+  }
+
+  function primeiraAbaPermitida(): AbaEmpresa {
+    return (ABAS_EMPRESA.find(aba => abaPermitida(aba)) as AbaEmpresa | undefined) || "visao_geral";
+  }
+
+  function navegarParaAba(aba: AbaEmpresa, opts?: { abrirFollowup?: boolean }) {
+    const destino = abaPermitida(aba) ? aba : primeiraAbaPermitida();
+    if (destino !== aba) {
+      toast.info("Esta função está oculta para este usuário.");
+    }
+    setAbaAtiva(destino);
+    if (opts?.abrirFollowup && destino === "followup") setShowFollowupForm(true);
+    if (selecionada?.id) setLocation(`/colaborador/empresas?empresa=${selecionada.id}&aba=${destino}`);
+  }
+
   async function buscarCEP(cep: string) {
     const n = cep.replace(/\D/g, "");
     if (n.length !== 8) return;
@@ -1817,7 +1859,7 @@ export default function Empresas() {
                           {/* Ações */}
                           <div className="emp-action-btns flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                             {/* Botão Sincronizar — só aparece se tem CNPJ */}
-                            {selecionada.cnpj && (
+                            {selecionada.cnpj && isFeatureEnabled("empresa-action-atualizar-cadastro") && (
                               <button
                                 onClick={() => sincronizarDados(selecionada)}
                                 disabled={sincronizando}
@@ -1828,14 +1870,16 @@ export default function Empresas() {
                                 <span className="hidden md:inline">{sincronizando ? "Atualizando..." : "Atualizar cadastro"}</span>
                               </button>
                             )}
-                            <button
-                              onClick={() => selecionada && abrirEditar(selecionada)}
-                              className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 border border-slate-200 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                              <span className="hidden md:inline">Editar</span>
-                            </button>
-                            {confirmDelete === selecionada.id ? (
+                            {isFeatureEnabled("empresa-action-editar") && (
+                              <button
+                                onClick={() => selecionada && abrirEditar(selecionada)}
+                                className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 border border-slate-200 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                                <span className="hidden md:inline">Editar</span>
+                              </button>
+                            )}
+                            {isFeatureEnabled("empresa-action-arquivar") && (confirmDelete === selecionada.id ? (
                               <div className="flex gap-1">
                                 <button onClick={() => handleExcluir(selecionada.id)} className="text-xs font-semibold bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700">Confirmar</button>
                                 <button onClick={() => setConfirmDelete(null)} className="text-xs text-slate-500 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50">Cancelar</button>
@@ -1844,7 +1888,7 @@ export default function Empresas() {
                               <button onClick={() => setConfirmDelete(selecionada.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100">
                                 <Trash2 className="w-4 h-4" />
                               </button>
-                            )}
+                            ))}
                           </div>
                         </div>
                       </div>
@@ -1854,6 +1898,7 @@ export default function Empresas() {
                   {/* ── Quick Actions ── */}
                   <div className="px-3 sm:px-4 py-1 border-b border-slate-100 bg-slate-50/60 shrink-0">
                     <div className="flex flex-wrap gap-1.5">
+                      {isFeatureEnabled("empresa-action-nova-simulacao") && isFeatureEnabled("calculadora") && (
                       <button
                         onClick={() => {
                           sessionStorage.setItem("calculadora_empresa", JSON.stringify({
@@ -1870,6 +1915,8 @@ export default function Empresas() {
                         <Calculator className="w-3.5 h-3.5" />
                         <span>Nova Simulação</span>
                       </button>
+                      )}
+                      {isFeatureEnabled("empresa-action-novo-contrato") && isFeatureEnabled("contratos") && (
                       <button
                         onClick={() => window.location.href = "/colaborador/contratos"}
                         className="flex items-center gap-1 text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-1 rounded-lg hover:bg-violet-100 transition-colors"
@@ -1878,14 +1925,17 @@ export default function Empresas() {
                         <FileText className="w-3.5 h-3.5" />
                         <span>Novo Contrato</span>
                       </button>
+                      )}
+                      {isFeatureEnabled("empresa-action-iniciar-conversa") && abaPermitida("followup") && (
                       <button
-                        onClick={() => { setAbaAtiva("followup"); setShowFollowupForm(true); }}
+                        onClick={() => navegarParaAba("followup", { abrirFollowup: true })}
                         className="flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg hover:bg-amber-100 transition-colors"
                         title="Iniciar conversa"
                       >
                         <Bell className="w-3.5 h-3.5" />
                         <span>Iniciar conversa</span>
                       </button>
+                      )}
                     </div>
                   </div>
 
@@ -1949,13 +1999,10 @@ export default function Empresas() {
                         { id: "simulacoes", label: "Simulações", badge: simulacoesEmpresa.length || undefined },
                         { id: "contratos", label: "Contratos Firmados", badge: contratosEmpresa.length || undefined },
                         { id: "historico", label: "Histórico", badge: historico.length || undefined },
-                      ] as const).map(aba => (
+                      ] as const).filter(aba => abaPermitida(aba.id)).map(aba => (
                         <button
                           key={aba.id}
-                          onClick={() => {
-                            setAbaAtiva(aba.id);
-                            if (selecionada?.id) setLocation(`/colaborador/empresas?empresa=${selecionada.id}&aba=${aba.id}`);
-                          }}
+                          onClick={() => navegarParaAba(aba.id)}
                           className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold border transition-all whitespace-nowrap ${
                             abaAtiva === aba.id
                               ? "border-blue-300 bg-blue-600 text-white shadow-md shadow-blue-100"
@@ -1980,7 +2027,7 @@ export default function Empresas() {
                     ) : (
 
                     /* ── VISÃO GERAL ── */
-                    abaAtiva === "visao_geral" ? (
+                    (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "visao_geral" ? (
                       <EmpresaDadosWorkspace
                         empresa={selecionada}
                         socios={sociosExibicao}
@@ -1988,9 +2035,9 @@ export default function Empresas() {
                         simulacoesTotal={simulacoesEmpresa.length}
                         contratosTotal={contratosEmpresa.length}
                         sincronizando={sincronizando}
-                        onSincronizar={() => sincronizarDados(selecionada)}
-                        onEditar={() => abrirEditar(selecionada)}
-                        onNovaSimulacao={() => {
+                        onSincronizar={isFeatureEnabled("empresa-action-atualizar-cadastro") ? () => sincronizarDados(selecionada) : undefined}
+                        onEditar={isFeatureEnabled("empresa-action-editar") ? () => abrirEditar(selecionada) : undefined}
+                        onNovaSimulacao={isFeatureEnabled("empresa-action-nova-simulacao") && isFeatureEnabled("calculadora") ? () => {
                           sessionStorage.setItem("calculadora_empresa", JSON.stringify({
                             nome: selecionada.responsavel_nome || selecionada.razao_social,
                             empresa: selecionada.razao_social,
@@ -1998,15 +2045,15 @@ export default function Empresas() {
                             cpf_cnpj: selecionada.cnpj || "",
                           }));
                           window.location.href = "/colaborador/calculadora";
-                        }}
-                        onNovoContrato={() => { window.location.href = "/colaborador/contratos"; }}
-                        onIniciarConversa={() => { setAbaAtiva("followup"); setShowFollowupForm(true); if (selecionada?.id) setLocation(`/colaborador/empresas?empresa=${selecionada.id}&aba=followup`); }}
-                        onAbrirAcervo={() => { setAbaAtiva("documentos"); if (selecionada?.id) setLocation(`/colaborador/empresas?empresa=${selecionada.id}&aba=documentos`); }}
+                        } : undefined}
+                        onNovoContrato={isFeatureEnabled("empresa-action-novo-contrato") && isFeatureEnabled("contratos") ? () => { window.location.href = "/colaborador/contratos"; } : undefined}
+                        onIniciarConversa={isFeatureEnabled("empresa-action-iniciar-conversa") && abaPermitida("followup") ? () => navegarParaAba("followup", { abrirFollowup: true }) : undefined}
+                        onAbrirAcervo={abaPermitida("documentos") ? () => navegarParaAba("documentos") : undefined}
                       />
                     )
 
                     /* ── DOSSIÊ DE CRÉDITO ── */
-                    : abaAtiva === "dossie_credito" ? (
+                    : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "dossie_credito" ? (
                       <DossieCreditoEmpresa
                         empresaId={selecionada?.id}
                         onAtualizarReceita={selecionada ? () => sincronizarDados(selecionada) : undefined}
@@ -2014,15 +2061,12 @@ export default function Empresas() {
                     )
 
                     /* ── INTELIGÊNCIA 360 ── */
-                    : abaAtiva === "inteligencia_360" ? (
+                    : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "inteligencia_360" ? (
                       selecionada?.id ? (
                         <Inteligencia360
                           empresaId={selecionada.id}
                           onNavegar={(aba) => {
-                            if (isAbaEmpresa(aba)) {
-                              setAbaAtiva(aba);
-                              if (selecionada?.id) setLocation(`/colaborador/empresas?empresa=${selecionada.id}&aba=${aba}`);
-                            }
+                            if (isAbaEmpresa(aba)) navegarParaAba(aba);
                           }}
                         />
                       ) : (
@@ -2031,16 +2075,13 @@ export default function Empresas() {
                     )
 
                     /* ── ESTEIRA DE CRÉDITO ── */
-                    : abaAtiva === "esteira_credito" ? (
+                    : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "esteira_credito" ? (
                       selecionada?.id ? (
                         <div className="p-4">
                           <EsteiraCredito
                             empresaId={selecionada.id}
                             onNavegar={(aba) => {
-                              if (isAbaEmpresa(aba)) {
-                                setAbaAtiva(aba);
-                                if (selecionada?.id) setLocation(`/colaborador/empresas?empresa=${selecionada.id}&aba=${aba}`);
-                              }
+                              if (isAbaEmpresa(aba)) navegarParaAba(aba);
                             }}
                           />
                         </div>
@@ -2050,7 +2091,7 @@ export default function Empresas() {
                     )
 
                     /* ── SÓCIOS ── */
-                    : abaAtiva === "socios" ? (
+                    : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "socios" ? (
                       <div className="p-5 fade-in space-y-4">
                         <div className="flex items-center justify-between mb-1">
                           <div>
@@ -2063,7 +2104,7 @@ export default function Empresas() {
                             <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
                               {sociosExibicao.length} sócio(s)
                             </span>
-                            {selecionada.cnpj && (
+                            {selecionada.cnpj && isFeatureEnabled("empresa-action-atualizar-cadastro") && (
                               <button
                                 onClick={() => sincronizarDados(selecionada)}
                                 disabled={sincronizando}
@@ -2183,7 +2224,7 @@ export default function Empresas() {
                     )
 
                     /* ── FOLLOW-UP ── */
-                    : abaAtiva === "followup" ? (
+                    : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "followup" ? (
                       <div className="p-5 fade-in">
                         <div className="flex items-center justify-between mb-4">
                           <h3 className="text-sm font-bold text-slate-700">Conversas</h3>
@@ -2244,7 +2285,7 @@ export default function Empresas() {
                     )
 
                     /* ── HISTÓRICO ── */
-                    : abaAtiva === "historico" ? (
+                    : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "historico" ? (
                       <div className="p-5 fade-in">
                         <div className="flex gap-2 mb-4">
                           <textarea
@@ -2300,7 +2341,7 @@ export default function Empresas() {
                     )
 
                     /* ── ACERVO DOCUMENTAL ── */
-                    : abaAtiva === "documentos" ? (
+                    : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "documentos" ? (
                       <div className="p-3 fade-in">
                         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -2328,7 +2369,7 @@ export default function Empresas() {
                           </div>
                         </div>
                       </div>
-                    ) : abaAtiva === "simulacoes" ? (
+                    ) : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "simulacoes" ? (
                       <div className="p-4 space-y-3">
                         <div className="flex items-center justify-between mb-2">
                           <h3 className="text-sm font-semibold text-slate-700">Simulações vinculadas</h3>
@@ -2389,7 +2430,7 @@ export default function Empresas() {
                           </div>
                         )}
                       </div>
-                    ) : abaAtiva === "contratos" ? (
+                    ) : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "contratos" ? (
                       <div className="p-4 space-y-3">
                         <div className="flex items-center justify-between mb-2">
                           <div>
