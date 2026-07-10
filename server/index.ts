@@ -4067,6 +4067,217 @@ async function startServer() {
     }
   });
 
+
+  // Relatório operacional de empresas (CSV/JSON).
+  // Importante: esta rota fica antes de /api/empresas/:id para não ser tratada como ID.
+  app.get("/api/empresas/relatorio", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const isGestor = isGestorCargo(colaborador?.cargo || '');
+      const formato = String(req.query.formato || "csv").toLowerCase();
+      const busca = String(req.query.busca || "").trim();
+      const status = String(req.query.status || "todos");
+      const porte = String(req.query.porte || "todos");
+      const origem = String(req.query.origem || "todos");
+      const cidade = String(req.query.cidade || "").trim();
+      const estado = String(req.query.estado || "").trim();
+      const responsavelId = String(req.query.responsavel_id || "").trim();
+      const incluirIncompletos = ["1", "true", "sim"].includes(String(req.query.incluir_incompletos || "").toLowerCase());
+      const limitRaw = Number(req.query.limit || req.query.limite || 5000);
+      const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 5000, 1), 20000);
+
+      const params: any[] = [];
+      const conditions: string[] = [];
+
+      if (!isGestor && colaborador?.id) {
+        params.push(colaborador.id);
+        conditions.push(`(e.responsavel_id = $${params.length} OR e.analista_id = $${params.length} OR e.captador_id = $${params.length})`);
+      }
+
+      if (status && status !== "todos") {
+        if (status === "ativa") {
+          conditions.push(`COALESCE(e.situacao_cadastral, e.status, '') ILIKE '%ativa%'`);
+        } else if (status === "inativa") {
+          conditions.push(`COALESCE(e.situacao_cadastral, e.status, '') NOT ILIKE '%ativa%'`);
+        } else {
+          params.push(status);
+          conditions.push(`(e.status = $${params.length} OR e.situacao_cadastral = $${params.length})`);
+        }
+      }
+
+      if (porte && porte !== "todos") {
+        params.push(porte);
+        conditions.push(`e.porte = $${params.length}`);
+      }
+
+      if (origem && origem !== "todos") {
+        params.push(`%${origem}%`);
+        conditions.push(`COALESCE(e.origem, '') ILIKE $${params.length}`);
+      }
+
+      if (responsavelId) {
+        params.push(responsavelId);
+        conditions.push(`e.responsavel_id = $${params.length}`);
+      }
+
+      if (cidade) {
+        params.push(`%${cidade}%`);
+        conditions.push(`COALESCE(e.cidade, '') ILIKE $${params.length}`);
+      }
+
+      if (estado) {
+        params.push(estado.toUpperCase());
+        conditions.push(`UPPER(COALESCE(e.estado, '')) = $${params.length}`);
+      }
+
+      if (busca) {
+        params.push(`%${busca}%`);
+        const idxText = params.length;
+        const searchParts = [
+          `COALESCE(e.razao_social, '') ILIKE $${idxText}`,
+          `COALESCE(e.nome_fantasia, '') ILIKE $${idxText}`,
+          `COALESCE(e.cnpj, '') ILIKE $${idxText}`,
+          `COALESCE(e.responsavel_nome, '') ILIKE $${idxText}`,
+          `COALESCE(e.telefone, '') ILIKE $${idxText}`,
+          `COALESCE(e.email, '') ILIKE $${idxText}`,
+        ];
+        const digits = onlyDigits(busca);
+        if (digits) {
+          params.push(`%${digits}%`);
+          const idxDigits = params.length;
+          searchParts.push(`regexp_replace(COALESCE(e.cnpj,''), '[^0-9]', '', 'g') LIKE $${idxDigits}`);
+          searchParts.push(`regexp_replace(COALESCE(e.telefone,''), '[^0-9]', '', 'g') LIKE $${idxDigits}`);
+        }
+        conditions.push(`(${searchParts.join(" OR ")})`);
+      }
+
+      if (!incluirIncompletos) {
+        conditions.push(`COALESCE(e.arquivado_por_duplicidade, false) = false`);
+        conditions.push(`COALESCE(e.bloqueado_operacional, false) = false`);
+      }
+
+      params.push(limit);
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+      const sql = `
+        SELECT
+          e.id,
+          e.razao_social,
+          e.nome_fantasia,
+          e.cnpj,
+          e.situacao_cadastral,
+          e.status,
+          e.porte,
+          e.regime_tributario,
+          e.cnae_principal,
+          e.natureza_juridica,
+          e.data_abertura,
+          e.capital_social,
+          e.faturamento_anual,
+          e.limite_credito_atual,
+          e.score_serasa,
+          e.score_spc,
+          e.email,
+          e.telefone,
+          e.whatsapp,
+          e.cidade,
+          e.estado,
+          e.origem,
+          e.responsavel_nome,
+          e.ultima_sincronizacao_receita,
+          e.cadastro_completo,
+          e.cadastro_status,
+          e.created_at,
+          e.updated_at,
+          cap.nome AS captador_nome,
+          ana.nome AS analista_nome,
+          resp.nome AS responsavel_colaborador_nome
+        FROM empresas e
+        LEFT JOIN colaboradores cap ON cap.id = e.captador_id
+        LEFT JOIN colaboradores ana ON ana.id = e.analista_id
+        LEFT JOIN colaboradores resp ON resp.id = e.responsavel_id
+        ${where}
+        ORDER BY COALESCE(NULLIF(e.razao_social,''), e.nome_fantasia, e.cnpj, e.id::text) ASC
+        LIMIT $${params.length}`;
+
+      const { rows } = await pool.query(sql, params);
+
+      const formatDateForReport = (value: unknown): string => {
+        if (!value) return "";
+        const date = value instanceof Date ? value : new Date(String(value));
+        if (Number.isNaN(date.getTime())) return String(value);
+        return date.toISOString().slice(0, 10);
+      };
+
+      const formatMoneyForReport = (value: unknown): string => {
+        if (value === null || value === undefined || value === "") return "";
+        const n = Number(value);
+        return Number.isFinite(n) ? n.toFixed(2).replace(".", ",") : String(value);
+      };
+
+      const csvEscape = (value: unknown): string => {
+        const text = value === null || value === undefined ? "" : String(value);
+        return `"${text.replace(/"/g, '""')}"`;
+      };
+
+      const reportRows = rows.map((e: any) => ({
+        "Razão Social": e.razao_social || "",
+        "Nome Fantasia": e.nome_fantasia || "",
+        "CNPJ": e.cnpj || "",
+        "Situação Cadastral": e.situacao_cadastral || e.status || "",
+        "Status Operacional": e.status || "",
+        "Porte": e.porte || "",
+        "Regime Tributário": e.regime_tributario || "",
+        "Natureza Jurídica": e.natureza_juridica || "",
+        "CNAE Principal": e.cnae_principal || "",
+        "Data de Abertura": formatDateForReport(e.data_abertura),
+        "Capital Social": formatMoneyForReport(e.capital_social),
+        "Faturamento Anual": formatMoneyForReport(e.faturamento_anual),
+        "Limite Atual": formatMoneyForReport(e.limite_credito_atual),
+        "Serasa": e.score_serasa ?? "",
+        "SPC": e.score_spc ?? "",
+        "Telefone": e.telefone || e.whatsapp || "",
+        "E-mail": e.email || "",
+        "Cidade": e.cidade || "",
+        "UF": e.estado || "",
+        "Origem": e.origem || "",
+        "Responsável Cadastro": e.responsavel_nome || e.responsavel_colaborador_nome || "",
+        "Captador": e.captador_nome || "",
+        "Analista": e.analista_nome || "",
+        "Cadastro Completo": e.cadastro_completo === true ? "Sim" : e.cadastro_completo === false ? "Não" : "",
+        "Status Cadastro": e.cadastro_status || "",
+        "Última Sincronização Receita": formatDateForReport(e.ultima_sincronizacao_receita),
+        "Criado em": formatDateForReport(e.created_at),
+        "Atualizado em": formatDateForReport(e.updated_at),
+      }));
+
+      if (formato === "json") {
+        res.json({ total: reportRows.length, empresas: reportRows, filtros: { busca, status, porte, origem, cidade, estado } });
+        return;
+      }
+
+      const headers = Object.keys(reportRows[0] || {
+        "Razão Social": "", "Nome Fantasia": "", "CNPJ": "", "Situação Cadastral": "", "Status Operacional": "",
+        "Porte": "", "Regime Tributário": "", "Natureza Jurídica": "", "CNAE Principal": "", "Data de Abertura": "",
+        "Capital Social": "", "Faturamento Anual": "", "Limite Atual": "", "Serasa": "", "SPC": "", "Telefone": "", "E-mail": "",
+        "Cidade": "", "UF": "", "Origem": "", "Responsável Cadastro": "", "Captador": "", "Analista": "",
+        "Cadastro Completo": "", "Status Cadastro": "", "Última Sincronização Receita": "", "Criado em": "", "Atualizado em": "",
+      });
+      const csv = [
+        headers.map(csvEscape).join(","),
+        ...reportRows.map((row) => headers.map((header) => csvEscape((row as Record<string, unknown>)[header])).join(",")),
+      ].join("\n");
+
+      const fileDate = new Date().toISOString().slice(0, 10);
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="relatorio-empresas-${fileDate}.csv"`);
+      res.setHeader("Cache-Control", "no-store");
+      res.send(`\uFEFF${csv}`);
+    } catch (err: any) {
+      console.error("[GET /api/empresas/relatorio]", err);
+      res.status(500).json({ error: "Erro ao gerar relatório de empresas", code: "EMPRESAS_RELATORIO_FAILED" });
+    }
+  });
+
   // Diagnóstico consolidado: usa a última análise CNPJ/IA como fonte única quando disponível.
   // Mantém compatibilidade com instalações onde a tabela de análise ainda não foi migrada.
   app.get("/api/diagnostico-credito", auth, async (req: Request, res: Response) => {

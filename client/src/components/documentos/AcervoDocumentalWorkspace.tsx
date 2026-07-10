@@ -17,6 +17,7 @@ import {
   HardDrive,
   Image as ImageIcon,
   Loader2,
+  Maximize2,
   Plus,
   Printer,
   RefreshCw,
@@ -151,6 +152,7 @@ export default function AcervoDocumentalWorkspace({
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const viewerRef = useRef<HTMLDivElement>(null);
 
   const query = useMemo(() => {
     const params = new URLSearchParams({ entidade_tipo: entidadeTipo, entidade_id: entidadeId });
@@ -288,6 +290,18 @@ export default function AcervoDocumentalWorkspace({
       setTimeout(() => URL.revokeObjectURL(url), 120000);
     } catch (err: any) {
       toast.error(err?.message || "Erro ao imprimir documento.");
+    }
+  }
+
+  async function abrirTelaCheia() {
+    try {
+      if (viewerRef.current?.requestFullscreen) {
+        await viewerRef.current.requestFullscreen();
+      } else if (previewUrl) {
+        window.open(previewUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch {
+      if (previewUrl) window.open(previewUrl, "_blank", "noopener,noreferrer");
     }
   }
 
@@ -482,8 +496,8 @@ export default function AcervoDocumentalWorkspace({
   }
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="border-b border-slate-200 px-5 py-4 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="border-b border-slate-200 px-4 py-2.5 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
         <div>
           <p className="text-[11px] font-black uppercase tracking-[0.12em] text-blue-600">Central documental</p>
           <div className="mt-1 flex flex-wrap items-center gap-3">
@@ -497,11 +511,11 @@ export default function AcervoDocumentalWorkspace({
           <button type="button" onClick={carregar} className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2">
             <RefreshCw className="h-4 w-4" /> Atualizar
           </button>
-          <button type="button" onClick={exportarTodos} className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+          <button type="button" onClick={exportarTodos} className="h-9 px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2">
             <Download className="h-4 w-4" /> Exportar
           </button>
           {permitirUpload && (
-            <button type="button" onClick={() => setMode("upload")} className="h-10 px-4 rounded-xl bg-blue-600 text-white text-sm font-bold shadow-sm hover:bg-blue-700 flex items-center gap-2">
+            <button type="button" onClick={() => setMode("upload")} className="h-9 px-3 rounded-xl bg-blue-600 text-white text-xs font-bold shadow-sm hover:bg-blue-700 flex items-center gap-2">
               <Plus className="h-4 w-4" /> Anexar documento
             </button>
           )}
@@ -518,12 +532,12 @@ export default function AcervoDocumentalWorkspace({
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-[430px_minmax(0,1fr)] min-h-[calc(100vh-280px)]">
-        <aside className="border-b xl:border-b-0 xl:border-r border-slate-200 bg-slate-50/60 flex flex-col min-h-[520px]">
-          <div className="p-4 space-y-3 border-b border-slate-200 bg-white/70">
+      <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] min-h-[calc(100vh-190px)]">
+        <aside className="border-b xl:border-b-0 xl:border-r border-slate-200 bg-slate-50/60 flex flex-col min-h-[420px]">
+          <div className="p-3 space-y-2 border-b border-slate-200 bg-white/70">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, tipo ou observação..." className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none focus:border-blue-400" />
+              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar documento..." className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none focus:border-blue-400" />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2 gap-2">
               <select value={secaoFiltro} onChange={(e) => setSecaoFiltro(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700">
@@ -539,7 +553,7 @@ export default function AcervoDocumentalWorkspace({
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[calc(100vh-400px)] min-h-[420px]">
+          <div className="flex-1 overflow-y-auto p-2.5 space-y-2 max-h-[calc(100vh-290px)] min-h-[360px]">
             {loading ? (
               <div className="h-full flex items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-blue-600" /></div>
             ) : docsFiltrados.length === 0 ? (
@@ -552,9 +566,9 @@ export default function AcervoDocumentalWorkspace({
               const Icon = documentIcon(doc);
               const selected = selectedId === doc.id;
               return (
-                <button key={doc.id} type="button" onClick={() => setSelectedId(doc.id)} className={`w-full rounded-2xl border p-3 text-left transition ${selected ? "border-blue-300 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50"}`}>
+                <button key={doc.id} type="button" onClick={() => setSelectedId(doc.id)} className={`w-full rounded-xl border p-2.5 text-left transition ${selected ? "border-blue-300 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50"}`}>
                   <div className="flex gap-3">
-                    <div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 ${selected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}><Icon className="h-5 w-5" /></div>
+                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${selected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}><Icon className="h-5 w-5" /></div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-black text-slate-900 truncate">{doc.nome_customizado || doc.nome_original}</p>
                       <p className="mt-0.5 text-xs text-slate-500 truncate">{labelTipoDocumento(doc.tipo_documento)}</p>
@@ -571,7 +585,7 @@ export default function AcervoDocumentalWorkspace({
           </div>
         </aside>
 
-        <main className="min-w-0 bg-slate-100/60 flex flex-col min-h-[calc(100vh-280px)]">
+        <main className="min-w-0 bg-slate-100/60 flex flex-col min-h-[calc(100vh-190px)]">
           {!selectedDoc ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
               <Eye className="h-14 w-14 text-slate-200" />
@@ -580,19 +594,29 @@ export default function AcervoDocumentalWorkspace({
             </div>
           ) : (
             <>
-              <div className="border-b border-slate-200 bg-white px-4 py-3 flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-3">
+              <div className="border-b border-slate-200 bg-white px-3 py-2.5 flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-2">
                 <div className="min-w-0 flex items-center gap-3">
                   <div className="h-10 w-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center"><SelectedIcon className="h-5 w-5 text-blue-600" /></div>
                   <div className="min-w-0">
                     <p className="font-black text-slate-950 truncate">{selectedDoc.nome_customizado || selectedDoc.nome_original}</p>
                     <p className="text-xs text-slate-500 truncate">{labelTipoDocumento(selectedDoc.tipo_documento)}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                      <span className={`rounded-full border px-2 py-0.5 font-bold ${statusClass(selectedDoc)}`}>{statusLabel(selectedDoc)}</span>
+                      <span>{formatBytes(selectedDoc.tamanho_bytes)}</span>
+                      <span>Incluído em {formatDate(selectedDoc.criado_em)}</span>
+                    </div>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {previewUrl && (
-                    <a href={previewUrl} target="_blank" rel="noreferrer" className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5">
-                      <ExternalLink className="h-3.5 w-3.5" /> Nova guia
-                    </a>
+                    <>
+                      <button type="button" onClick={abrirTelaCheia} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5">
+                        <Maximize2 className="h-3.5 w-3.5" /> Tela cheia
+                      </button>
+                      <a href={previewUrl} target="_blank" rel="noreferrer" className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5">
+                        <ExternalLink className="h-3.5 w-3.5" /> Nova guia
+                      </a>
+                    </>
                   )}
                   <button type="button" onClick={() => baixar(selectedDoc)} disabled={selectedDoc.arquivo_disponivel === false} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1.5"><Download className="h-3.5 w-3.5" /> Baixar</button>
                   <button type="button" onClick={() => imprimir(selectedDoc)} disabled={selectedDoc.arquivo_disponivel === false} className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1.5"><Printer className="h-3.5 w-3.5" /> Imprimir</button>
@@ -601,14 +625,14 @@ export default function AcervoDocumentalWorkspace({
                 </div>
               </div>
 
-              <div className="flex-1 p-4 min-h-[560px]">
-                <div className="h-full min-h-[560px] rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-inner flex items-center justify-center">
+              <div className="flex-1 p-3 min-h-[calc(100vh-290px)]">
+                <div ref={viewerRef} className="h-full min-h-[calc(100vh-290px)] rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-inner flex items-center justify-center fullscreen:bg-white fullscreen:p-3">
                   {previewLoading ? (
                     <div className="flex flex-col items-center gap-3 text-slate-500"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /><span className="text-sm">Carregando documento...</span></div>
                   ) : previewUrl && previewIsPdf ? (
-                    <iframe title={selectedDoc.nome_original} src={previewUrl} className="w-full h-[calc(100vh-390px)] min-h-[560px] bg-white" />
+                    <iframe title={selectedDoc.nome_original} src={previewUrl} className="w-full h-[calc(100vh-300px)] min-h-[640px] bg-white fullscreen:h-[96vh] fullscreen:min-h-[96vh]" />
                   ) : previewUrl && previewIsImage ? (
-                    <div className="w-full h-[calc(100vh-390px)] min-h-[560px] overflow-auto bg-slate-950/5 p-4 flex items-start justify-center"><img src={previewUrl} alt={selectedDoc.nome_original} className="max-w-full h-auto rounded-lg shadow-lg" /></div>
+                    <div className="w-full h-[calc(100vh-300px)] min-h-[640px] overflow-auto bg-slate-950/5 p-4 flex items-start justify-center fullscreen:h-[96vh] fullscreen:min-h-[96vh]"><img src={previewUrl} alt={selectedDoc.nome_original} className="max-w-full h-auto rounded-lg shadow-lg" /></div>
                   ) : previewUrl ? (
                     <div className="text-center p-8"><File className="h-14 w-14 text-slate-300 mx-auto" /><p className="mt-3 font-bold text-slate-700">Pré-visualização não disponível</p><p className="mt-1 text-sm text-slate-400">Baixe o arquivo para abrir no aplicativo adequado.</p><button onClick={() => baixar(selectedDoc)} className="mt-4 h-10 px-4 rounded-xl bg-blue-600 text-white text-sm font-bold">Baixar arquivo</button></div>
                   ) : (
@@ -622,12 +646,9 @@ export default function AcervoDocumentalWorkspace({
                 </div>
               </div>
 
-              {(selectedDoc.nome_customizado || selectedDoc.observacoes) && (
-                <div className="border-t border-slate-200 bg-white px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                  {selectedDoc.nome_customizado && (
-                    <div><p className="font-bold uppercase tracking-wide text-slate-400">Nome do arquivo original</p><p className="mt-1 text-slate-700 break-all">{selectedDoc.nome_original}</p></div>
-                  )}
-                  {selectedDoc.observacoes && <div className="sm:col-span-2"><p className="font-bold uppercase tracking-wide text-slate-400">Observações</p><p className="mt-1 text-slate-700 whitespace-pre-wrap">{selectedDoc.observacoes}</p></div>}
+              {selectedDoc.observacoes && (
+                <div className="border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
+                  <span className="font-bold text-slate-500">Observações: </span>{selectedDoc.observacoes}
                 </div>
               )}
             </>

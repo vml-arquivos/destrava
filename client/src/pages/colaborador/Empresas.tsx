@@ -1675,8 +1675,12 @@ export default function Empresas() {
                           </SectionCard>
                         )}
 
-                        {/* Responsável */}
-                        {selecionada.responsavel_nome && (
+                        {/* Responsável — só mostra aqui se essa pessoa NÃO estiver já listada em
+                            "Quadro societário e administradores" logo abaixo (mesmo nome = mesma pessoa,
+                            mostrada lá com muito mais detalhe: CPF, contato, endereço, pendências etc.) */}
+                        {selecionada.responsavel_nome && !sociosExibicao.some((s: any) =>
+                          String(s.nome || "").trim().toLowerCase() === String(selecionada.responsavel_nome || "").trim().toLowerCase()
+                        ) && (
                           <SectionCard title="Sócio / Responsável" icon={<User className="w-4 h-4" />}>
                             <div className="py-3">
                               <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border border-slate-100">
