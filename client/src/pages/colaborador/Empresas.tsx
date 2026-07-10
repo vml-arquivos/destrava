@@ -1540,13 +1540,11 @@ export default function Empresas() {
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 py-2">
                             <InfoTile label="Razão Social" value={selecionada.razao_social} icon={<Building2 className="w-3.5 h-3.5" />} />
                             <InfoTile label="Nome Fantasia" value={selecionada.nome_fantasia || "Não informado"} icon={<Star className="w-3.5 h-3.5" />} />
-                            <InfoTile label="Natureza Jurídica" value={selecionada.natureza_juridica || "Não sincronizada"} icon={<Briefcase className="w-3.5 h-3.5" />} tone="blue" />
-                            <InfoTile label="Capital Social" value={normalizarCapitalSocial(selecionada.capital_social)} icon={<Banknote className="w-3.5 h-3.5" />} tone="emerald" />
-                            <InfoTile label="CNAE Principal" value={selecionada.cnae_principal || selecionada.segmento || "Não informado"} icon={<Tag className="w-3.5 h-3.5" />} tone="violet" />
-                            <InfoTile label="Data de Abertura" value={selecionada.data_abertura ? fmtDate(selecionada.data_abertura) : "Não informado"} icon={<Calendar className="w-3.5 h-3.5" />} />
                             <InfoTile label="Situação Cadastral" value={selecionada.situacao_cadastral || "Não informado"} icon={<CheckCircle className="w-3.5 h-3.5" />} tone="emerald" />
                             <InfoTile label="Matriz / Filial" value={selecionada.matriz_filial || "Não informado"} icon={<Building className="w-3.5 h-3.5" />} />
                           </div>
+                          {/* Natureza Jurídica, Capital Social, CNAE Principal e Abertura já aparecem no painel
+                              executivo logo acima -- removidos daqui para não repetir a mesma informação duas vezes. */}
                           {selecionada.cnaes_secundarios && selecionada.cnaes_secundarios.length > 0 && (
                             <div className="mt-3 pt-3 border-t border-slate-100">
                               <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">CNAEs secundários</p>

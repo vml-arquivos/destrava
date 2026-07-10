@@ -622,13 +622,14 @@ export default function AcervoDocumentalWorkspace({
                 </div>
               </div>
 
-              <div className="border-t border-slate-200 bg-white px-5 py-4 grid grid-cols-2 xl:grid-cols-4 gap-4 text-xs">
-                <div><p className="font-bold uppercase tracking-wide text-slate-400">Arquivo</p><p className="mt-1 text-slate-700 break-all">{selectedDoc.nome_original}</p></div>
-                <div><p className="font-bold uppercase tracking-wide text-slate-400">Tamanho</p><p className="mt-1 text-slate-700">{formatBytes(selectedDoc.tamanho_bytes)}</p></div>
-                <div><p className="font-bold uppercase tracking-wide text-slate-400">Incluído em</p><p className="mt-1 text-slate-700">{formatDate(selectedDoc.criado_em)}</p></div>
-                <div><p className="font-bold uppercase tracking-wide text-slate-400">Status</p><p className="mt-1 text-slate-700">{statusLabel(selectedDoc)}</p></div>
-                {selectedDoc.observacoes && <div className="col-span-2 xl:col-span-4"><p className="font-bold uppercase tracking-wide text-slate-400">Observações</p><p className="mt-1 text-slate-700 whitespace-pre-wrap">{selectedDoc.observacoes}</p></div>}
-              </div>
+              {(selectedDoc.nome_customizado || selectedDoc.observacoes) && (
+                <div className="border-t border-slate-200 bg-white px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  {selectedDoc.nome_customizado && (
+                    <div><p className="font-bold uppercase tracking-wide text-slate-400">Nome do arquivo original</p><p className="mt-1 text-slate-700 break-all">{selectedDoc.nome_original}</p></div>
+                  )}
+                  {selectedDoc.observacoes && <div className="sm:col-span-2"><p className="font-bold uppercase tracking-wide text-slate-400">Observações</p><p className="mt-1 text-slate-700 whitespace-pre-wrap">{selectedDoc.observacoes}</p></div>}
+                </div>
+              )}
             </>
           )}
         </main>
