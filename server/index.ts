@@ -11881,12 +11881,130 @@ async function registrarDocumentoContratoGerado(params: {
       .replace(/"/g, "&quot;");
   }
 
+  type TipoRelatorioAcompanhamento = "mensal" | "periodo" | "completo" | "executivo";
+  type FormatoRelatorioAcompanhamento = "pdf" | "html" | "xls" | "json";
+
+  function parseDataRelatorioAcompanhamento(value: unknown): string | null {
+    const s = String(value || "").slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+  }
+
+  function normalizarTipoRelatorioAcompanhamento(value: unknown): TipoRelatorioAcompanhamento {
+    const v = String(value || "mensal").toLowerCase();
+    if (["periodo", "personalizado", "intervalo"].includes(v)) return "periodo";
+    if (["completo", "todos", "full"].includes(v)) return "completo";
+    if (["executivo", "resumo"].includes(v)) return "executivo";
+    return "mensal";
+  }
+
+  function normalizarFormatoRelatorioAcompanhamento(value: unknown): FormatoRelatorioAcompanhamento {
+    const v = String(value || "pdf").toLowerCase();
+    if (["html", "visualizar", "preview"].includes(v)) return "html";
+    if (["xls", "xlsx", "excel"].includes(v)) return "xls";
+    if (["json"].includes(v)) return "json";
+    return "pdf";
+  }
+
+  function periodoSemanaSobrepoeRelatorio(item: any, inicio: string, fim: string): boolean {
+    const itemInicio = parseDataRelatorioAcompanhamento(item?.data_referencia_inicio || item?.data_atualizacao || item?.created_at);
+    const itemFim = parseDataRelatorioAcompanhamento(item?.data_referencia_fim || item?.data_referencia_inicio || item?.data_atualizacao || item?.created_at);
+    if (!itemInicio && !itemFim) return false;
+    const a = itemInicio || itemFim || "";
+    const b = itemFim || itemInicio || "";
+    return a <= fim && b >= inicio;
+  }
+
+  function filtrarSemanasRelatorioAcompanhamento(atualizacoes: any[], filtros: {
+    tipo: TipoRelatorioAcompanhamento;
+    ano: number;
+    mes: number;
+    dataInicio?: string | null;
+    dataFim?: string | null;
+  }): any[] {
+    const semanas = Array.isArray(atualizacoes) ? atualizacoes.filter(Boolean) : [];
+    if (filtros.tipo === "completo") return semanas;
+    if (filtros.tipo === "periodo" && filtros.dataInicio && filtros.dataFim) {
+      return semanas.filter((s) => periodoSemanaSobrepoeRelatorio(s, filtros.dataInicio!, filtros.dataFim!));
+    }
+    return semanas.filter((s) => {
+      const base = parseDataRelatorioAcompanhamento(s?.data_referencia_inicio || s?.data_atualizacao || s?.created_at);
+      if (!base) return false;
+      const [ano, mes] = base.split("-").map(Number);
+      return ano === filtros.ano && mes === filtros.mes;
+    });
+  }
+
+  function filtrarAlertasRelatorioAcompanhamento(alertas: any[], semanas: any[], filtros: {
+    tipo: TipoRelatorioAcompanhamento;
+    ano: number;
+    mes: number;
+    dataInicio?: string | null;
+    dataFim?: string | null;
+  }): any[] {
+    const lista = Array.isArray(alertas) ? alertas.filter(Boolean) : [];
+    const numeros = new Set(semanas.map((s) => Number(s?.numero_semana)).filter((n) => Number.isFinite(n)));
+    if (filtros.tipo === "completo") return lista;
+    return lista.filter((al) => {
+      const n = Number(al?.numero_semana);
+      if (Number.isFinite(n) && numeros.has(n)) return true;
+      const d = parseDataRelatorioAcompanhamento(al?.data_alerta || al?.created_at);
+      if (!d) return false;
+      if (filtros.tipo === "periodo" && filtros.dataInicio && filtros.dataFim) return d >= filtros.dataInicio && d <= filtros.dataFim;
+      const [ano, mes] = d.split("-").map(Number);
+      return ano === filtros.ano && mes === filtros.mes;
+    });
+  }
+
+  function totalEntradasRelatorioAcompanhamento(s: any): number {
+    return Number(s?.total_entradas || 0) ||
+      Number(s?.entrada_maquininha || 0) +
+      Number(s?.entrada_pix || 0) +
+      Number(s?.entrada_boleto || 0) +
+      Number(s?.entrada_ted || 0) +
+      Number(s?.entrada_dinheiro || 0) +
+      Number(s?.outras_entradas || 0);
+  }
+
+  function slugRelatorioAcompanhamento(value: unknown): string {
+    return String(value || "relatorio")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase() || "relatorio";
+  }
+
+  function tituloPeriodoRelatorioAcompanhamento(payload: {
+    tipo: TipoRelatorioAcompanhamento;
+    ano: number;
+    mes: number;
+    dataInicio?: string | null;
+    dataFim?: string | null;
+  }): string {
+    const meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+    if (payload.tipo === "completo") return "Relatório completo do acompanhamento";
+    if (payload.tipo === "periodo" && payload.dataInicio && payload.dataFim) {
+      const fmt = (iso: string) => iso.split("-").reverse().join("/");
+      return `Período personalizado — ${fmt(payload.dataInicio)} a ${fmt(payload.dataFim)}`;
+    }
+    if (payload.tipo === "executivo") return `Relatório executivo — ${meses[payload.mes - 1] || payload.mes} de ${payload.ano}`;
+    return `${meses[payload.mes - 1] || payload.mes} de ${payload.ano}`;
+  }
+
   function gerarHtmlRelatorioMensalAcompanhamento(payload: {
     acompanhamento: any;
     atualizacoes: any[];
     alertas: any[];
+    documentos?: any[];
+    inteligencia?: any | null;
     ano: number;
     mes: number;
+    tipo?: TipoRelatorioAcompanhamento;
+    dataInicio?: string | null;
+    dataFim?: string | null;
+    detalhado?: boolean;
+    incluirIa?: boolean;
+    incluirAnexos?: boolean;
     geradoPor?: string | null;
   }): string {
     const esc = escapeHtmlAcompanhamento;
@@ -11899,37 +12017,58 @@ async function registrarDocumentoContratoGerado(params: {
       const [y, m, d] = s.split("-");
       return `${d}/${m}/${y}`;
     };
-    const meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-    const nomeMes = meses[payload.mes - 1] || String(payload.mes);
+    const tipo = payload.tipo || "mensal";
+    const periodoTitulo = tituloPeriodoRelatorioAcompanhamento({ tipo, ano: payload.ano, mes: payload.mes, dataInicio: payload.dataInicio, dataFim: payload.dataFim });
     const a = payload.acompanhamento || {};
-    const semanas = payload.atualizacoes || [];
-    const hoje = new Date();
-    const hojeIso = hoje.toISOString().slice(0, 10);
+    const semanas = (payload.atualizacoes || []).filter(Boolean);
+    const inteligencia = payload.inteligencia || null;
+    const documentos = payload.documentos || [];
+    const hojeIso = new Date().toISOString().slice(0, 10);
     const semanaAtual = semanas.find((s: any) => String(s.data_referencia_inicio || "").slice(0,10) <= hojeIso && String(s.data_referencia_fim || "").slice(0,10) >= hojeIso)
       || [...semanas].reverse().find((s: any) => String(s.data_referencia_inicio || "").slice(0,10) <= hojeIso)
       || semanas[semanas.length - 1]
       || null;
 
-    const totalMes = semanas.reduce((acc: number, s: any) => acc + Number(s.total_entradas || 0), 0);
+    const totalMes = semanas.reduce((acc: number, s: any) => acc + totalEntradasRelatorioAcompanhamento(s), 0);
     const totalSaidas = semanas.reduce((acc: number, s: any) => acc + Number(s.total_saidas || 0), 0);
     const saldoMes = totalMes - totalSaidas;
+    const semanasPositivas = semanas.filter((s: any) => Number(s.saldo_semanal ?? (totalEntradasRelatorioAcompanhamento(s) - Number(s.total_saidas || 0))) > 0).length;
+    const semanasNegativas = semanas.filter((s: any) => Number(s.saldo_semanal ?? (totalEntradasRelatorioAcompanhamento(s) - Number(s.total_saidas || 0))) < 0).length;
+    const semanasCriticas = semanas.filter((s: any) => String(s.status_aderencia || "") === "critico").length;
+    const maiorEntrada = semanas.reduce((max: any, s: any) => totalEntradasRelatorioAcompanhamento(s) > totalEntradasRelatorioAcompanhamento(max) ? s : max, semanas[0] || null);
+    const piorSaldo = semanas.reduce((min: any, s: any) => Number(s?.saldo_semanal || 0) < Number(min?.saldo_semanal || 0) ? s : min, semanas[0] || null);
     const tetoMensal = Number(semanaAtual?.teto_mensal_movimentacao || 0) || Number(a.margem_seguranca_30 || 0) || Number(a.media_mensal || 0) * 1.3;
+    const mediaMensal = Number(a.media_mensal || 0) || Number(a.faturamento_anual || 0) / 12;
     const percentualUsoMes = tetoMensal > 0 ? (totalMes / tetoMensal) * 100 : 0;
+    const alertasPendentes = (payload.alertas || []).filter((x: any) => x.status !== "resolvido").length;
+    const statusInteligente = String(inteligencia?.statusInteligente || (saldoMes < 0 || semanasCriticas ? "critico" : semanasNegativas ? "atencao" : "positivo"));
+    const prontidaoCredito = String(inteligencia?.prontidaoCredito || "em_preparacao").replace(/_/g, " ");
+    const impactoRating = String(inteligencia?.impactoNoRating || "mantem").replace(/_/g, " ");
 
     const linhasSemanas = semanas.map((s: any) => {
       const isAtual = semanaAtual && Number(s.numero_semana) === Number(semanaAtual.numero_semana);
       const status = textoStatusAderencia(s.status_aderencia || s.status_semana || s.status);
+      const entradas = totalEntradasRelatorioAcompanhamento(s);
+      const saldo = Number(s.saldo_semanal ?? (entradas - Number(s.total_saidas || 0)));
       return `
         <tr class="${isAtual ? "atual" : ""}">
           <td>Semana ${esc(s.numero_semana)}${isAtual ? " — atual" : ""}</td>
           <td>${fmtDate(s.data_referencia_inicio)} a ${fmtDate(s.data_referencia_fim)}</td>
-          <td>${fmt(s.total_entradas)}</td>
+          <td>${fmt(s.entrada_maquininha)}</td>
+          <td>${fmt(s.entrada_pix)}</td>
+          <td>${fmt(s.entrada_boleto)}</td>
+          <td>${fmt(s.entrada_ted)}</td>
+          <td>${fmt(s.entrada_dinheiro)}</td>
+          <td>${fmt(s.outras_entradas)}</td>
+          <td><strong>${fmt(entradas)}</strong></td>
           <td>${fmt(s.total_saidas)}</td>
-          <td>${fmt(s.saldo_semanal)}</td>
+          <td class="${saldo < 0 ? "neg" : "pos"}">${fmt(saldo)}</td>
           <td>${esc(s.rating_bacen || "—")}</td>
           <td>${esc(s.rating_interno || "—")}</td>
           <td>${esc(status)}</td>
-          <td>${esc(s.motivo_alerta_aderencia || s.diagnostico_tecnico || s.analise_semana || "—")}</td>
+          <td>${esc(s.analise_semana || s.diagnostico_tecnico || s.motivo_alerta_aderencia || "—")}</td>
+          <td>${esc(s.orientacao_cliente || "—")}</td>
+          <td>${esc(s.proxima_acao || "—")}</td>
         </tr>`;
     }).join("");
 
@@ -11943,78 +12082,159 @@ async function registrarDocumentoContratoGerado(params: {
       </tr>
     `).join("");
 
+    const itens = (lista: any[] | undefined, vazio: string) => {
+      const arr = Array.isArray(lista) ? lista.filter(Boolean) : [];
+      if (!arr.length) return `<li>${esc(vazio)}</li>`;
+      return arr.map((x: any) => `<li><strong>${esc(x.titulo || "Orientação")}:</strong> ${esc(x.descricao || x.acao || x.motivo || "—")}</li>`).join("");
+    };
+
+    const linhasDocumentos = documentos.map((doc: any) => `
+      <tr>
+        <td>${esc(doc.tipo_documento || doc.tipo || "Documento")}</td>
+        <td>${esc(doc.nome_customizado || doc.nome_original || doc.nome_arquivo || "—")}</td>
+        <td>${esc(doc.status || (doc.validado ? "validado" : "pendente"))}</td>
+        <td>${fmtDate(doc.criado_em || doc.created_at)}</td>
+        <td>${doc.tamanho_bytes ? `${Math.round(Number(doc.tamanho_bytes) / 1024)} KB` : "—"}</td>
+      </tr>`).join("");
+
+    const semDados = !semanas.length;
+    const resumoExecutivo = semDados
+      ? `Não há atualizações semanais registradas no período selecionado. O relatório foi gerado para orientar a alimentação correta do acompanhamento, mas não há base suficiente para diagnóstico conclusivo de rating.`
+      : (inteligencia?.resumoExecutivo || `No período analisado, a empresa movimentou ${fmt(totalMes)} em entradas, registrou ${fmt(totalSaidas)} em saídas e fechou com saldo de ${fmt(saldoMes)}. O uso do teto mensal ficou em ${fmtPct(percentualUsoMes)}.`);
+
+    const parecerFinal = inteligencia?.parecerTecnico || (semDados
+      ? `Parecer técnico: o período selecionado não possui semanas alimentadas. Recomenda-se registrar as atualizações semanais, anexar extratos e reemitir o relatório para avaliação de aderência, rating interno e prontidão para crédito.`
+      : `Parecer técnico: o acompanhamento deve seguir com atualização semanal e fechamento mensal. O período apresenta ${semanasPositivas} semana(s) positiva(s), ${semanasNegativas} semana(s) negativa(s) e ${semanasCriticas} semana(s) crítica(s).`);
+
+    const textoSemanasVazias = `<tr><td colspan="17">Nenhuma atualização registrada para o período selecionado. Não é possível emitir diagnóstico financeiro conclusivo sem alimentação semanal.</td></tr>`;
+
     return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8"/>
   <style>
-    @page { size: A4; margin: 14mm; }
-    body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; font-size: 12px; }
-    .topo { border-bottom: 4px solid #1d4ed8; padding-bottom: 12px; margin-bottom: 16px; }
-    h1 { font-size: 20px; margin: 0; color: #0f172a; }
-    h2 { margin-top: 20px; font-size: 13px; text-transform: uppercase; color: #1d4ed8; letter-spacing: .04em; }
+    @page { size: A4 landscape; margin: 10mm; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; font-size: 10.5px; line-height: 1.35; }
+    .topo { border-bottom: 4px solid #1d4ed8; padding-bottom: 12px; margin-bottom: 14px; }
+    h1 { font-size: 22px; margin: 0; color: #0f172a; }
+    h2 { margin-top: 16px; font-size: 13px; text-transform: uppercase; color: #1d4ed8; letter-spacing: .06em; break-after: avoid; }
+    h3 { margin: 0 0 6px; font-size: 12px; color: #0f172a; }
     .sub { color: #475569; margin-top: 4px; }
     .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-    .card { border: 1px solid #dbe4f0; border-radius: 10px; padding: 9px; background: #f8fafc; }
+    .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .card { border: 1px solid #dbe4f0; border-radius: 10px; padding: 9px; background: #f8fafc; break-inside: avoid; }
     .card.atual { border: 2px solid #f59e0b; background: #fffbeb; }
-    .label { font-size: 9px; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
-    .value { margin-top: 4px; font-size: 13px; font-weight: 700; }
-    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10px; }
-    th { background: #e0ecff; color: #1d4ed8; text-align: left; border: 1px solid #cbd5e1; padding: 6px; }
-    td { border: 1px solid #e2e8f0; padding: 6px; vertical-align: top; }
+    .card.critico { border-color: #fecaca; background: #fef2f2; }
+    .card.ok { border-color: #bbf7d0; background: #f0fdf4; }
+    .label { font-size: 8px; color: #64748b; text-transform: uppercase; letter-spacing: .05em; }
+    .value { margin-top: 4px; font-size: 12px; font-weight: 700; }
+    .pill { display: inline-block; border-radius: 999px; padding: 4px 8px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+    .pill.critico, .pill.nao_recomendada { background: #fee2e2; color: #b91c1c; }
+    .pill.atencao, .pill.em_preparacao { background: #fef3c7; color: #b45309; }
+    .pill.positivo, .pill.pronta, .pill.quase_pronta { background: #dcfce7; color: #15803d; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 8.5px; }
+    th { background: #e0ecff; color: #1d4ed8; text-align: left; border: 1px solid #cbd5e1; padding: 5px; }
+    td { border: 1px solid #e2e8f0; padding: 5px; vertical-align: top; }
     tr.atual td { background: #fffbeb; border-top: 2px solid #f59e0b; border-bottom: 2px solid #f59e0b; }
-    .alerta { border-left: 4px solid #dc2626; background: #fef2f2; padding: 10px; border-radius: 8px; margin-top: 10px; }
-    .nota { border-left: 4px solid #1d4ed8; background: #eff6ff; padding: 10px; border-radius: 8px; margin-top: 10px; }
-    .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 38px; margin-top: 44px; page-break-inside: avoid; }
-    .assinatura { border-top: 1px solid #334155; padding-top: 8px; text-align: center; font-size: 11px; }
+    .neg { color: #dc2626; font-weight: 700; }
+    .pos { color: #059669; font-weight: 700; }
+    .box { border-left: 4px solid #1d4ed8; background: #eff6ff; padding: 10px; border-radius: 8px; margin-top: 8px; break-inside: avoid; }
+    .alerta { border-left-color: #dc2626; background: #fef2f2; }
+    ul { margin: 6px 0 0 16px; padding: 0; }
+    li { margin: 3px 0; }
+    .page { page-break-before: always; }
+    .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 38px; margin-top: 36px; page-break-inside: avoid; }
+    .assinatura { border-top: 1px solid #334155; padding-top: 8px; text-align: center; font-size: 10px; }
   </style>
 </head>
 <body>
   <div class="topo">
-    <h1>Relatório Mensal de Acompanhamento Bancário</h1>
-    <div class="sub">${esc(nomeMes)} de ${payload.ano} — ${esc(a.nome_empresa)} — ${esc(a.banco_observado || "Banco não informado")}</div>
-    <div class="sub">Gerado em ${fmtDate(new Date().toISOString())} por ${esc(payload.geradoPor || "Sistema")}</div>
+    <h1>Relatório Inteligente de Acompanhamento Bancário</h1>
+    <div class="sub">${esc(periodoTitulo)} — ${esc(a.nome_empresa)} — ${esc(a.banco_observado || "Banco não informado")}</div>
+    <div class="sub">CNPJ ${esc(a.cnpj || "—")} · Gerado em ${fmtDate(new Date().toISOString())} por ${esc(payload.geradoPor || "Sistema")}</div>
+  </div>
+
+  <h2>Resumo executivo</h2>
+  <div class="box ${statusInteligente === "critico" ? "alerta" : ""}">
+    <strong>Status inteligente:</strong> <span class="pill ${esc(statusInteligente)}">${esc(statusInteligente)}</span>
+    &nbsp; <strong>Prontidão para crédito:</strong> ${esc(prontidaoCredito)}
+    &nbsp; <strong>Impacto no rating:</strong> ${esc(impactoRating)}<br/>
+    ${esc(resumoExecutivo)}
   </div>
 
   <h2>Semana atual em evidência</h2>
   <div class="grid">
     <div class="card atual"><div class="label">Semana atual</div><div class="value">Semana ${esc(semanaAtual?.numero_semana || "—")}</div></div>
     <div class="card atual"><div class="label">Período</div><div class="value">${fmtDate(semanaAtual?.data_referencia_inicio)} a ${fmtDate(semanaAtual?.data_referencia_fim)}</div></div>
-    <div class="card atual"><div class="label">Entradas</div><div class="value">${fmt(semanaAtual?.total_entradas)}</div></div>
+    <div class="card atual"><div class="label">Entradas</div><div class="value">${fmt(semanaAtual ? totalEntradasRelatorioAcompanhamento(semanaAtual) : 0)}</div></div>
     <div class="card atual"><div class="label">Status</div><div class="value">${esc(textoStatusAderencia(semanaAtual?.status_aderencia || semanaAtual?.status_semana))}</div></div>
   </div>
 
-  <h2>Resumo mensal</h2>
+  <h2>Base de cálculo e resumo do período</h2>
   <div class="grid">
     <div class="card"><div class="label">Faturamento anual declarado</div><div class="value">${fmt(a.faturamento_anual)}</div></div>
-    <div class="card"><div class="label">Média mensal base</div><div class="value">${fmt(a.media_mensal)}</div></div>
+    <div class="card"><div class="label">Média mensal base</div><div class="value">${fmt(mediaMensal)}</div></div>
     <div class="card"><div class="label">Teto mensal + margem</div><div class="value">${fmt(tetoMensal)}</div></div>
     <div class="card"><div class="label">Uso do teto mensal</div><div class="value">${fmtPct(percentualUsoMes)}</div></div>
-    <div class="card"><div class="label">Entradas do mês</div><div class="value">${fmt(totalMes)}</div></div>
-    <div class="card"><div class="label">Saídas do mês</div><div class="value">${fmt(totalSaidas)}</div></div>
-    <div class="card"><div class="label">Saldo do mês</div><div class="value">${fmt(saldoMes)}</div></div>
-    <div class="card"><div class="label">Alertas pendentes</div><div class="value">${payload.alertas.filter((x: any) => x.status !== "resolvido").length}</div></div>
+    <div class="card"><div class="label">Entradas do período</div><div class="value">${fmt(totalMes)}</div></div>
+    <div class="card"><div class="label">Saídas do período</div><div class="value">${fmt(totalSaidas)}</div></div>
+    <div class="card ${saldoMes < 0 ? "critico" : "ok"}"><div class="label">Saldo do período</div><div class="value">${fmt(saldoMes)}</div></div>
+    <div class="card"><div class="label">Alertas pendentes</div><div class="value">${alertasPendentes}</div></div>
   </div>
 
-  ${percentualUsoMes > 100 ? `<div class="alerta"><strong>Atenção:</strong> o acumulado mensal ultrapassou o teto operacional. Recomenda-se compensação imediata nas próximas semanas e documentação da origem dos recursos.</div>` : `<div class="nota"><strong>Leitura:</strong> acompanhamento mensal gerado com base na fórmula oficial de faturamento anual / 12 / 4 acrescida da margem operacional configurada.</div>`}
+  <h2>Leitura operacional do período</h2>
+  <div class="grid">
+    <div class="card"><div class="label">Semanas alimentadas</div><div class="value">${semanas.length}</div></div>
+    <div class="card"><div class="label">Semanas positivas</div><div class="value">${semanasPositivas}</div></div>
+    <div class="card"><div class="label">Semanas negativas</div><div class="value">${semanasNegativas}</div></div>
+    <div class="card"><div class="label">Semanas críticas</div><div class="value">${semanasCriticas}</div></div>
+  </div>
+  <div class="box">
+    <strong>Melhor entrada:</strong> ${maiorEntrada ? `Semana ${esc(maiorEntrada.numero_semana)} com ${fmt(totalEntradasRelatorioAcompanhamento(maiorEntrada))}` : "—"}.<br/>
+    <strong>Pior saldo:</strong> ${piorSaldo ? `Semana ${esc(piorSaldo.numero_semana)} com ${fmt(piorSaldo.saldo_semanal)}` : "—"}.<br/>
+    <strong>Fórmula:</strong> relatório mensal alimentado por semanas. A média mensal vem do faturamento anual / 12 e a margem operacional configurada define o teto de controle.
+  </div>
 
-  <h2>Histórico semanal do mês</h2>
+  ${payload.incluirIa !== false ? `
+  <h2>Assessoria Inteligente de Crédito</h2>
+  <div class="grid3">
+    <div class="card"><div class="label">Impacto no rating interno</div><div class="value">${esc(impactoRating)}</div></div>
+    <div class="card"><div class="label">Prontidão para crédito</div><div class="value">${esc(prontidaoCredito)}</div></div>
+    <div class="card"><div class="label">Próxima melhor ação</div><div class="value">${esc(inteligencia?.proximaMelhorAcao || "Alimentar semanas e revisar dados do período.")}</div></div>
+  </div>
+  <div class="grid3" style="margin-top:8px">
+    <div class="card"><h3>Alertas</h3><ul>${itens(inteligencia?.alertas, semDados ? "Sem dados semanais para alertas conclusivos." : "Nenhum alerta crítico adicional identificado.")}</ul></div>
+    <div class="card"><h3>Pontos de atenção</h3><ul>${itens(inteligencia?.pontosAtencao, "Nenhum ponto de atenção adicional.")}</ul></div>
+    <div class="card"><h3>Plano de ação</h3><ul>${itens(inteligencia?.planoAcao, "Manter rotina semanal de alimentação e revisão mensal.")}</ul></div>
+  </div>
+  <div class="box"><strong>Parecer técnico:</strong> ${esc(parecerFinal)}</div>
+  ` : ""}
+
+  <h2>Histórico semanal do período</h2>
   <table>
     <thead>
-      <tr><th>Semana</th><th>Período</th><th>Entradas</th><th>Saídas</th><th>Saldo</th><th>Rating Bacen</th><th>Rating interno</th><th>Status</th><th>Diagnóstico / orientação</th></tr>
+      <tr><th>Semana</th><th>Período</th><th>Maquininha</th><th>Pix</th><th>Boleto</th><th>TED</th><th>Dinheiro</th><th>Outras</th><th>Total entradas</th><th>Saídas</th><th>Saldo</th><th>Rating Bacen</th><th>Rating interno</th><th>Status</th><th>Diagnóstico</th><th>Orientação</th><th>Próxima ação</th></tr>
     </thead>
-    <tbody>${linhasSemanas || `<tr><td colspan="9">Nenhuma atualização registrada para o mês selecionado.</td></tr>`}</tbody>
+    <tbody>${linhasSemanas || textoSemanasVazias}</tbody>
   </table>
 
   <h2>Alertas operacionais</h2>
   <table>
     <thead><tr><th>Data</th><th>Prioridade</th><th>Título</th><th>Mensagem</th><th>Status</th></tr></thead>
-    <tbody>${linhasAlertas || `<tr><td colspan="5">Nenhum alerta registrado para o mês.</td></tr>`}</tbody>
+    <tbody>${linhasAlertas || `<tr><td colspan="5">Nenhum alerta registrado para o período.</td></tr>`}</tbody>
   </table>
 
-  <div class="nota">
-    Este relatório é parte da consultoria de acompanhamento bancário prestada para apoiar a coerência entre faturamento declarado, movimentação financeira, rating, restrições e preparação para crédito empresarial.
-  </div>
+  ${payload.incluirAnexos !== false ? `
+  <h2>Documentos e anexos considerados</h2>
+  <table>
+    <thead><tr><th>Tipo</th><th>Arquivo/documento</th><th>Status</th><th>Incluído em</th><th>Tamanho</th></tr></thead>
+    <tbody>${linhasDocumentos || `<tr><td colspan="5">Nenhum documento vinculado/localizado para a empresa neste relatório. Recomenda-se anexar extratos, comprovantes e documentos financeiros no acervo documental.</td></tr>`}</tbody>
+  </table>
+  ` : ""}
+
+  <h2>Parecer técnico final</h2>
+  <div class="box ${semDados || statusInteligente === "critico" ? "alerta" : ""}">${esc(parecerFinal)}</div>
+  <div class="box"><strong>Orientação para o cliente:</strong> ${esc(inteligencia?.orientacaoCliente || (semDados ? "Enviar os dados semanais do período e anexar extratos para possibilitar diagnóstico completo." : "Manter rotina semanal e seguir o plano de ação do acompanhamento."))}</div>
 
   <div class="assinaturas">
     <div class="assinatura">
@@ -12030,6 +12250,159 @@ async function registrarDocumentoContratoGerado(params: {
 </html>`;
   }
 
+  async function responderRelatorioAcompanhamentoBancario(req: Request, res: Response) {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const hoje = new Date();
+      const tipo = normalizarTipoRelatorioAcompanhamento(req.body?.tipo);
+      const formato = normalizarFormatoRelatorioAcompanhamento(req.body?.formato);
+      const ano = Number(req.body?.ano || hoje.getFullYear());
+      const mes = Number(req.body?.mes || hoje.getMonth() + 1);
+      const dataInicio = parseDataRelatorioAcompanhamento(req.body?.dataInicio || req.body?.data_inicio);
+      const dataFim = parseDataRelatorioAcompanhamento(req.body?.dataFim || req.body?.data_fim);
+      const detalhado = req.body?.detalhado !== false;
+      const incluirIa = req.body?.incluirIa !== false;
+      const incluirAnexos = req.body?.incluirAnexos !== false;
+
+      if (tipo === "mensal" && (!ano || !mes || mes < 1 || mes > 12)) {
+        res.status(400).json({ error: "Informe ano e mês válidos para o relatório." });
+        return;
+      }
+      if (tipo === "periodo" && (!dataInicio || !dataFim || dataInicio > dataFim)) {
+        res.status(400).json({ error: "Informe data inicial e final válidas para o relatório por período." });
+        return;
+      }
+
+      const { rows } = await pool.query(
+        `SELECT a.*, c.nome AS responsavel_nome
+           FROM acompanhamentos_bancarios a
+           LEFT JOIN colaboradores c ON c.id = a.responsavel_id
+          WHERE a.id = $1
+          LIMIT 1`,
+        [req.params.id]
+      );
+
+      if (!rows.length) {
+        res.status(404).json({ error: "Acompanhamento não encontrado." });
+        return;
+      }
+
+      const acompanhamento = rows[0];
+      const { rows: todasAtualizacoes } = await pool.query(
+        `SELECT *
+           FROM acompanhamento_bancario_atualizacoes
+          WHERE acompanhamento_id = $1
+          ORDER BY numero_semana ASC, data_referencia_inicio ASC, created_at ASC`,
+        [req.params.id]
+      );
+      const filtros = { tipo, ano, mes, dataInicio, dataFim };
+      const atualizacoes = filtrarSemanasRelatorioAcompanhamento(todasAtualizacoes, filtros);
+
+      const { rows: todosAlertas } = await pool.query(
+        `SELECT *
+           FROM acompanhamento_bancario_alertas
+          WHERE acompanhamento_id = $1
+          ORDER BY data_alerta DESC, created_at DESC`,
+        [req.params.id]
+      ).catch(() => ({ rows: [] as any[] }));
+      const alertas = filtrarAlertasRelatorioAcompanhamento(todosAlertas, atualizacoes, filtros);
+
+      let documentos: any[] = [];
+      if (incluirAnexos && acompanhamento?.empresa_id) {
+        const docsResult = await pool.query(
+          `SELECT id, tipo_documento, nome_original, nome_customizado, nome_arquivo, status, validado, tamanho_bytes, criado_em
+             FROM public.documentos_arquivos
+            WHERE empresa_id = $1
+              AND excluido_em IS NULL
+              AND COALESCE(status, '') <> 'excluido'
+            ORDER BY criado_em DESC
+            LIMIT 80`,
+          [acompanhamento.empresa_id]
+        ).catch(() => ({ rows: [] as any[] }));
+        documentos = docsResult.rows || [];
+      }
+
+      const inteligencia = incluirIa
+        ? calcularInteligenciaAcompanhamentoBancario({ acompanhamento, atualizacoes })
+        : null;
+
+      if (formato === "json") {
+        res.json({ acompanhamento, atualizacoes, alertas, documentos, inteligencia, filtros: { tipo, ano, mes, dataInicio, dataFim, detalhado, incluirIa, incluirAnexos } });
+        return;
+      }
+
+      const html = gerarHtmlRelatorioMensalAcompanhamento({
+        acompanhamento,
+        atualizacoes,
+        alertas,
+        documentos,
+        inteligencia,
+        ano,
+        mes,
+        tipo,
+        dataInicio,
+        dataFim,
+        detalhado,
+        incluirIa,
+        incluirAnexos,
+        geradoPor: colaborador?.nome || colaborador?.email || null,
+      });
+
+      const empresaSlug = slugRelatorioAcompanhamento(acompanhamento.nome_empresa || "empresa");
+      const periodoSlug = tipo === "periodo" && dataInicio && dataFim
+        ? `${dataInicio}-${dataFim}`
+        : tipo === "completo"
+          ? "completo"
+          : `${ano}-${String(mes).padStart(2, "0")}`;
+      const baseName = `relatorio-bancario-inteligente-${empresaSlug}-${periodoSlug}-${Date.now()}`;
+
+      if (formato === "html") {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.send(html);
+        return;
+      }
+
+      if (formato === "xls") {
+        res.setHeader("Content-Type", "application/vnd.ms-excel; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="${baseName}.xls"`);
+        res.send(`\ufeff${html}`);
+        return;
+      }
+
+      const uploadsDir = path.resolve("uploads", "acompanhamento-bancario");
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+      const fileName = `${baseName}.pdf`;
+      const filePath = path.join(uploadsDir, fileName);
+
+      let browser: any;
+      try {
+        browser = await launchChromium();
+        const page = await browser.newPage();
+        await page.setContent(html, { waitUntil: "networkidle0" });
+        await page.pdf({
+          path: filePath,
+          format: "A4",
+          landscape: true,
+          printBackground: true,
+          margin: { top: "8mm", bottom: "8mm", left: "7mm", right: "7mm" },
+        });
+      } finally {
+        await closeChromium(browser);
+      }
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      const stream = fs.createReadStream(filePath);
+      stream.pipe(res);
+      stream.on("end", () => fs.unlink(filePath, () => {}));
+    } catch (err: any) {
+      console.error("[POST /api/acompanhamentos-bancarios/:id/relatorio]", err);
+      res.status(500).json({ error: err.message || "Erro ao gerar relatório de acompanhamento bancário." });
+    }
+  }
+
+  app.post("/api/acompanhamentos-bancarios/:id/relatorio", auth, requireAcessoAcompanhamento, responderRelatorioAcompanhamentoBancario);
+  app.post("/api/acompanhamentos-bancarios/:id/relatorio-mensal", auth, requireAcessoAcompanhamento, responderRelatorioAcompanhamentoBancario);
 
   app.get("/api/acompanhamentos-bancarios", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
@@ -12283,113 +12656,6 @@ async function registrarDocumentoContratoGerado(params: {
     }
   });
 
-  app.post("/api/acompanhamentos-bancarios/:id/relatorio-mensal", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
-    try {
-      const colaborador = (req as Request & { colaborador: any }).colaborador;
-      const hoje = new Date();
-      const ano = Number(req.body?.ano || hoje.getFullYear());
-      const mes = Number(req.body?.mes || hoje.getMonth() + 1);
-
-      if (!ano || !mes || mes < 1 || mes > 12) {
-        res.status(400).json({ error: "Informe ano e mês válidos para o relatório." });
-        return;
-      }
-
-      const { rows } = await pool.query(
-        `SELECT a.*, c.nome AS responsavel_nome
-           FROM acompanhamentos_bancarios a
-           LEFT JOIN colaboradores c ON c.id = a.responsavel_id
-          WHERE a.id = $1
-          LIMIT 1`,
-        [req.params.id]
-      );
-
-      if (!rows.length) {
-        res.status(404).json({ error: "Acompanhamento não encontrado." });
-        return;
-      }
-
-      const acompanhamento = rows[0];
-
-      const { rows: atualizacoes } = await pool.query(
-        `SELECT *
-           FROM acompanhamento_bancario_atualizacoes
-          WHERE acompanhamento_id = $1
-            AND EXTRACT(YEAR FROM COALESCE(data_referencia_inicio, data_atualizacao)) = $2
-            AND EXTRACT(MONTH FROM COALESCE(data_referencia_inicio, data_atualizacao)) = $3
-          ORDER BY numero_semana ASC, data_referencia_inicio ASC, created_at ASC`,
-        [req.params.id, ano, mes]
-      );
-
-      const { rows: alertas } = await pool.query(
-        `SELECT *
-           FROM acompanhamento_bancario_alertas
-          WHERE acompanhamento_id = $1
-            AND (
-              numero_semana IN (
-                SELECT numero_semana
-                  FROM acompanhamento_bancario_atualizacoes
-                 WHERE acompanhamento_id = $1
-                   AND EXTRACT(YEAR FROM COALESCE(data_referencia_inicio, data_atualizacao)) = $2
-                   AND EXTRACT(MONTH FROM COALESCE(data_referencia_inicio, data_atualizacao)) = $3
-              )
-              OR (
-                EXTRACT(YEAR FROM data_alerta) = $2
-                AND EXTRACT(MONTH FROM data_alerta) = $3
-              )
-            )
-          ORDER BY data_alerta DESC, created_at DESC`,
-        [req.params.id, ano, mes]
-      );
-
-      const html = gerarHtmlRelatorioMensalAcompanhamento({
-        acompanhamento,
-        atualizacoes,
-        alertas,
-        ano,
-        mes,
-        geradoPor: colaborador?.nome || colaborador?.email || null,
-      });
-
-      const uploadsDir = path.resolve("uploads", "acompanhamento-bancario");
-      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-      const slugEmpresa = String(acompanhamento.nome_empresa || "empresa")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-zA-Z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-        .toLowerCase();
-
-      const fileName = `relatorio-bancario-${slugEmpresa}-${ano}-${String(mes).padStart(2, "0")}-${Date.now()}.pdf`;
-      const filePath = path.join(uploadsDir, fileName);
-
-      let browser: any;
-      try {
-        browser = await launchChromium();
-
-        const page = await browser.newPage();
-        await page.setContent(html, { waitUntil: "networkidle0" });
-        await page.pdf({
-          path: filePath,
-          format: "A4",
-          printBackground: true,
-          margin: { top: "10mm", bottom: "10mm", left: "8mm", right: "8mm" },
-        });
-      } finally {
-        await closeChromium(browser);
-      }
-
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-      const stream = fs.createReadStream(filePath);
-      stream.pipe(res);
-      stream.on("end", () => fs.unlink(filePath, () => {}));
-    } catch (err: any) {
-      console.error("[POST /api/acompanhamentos-bancarios/:id/relatorio-mensal]", err);
-      res.status(500).json({ error: err.message || "Erro ao gerar relatório mensal." });
-    }
-  });
 
 
   app.post("/api/acompanhamentos-bancarios", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {

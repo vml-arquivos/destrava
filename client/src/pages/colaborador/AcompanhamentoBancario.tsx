@@ -711,30 +711,86 @@ function exportarCSV(row: Acompanhamento, prestadoraKey: PrestadoraKey = "destra
   URL.revokeObjectURL(url);
 }
 
-async function exportarRelatorioMensalPDF(row: Acompanhamento, authHeaders: () => Record<string, string>) {
-  if (!row?.id) return;
-  const hoje = new Date();
-  const ano = hoje.getFullYear();
-  const mes = hoje.getMonth() + 1;
+type OpcoesRelatorioBancario = {
+  tipo: "mensal" | "periodo" | "completo" | "executivo";
+  formato: "pdf" | "html" | "xls" | "json";
+  mes: string;
+  ano: string;
+  dataInicio: string;
+  dataFim: string;
+  detalhado: boolean;
+  incluirIa: boolean;
+  incluirAnexos: boolean;
+};
 
-  const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}/relatorio-mensal`, {
+function opcoesRelatorioPadrao(): OpcoesRelatorioBancario {
+  const hoje = new Date();
+  return {
+    tipo: "mensal",
+    formato: "pdf",
+    mes: String(hoje.getMonth() + 1),
+    ano: String(hoje.getFullYear()),
+    dataInicio: "",
+    dataFim: "",
+    detalhado: true,
+    incluirIa: true,
+    incluirAnexos: true,
+  };
+}
+
+async function exportarRelatorioMensalPDF(
+  row: Acompanhamento,
+  authHeaders: () => Record<string, string>,
+  opcoes?: Partial<OpcoesRelatorioBancario>,
+) {
+  if (!row?.id) return;
+  const defaults = opcoesRelatorioPadrao();
+  const cfg = { ...defaults, ...(opcoes || {}) };
+  const body = {
+    tipo: cfg.tipo,
+    formato: cfg.formato,
+    mes: Number(cfg.mes || defaults.mes),
+    ano: Number(cfg.ano || defaults.ano),
+    dataInicio: cfg.dataInicio || null,
+    dataFim: cfg.dataFim || null,
+    detalhado: cfg.detalhado,
+    incluirIa: cfg.incluirIa,
+    incluirAnexos: cfg.incluirAnexos,
+  };
+
+  const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}/relatorio`, {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify({ ano, mes }),
+    body: JSON.stringify(body),
   });
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
-    alert(`Erro ao gerar relatório mensal: ${text || resp.statusText}`);
+    alert(`Erro ao gerar relatório: ${text || resp.statusText}`);
+    return;
+  }
+
+  const contentType = resp.headers.get("content-type") || "";
+  const contentDisposition = resp.headers.get("content-disposition") || "";
+  const match = contentDisposition.match(/filename="?([^";]+)"?/i);
+  const extensao = cfg.formato === "xls" ? "xls" : cfg.formato === "html" ? "html" : cfg.formato === "json" ? "json" : "pdf";
+  const fileName = match?.[1] || nomeArquivoRelatorio(row, "destrava", extensao).replace("relatorio-", "relatorio-inteligente-");
+
+  if (cfg.formato === "html" || contentType.includes("text/html")) {
+    const html = await resp.text();
+    const win = window.open("", "_blank");
+    if (!win) {
+      alert("Não foi possível abrir a pré-visualização. Verifique o bloqueador de pop-ups.");
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
     return;
   }
 
   const blob = await resp.blob();
   const url = URL.createObjectURL(blob);
-  const contentDisposition = resp.headers.get("content-disposition") || "";
-  const match = contentDisposition.match(/filename="?([^"]+)"?/i);
-  const fileName = match?.[1] || nomeArquivoRelatorio(row, "destrava", "pdf").replace("relatorio-", "relatorio-mensal-bancario-");
-
   const link = document.createElement("a");
   link.href = url;
   link.download = fileName;
@@ -742,83 +798,6 @@ async function exportarRelatorioMensalPDF(row: Acompanhamento, authHeaders: () =
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
-}
-
-// ─── Bancos sugeridos ─────────────────────────────────────────────────────────
-const BANCOS_SUGERIDOS = [
-  "SICOOB", "Caixa", "Banco do Brasil", "Bradesco", "Itaú",
-  "Santander", "Sicredi", "Cresol", "Inter", "Cora", "Stone", "Outro",
-];
-
-// ─── Campos do formulário Novo Acompanhamento ─────────────────────────────────
-const NOVO_FIELDS = [
-  { key: "nome_empresa", label: "Empresa", required: true, group: "empresa" },
-  { key: "cnpj", label: "CNPJ", group: "empresa" },
-  { key: "telefone_cliente", label: "Telefone", group: "empresa" },
-  { key: "whatsapp_cliente", label: "WhatsApp", group: "empresa" },
-  { key: "email_cliente", label: "E-mail", group: "empresa" },
-  { key: "banco_observado", label: "Banco observado", required: true, group: "banco", type: "banco" },
-  { key: "agencia", label: "Agência", group: "banco" },
-  { key: "conta", label: "Conta", group: "banco" },
-  { key: "gerente_banco", label: "Gerente do banco", group: "banco" },
-  { key: "contato_banco", label: "Contato do banco", group: "banco" },
-  { key: "data_abertura_conta", label: "Data de abertura/relacionamento", type: "date", group: "banco" },
-  { key: "data_inicio", label: "Início do acompanhamento", type: "date", group: "banco", required: true },
-  { key: "objetivo_credito", label: "Objetivo do crédito", group: "objetivo" },
-  { key: "valor_credito_pretendido", label: "Valor pretendido", type: "number", group: "objetivo" },
-  { key: "linha_credito_pretendida", label: "Linha pretendida", group: "objetivo" },
-  { key: "rating_bacen_inicial", label: "Rating Bacen inicial", group: "rating" },
-  { key: "rating_interno_inicial", label: "Rating interno inicial", group: "rating" },
-  { key: "faturamento_anual", label: "Faturamento anual", type: "number", group: "rating" },
-  { key: "media_mensal", label: "Média mensal", type: "number", group: "rating" },
-  { key: "margem_seguranca_30", label: "Margem de segurança 30%", type: "number", group: "rating" },
-  { key: "observacoes_iniciais", label: "Observações iniciais", textarea: true, group: "gestao" },
-];
-
-
-const EDIT_FIELDS = [
-  { key: "status", label: "Status", group: "controle" },
-  { key: "data_fim_prevista", label: "Fim previsto", type: "date", group: "controle" },
-  { key: "proxima_atualizacao", label: "Próxima atualização", type: "date", group: "controle" },
-  { key: "rating_bacen_atual", label: "Rating Bacen atual", group: "controle" },
-  { key: "rating_interno_atual", label: "Rating interno atual", group: "controle" },
-  { key: "observacoes_finais", label: "Observações finais", textarea: true, group: "controle" },
-];
-
-// ─── Estado inicial do formulário de atualização ──────────────────────────────
-function updFormInicial(): AtualizacaoForm {
-  return {
-    numero_semana: 1,
-    data_referencia_inicio: "",
-    data_referencia_fim: "",
-    data_atualizacao: "",
-    proxima_atualizacao_apos_salvar: "",
-    entrada_maquininha: 0,
-    entrada_pix: 0,
-    entrada_boleto: 0,
-    entrada_ted: 0,
-    entrada_dinheiro: 0,
-    outras_entradas: 0,
-    total_saidas: 0,
-    saldo_medio: 0,
-    saldo_final: 0,
-    quantidade_transacoes: 0,
-    rating_bacen: "",
-    rating_interno: "",
-    scr_status: "",
-    cenprot_status: "",
-    serasa_status: "",
-    cnd_status: "",
-    pld_aml_status: "",
-    coaf_status: "",
-    possui_restricao: false,
-    restricao_nova: false,
-    devolucao_ou_estorno: false,
-    ocorrencia_negativa: false,
-    analise_semana: "",
-    orientacao_cliente: "",
-    proxima_acao: "",
-  };
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -842,6 +821,9 @@ export default function AcompanhamentoBancario() {
   const [loadingInteligenciaAcompanhamento, setLoadingInteligenciaAcompanhamento] = useState(false);
   const [erroInteligenciaAcompanhamento, setErroInteligenciaAcompanhamento] = useState("");
   const [imprimirOpen, setImprimirOpen] = useState<Acompanhamento | null>(null);
+  const [relatorioOpen, setRelatorioOpen] = useState<Acompanhamento | null>(null);
+  const [opcoesRelatorio, setOpcoesRelatorio] = useState<OpcoesRelatorioBancario>(() => opcoesRelatorioPadrao());
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false);
   const [prestadoraRelatorio, setPrestadoraRelatorio] = useState<PrestadoraKey>("destrava");
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [editandoSemanaNumero, setEditandoSemanaNumero] = useState<number | null>(null);
@@ -1376,6 +1358,27 @@ export default function AcompanhamentoBancario() {
     setDetalhe(null);
     setUpdOpen(null);
     setNovoOpen(true);
+  };
+
+  // ─── Relatório inteligente por período ─────────────────────────────────────────
+  const abrirRelatorio = async (row: Acompanhamento) => {
+    let rowCompleto = row;
+    try {
+      const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}`, { headers: authHeaders() });
+      if (resp.ok) rowCompleto = await resp.json();
+    } catch { /* usa row sem atualizações */ }
+    setRelatorioOpen(rowCompleto);
+    setOpcoesRelatorio(opcoesRelatorioPadrao());
+  };
+
+  const gerarRelatorioConfigurado = async () => {
+    if (!relatorioOpen) return;
+    setGerandoRelatorio(true);
+    try {
+      await exportarRelatorioMensalPDF(relatorioOpen, authHeaders, opcoesRelatorio);
+    } finally {
+      setGerandoRelatorio(false);
+    }
   };
 
   // ─── Imprimir ─────────────────────────────────────────────────────────────────
@@ -1925,15 +1928,8 @@ export default function AcompanhamentoBancario() {
         >Exportar XLS</button>
         <button
           className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
-          onClick={async () => {
-            let rowCompleto = row;
-            try {
-              const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}`, { headers: authHeaders() });
-              if (resp.ok) rowCompleto = await resp.json();
-            } catch { /* usa row sem atualizações */ }
-            await exportarRelatorioMensalPDF(rowCompleto, authHeaders);
-          }}
-        >Relatório mensal PDF</button>
+          onClick={() => abrirRelatorio(row)}
+        >Gerar relatório</button>
         <button
           className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50"
           onClick={() => prorrogar(row.id)}
@@ -2596,7 +2592,7 @@ export default function AcompanhamentoBancario() {
                     })()}
                     <button className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100" onClick={() => adicionarOutroBanco(detalhe)}>+ Outro banco</button>
                     <button className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100" onClick={() => exportarCSV(detalhe, prestadoraRelatorio)}>Exportar XLS</button>
-                    <button className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100" onClick={() => exportarRelatorioMensalPDF(detalhe, authHeaders)}>Relatório mensal PDF</button>
+                    <button className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100" onClick={() => abrirRelatorio(detalhe)}>Gerar relatório</button>
                     <button className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-100" onClick={() => { setImprimirOpen(detalhe); setDetalhe(null); }}>Imprimir</button>
                     <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50" onClick={() => { setDetalhe(null); setInteligenciaAcompanhamento(null); setErroInteligenciaAcompanhamento(""); }}>Fechar</button>
                   </div>
@@ -3195,6 +3191,137 @@ export default function AcompanhamentoBancario() {
                     </div>
                   </div>
                 </section>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Modal — Gerador de relatório inteligente ─────────────────────── */}
+        {relatorioOpen && (
+          <div className="fixed inset-0 z-[10000] overflow-y-auto bg-slate-900/50 p-4">
+            <div className="mx-auto w-full max-w-3xl rounded-2xl bg-white p-5 shadow-2xl">
+              <div className="flex flex-col gap-2 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Gerador de relatório bancário</p>
+                  <h3 className="mt-1 text-xl font-black text-slate-950">Relatório inteligente por período</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {relatorioOpen.nome_empresa} — {relatorioOpen.banco_observado || "Banco não informado"}
+                  </p>
+                </div>
+                <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" onClick={() => setRelatorioOpen(null)}>
+                  Fechar
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Tipo de relatório
+                  <select
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case text-slate-700"
+                    value={opcoesRelatorio.tipo}
+                    onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, tipo: e.target.value as OpcoesRelatorioBancario["tipo"] }))}
+                  >
+                    <option value="mensal">Mensal</option>
+                    <option value="periodo">Período personalizado</option>
+                    <option value="completo">Completo do acompanhamento</option>
+                    <option value="executivo">Executivo mensal</option>
+                  </select>
+                </label>
+
+                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Formato
+                  <select
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case text-slate-700"
+                    value={opcoesRelatorio.formato}
+                    onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, formato: e.target.value as OpcoesRelatorioBancario["formato"] }))}
+                  >
+                    <option value="pdf">Baixar PDF</option>
+                    <option value="html">Visualizar antes</option>
+                    <option value="xls">Baixar XLS</option>
+                    <option value="json">Baixar JSON técnico</option>
+                  </select>
+                </label>
+
+                {opcoesRelatorio.tipo !== "periodo" && opcoesRelatorio.tipo !== "completo" && (
+                  <>
+                    <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Mês
+                      <select
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case text-slate-700"
+                        value={opcoesRelatorio.mes}
+                        onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, mes: e.target.value }))}
+                      >
+                        {Array.from({ length: 12 }, (_, i) => (
+                          <option key={i + 1} value={String(i + 1)}>{String(i + 1).padStart(2, "0")}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Ano
+                      <input
+                        type="number"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case text-slate-700"
+                        value={opcoesRelatorio.ano}
+                        onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, ano: e.target.value }))}
+                      />
+                    </label>
+                  </>
+                )}
+
+                {opcoesRelatorio.tipo === "periodo" && (
+                  <>
+                    <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Data inicial
+                      <input
+                        type="date"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case text-slate-700"
+                        value={opcoesRelatorio.dataInicio}
+                        onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, dataInicio: e.target.value }))}
+                      />
+                    </label>
+                    <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Data final
+                      <input
+                        type="date"
+                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case text-slate-700"
+                        value={opcoesRelatorio.dataFim}
+                        onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, dataFim: e.target.value }))}
+                      />
+                    </label>
+                  </>
+                )}
+              </div>
+
+              <div className="mt-4 grid gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 sm:grid-cols-3">
+                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <input type="checkbox" checked={opcoesRelatorio.detalhado} onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, detalhado: e.target.checked }))} />
+                  Detalhado
+                </label>
+                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <input type="checkbox" checked={opcoesRelatorio.incluirIa} onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, incluirIa: e.target.checked }))} />
+                  Incluir IA/parecer
+                </label>
+                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <input type="checkbox" checked={opcoesRelatorio.incluirAnexos} onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, incluirAnexos: e.target.checked }))} />
+                  Listar anexos/documentos
+                </label>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <strong>Como funciona:</strong> o relatório é mensal ou por período, alimentado pelas semanas registradas. Ele mantém a lógica financeira atual, mas adiciona análise inteligente, parecer técnico, plano de ação, alertas e documentos considerados.
+              </div>
+
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <button className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" onClick={() => setRelatorioOpen(null)}>
+                  Cancelar
+                </button>
+                <button
+                  className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-blue-700 disabled:opacity-60"
+                  disabled={gerandoRelatorio || (opcoesRelatorio.tipo === "periodo" && (!opcoesRelatorio.dataInicio || !opcoesRelatorio.dataFim))}
+                  onClick={gerarRelatorioConfigurado}
+                >
+                  {gerandoRelatorio ? "Gerando..." : opcoesRelatorio.formato === "html" ? "Visualizar relatório" : "Gerar relatório"}
+                </button>
               </div>
             </div>
           </div>
