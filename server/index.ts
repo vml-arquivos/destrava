@@ -36,6 +36,7 @@ import { generateFollowupMessage, generateLeadRecommendations, generateLeadSumma
 import { getDataDir, resolveDocumentPath } from "./services/documentStorage";
 import { calcularInteligencia360 } from "./services/inteligencia360Service";
 import { calcularPropostaBancaria } from "./services/propostaBancariaService";
+import { gerarRelatorioTecnico } from "./services/relatorioTecnicoEmpresaService";
 
 const { Pool } = pkg;
 
@@ -4852,9 +4853,258 @@ async function startServer() {
       stream.pipe(res);
       stream.on("end", () => require('fs').unlink(filePath, () => {}));
     } catch (err: any) {
-      if (browser) { try { await closeChromium(browser); } catch { /* ignora */ } }
+            if (browser) { try { await closeChromium(browser); } catch { /* ignora */ } }
       console.error("[GET /api/empresas/:id/proposta-bancaria/pdf]", err);
       res.status(500).json({ error: "Erro ao gerar PDF da proposta bancária", detail: err?.message });
+    }
+  });
+
+  // ─── GET /api/empresas/:id/relatorio-tecnico ────────────────────
+  // Rota FIXA — deve ficar ANTES de /api/empresas/:id.
+  // Retorna JSON consolidado do relatório técnico premium.
+  app.get("/api/empresas/:id/relatorio-tecnico", auth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
+      const empresaId = req.params.id;
+      const colaborador = (req as any).colaborador;
+
+      const { rows: empresaRows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [empresaId]);
+      if (empresaRows.length === 0) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
+      const empresa = empresaRows[0];
+
+      let socios: any[] = [];
+      try { const { rows } = await pool.query("SELECT * FROM socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true ORDER BY created_at ASC", [empresaId]); socios = Array.isArray(rows) ? rows : []; } catch { socios = []; }
+
+      let documentos: any[] = [];
+      try { const { rows } = await pool.query(`SELECT id, tipo, nome_arquivo, arquivo_path, status, origem, created_at, updated_at FROM documentos_arquivos WHERE entidade_tipo = 'empresa' AND entidade_id = $1 AND COALESCE(status,'ativo') NOT IN ('excluido') ORDER BY created_at DESC`, [empresaId]); documentos = Array.isArray(rows) ? rows : []; } catch { documentos = []; }
+
+      let simulacoes: any[] = [];
+      try { const { rows } = await pool.query(`SELECT id, produto, valor_solicitado, prazo_meses, status, criado_em FROM simulacoes_colaborador WHERE empresa_id = $1 ORDER BY criado_em DESC`, [empresaId]); simulacoes = Array.isArray(rows) ? rows : []; } catch { simulacoes = []; }
+
+      let orcamentos: any[] = [];
+      try { const { rows } = await pool.query(`SELECT id, descricao, valor_total, status, created_at FROM orcamentos WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 10`, [empresaId]); orcamentos = Array.isArray(rows) ? rows : []; } catch { orcamentos = []; }
+
+      let contratos: any[] = [];
+      try { const { rows } = await pool.query(`SELECT id, numero_contrato, tipo_contrato, status, valor_contrato, data_assinatura, created_at FROM contratos_gerados WHERE empresa_id = $1 ORDER BY created_at DESC`, [empresaId]); contratos = Array.isArray(rows) ? rows : []; } catch { contratos = []; }
+
+      let historico: any[] = [];
+      try { const { rows } = await pool.query(`SELECT id, tipo, descricao, created_at FROM empresa_historico WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 30`, [empresaId]); historico = Array.isArray(rows) ? rows : []; } catch { historico = []; }
+
+      const resultado = gerarRelatorioTecnico({
+        empresa,
+        socios,
+        documentos,
+        simulacoes,
+        orcamentos,
+        contratos,
+        historico,
+        responsavel_nome: colaborador?.nome || colaborador?.email || "Destrava Crédito",
+      });
+
+      res.json(resultado);
+    } catch (err) {
+      console.error("[GET /api/empresas/:id/relatorio-tecnico]", err);
+      res.status(500).json({
+        error: "Erro ao gerar relatório técnico",
+        empresa_id: req.params.id,
+        resumo_executivo: "Erro ao carregar dados da empresa.",
+        pendencias: [],
+        plano_acao: [],
+        recomendacoes: [],
+        gerado_em: new Date().toISOString(),
+        fonte: "deterministica",
+      });
+    }
+  });
+
+  // ─── GET /api/empresas/:id/relatorio-tecnico/pdf ─────────────────
+  // Gera PDF do relatório técnico premium usando Puppeteer.
+  app.get("/api/empresas/:id/relatorio-tecnico/pdf", auth, async (req: Request, res: Response) => {
+    let browser: any;
+    try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
+      const empresaId = req.params.id;
+      const colaborador = (req as any).colaborador;
+
+      const { rows: empresaRows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [empresaId]);
+      if (empresaRows.length === 0) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
+      const empresa = empresaRows[0];
+
+      let socios: any[] = [];
+      try { const { rows } = await pool.query("SELECT * FROM socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true", [empresaId]); socios = rows; } catch { socios = []; }
+      let documentos: any[] = [];
+      try { const { rows } = await pool.query(`SELECT id, tipo, nome_arquivo, arquivo_path, status FROM documentos_arquivos WHERE entidade_tipo = 'empresa' AND entidade_id = $1 AND COALESCE(status,'ativo') NOT IN ('excluido')`, [empresaId]); documentos = rows; } catch { documentos = []; }
+      let simulacoes: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, produto, valor_solicitado, prazo_meses, status FROM simulacoes_colaborador WHERE empresa_id = $1 ORDER BY criado_em DESC", [empresaId]); simulacoes = rows; } catch { simulacoes = []; }
+      let contratos: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, numero_contrato, tipo_contrato, status, valor_contrato, data_assinatura FROM contratos_gerados WHERE empresa_id = $1 ORDER BY created_at DESC", [empresaId]); contratos = rows; } catch { contratos = []; }
+
+      const rel = gerarRelatorioTecnico({
+        empresa, socios, documentos, simulacoes, orcamentos: [], contratos, historico: [],
+        responsavel_nome: colaborador?.nome || colaborador?.email || "Destrava Crédito",
+      });
+
+      const nivelRiscoCor: Record<string, string> = { baixo: "#16a34a", medio: "#d97706", alto: "#ea580c", critico: "#dc2626" };
+      const riscoCor = nivelRiscoCor[rel.analise_credito.nivel_risco] || "#64748b";
+      const fmtD = (v: string) => v || "Não informado";
+
+      const html = gerarHtmlTimbrado(`
+        <style>
+          .rt-section { margin-bottom: 20px; }
+          .rt-section h2 { font-size: 13px; font-weight: 800; color: #1e40af; border-bottom: 2px solid #dbeafe; padding-bottom: 4px; margin-bottom: 10px; }
+          .rt-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+          .rt-table th { background: #f8fafc; padding: 6px 10px; text-align: left; font-weight: 700; color: #475569; border-bottom: 1px solid #e2e8f0; }
+          .rt-table td { padding: 5px 10px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+          .rt-table tr:last-child td { border-bottom: none; }
+          .chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; }
+          .chip-ok { background: #dcfce7; color: #166534; }
+          .chip-warn { background: #fef9c3; color: #854d0e; }
+          .chip-err { background: #fee2e2; color: #991b1b; }
+          .chip-info { background: #dbeafe; color: #1e40af; }
+        </style>
+
+        <!-- CAPA -->
+        <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; padding: 32px 28px; border-radius: 12px; margin-bottom: 24px;">
+          <p style="margin:0; font-size:11px; opacity:0.7; letter-spacing:1px;">RELATÓRIO TÉCNICO PREMIUM</p>
+          <h1 style="margin:8px 0 4px; font-size:22px; font-weight:900;">${rel.identificacao.razao_social}</h1>
+          <p style="margin:0; font-size:13px; opacity:0.85;">CNPJ: ${rel.identificacao.cnpj} &mdash; ${rel.identificacao.situacao_cadastral}</p>
+          <div style="margin-top:16px; display:flex; gap:24px; flex-wrap:wrap;">
+            <div><p style="margin:0; font-size:10px; opacity:0.7;">Score Destrava</p><p style="margin:0; font-size:24px; font-weight:900;">${rel.analise_credito.score_destrava}/100</p></div>
+            <div><p style="margin:0; font-size:10px; opacity:0.7;">Nível de Risco</p><p style="margin:0; font-size:16px; font-weight:700; color: ${riscoCor === '#16a34a' ? '#86efac' : riscoCor === '#dc2626' ? '#fca5a5' : '#fde68a'};">${rel.analise_credito.nivel_risco.toUpperCase()}</p></div>
+            <div><p style="margin:0; font-size:10px; opacity:0.7;">Status</p><p style="margin:0; font-size:12px; font-weight:700; opacity:0.9;">${rel.analise_credito.status_proposta}</p></div>
+            <div><p style="margin:0; font-size:10px; opacity:0.7;">Gerado em</p><p style="margin:0; font-size:12px; font-weight:700; opacity:0.9;">${new Date(rel.gerado_em).toLocaleDateString('pt-BR')}</p></div>
+          </div>
+        </div>
+
+        <!-- RESUMO EXECUTIVO -->
+        <div class="rt-section">
+          <h2>Resumo Executivo</h2>
+          <p style="font-size:12px; line-height:1.7; color:#334155;">${rel.resumo_executivo}</p>
+        </div>
+
+        <!-- IDENTIFICAÇÃO -->
+        <div class="rt-section">
+          <h2>Identificação da Empresa</h2>
+          <table class="rt-table">
+            <tr><th>Razão Social</th><td>${fmtD(rel.identificacao.razao_social)}</td><th>Nome Fantasia</th><td>${fmtD(rel.identificacao.nome_fantasia)}</td></tr>
+            <tr><th>CNPJ</th><td>${fmtD(rel.identificacao.cnpj)}</td><th>Situação</th><td>${fmtD(rel.identificacao.situacao_cadastral)}</td></tr>
+            <tr><th>Data de Abertura</th><td>${fmtD(rel.identificacao.data_abertura)}</td><th>Natureza Jurídica</th><td>${fmtD(rel.identificacao.natureza_juridica)}</td></tr>
+            <tr><th>Porte</th><td>${fmtD(rel.identificacao.porte)}</td><th>Regime Tributário</th><td>${fmtD(rel.identificacao.regime_tributario)}</td></tr>
+            <tr><th>CNAE Principal</th><td colspan="3">${fmtD(rel.identificacao.cnae_principal)}</td></tr>
+            <tr><th>Segmento</th><td>${fmtD(rel.identificacao.segmento)}</td><th>Capital Social</th><td>${fmtD(rel.identificacao.capital_social)}</td></tr>
+          </table>
+        </div>
+
+        <!-- CONTATO -->
+        <div class="rt-section">
+          <h2>Contato e Endereço</h2>
+          <table class="rt-table">
+            <tr><th>Responsável</th><td>${fmtD(rel.contato.responsavel_nome)}</td><th>E-mail</th><td>${fmtD(rel.contato.email)}</td></tr>
+            <tr><th>Telefone</th><td>${fmtD(rel.contato.telefone)}</td><th>WhatsApp</th><td>${fmtD(rel.contato.whatsapp)}</td></tr>
+            <tr><th>Cidade/UF</th><td>${fmtD(rel.contato.cidade)}${rel.contato.estado && rel.contato.estado !== 'Não informado' ? ' / ' + rel.contato.estado : ''}</td><th>CEP</th><td>${fmtD(rel.contato.cep)}</td></tr>
+          </table>
+        </div>
+
+        <!-- SÓCIOS -->
+        ${rel.socios.length > 0 ? `
+        <div class="rt-section">
+          <h2>Sócios / QSA (${rel.socios.length})</h2>
+          <table class="rt-table">
+            <tr><th>Nome</th><th>CPF</th><th>Participação</th><th>Qualificação</th><th>Rep. Legal</th></tr>
+            ${rel.socios.map(s => `<tr><td>${s.nome}</td><td>${s.cpf}</td><td>${s.percentual}</td><td>${s.qualificacao}</td><td>${s.representante_legal ? '<span class="chip chip-ok">Sim</span>' : 'Não'}</td></tr>`).join('')}
+          </table>
+        </div>` : '<div class="rt-section"><h2>Sócios / QSA</h2><p style="font-size:11px; color:#94a3b8;">Nenhum sócio cadastrado.</p></div>'}
+
+        <!-- ANÁLISE DE CRÉDITO -->
+        <div class="rt-section">
+          <h2>Análise de Crédito</h2>
+          <table class="rt-table">
+            <tr><th>Score Destrava</th><td><strong>${rel.analise_credito.score_destrava}/100</strong></td><th>Nível de Risco</th><td style="color:${riscoCor}; font-weight:700;">${rel.analise_credito.nivel_risco.toUpperCase()}</td></tr>
+            <tr><th>Score Interno</th><td>${fmtD(rel.analise_credito.score_interno)}</td><th>Score Serasa</th><td>${fmtD(rel.analise_credito.score_serasa)}</td></tr>
+            <tr><th>Faturamento</th><td>${fmtD(rel.analise_credito.faturamento)}</td><th>Capital Social</th><td>${fmtD(rel.analise_credito.capital_social)}</td></tr>
+            <tr><th>Limite Estimado Mín.</th><td>${fmtD(rel.analise_credito.capacidade_estimada_min)}</td><th>Limite Estimado Máx.</th><td>${fmtD(rel.analise_credito.capacidade_estimada_max)}</td></tr>
+            <tr><th>Produto Sugerido</th><td>${fmtD(rel.analise_credito.produto_sugerido)}</td><th>Prazo Sugerido</th><td>${fmtD(rel.analise_credito.prazo_sugerido)}</td></tr>
+            <tr><th colspan="4">Status: <span class="chip chip-info">${fmtD(rel.analise_credito.status_proposta)}</span></th></tr>
+          </table>
+        </div>
+
+        <!-- ANÁLISE DOCUMENTAL -->
+        <div class="rt-section">
+          <h2>Análise Documental</h2>
+          <table class="rt-table">
+            <tr><th>Total de Documentos</th><td>${rel.analise_documental.total}</td><th>Com Arquivo</th><td>${rel.analise_documental.com_arquivo}</td></tr>
+            <tr><th>Sem Arquivo</th><td>${rel.analise_documental.sem_arquivo}</td><th>Validados</th><td>${rel.analise_documental.validados}</td></tr>
+            <tr><th>Cobertura</th><td colspan="3"><strong>${rel.analise_documental.percentual_cobertura}%</strong> &mdash; ${rel.analise_documental.status}</td></tr>
+          </table>
+          ${rel.documentos.length > 0 ? `
+          <table class="rt-table" style="margin-top:8px;">
+            <tr><th>Documento</th><th>Arquivo</th><th>Status</th><th>Upload</th></tr>
+            ${rel.documentos.map(d => `<tr><td>${d.tipo}</td><td>${d.tem_arquivo ? '<span class="chip chip-ok">✓ Sim</span>' : '<span class="chip chip-err">✗ Não</span>'}</td><td>${d.status}</td><td>${d.data_upload}</td></tr>`).join('')}
+          </table>` : ''}
+        </div>
+
+        <!-- PENDÊNCIAS -->
+        ${rel.pendencias.length > 0 ? `
+        <div class="rt-section">
+          <h2>Pendências Identificadas (${rel.pendencias.length})</h2>
+          <table class="rt-table">
+            <tr><th>Tipo</th><th>Descrição</th><th>Impacto</th><th>Ação</th><th>Prioridade</th></tr>
+            ${rel.pendencias.map(p => `<tr><td>${p.tipo}</td><td>${p.descricao}</td><td>${p.impacto}</td><td>${p.acao_requerida}</td><td><span class="chip ${p.prioridade === 'critica' ? 'chip-err' : p.prioridade === 'alta' ? 'chip-warn' : 'chip-info'}">${p.prioridade}</span></td></tr>`).join('')}
+          </table>
+        </div>` : ''}
+
+        <!-- PLANO DE AÇÃO -->
+        ${rel.plano_acao.length > 0 ? `
+        <div class="rt-section">
+          <h2>Plano de Ação</h2>
+          <table class="rt-table">
+            <tr><th>#</th><th>Ação</th><th>Módulo</th><th>Prazo</th></tr>
+            ${rel.plano_acao.map(p => `<tr><td><strong>${p.numero}</strong></td><td>${p.acao}</td><td>${p.modulo}</td><td>${p.prazo}</td></tr>`).join('')}
+          </table>
+        </div>` : ''}
+
+        <!-- RECOMENDAÇÕES -->
+        ${rel.recomendacoes.length > 0 ? `
+        <div class="rt-section">
+          <h2>Recomendações</h2>
+          <table class="rt-table">
+            <tr><th>Título</th><th>Descrição</th><th>Módulo</th><th>Prioridade</th></tr>
+            ${rel.recomendacoes.map(r => `<tr><td><strong>${r.titulo}</strong></td><td>${r.descricao}</td><td>${r.modulo}</td><td><span class="chip ${r.prioridade === 'alta' ? 'chip-warn' : 'chip-info'}">${r.prioridade}</span></td></tr>`).join('')}
+          </table>
+        </div>` : ''}
+
+        <!-- OBSERVAÇÕES LEGAIS -->
+        <div style="margin-top:24px; padding:12px 16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; font-size:10px; color:#64748b; line-height:1.6;">
+          <strong>Observações Legais:</strong> ${rel.observacoes_legais}
+        </div>
+
+        <div style="margin-top:12px; font-size:10px; color:#94a3b8; text-align:center;">
+          Relatório gerado em ${new Date(rel.gerado_em).toLocaleString('pt-BR')} por ${rel.responsavel_analise} &mdash; Destrava Crédito
+        </div>
+      `, `Relatório Técnico — ${rel.identificacao.razao_social}`);
+
+      const uploadsDir = require('path').resolve("uploads", "relatorios-tecnicos");
+      if (!require('fs').existsSync(uploadsDir)) require('fs').mkdirSync(uploadsDir, { recursive: true });
+      const slug = String(rel.identificacao.razao_social).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase();
+      const fileName = `relatorio-tecnico-${slug}-${Date.now()}.pdf`;
+      const filePath = require('path').join(uploadsDir, fileName);
+
+      browser = await launchChromium();
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: "networkidle0" });
+      await page.pdf({ path: filePath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "8mm", right: "8mm" } });
+      await closeChromium(browser);
+      browser = undefined;
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      const stream = require('fs').createReadStream(filePath);
+      stream.pipe(res);
+      stream.on("end", () => require('fs').unlink(filePath, () => {}));
+    } catch (err: any) {
+      if (browser) { try { await closeChromium(browser); } catch { /* ignora */ } }
+      console.error("[GET /api/empresas/:id/relatorio-tecnico/pdf]", err);
+      res.status(500).json({ error: "Erro ao gerar PDF do relatório técnico", detail: err?.message });
     }
   });
 

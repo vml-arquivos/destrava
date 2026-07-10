@@ -11,6 +11,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
 import PropostaBancaria from "./PropostaBancaria";
+import RelatorioTecnico from "./RelatorioTecnico";
 import {
   Building2, Users, FileText, AlertTriangle, CheckCircle2,
   TrendingUp, ShieldCheck, ShieldAlert, ShieldX, ShieldOff,
@@ -782,6 +783,9 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
           </ol>
         </div>
       )}
+
+      {/* ── Relatório Técnico Premium ── */}
+      <RelatorioTecnico empresaId={empresaId} onNavegar={onNavegar} />
 
       {/* ── Proposta Bancária Inteligente ── */}
       <PropostaBancaria empresaId={empresaId} onNavegar={onNavegar} />
