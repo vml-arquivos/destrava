@@ -12,6 +12,7 @@ import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
 import PropostaBancaria from "./PropostaBancaria";
 import RelatorioTecnico from "./RelatorioTecnico";
+import PlanoAcaoMotor from "./PlanoAcaoMotor";
 import {
   Building2, Users, FileText, AlertTriangle, CheckCircle2,
   TrendingUp, ShieldCheck, ShieldAlert, ShieldX, ShieldOff,
@@ -783,6 +784,9 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
           </ol>
         </div>
       )}
+
+      {/* ── Motor de Pendências e Plano de Ação ── */}
+      <PlanoAcaoMotor empresaId={empresaId} onNavegar={onNavegar} />
 
       {/* ── Relatório Técnico Premium ── */}
       <RelatorioTecnico empresaId={empresaId} onNavegar={onNavegar} />

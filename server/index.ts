@@ -37,6 +37,7 @@ import { getDataDir, resolveDocumentPath } from "./services/documentStorage";
 import { calcularInteligencia360 } from "./services/inteligencia360Service";
 import { calcularPropostaBancaria } from "./services/propostaBancariaService";
 import { gerarRelatorioTecnico } from "./services/relatorioTecnicoEmpresaService";
+import { calcularPendencias } from "./services/pendenciasEmpresaService";
 
 const { Pool } = pkg;
 
@@ -4856,6 +4857,64 @@ async function startServer() {
             if (browser) { try { await closeChromium(browser); } catch { /* ignora */ } }
       console.error("[GET /api/empresas/:id/proposta-bancaria/pdf]", err);
       res.status(500).json({ error: "Erro ao gerar PDF da proposta bancária", detail: err?.message });
+    }
+  });
+
+  // ─── GET /api/empresas/:id/pendencias ─────────────────────────────
+  // Rota FIXA — deve ficar ANTES de /api/empresas/:id.
+  // Retorna JSON com todas as pendências calculadas em tempo real.
+  app.get("/api/empresas/:id/pendencias", auth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
+      const empresaId = req.params.id;
+
+      const { rows: empresaRows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [empresaId]);
+      if (empresaRows.length === 0) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
+      const empresa = empresaRows[0];
+
+      let socios: any[] = [];
+      try { const { rows } = await pool.query("SELECT * FROM socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true ORDER BY created_at ASC", [empresaId]); socios = Array.isArray(rows) ? rows : []; } catch { socios = []; }
+
+      let documentos: any[] = [];
+      try { const { rows } = await pool.query(`SELECT id, tipo, nome_arquivo, arquivo_path, status, origem, created_at FROM documentos_arquivos WHERE entidade_tipo = 'empresa' AND entidade_id = $1 AND COALESCE(status,'ativo') NOT IN ('excluido') ORDER BY created_at DESC`, [empresaId]); documentos = Array.isArray(rows) ? rows : []; } catch { documentos = []; }
+
+      let simulacoes: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, produto, valor_solicitado, prazo_meses, status FROM simulacoes_colaborador WHERE empresa_id = $1 ORDER BY criado_em DESC", [empresaId]); simulacoes = Array.isArray(rows) ? rows : []; } catch { simulacoes = []; }
+
+      let orcamentos: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, descricao, valor_total, status FROM orcamentos WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 10", [empresaId]); orcamentos = Array.isArray(rows) ? rows : []; } catch { orcamentos = []; }
+
+      let contratos: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, numero_contrato, tipo_contrato, status, valor_contrato, data_assinatura, data_vencimento FROM contratos_gerados WHERE empresa_id = $1 ORDER BY created_at DESC", [empresaId]); contratos = Array.isArray(rows) ? rows : []; } catch { contratos = []; }
+
+      let historico: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, tipo, descricao, created_at FROM empresa_historico WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 30", [empresaId]); historico = Array.isArray(rows) ? rows : []; } catch { historico = []; }
+
+      let followups: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, tipo, descricao, created_at FROM followup_empresa WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 30", [empresaId]); followups = Array.isArray(rows) ? rows : []; } catch { followups = []; }
+
+      const resultado = calcularPendencias({
+        empresa, socios, documentos, simulacoes, orcamentos, contratos, historico, followups,
+      });
+
+      res.json(resultado);
+    } catch (err) {
+      console.error("[GET /api/empresas/:id/pendencias]", err);
+      res.status(500).json({
+        error: "Erro ao calcular pendências",
+        empresa_id: req.params.id,
+        total: 0,
+        altas: 0,
+        medias: 0,
+        baixas: 0,
+        resolvidas: 0,
+        score_completude: 0,
+        status_geral: "critico",
+        grupos: [],
+        plano_acao: [],
+        resumo: "Erro ao carregar dados da empresa.",
+        calculado_em: new Date().toISOString(),
+      });
     }
   });
 
