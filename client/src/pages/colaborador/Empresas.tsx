@@ -735,36 +735,36 @@ function EmpresaDadosWorkspace({
   };
 
   return (
-    <div className="p-3 sm:p-4 fade-in">
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm lg:h-[calc(100vh-270px)] lg:min-h-[610px]">
-        <div className="grid h-full min-h-[610px] grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <aside className="border-b border-slate-200 bg-slate-50/70 lg:border-b-0 lg:border-r min-h-0">
-            <div className="border-b border-slate-200 bg-white px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">Central de informações</p>
-              <h3 className="mt-1 text-lg font-black text-slate-900 truncate">Dados da empresa</h3>
-              <div className="mt-2 flex flex-wrap gap-1.5">
+    <div className="p-2 sm:p-3 fade-in">
+      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="grid min-h-[520px] grid-cols-1 lg:grid-cols-[270px_minmax(0,1fr)] xl:grid-cols-[290px_minmax(0,1fr)]">
+          <aside className="border-b border-slate-200 bg-slate-50/70 lg:border-b-0 lg:border-r">
+            <div className="border-b border-slate-200 bg-white px-3 py-2.5">
+              <p className="text-[9px] font-black uppercase tracking-[0.22em] text-blue-600">Central de informações</p>
+              <h3 className="mt-0.5 text-base font-black text-slate-900 truncate">Dados da empresa</h3>
+              <div className="mt-1.5 flex flex-wrap gap-1">
                 <DetailChip label="Docs" value={documentosTotal} tone="blue" />
                 <DetailChip label="Sócios" value={socios.length} tone="emerald" />
                 <DetailChip label="Score" value={score} tone={risco === "baixo" ? "emerald" : risco === "medio" ? "amber" : "rose"} />
               </div>
             </div>
-            <div className="max-h-[260px] overflow-y-auto p-3 lg:max-h-none lg:h-[calc(100%-96px)]">
-              <div className="space-y-1.5">
+            <div className="p-2.5">
+              <div className="space-y-1">
                 {paineis.map((painel) => (
                   <button
                     key={painel.id}
                     type="button"
                     onClick={() => setPainelAtivo(painel.id)}
-                    className={`w-full rounded-2xl border p-3 text-left transition-all ${painelAtivo === painel.id ? "border-blue-300 bg-blue-50 shadow-sm" : "border-transparent bg-white hover:border-slate-200 hover:bg-white"}`}
+                    className={`w-full rounded-xl border px-2.5 py-2 text-left transition-all ${painelAtivo === painel.id ? "border-blue-300 bg-blue-50 shadow-sm" : "border-transparent bg-white hover:border-slate-200 hover:bg-white"}`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${painelAtivo === painel.id ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{painel.icon}</div>
+                      <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${painelAtivo === painel.id ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{painel.icon}</div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-black text-slate-900 truncate">{painel.label}</p>
+                          <p className="text-[13px] font-black text-slate-900 truncate">{painel.label}</p>
                           {painel.badge && <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500 max-w-[86px] truncate">{painel.badge}</span>}
                         </div>
-                        <p className="mt-0.5 text-xs font-medium text-slate-400 truncate">{painel.description}</p>
+                        <p className="mt-0.5 text-[11px] font-medium text-slate-400 truncate">{painel.description}</p>
                       </div>
                     </div>
                   </button>
@@ -773,12 +773,12 @@ function EmpresaDadosWorkspace({
             </div>
           </aside>
 
-          <section className="min-w-0 min-h-0 flex flex-col bg-white">
-            <div className="border-b border-slate-200 px-4 py-3 shrink-0">
+          <section className="min-w-0 bg-white">
+            <div className="border-b border-slate-200 px-3 sm:px-4 py-2.5">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="min-w-0">
                   <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Visualização</p>
-                  <h3 className="text-xl font-black text-slate-900 truncate">{painelSelecionado.label}</h3>
+                  <h3 className="text-lg font-black text-slate-900 truncate">{painelSelecionado.label}</h3>
                   <p className="text-sm text-slate-500 truncate">{painelSelecionado.description}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -787,7 +787,7 @@ function EmpresaDadosWorkspace({
                 </div>
               </div>
             </div>
-            <div className="flex-1 min-h-0 overflow-y-auto p-4">
+            <div className="p-3 sm:p-4">
               {renderPainel()}
             </div>
           </section>
@@ -1594,11 +1594,11 @@ export default function Empresas() {
         .emp-tab-btn { transition: all 0.15s ease; }
       `}</style>
 
-      <div className="emp-page h-full min-h-0 overflow-hidden bg-[#f8f9fc]">
+      <div className="emp-page min-h-screen overflow-x-hidden bg-[#f8f9fc]">
 
         {/* ── Layout principal em tela cheia útil ── */}
-        <div className="max-w-none w-full h-full min-h-0 px-3 sm:px-4 py-2 overflow-hidden">
-          <div className="flex flex-col gap-3 h-full min-h-0">
+        <div className="max-w-none w-full px-3 sm:px-4 py-2">
+          <div className="flex flex-col gap-3 min-h-0">
 
             {/* ── BARRA SUPERIOR: seletor de empresa com busca ── */}
             <div className={`shrink-0 rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm ${showDetail ? "hidden sm:block" : ""}`}>
@@ -1736,7 +1736,7 @@ export default function Empresas() {
 
 
             {/* ── Detalhe ── */}
-            <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
+            <div className="flex-1 min-w-0">
               {!selecionada ? (
                 <div className="flex flex-col items-center justify-center h-full min-h-[420px] gap-4 rounded-2xl border-2 border-dashed border-slate-200 bg-white">
                   <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
@@ -1748,7 +1748,7 @@ export default function Empresas() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden slide-up h-full min-h-0 flex flex-col min-w-0">
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden slide-up flex flex-col min-w-0">
 
                   {/* ── Header detalhe ── */}
                   <div className="px-3 sm:px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
@@ -1967,7 +1967,7 @@ export default function Empresas() {
                   </div>
 
                   {/* ── Conteúdo das abas ── */}
-                  <div className="scroll-area overflow-y-auto overscroll-contain flex-1 min-h-0" style={{ minHeight: 0 }}>
+                  <div className="min-w-0">
                     {loadingDetalhe ? (
                       <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
                     ) : (
