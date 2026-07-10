@@ -4990,8 +4990,10 @@ async function startServer() {
   // ─── GET /api/empresas/:id/pendencias/nexus-status ──────────────
   // Rota FIXA — deve ficar ANTES de /api/empresas/:id.
   // Retorna o status da configuração da integração Nexus/n8n.
+  // Sprint 8: adicionado requireEmpresaAccess.
   app.get("/api/empresas/:id/pendencias/nexus-status", auth, async (req: Request, res: Response) => {
     try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
       const config = verificarConfiguracaoNexus();
       res.json({
         empresa_id: req.params.id,
@@ -5006,128 +5008,144 @@ async function startServer() {
 
   // ─── POST /api/empresas/:id/pendencias/enviar-nexus ───────────────
   // Rota FIXA — deve ficar ANTES de /api/empresas/:id.
-  // Envia uma pendência como tarefa para o Nexus ou n8n.
-  // Exige confirmação explícita do usuário (campo confirmed: true no body).
-  // Implementa idempotência via idempotencyKey.
+  // Sprint 8 — Hardening: o frontend envia apenas { confirmed: true, pendenciaId }.
+  // O backend busca a empresa real, recalcula as pendências e monta o payload oficial.
+  // Não aceita cnpj, razão social, título ou descrição vindos do frontend.
   app.post("/api/empresas/:id/pendencias/enviar-nexus", auth, async (req: Request, res: Response) => {
     try {
       if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
 
       const body = req.body || {};
+      const empresaId = req.params.id;
 
-      // Exige confirmação explícita do usuário
+      // 1. Exige confirmação explícita do usuário
       if (!body.confirmed) {
         res.status(400).json({
           error: "Confirmação obrigatória",
-          mensagem:
-            "Esta ação requer confirmação explícita. Envie confirmed: true no body para prosseguir.",
+          mensagem: "Esta ação requer confirmação explícita. Envie confirmed: true no body para prosseguir.",
         });
         return;
       }
 
-      // Verificar se a integração está configurada antes de qualquer coisa
+      // 2. Exige pendenciaId
+      const pendenciaId = String(body.pendenciaId || "").trim();
+      if (!pendenciaId) {
+        res.status(400).json({
+          error: "pendenciaId obrigatório",
+          mensagem: "Informe o pendenciaId da pendência a ser enviada.",
+        });
+        return;
+      }
+
+      // 3. Verificar se a integração está configurada
       const config = verificarConfiguracaoNexus();
       if (!config.algumConfigurado) {
         res.status(503).json({
           error: "Integração não configurada",
           mensagem: config.mensagemStatus,
-          detalhe:
-            "Configure NEXUS_WEBHOOK_URL ou N8N_WEBHOOK_URL nas variáveis de ambiente do servidor.",
+          detalhe: "Configure NEXUS_WEBHOOK_URL ou N8N_WEBHOOK_URL nas variáveis de ambiente do servidor.",
         });
         return;
       }
 
-      // Construir payload a partir do body + empresaId da rota
+      // 4. Buscar empresa real no banco (fonte da verdade)
+      const { rows: empresaRows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [empresaId]);
+      if (empresaRows.length === 0) {
+        res.status(404).json({ error: "Empresa não encontrada", mensagem: "A empresa informada não existe ou você não tem acesso." });
+        return;
+      }
+      const empresa = empresaRows[0];
+
+      // 5. Recalcular pendências usando pendenciasEmpresaService (fonte da verdade)
+      let socios: any[] = [];
+      try { const { rows } = await pool.query("SELECT * FROM socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true", [empresaId]); socios = Array.isArray(rows) ? rows : []; } catch { socios = []; }
+      let documentos: any[] = [];
+      try { const { rows } = await pool.query(`SELECT id, tipo, nome_arquivo, status FROM documentos_arquivos WHERE entidade_tipo = 'empresa' AND entidade_id = $1 AND COALESCE(status,'ativo') NOT IN ('excluido')`, [empresaId]); documentos = Array.isArray(rows) ? rows : []; } catch { documentos = []; }
+      let simulacoes: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, produto, valor_solicitado, status FROM simulacoes_colaborador WHERE empresa_id = $1 ORDER BY criado_em DESC LIMIT 10", [empresaId]); simulacoes = Array.isArray(rows) ? rows : []; } catch { simulacoes = []; }
+      let orcamentos: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, descricao, valor_total, status FROM orcamentos WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 5", [empresaId]); orcamentos = Array.isArray(rows) ? rows : []; } catch { orcamentos = []; }
+      let contratos: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, numero_contrato, tipo_contrato, status FROM contratos_gerados WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 5", [empresaId]); contratos = Array.isArray(rows) ? rows : []; } catch { contratos = []; }
+      let historico: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, tipo, descricao, created_at FROM empresa_historico WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 20", [empresaId]); historico = Array.isArray(rows) ? rows : []; } catch { historico = []; }
+      let followups: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, tipo, descricao, created_at FROM followup_empresa WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 20", [empresaId]); followups = Array.isArray(rows) ? rows : []; } catch { followups = []; }
+
+      const resultadoPendencias = calcularPendencias({ empresa, socios, documentos, simulacoes, orcamentos, contratos, historico, followups });
+      const todasPendencias = (resultadoPendencias.grupos || []).flatMap((g: any) => Array.isArray(g.pendencias) ? g.pendencias : []);
+
+      // 6. Localizar a pendência pelo pendenciaId (fonte da verdade)
+      const pendenciaEncontrada = todasPendencias.find((p: any) => p.id === pendenciaId);
+      if (!pendenciaEncontrada) {
+        res.status(404).json({
+          error: "Pendência não encontrada",
+          mensagem: `A pendência '${pendenciaId}' não foi encontrada nos dados atuais da empresa. Ela pode já ter sido resolvida.`,
+        });
+        return;
+      }
+
+      // 7. Montar payload oficial com dados do banco (nunca do frontend)
       const payload: PayloadNexus = {
-        empresaId: req.params.id,
-        cnpj: String(body.cnpj || "").trim() || null,
-        razaoSocial: String(body.razaoSocial || "").trim(),
-        pendenciaId: String(body.pendenciaId || "").trim(),
-        prioridade: body.prioridade || "media",
-        categoria: String(body.categoria || "").trim(),
-        titulo: String(body.titulo || "").trim(),
-        descricao: String(body.descricao || "").trim(),
-        moduloOrigem: String(body.moduloOrigem || "inteligencia_360").trim(),
-        acaoRecomendada: String(body.acaoRecomendada || "").trim(),
-        idempotencyKey:
-          String(body.idempotencyKey || "").trim() ||
-          gerarIdempotencyKey(req.params.id, String(body.pendenciaId || "")),
+        empresaId,
+        cnpj: empresa.cnpj ? String(empresa.cnpj).replace(/\D/g, "") || null : null,
+        razaoSocial: String(empresa.razao_social || "").trim() || "Empresa sem razão social",
+        pendenciaId,
+        prioridade: pendenciaEncontrada.prioridade || "media",
+        categoria: pendenciaEncontrada.categoria || "geral",
+        titulo: pendenciaEncontrada.titulo || "Pendência sem título",
+        descricao: pendenciaEncontrada.descricao || pendenciaEncontrada.impacto || "",
+        moduloOrigem: pendenciaEncontrada.modulo || "inteligencia_360",
+        acaoRecomendada: pendenciaEncontrada.acao_recomendada || pendenciaEncontrada.acaoRecomendada || "",
+        idempotencyKey: gerarIdempotencyKey(empresaId, pendenciaId),
       };
 
-      // Validar payload
-      const erros = validarPayloadNexus(payload);
-      if (erros.length > 0) {
-        res.status(400).json({
-          error: "Dados inválidos",
-          erros,
-          mensagem: `Corrija os campos: ${erros.map((e) => e.campo).join(", ")}.`,
-        });
-        return;
-      }
-
-      // Verificar duplicata no banco (tabela nexus_tarefas_enviadas se existir)
+      // 8. Verificar duplicata no banco
       const verificarDuplicataExterna = async (key: string): Promise<boolean> => {
         try {
-          const { rows } = await pool.query(
-            `SELECT 1 FROM nexus_tarefas_enviadas WHERE idempotency_key = $1 LIMIT 1`,
-            [key]
-          );
+          const { rows } = await pool.query(`SELECT 1 FROM nexus_tarefas_enviadas WHERE idempotency_key = $1 LIMIT 1`, [key]);
           return rows.length > 0;
-        } catch {
-          // Tabela pode não existir — não bloqueia o envio
-          return false;
-        }
+        } catch { return false; }
       };
 
-      // Enviar para Nexus/n8n
+      // 9. Enviar para Nexus/n8n
       const resultado = await enviarPendenciaNexus(payload, verificarDuplicataExterna);
 
-      // Se enviou com sucesso, registrar no banco para idempotência persistente
+      // 10. Registrar no banco e no histórico se enviou com sucesso
       if (resultado.sucesso && !resultado.jaEnviado) {
         try {
           await pool.query(
             `INSERT INTO nexus_tarefas_enviadas
-               (idempotency_key, empresa_id, pendencia_id, titulo, categoria, prioridade, destino, enviado_em)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+               (idempotency_key, empresa_id, pendencia_id, titulo, categoria, prioridade, destino, status, resposta_webhook, enviado_em)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'enviado', $8, NOW())
              ON CONFLICT (idempotency_key) DO NOTHING`,
             [
               resultado.idempotencyKey,
-              req.params.id,
-              payload.pendenciaId,
+              empresaId,
+              pendenciaId,
               payload.titulo,
               payload.categoria,
               payload.prioridade,
               resultado.destino || "nexus",
+              JSON.stringify({ mensagem: resultado.mensagem, timestamp: resultado.timestamp }),
             ]
           );
-        } catch {
-          // Tabela pode não existir — não bloqueia o retorno de sucesso
-          // A idempotência em memória já foi registrada pelo serviço
-        }
-
-        // Registrar no histórico da empresa
+        } catch { /* tabela pode não existir ainda — idempotência em memória já registrada */ }
         try {
           await pool.query(
-            `INSERT INTO empresa_historico (empresa_id, tipo, descricao, autor)
-             VALUES ($1, 'nexus', $2, 'Sistema — Integração Nexus')`,
-            [
-              req.params.id,
-              `Tarefa criada no ${resultado.destino === "n8n" ? "n8n" : "Nexus"}: ${payload.titulo} (${payload.categoria} — ${payload.prioridade})`,
-            ]
+            `INSERT INTO empresa_historico (empresa_id, tipo, descricao, autor) VALUES ($1, 'nexus', $2, 'Sistema — Integração Nexus')`,
+            [empresaId, `Tarefa criada no ${resultado.destino === "n8n" ? "n8n" : "Nexus"}: ${payload.titulo} (${payload.categoria} — ${payload.prioridade})`]
           );
-        } catch {
-          // Não bloqueia o retorno de sucesso
-        }
+        } catch { /* não bloqueia */ }
       }
 
-      const statusCode = resultado.sucesso ? 200 : resultado.jaEnviado ? 200 : 502;
+      const statusCode = resultado.sucesso || resultado.jaEnviado ? 200 : 502;
       res.status(statusCode).json(resultado);
     } catch (err: any) {
       console.error("[POST /api/empresas/:id/pendencias/enviar-nexus]", err);
       res.status(500).json({
         error: "Erro interno ao enviar tarefa para o Nexus",
-        mensagem:
-          "Ocorreu um erro inesperado. Tente novamente ou entre em contato com o suporte.",
+        mensagem: "Ocorreu um erro inesperado. Tente novamente ou entre em contato com o suporte.",
       });
     }
   });

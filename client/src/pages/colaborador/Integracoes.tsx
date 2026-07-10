@@ -372,6 +372,118 @@ export default function Integracoes() {
           </div>
         </div>
 
+        {/* Painel Nexus/n8n — Inteligência 360 */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
+              <Zap className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h2 className="font-bold text-slate-900">Nexus/n8n — Tarefas de Pendências (Inteligência 360)</h2>
+              <p className="text-xs text-slate-500">Integração para criar tarefas no Nexus ou n8n a partir de pendências críticas da empresa</p>
+            </div>
+          </div>
+
+          {/* Status das variáveis */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {[
+              {
+                label: "NEXUS_WEBHOOK_URL",
+                descricao: "URL do webhook do Nexus (prioridade)",
+                status: "Configure no servidor para ativar",
+                cor: "amber",
+              },
+              {
+                label: "NEXUS_API_TOKEN",
+                descricao: "Token Bearer para autenticar no Nexus",
+                status: "Opcional — recomendado para produção",
+                cor: "slate",
+              },
+              {
+                label: "N8N_WEBHOOK_URL",
+                descricao: "Fallback: n8n recebe se Nexus não estiver configurado",
+                status: status?.configured ? "Configurada" : "Não configurada",
+                cor: status?.configured ? "emerald" : "slate",
+              },
+            ].map(v => (
+              <div key={v.label} className={`rounded-xl border p-3 ${
+                v.cor === "emerald" ? "bg-emerald-50 border-emerald-200" :
+                v.cor === "amber" ? "bg-amber-50 border-amber-200" :
+                "bg-slate-50 border-slate-200"
+              }`}>
+                <code className={`text-[11px] font-bold block mb-1 ${
+                  v.cor === "emerald" ? "text-emerald-700" :
+                  v.cor === "amber" ? "text-amber-700" :
+                  "text-slate-600"
+                }`}>{v.label}</code>
+                <p className="text-[11px] text-slate-600">{v.descricao}</p>
+                <p className={`text-[11px] font-semibold mt-1 ${
+                  v.cor === "emerald" ? "text-emerald-700" :
+                  v.cor === "amber" ? "text-amber-600" :
+                  "text-slate-500"
+                }`}>{v.status}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Como funciona */}
+          <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-2">
+            <p className="text-xs font-bold text-slate-700">Como funciona</p>
+            <div className="space-y-1.5 text-xs text-slate-600">
+              <p>1. Na aba <strong>Inteligência 360</strong> de qualquer empresa, o usuário visualiza as pendências críticas calculadas em tempo real.</p>
+              <p>2. Ao clicar em <strong>"Criar tarefa no Nexus"</strong>, um modal de confirmação exibe os detalhes da pendência.</p>
+              <p>3. Após confirmar, o backend busca os dados reais da empresa, recalcula as pendências e monta o payload oficial.</p>
+              <p>4. O payload é enviado para <code className="bg-slate-200 px-1 rounded">NEXUS_WEBHOOK_URL</code> (ou <code className="bg-slate-200 px-1 rounded">N8N_WEBHOOK_URL</code> como fallback).</p>
+              <p>5. A tarefa é registrada com <strong>idempotência dupla</strong> (memória + banco) para evitar duplicatas.</p>
+            </div>
+          </div>
+
+          {/* Payload de exemplo */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-slate-500 uppercase">Exemplo de Payload enviado ao Nexus/n8n</p>
+              <button
+                onClick={() => copiar(JSON.stringify({
+                  evento: "tarefa_nexus",
+                  timestamp: new Date().toISOString(),
+                  empresaId: "123",
+                  cnpj: "12345678000195",
+                  razaoSocial: "Empresa Exemplo Ltda",
+                  pendenciaId: "doc_contrato_social",
+                  prioridade: "alta",
+                  categoria: "documental",
+                  titulo: "Contrato Social não enviado",
+                  descricao: "O Contrato Social é obrigatório para análise de crédito.",
+                  moduloOrigem: "inteligencia_360",
+                  acaoRecomendada: "Solicitar Contrato Social ao cliente",
+                  idempotencyKey: "destrava_123_doc_contrato_social_2026-07-10",
+                  _meta: { versao: "v2", fonte: "destrava_credito", sprint: "8" },
+                }, null, 2), "nexus-payload")}
+                className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
+              >
+                {copiado === "nexus-payload" ? <CheckCircle className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                {copiado === "nexus-payload" ? "Copiado!" : "Copiar"}
+              </button>
+            </div>
+            <pre className="bg-gray-900 text-green-400 text-xs p-4 rounded-lg overflow-x-auto font-mono leading-relaxed">{JSON.stringify({
+              evento: "tarefa_nexus",
+              timestamp: "2026-07-10T10:30:00.000Z",
+              empresaId: "123",
+              cnpj: "12345678000195",
+              razaoSocial: "Empresa Exemplo Ltda",
+              pendenciaId: "doc_contrato_social",
+              prioridade: "alta",
+              categoria: "documental",
+              titulo: "Contrato Social não enviado",
+              descricao: "O Contrato Social é obrigatório para análise de crédito.",
+              moduloOrigem: "inteligencia_360",
+              acaoRecomendada: "Solicitar Contrato Social ao cliente",
+              idempotencyKey: "destrava_123_doc_contrato_social_2026-07-10",
+              _meta: { versao: "v2", fonte: "destrava_credito", sprint: "8" },
+            }, null, 2)}</pre>
+          </div>
+        </div>
+
         {/* Dicas de uso no n8n */}
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
           <h3 className="font-bold text-blue-900 flex items-center gap-2 mb-3">

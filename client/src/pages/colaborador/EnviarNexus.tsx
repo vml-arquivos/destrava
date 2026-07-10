@@ -3,11 +3,10 @@
  *
  * Componente de integração Nexus/n8n para envio de pendências como tarefas.
  *
- * REGRAS:
- * - Exige confirmação explícita do usuário antes de enviar.
- * - Não envia se a integração não estiver configurada.
- * - Não cria tarefas duplicadas (idempotência por idempotencyKey).
- * - Exibe mensagem amigável se variáveis de ambiente estiverem ausentes.
+ * Sprint 8 — Hardening:
+ * - O frontend envia APENAS { confirmed: true, pendenciaId }.
+ * - O backend busca a empresa real, recalcula as pendências e monta o payload oficial.
+ * - cnpj, razão social, título, descrição e categoria NÃO são mais enviados pelo frontend.
  * - ZERO REGRESSÃO — não altera dados existentes.
  */
 
@@ -50,8 +49,9 @@ interface ResultadoEnvio {
 
 interface Props {
   empresaId: string;
+  /** cnpj e razaoSocial não são mais usados no payload (Sprint 8 hardening). */
   cnpj?: string | null;
-  razaoSocial: string;
+  razaoSocial?: string;
   pendencias: PendenciaNexus[];
   /** Callback chamado após envio bem-sucedido */
   onEnviado?: (pendenciaId: string, resultado: ResultadoEnvio) => void;
@@ -65,9 +65,9 @@ const PRIORIDADE_CFG: Record<string, { label: string; color: string; bg: string 
   baixa: { label: "Baixa", color: "text-slate-600", bg: "bg-slate-50 border-slate-200" },
 };
 
-function gerarIdempotencyKey(empresaId: string, pendenciaId: string): string {
-  const data = new Date().toISOString().slice(0, 10);
-  return `destrava_${empresaId}_${pendenciaId}_${data}`;
+// Sprint 8: idempotencyKey gerada server-side. Função mantida apenas para compatibilidade.
+function gerarIdempotencyKey(_empresaId: string, _pendenciaId: string): string {
+  return "";
 }
 
 // ─── Sub-componente: Status da integração ─────────────────────────────────────
@@ -102,7 +102,7 @@ function StatusIntegracao({ config }: { config: ConfiguracaoNexus | null }) {
 
 interface ModalConfirmacaoProps {
   pendencia: PendenciaNexus;
-  razaoSocial: string;
+  razaoSocial?: string;
   destino: string;
   onConfirmar: () => void;
   onCancelar: () => void;
@@ -110,7 +110,7 @@ interface ModalConfirmacaoProps {
 }
 
 function ModalConfirmacao({
-  pendencia, razaoSocial, destino, onConfirmar, onCancelar, enviando,
+  pendencia, razaoSocial = "Empresa", destino, onConfirmar, onCancelar, enviando,
 }: ModalConfirmacaoProps) {
   const priorCfg = PRIORIDADE_CFG[pendencia.prioridade] ?? PRIORIDADE_CFG.media;
   const destinoLabel = destino === "nexus" ? "Nexus" : destino === "n8n" ? "n8n" : "Nexus/n8n";
@@ -201,7 +201,7 @@ function ModalConfirmacao({
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function EnviarNexus({ empresaId, cnpj, razaoSocial, pendencias, onEnviado }: Props) {
+export default function EnviarNexus({ empresaId, pendencias, onEnviado }: Props) {
   const [config, setConfig] = useState<ConfiguracaoNexus | null>(null);
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [pendenciaSelecionada, setPendenciaSelecionada] = useState<PendenciaNexus | null>(null);
@@ -237,24 +237,15 @@ export default function EnviarNexus({ empresaId, cnpj, razaoSocial, pendencias, 
 
     setEnviando(true);
     try {
-      const idempotencyKey = gerarIdempotencyKey(empresaId, pendenciaSelecionada.pendenciaId);
-
+      // Sprint 8: enviar apenas confirmed + pendenciaId.
+      // O backend busca a empresa real e monta o payload oficial.
       const resultado: ResultadoEnvio = await apiFetch(
         `/api/empresas/${empresaId}/pendencias/enviar-nexus`,
         {
           method: "POST",
           body: JSON.stringify({
             confirmed: true,
-            cnpj: cnpj ?? null,
-            razaoSocial,
             pendenciaId: pendenciaSelecionada.pendenciaId,
-            prioridade: pendenciaSelecionada.prioridade,
-            categoria: pendenciaSelecionada.categoria,
-            titulo: pendenciaSelecionada.titulo,
-            descricao: pendenciaSelecionada.descricao,
-            moduloOrigem: pendenciaSelecionada.moduloOrigem,
-            acaoRecomendada: pendenciaSelecionada.acaoRecomendada,
-            idempotencyKey,
           }),
         }
       );
@@ -318,7 +309,6 @@ export default function EnviarNexus({ empresaId, cnpj, razaoSocial, pendencias, 
       {pendenciaSelecionada && (
         <ModalConfirmacao
           pendencia={pendenciaSelecionada}
-          razaoSocial={razaoSocial}
           destino={config?.destino || "nexus"}
           onConfirmar={confirmarEnvio}
           onCancelar={() => setPendenciaSelecionada(null)}

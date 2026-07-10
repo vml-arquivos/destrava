@@ -506,10 +506,9 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
         {/* ── Integração Nexus/n8n ── */}
         {data.total > 0 && (
           <div id={`nexus-block-${empresaId}`}>
+            {/* Sprint 8: EnviarNexus envia apenas confirmed+pendenciaId. Backend monta o payload. */}
             <EnviarNexus
               empresaId={empresaId}
-              cnpj={null}
-              razaoSocial={empresaId}
               pendencias={todasPendencias
                 .filter(p => p.prioridade === "alta" || p.prioridade === "media")
                 .map(p => ({
