@@ -277,10 +277,10 @@ export default function AssessoriaIA() {
                   {/* ── Cards de resumo ── */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
-                      { label: "Impedimentos", valor: analise.pontos_impeditivos.length, cor: "text-red-600", bg: "bg-red-50", icon: XCircle },
+                      { label: "Impedimentos", valor: (Array.isArray(analise.pontos_impeditivos) ? analise.pontos_impeditivos : []).length, cor: "text-red-600", bg: "bg-red-50", icon: XCircle },
                       { label: "Alertas críticos", valor: alertasCriticos.length, cor: "text-orange-600", bg: "bg-orange-50", icon: AlertTriangle },
                       { label: "Atenções", valor: alertasMedia.length + alertasBaixa.length, cor: "text-amber-600", bg: "bg-amber-50", icon: BadgeAlert },
-                      { label: "Pontos positivos", valor: analise.pontos_positivos.length, cor: "text-emerald-600", bg: "bg-emerald-50", icon: CheckCircle2 },
+                      { label: "Pontos positivos", valor: (Array.isArray(analise.pontos_positivos) ? analise.pontos_positivos : []).length, cor: "text-emerald-600", bg: "bg-emerald-50", icon: CheckCircle2 },
                     ].map(({ label, valor, cor, bg, icon: Icon }) => (
                       <div key={label} className={`rounded-2xl border border-slate-100 ${bg} p-3 text-center`}>
                         <Icon className={`h-6 w-6 mx-auto mb-1 ${cor}`} />
@@ -297,10 +297,10 @@ export default function AssessoriaIA() {
                       titulo: "Impedimentos para crédito",
                       icon: XCircle,
                       corIcon: "text-red-600",
-                      hidden: analise.pontos_impeditivos.length === 0,
+                      hidden: (Array.isArray(analise.pontos_impeditivos) ? analise.pontos_impeditivos : []).length === 0,
                       conteudo: (
                         <ul className="space-y-2">
-                          {analise.pontos_impeditivos.map((p, i) => (
+                          {(Array.isArray(analise.pontos_impeditivos) ? analise.pontos_impeditivos : []).map((p, i) => (
                             <li key={i} className="flex items-start gap-2 text-sm text-red-800">
                               <XCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
                               {p}
@@ -311,13 +311,13 @@ export default function AssessoriaIA() {
                     },
                     {
                       id: "alertas",
-                      titulo: `Alertas identificados (${analise.alertas.length})`,
+                      titulo: `Alertas identificados (${(Array.isArray(analise.alertas) ? analise.alertas : []).length})`,
                       icon: AlertTriangle,
                       corIcon: "text-orange-600",
-                      hidden: analise.alertas.length === 0,
+                      hidden: (Array.isArray(analise.alertas) ? analise.alertas : []).length === 0,
                       conteudo: (
                         <div className="space-y-2">
-                          {analise.alertas.map((a, i) => {
+                          {(Array.isArray(analise.alertas) ? analise.alertas : []).map((a, i) => {
                             const sev = SEV_CONFIG[a.severidade] || SEV_CONFIG.baixa;
                             return (
                               <div key={i} className={`rounded-xl border p-3 ${sev.cor}`}>
@@ -339,13 +339,13 @@ export default function AssessoriaIA() {
                     },
                     {
                       id: "divergencias",
-                      titulo: `Divergências CNPJ vs Cartão (${analise.divergencias.length})`,
+                      titulo: `Divergências CNPJ vs Cartão (${(Array.isArray(analise.divergencias) ? analise.divergencias : []).length})`,
                       icon: FileWarning,
                       corIcon: "text-amber-600",
-                      hidden: analise.divergencias.length === 0,
+                      hidden: (Array.isArray(analise.divergencias) ? analise.divergencias : []).length === 0,
                       conteudo: (
                         <div className="space-y-2">
-                          {analise.divergencias.map((d, i) => (
+                          {(Array.isArray(analise.divergencias) ? analise.divergencias : []).map((d, i) => (
                             <div key={i} className="rounded-xl border border-amber-200 bg-amber-50 p-3">
                               <p className="text-xs font-bold text-amber-800">{d.label}</p>
                               <div className="mt-1.5 grid grid-cols-2 gap-2 text-[11px]">
@@ -368,10 +368,10 @@ export default function AssessoriaIA() {
                       titulo: "Plano de ação para aptidão",
                       icon: TrendingUp,
                       corIcon: "text-blue-600",
-                      hidden: analise.recomendacoes.length === 0,
+                      hidden: (Array.isArray(analise.recomendacoes) ? analise.recomendacoes : []).length === 0,
                       conteudo: (
                         <ol className="space-y-2">
-                          {analise.recomendacoes.map((r, i) => (
+                          {(Array.isArray(analise.recomendacoes) ? analise.recomendacoes : []).map((r, i) => (
                             <li key={i} className="flex items-start gap-3 text-sm text-slate-700">
                               <span className="h-5 w-5 rounded-full bg-blue-100 text-blue-700 font-black text-[11px] flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
                               {r}
@@ -382,13 +382,13 @@ export default function AssessoriaIA() {
                     },
                     {
                       id: "positivos",
-                      titulo: `Pontos positivos (${analise.pontos_positivos.length})`,
+                      titulo: `Pontos positivos (${(Array.isArray(analise.pontos_positivos) ? analise.pontos_positivos : []).length})`,
                       icon: CheckCircle2,
                       corIcon: "text-emerald-600",
-                      hidden: analise.pontos_positivos.length === 0,
+                      hidden: (Array.isArray(analise.pontos_positivos) ? analise.pontos_positivos : []).length === 0,
                       conteudo: (
                         <ul className="space-y-2">
-                          {analise.pontos_positivos.map((p, i) => (
+                          {(Array.isArray(analise.pontos_positivos) ? analise.pontos_positivos : []).map((p, i) => (
                             <li key={i} className="flex items-start gap-2 text-sm text-emerald-800">
                               <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
                               {p}

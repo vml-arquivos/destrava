@@ -34,6 +34,7 @@ import { loginInputSchema, leadInputSchema, validateBody } from "./lib/inputVali
 import { closeChromium, launchChromium } from "./services/chromiumLauncher";
 import { generateFollowupMessage, generateLeadRecommendations, generateLeadSummary, qualifyTriagemLead } from "./services/aiService";
 import { getDataDir, resolveDocumentPath } from "./services/documentStorage";
+import { calcularInteligencia360 } from "./services/inteligencia360Service";
 
 const { Pool } = pkg;
 
@@ -4454,6 +4455,156 @@ async function startServer() {
     }
   });
 
+
+  // ─── GET /api/empresas/:id/inteligencia-360 ──────────────────────────────────
+  // Rota FIXA — deve ficar ANTES de /api/empresas/:id para não ser capturada como ID.
+  // Consolida dados existentes em uma visão executiva 360 sem alterar nenhum dado.
+  app.get("/api/empresas/:id/inteligencia-360", auth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
+      const empresaId = req.params.id;
+
+      // Buscar empresa
+      const { rows: empresaRows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [empresaId]);
+      if (empresaRows.length === 0) {
+        res.status(404).json({ error: "Empresa não encontrada" });
+        return;
+      }
+      const empresa = empresaRows[0];
+
+      // Buscar sócios
+      let socios: any[] = [];
+      try {
+        const { rows: sociosRows } = await pool.query(
+          "SELECT * FROM socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true ORDER BY created_at ASC",
+          [empresaId]
+        );
+        socios = Array.isArray(sociosRows) ? sociosRows : [];
+      } catch { socios = []; }
+
+      // Buscar documentos (tabela documentos_arquivos)
+      let documentos: any[] = [];
+      try {
+        const { rows: docsRows } = await pool.query(
+          `SELECT id, tipo, nome_arquivo, arquivo_path, status, origem, created_at, updated_at
+           FROM documentos_arquivos
+           WHERE entidade_tipo = 'empresa' AND entidade_id = $1
+           AND COALESCE(status, 'ativo') NOT IN ('excluido')
+           ORDER BY created_at DESC`,
+          [empresaId]
+        );
+        documentos = Array.isArray(docsRows) ? docsRows : [];
+      } catch { documentos = []; }
+
+      // Buscar simulações
+      let simulacoes: any[] = [];
+      try {
+        const { rows: simsRows } = await pool.query(
+          `SELECT id, produto, valor_solicitado, prazo_meses, status, criado_em
+           FROM simulacoes_colaborador WHERE empresa_id = $1 ORDER BY criado_em DESC`,
+          [empresaId]
+        );
+        simulacoes = Array.isArray(simsRows) ? simsRows : [];
+      } catch { simulacoes = []; }
+
+      // Buscar contratos
+      let contratos: any[] = [];
+      try {
+        const { rows: contsRows } = await pool.query(
+          `SELECT id, numero_contrato, tipo_contrato, status, valor_contrato, data_assinatura, created_at
+           FROM contratos_gerados WHERE empresa_id = $1 ORDER BY created_at DESC`,
+          [empresaId]
+        );
+        contratos = Array.isArray(contsRows) ? contsRows : [];
+      } catch { contratos = []; }
+
+      // Buscar histórico
+      let historico: any[] = [];
+      try {
+        const { rows: histRows } = await pool.query(
+          `SELECT id, tipo, descricao, created_at FROM empresa_historico WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 50`,
+          [empresaId]
+        );
+        historico = Array.isArray(histRows) ? histRows : [];
+      } catch { historico = []; }
+
+      // Buscar followups
+      let followups: any[] = [];
+      try {
+        const { rows: followsRows } = await pool.query(
+          `SELECT id, tipo, titulo, concluido, created_at FROM empresa_followups WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 50`,
+          [empresaId]
+        );
+        followups = Array.isArray(followsRows) ? followsRows : [];
+      } catch { followups = []; }
+
+      // Calcular inteligência 360
+      const resultado = calcularInteligencia360({
+        empresa,
+        socios,
+        documentos,
+        simulacoes,
+        contratos,
+        historico,
+        followups,
+      });
+
+      res.json(resultado);
+    } catch (err) {
+      console.error("[GET /api/empresas/:id/inteligencia-360]", err);
+      res.status(500).json({
+        error: "Erro ao calcular inteligência 360",
+        // Fallback seguro — nunca deixar a tela quebrar
+        empresa_id: req.params.id,
+        razao_social: "Não informado",
+        cnpj: null,
+        saude_cadastral: "critico",
+        saude_documental: "critico",
+        risco_documental: "critico",
+        risco_credito: "critico",
+        prontidao_contrato: "inapto",
+        prontidao_proposta_bancaria: "insuficiente",
+        score_destrava: 0,
+        score_serasa: null,
+        score_spc: null,
+        score_interno: null,
+        situacao_cadastral: "Não informado",
+        regime_tributario: null,
+        porte: null,
+        capital_social: null,
+        data_abertura: null,
+        cnae_principal: null,
+        segmento: null,
+        dados_receita: { sincronizado: false, ultima_sincronizacao: null, situacao: null, data_situacao: null, motivo_situacao: null, matriz_filial: null, natureza_juridica: null },
+        socios: [],
+        socios_com_cpf: 0,
+        socios_sem_cpf: 0,
+        socios_com_pendencias: 0,
+        documentos: [],
+        documentos_com_arquivo: 0,
+        documentos_sem_arquivo: 0,
+        documentos_validados: 0,
+        documentos_pendentes_validacao: 0,
+        pendencias: [],
+        pendencias_contrato: [],
+        pendencias_credito: [],
+        pendencias_faturamento: [],
+        pendencias_cadastrais: [],
+        simulacoes: [],
+        contratos: [],
+        faturamento: null,
+        historico_count: 0,
+        followups_abertos: 0,
+        proposta_preliminar: { empresa: "Não informado", cnpj: null, segmento: null, cnae: null, capital_social: null, faturamento: null, score_interno: null, documentos_disponiveis: 0, pendencias_count: 0, valor_sugerido: null, observacao: "Erro ao carregar dados.", apto_para_proposta: false },
+        recomendacoes: [],
+        proximas_acoes: [],
+        diagnostico_geral: "Erro ao carregar dados da empresa.",
+        caminho_sugerido: "Tente novamente ou contate o suporte.",
+        gerado_em: new Date().toISOString(),
+        fonte: "deterministica",
+      });
+    }
+  });
 
   app.get("/api/empresas/:id", auth, async (req: Request, res: Response) => {
     try {

@@ -23,6 +23,7 @@ import { EmptyState, LoadingState, ErrorState } from "@/components/ui/states";
 import { RiscoBadge, ScoreIndicator, StatusCadastroBadge } from "@/components/ui/risco-badge";
 import DocumentosEntidade from "@/components/documentos/DocumentosEntidade";
 import DossieCreditoEmpresa from "@/components/documentacao/DossieCreditoEmpresa";
+import Inteligencia360 from "./Inteligencia360";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -144,6 +145,7 @@ const ABAS_EMPRESA = [
   "visao_geral",
   "socios",
   "dossie_credito",
+  "inteligencia_360",
   "followup",
   "historico",
   "documentos",
@@ -1937,6 +1939,7 @@ export default function Empresas() {
                       {([
                         { id: "visao_geral", label: "Dados da Empresa", badge: sociosExibicao.length || undefined },
                         { id: "dossie_credito", label: "Dossiê / Laudo IA" },
+                        { id: "inteligencia_360", label: "Inteligência 360" },
                         { id: "documentos", label: "Acervo Documental", badge: documentos.length + contratosSociais.length || undefined },
                         { id: "followup", label: "Conversas", badge: followups.filter(f => !f.concluido).length || undefined },
                         { id: "simulacoes", label: "Simulações", badge: simulacoesEmpresa.length || undefined },
@@ -2004,6 +2007,23 @@ export default function Empresas() {
                         empresaId={selecionada?.id}
                         onAtualizarReceita={selecionada ? () => sincronizarDados(selecionada) : undefined}
                       />
+                    )
+
+                    /* ── INTELIGÊNCIA 360 ── */
+                    : abaAtiva === "inteligencia_360" ? (
+                      selecionada?.id ? (
+                        <Inteligencia360
+                          empresaId={selecionada.id}
+                          onNavegar={(aba) => {
+                            if (isAbaEmpresa(aba)) {
+                              setAbaAtiva(aba);
+                              if (selecionada?.id) setLocation(`/colaborador/empresas?empresa=${selecionada.id}&aba=${aba}`);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div className="p-6 text-sm text-slate-400">Empresa não selecionada.</div>
+                      )
                     )
 
                     /* ── SÓCIOS ── */
