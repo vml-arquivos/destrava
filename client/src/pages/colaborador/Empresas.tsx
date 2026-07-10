@@ -1599,7 +1599,7 @@ export default function Empresas() {
         .emp-tab-btn { transition: all 0.15s ease; }
       `}</style>
 
-      <div className="emp-page min-h-screen overflow-x-hidden bg-[#f8f9fc]">
+      <div className="emp-page min-h-full overflow-x-hidden bg-[#f8f9fc] pb-8">
 
         {/* ── Layout principal em tela cheia útil ── */}
         <div className="max-w-none w-full px-3 sm:px-4 py-2">
@@ -1753,7 +1753,7 @@ export default function Empresas() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden slide-up flex flex-col min-w-0">
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-visible slide-up flex flex-col min-w-0">
 
                   {/* ── Header detalhe ── */}
                   <div className="px-3 sm:px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
@@ -1974,7 +1974,7 @@ export default function Empresas() {
                   </div>
 
                   {/* ── Conteúdo das abas ── */}
-                  <div className="min-w-0">
+                  <div className="min-w-0 overflow-visible pb-6">
                     {loadingDetalhe ? (
                       <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
                     ) : (

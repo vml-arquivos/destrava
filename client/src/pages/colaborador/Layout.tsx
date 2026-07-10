@@ -167,6 +167,7 @@ export default function Layout({ children, title }: { children: React.ReactNode;
   }
 
   const isTelaEmpresas = location.startsWith("/colaborador/empresas") || location.startsWith("/colaborador/assessoria");
+  const isEmpresaDetalhe = location.startsWith("/colaborador/empresas");
 
   const sidebar = (
     <nav className="flex h-full flex-col">
@@ -332,8 +333,20 @@ export default function Layout({ children, title }: { children: React.ReactNode;
         </header>
 
         {/* Conteúdo */}
-        <main className={`flex-1 min-w-0 ${isTelaEmpresas ? "overflow-hidden flex flex-col" : "overflow-y-auto"}`}>
-          <div className={`destrava-page ${isTelaEmpresas ? "flex-1 min-h-0 overflow-hidden flex flex-col" : "min-h-0 overflow-visible"}`}>
+        <main
+          className={`flex-1 min-w-0 overflow-x-hidden ${
+            isEmpresaDetalhe ? "overflow-y-auto" : isTelaEmpresas ? "overflow-y-auto flex flex-col" : "overflow-y-auto"
+          }`}
+        >
+          <div
+            className={`destrava-page ${
+              isEmpresaDetalhe
+                ? "min-h-full overflow-visible"
+                : isTelaEmpresas
+                  ? "flex-1 min-h-full overflow-visible flex flex-col"
+                  : "min-h-0 overflow-visible"
+            }`}
+          >
             {children}
           </div>
         </main>

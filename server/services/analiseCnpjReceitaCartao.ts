@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import pkg from 'pg';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { classificarSituacaoCadastral, isSituacaoAtiva, isSituacaoIrregular } from '../utils/situacaoCadastral';
 
 const { Pool } = pkg;
 const pool = new Pool({
