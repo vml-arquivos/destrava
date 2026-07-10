@@ -414,6 +414,389 @@ function ScoreBar({ score, risco }: { score: number; risco: string }) {
   );
 }
 
+
+function DetailChip({ label, value, tone = "slate" }: { label: string; value?: string | number | null; tone?: "slate" | "blue" | "emerald" | "amber" | "rose" | "violet" }) {
+  const palette = {
+    slate: "border-slate-200 bg-slate-50 text-slate-700",
+    blue: "border-blue-200 bg-blue-50 text-blue-700",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    amber: "border-amber-200 bg-amber-50 text-amber-700",
+    rose: "border-rose-200 bg-rose-50 text-rose-700",
+    violet: "border-violet-200 bg-violet-50 text-violet-700",
+  }[tone];
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${palette}`}>
+      <span className="text-slate-400 font-black uppercase tracking-wide">{label}</span>
+      <span>{value || "—"}</span>
+    </span>
+  );
+}
+
+function DataCell({ label, value, icon, mono = false, muted = false }: { label: string; value?: string | number | null; icon?: React.ReactNode; mono?: boolean; muted?: boolean }) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5 min-h-[72px]">
+      <div className="flex items-center gap-1.5 text-slate-400 mb-1">
+        {icon}
+        <p className="text-[10px] font-black uppercase tracking-widest">{label}</p>
+      </div>
+      <p className={`text-sm font-bold break-words ${mono ? "font-mono" : ""} ${muted || !value ? "text-slate-500" : "text-slate-800"}`}>
+        {value || "Não informado"}
+      </p>
+    </div>
+  );
+}
+
+function EmpresaDadosWorkspace({
+  empresa,
+  socios,
+  documentosTotal,
+  simulacoesTotal,
+  contratosTotal,
+  sincronizando,
+  onSincronizar,
+  onEditar,
+  onNovaSimulacao,
+  onNovoContrato,
+  onIniciarConversa,
+  onAbrirAcervo,
+}: {
+  empresa: Empresa;
+  socios: any[];
+  documentosTotal: number;
+  simulacoesTotal: number;
+  contratosTotal: number;
+  sincronizando: boolean;
+  onSincronizar: () => void;
+  onEditar: () => void;
+  onNovaSimulacao: () => void;
+  onNovoContrato: () => void;
+  onIniciarConversa: () => void;
+  onAbrirAcervo: () => void;
+}) {
+  const [painelAtivo, setPainelAtivo] = useState<"resumo" | "receita" | "cadastro" | "contato" | "endereco" | "socios" | "documentos">("resumo");
+  const { score, risco, tags } = calcularScore(empresa);
+  const enderecoCompleto = [empresa.logradouro, empresa.numero, empresa.complemento, empresa.bairro, empresa.cidade, empresa.estado]
+    .filter(Boolean)
+    .join(", ");
+  const cnaesSecundarios = Array.isArray(empresa.cnaes_secundarios) ? empresa.cnaes_secundarios.filter(Boolean) : [];
+  const pendenciasSocios = socios.reduce((acc: number, s: any) => acc + pendenciasSocioContrato(s).length, 0);
+
+  const paineis = [
+    { id: "resumo" as const, label: "Resumo", description: "Visão executiva", icon: <Building2 className="w-4 h-4" />, badge: empresa.status },
+    { id: "receita" as const, label: "Receita Federal", description: "Dados oficiais", icon: <Briefcase className="w-4 h-4" />, badge: empresa.situacao_cadastral },
+    { id: "cadastro" as const, label: "Cadastro interno", description: "Controle operacional", icon: <Building className="w-4 h-4" />, badge: fmtDate(empresa.created_at) },
+    { id: "contato" as const, label: "Contato", description: "Telefone, e-mail e site", icon: <Phone className="w-4 h-4" />, badge: empresa.telefone || empresa.email ? "OK" : "Pendente" },
+    { id: "endereco" as const, label: "Endereço", description: "Localização completa", icon: <MapPin className="w-4 h-4" />, badge: empresa.cidade || "Pendente" },
+    { id: "socios" as const, label: "Sócios / QSA", description: "Administradores e pendências", icon: <Users className="w-4 h-4" />, badge: socios.length ? `${socios.length}` : "0" },
+    { id: "documentos" as const, label: "Documentos", description: "Atalho para o acervo", icon: <FileText className="w-4 h-4" />, badge: `${documentosTotal}` },
+  ];
+
+  const painelSelecionado = paineis.find((p) => p.id === painelAtivo) || paineis[0];
+
+  const renderPainel = () => {
+    if (painelAtivo === "receita") {
+      return (
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">Atualização cadastral</p>
+                <p className="text-sm text-blue-900 mt-1">Dados oficiais vindos das fontes confiáveis. Atualize somente quando precisar sincronizar com a Receita Federal.</p>
+                <p className="text-xs text-blue-700 mt-1">Última atualização: {empresa.ultima_sincronizacao_receita ? new Date(empresa.ultima_sincronizacao_receita).toLocaleString("pt-BR") : "Não registrada"}</p>
+              </div>
+              {empresa.cnpj && (
+                <button onClick={onSincronizar} disabled={sincronizando} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50">
+                  <RotateCw className={`w-4 h-4 ${sincronizando ? "animate-spin" : ""}`} />
+                  Atualizar Receita
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <DataCell label="Razão Social" value={empresa.razao_social} icon={<Building2 className="w-3.5 h-3.5" />} />
+            <DataCell label="Nome Fantasia" value={empresa.nome_fantasia} icon={<Star className="w-3.5 h-3.5" />} muted={!empresa.nome_fantasia} />
+            <DataCell label="Situação Cadastral" value={empresa.situacao_cadastral} icon={<CheckCircle className="w-3.5 h-3.5" />} />
+            <DataCell label="Matriz / Filial" value={empresa.matriz_filial} icon={<Building className="w-3.5 h-3.5" />} />
+            <DataCell label="Natureza Jurídica" value={empresa.natureza_juridica} icon={<Briefcase className="w-3.5 h-3.5" />} />
+            <DataCell label="Data de Abertura" value={fmtDate(empresa.data_abertura || "")} icon={<Calendar className="w-3.5 h-3.5" />} />
+            <DataCell label="Capital Social" value={normalizarCapitalSocial(empresa.capital_social)} icon={<Banknote className="w-3.5 h-3.5" />} />
+            <DataCell label="Regime Tributário" value={empresa.regime_tributario} icon={<FileText className="w-3.5 h-3.5" />} muted={!empresa.regime_tributario} />
+          </div>
+          <DataCell label="CNAE Principal" value={empresa.cnae_principal} icon={<Tag className="w-3.5 h-3.5" />} />
+          {cnaesSecundarios.length > 0 && (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">CNAEs secundários</p>
+              <div className="flex flex-wrap gap-1.5">
+                {cnaesSecundarios.map((cnae, i) => <span key={`${cnae}-${i}`} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">{cnae}</span>)}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (painelAtivo === "cadastro") {
+      return (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            <DataCell label="CNPJ" value={empresa.cnpj} icon={<Hash className="w-3.5 h-3.5" />} mono />
+            <DataCell label="Cadastrado em" value={fmtDate(empresa.created_at)} icon={<Calendar className="w-3.5 h-3.5" />} />
+            <DataCell label="Origem" value={empresa.origem || "Manual"} icon={<Info className="w-3.5 h-3.5" />} />
+            <DataCell label="Porte" value={empresa.porte ? PORTE_CFG[empresa.porte]?.label : undefined} icon={<Building className="w-3.5 h-3.5" />} />
+            <DataCell label="Segmento" value={empresa.segmento} icon={<Tag className="w-3.5 h-3.5" />} muted={!empresa.segmento} />
+            <DataCell label="Funcionários" value={empresa.numero_funcionarios ? `${empresa.numero_funcionarios} colaboradores` : undefined} icon={<Users className="w-3.5 h-3.5" />} muted={!empresa.numero_funcionarios} />
+            <DataCell label="Captador" value={empresa.captador_nome} icon={<User className="w-3.5 h-3.5" />} muted={!empresa.captador_nome} />
+            <DataCell label="Analista" value={empresa.analista_nome} icon={<User className="w-3.5 h-3.5" />} muted={!empresa.analista_nome} />
+            <DataCell label="Status" value={STATUS_CFG[empresa.status]?.label || empresa.status} icon={<CheckCircle className="w-3.5 h-3.5" />} />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={onEditar} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
+              <Edit2 className="w-4 h-4" /> Editar cadastro
+            </button>
+            {empresa.cnpj && (
+              <button onClick={onSincronizar} disabled={sincronizando} className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">
+                <RotateCw className={`w-4 h-4 ${sincronizando ? "animate-spin" : ""}`} /> Atualizar cadastro
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (painelAtivo === "contato") {
+      const contatos = [
+        { label: "Telefone", value: empresa.telefone, href: empresa.telefone ? `tel:${empresa.telefone}` : undefined, icon: <Phone className="w-4 h-4" /> },
+        { label: "WhatsApp", value: empresa.whatsapp, href: empresa.whatsapp ? `https://wa.me/55${empresa.whatsapp.replace(/\D/g, "")}` : undefined, icon: <Phone className="w-4 h-4" /> },
+        { label: "E-mail", value: empresa.email, href: empresa.email ? `mailto:${empresa.email}` : undefined, icon: <Mail className="w-4 h-4" /> },
+        { label: "Site", value: empresa.site, href: empresa.site, icon: <Globe className="w-4 h-4" /> },
+      ];
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {contatos.map((c) => (
+            c.value ? (
+              <a key={c.label} href={c.href} target={c.href?.startsWith("http") ? "_blank" : undefined} rel="noreferrer" className="rounded-2xl border border-slate-100 bg-slate-50 p-4 hover:border-blue-200 hover:bg-blue-50 transition-all">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-slate-500">{c.icon}</div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{c.label}</p>
+                    <p className="text-sm font-bold text-slate-800 truncate">{c.value}</p>
+                  </div>
+                </div>
+              </a>
+            ) : (
+              <div key={c.label} className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 p-4 text-slate-400">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl border border-slate-200 bg-white flex items-center justify-center">{c.icon}</div>
+                  <div><p className="text-[10px] font-black uppercase tracking-widest">{c.label}</p><p className="text-sm font-bold">Não informado</p></div>
+                </div>
+              </div>
+            )
+          ))}
+        </div>
+      );
+    }
+
+    if (painelAtivo === "endereco") {
+      return (
+        <div className="space-y-4">
+          <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
+            <div className="flex items-start gap-4">
+              <div className="h-12 w-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-500 shrink-0"><MapPin className="w-5 h-5" /></div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Endereço principal</p>
+                <p className="text-lg font-black text-slate-900 mt-1">{enderecoCompleto || "Não informado"}</p>
+                <p className="text-sm text-slate-500 mt-1">{empresa.cep ? `CEP ${empresa.cep}` : "CEP não informado"}</p>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <DataCell label="Logradouro" value={empresa.logradouro} icon={<MapPin className="w-3.5 h-3.5" />} />
+            <DataCell label="Número / complemento" value={[empresa.numero, empresa.complemento].filter(Boolean).join(" · ")} icon={<Hash className="w-3.5 h-3.5" />} />
+            <DataCell label="Bairro" value={empresa.bairro} icon={<Building className="w-3.5 h-3.5" />} />
+            <DataCell label="Cidade" value={empresa.cidade} icon={<MapPin className="w-3.5 h-3.5" />} />
+            <DataCell label="UF" value={empresa.estado} icon={<MapPin className="w-3.5 h-3.5" />} />
+            <DataCell label="CEP" value={empresa.cep} icon={<Hash className="w-3.5 h-3.5" />} />
+          </div>
+        </div>
+      );
+    }
+
+    if (painelAtivo === "socios") {
+      return (
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-black text-slate-800">Quadro societário e administradores</p>
+              <p className="text-xs text-slate-500">Visualização compacta para análise cadastral, crédito, contrato e laudo.</p>
+            </div>
+            <DetailChip label="Pendências" value={pendenciasSocios} tone={pendenciasSocios ? "amber" : "emerald"} />
+          </div>
+          {socios.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm font-semibold text-slate-500">Nenhum sócio retornado para esta empresa.</div>
+          ) : (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+              {socios.map((s: any) => {
+                const pendencias = Array.isArray(s.pendencias_contrato) ? s.pendencias_contrato : pendenciasSocioContrato(s);
+                return (
+                  <div key={s.id || s.nome} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <div className="flex items-start gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-sm font-black shrink-0">{String(s.nome || "?").slice(0, 1).toUpperCase()}</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-black text-slate-900 truncate">{s.nome || "Nome não informado"}</p>
+                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${pendencias.length ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{pendencias.length ? `${pendencias.length} pendência(s)` : "Completo"}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {s.qualificacao_socio && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700">{s.qualificacao_socio}</span>}
+                          {s.representante_legal && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">Administrador</span>}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 text-xs">
+                          <DataCell label="CPF/CNPJ" value={s.cpf_cnpj} mono />
+                          <DataCell label="Contato" value={s.whatsapp || s.telefone || s.email} />
+                          <DataCell label="Estado civil" value={s.estado_civil} />
+                          <DataCell label="Endereço" value={[s.logradouro, s.numero, s.bairro, s.cidade, s.uf].filter(Boolean).join(", ")} />
+                        </div>
+                        {pendencias.length > 0 && (
+                          <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50 p-2">
+                            <p className="text-[11px] font-black text-amber-700 mb-1">Pendências para contrato/análise</p>
+                            <div className="flex flex-wrap gap-1">{pendencias.slice(0, 8).map((p: string) => <span key={p} className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-700">{p}</span>)}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (painelAtivo === "documentos") {
+      return (
+        <div className="rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="h-14 w-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-sm"><FileText className="w-7 h-7" /></div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">Central documental</p>
+                <h3 className="text-xl font-black text-slate-900 mt-1">Anexos e documentos da empresa</h3>
+                <p className="text-sm text-slate-500 mt-1 max-w-2xl">Todos os arquivos são visualizados na página exclusiva do acervo para preservar o cadastro limpo e oferecer mais espaço ao PDF.</p>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <DetailChip label="Arquivos" value={documentosTotal} tone="blue" />
+                  <DetailChip label="Simulações" value={simulacoesTotal} />
+                  <DetailChip label="Contratos" value={contratosTotal} />
+                </div>
+              </div>
+            </div>
+            <button onClick={onAbrirAcervo} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-black text-white shadow-sm shadow-blue-100 hover:bg-blue-700">
+              <ExternalLink className="w-4 h-4" /> Abrir acervo documental
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <DataCell label="Capital Social" value={normalizarCapitalSocial(empresa.capital_social)} icon={<Banknote className="w-3.5 h-3.5" />} />
+          <DataCell label="Faturamento anual" value={empresa.faturamento_anual ? fmt(empresa.faturamento_anual) : undefined} icon={<DollarSign className="w-3.5 h-3.5" />} muted={!empresa.faturamento_anual} />
+          <DataCell label="Limite atual" value={fmt(empresa.limite_credito_atual || 0)} icon={<CreditCard className="w-3.5 h-3.5" />} />
+          <DataCell label="Abertura" value={fmtDate(empresa.data_abertura || "")} icon={<Calendar className="w-3.5 h-3.5" />} />
+        </div>
+        <div className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
+            <div className="flex items-center gap-3 min-w-[220px]">
+              <div className="h-11 w-11 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-500"><ShieldCheck className="w-5 h-5" /></div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-slate-400">Score Destrava</p>
+                <div className="flex items-end gap-1"><span className="text-3xl font-black text-slate-900">{score}</span><span className="text-sm font-bold text-slate-400 pb-1">/100</span></div>
+              </div>
+            </div>
+            <div className="flex-1 min-w-[180px]"><ScoreBar score={score} risco={risco} /></div>
+            <div className="flex flex-wrap gap-1.5 xl:max-w-[360px]">{tags.slice(0, 4).map((t, i) => <span key={i} className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${t.ok ? "bg-white text-slate-600 border-slate-200" : "bg-rose-50 text-rose-700 border-rose-200"}`}>{t.text}</span>)}</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <DataCell label="CNPJ" value={empresa.cnpj} icon={<Hash className="w-3.5 h-3.5" />} mono />
+          <DataCell label="Localização" value={[empresa.cidade, empresa.estado].filter(Boolean).join(" / ")} icon={<MapPin className="w-3.5 h-3.5" />} />
+          <DataCell label="Contato principal" value={empresa.responsavel_nome || empresa.telefone || empresa.whatsapp || empresa.email} icon={<Phone className="w-3.5 h-3.5" />} />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={onNovaSimulacao} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"><Calculator className="w-4 h-4" /> Nova simulação</button>
+          <button onClick={onNovoContrato} className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-bold text-violet-700 hover:bg-violet-100"><FileText className="w-4 h-4" /> Novo contrato</button>
+          <button onClick={onIniciarConversa} className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-700 hover:bg-amber-100"><Bell className="w-4 h-4" /> Iniciar conversa</button>
+          <button onClick={onAbrirAcervo} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"><ExternalLink className="w-4 h-4" /> Acervo documental</button>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="p-3 sm:p-4 fade-in">
+      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm lg:h-[calc(100vh-270px)] lg:min-h-[610px]">
+        <div className="grid h-full min-h-[610px] grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <aside className="border-b border-slate-200 bg-slate-50/70 lg:border-b-0 lg:border-r min-h-0">
+            <div className="border-b border-slate-200 bg-white px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">Central de informações</p>
+              <h3 className="mt-1 text-lg font-black text-slate-900 truncate">Dados da empresa</h3>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <DetailChip label="Docs" value={documentosTotal} tone="blue" />
+                <DetailChip label="Sócios" value={socios.length} tone="emerald" />
+                <DetailChip label="Score" value={score} tone={risco === "baixo" ? "emerald" : risco === "medio" ? "amber" : "rose"} />
+              </div>
+            </div>
+            <div className="max-h-[260px] overflow-y-auto p-3 lg:max-h-none lg:h-[calc(100%-96px)]">
+              <div className="space-y-1.5">
+                {paineis.map((painel) => (
+                  <button
+                    key={painel.id}
+                    type="button"
+                    onClick={() => setPainelAtivo(painel.id)}
+                    className={`w-full rounded-2xl border p-3 text-left transition-all ${painelAtivo === painel.id ? "border-blue-300 bg-blue-50 shadow-sm" : "border-transparent bg-white hover:border-slate-200 hover:bg-white"}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${painelAtivo === painel.id ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}>{painel.icon}</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-black text-slate-900 truncate">{painel.label}</p>
+                          {painel.badge && <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500 max-w-[86px] truncate">{painel.badge}</span>}
+                        </div>
+                        <p className="mt-0.5 text-xs font-medium text-slate-400 truncate">{painel.description}</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </aside>
+
+          <section className="min-w-0 min-h-0 flex flex-col bg-white">
+            <div className="border-b border-slate-200 px-4 py-3 shrink-0">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Visualização</p>
+                  <h3 className="text-xl font-black text-slate-900 truncate">{painelSelecionado.label}</h3>
+                  <p className="text-sm text-slate-500 truncate">{painelSelecionado.description}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={onEditar} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"><Edit2 className="w-3.5 h-3.5" /> Editar</button>
+                  {empresa.cnpj && <button onClick={onSincronizar} disabled={sincronizando} className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"><RotateCw className={`w-3.5 h-3.5 ${sincronizando ? "animate-spin" : ""}`} /> Atualizar</button>}
+                </div>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4">
+              {renderPainel()}
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Modal Field ──────────────────────────────────────────────────────────────
 
 function MField({ label, required, error, children }: {
@@ -1591,371 +1974,28 @@ export default function Empresas() {
 
                     /* ── VISÃO GERAL ── */
                     abaAtiva === "visao_geral" ? (
-                      <div className="p-4 space-y-3 fade-in">
-
-                        {/* Painel executivo ampliado para análise de crédito */}
-                        <div className="emp-tiles-grid grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
-                          <InfoTile label="Capital Social" value={normalizarCapitalSocial(selecionada.capital_social)} icon={<Banknote className="w-3.5 h-3.5" />} tone="emerald" />
-                          <InfoTile label="Natureza Jurídica" value={selecionada.natureza_juridica || "Não informado"} icon={<Briefcase className="w-3.5 h-3.5" />} tone="blue" />
-                          <InfoTile label="CNAE Principal" value={selecionada.cnae_principal || selecionada.segmento || "Não informado"} icon={<Tag className="w-3.5 h-3.5" />} tone="violet" />
-                          <InfoTile label="Abertura" value={selecionada.data_abertura ? fmtDate(selecionada.data_abertura) : "Não informado"} icon={<Calendar className="w-3.5 h-3.5" />} tone="amber" />
-                          <InfoTile label="Faturamento Anual" value={selecionada.faturamento_anual ? fmt(selecionada.faturamento_anual) : "Não informado"} icon={<Banknote className="w-3.5 h-3.5" />} />
-                          <InfoTile label="Limite Atual" value={selecionada.limite_credito_atual ? fmt(selecionada.limite_credito_atual) : "R$ 0,00"} icon={<CreditCard className="w-3.5 h-3.5" />} />
-                          <InfoTile label="Serasa" value={selecionada.score_serasa || "Não informado"} icon={<BarChart3 className="w-3.5 h-3.5" />} />
-                          <InfoTile label="SPC" value={selecionada.score_spc || "Não informado"} icon={<BarChart3 className="w-3.5 h-3.5" />} />
-                        </div>
-
-                        {/* Receita Federal / Junta Comercial */}
-                        <SectionCard title="Receita Federal e Junta Comercial" icon={<Briefcase className="w-4 h-4" />}>
-                          <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 flex flex-col gap-1">
-                            <div><b>Atualização cadastral:</b> busca dados nas fontes confiáveis, salva no banco e atualiza a tela.</div>
-                            <div><b>Última atualização:</b> {selecionada.ultima_sincronizacao_receita ? new Date(selecionada.ultima_sincronizacao_receita).toLocaleString('pt-BR') : 'Não sincronizada'}</div>
-                          </div>
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 py-2">
-                            <InfoTile label="Razão Social" value={selecionada.razao_social} icon={<Building2 className="w-3.5 h-3.5" />} />
-                            <InfoTile label="Nome Fantasia" value={selecionada.nome_fantasia || "Não informado"} icon={<Star className="w-3.5 h-3.5" />} />
-                            <InfoTile label="Situação Cadastral" value={selecionada.situacao_cadastral || "Não informado"} icon={<CheckCircle className="w-3.5 h-3.5" />} tone="emerald" />
-                            <InfoTile label="Matriz / Filial" value={selecionada.matriz_filial || "Não informado"} icon={<Building className="w-3.5 h-3.5" />} />
-                          </div>
-                          {/* Natureza Jurídica, Capital Social, CNAE Principal e Abertura já aparecem no painel
-                              executivo logo acima -- removidos daqui para não repetir a mesma informação duas vezes. */}
-                          {selecionada.cnaes_secundarios && selecionada.cnaes_secundarios.length > 0 && (
-                            <div className="mt-3 pt-3 border-t border-slate-100">
-                              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">CNAEs secundários</p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {selecionada.cnaes_secundarios.map((cnae, idx) => (
-                                  <span key={idx} className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">{cnae}</span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          <button
-                            onClick={() => sincronizarDados(selecionada)}
-                            disabled={!selecionada.cnpj || sincronizando}
-                            className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 text-white py-2.5 text-sm font-bold hover:bg-blue-700 disabled:opacity-50"
-                          >
-                            <RotateCw className={`w-4 h-4 ${sincronizando ? "animate-spin" : ""}`} />
-                            Atualizar e salvar cadastro pela Receita Federal
-                          </button>
-                        </SectionCard>
-
-                        {/* Dados Cadastrais */}
-                        <SectionCard title="Dados Cadastrais" icon={<Building className="w-4 h-4" />}>
-                          <div className="divide-y divide-slate-100">
-                            {selecionada.cnpj && (
-                              <div className="flex items-center justify-between py-2.5">
-                                <div>
-                                  <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-0.5">CNPJ</p>
-                                  <p className="text-sm font-semibold text-slate-800 font-mono">{selecionada.cnpj}</p>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <CopyButton text={selecionada.cnpj} />
-                                  <button
-                                    onClick={() => sincronizarDados(selecionada)}
-                                    disabled={sincronizando}
-                                    className="p-1 rounded hover:bg-emerald-100 text-emerald-600 transition-colors disabled:opacity-40"
-                                    title="Atualizar e salvar cadastro pela Receita Federal"
-                                  >
-                                    <RotateCw className={`w-3.5 h-3.5 ${sincronizando ? "animate-spin" : ""}`} />
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                            {selecionada.inscricao_estadual && (
-                              <FieldRow label="Inscrição Estadual" value={selecionada.inscricao_estadual} icon={<Hash className="w-3.5 h-3.5" />} mono />
-                            )}
-                            <FieldRow label="Cadastrado em" value={fmtDate(selecionada.created_at)} icon={<Calendar className="w-3.5 h-3.5" />} />
-                            {selecionada.origem && selecionada.origem !== "manual" && (
-                              <FieldRow label="Origem" value={selecionada.origem} icon={<Info className="w-3.5 h-3.5" />} />
-                            )}
-                            {selecionada.numero_funcionarios && (
-                              <FieldRow label="Funcionários" value={`${selecionada.numero_funcionarios} colaboradores`} icon={<Users className="w-3.5 h-3.5" />} />
-                            )}
-                          </div>
-                        </SectionCard>
-
-                        {/* Contato */}
-                        {(selecionada.email || selecionada.telefone || selecionada.whatsapp || selecionada.site) && (
-                          <SectionCard title="Contato" icon={<Phone className="w-4 h-4" />}>
-                            <div className="py-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {selecionada.telefone && (
-                                <a href={`tel:${selecionada.telefone}`} className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-50 border border-slate-100 hover:border-blue-200 hover:bg-blue-50 transition-all group">
-                                  <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 group-hover:border-blue-200 flex items-center justify-center shrink-0">
-                                    <Phone className="w-3.5 h-3.5 text-slate-500" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="text-[11px] text-slate-400">Telefone</p>
-                                    <p className="text-sm font-medium text-slate-700 truncate">{selecionada.telefone}</p>
-                                  </div>
-                                </a>
-                              )}
-                              {selecionada.whatsapp && (
-                                <a href={`https://wa.me/55${selecionada.whatsapp.replace(/\D/g,"")}`} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 p-2.5 rounded-lg bg-emerald-50 border border-emerald-100 hover:border-emerald-300 transition-all group">
-                                  <div className="w-8 h-8 rounded-lg bg-white border border-emerald-200 flex items-center justify-center shrink-0">
-                                    <Phone className="w-3.5 h-3.5 text-emerald-600" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="text-[11px] text-emerald-600">WhatsApp</p>
-                                    <p className="text-sm font-medium text-emerald-800 truncate">{selecionada.whatsapp}</p>
-                                  </div>
-                                </a>
-                              )}
-                              {selecionada.email && (
-                                <a href={`mailto:${selecionada.email}`} className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-50 border border-slate-100 hover:border-blue-200 hover:bg-blue-50 transition-all group">
-                                  <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 group-hover:border-blue-200 flex items-center justify-center shrink-0">
-                                    <Mail className="w-3.5 h-3.5 text-slate-500" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="text-[11px] text-slate-400">E-mail</p>
-                                    <p className="text-sm font-medium text-slate-700 truncate">{selecionada.email}</p>
-                                  </div>
-                                </a>
-                              )}
-                              {selecionada.site && (
-                                <a href={selecionada.site} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-50 border border-slate-100 hover:border-blue-200 hover:bg-blue-50 transition-all group">
-                                  <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 group-hover:border-blue-200 flex items-center justify-center shrink-0">
-                                    <Globe className="w-3.5 h-3.5 text-slate-500" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="text-[11px] text-slate-400">Site</p>
-                                    <p className="text-sm font-medium text-slate-700 truncate">{selecionada.site}</p>
-                                  </div>
-                                </a>
-                              )}
-                            </div>
-                          </SectionCard>
-                        )}
-
-                        {/* Endereço */}
-                        {(selecionada.logradouro || selecionada.cidade) && (
-                          <SectionCard title="Endereço" icon={<MapPin className="w-4 h-4" />}>
-                            <div className="py-3">
-                              <div className="flex items-start gap-3 p-3 rounded-lg bg-slate-50 border border-slate-100">
-                                <MapPin className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-                                <div>
-                                  {(selecionada.logradouro || selecionada.numero) && (
-                                    <p className="text-sm font-medium text-slate-800">
-                                      {[selecionada.logradouro, selecionada.numero, selecionada.complemento].filter(Boolean).join(", ")}
-                                    </p>
-                                  )}
-                                  {selecionada.bairro && <p className="text-xs text-slate-500 mt-0.5">{selecionada.bairro}</p>}
-                                  <p className="text-xs text-slate-600 mt-0.5 font-medium">
-                                    {[selecionada.cidade, selecionada.estado].filter(Boolean).join(" — ")}
-                                    {selecionada.cep && ` · CEP ${selecionada.cep}`}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          </SectionCard>
-                        )}
-
-                        {/* Responsável — só mostra aqui se essa pessoa NÃO estiver já listada em
-                            "Quadro societário e administradores" logo abaixo (mesmo nome = mesma pessoa,
-                            mostrada lá com muito mais detalhe: CPF, contato, endereço, pendências etc.) */}
-                        {selecionada.responsavel_nome && !sociosExibicao.some((s: any) =>
-                          String(s.nome || "").trim().toLowerCase() === String(selecionada.responsavel_nome || "").trim().toLowerCase()
-                        ) && (
-                          <SectionCard title="Sócio / Responsável" icon={<User className="w-4 h-4" />}>
-                            <div className="py-3">
-                              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border border-slate-100">
-                                <div className="w-10 h-10 rounded-xl bg-slate-700 text-white flex items-center justify-center font-bold text-sm shrink-0">
-                                  {getInitials(selecionada.responsavel_nome)}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-semibold text-slate-800">{selecionada.responsavel_nome}</p>
-                                  {selecionada.responsavel_cargo && <p className="text-xs text-slate-500">{selecionada.responsavel_cargo}</p>}
-                                  {selecionada.responsavel_cpf && (
-                                    <p className="text-xs text-slate-400 font-mono mt-0.5">CPF: {selecionada.responsavel_cpf}</p>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="mt-2 grid grid-cols-2 gap-2">
-                                {selecionada.responsavel_telefone && (
-                                  <a href={`tel:${selecionada.responsavel_telefone}`} className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-blue-600 p-2 rounded-lg border border-slate-100 hover:border-blue-200 bg-white transition-colors">
-                                    <Phone className="w-3 h-3" />{selecionada.responsavel_telefone}
-                                  </a>
-                                )}
-                                {selecionada.responsavel_email && (
-                                  <a href={`mailto:${selecionada.responsavel_email}`} className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-blue-600 p-2 rounded-lg border border-slate-100 hover:border-blue-200 bg-white transition-colors truncate">
-                                    <Mail className="w-3 h-3 shrink-0" /><span className="truncate">{selecionada.responsavel_email}</span>
-                                  </a>
-                                )}
-                              </div>
-                            </div>
-                          </SectionCard>
-                        )}
-
-                        {/* Financeiro / Bancário */}
-                        {(selecionada.banco_principal || selecionada.agencia || selecionada.conta) && (
-                          <SectionCard title="Dados Bancários" icon={<Briefcase className="w-4 h-4" />} defaultOpen={false}>
-                            <div className="divide-y divide-slate-100">
-                              <FieldRow label="Banco" value={selecionada.banco_principal} />
-                              <FieldRow label="Agência" value={selecionada.agencia} mono />
-                              <FieldRow label="Conta" value={selecionada.conta} mono />
-                            </div>
-                          </SectionCard>
-                        )}
-
-                        {/* Equipe */}
-                        {(selecionada.captador_nome || selecionada.analista_nome) && (
-                          <SectionCard title="Equipe Responsável" icon={<Users className="w-4 h-4" />} defaultOpen={false}>
-                            <div className="py-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              {selecionada.captador_nome && (
-                                <div className="p-3 rounded-xl border border-orange-100 bg-orange-50">
-                                  <p className="text-[11px] font-semibold text-orange-600 mb-1.5 flex items-center gap-1">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" /> Captação
-                                  </p>
-                                  <p className="text-sm font-semibold text-slate-800">{selecionada.captador_nome}</p>
-                                </div>
-                              )}
-                              {selecionada.analista_nome && (
-                                <div className="p-3 rounded-xl border border-blue-100 bg-blue-50">
-                                  <p className="text-[11px] font-semibold text-blue-600 mb-1.5 flex items-center gap-1">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" /> Atendimento
-                                  </p>
-                                  <p className="text-sm font-semibold text-slate-800">{selecionada.analista_nome}</p>
-                                </div>
-                              )}
-                            </div>
-                          </SectionCard>
-                        )}
-
-                        {/* Tags */}
-                        {(selecionada.tags || []).length > 0 && (
-                          <div className="flex flex-wrap gap-1.5">
-                            {(selecionada.tags || []).map(tag => (
-                              <span key={tag} className="flex items-center gap-1 text-xs font-medium bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
-                                <Tag className="w-3 h-3" />{tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Observações */}
-                        {selecionada.observacoes && (
-                          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                            <p className="text-xs font-semibold text-amber-700 mb-2 flex items-center gap-1.5">
-                              <AlertCircle className="w-3.5 h-3.5" /> Observações
-                            </p>
-                            <p className="text-sm text-amber-900 whitespace-pre-wrap leading-relaxed">{selecionada.observacoes}</p>
-                          </div>
-                        )}
-
-
-                        <SectionCard title="Dados cadastrais e quadro societário" icon={<Users className="w-4 h-4" />}>
-                          <div className="py-3 space-y-3">
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5">
-                              <div>
-                                <p className="text-sm font-semibold text-slate-800">Quadro societário e administradores</p>
-                                <p className="text-xs text-slate-500">Os dados da empresa e dos sócios aparecem juntos para análise cadastral, crédito, contrato e laudo IA.</p>
-                              </div>
-                              {selecionada.cnpj && (
-                                <button
-                                  onClick={() => sincronizarDados(selecionada)}
-                                  disabled={sincronizando}
-                                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200 bg-white px-3 py-1.5 rounded-lg hover:bg-emerald-50 transition-colors disabled:opacity-50"
-                                  title="Atualizar dados societários"
-                                >
-                                  <RotateCw className={`w-3.5 h-3.5 ${sincronizando ? "animate-spin" : ""}`} />
-                                  Atualizar dados societários
-                                </button>
-                              )}
-                            </div>
-
-                            {sociosExibicao.length === 0 ? (
-                              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                                Nenhum sócio retornado para esta empresa até o momento.
-                              </div>
-                            ) : (
-                              <div className={`grid grid-cols-1 ${sociosExibicao.length > 1 ? "xl:grid-cols-2" : ""} gap-3`}>
-                                {sociosExibicao.map((s: any) => {
-                                  const pendencias = Array.isArray(s.pendencias_contrato) ? s.pendencias_contrato : pendenciasSocioContrato(s);
-                                  const completo = pendencias.length === 0;
-                                  return (
-                                    <div key={s.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm w-full">
-                                      <div className="flex items-start gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center font-bold text-sm shrink-0">
-                                          {(s.nome?.charAt(0) ?? "?").toUpperCase()}
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                          <div className="flex flex-wrap items-center gap-2">
-                                            <p className="text-sm font-bold text-slate-800 truncate">{s.nome}</p>
-                                            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${completo ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                                              {completo ? 'Completo' : `${pendencias.length} pendência(s)`}
-                                            </span>
-                                          </div>
-                                          <div className="flex flex-wrap gap-1.5 mt-1">
-                                            {s.qualificacao_socio && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{s.qualificacao_socio}</span>}
-                                            {s.representante_legal && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Administrador</span>}
-                                          </div>
-                                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-3 text-xs">
-                                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-                                              <span className="block text-slate-400 text-[11px] mb-0.5">CPF/CNPJ</span>
-                                              <span className="font-mono text-slate-700">{s.cpf_cnpj || 'Não informado'}</span>
-                                            </div>
-                                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-                                              <span className="block text-slate-400 text-[11px] mb-0.5">Participação</span>
-                                              <span className="text-slate-700">{s.percentual_capital_social || s.faixa_etaria || 'Não informado'}</span>
-                                            </div>
-                                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-                                              <span className="block text-slate-400 text-[11px] mb-0.5">Entrada na sociedade</span>
-                                              <span className="text-slate-700">{s.data_entrada_sociedade ? new Date(s.data_entrada_sociedade).toLocaleDateString('pt-BR') : 'Não informado'}</span>
-                                            </div>
-                                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-                                              <span className="block text-slate-400 text-[11px] mb-0.5">Representante legal</span>
-                                              <span className="text-slate-700">{s.nome_representante || (s.representante_legal ? 'Sim' : 'Não informado')}</span>
-                                            </div>
-                                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-                                              <span className="block text-slate-400 text-[11px] mb-0.5">Nascimento</span>
-                                              <span className="text-slate-700">{s.data_nascimento ? new Date(s.data_nascimento).toLocaleDateString('pt-BR') : 'Pendente'}</span>
-                                            </div>
-                                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-                                              <span className="block text-slate-400 text-[11px] mb-0.5">Contato</span>
-                                              <span className="text-slate-700">{s.whatsapp || s.telefone || s.email || 'Pendente'}</span>
-                                            </div>
-                                          </div>
-
-                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-xs">
-                                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-                                              <span className="block text-slate-400 text-[11px] mb-0.5">Estado civil / cônjuge</span>
-                                              <span className="text-slate-700">{[s.estado_civil, s.conjuge_nome].filter(Boolean).join(' • ') || 'Pendente'}</span>
-                                            </div>
-                                            <div className="rounded-lg border border-slate-100 bg-slate-50 p-2">
-                                              <span className="block text-slate-400 text-[11px] mb-0.5">Endereço</span>
-                                              <span className="text-slate-700">{[s.logradouro, s.numero, s.bairro, s.cidade, s.uf].filter(Boolean).join(', ') || 'Pendente'}</span>
-                                            </div>
-                                          </div>
-
-                                          <div className="flex flex-wrap gap-2 mt-3">
-                                            {s.inferido_empresa ? (
-                                              <button onClick={() => selecionada && abrirEditar(selecionada)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><Edit2 className="w-3 h-3" /> Completar dados</button>
-                                            ) : (
-                                              <>
-                                                <button onClick={() => abrirEdicaoSocio(s)} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><Edit2 className="w-3 h-3" /> Editar sócio</button>
-                                                <button onClick={() => atualizarSocioIndividual(s)} disabled={sincronizando} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50"><RotateCw className="w-3 h-3" /> Atualizar</button>
-                                                {!s.cpf_cnpj && <button onClick={() => { const cpf = prompt('Informe o CPF completo do sócio'); if (cpf) atualizarCpfManualSocio(s, cpf); }} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100">Informar CPF</button>}
-                                              </>
-                                            )}
-                                          </div>
-
-                                          {pendencias.length > 0 && (
-                                            <div className="rounded-lg bg-amber-50 border border-amber-100 p-2 mt-3">
-                                              <p className="text-[11px] font-bold text-amber-700 mb-1">Pendências para contratos/análises</p>
-                                              <div className="flex flex-wrap gap-1">
-                                                {pendencias.slice(0, 8).map((p: string) => <span key={p} className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-amber-200 text-amber-700">{p}</span>)}
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        </SectionCard>
-                      </div>
+                      <EmpresaDadosWorkspace
+                        empresa={selecionada}
+                        socios={sociosExibicao}
+                        documentosTotal={documentos.length + contratosSociais.length}
+                        simulacoesTotal={simulacoesEmpresa.length}
+                        contratosTotal={contratosEmpresa.length}
+                        sincronizando={sincronizando}
+                        onSincronizar={() => sincronizarDados(selecionada)}
+                        onEditar={() => abrirEditar(selecionada)}
+                        onNovaSimulacao={() => {
+                          sessionStorage.setItem("calculadora_empresa", JSON.stringify({
+                            nome: selecionada.responsavel_nome || selecionada.razao_social,
+                            empresa: selecionada.razao_social,
+                            telefone: selecionada.telefone || selecionada.whatsapp || "",
+                            cpf_cnpj: selecionada.cnpj || "",
+                          }));
+                          window.location.href = "/colaborador/calculadora";
+                        }}
+                        onNovoContrato={() => { window.location.href = "/colaborador/contratos"; }}
+                        onIniciarConversa={() => { setAbaAtiva("followup"); setShowFollowupForm(true); if (selecionada?.id) setLocation(`/colaborador/empresas?empresa=${selecionada.id}&aba=followup`); }}
+                        onAbrirAcervo={() => { setAbaAtiva("documentos"); if (selecionada?.id) setLocation(`/colaborador/empresas?empresa=${selecionada.id}&aba=documentos`); }}
+                      />
                     )
 
                     /* ── DOSSIÊ DE CRÉDITO ── */
