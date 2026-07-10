@@ -815,6 +815,7 @@ type OpcoesRelatorioBancario = {
   detalhado: boolean;
   incluirIa: boolean;
   incluirAnexos: boolean;
+  marca: PrestadoraKey;
 };
 
 function opcoesRelatorioPadrao(): OpcoesRelatorioBancario {
@@ -829,6 +830,7 @@ function opcoesRelatorioPadrao(): OpcoesRelatorioBancario {
     detalhado: true,
     incluirIa: true,
     incluirAnexos: true,
+    marca: "destrava",
   };
 }
 
@@ -850,6 +852,7 @@ async function exportarRelatorioMensalPDF(
     detalhado: cfg.detalhado,
     incluirIa: cfg.incluirIa,
     incluirAnexos: cfg.incluirAnexos,
+    marca: cfg.marca || "destrava",
   };
 
   const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}/relatorio`, {
@@ -3333,6 +3336,18 @@ export default function AcompanhamentoBancario() {
                     <option value="html">Visualizar antes</option>
                     <option value="xls">Baixar XLS</option>
                     <option value="json">Baixar JSON técnico</option>
+                  </select>
+                </label>
+
+                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Logo / prestadora
+                  <select
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold normal-case text-slate-700"
+                    value={opcoesRelatorio.marca}
+                    onChange={(e) => setOpcoesRelatorio((p) => ({ ...p, marca: e.target.value as PrestadoraKey }))}
+                  >
+                    <option value="destrava">Destrava Crédito</option>
+                    <option value="permupay">PermuPay</option>
                   </select>
                 </label>
 

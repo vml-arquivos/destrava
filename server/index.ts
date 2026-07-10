@@ -32,6 +32,7 @@ import {
 import { normalizarPaginacaoCatalogo, normalizarTipoCatalogo } from "./lib/nexusCatalogo";
 import { loginInputSchema, leadInputSchema, validateBody } from "./lib/inputValidation";
 import { closeChromium, launchChromium } from "./services/chromiumLauncher";
+import { generateBrandedPdfBuffer } from "./services/brandedPdfLayout";
 import { generateFollowupMessage, generateLeadRecommendations, generateLeadSummary, qualifyTriagemLead } from "./services/aiService";
 import { getDataDir, resolveDocumentPath } from "./services/documentStorage";
 import { calcularInteligencia360 } from "./services/inteligencia360Service";
@@ -12017,6 +12018,7 @@ async function registrarDocumentoContratoGerado(params: {
     incluirIa?: boolean;
     incluirAnexos?: boolean;
     geradoPor?: string | null;
+    marca?: string | null;
   }): string {
     const esc = escapeHtmlAcompanhamento;
     const fmt = (v: unknown) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -12118,7 +12120,6 @@ async function registrarDocumentoContratoGerado(params: {
       const status = textoStatusAderencia(s.status_aderencia || s.status_semana || s.status);
       const entradas = totalEntradasRelatorioAcompanhamento(s);
       const saldo = Number(s.saldo_semanal ?? (entradas - Number(s.total_saidas || 0)));
-      const leitura = resumoTexto(s.analise_semana || s.diagnostico_tecnico || s.motivo_alerta_aderencia || "—", 180);
       return `
         <tr class="${isAtual ? "atual" : ""}">
           <td><strong>Semana ${esc(s.numero_semana)}</strong>${isAtual ? `<br/><span class="tag medio">Atual</span>` : ""}</td>
@@ -12129,7 +12130,6 @@ async function registrarDocumentoContratoGerado(params: {
           <td>${esc(s.rating_bacen || "—")}</td>
           <td>${esc(s.rating_interno || "—")}</td>
           <td>${esc(status)}</td>
-          <td>${esc(leitura)}</td>
         </tr>`;
     }).join("");
     const linhasComposicao = semanas.map((s: any) => {
@@ -12145,17 +12145,49 @@ async function registrarDocumentoContratoGerado(params: {
         <td class="num"><strong>${fmt(entradas)}</strong></td>
       </tr>`;
     }).join("");
-    const linhasDiagnostico = semanas.map((s: any) => `<tr>
-      <td><strong>Semana ${esc(s.numero_semana)}</strong><br/>${fmtDate(s.data_referencia_inicio)} a ${fmtDate(s.data_referencia_fim)}</td>
-      <td>${esc(resumoTexto(s.analise_semana || s.diagnostico_tecnico || s.motivo_alerta_aderencia || "—", 520))}</td>
-      <td>${esc(resumoTexto(s.orientacao_semana || s.recomendacao_operacional || "—", 360))}</td>
-      <td>${esc(resumoTexto(s.proxima_acao || s.proxima_acao_recomendada || "—", 300))}</td>
-    </tr>`).join("");
-    const textoSemanasVazias = `<tr><td colspan="9">Nenhuma atualização semanal registrada para o período selecionado. Para gerar análise completa, alimente as semanas e anexe os documentos de suporte.</td></tr>`;
+    const linhasDiagnostico = semanas.map((s: any) => {
+      const isAtual = semanaAtual && Number(s.numero_semana) === Number(semanaAtual.numero_semana);
+      return `<article class="week-note ${isAtual ? "atual" : ""}">
+        <header><strong>Semana ${esc(s.numero_semana)}</strong><span>${fmtDate(s.data_referencia_inicio)} a ${fmtDate(s.data_referencia_fim)}</span></header>
+        <div class="note-block"><b>Diagnóstico</b><p>${esc(resumoTexto(s.analise_semana || s.diagnostico_tecnico || s.motivo_alerta_aderencia || "—", 680))}</p></div>
+        <div class="note-block"><b>Orientação</b><p>${esc(resumoTexto(s.orientacao_semana || s.recomendacao_operacional || "—", 420))}</p></div>
+        <div class="note-block"><b>Próxima ação</b><p>${esc(resumoTexto(s.proxima_acao || s.proxima_acao_recomendada || "—", 360))}</p></div>
+      </article>`;
+    }).join("");
+    const textoSemanasVazias = `<tr><td colspan="8">Nenhuma atualização semanal registrada para o período selecionado. Para gerar análise completa, alimente as semanas e anexe os documentos de suporte.</td></tr>`;
     const linhasAlertas = (payload.alertas || []).map((al: any) => `<tr><td>${fmtDate(al.data_alerta || al.created_at)}</td><td>${esc(humanizar(al.prioridade || "—"))}</td><td>${esc(al.titulo || "—")}</td><td>${esc(al.mensagem || "—")}</td><td>${esc(humanizar(al.status || "pendente"))}</td></tr>`).join("");
     const linhasDocumentos = documentos.map((d: any) => `<tr><td>${esc(d.tipo_documento || d.categoria || "—")}</td><td>${esc(d.nome_customizado || d.nome_original || d.nome_arquivo || "—")}</td><td>${esc(humanizar(d.status || (d.validado ? "validado" : "ativo")))}</td><td>${fmtDate(d.criado_em || d.incluido_em)}</td><td>${d.tamanho_bytes ? `${Math.round(Number(d.tamanho_bytes) / 1024)} KB` : "—"}</td></tr>`).join("");
     const periodoSemanaAtual = semanaAtual ? `${fmtDate(semanaAtual.data_referencia_inicio)} a ${fmtDate(semanaAtual.data_referencia_fim)}` : "—";
     const numeroSemanaAtual = semanaAtual?.numero_semana ? `Semana ${semanaAtual.numero_semana}` : "—";
+    const marcaRelatorio = String(payload.marca || "destrava").toLowerCase().includes("permu") ? "permupay" : "destrava";
+    const logoRelatorio = marcaRelatorio === "permupay" ? PERMUPAY_LOGO_B64 : DESTRAVA_LOGO_B64;
+    const nomePrestadora = marcaRelatorio === "permupay" ? "PermuPay" : "Destrava Crédito";
+    const cnpjPrestadora = marcaRelatorio === "permupay" ? "" : "CNPJ 35.427.182/0001-66";
+    const entradasSemanaAtual = semanaAtual ? totalEntradasRelatorioAcompanhamento(semanaAtual) : 0;
+    const referenciaSemanal = Number(semanaAtual?.referencia_semanal_base || semanaAtual?.referencia_semanal || semanaAtual?.meta_semanal_base || 0) || (mediaMensal > 0 ? mediaMensal / 4 : 0);
+    const tetoSemanal = Number(semanaAtual?.teto_semanal_operacional || semanaAtual?.teto_semanal_movimentacao || semanaAtual?.teto_semanal || 0) || (referenciaSemanal > 0 ? referenciaSemanal * 1.3 : 0);
+    const margemTetoMensal = tetoMensal - totalMes;
+    const deltaMediaMensal = mediaMensal - totalMes;
+    const deltaTetoSemanal = tetoSemanal - entradasSemanaAtual;
+    const necessidadeSaldo = saldoMes < 0 ? Math.abs(saldoMes) : 0;
+    const textoAjusteMensal = semDados
+      ? "Sem semanas no período. Não há cálculo conclusivo de ajuste mensal."
+      : margemTetoMensal >= 0
+        ? `Ainda há margem de ${fmt(margemTetoMensal)} até o teto mensal configurado.`
+        : `O período excedeu o teto mensal configurado em ${fmt(Math.abs(margemTetoMensal))}.`;
+    const textoMediaMensal = semDados
+      ? "Alimente as semanas para comparar o mês com a média mensal."
+      : deltaMediaMensal >= 0
+        ? `Faltam ${fmt(deltaMediaMensal)} para atingir a média mensal base.`
+        : `As entradas superaram a média mensal base em ${fmt(Math.abs(deltaMediaMensal))}.`;
+    const textoSemana = !semanaAtual
+      ? "Sem semana em evidência no período."
+      : deltaTetoSemanal >= 0
+        ? `A semana atual ainda está ${fmt(deltaTetoSemanal)} abaixo do teto semanal operacional.`
+        : `A semana atual excedeu o teto semanal operacional em ${fmt(Math.abs(deltaTetoSemanal))}.`;
+    const textoSaldo = necessidadeSaldo > 0
+      ? `Para zerar o saldo consolidado do período, seria necessário reduzir saídas ou aumentar entradas em ${fmt(necessidadeSaldo)}.`
+      : `O período fechou com saldo positivo de ${fmt(saldoMes)}.`;
 
     return `<!doctype html>
 <html lang="pt-BR">
@@ -12163,34 +12195,39 @@ async function registrarDocumentoContratoGerado(params: {
   <meta charset="utf-8" />
   <title>Relatório Bancário Inteligente</title>
   <style>
-    @page { size: A4 landscape; margin: 8mm; }
+    @page { size: A4; margin: 0; }
     * { box-sizing: border-box; }
-    body { font-family: Arial, Helvetica, sans-serif; color: #172033; font-size: 10.2px; line-height: 1.34; margin: 0; background: #fff; }
-    h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -0.3px; }
-    h2 { color: #1d5ed8; font-size: 14px; text-transform: uppercase; letter-spacing: 1.2px; margin: 18px 0 8px; page-break-after: avoid; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #172033; font-size: 10.6px; line-height: 1.42; margin: 0; background: #fff; }
+    h1 { font-size: 22px; margin: 0 0 5px; letter-spacing: -0.2px; }
+    h2 { color: #1d5ed8; font-size: 13px; text-transform: uppercase; letter-spacing: 1.1px; margin: 16px 0 8px; page-break-after: avoid; }
     h3 { margin: 0 0 7px; font-size: 12px; color: #27344d; }
+    p { margin: 0; }
     .muted { color: #60708c; }
-    .top { border-bottom: 4px solid #1f63e9; padding-bottom: 9px; margin-bottom: 12px; }
-    .sub { color: #44546d; font-size: 12px; }
+    .inline-logo { text-align: center; margin: 0 0 10px; }
+    .inline-logo img { max-height: 46px; max-width: 190px; object-fit: contain; }
+    .top { border-bottom: 3px solid #1B3A8C; padding-bottom: 10px; margin-bottom: 12px; page-break-inside: avoid; }
+    .doc-type { color: #1d5ed8; font-size: 9px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 5px; }
+    .sub { color: #44546d; font-size: 11.5px; }
     .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-    .tag { display: inline-block; padding: 3px 7px; border-radius: 999px; font-weight: 700; font-size: 9px; border: 1px solid transparent; }
+    .tag { display: inline-block; padding: 3px 7px; border-radius: 999px; font-weight: 700; font-size: 8.5px; border: 1px solid transparent; white-space: nowrap; }
     .critico { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
     .alto { background: #ffedd5; color: #c2410c; border-color: #fed7aa; }
     .medio { background: #fef3c7; color: #a16207; border-color: #fde68a; }
     .baixo { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
-    .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .grid4 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
     .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-    .card, .box { border: 1px solid #d9e2ef; border-radius: 10px; padding: 10px; background: #f8fbff; page-break-inside: avoid; }
-    .card strong.label { display: block; color: #71809a; font-size: 9px; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 4px; }
-    .value { font-size: 15px; font-weight: 800; color: #111827; }
+    .card, .box { border: 1px solid #d9e2ef; border-radius: 10px; padding: 9px; background: #f8fbff; page-break-inside: avoid; }
+    .card strong.label { display: block; color: #71809a; font-size: 8.4px; text-transform: uppercase; letter-spacing: .7px; margin-bottom: 4px; }
+    .value { font-size: 14px; font-weight: 800; color: #111827; }
     .kpi-neg { color: #dc2626; }
     .kpi-pos { color: #059669; }
     .box { background: #eef6ff; border-left: 4px solid #1f63e9; }
     .box.alerta { background: #fff1f2; border-left-color: #dc2626; }
+    .service-note { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 9px 10px; color: #334155; margin-top: 10px; page-break-inside: avoid; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 6px; page-break-inside: auto; }
-    th { background: #dcecff; color: #1d5ed8; border: 1px solid #b8cce8; padding: 6px 5px; font-size: 8.7px; text-align: left; }
-    td { border: 1px solid #d5e0ef; padding: 5px; vertical-align: top; word-break: break-word; }
+    th { background: #dcecff; color: #1d5ed8; border: 1px solid #b8cce8; padding: 6px 5px; font-size: 8.2px; text-align: left; }
+    td { border: 1px solid #d5e0ef; padding: 5px; vertical-align: top; word-break: normal; overflow-wrap: anywhere; }
     tr { page-break-inside: avoid; }
     tr.atual td { background: #fff8df; border-top: 2px solid #f59e0b; border-bottom: 2px solid #f59e0b; }
     .num { text-align: right; white-space: nowrap; }
@@ -12201,20 +12238,40 @@ async function registrarDocumentoContratoGerado(params: {
     li small { display: block; color: #64748b; margin-top: 2px; }
     .section { page-break-inside: avoid; }
     .page-break { page-break-before: always; }
-    .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 26px; }
-    .assinatura { border-top: 1px solid #111827; padding-top: 8px; text-align: center; font-size: 10px; }
+    .calc-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .calc-card { border-radius: 10px; padding: 10px; border: 1px solid #dbeafe; background: #f8fbff; page-break-inside: avoid; }
+    .calc-card b { display: block; color: #1e3a8a; text-transform: uppercase; letter-spacing: .7px; font-size: 8.5px; margin-bottom: 4px; }
+    .calc-card p { color: #334155; }
+    .week-notes { display: grid; grid-template-columns: 1fr; gap: 8px; }
+    .week-note { border: 1px solid #d9e2ef; border-radius: 10px; padding: 9px; background: #fff; page-break-inside: avoid; }
+    .week-note.atual { background: #fff8df; border-color: #f59e0b; }
+    .week-note header { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid #edf2f7; padding-bottom: 5px; margin-bottom: 6px; color: #0f172a; }
+    .week-note header span { color: #64748b; }
+    .note-block { margin-top: 5px; }
+    .note-block b { color: #1d5ed8; font-size: 9px; text-transform: uppercase; letter-spacing: .7px; }
+    .note-block p { margin-top: 2px; color: #334155; }
+    .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 28px; page-break-inside: avoid; }
+    .assinatura { border-top: 1px solid #111827; padding-top: 8px; text-align: center; font-size: 10px; min-height: 62px; }
+    .rodape-servico { margin-top: 14px; font-size: 9.5px; color: #64748b; text-align: center; }
+    @media print { .inline-logo { display: none; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
   </style>
 </head>
 <body>
+  <div class="inline-logo">${logoRelatorio ? `<img src="${logoRelatorio}" alt="${esc(nomePrestadora)}"/>` : `<strong>${esc(nomePrestadora)}</strong>`}</div>
   <div class="top">
+    <div class="doc-type">Relatório operacional / prestação de serviço</div>
     <h1>Relatório Bancário Inteligente de Acompanhamento</h1>
-    <div class="sub">${esc(periodoTitulo)} — ${esc(a.nome_empresa || "Empresa não informada")} — ${esc(a.banco_observado || "Banco não informado")}</div>
-    <div class="sub">CNPJ ${esc(a.cnpj || "—")} · Gerado em ${fmtDate(new Date())} por ${esc(payload.geradoPor || "Destrava Crédito")}</div>
+    <div class="sub">${esc(periodoTitulo)} — ${esc(a.nome_empresa || "Empresa")} — ${esc(a.banco_observado || "Banco não informado")}</div>
+    <div class="sub">CNPJ ${esc(a.cnpj || "—")} · Gerado em ${fmtDate(new Date())} por ${esc(payload.geradoPor || a.responsavel_nome || "Responsável")}</div>
     <div class="chips">
       <span class="tag ${statusInteligente === "critico" ? "critico" : statusInteligente === "atencao" ? "medio" : "baixo"}">Status: ${esc(humanizar(statusInteligente))}</span>
       <span class="tag ${prontidaoCredito.includes("nao") ? "critico" : prontidaoCredito.includes("prepar") ? "medio" : "baixo"}">Prontidão: ${esc(humanizar(prontidaoCredito))}</span>
       <span class="tag ${impactoRating.includes("correc") || impactoRating.includes("prejud") ? "critico" : "baixo"}">Rating: ${esc(humanizar(impactoRating))}</span>
     </div>
+  </div>
+
+  <div class="service-note">
+    Este documento integra a prestação de serviço de acompanhamento bancário. O relatório consolida as semanas alimentadas, interpreta aderência financeira, rating interno, riscos e ações recomendadas para apoiar a preparação da empresa para crédito, sem promessa de aprovação bancária.
   </div>
 
   <h2>Resumo executivo</h2>
@@ -12250,6 +12307,14 @@ async function registrarDocumentoContratoGerado(params: {
     A fórmula preserva a regra atual: relatório mensal alimentado por semanas, com referência no faturamento anual declarado e margem operacional configurada.
   </div>
 
+  <h2>Cálculo de aderência e ajuste necessário</h2>
+  <div class="calc-grid section">
+    <div class="calc-card"><b>Referência da semana</b><p>Referência semanal: <strong>${fmt(referenciaSemanal)}</strong>. Teto semanal operacional: <strong>${fmt(tetoSemanal)}</strong>. ${esc(textoSemana)}</p></div>
+    <div class="calc-card"><b>Média mensal</b><p>${esc(textoMediaMensal)}</p></div>
+    <div class="calc-card"><b>Margem até o teto mensal</b><p>${esc(textoAjusteMensal)}</p></div>
+    <div class="calc-card"><b>Composição para correção</b><p>${esc(textoSaldo)} A assessoria deve orientar redução de saídas, comprovação de origem dos recursos e regularidade semanal antes de proposta bancária.</p></div>
+  </div>
+
   ${payload.incluirIa !== false ? `
   <h2>Assessoria inteligente de crédito</h2>
   <div class="grid3 section">
@@ -12267,7 +12332,7 @@ async function registrarDocumentoContratoGerado(params: {
 
   <h2>Movimentação consolidada por semana</h2>
   <table>
-    <thead><tr><th style="width:8%">Semana</th><th style="width:11%">Período</th><th>Entradas</th><th>Saídas</th><th>Saldo</th><th>Rating Bacen</th><th>Rating interno</th><th>Status</th><th style="width:30%">Leitura resumida</th></tr></thead>
+    <thead><tr><th style="width:13%">Semana</th><th style="width:17%">Período</th><th>Entradas</th><th>Saídas</th><th>Saldo</th><th>Rating Bacen</th><th>Rating interno</th><th>Status</th></tr></thead>
     <tbody>${linhasMovimentacao || textoSemanasVazias}</tbody>
   </table>
 
@@ -12279,10 +12344,7 @@ async function registrarDocumentoContratoGerado(params: {
   </table>
 
   <h2>Diagnóstico e orientação por semana</h2>
-  <table>
-    <thead><tr><th style="width:12%">Semana</th><th>Diagnóstico</th><th>Orientação</th><th>Próxima ação</th></tr></thead>
-    <tbody>${linhasDiagnostico || `<tr><td colspan="4">Sem diagnósticos semanais no período.</td></tr>`}</tbody>
-  </table>
+  <div class="week-notes">${linhasDiagnostico || `<div class="box">Sem diagnósticos semanais no período.</div>`}</div>
   ` : ""}
 
   <h2>Alertas operacionais</h2>
@@ -12305,14 +12367,17 @@ async function registrarDocumentoContratoGerado(params: {
 
   <div class="assinaturas">
     <div class="assinatura">
-      ${esc(a.responsavel_nome || payload.geradoPor || "Responsável pelo acompanhamento")}<br/>
-      Responsável técnico — Destrava Crédito
+      <strong>${esc(nomePrestadora === "Destrava Crédito" ? "DESTRAVA CRÉDITO LTDA" : nomePrestadora.toUpperCase())}</strong><br/>
+      Prestadora / Responsável técnico<br/>
+      ${esc(cnpjPrestadora || a.responsavel_nome || payload.geradoPor || "")}
     </div>
     <div class="assinatura">
-      Responsável legal da empresa acompanhada<br/>
-      ${esc(a.nome_empresa || "Empresa")} — CNPJ ${esc(a.cnpj || "—")}
+      <strong>${esc(a.nome_empresa || "Empresa acompanhada")}</strong><br/>
+      Cliente / Contratante<br/>
+      CNPJ ${esc(a.cnpj || "—")}
     </div>
   </div>
+  <div class="rodape-servico">Relatório gerado para fins de acompanhamento, assessoria e comprovação da prestação de serviço. A análise é consultiva e não representa promessa de aprovação de crédito.</div>
 </body>
 </html>`;
   }
@@ -12330,6 +12395,7 @@ async function registrarDocumentoContratoGerado(params: {
       const detalhado = req.body?.detalhado !== false;
       const incluirIa = req.body?.incluirIa !== false;
       const incluirAnexos = req.body?.incluirAnexos !== false;
+      const marca = String(req.body?.marca || req.body?.prestadora || "destrava").toLowerCase().includes("permu") ? "permupay" : "destrava";
 
       if (tipo === "mensal" && (!ano || !mes || mes < 1 || mes > 12)) {
         res.status(400).json({ error: "Informe ano e mês válidos para o relatório." });
@@ -12394,7 +12460,7 @@ async function registrarDocumentoContratoGerado(params: {
         : null;
 
       if (formato === "json") {
-        res.json({ acompanhamento, atualizacoes, alertas, documentos, inteligencia, filtros: { tipo, ano, mes, dataInicio, dataFim, detalhado, incluirIa, incluirAnexos } });
+        res.json({ acompanhamento, atualizacoes, alertas, documentos, inteligencia, filtros: { tipo, ano, mes, dataInicio, dataFim, detalhado, incluirIa, incluirAnexos, marca } });
         return;
       }
 
@@ -12413,6 +12479,7 @@ async function registrarDocumentoContratoGerado(params: {
         incluirIa,
         incluirAnexos,
         geradoPor: colaborador?.nome || colaborador?.email || null,
+        marca,
       });
 
       const empresaSlug = slugRelatorioAcompanhamento(acompanhamento.nome_empresa || "empresa");
@@ -12436,32 +12503,12 @@ async function registrarDocumentoContratoGerado(params: {
         return;
       }
 
-      const uploadsDir = path.resolve("uploads", "acompanhamento-bancario");
-      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
       const fileName = `${baseName}.pdf`;
-      const filePath = path.join(uploadsDir, fileName);
-
-      let browser: any;
-      try {
-        browser = await launchChromium();
-        const page = await browser.newPage();
-        await page.setContent(html, { waitUntil: "networkidle0" });
-        await page.pdf({
-          path: filePath,
-          format: "A4",
-          landscape: true,
-          printBackground: true,
-          margin: { top: "8mm", bottom: "8mm", left: "7mm", right: "7mm" },
-        });
-      } finally {
-        await closeChromium(browser);
-      }
+      const pdfBuffer = await generateBrandedPdfBuffer(html, { brand: marca });
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-      const stream = fs.createReadStream(filePath);
-      stream.pipe(res);
-      stream.on("end", () => fs.unlink(filePath, () => {}));
+      res.send(pdfBuffer);
     } catch (err: any) {
       console.error("[POST /api/acompanhamentos-bancarios/:id/relatorio]", err);
       res.status(500).json({ error: err.message || "Erro ao gerar relatório de acompanhamento bancário." });
