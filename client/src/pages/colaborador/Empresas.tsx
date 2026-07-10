@@ -140,6 +140,22 @@ const SEGMENTOS = [
 ];
 const ESTADOS_BR = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
+const ABAS_EMPRESA = [
+  "visao_geral",
+  "socios",
+  "dossie_credito",
+  "followup",
+  "historico",
+  "documentos",
+  "simulacoes",
+  "contratos",
+] as const;
+type AbaEmpresa = typeof ABAS_EMPRESA[number];
+
+function isAbaEmpresa(value: string | null): value is AbaEmpresa {
+  return Boolean(value && (ABAS_EMPRESA as readonly string[]).includes(value));
+}
+
 // ─── Utilitários ──────────────────────────────────────────────────────────────
 
 const fmt = (v?: number | null) =>
@@ -576,7 +592,7 @@ function mapCnpjDataParaEmpresa(data: any, prev: Record<string, any> = {}): Reco
 }
 
 export default function Empresas() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
@@ -584,7 +600,7 @@ export default function Empresas() {
   const [selecionada, setSelecionada] = useState<Empresa | null>(null);
   const [showDetail, setShowDetail] = useState(false); // mobile toggle
   const [comboAberto, setComboAberto] = useState(false);
-  const [abaAtiva, setAbaAtiva] = useState<"visao_geral" | "socios" | "dossie_credito" | "followup" | "historico" | "documentos" | "simulacoes" | "contratos">("visao_geral");
+  const [abaAtiva, setAbaAtiva] = useState<AbaEmpresa>("visao_geral");
   const [followups, setFollowups] = useState<EmpresaFollowup[]>([]);
   const [historico, setHistorico] = useState<EmpresaHistorico[]>([]);
   const [documentos, setDocumentos] = useState<EmpresaDocumento[]>([]);
@@ -851,10 +867,52 @@ export default function Empresas() {
     return () => clearTimeout(t);
   }, [carregarEmpresas]);
 
+  // ── Reabrir detalhe da empresa via URL ─────────────────────────────────────
+  // Usado pelo acervo documental para voltar exatamente para a empresa aberta,
+  // sem cair na tela vazia de seleção. Não altera dados nem rotas antigas.
+  useEffect(() => {
+    const queryString = location.split("?")[1] || "";
+    const params = new URLSearchParams(queryString);
+    const empresaIdParam = params.get("empresa") || params.get("empresa_id") || params.get("id");
+    const abaParam = params.get("aba");
+
+    if (!empresaIdParam) return;
+
+    if (selecionada?.id === empresaIdParam) {
+      setShowDetail(true);
+      if (isAbaEmpresa(abaParam)) setAbaAtiva(abaParam);
+      return;
+    }
+
+    const encontrada = empresas.find((emp) => emp.id === empresaIdParam);
+    if (encontrada) {
+      setSelecionada(encontrada);
+      setShowDetail(true);
+      if (isAbaEmpresa(abaParam)) setAbaAtiva(abaParam);
+      return;
+    }
+
+    let cancelado = false;
+    apiFetch(`/api/empresas/${empresaIdParam}`)
+      .then((empresa) => {
+        if (cancelado || !empresa?.id) return;
+        setSelecionada(empresa);
+        setShowDetail(true);
+        if (isAbaEmpresa(abaParam)) setAbaAtiva(abaParam);
+      })
+      .catch(() => {
+        if (!cancelado) toast.error("Não foi possível reabrir a empresa selecionada.");
+      });
+
+    return () => { cancelado = true; };
+  }, [location, empresas, selecionada?.id]);
+
   // ── Carregar detalhe ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!selecionada) return;
-    setAbaAtiva("visao_geral");
+    const queryString = location.split("?")[1] || "";
+    const abaParam = new URLSearchParams(queryString).get("aba");
+    setAbaAtiva(isAbaEmpresa(abaParam) ? abaParam : "visao_geral");
     setFollowups([]); setHistorico([]); setDocumentos([]); setContratosSociais([]); setSociosEmpresa([]);
     setSimulacoesEmpresa([]); setContratosEmpresa([]);
     setLoadingDetalhe(true);
@@ -875,12 +933,13 @@ export default function Empresas() {
       setSimulacoesEmpresa(Array.isArray(sim) ? sim : []);
       setContratosEmpresa(Array.isArray(cont) ? cont : []);
     }).finally(() => setLoadingDetalhe(false));
-  }, [selecionada?.id]);
+  }, [selecionada?.id, location]);
 
   // ── Selecionar empresa ──────────────────────────────────────────────────────
   function selecionar(emp: Empresa) {
     setSelecionada(emp);
     setShowDetail(true);
+    setLocation(`/colaborador/empresas?empresa=${emp.id}`);
   }
 
   // ── Histórico ──────────────────────────────────────────────────────────────
@@ -1301,7 +1360,7 @@ export default function Empresas() {
                     <div className="flex items-start gap-3">
                       {/* Botão voltar mobile */}
                       <button
-                        onClick={() => { setSelecionada(null); setShowDetail(false); }}
+                        onClick={() => { setSelecionada(null); setShowDetail(false); setLocation("/colaborador/empresas"); }}
                         className="sm:hidden mt-0.5 shrink-0 p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"
                       >
                         <ArrowLeft className="w-4 h-4" />

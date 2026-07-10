@@ -55,11 +55,12 @@ export default function AcervoDocumentalEmpresa() {
               <div className="flex min-w-0 items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setLocation("/colaborador/empresas")}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                  title="Voltar para empresas"
+                  onClick={() => setLocation(`/colaborador/empresas?empresa=${empresaId}&aba=documentos`)}
+                  className="flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-slate-600 hover:bg-slate-50"
+                  title="Voltar para a página da empresa"
                 >
                   <ArrowLeft className="h-5 w-5" />
+                  <span className="hidden text-xs font-bold lg:inline">Voltar para empresa</span>
                 </button>
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
                   <FileText className="h-5 w-5" />

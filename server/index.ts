@@ -4070,13 +4070,15 @@ async function startServer() {
 
   // Relatório operacional de empresas (CSV/JSON).
   // Importante: esta rota fica antes de /api/empresas/:id para não ser tratada como ID.
+  // Implementação defensiva: não quebra se alguma coluna legada ainda não existir no banco.
   app.get("/api/empresas/relatorio", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
       const isGestor = isGestorCargo(colaborador?.cargo || '');
       const formato = String(req.query.formato || "csv").toLowerCase();
       const busca = String(req.query.busca || "").trim();
-      const status = String(req.query.status || "todos");
+      const status = String(req.query.status || "todos").trim();
+      const statusNormalizado = status.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       const porte = String(req.query.porte || "todos");
       const origem = String(req.query.origem || "todos");
       const cidade = String(req.query.cidade || "").trim();
@@ -4086,46 +4088,91 @@ async function startServer() {
       const limitRaw = Number(req.query.limit || req.query.limite || 5000);
       const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 5000, 1), 20000);
 
+      const empresaColsResult = await pool.query(
+        `SELECT column_name
+           FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'empresas'`,
+      );
+      const empresaColumns = new Set<string>(empresaColsResult.rows.map((row: any) => String(row.column_name)));
+      const hasEmpresaColumn = (column: string) => empresaColumns.has(column);
+      const colSql = (column: string, cast: string = "text", alias = column) =>
+        hasEmpresaColumn(column) ? `e.${column} AS ${alias}` : `NULL::${cast} AS ${alias}`;
+      const colRefOrNull = (column: string, cast: string = "text") =>
+        hasEmpresaColumn(column) ? `e.${column}` : `NULL::${cast}`;
+      const coalesceText = (columns: string[]) =>
+        `COALESCE(${columns.map((column) => colRefOrNull(column, "text")).join(", ")}, '')`;
+
+      const colaboradoresExists = await pool.query("SELECT to_regclass('public.colaboradores') AS table_name");
+      const hasColaboradores = Boolean(colaboradoresExists.rows?.[0]?.table_name);
+
       const params: any[] = [];
       const conditions: string[] = [];
 
       if (!isGestor && colaborador?.id) {
+        const accessParts: string[] = [];
+        if (hasEmpresaColumn("responsavel_id")) accessParts.push(`e.responsavel_id = $${params.length + 1}`);
+        if (hasEmpresaColumn("analista_id")) accessParts.push(`e.analista_id = $${params.length + 1}`);
+        if (hasEmpresaColumn("captador_id")) accessParts.push(`e.captador_id = $${params.length + 1}`);
         params.push(colaborador.id);
-        conditions.push(`(e.responsavel_id = $${params.length} OR e.analista_id = $${params.length} OR e.captador_id = $${params.length})`);
+        conditions.push(accessParts.length ? `(${accessParts.join(" OR ")})` : "1 = 0");
       }
 
-      if (status && status !== "todos") {
-        if (status === "ativa") {
-          conditions.push(`COALESCE(e.situacao_cadastral, e.status, '') ILIKE '%ativa%'`);
-        } else if (status === "inativa") {
-          conditions.push(`COALESCE(e.situacao_cadastral, e.status, '') NOT ILIKE '%ativa%'`);
+      if (status && statusNormalizado !== "todos") {
+        const statusExpr = `UPPER(TRIM(${coalesceText(["situacao_cadastral", "status"])}))`;
+        const statusOperacionalExpr = hasEmpresaColumn("status") ? "LOWER(TRIM(COALESCE(e.status, '')))" : "NULL::text";
+        const activePredicate = `(
+          (${statusExpr} LIKE 'ATIV%' AND ${statusExpr} NOT LIKE 'INATIV%')
+          OR ${statusExpr} IN ('REGULAR', 'HABILITADA', 'HABILITADO')
+        )`;
+        const inactivePredicate = `(
+          ${statusExpr} LIKE 'INATIV%'
+          OR ${statusExpr} LIKE 'BAIXAD%'
+          OR ${statusExpr} LIKE 'INAPT%'
+          OR ${statusExpr} LIKE 'SUSPENS%'
+          OR ${statusExpr} LIKE 'CANCELAD%'
+          OR ${statusExpr} LIKE 'NUL%'
+        )`;
+
+        if (["ativa", "ativo"].includes(statusNormalizado)) {
+          conditions.push(statusNormalizado === "ativo" && hasEmpresaColumn("status")
+            ? `(${statusOperacionalExpr} = 'ativo' OR ${activePredicate})`
+            : activePredicate);
+        } else if (["inativa", "inativo"].includes(statusNormalizado)) {
+          conditions.push(statusNormalizado === "inativo" && hasEmpresaColumn("status")
+            ? `(${statusOperacionalExpr} = 'inativo' OR ${inactivePredicate})`
+            : inactivePredicate);
         } else {
+          const exactParts: string[] = [];
           params.push(status);
-          conditions.push(`(e.status = $${params.length} OR e.situacao_cadastral = $${params.length})`);
+          const idx = params.length;
+          if (hasEmpresaColumn("status")) exactParts.push(`e.status = $${idx}`);
+          if (hasEmpresaColumn("situacao_cadastral")) exactParts.push(`e.situacao_cadastral = $${idx}`);
+          conditions.push(exactParts.length ? `(${exactParts.join(" OR ")})` : "1 = 0");
         }
       }
 
-      if (porte && porte !== "todos") {
+      if (porte && porte !== "todos" && hasEmpresaColumn("porte")) {
         params.push(porte);
         conditions.push(`e.porte = $${params.length}`);
       }
 
-      if (origem && origem !== "todos") {
+      if (origem && origem !== "todos" && hasEmpresaColumn("origem")) {
         params.push(`%${origem}%`);
         conditions.push(`COALESCE(e.origem, '') ILIKE $${params.length}`);
       }
 
-      if (responsavelId) {
+      if (responsavelId && hasEmpresaColumn("responsavel_id")) {
         params.push(responsavelId);
         conditions.push(`e.responsavel_id = $${params.length}`);
       }
 
-      if (cidade) {
+      if (cidade && hasEmpresaColumn("cidade")) {
         params.push(`%${cidade}%`);
         conditions.push(`COALESCE(e.cidade, '') ILIKE $${params.length}`);
       }
 
-      if (estado) {
+      if (estado && hasEmpresaColumn("estado")) {
         params.push(estado.toUpperCase());
         conditions.push(`UPPER(COALESCE(e.estado, '')) = $${params.length}`);
       }
@@ -4133,85 +4180,126 @@ async function startServer() {
       if (busca) {
         params.push(`%${busca}%`);
         const idxText = params.length;
-        const searchParts = [
-          `COALESCE(e.razao_social, '') ILIKE $${idxText}`,
-          `COALESCE(e.nome_fantasia, '') ILIKE $${idxText}`,
-          `COALESCE(e.cnpj, '') ILIKE $${idxText}`,
-          `COALESCE(e.responsavel_nome, '') ILIKE $${idxText}`,
-          `COALESCE(e.telefone, '') ILIKE $${idxText}`,
-          `COALESCE(e.email, '') ILIKE $${idxText}`,
-        ];
+        const searchParts: string[] = [];
+        for (const column of ["razao_social", "nome_fantasia", "cnpj", "responsavel_nome", "telefone", "email"]) {
+          if (hasEmpresaColumn(column)) searchParts.push(`COALESCE(e.${column}, '') ILIKE $${idxText}`);
+        }
         const digits = onlyDigits(busca);
         if (digits) {
           params.push(`%${digits}%`);
           const idxDigits = params.length;
-          searchParts.push(`regexp_replace(COALESCE(e.cnpj,''), '[^0-9]', '', 'g') LIKE $${idxDigits}`);
-          searchParts.push(`regexp_replace(COALESCE(e.telefone,''), '[^0-9]', '', 'g') LIKE $${idxDigits}`);
+          if (hasEmpresaColumn("cnpj")) searchParts.push(`regexp_replace(COALESCE(e.cnpj,''), '[^0-9]', '', 'g') LIKE $${idxDigits}`);
+          if (hasEmpresaColumn("telefone")) searchParts.push(`regexp_replace(COALESCE(e.telefone,''), '[^0-9]', '', 'g') LIKE $${idxDigits}`);
         }
-        conditions.push(`(${searchParts.join(" OR ")})`);
+        if (searchParts.length) conditions.push(`(${searchParts.join(" OR ")})`);
       }
 
       if (!incluirIncompletos) {
-        conditions.push(`COALESCE(e.arquivado_por_duplicidade, false) = false`);
-        conditions.push(`COALESCE(e.bloqueado_operacional, false) = false`);
+        if (hasEmpresaColumn("arquivado_por_duplicidade")) conditions.push(`COALESCE(e.arquivado_por_duplicidade, false) = false`);
+        if (hasEmpresaColumn("bloqueado_operacional")) conditions.push(`COALESCE(e.bloqueado_operacional, false) = false`);
       }
+
+      const joinClauses: string[] = [];
+      if (hasColaboradores && hasEmpresaColumn("captador_id")) joinClauses.push("LEFT JOIN colaboradores cap ON cap.id = e.captador_id");
+      if (hasColaboradores && hasEmpresaColumn("analista_id")) joinClauses.push("LEFT JOIN colaboradores ana ON ana.id = e.analista_id");
+      if (hasColaboradores && hasEmpresaColumn("responsavel_id")) joinClauses.push("LEFT JOIN colaboradores resp ON resp.id = e.responsavel_id");
+
+      const selectColumns = [
+        colSql("id", "text"),
+        colSql("razao_social"),
+        colSql("nome_fantasia"),
+        colSql("cnpj"),
+        colSql("situacao_cadastral"),
+        colSql("status"),
+        colSql("porte"),
+        colSql("regime_tributario"),
+        colSql("cnae_principal"),
+        colSql("natureza_juridica"),
+        colSql("data_abertura", "date"),
+        colSql("capital_social", "numeric"),
+        colSql("faturamento_anual", "numeric"),
+        colSql("limite_credito_atual", "numeric"),
+        colSql("score_serasa", "numeric"),
+        colSql("score_spc", "numeric"),
+        colSql("email"),
+        colSql("telefone"),
+        colSql("whatsapp"),
+        colSql("cidade"),
+        colSql("estado"),
+        colSql("origem"),
+        colSql("responsavel_nome"),
+        colSql("ultima_sincronizacao_receita", "timestamp"),
+        colSql("cadastro_completo", "boolean"),
+        colSql("cadastro_status"),
+        colSql("created_at", "timestamp"),
+        colSql("updated_at", "timestamp"),
+        hasColaboradores && hasEmpresaColumn("captador_id") ? "cap.nome AS captador_nome" : "NULL::text AS captador_nome",
+        hasColaboradores && hasEmpresaColumn("analista_id") ? "ana.nome AS analista_nome" : "NULL::text AS analista_nome",
+        hasColaboradores && hasEmpresaColumn("responsavel_id") ? "resp.nome AS responsavel_colaborador_nome" : "NULL::text AS responsavel_colaborador_nome",
+      ];
+
+      const orderExpr = hasEmpresaColumn("razao_social")
+        ? `COALESCE(NULLIF(e.razao_social,''), ${colRefOrNull("nome_fantasia")}, ${colRefOrNull("cnpj")}, e.id::text)`
+        : "e.id::text";
 
       params.push(limit);
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
       const sql = `
         SELECT
-          e.id,
-          e.razao_social,
-          e.nome_fantasia,
-          e.cnpj,
-          e.situacao_cadastral,
-          e.status,
-          e.porte,
-          e.regime_tributario,
-          e.cnae_principal,
-          e.natureza_juridica,
-          e.data_abertura,
-          e.capital_social,
-          e.faturamento_anual,
-          e.limite_credito_atual,
-          e.score_serasa,
-          e.score_spc,
-          e.email,
-          e.telefone,
-          e.whatsapp,
-          e.cidade,
-          e.estado,
-          e.origem,
-          e.responsavel_nome,
-          e.ultima_sincronizacao_receita,
-          e.cadastro_completo,
-          e.cadastro_status,
-          e.created_at,
-          e.updated_at,
-          cap.nome AS captador_nome,
-          ana.nome AS analista_nome,
-          resp.nome AS responsavel_colaborador_nome
+          ${selectColumns.join(",\n          ")}
         FROM empresas e
-        LEFT JOIN colaboradores cap ON cap.id = e.captador_id
-        LEFT JOIN colaboradores ana ON ana.id = e.analista_id
-        LEFT JOIN colaboradores resp ON resp.id = e.responsavel_id
+        ${joinClauses.join("\n        ")}
         ${where}
-        ORDER BY COALESCE(NULLIF(e.razao_social,''), e.nome_fantasia, e.cnpj, e.id::text) ASC
+        ORDER BY ${orderExpr} ASC
         LIMIT $${params.length}`;
 
       const { rows } = await pool.query(sql, params);
 
+      const corrigirMojibakeRelatorio = (value: unknown): string => {
+        if (value === null || value === undefined) return "";
+        const text = String(value).trim();
+        if (!text) return "";
+        if (!/[ÃÂ�]/.test(text)) return text;
+        try {
+          return Buffer.from(text, "latin1").toString("utf8");
+        } catch {
+          return text;
+        }
+      };
+
       const formatDateForReport = (value: unknown): string => {
         if (!value) return "";
         const date = value instanceof Date ? value : new Date(String(value));
-        if (Number.isNaN(date.getTime())) return String(value);
-        return date.toISOString().slice(0, 10);
+        if (Number.isNaN(date.getTime())) return corrigirMojibakeRelatorio(value);
+        return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
       };
 
       const formatMoneyForReport = (value: unknown): string => {
         if (value === null || value === undefined || value === "") return "";
         const n = Number(value);
-        return Number.isFinite(n) ? n.toFixed(2).replace(".", ",") : String(value);
+        return Number.isFinite(n)
+          ? n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+          : corrigirMojibakeRelatorio(value);
+      };
+
+      const formatCnpjForReport = (value: unknown): string => {
+        const digits = onlyDigits(String(value || ""));
+        if (digits.length !== 14) return corrigirMojibakeRelatorio(value);
+        return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+      };
+
+      const formatPhoneForReport = (value: unknown): string => {
+        const digits = onlyDigits(String(value || ""));
+        if (!digits) return "";
+        if (digits.length === 10) return digits.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
+        if (digits.length === 11) return digits.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
+        return corrigirMojibakeRelatorio(value);
+      };
+
+      const formatPorteForReport = (value: unknown): string => {
+        const v = String(value || "").trim().toLowerCase();
+        const map: Record<string, string> = { mei: "MEI", me: "ME", epp: "EPP", medio: "Médio porte", grande: "Grande porte" };
+        return map[v] || corrigirMojibakeRelatorio(value);
       };
 
       const csvEscape = (value: unknown): string => {
@@ -4220,61 +4308,68 @@ async function startServer() {
       };
 
       const reportRows = rows.map((e: any) => ({
-        "Razão Social": e.razao_social || "",
-        "Nome Fantasia": e.nome_fantasia || "",
-        "CNPJ": e.cnpj || "",
-        "Situação Cadastral": e.situacao_cadastral || e.status || "",
-        "Status Operacional": e.status || "",
-        "Porte": e.porte || "",
-        "Regime Tributário": e.regime_tributario || "",
-        "Natureza Jurídica": e.natureza_juridica || "",
-        "CNAE Principal": e.cnae_principal || "",
+        "Empresa": corrigirMojibakeRelatorio(e.razao_social),
+        "Nome Fantasia": corrigirMojibakeRelatorio(e.nome_fantasia),
+        "CNPJ": formatCnpjForReport(e.cnpj),
+        "Situação Receita": corrigirMojibakeRelatorio(e.situacao_cadastral || e.status),
+        "Status Operacional": corrigirMojibakeRelatorio(e.status),
+        "Porte": formatPorteForReport(e.porte),
+        "Regime Tributário": corrigirMojibakeRelatorio(e.regime_tributario),
+        "Natureza Jurídica": corrigirMojibakeRelatorio(e.natureza_juridica),
+        "CNAE Principal": corrigirMojibakeRelatorio(e.cnae_principal),
         "Data de Abertura": formatDateForReport(e.data_abertura),
         "Capital Social": formatMoneyForReport(e.capital_social),
         "Faturamento Anual": formatMoneyForReport(e.faturamento_anual),
         "Limite Atual": formatMoneyForReport(e.limite_credito_atual),
-        "Serasa": e.score_serasa ?? "",
-        "SPC": e.score_spc ?? "",
-        "Telefone": e.telefone || e.whatsapp || "",
-        "E-mail": e.email || "",
-        "Cidade": e.cidade || "",
-        "UF": e.estado || "",
-        "Origem": e.origem || "",
-        "Responsável Cadastro": e.responsavel_nome || e.responsavel_colaborador_nome || "",
-        "Captador": e.captador_nome || "",
-        "Analista": e.analista_nome || "",
+        "Score Serasa": e.score_serasa ?? "",
+        "Score SPC": e.score_spc ?? "",
+        "Telefone": formatPhoneForReport(e.telefone || e.whatsapp),
+        "E-mail": corrigirMojibakeRelatorio(e.email),
+        "Cidade": corrigirMojibakeRelatorio(e.cidade),
+        "UF": corrigirMojibakeRelatorio(e.estado).toUpperCase(),
+        "Origem": corrigirMojibakeRelatorio(e.origem),
+        "Responsável": corrigirMojibakeRelatorio(e.responsavel_nome || e.responsavel_colaborador_nome),
+        "Captador": corrigirMojibakeRelatorio(e.captador_nome),
+        "Analista": corrigirMojibakeRelatorio(e.analista_nome),
         "Cadastro Completo": e.cadastro_completo === true ? "Sim" : e.cadastro_completo === false ? "Não" : "",
-        "Status Cadastro": e.cadastro_status || "",
-        "Última Sincronização Receita": formatDateForReport(e.ultima_sincronizacao_receita),
+        "Status Cadastro": corrigirMojibakeRelatorio(e.cadastro_status),
+        "Última Atualização Receita": formatDateForReport(e.ultima_sincronizacao_receita),
         "Criado em": formatDateForReport(e.created_at),
         "Atualizado em": formatDateForReport(e.updated_at),
       }));
 
       if (formato === "json") {
-        res.json({ total: reportRows.length, empresas: reportRows, filtros: { busca, status, porte, origem, cidade, estado } });
+        res.json({ ok: true, total: reportRows.length, data: reportRows, empresas: rows });
+        return;
+      }
+
+      if (formato !== "csv") {
+        res.status(400).json({ ok: false, code: "FORMATO_RELATORIO_INVALIDO", message: "Formato de relatório inválido. Use csv ou json." });
         return;
       }
 
       const headers = Object.keys(reportRows[0] || {
-        "Razão Social": "", "Nome Fantasia": "", "CNPJ": "", "Situação Cadastral": "", "Status Operacional": "",
-        "Porte": "", "Regime Tributário": "", "Natureza Jurídica": "", "CNAE Principal": "", "Data de Abertura": "",
-        "Capital Social": "", "Faturamento Anual": "", "Limite Atual": "", "Serasa": "", "SPC": "", "Telefone": "", "E-mail": "",
-        "Cidade": "", "UF": "", "Origem": "", "Responsável Cadastro": "", "Captador": "", "Analista": "",
-        "Cadastro Completo": "", "Status Cadastro": "", "Última Sincronização Receita": "", "Criado em": "", "Atualizado em": "",
+        "Empresa": "", "Nome Fantasia": "", "CNPJ": "", "Situação Receita": "",
+        "Status Operacional": "", "Porte": "", "Regime Tributário": "", "Natureza Jurídica": "",
+        "CNAE Principal": "", "Data de Abertura": "", "Capital Social": "", "Faturamento Anual": "",
+        "Limite Atual": "", "Score Serasa": "", "Score SPC": "", "Telefone": "", "E-mail": "",
+        "Cidade": "", "UF": "", "Origem": "", "Responsável": "", "Captador": "",
+        "Analista": "", "Cadastro Completo": "", "Status Cadastro": "", "Última Atualização Receita": "",
+        "Criado em": "", "Atualizado em": "",
       });
+      const delimiter = ";";
       const csv = [
-        headers.map(csvEscape).join(","),
-        ...reportRows.map((row) => headers.map((header) => csvEscape((row as Record<string, unknown>)[header])).join(",")),
-      ].join("\n");
+        "sep=;",
+        headers.map(csvEscape).join(delimiter),
+        ...reportRows.map((row: any) => headers.map((header) => csvEscape(row[header])).join(delimiter)),
+      ].join("\r\n");
 
-      const fileDate = new Date().toISOString().slice(0, 10);
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
-      res.setHeader("Content-Disposition", `attachment; filename="relatorio-empresas-${fileDate}.csv"`);
-      res.setHeader("Cache-Control", "no-store");
-      res.send(`\uFEFF${csv}`);
+      res.setHeader("Content-Disposition", `attachment; filename="relatorio-empresas-${new Date().toISOString().slice(0, 10)}.csv"`);
+      res.send("\ufeff" + csv);
     } catch (err: any) {
       console.error("[GET /api/empresas/relatorio]", err);
-      res.status(500).json({ error: "Erro ao gerar relatório de empresas", code: "EMPRESAS_RELATORIO_FAILED" });
+      res.status(500).json({ ok: false, code: "RELATORIO_EMPRESAS_FAILED", message: "Erro ao gerar relatório de empresas." });
     }
   });
 

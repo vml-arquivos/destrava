@@ -73,11 +73,45 @@ function formatCurrency(value?: number | null): string {
   return Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function csvCell(value: unknown): string {
+  const text = value == null || value === "-" ? "" : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function gerarCsvExcel(headers: string[], rows: unknown[][]): string {
+  return [
+    "sep=;",
+    headers.map(csvCell).join(";"),
+    ...rows.map((row) => row.map(csvCell).join(";")),
+  ].join("\r\n");
+}
+
+function normalizarSituacao(situacao?: string | null): string {
+  return (situacao || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase();
+}
+
+function isSituacaoAtiva(situacao?: string | null): boolean {
+  const s = normalizarSituacao(situacao);
+  return (s.startsWith("ATIV") && !s.startsWith("INATIV")) || ["REGULAR", "HABILITADA", "HABILITADO"].includes(s);
+}
+
+function isSituacaoInativa(situacao?: string | null): boolean {
+  const s = normalizarSituacao(situacao);
+  return s.startsWith("INATIV")
+    || s.startsWith("BAIXAD")
+    || s.startsWith("INAPT")
+    || s.startsWith("SUSPENS")
+    || s.startsWith("CANCELAD")
+    || s.startsWith("NUL");
+}
+
 function situacaoBadge(situacao?: string | null) {
-  const s = (situacao || "").toLowerCase();
-  if (s.includes("ativa")) return { cls: "bg-emerald-50 text-emerald-700 border-emerald-100", label: "Ativa" };
-  if (s.includes("baixada") || s.includes("cancelada")) return { cls: "bg-red-50 text-red-700 border-red-100", label: situacao || "Baixada" };
-  if (s.includes("suspensa") || s.includes("inapta")) return { cls: "bg-amber-50 text-amber-700 border-amber-100", label: situacao || "Suspensa" };
+  if (isSituacaoAtiva(situacao)) return { cls: "bg-emerald-50 text-emerald-700 border-emerald-100", label: situacao || "Ativa" };
+  if (isSituacaoInativa(situacao)) return { cls: "bg-red-50 text-red-700 border-red-100", label: situacao || "Inativa/Baixada" };
   return { cls: "bg-slate-50 text-slate-600 border-slate-200", label: situacao || "Não informada" };
 }
 
@@ -99,13 +133,14 @@ export default function RelatorioEmpresas() {
       const lista: EmpresaResumo[] = Array.isArray(data) ? data : (data?.empresas || []);
       setEmpresas(lista);
       // Calcular resumo
-      const ativas = lista.filter((e) => (e.situacao_cadastral || "").toLowerCase().includes("ativa")).length;
+      const ativas = lista.filter((e) => isSituacaoAtiva(e.situacao_cadastral)).length;
+      const inativas = lista.filter((e) => isSituacaoInativa(e.situacao_cadastral)).length;
       const sincronizadas = lista.filter((e) => e.ultima_sincronizacao_receita).length;
       const pendentes = lista.filter((e) => !e.cnpj || !e.situacao_cadastral).length;
       setResumo({
         total: lista.length,
         ativas,
-        inativas: lista.length - ativas,
+        inativas,
         pendentes,
         sincronizadas,
       });
@@ -125,9 +160,8 @@ export default function RelatorioEmpresas() {
     const q = busca.toLowerCase().trim();
     if (q && !e.razao_social?.toLowerCase().includes(q) && !e.nome_fantasia?.toLowerCase().includes(q) && !e.cnpj?.includes(q)) return false;
     if (filtroStatus !== "todos") {
-      const s = (e.situacao_cadastral || "").toLowerCase();
-      if (filtroStatus === "ativa" && !s.includes("ativa")) return false;
-      if (filtroStatus === "inativa" && s.includes("ativa")) return false;
+      if (filtroStatus === "ativa" && !isSituacaoAtiva(e.situacao_cadastral)) return false;
+      if (filtroStatus === "inativa" && !isSituacaoInativa(e.situacao_cadastral)) return false;
     }
     if (filtroPorte !== "todos" && (e.porte || "").toLowerCase() !== filtroPorte.toLowerCase()) return false;
     if (filtroEstado !== "todos" && (e.estado || "").toUpperCase() !== filtroEstado.toUpperCase()) return false;
@@ -170,9 +204,9 @@ export default function RelatorioEmpresas() {
 
   function gerarCSVClientSide() {
     const headers = [
-      "Razão Social", "Nome Fantasia", "CNPJ", "Situação Cadastral", "Porte",
-      "Regime Tributário", "CNAE Principal", "Data Abertura", "Capital Social",
-      "Cidade", "Estado", "Última Sincronização", "Status Cadastro", "Responsável",
+      "Empresa", "Nome Fantasia", "CNPJ", "Situação Receita", "Porte",
+      "Regime Tributário", "CNAE Principal", "Data de Abertura", "Capital Social",
+      "Cidade", "UF", "Última Atualização Receita", "Status Cadastro", "Responsável",
     ];
     const rows = empresasFiltradas.map((e) => [
       e.razao_social || "",
@@ -183,16 +217,14 @@ export default function RelatorioEmpresas() {
       e.regime_tributario || "",
       e.cnae_principal || "",
       formatDate(e.data_abertura),
-      e.capital_social != null ? String(e.capital_social) : "",
+      e.capital_social != null ? formatCurrency(e.capital_social) : "",
       e.cidade || "",
       e.estado || "",
       formatDate(e.ultima_sincronizacao_receita),
       e.status_cadastro || "",
       e.responsavel_nome || "",
     ]);
-    const csvContent = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
+    const csvContent = gerarCsvExcel(headers, rows);
     const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);

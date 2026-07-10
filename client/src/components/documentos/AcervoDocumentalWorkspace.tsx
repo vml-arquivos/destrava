@@ -110,6 +110,21 @@ function statusClass(doc: DocumentoAcervo) {
   return "bg-blue-50 text-blue-700 border-blue-200";
 }
 
+function corrigirMojibake(value?: string | null) {
+  const text = String(value || "").trim();
+  if (!text || !/[ÃÂ�]/.test(text)) return text;
+  try {
+    const bytes = new Uint8Array(Array.from(text).map((char) => char.charCodeAt(0) & 0xff));
+    return new TextDecoder("utf-8").decode(bytes);
+  } catch {
+    return text;
+  }
+}
+
+function displayDocName(doc?: Pick<DocumentoAcervo, "nome_customizado" | "nome_original"> | null) {
+  return corrigirMojibake(doc?.nome_customizado || doc?.nome_original || "Documento");
+}
+
 function buildSlots(tiposPermitidos: string[]): Array<{ secao: string; slot: DocumentoSlot }> {
   const allowed = new Set(tiposPermitidos);
   const rows: Array<{ secao: string; slot: DocumentoSlot }> = [];
@@ -262,7 +277,7 @@ export default function AcervoDocumentalWorkspace({
         || (statusFiltro === "validados" && Boolean(doc.validado || doc.status === "validado"))
         || (statusFiltro === "pendentes" && !doc.validado && doc.status !== "validado")
         || (statusFiltro === "faltando_arquivo" && doc.arquivo_disponivel === false);
-      const haystack = `${doc.nome_customizado || ""} ${doc.nome_original || ""} ${doc.observacoes || ""} ${labelTipoDocumento(doc.tipo_documento)}`.toLowerCase();
+      const haystack = `${displayDocName(doc)} ${corrigirMojibake(doc.observacoes)} ${labelTipoDocumento(doc.tipo_documento)}`.toLowerCase();
       return matchesSection && matchesStatus && (!term || haystack.includes(term));
     });
   }, [docs, busca, secaoFiltro, statusFiltro, slots]);
@@ -274,7 +289,7 @@ export default function AcervoDocumentalWorkspace({
   async function baixar(doc: DocumentoAcervo) {
     try {
       const { blob, filename } = await apiFetchBlob(`/api/documentos/${doc.id}/download`);
-      saveBlob(blob, filename || doc.nome_original || "documento");
+      saveBlob(blob, corrigirMojibake(filename || doc.nome_original) || "documento");
     } catch (err: any) {
       toast.error(err?.message || "Erro ao baixar documento.");
     }
@@ -320,7 +335,7 @@ export default function AcervoDocumentalWorkspace({
   }
 
   async function arquivar(doc: DocumentoAcervo) {
-    if (!confirm(`Arquivar “${doc.nome_customizado || doc.nome_original}”? O arquivo físico será preservado.`)) return;
+    if (!confirm(`Arquivar “${displayDocName(doc)}”? O arquivo físico será preservado.`)) return;
     try {
       await apiFetch(`/api/documentos/${doc.id}`, { method: "DELETE" });
       toast.success("Documento arquivado sem apagar o arquivo físico.");
@@ -570,7 +585,7 @@ export default function AcervoDocumentalWorkspace({
                   <div className="flex gap-3">
                     <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${selected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"}`}><Icon className="h-5 w-5" /></div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-black text-slate-900 truncate">{doc.nome_customizado || doc.nome_original}</p>
+                      <p className="text-sm font-black text-slate-900 truncate">{displayDocName(doc)}</p>
                       <p className="mt-0.5 text-xs text-slate-500 truncate">{labelTipoDocumento(doc.tipo_documento)}</p>
                       <div className="mt-2 flex items-center gap-2 flex-wrap">
                         <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusClass(doc)}`}>{statusLabel(doc)}</span>
@@ -598,7 +613,7 @@ export default function AcervoDocumentalWorkspace({
                 <div className="min-w-0 flex items-center gap-3">
                   <div className="h-10 w-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center"><SelectedIcon className="h-5 w-5 text-blue-600" /></div>
                   <div className="min-w-0">
-                    <p className="font-black text-slate-950 truncate">{selectedDoc.nome_customizado || selectedDoc.nome_original}</p>
+                    <p className="font-black text-slate-950 truncate">{displayDocName(selectedDoc)}</p>
                     <p className="text-xs text-slate-500 truncate">{labelTipoDocumento(selectedDoc.tipo_documento)}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
                       <span className={`rounded-full border px-2 py-0.5 font-bold ${statusClass(selectedDoc)}`}>{statusLabel(selectedDoc)}</span>
@@ -630,9 +645,9 @@ export default function AcervoDocumentalWorkspace({
                   {previewLoading ? (
                     <div className="flex flex-col items-center gap-3 text-slate-500"><Loader2 className="h-8 w-8 animate-spin text-blue-600" /><span className="text-sm">Carregando documento...</span></div>
                   ) : previewUrl && previewIsPdf ? (
-                    <iframe title={selectedDoc.nome_original} src={previewUrl} className="w-full h-[calc(100vh-300px)] min-h-[640px] bg-white fullscreen:h-[96vh] fullscreen:min-h-[96vh]" />
+                    <iframe title={displayDocName(selectedDoc)} src={previewUrl} className="w-full h-[calc(100vh-300px)] min-h-[640px] bg-white fullscreen:h-[96vh] fullscreen:min-h-[96vh]" />
                   ) : previewUrl && previewIsImage ? (
-                    <div className="w-full h-[calc(100vh-300px)] min-h-[640px] overflow-auto bg-slate-950/5 p-4 flex items-start justify-center fullscreen:h-[96vh] fullscreen:min-h-[96vh]"><img src={previewUrl} alt={selectedDoc.nome_original} className="max-w-full h-auto rounded-lg shadow-lg" /></div>
+                    <div className="w-full h-[calc(100vh-300px)] min-h-[640px] overflow-auto bg-slate-950/5 p-4 flex items-start justify-center fullscreen:h-[96vh] fullscreen:min-h-[96vh]"><img src={previewUrl} alt={displayDocName(selectedDoc)} className="max-w-full h-auto rounded-lg shadow-lg" /></div>
                   ) : previewUrl ? (
                     <div className="text-center p-8"><File className="h-14 w-14 text-slate-300 mx-auto" /><p className="mt-3 font-bold text-slate-700">Pré-visualização não disponível</p><p className="mt-1 text-sm text-slate-400">Baixe o arquivo para abrir no aplicativo adequado.</p><button onClick={() => baixar(selectedDoc)} className="mt-4 h-10 px-4 rounded-xl bg-blue-600 text-white text-sm font-bold">Baixar arquivo</button></div>
                   ) : (
