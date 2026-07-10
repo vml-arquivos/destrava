@@ -14,10 +14,11 @@ import { toast } from "sonner";
 import {
   ClipboardList, RefreshCw, Copy, CheckCheck, ArrowRight,
   AlertTriangle, AlertCircle, Info, CheckCircle2,
-  ChevronDown, ChevronUp, Zap, Lock,
+  ChevronDown, ChevronUp, Zap,
   Building2, Users, FileText, BarChart3, FileSignature,
   TrendingUp, Handshake, Settings,
 } from "lucide-react";
+import EnviarNexus from "./EnviarNexus";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -325,12 +326,12 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
               {copiado ? "Copiado!" : "Copiar plano"}
             </button>
             <button
-              title="Criar tarefas no Nexus — disponível em breve"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-xs font-semibold opacity-60 cursor-not-allowed"
-              disabled
+              title="Criar tarefas no Nexus"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold transition-all"
+              onClick={() => document.getElementById(`nexus-block-${empresaId}`)?.scrollIntoView({ behavior: 'smooth' })}
             >
-              <Lock className="w-3.5 h-3.5" />
-              Nexus (em breve)
+              <Zap className="w-3.5 h-3.5" />
+              Criar no Nexus
             </button>
             <button onClick={calcular} disabled={loading} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold transition-all">
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -499,6 +500,28 @@ export default function PlanoAcaoMotor({ empresaId, onNavegar }: Props) {
             {grupos.map(g => (
               <GrupoAccordion key={g.categoria} grupo={g} onNavegar={onNavegar} />
             ))}
+          </div>
+        )}
+
+        {/* ── Integração Nexus/n8n ── */}
+        {data.total > 0 && (
+          <div id={`nexus-block-${empresaId}`}>
+            <EnviarNexus
+              empresaId={empresaId}
+              cnpj={null}
+              razaoSocial={empresaId}
+              pendencias={todasPendencias
+                .filter(p => p.prioridade === "alta" || p.prioridade === "media")
+                .map(p => ({
+                  pendenciaId: p.id,
+                  prioridade: p.prioridade as "alta" | "media" | "baixa",
+                  categoria: p.categoria || "geral",
+                  titulo: p.titulo || "Pendência",
+                  descricao: p.descricao || p.impacto || "",
+                  moduloOrigem: p.modulo || "inteligencia_360",
+                  acaoRecomendada: p.acaoRecomendada || "Resolver pendência",
+                }))}
+            />
           </div>
         )}
 

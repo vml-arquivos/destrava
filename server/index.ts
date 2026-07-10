@@ -40,6 +40,13 @@ import { gerarRelatorioTecnico } from "./services/relatorioTecnicoEmpresaService
 import { calcularPendencias } from "./services/pendenciasEmpresaService";
 import { calcularEsteiraCredito } from "./services/esteiraCreditoService";
 import { consolidarHistorico360 } from "./services/historicoClienteService";
+import {
+  enviarPendenciaNexus,
+  verificarConfiguracaoNexus,
+  gerarIdempotencyKey,
+  validarPayloadNexus,
+  type PayloadNexus,
+} from "./services/integracaoNexusService";
 
 const { Pool } = pkg;
 
@@ -4976,6 +4983,151 @@ async function startServer() {
         primeiro_evento: null,
         ultimo_evento: null,
         fonte: "consolidado_360",
+      });
+    }
+  });
+
+  // ─── GET /api/empresas/:id/pendencias/nexus-status ──────────────
+  // Rota FIXA — deve ficar ANTES de /api/empresas/:id.
+  // Retorna o status da configuração da integração Nexus/n8n.
+  app.get("/api/empresas/:id/pendencias/nexus-status", auth, async (req: Request, res: Response) => {
+    try {
+      const config = verificarConfiguracaoNexus();
+      res.json({
+        empresa_id: req.params.id,
+        ...config,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error("[GET /api/empresas/:id/pendencias/nexus-status]", err);
+      res.status(500).json({ error: "Erro ao verificar configuração Nexus" });
+    }
+  });
+
+  // ─── POST /api/empresas/:id/pendencias/enviar-nexus ───────────────
+  // Rota FIXA — deve ficar ANTES de /api/empresas/:id.
+  // Envia uma pendência como tarefa para o Nexus ou n8n.
+  // Exige confirmação explícita do usuário (campo confirmed: true no body).
+  // Implementa idempotência via idempotencyKey.
+  app.post("/api/empresas/:id/pendencias/enviar-nexus", auth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
+
+      const body = req.body || {};
+
+      // Exige confirmação explícita do usuário
+      if (!body.confirmed) {
+        res.status(400).json({
+          error: "Confirmação obrigatória",
+          mensagem:
+            "Esta ação requer confirmação explícita. Envie confirmed: true no body para prosseguir.",
+        });
+        return;
+      }
+
+      // Verificar se a integração está configurada antes de qualquer coisa
+      const config = verificarConfiguracaoNexus();
+      if (!config.algumConfigurado) {
+        res.status(503).json({
+          error: "Integração não configurada",
+          mensagem: config.mensagemStatus,
+          detalhe:
+            "Configure NEXUS_WEBHOOK_URL ou N8N_WEBHOOK_URL nas variáveis de ambiente do servidor.",
+        });
+        return;
+      }
+
+      // Construir payload a partir do body + empresaId da rota
+      const payload: PayloadNexus = {
+        empresaId: req.params.id,
+        cnpj: String(body.cnpj || "").trim() || null,
+        razaoSocial: String(body.razaoSocial || "").trim(),
+        pendenciaId: String(body.pendenciaId || "").trim(),
+        prioridade: body.prioridade || "media",
+        categoria: String(body.categoria || "").trim(),
+        titulo: String(body.titulo || "").trim(),
+        descricao: String(body.descricao || "").trim(),
+        moduloOrigem: String(body.moduloOrigem || "inteligencia_360").trim(),
+        acaoRecomendada: String(body.acaoRecomendada || "").trim(),
+        idempotencyKey:
+          String(body.idempotencyKey || "").trim() ||
+          gerarIdempotencyKey(req.params.id, String(body.pendenciaId || "")),
+      };
+
+      // Validar payload
+      const erros = validarPayloadNexus(payload);
+      if (erros.length > 0) {
+        res.status(400).json({
+          error: "Dados inválidos",
+          erros,
+          mensagem: `Corrija os campos: ${erros.map((e) => e.campo).join(", ")}.`,
+        });
+        return;
+      }
+
+      // Verificar duplicata no banco (tabela nexus_tarefas_enviadas se existir)
+      const verificarDuplicataExterna = async (key: string): Promise<boolean> => {
+        try {
+          const { rows } = await pool.query(
+            `SELECT 1 FROM nexus_tarefas_enviadas WHERE idempotency_key = $1 LIMIT 1`,
+            [key]
+          );
+          return rows.length > 0;
+        } catch {
+          // Tabela pode não existir — não bloqueia o envio
+          return false;
+        }
+      };
+
+      // Enviar para Nexus/n8n
+      const resultado = await enviarPendenciaNexus(payload, verificarDuplicataExterna);
+
+      // Se enviou com sucesso, registrar no banco para idempotência persistente
+      if (resultado.sucesso && !resultado.jaEnviado) {
+        try {
+          await pool.query(
+            `INSERT INTO nexus_tarefas_enviadas
+               (idempotency_key, empresa_id, pendencia_id, titulo, categoria, prioridade, destino, enviado_em)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+             ON CONFLICT (idempotency_key) DO NOTHING`,
+            [
+              resultado.idempotencyKey,
+              req.params.id,
+              payload.pendenciaId,
+              payload.titulo,
+              payload.categoria,
+              payload.prioridade,
+              resultado.destino || "nexus",
+            ]
+          );
+        } catch {
+          // Tabela pode não existir — não bloqueia o retorno de sucesso
+          // A idempotência em memória já foi registrada pelo serviço
+        }
+
+        // Registrar no histórico da empresa
+        try {
+          await pool.query(
+            `INSERT INTO empresa_historico (empresa_id, tipo, descricao, autor)
+             VALUES ($1, 'nexus', $2, 'Sistema — Integração Nexus')`,
+            [
+              req.params.id,
+              `Tarefa criada no ${resultado.destino === "n8n" ? "n8n" : "Nexus"}: ${payload.titulo} (${payload.categoria} — ${payload.prioridade})`,
+            ]
+          );
+        } catch {
+          // Não bloqueia o retorno de sucesso
+        }
+      }
+
+      const statusCode = resultado.sucesso ? 200 : resultado.jaEnviado ? 200 : 502;
+      res.status(statusCode).json(resultado);
+    } catch (err: any) {
+      console.error("[POST /api/empresas/:id/pendencias/enviar-nexus]", err);
+      res.status(500).json({
+        error: "Erro interno ao enviar tarefa para o Nexus",
+        mensagem:
+          "Ocorreu um erro inesperado. Tente novamente ou entre em contato com o suporte.",
       });
     }
   });
