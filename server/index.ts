@@ -11885,8 +11885,19 @@ async function registrarDocumentoContratoGerado(params: {
   type FormatoRelatorioAcompanhamento = "pdf" | "html" | "xls" | "json";
 
   function parseDataRelatorioAcompanhamento(value: unknown): string | null {
-    const s = String(value || "").slice(0, 10);
-    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+    if (!value) return null;
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return value.toISOString().slice(0, 10);
+    }
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    const iso = raw.match(/(\d{4}-\d{2}-\d{2})/);
+    if (iso) return iso[1];
+    const br = raw.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+    return null;
   }
 
   function normalizarTipoRelatorioAcompanhamento(value: unknown): TipoRelatorioAcompanhamento {
@@ -12010,12 +12021,59 @@ async function registrarDocumentoContratoGerado(params: {
     const esc = escapeHtmlAcompanhamento;
     const fmt = (v: unknown) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     const fmtPct = (v: unknown) => `${(Math.round((Number(v) || 0) * 100) / 100).toFixed(2).replace(".", ",")}%`;
-    const fmtDate = (value?: string | null) => {
-      if (!value) return "—";
-      const s = String(value).slice(0, 10);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return esc(value);
-      const [y, m, d] = s.split("-");
+    const fmtDate = (value?: unknown) => {
+      const iso = parseDataRelatorioAcompanhamento(value);
+      if (!iso) return "—";
+      const [y, m, d] = iso.split("-");
       return `${d}/${m}/${y}`;
+    };
+    const resumoTexto = (value: unknown, max = 260) => {
+      const txt = String(value || "").replace(/\s+/g, " ").trim();
+      if (!txt) return "—";
+      return txt.length > max ? `${txt.slice(0, max - 1)}…` : txt;
+    };
+    const humanizar = (value: unknown) => {
+      const raw = String(value || "").trim();
+      if (!raw) return "Não informado";
+      const mapa: Record<string, string> = {
+        critico: "Crítico",
+        critica: "Crítica",
+        atencao: "Atenção",
+        positivo: "Positivo",
+        nao_recomendada: "Não recomendada agora",
+        nao_recomendada_agora: "Não recomendada agora",
+        em_preparacao: "Em preparação",
+        quase_pronta: "Quase pronta",
+        pronta: "Pronta",
+        exige_correcao: "Exige correção",
+        prejudica: "Prejudica",
+        mantem: "Mantém",
+        melhora: "Melhora",
+        media: "Média",
+        alta: "Alta",
+        baixa: "Baixa",
+      };
+      const key = raw.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_");
+      return mapa[key] || raw.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    };
+    const prioridadeClasse = (value: unknown) => {
+      const v = String(value || "").toLowerCase();
+      if (v.includes("critic")) return "critico";
+      if (v.includes("alta")) return "alto";
+      if (v.includes("media") || v.includes("média")) return "medio";
+      return "baixo";
+    };
+    const itemList = (arr: any, empty: string) => {
+      const lista = Array.isArray(arr) ? arr.filter(Boolean) : [];
+      if (!lista.length) return `<li>${esc(empty)}</li>`;
+      return lista.map((i: any) => {
+        if (typeof i === "string") return `<li>${esc(i)}</li>`;
+        const titulo = i?.titulo || i?.title || i?.nome || "Orientação";
+        const desc = i?.descricao || i?.description || i?.mensagem || i?.acao || "";
+        const pr = i?.prioridade ? `<span class="tag ${prioridadeClasse(i.prioridade)}">${esc(humanizar(i.prioridade))}</span>` : "";
+        const impacto = i?.impactoEsperado ? `<small>Impacto esperado: ${esc(i.impactoEsperado)}</small>` : "";
+        return `<li><strong>${esc(titulo)}</strong> ${pr}${desc ? `<br/><span>${esc(desc)}</span>` : ""}${impacto}</li>`;
+      }).join("");
     };
     const tipo = payload.tipo || "mensal";
     const periodoTitulo = tituloPeriodoRelatorioAcompanhamento({ tipo, ano: payload.ano, mes: payload.mes, dataInicio: payload.dataInicio, dataFim: payload.dataFim });
@@ -12024,199 +12082,208 @@ async function registrarDocumentoContratoGerado(params: {
     const inteligencia = payload.inteligencia || null;
     const documentos = payload.documentos || [];
     const hojeIso = new Date().toISOString().slice(0, 10);
-    const semanaAtual = semanas.find((s: any) => String(s.data_referencia_inicio || "").slice(0,10) <= hojeIso && String(s.data_referencia_fim || "").slice(0,10) >= hojeIso)
-      || [...semanas].reverse().find((s: any) => String(s.data_referencia_inicio || "").slice(0,10) <= hojeIso)
-      || semanas[semanas.length - 1]
-      || null;
+    const semanaAtual = semanas.find((s: any) => {
+      const ini = parseDataRelatorioAcompanhamento(s?.data_referencia_inicio || s?.data_atualizacao || s?.created_at);
+      const fim = parseDataRelatorioAcompanhamento(s?.data_referencia_fim || s?.data_referencia_inicio || s?.data_atualizacao || s?.created_at);
+      return ini && fim && ini <= hojeIso && fim >= hojeIso;
+    }) || [...semanas].reverse().find((s: any) => {
+      const fim = parseDataRelatorioAcompanhamento(s?.data_referencia_fim || s?.data_referencia_inicio || s?.data_atualizacao || s?.created_at);
+      return fim && fim <= hojeIso;
+    }) || semanas[semanas.length - 1] || null;
 
     const totalMes = semanas.reduce((acc: number, s: any) => acc + totalEntradasRelatorioAcompanhamento(s), 0);
     const totalSaidas = semanas.reduce((acc: number, s: any) => acc + Number(s.total_saidas || 0), 0);
     const saldoMes = totalMes - totalSaidas;
+    const saldoSemanaAtual = semanaAtual ? Number(semanaAtual.saldo_semanal ?? (totalEntradasRelatorioAcompanhamento(semanaAtual) - Number(semanaAtual.total_saidas || 0))) : 0;
     const semanasPositivas = semanas.filter((s: any) => Number(s.saldo_semanal ?? (totalEntradasRelatorioAcompanhamento(s) - Number(s.total_saidas || 0))) > 0).length;
     const semanasNegativas = semanas.filter((s: any) => Number(s.saldo_semanal ?? (totalEntradasRelatorioAcompanhamento(s) - Number(s.total_saidas || 0))) < 0).length;
-    const semanasCriticas = semanas.filter((s: any) => String(s.status_aderencia || "") === "critico").length;
-    const maiorEntrada = semanas.reduce((max: any, s: any) => totalEntradasRelatorioAcompanhamento(s) > totalEntradasRelatorioAcompanhamento(max) ? s : max, semanas[0] || null);
-    const piorSaldo = semanas.reduce((min: any, s: any) => Number(s?.saldo_semanal || 0) < Number(min?.saldo_semanal || 0) ? s : min, semanas[0] || null);
+    const isCriticoStatus = (s: any) => String(s?.status_aderencia || s?.status_semana || s?.status || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes("critic");
+    const semanasCriticas = semanas.filter((s: any) => isCriticoStatus(s)).length;
+    const maiorEntrada = semanas.reduce((max: any, s: any) => !max || totalEntradasRelatorioAcompanhamento(s) > totalEntradasRelatorioAcompanhamento(max) ? s : max, null);
+    const piorSaldo = semanas.reduce((min: any, s: any) => !min || Number(s?.saldo_semanal || 0) < Number(min?.saldo_semanal || 0) ? s : min, null);
     const tetoMensal = Number(semanaAtual?.teto_mensal_movimentacao || 0) || Number(a.margem_seguranca_30 || 0) || Number(a.media_mensal || 0) * 1.3;
     const mediaMensal = Number(a.media_mensal || 0) || Number(a.faturamento_anual || 0) / 12;
     const percentualUsoMes = tetoMensal > 0 ? (totalMes / tetoMensal) * 100 : 0;
     const alertasPendentes = (payload.alertas || []).filter((x: any) => x.status !== "resolvido").length;
     const statusInteligente = String(inteligencia?.statusInteligente || (saldoMes < 0 || semanasCriticas ? "critico" : semanasNegativas ? "atencao" : "positivo"));
-    const prontidaoCredito = String(inteligencia?.prontidaoCredito || "em_preparacao").replace(/_/g, " ");
-    const impactoRating = String(inteligencia?.impactoNoRating || "mantem").replace(/_/g, " ");
+    const prontidaoCredito = String(inteligencia?.prontidaoCredito || "em_preparacao");
+    const impactoRating = String(inteligencia?.impactoNoRating || "mantem");
+    const semDados = semanas.length === 0;
+    const parecerFinal = semDados
+      ? `Não há semanas registradas no período selecionado. O relatório foi gerado para fins de controle, mas ainda não permite conclusão completa sobre rating, aderência financeira ou prontidão de crédito. Recomenda-se alimentar as semanas do período, anexar extratos e reemitir o relatório.`
+      : String(inteligencia?.parecerTecnico || `${a.nome_empresa || "A empresa"} possui ${semanas.length} semana(s) alimentada(s), com ${semanasNegativas} semana(s) negativa(s), ${semanasCriticas} semana(s) crítica(s) e saldo consolidado de ${fmt(saldoMes)}.`);
 
-    const linhasSemanas = semanas.map((s: any) => {
+    const linhasMovimentacao = semanas.map((s: any) => {
       const isAtual = semanaAtual && Number(s.numero_semana) === Number(semanaAtual.numero_semana);
       const status = textoStatusAderencia(s.status_aderencia || s.status_semana || s.status);
       const entradas = totalEntradasRelatorioAcompanhamento(s);
       const saldo = Number(s.saldo_semanal ?? (entradas - Number(s.total_saidas || 0)));
+      const leitura = resumoTexto(s.analise_semana || s.diagnostico_tecnico || s.motivo_alerta_aderencia || "—", 180);
       return `
         <tr class="${isAtual ? "atual" : ""}">
-          <td>Semana ${esc(s.numero_semana)}${isAtual ? " — atual" : ""}</td>
-          <td>${fmtDate(s.data_referencia_inicio)} a ${fmtDate(s.data_referencia_fim)}</td>
-          <td>${fmt(s.entrada_maquininha)}</td>
-          <td>${fmt(s.entrada_pix)}</td>
-          <td>${fmt(s.entrada_boleto)}</td>
-          <td>${fmt(s.entrada_ted)}</td>
-          <td>${fmt(s.entrada_dinheiro)}</td>
-          <td>${fmt(s.outras_entradas)}</td>
-          <td><strong>${fmt(entradas)}</strong></td>
-          <td>${fmt(s.total_saidas)}</td>
-          <td class="${saldo < 0 ? "neg" : "pos"}">${fmt(saldo)}</td>
+          <td><strong>Semana ${esc(s.numero_semana)}</strong>${isAtual ? `<br/><span class="tag medio">Atual</span>` : ""}</td>
+          <td>${fmtDate(s.data_referencia_inicio)}<br/>a ${fmtDate(s.data_referencia_fim)}</td>
+          <td class="num"><strong>${fmt(entradas)}</strong></td>
+          <td class="num">${fmt(s.total_saidas)}</td>
+          <td class="num ${saldo < 0 ? "neg" : "pos"}"><strong>${fmt(saldo)}</strong></td>
           <td>${esc(s.rating_bacen || "—")}</td>
           <td>${esc(s.rating_interno || "—")}</td>
           <td>${esc(status)}</td>
-          <td>${esc(s.analise_semana || s.diagnostico_tecnico || s.motivo_alerta_aderencia || "—")}</td>
-          <td>${esc(s.orientacao_cliente || "—")}</td>
-          <td>${esc(s.proxima_acao || "—")}</td>
+          <td>${esc(leitura)}</td>
         </tr>`;
     }).join("");
-
-    const linhasAlertas = (payload.alertas || []).map((al: any) => `
-      <tr>
-        <td>${fmtDate(al.data_alerta)}</td>
-        <td>${esc(al.prioridade || "—")}</td>
-        <td>${esc(al.titulo || "—")}</td>
-        <td>${esc(al.mensagem || "—")}</td>
-        <td>${esc(al.status || "—")}</td>
-      </tr>
-    `).join("");
-
-    const itens = (lista: any[] | undefined, vazio: string) => {
-      const arr = Array.isArray(lista) ? lista.filter(Boolean) : [];
-      if (!arr.length) return `<li>${esc(vazio)}</li>`;
-      return arr.map((x: any) => `<li><strong>${esc(x.titulo || "Orientação")}:</strong> ${esc(x.descricao || x.acao || x.motivo || "—")}</li>`).join("");
-    };
-
-    const linhasDocumentos = documentos.map((doc: any) => `
-      <tr>
-        <td>${esc(doc.tipo_documento || doc.tipo || "Documento")}</td>
-        <td>${esc(doc.nome_customizado || doc.nome_original || doc.nome_arquivo || "—")}</td>
-        <td>${esc(doc.status || (doc.validado ? "validado" : "pendente"))}</td>
-        <td>${fmtDate(doc.criado_em || doc.created_at)}</td>
-        <td>${doc.tamanho_bytes ? `${Math.round(Number(doc.tamanho_bytes) / 1024)} KB` : "—"}</td>
-      </tr>`).join("");
-
-    const semDados = !semanas.length;
-    const resumoExecutivo = semDados
-      ? `Não há atualizações semanais registradas no período selecionado. O relatório foi gerado para orientar a alimentação correta do acompanhamento, mas não há base suficiente para diagnóstico conclusivo de rating.`
-      : (inteligencia?.resumoExecutivo || `No período analisado, a empresa movimentou ${fmt(totalMes)} em entradas, registrou ${fmt(totalSaidas)} em saídas e fechou com saldo de ${fmt(saldoMes)}. O uso do teto mensal ficou em ${fmtPct(percentualUsoMes)}.`);
-
-    const parecerFinal = inteligencia?.parecerTecnico || (semDados
-      ? `Parecer técnico: o período selecionado não possui semanas alimentadas. Recomenda-se registrar as atualizações semanais, anexar extratos e reemitir o relatório para avaliação de aderência, rating interno e prontidão para crédito.`
-      : `Parecer técnico: o acompanhamento deve seguir com atualização semanal e fechamento mensal. O período apresenta ${semanasPositivas} semana(s) positiva(s), ${semanasNegativas} semana(s) negativa(s) e ${semanasCriticas} semana(s) crítica(s).`);
-
-    const textoSemanasVazias = `<tr><td colspan="17">Nenhuma atualização registrada para o período selecionado. Não é possível emitir diagnóstico financeiro conclusivo sem alimentação semanal.</td></tr>`;
+    const linhasComposicao = semanas.map((s: any) => {
+      const entradas = totalEntradasRelatorioAcompanhamento(s);
+      return `<tr>
+        <td>Semana ${esc(s.numero_semana)}</td>
+        <td class="num">${fmt(s.entrada_maquininha)}</td>
+        <td class="num">${fmt(s.entrada_pix)}</td>
+        <td class="num">${fmt(s.entrada_boleto)}</td>
+        <td class="num">${fmt(s.entrada_ted)}</td>
+        <td class="num">${fmt(s.entrada_dinheiro)}</td>
+        <td class="num">${fmt(s.outras_entradas)}</td>
+        <td class="num"><strong>${fmt(entradas)}</strong></td>
+      </tr>`;
+    }).join("");
+    const linhasDiagnostico = semanas.map((s: any) => `<tr>
+      <td><strong>Semana ${esc(s.numero_semana)}</strong><br/>${fmtDate(s.data_referencia_inicio)} a ${fmtDate(s.data_referencia_fim)}</td>
+      <td>${esc(resumoTexto(s.analise_semana || s.diagnostico_tecnico || s.motivo_alerta_aderencia || "—", 520))}</td>
+      <td>${esc(resumoTexto(s.orientacao_semana || s.recomendacao_operacional || "—", 360))}</td>
+      <td>${esc(resumoTexto(s.proxima_acao || s.proxima_acao_recomendada || "—", 300))}</td>
+    </tr>`).join("");
+    const textoSemanasVazias = `<tr><td colspan="9">Nenhuma atualização semanal registrada para o período selecionado. Para gerar análise completa, alimente as semanas e anexe os documentos de suporte.</td></tr>`;
+    const linhasAlertas = (payload.alertas || []).map((al: any) => `<tr><td>${fmtDate(al.data_alerta || al.created_at)}</td><td>${esc(humanizar(al.prioridade || "—"))}</td><td>${esc(al.titulo || "—")}</td><td>${esc(al.mensagem || "—")}</td><td>${esc(humanizar(al.status || "pendente"))}</td></tr>`).join("");
+    const linhasDocumentos = documentos.map((d: any) => `<tr><td>${esc(d.tipo_documento || d.categoria || "—")}</td><td>${esc(d.nome_customizado || d.nome_original || d.nome_arquivo || "—")}</td><td>${esc(humanizar(d.status || (d.validado ? "validado" : "ativo")))}</td><td>${fmtDate(d.criado_em || d.incluido_em)}</td><td>${d.tamanho_bytes ? `${Math.round(Number(d.tamanho_bytes) / 1024)} KB` : "—"}</td></tr>`).join("");
+    const periodoSemanaAtual = semanaAtual ? `${fmtDate(semanaAtual.data_referencia_inicio)} a ${fmtDate(semanaAtual.data_referencia_fim)}` : "—";
+    const numeroSemanaAtual = semanaAtual?.numero_semana ? `Semana ${semanaAtual.numero_semana}` : "—";
 
     return `<!doctype html>
-<html>
+<html lang="pt-BR">
 <head>
-  <meta charset="utf-8"/>
+  <meta charset="utf-8" />
+  <title>Relatório Bancário Inteligente</title>
   <style>
-    @page { size: A4 landscape; margin: 10mm; }
-    body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; font-size: 10.5px; line-height: 1.35; }
-    .topo { border-bottom: 4px solid #1d4ed8; padding-bottom: 12px; margin-bottom: 14px; }
-    h1 { font-size: 22px; margin: 0; color: #0f172a; }
-    h2 { margin-top: 16px; font-size: 13px; text-transform: uppercase; color: #1d4ed8; letter-spacing: .06em; break-after: avoid; }
-    h3 { margin: 0 0 6px; font-size: 12px; color: #0f172a; }
-    .sub { color: #475569; margin-top: 4px; }
-    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    @page { size: A4 landscape; margin: 8mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #172033; font-size: 10.2px; line-height: 1.34; margin: 0; background: #fff; }
+    h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -0.3px; }
+    h2 { color: #1d5ed8; font-size: 14px; text-transform: uppercase; letter-spacing: 1.2px; margin: 18px 0 8px; page-break-after: avoid; }
+    h3 { margin: 0 0 7px; font-size: 12px; color: #27344d; }
+    .muted { color: #60708c; }
+    .top { border-bottom: 4px solid #1f63e9; padding-bottom: 9px; margin-bottom: 12px; }
+    .sub { color: #44546d; font-size: 12px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .tag { display: inline-block; padding: 3px 7px; border-radius: 999px; font-weight: 700; font-size: 9px; border: 1px solid transparent; }
+    .critico { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
+    .alto { background: #ffedd5; color: #c2410c; border-color: #fed7aa; }
+    .medio { background: #fef3c7; color: #a16207; border-color: #fde68a; }
+    .baixo { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+    .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
     .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .card { border: 1px solid #dbe4f0; border-radius: 10px; padding: 9px; background: #f8fafc; break-inside: avoid; }
-    .card.atual { border: 2px solid #f59e0b; background: #fffbeb; }
-    .card.critico { border-color: #fecaca; background: #fef2f2; }
-    .card.ok { border-color: #bbf7d0; background: #f0fdf4; }
-    .label { font-size: 8px; color: #64748b; text-transform: uppercase; letter-spacing: .05em; }
-    .value { margin-top: 4px; font-size: 12px; font-weight: 700; }
-    .pill { display: inline-block; border-radius: 999px; padding: 4px 8px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
-    .pill.critico, .pill.nao_recomendada { background: #fee2e2; color: #b91c1c; }
-    .pill.atencao, .pill.em_preparacao { background: #fef3c7; color: #b45309; }
-    .pill.positivo, .pill.pronta, .pill.quase_pronta { background: #dcfce7; color: #15803d; }
-    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 8.5px; }
-    th { background: #e0ecff; color: #1d4ed8; text-align: left; border: 1px solid #cbd5e1; padding: 5px; }
-    td { border: 1px solid #e2e8f0; padding: 5px; vertical-align: top; }
-    tr.atual td { background: #fffbeb; border-top: 2px solid #f59e0b; border-bottom: 2px solid #f59e0b; }
-    .neg { color: #dc2626; font-weight: 700; }
-    .pos { color: #059669; font-weight: 700; }
-    .box { border-left: 4px solid #1d4ed8; background: #eff6ff; padding: 10px; border-radius: 8px; margin-top: 8px; break-inside: avoid; }
-    .alerta { border-left-color: #dc2626; background: #fef2f2; }
-    ul { margin: 6px 0 0 16px; padding: 0; }
-    li { margin: 3px 0; }
-    .page { page-break-before: always; }
-    .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 38px; margin-top: 36px; page-break-inside: avoid; }
-    .assinatura { border-top: 1px solid #334155; padding-top: 8px; text-align: center; font-size: 10px; }
+    .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .card, .box { border: 1px solid #d9e2ef; border-radius: 10px; padding: 10px; background: #f8fbff; page-break-inside: avoid; }
+    .card strong.label { display: block; color: #71809a; font-size: 9px; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 4px; }
+    .value { font-size: 15px; font-weight: 800; color: #111827; }
+    .kpi-neg { color: #dc2626; }
+    .kpi-pos { color: #059669; }
+    .box { background: #eef6ff; border-left: 4px solid #1f63e9; }
+    .box.alerta { background: #fff1f2; border-left-color: #dc2626; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 6px; page-break-inside: auto; }
+    th { background: #dcecff; color: #1d5ed8; border: 1px solid #b8cce8; padding: 6px 5px; font-size: 8.7px; text-align: left; }
+    td { border: 1px solid #d5e0ef; padding: 5px; vertical-align: top; word-break: break-word; }
+    tr { page-break-inside: avoid; }
+    tr.atual td { background: #fff8df; border-top: 2px solid #f59e0b; border-bottom: 2px solid #f59e0b; }
+    .num { text-align: right; white-space: nowrap; }
+    .neg { color: #dc2626; font-weight: 800; }
+    .pos { color: #059669; font-weight: 800; }
+    ul { margin: 0; padding-left: 15px; }
+    li { margin: 0 0 6px; }
+    li small { display: block; color: #64748b; margin-top: 2px; }
+    .section { page-break-inside: avoid; }
+    .page-break { page-break-before: always; }
+    .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 26px; }
+    .assinatura { border-top: 1px solid #111827; padding-top: 8px; text-align: center; font-size: 10px; }
   </style>
 </head>
 <body>
-  <div class="topo">
-    <h1>Relatório Inteligente de Acompanhamento Bancário</h1>
-    <div class="sub">${esc(periodoTitulo)} — ${esc(a.nome_empresa)} — ${esc(a.banco_observado || "Banco não informado")}</div>
-    <div class="sub">CNPJ ${esc(a.cnpj || "—")} · Gerado em ${fmtDate(new Date().toISOString())} por ${esc(payload.geradoPor || "Sistema")}</div>
+  <div class="top">
+    <h1>Relatório Bancário Inteligente de Acompanhamento</h1>
+    <div class="sub">${esc(periodoTitulo)} — ${esc(a.nome_empresa || "Empresa não informada")} — ${esc(a.banco_observado || "Banco não informado")}</div>
+    <div class="sub">CNPJ ${esc(a.cnpj || "—")} · Gerado em ${fmtDate(new Date())} por ${esc(payload.geradoPor || "Destrava Crédito")}</div>
+    <div class="chips">
+      <span class="tag ${statusInteligente === "critico" ? "critico" : statusInteligente === "atencao" ? "medio" : "baixo"}">Status: ${esc(humanizar(statusInteligente))}</span>
+      <span class="tag ${prontidaoCredito.includes("nao") ? "critico" : prontidaoCredito.includes("prepar") ? "medio" : "baixo"}">Prontidão: ${esc(humanizar(prontidaoCredito))}</span>
+      <span class="tag ${impactoRating.includes("correc") || impactoRating.includes("prejud") ? "critico" : "baixo"}">Rating: ${esc(humanizar(impactoRating))}</span>
+    </div>
   </div>
 
   <h2>Resumo executivo</h2>
-  <div class="box ${statusInteligente === "critico" ? "alerta" : ""}">
-    <strong>Status inteligente:</strong> <span class="pill ${esc(statusInteligente)}">${esc(statusInteligente)}</span>
-    &nbsp; <strong>Prontidão para crédito:</strong> ${esc(prontidaoCredito)}
-    &nbsp; <strong>Impacto no rating:</strong> ${esc(impactoRating)}<br/>
-    ${esc(resumoExecutivo)}
-  </div>
+  <div class="box ${statusInteligente === "critico" ? "alerta" : ""}">${esc(inteligencia?.resumoExecutivo || parecerFinal)}</div>
 
-  <h2>Semana atual em evidência</h2>
-  <div class="grid">
-    <div class="card atual"><div class="label">Semana atual</div><div class="value">Semana ${esc(semanaAtual?.numero_semana || "—")}</div></div>
-    <div class="card atual"><div class="label">Período</div><div class="value">${fmtDate(semanaAtual?.data_referencia_inicio)} a ${fmtDate(semanaAtual?.data_referencia_fim)}</div></div>
-    <div class="card atual"><div class="label">Entradas</div><div class="value">${fmt(semanaAtual ? totalEntradasRelatorioAcompanhamento(semanaAtual) : 0)}</div></div>
-    <div class="card atual"><div class="label">Status</div><div class="value">${esc(textoStatusAderencia(semanaAtual?.status_aderencia || semanaAtual?.status_semana))}</div></div>
+  <h2>Semana em evidência</h2>
+  <div class="grid4 section">
+    <div class="card"><strong class="label">Semana atual</strong><div class="value">${esc(numeroSemanaAtual)}</div></div>
+    <div class="card"><strong class="label">Período</strong><div class="value">${esc(periodoSemanaAtual)}</div></div>
+    <div class="card"><strong class="label">Entradas</strong><div class="value">${fmt(semanaAtual ? totalEntradasRelatorioAcompanhamento(semanaAtual) : 0)}</div></div>
+    <div class="card"><strong class="label">Saldo</strong><div class="value ${saldoSemanaAtual < 0 ? "kpi-neg" : "kpi-pos"}">${fmt(saldoSemanaAtual)}</div></div>
   </div>
 
   <h2>Base de cálculo e resumo do período</h2>
-  <div class="grid">
-    <div class="card"><div class="label">Faturamento anual declarado</div><div class="value">${fmt(a.faturamento_anual)}</div></div>
-    <div class="card"><div class="label">Média mensal base</div><div class="value">${fmt(mediaMensal)}</div></div>
-    <div class="card"><div class="label">Teto mensal + margem</div><div class="value">${fmt(tetoMensal)}</div></div>
-    <div class="card"><div class="label">Uso do teto mensal</div><div class="value">${fmtPct(percentualUsoMes)}</div></div>
-    <div class="card"><div class="label">Entradas do período</div><div class="value">${fmt(totalMes)}</div></div>
-    <div class="card"><div class="label">Saídas do período</div><div class="value">${fmt(totalSaidas)}</div></div>
-    <div class="card ${saldoMes < 0 ? "critico" : "ok"}"><div class="label">Saldo do período</div><div class="value">${fmt(saldoMes)}</div></div>
-    <div class="card"><div class="label">Alertas pendentes</div><div class="value">${alertasPendentes}</div></div>
+  <div class="grid4 section">
+    <div class="card"><strong class="label">Faturamento anual declarado</strong><div class="value">${fmt(a.faturamento_anual)}</div></div>
+    <div class="card"><strong class="label">Média mensal base</strong><div class="value">${fmt(mediaMensal)}</div></div>
+    <div class="card"><strong class="label">Teto mensal + margem</strong><div class="value">${fmt(tetoMensal)}</div></div>
+    <div class="card"><strong class="label">Uso do teto mensal</strong><div class="value ${percentualUsoMes > 100 ? "kpi-neg" : ""}">${fmtPct(percentualUsoMes)}</div></div>
+    <div class="card"><strong class="label">Entradas do período</strong><div class="value">${fmt(totalMes)}</div></div>
+    <div class="card"><strong class="label">Saídas do período</strong><div class="value">${fmt(totalSaidas)}</div></div>
+    <div class="card"><strong class="label">Saldo do período</strong><div class="value ${saldoMes < 0 ? "kpi-neg" : "kpi-pos"}">${fmt(saldoMes)}</div></div>
+    <div class="card"><strong class="label">Alertas pendentes</strong><div class="value">${alertasPendentes}</div></div>
   </div>
-
-  <h2>Leitura operacional do período</h2>
-  <div class="grid">
-    <div class="card"><div class="label">Semanas alimentadas</div><div class="value">${semanas.length}</div></div>
-    <div class="card"><div class="label">Semanas positivas</div><div class="value">${semanasPositivas}</div></div>
-    <div class="card"><div class="label">Semanas negativas</div><div class="value">${semanasNegativas}</div></div>
-    <div class="card"><div class="label">Semanas críticas</div><div class="value">${semanasCriticas}</div></div>
+  <div class="grid4" style="margin-top:8px">
+    <div class="card"><strong class="label">Semanas alimentadas</strong><div class="value">${semanas.length}</div></div>
+    <div class="card"><strong class="label">Semanas positivas</strong><div class="value kpi-pos">${semanasPositivas}</div></div>
+    <div class="card"><strong class="label">Semanas negativas</strong><div class="value kpi-neg">${semanasNegativas}</div></div>
+    <div class="card"><strong class="label">Semanas críticas</strong><div class="value kpi-neg">${semanasCriticas}</div></div>
   </div>
-  <div class="box">
-    <strong>Melhor entrada:</strong> ${maiorEntrada ? `Semana ${esc(maiorEntrada.numero_semana)} com ${fmt(totalEntradasRelatorioAcompanhamento(maiorEntrada))}` : "—"}.<br/>
-    <strong>Pior saldo:</strong> ${piorSaldo ? `Semana ${esc(piorSaldo.numero_semana)} com ${fmt(piorSaldo.saldo_semanal)}` : "—"}.<br/>
-    <strong>Fórmula:</strong> relatório mensal alimentado por semanas. A média mensal vem do faturamento anual / 12 e a margem operacional configurada define o teto de controle.
+  <div class="box" style="margin-top:8px">
+    <strong>Leitura operacional:</strong> ${semDados ? "Nenhuma semana foi encontrada para o período selecionado." : `Melhor entrada: Semana ${esc(maiorEntrada?.numero_semana || "—")} com ${fmt(maiorEntrada ? totalEntradasRelatorioAcompanhamento(maiorEntrada) : 0)}. Pior saldo: Semana ${esc(piorSaldo?.numero_semana || "—")} com ${fmt(piorSaldo?.saldo_semanal || 0)}.`}
+    A fórmula preserva a regra atual: relatório mensal alimentado por semanas, com referência no faturamento anual declarado e margem operacional configurada.
   </div>
 
   ${payload.incluirIa !== false ? `
-  <h2>Assessoria Inteligente de Crédito</h2>
-  <div class="grid3">
-    <div class="card"><div class="label">Impacto no rating interno</div><div class="value">${esc(impactoRating)}</div></div>
-    <div class="card"><div class="label">Prontidão para crédito</div><div class="value">${esc(prontidaoCredito)}</div></div>
-    <div class="card"><div class="label">Próxima melhor ação</div><div class="value">${esc(inteligencia?.proximaMelhorAcao || "Alimentar semanas e revisar dados do período.")}</div></div>
+  <h2>Assessoria inteligente de crédito</h2>
+  <div class="grid3 section">
+    <div class="card"><strong class="label">Impacto no rating interno</strong><div class="value">${esc(humanizar(impactoRating))}</div></div>
+    <div class="card"><strong class="label">Prontidão para crédito</strong><div class="value">${esc(humanizar(prontidaoCredito))}</div></div>
+    <div class="card"><strong class="label">Próxima melhor ação</strong><div style="font-weight:700">${esc(inteligencia?.proximaMelhorAcao || "Alimentar semanas e revisar dados do período.")}</div></div>
   </div>
   <div class="grid3" style="margin-top:8px">
-    <div class="card"><h3>Alertas</h3><ul>${itens(inteligencia?.alertas, semDados ? "Sem dados semanais para alertas conclusivos." : "Nenhum alerta crítico adicional identificado.")}</ul></div>
-    <div class="card"><h3>Pontos de atenção</h3><ul>${itens(inteligencia?.pontosAtencao, "Nenhum ponto de atenção adicional.")}</ul></div>
-    <div class="card"><h3>Plano de ação</h3><ul>${itens(inteligencia?.planoAcao, "Manter rotina semanal de alimentação e revisão mensal.")}</ul></div>
+    <div class="card"><h3>Alertas</h3><ul>${itemList(inteligencia?.alertas, semDados ? "Sem dados semanais para alertas conclusivos." : "Nenhum alerta crítico adicional identificado.")}</ul></div>
+    <div class="card"><h3>Pontos de atenção</h3><ul>${itemList(inteligencia?.pontosAtencao, "Nenhum ponto de atenção adicional.")}</ul></div>
+    <div class="card"><h3>Plano de ação</h3><ul>${itemList(inteligencia?.planoAcao, "Manter rotina semanal de alimentação e revisão mensal.")}</ul></div>
   </div>
-  <div class="box"><strong>Parecer técnico:</strong> ${esc(parecerFinal)}</div>
+  <div class="box" style="margin-top:8px"><strong>Parecer técnico:</strong> ${esc(parecerFinal)}</div>
   ` : ""}
 
-  <h2>Histórico semanal do período</h2>
+  <h2>Movimentação consolidada por semana</h2>
   <table>
-    <thead>
-      <tr><th>Semana</th><th>Período</th><th>Maquininha</th><th>Pix</th><th>Boleto</th><th>TED</th><th>Dinheiro</th><th>Outras</th><th>Total entradas</th><th>Saídas</th><th>Saldo</th><th>Rating Bacen</th><th>Rating interno</th><th>Status</th><th>Diagnóstico</th><th>Orientação</th><th>Próxima ação</th></tr>
-    </thead>
-    <tbody>${linhasSemanas || textoSemanasVazias}</tbody>
+    <thead><tr><th style="width:8%">Semana</th><th style="width:11%">Período</th><th>Entradas</th><th>Saídas</th><th>Saldo</th><th>Rating Bacen</th><th>Rating interno</th><th>Status</th><th style="width:30%">Leitura resumida</th></tr></thead>
+    <tbody>${linhasMovimentacao || textoSemanasVazias}</tbody>
   </table>
+
+  ${payload.detalhado !== false ? `
+  <h2>Composição das entradas</h2>
+  <table>
+    <thead><tr><th>Semana</th><th>Maquininha</th><th>Pix</th><th>Boleto</th><th>TED</th><th>Dinheiro</th><th>Outras</th><th>Total entradas</th></tr></thead>
+    <tbody>${linhasComposicao || `<tr><td colspan="8">Sem composição de entradas no período.</td></tr>`}</tbody>
+  </table>
+
+  <h2>Diagnóstico e orientação por semana</h2>
+  <table>
+    <thead><tr><th style="width:12%">Semana</th><th>Diagnóstico</th><th>Orientação</th><th>Próxima ação</th></tr></thead>
+    <tbody>${linhasDiagnostico || `<tr><td colspan="4">Sem diagnósticos semanais no período.</td></tr>`}</tbody>
+  </table>
+  ` : ""}
 
   <h2>Alertas operacionais</h2>
   <table>
@@ -12228,7 +12295,7 @@ async function registrarDocumentoContratoGerado(params: {
   <h2>Documentos e anexos considerados</h2>
   <table>
     <thead><tr><th>Tipo</th><th>Arquivo/documento</th><th>Status</th><th>Incluído em</th><th>Tamanho</th></tr></thead>
-    <tbody>${linhasDocumentos || `<tr><td colspan="5">Nenhum documento vinculado/localizado para a empresa neste relatório. Recomenda-se anexar extratos, comprovantes e documentos financeiros no acervo documental.</td></tr>`}</tbody>
+    <tbody>${linhasDocumentos || `<tr><td colspan="5">Nenhum documento vinculado/localizado para a empresa neste relatório. Recomenda-se anexar extratos, comprovantes, relatório de faturamento e documentos financeiros no acervo documental.</td></tr>`}</tbody>
   </table>
   ` : ""}
 
@@ -12243,7 +12310,7 @@ async function registrarDocumentoContratoGerado(params: {
     </div>
     <div class="assinatura">
       Responsável legal da empresa acompanhada<br/>
-      ${esc(a.nome_empresa)} — CNPJ ${esc(a.cnpj || "—")}
+      ${esc(a.nome_empresa || "Empresa")} — CNPJ ${esc(a.cnpj || "—")}
     </div>
   </div>
 </body>

@@ -65,8 +65,19 @@ function percentual(value: unknown): string {
 }
 
 function dataISO(value: unknown): string | null {
-  const raw = String(value || "").slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const iso = raw.match(/(\d{4}-\d{2}-\d{2})/);
+  if (iso) return iso[1];
+  const br = raw.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  return null;
 }
 
 function totalEntradas(semana: Record<string, unknown> | null | undefined): number {
