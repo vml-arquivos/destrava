@@ -97,6 +97,43 @@ function hojeISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function updFormInicial(): AtualizacaoForm {
+  const hoje = hojeISO();
+  const fimPeriodo = proximaQuartaFeira(hoje);
+  return {
+    numero_semana: 1,
+    data_referencia_inicio: hoje,
+    data_referencia_fim: fimPeriodo,
+    data_atualizacao: fimPeriodo,
+    proxima_atualizacao_apos_salvar: proximaQuartaFeira(fimPeriodo),
+    entrada_maquininha: 0,
+    entrada_pix: 0,
+    entrada_boleto: 0,
+    entrada_ted: 0,
+    entrada_dinheiro: 0,
+    outras_entradas: 0,
+    total_saidas: 0,
+    saldo_medio: 0,
+    saldo_final: 0,
+    quantidade_transacoes: 0,
+    rating_bacen: "",
+    rating_interno: "",
+    scr_status: "",
+    cenprot_status: "",
+    serasa_status: "",
+    cnd_status: "",
+    pld_aml_status: "",
+    coaf_status: "",
+    possui_restricao: false,
+    restricao_nova: false,
+    devolucao_ou_estorno: false,
+    ocorrencia_negativa: false,
+    analise_semana: "",
+    orientacao_cliente: "",
+    proxima_acao: "",
+  };
+}
+
 function proximaQuartaFeira(base: string | Date): string {
   const d =
     typeof base === "string"
@@ -331,6 +368,63 @@ function authHeaders(extra: Record<string, string> = {}): Record<string, string>
     ...extra,
   };
 }
+
+type AcompanhamentoFieldConfig = {
+  key: string;
+  label: string;
+  type?: string;
+  textarea?: boolean;
+  required?: boolean;
+  group: "empresa" | "banco" | "objetivo" | "rating" | "gestao" | "controle";
+};
+
+const BANCOS_SUGERIDOS: string[] = [
+  "SICOOB",
+  "Caixa",
+  "Banco do Brasil",
+  "Bradesco",
+  "Itaú",
+  "Santander",
+  "Sicredi",
+  "Cresol",
+  "Inter",
+  "Cora",
+  "Stone",
+  "Outro",
+];
+
+const NOVO_FIELDS: AcompanhamentoFieldConfig[] = [
+  { key: "nome_empresa", label: "Empresa", required: true, group: "empresa" },
+  { key: "cnpj", label: "CNPJ", group: "empresa" },
+  { key: "telefone_cliente", label: "Telefone", group: "empresa" },
+  { key: "whatsapp_cliente", label: "WhatsApp", group: "empresa" },
+  { key: "email_cliente", label: "E-mail", group: "empresa" },
+  { key: "banco_observado", label: "Banco observado", required: true, group: "banco", type: "banco" },
+  { key: "agencia", label: "Agência", group: "banco" },
+  { key: "conta", label: "Conta", group: "banco" },
+  { key: "gerente_banco", label: "Gerente do banco", group: "banco" },
+  { key: "contato_banco", label: "Contato do banco", group: "banco" },
+  { key: "data_abertura_conta", label: "Data de abertura/relacionamento", type: "date", group: "banco" },
+  { key: "data_inicio", label: "Início do acompanhamento", type: "date", group: "banco", required: true },
+  { key: "objetivo_credito", label: "Objetivo do crédito", group: "objetivo" },
+  { key: "valor_credito_pretendido", label: "Valor pretendido", type: "number", group: "objetivo" },
+  { key: "linha_credito_pretendida", label: "Linha pretendida", group: "objetivo" },
+  { key: "rating_bacen_inicial", label: "Rating Bacen inicial", group: "rating" },
+  { key: "rating_interno_inicial", label: "Rating interno inicial", group: "rating" },
+  { key: "faturamento_anual", label: "Faturamento anual", type: "number", group: "rating" },
+  { key: "media_mensal", label: "Média mensal", type: "number", group: "rating" },
+  { key: "margem_seguranca_30", label: "Margem de segurança 30%", type: "number", group: "rating" },
+  { key: "observacoes_iniciais", label: "Observações iniciais", textarea: true, group: "gestao" },
+];
+
+const EDIT_FIELDS: AcompanhamentoFieldConfig[] = [
+  { key: "status", label: "Status", group: "controle" },
+  { key: "data_fim_prevista", label: "Fim previsto", type: "date", group: "controle" },
+  { key: "proxima_atualizacao", label: "Próxima atualização", type: "date", group: "controle" },
+  { key: "rating_bacen_atual", label: "Rating Bacen atual", group: "controle" },
+  { key: "rating_interno_atual", label: "Rating interno atual", group: "controle" },
+  { key: "observacoes_finais", label: "Observações finais", textarea: true, group: "controle" },
+];
 
 
 const PRESTADORAS_RELATORIO = {
