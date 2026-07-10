@@ -253,6 +253,54 @@ function labelStatus(status?: string | null): string {
     .replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
+
+function statusInteligenciaLabel(value?: string | null): string {
+  const mapa: Record<string, string> = {
+    positivo: "Positivo",
+    atencao: "Atenção",
+    critico: "Crítico",
+  };
+  return mapa[String(value || "")] || labelStatus(value || "Não analisado");
+}
+
+function prontidaoCreditoLabel(value?: string | null): string {
+  const mapa: Record<string, string> = {
+    pronta: "Pronta",
+    quase_pronta: "Quase pronta",
+    em_preparacao: "Em preparação",
+    nao_recomendada: "Não recomendada agora",
+  };
+  return mapa[String(value || "")] || labelStatus(value || "Não analisada");
+}
+
+function impactoRatingLabel(value?: string | null): string {
+  const mapa: Record<string, string> = {
+    melhora: "Melhora o rating",
+    mantem: "Mantém o rating",
+    prejudica: "Prejudica o rating",
+    exige_correcao: "Exige correção",
+  };
+  return mapa[String(value || "")] || labelStatus(value || "Não analisado");
+}
+
+function chipInteligenciaClass(value?: string | null): string {
+  const v = String(value || "");
+  if (["critico", "nao_recomendada", "exige_correcao", "alta", "critica"].includes(v)) {
+    return "border-red-200 bg-red-50 text-red-700";
+  }
+  if (["atencao", "em_preparacao", "prejudica", "media"].includes(v)) {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+  if (["positivo", "pronta", "quase_pronta", "melhora", "baixa"].includes(v)) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function listaItensInteligencia(value: any): any[] {
+  return Array.isArray(value) ? value.filter(Boolean) : [];
+}
+
 function normalizeRows(payload: any): Acompanhamento[] {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.data)) return payload.data;
@@ -790,6 +838,9 @@ export default function AcompanhamentoBancario() {
   const [novoOpen, setNovoOpen] = useState(false);
   const [updOpen, setUpdOpen] = useState<Acompanhamento | null>(null);
   const [detalhe, setDetalhe] = useState<Acompanhamento | null>(null);
+  const [inteligenciaAcompanhamento, setInteligenciaAcompanhamento] = useState<any | null>(null);
+  const [loadingInteligenciaAcompanhamento, setLoadingInteligenciaAcompanhamento] = useState(false);
+  const [erroInteligenciaAcompanhamento, setErroInteligenciaAcompanhamento] = useState("");
   const [imprimirOpen, setImprimirOpen] = useState<Acompanhamento | null>(null);
   const [prestadoraRelatorio, setPrestadoraRelatorio] = useState<PrestadoraKey>("destrava");
   const [editandoId, setEditandoId] = useState<string | null>(null);
@@ -1234,12 +1285,51 @@ export default function AcompanhamentoBancario() {
   };
 
   // ─── Carregar detalhe ─────────────────────────────────────────────────────────
+  const carregarInteligenciaAcompanhamento = async (id: string) => {
+    setLoadingInteligenciaAcompanhamento(true);
+    setErroInteligenciaAcompanhamento("");
+    try {
+      const response = await fetch(`/api/acompanhamentos-bancarios/${id}/inteligencia`, {
+        headers: authHeaders(),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.error || "Não foi possível gerar a inteligência do acompanhamento.");
+      }
+      setInteligenciaAcompanhamento(await response.json());
+    } catch (err: any) {
+      console.error("[ACOMPANHAMENTO IA]", err);
+      setInteligenciaAcompanhamento(null);
+      setErroInteligenciaAcompanhamento(err?.message || "Erro ao gerar inteligência do acompanhamento.");
+    } finally {
+      setLoadingInteligenciaAcompanhamento(false);
+    }
+  };
+
   const carregarDetalhe = async (id: string) => {
+    setInteligenciaAcompanhamento(null);
+    setErroInteligenciaAcompanhamento("");
     const response = await fetch(`/api/acompanhamentos-bancarios/${id}`, {
       headers: authHeaders(),
     });
     if (!response.ok) { alert("Não foi possível carregar os detalhes."); return; }
-    setDetalhe(await response.json());
+    const payload = await response.json();
+    setDetalhe(payload);
+    await carregarInteligenciaAcompanhamento(id);
+  };
+
+  const copiarTextoInteligencia = async (texto?: string | null) => {
+    const conteudo = String(texto || "").trim();
+    if (!conteudo) {
+      alert("Não há texto disponível para copiar.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(conteudo);
+      alert("Texto copiado com sucesso.");
+    } catch {
+      alert("Não foi possível copiar automaticamente. Selecione o texto manualmente.");
+    }
   };
 
   // ─── Prorrogar ────────────────────────────────────────────────────────────────
@@ -2508,7 +2598,7 @@ export default function AcompanhamentoBancario() {
                     <button className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100" onClick={() => exportarCSV(detalhe, prestadoraRelatorio)}>Exportar XLS</button>
                     <button className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100" onClick={() => exportarRelatorioMensalPDF(detalhe, authHeaders)}>Relatório mensal PDF</button>
                     <button className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-100" onClick={() => { setImprimirOpen(detalhe); setDetalhe(null); }}>Imprimir</button>
-                    <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50" onClick={() => setDetalhe(null)}>Fechar</button>
+                    <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50" onClick={() => { setDetalhe(null); setInteligenciaAcompanhamento(null); setErroInteligenciaAcompanhamento(""); }}>Fechar</button>
                   </div>
                 </div>
               </div>
@@ -2738,6 +2828,160 @@ export default function AcompanhamentoBancario() {
                     </section>
                   );
                 })()}
+                <section className="overflow-hidden rounded-2xl border border-indigo-200 bg-white shadow-sm">
+                  <div className="flex flex-col gap-3 border-b border-indigo-100 bg-gradient-to-r from-indigo-50 via-white to-blue-50 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">Assessoria inteligente de crédito</p>
+                      <h4 className="mt-1 text-lg font-black text-slate-950">Inteligência do Acompanhamento Bancário</h4>
+                      <p className="text-xs text-slate-500">Camada consultiva: preserva a lógica semanal/mensal já existente e interpreta os dados para rating, crédito e plano de ação.</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        className="rounded-xl border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-50 disabled:cursor-wait disabled:opacity-60"
+                        disabled={loadingInteligenciaAcompanhamento}
+                        onClick={() => detalhe?.id && carregarInteligenciaAcompanhamento(detalhe.id)}
+                      >{loadingInteligenciaAcompanhamento ? "Analisando..." : "Atualizar análise"}</button>
+                      <button
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                        onClick={() => copiarTextoInteligencia(inteligenciaAcompanhamento?.parecerTecnico)}
+                      >Copiar parecer</button>
+                      <button
+                        className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                        onClick={() => copiarTextoInteligencia(inteligenciaAcompanhamento?.orientacaoCliente)}
+                      >Copiar orientação</button>
+                      <button
+                        className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={!detalhe?.empresa_id}
+                        onClick={() => detalhe?.empresa_id && (window.location.href = `/colaborador/empresas?empresa=${detalhe.empresa_id}&aba=proposta_bancaria`)}
+                        title={detalhe?.empresa_id ? "Abrir empresa para usar esta leitura na proposta bancária" : "Acompanhamento sem empresa vinculada"}
+                      >Usar na proposta</button>
+                    </div>
+                  </div>
+
+                  <div className="p-4">
+                    {erroInteligenciaAcompanhamento && (
+                      <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+                        {erroInteligenciaAcompanhamento}
+                      </div>
+                    )}
+
+                    {loadingInteligenciaAcompanhamento && !inteligenciaAcompanhamento ? (
+                      <div className="rounded-xl border border-dashed border-indigo-200 bg-indigo-50/50 p-4 text-sm text-indigo-700">
+                        Gerando diagnóstico consultivo com base nos dados do acompanhamento...
+                      </div>
+                    ) : inteligenciaAcompanhamento ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Status inteligente</div>
+                            <div className={`mt-2 inline-flex rounded-full border px-3 py-1 text-xs font-bold ${chipInteligenciaClass(inteligenciaAcompanhamento.statusInteligente)}`}>
+                              {statusInteligenciaLabel(inteligenciaAcompanhamento.statusInteligente)}
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Impacto no rating</div>
+                            <div className={`mt-2 inline-flex rounded-full border px-3 py-1 text-xs font-bold ${chipInteligenciaClass(inteligenciaAcompanhamento.impactoNoRating)}`}>
+                              {impactoRatingLabel(inteligenciaAcompanhamento.impactoNoRating)}
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Prontidão para crédito</div>
+                            <div className={`mt-2 inline-flex rounded-full border px-3 py-1 text-xs font-bold ${chipInteligenciaClass(inteligenciaAcompanhamento.prontidaoCredito)}`}>
+                              {prontidaoCreditoLabel(inteligenciaAcompanhamento.prontidaoCredito)}
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                            <div className="text-[10px] font-bold uppercase tracking-wide text-blue-500">Próxima melhor ação</div>
+                            <div className="mt-2 text-xs font-semibold leading-5 text-blue-900">{inteligenciaAcompanhamento.proximaMelhorAcao || "Manter acompanhamento semanal."}</div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                          <h5 className="text-sm font-black text-slate-900">Resumo executivo</h5>
+                          <p className="mt-2 text-sm leading-6 text-slate-700">{inteligenciaAcompanhamento.resumoExecutivo}</p>
+                        </div>
+
+                        {inteligenciaAcompanhamento.metricas && (
+                          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                            <InfoCard label="Mês referência" value={inteligenciaAcompanhamento.metricas.mes_referencia || "-"} />
+                            <InfoCard label="Ref. semanal" value={moneyBR(inteligenciaAcompanhamento.metricas.referencia_semanal)} />
+                            <InfoCard label="Teto semanal" value={moneyBR(inteligenciaAcompanhamento.metricas.teto_semanal)} />
+                            <InfoCard label="Uso semanal" value={`${Number(inteligenciaAcompanhamento.metricas.percentual_uso_semanal || 0).toFixed(1)}%`} negative={Number(inteligenciaAcompanhamento.metricas.percentual_uso_semanal || 0) > 130} positive={Number(inteligenciaAcompanhamento.metricas.percentual_uso_semanal || 0) >= 70 && Number(inteligenciaAcompanhamento.metricas.percentual_uso_semanal || 0) <= 130} />
+                            <InfoCard label="Uso mensal" value={`${Number(inteligenciaAcompanhamento.metricas.percentual_uso_mensal || 0).toFixed(1)}%`} negative={Number(inteligenciaAcompanhamento.metricas.percentual_uso_mensal || 0) > 100} positive={Number(inteligenciaAcompanhamento.metricas.percentual_uso_mensal || 0) >= 70 && Number(inteligenciaAcompanhamento.metricas.percentual_uso_mensal || 0) <= 100} />
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                          <div className="rounded-2xl border border-red-100 bg-red-50/40 p-4">
+                            <h5 className="text-sm font-black text-red-800">Alertas e riscos</h5>
+                            <div className="mt-3 space-y-2">
+                              {[...listaItensInteligencia(inteligenciaAcompanhamento.alertas), ...listaItensInteligencia(inteligenciaAcompanhamento.riscos)].length ? (
+                                [...listaItensInteligencia(inteligenciaAcompanhamento.alertas), ...listaItensInteligencia(inteligenciaAcompanhamento.riscos)].slice(0, 6).map((item: any, idx: number) => (
+                                  <div key={`alerta-${idx}`} className="rounded-xl border border-red-100 bg-white p-3">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <strong className="text-xs text-slate-900">{item.titulo}</strong>
+                                      {item.prioridade && <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${chipInteligenciaClass(item.prioridade)}`}>{labelStatus(item.prioridade)}</span>}
+                                    </div>
+                                    <p className="mt-1 text-xs leading-5 text-slate-600">{item.descricao}</p>
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="text-xs text-slate-500">Nenhum alerta crítico identificado com os dados atuais.</p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
+                            <h5 className="text-sm font-black text-emerald-800">Pontos fortes e atenção</h5>
+                            <div className="mt-3 space-y-2">
+                              {[...listaItensInteligencia(inteligenciaAcompanhamento.pontosFortes), ...listaItensInteligencia(inteligenciaAcompanhamento.pontosAtencao)].length ? (
+                                [...listaItensInteligencia(inteligenciaAcompanhamento.pontosFortes), ...listaItensInteligencia(inteligenciaAcompanhamento.pontosAtencao)].slice(0, 6).map((item: any, idx: number) => (
+                                  <div key={`ponto-${idx}`} className="rounded-xl border border-slate-100 bg-white p-3">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <strong className="text-xs text-slate-900">{item.titulo}</strong>
+                                      {item.prioridade && <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${chipInteligenciaClass(item.prioridade)}`}>{labelStatus(item.prioridade)}</span>}
+                                    </div>
+                                    <p className="mt-1 text-xs leading-5 text-slate-600">{item.descricao}</p>
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="text-xs text-slate-500">Acompanhe novas semanas para identificar pontos fortes consistentes.</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                          <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
+                            <h5 className="text-sm font-black text-blue-800">Plano de ação para melhorar rating</h5>
+                            <ol className="mt-3 space-y-2">
+                              {listaItensInteligencia(inteligenciaAcompanhamento.planoAcao).slice(0, 6).map((item: any, idx: number) => (
+                                <li key={`acao-${idx}`} className="rounded-xl border border-blue-100 bg-white p-3 text-xs leading-5 text-slate-700">
+                                  <strong className="text-blue-800">{idx + 1}. {item.titulo}</strong>
+                                  <p className="mt-1">{item.descricao}</p>
+                                  {item.impactoEsperado && <p className="mt-1 font-semibold text-emerald-700">Impacto esperado: {item.impactoEsperado}</p>}
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                            <h5 className="text-sm font-black text-slate-900">Parecer técnico consultivo</h5>
+                            <p className="mt-2 text-sm leading-6 text-slate-700">{inteligenciaAcompanhamento.parecerTecnico}</p>
+                            <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-3">
+                              <div className="text-xs font-black uppercase tracking-wide text-amber-700">Orientação ao cliente</div>
+                              <p className="mt-1 text-xs leading-5 text-amber-900">{inteligenciaAcompanhamento.orientacaoCliente}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                        Clique em <strong>Atualizar análise</strong> para gerar a inteligência consultiva deste acompanhamento.
+                      </div>
+                    )}
+                  </div>
+                </section>
+
                 <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                     <div>

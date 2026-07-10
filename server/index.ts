@@ -40,6 +40,7 @@ import { gerarRelatorioTecnico } from "./services/relatorioTecnicoEmpresaService
 import { calcularPendencias } from "./services/pendenciasEmpresaService";
 import { calcularEsteiraCredito } from "./services/esteiraCreditoService";
 import { consolidarHistorico360 } from "./services/historicoClienteService";
+import { calcularInteligenciaAcompanhamentoBancario } from "./services/inteligenciaAcompanhamentoBancarioService";
 import {
   enviarPendenciaNexus,
   verificarConfiguracaoNexus,
@@ -12185,6 +12186,42 @@ async function registrarDocumentoContratoGerado(params: {
     } catch (err) {
       console.error("[GET /api/acompanhamentos-bancarios/alertas]", err);
       res.status(500).json({ error: "Erro ao listar alertas de acompanhamento." });
+    }
+  });
+
+  app.get("/api/acompanhamentos-bancarios/:id/inteligencia", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT a.*, c.nome AS responsavel_nome
+           FROM acompanhamentos_bancarios a
+           LEFT JOIN colaboradores c ON c.id = a.responsavel_id
+          WHERE a.id = $1
+          LIMIT 1`,
+        [req.params.id]
+      );
+
+      if (!rows.length) {
+        res.status(404).json({ error: "Acompanhamento não encontrado." });
+        return;
+      }
+
+      const { rows: atualizacoes } = await pool.query(
+        `SELECT *
+           FROM acompanhamento_bancario_atualizacoes
+          WHERE acompanhamento_id = $1
+          ORDER BY numero_semana ASC, data_referencia_inicio ASC, created_at ASC`,
+        [req.params.id]
+      );
+
+      const resultado = calcularInteligenciaAcompanhamentoBancario({
+        acompanhamento: rows[0],
+        atualizacoes,
+      });
+
+      res.json(resultado);
+    } catch (err) {
+      console.error("[GET /api/acompanhamentos-bancarios/:id/inteligencia]", err);
+      res.status(500).json({ error: "Erro ao gerar inteligência do acompanhamento bancário." });
     }
   });
 
