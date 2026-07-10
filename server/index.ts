@@ -39,6 +39,7 @@ import { calcularPropostaBancaria } from "./services/propostaBancariaService";
 import { gerarRelatorioTecnico } from "./services/relatorioTecnicoEmpresaService";
 import { calcularPendencias } from "./services/pendenciasEmpresaService";
 import { calcularEsteiraCredito } from "./services/esteiraCreditoService";
+import { consolidarHistorico360 } from "./services/historicoClienteService";
 
 const { Pool } = pkg;
 
@@ -4915,6 +4916,66 @@ async function startServer() {
         plano_acao: [],
         resumo: "Erro ao carregar dados da empresa.",
         calculado_em: new Date().toISOString(),
+      });
+    }
+  });
+
+  // ─── GET /api/empresas/:id/historico-360 ──────────────────────
+  // Rota FIXA — deve ficar ANTES de /api/empresas/:id.
+  // Retorna JSON consolidado do histórico 360 do cliente.
+  app.get("/api/empresas/:id/historico-360", auth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
+      const empresaId = req.params.id;
+
+      const { rows: empresaRows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [empresaId]);
+      if (empresaRows.length === 0) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
+      const empresa = empresaRows[0];
+
+      let historicoEmpresa: any[] = [];
+      try { const { rows } = await pool.query("SELECT * FROM empresa_historico WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 100", [empresaId]); historicoEmpresa = Array.isArray(rows) ? rows : []; } catch { historicoEmpresa = []; }
+
+      let followupsEmpresa: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, tipo, descricao, autor, created_at FROM followup_empresa WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 50", [empresaId]); followupsEmpresa = Array.isArray(rows) ? rows : []; } catch { followupsEmpresa = []; }
+
+      let followupsEstruturados: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, tipo, titulo, descricao, concluido, created_at FROM empresa_followups WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 50", [empresaId]); followupsEstruturados = Array.isArray(rows) ? rows : []; } catch { followupsEstruturados = []; }
+
+      let documentos: any[] = [];
+      try { const { rows } = await pool.query(`SELECT id, tipo, nome_arquivo, arquivo_path, status, origem, created_at FROM documentos_arquivos WHERE entidade_tipo = 'empresa' AND entidade_id = $1 AND COALESCE(status,'ativo') NOT IN ('excluido') ORDER BY created_at DESC`, [empresaId]); documentos = Array.isArray(rows) ? rows : []; } catch { documentos = []; }
+
+      let simulacoes: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, produto, valor_solicitado, prazo_meses, status, criado_em, created_at FROM simulacoes_colaborador WHERE empresa_id = $1 ORDER BY criado_em DESC", [empresaId]); simulacoes = Array.isArray(rows) ? rows : []; } catch { simulacoes = []; }
+
+      let contratos: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, numero_contrato, tipo_contrato, status, valor_contrato, data_assinatura, created_at FROM contratos_gerados WHERE empresa_id = $1 ORDER BY created_at DESC", [empresaId]); contratos = Array.isArray(rows) ? rows : []; } catch { contratos = []; }
+
+      let orcamentos: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, descricao, valor_total, status, created_at FROM orcamentos WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 20", [empresaId]); orcamentos = Array.isArray(rows) ? rows : []; } catch { orcamentos = []; }
+
+      let acompanhamentos: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, banco, produto, status, valor, responsavel, created_at FROM acompanhamentos_bancarios WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 30", [empresaId]); acompanhamentos = Array.isArray(rows) ? rows : []; } catch { acompanhamentos = []; }
+
+      const resultado = consolidarHistorico360({
+        empresa, historicoEmpresa, followupsEmpresa, followupsEstruturados,
+        documentos, simulacoes, contratos, orcamentos, acompanhamentos,
+      });
+
+      res.json(resultado);
+    } catch (err: any) {
+      console.error("[GET /api/empresas/:id/historico-360]", err);
+      res.status(500).json({
+        error: "Erro ao consolidar histórico 360",
+        empresa_id: req.params.id,
+        calculado_em: new Date().toISOString(),
+        total_eventos: 0,
+        total_sem_data: 0,
+        eventos_com_data: [],
+        eventos_sem_data: [],
+        resumo_por_tipo: {},
+        primeiro_evento: null,
+        ultimo_evento: null,
+        fonte: "consolidado_360",
       });
     }
   });

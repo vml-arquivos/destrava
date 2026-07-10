@@ -14,6 +14,7 @@ import PropostaBancaria from "./PropostaBancaria";
 import RelatorioTecnico from "./RelatorioTecnico";
 import PlanoAcaoMotor from "./PlanoAcaoMotor";
 import EsteiraCredito from "./EsteiraCredito";
+import Historico360 from "./Historico360";
 import {
   Building2, Users, FileText, AlertTriangle, CheckCircle2,
   TrendingUp, ShieldCheck, ShieldAlert, ShieldX, ShieldOff,
@@ -797,6 +798,9 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
 
       {/* ── Proposta Bancária Inteligente ── */}
       <PropostaBancaria empresaId={empresaId} onNavegar={onNavegar} />
+
+      {/* ── Histórico 360 do Cliente ── */}
+      <Historico360 empresaId={empresaId} onNavegar={onNavegar} />
 
       {/* ── Resumo de Atividade ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

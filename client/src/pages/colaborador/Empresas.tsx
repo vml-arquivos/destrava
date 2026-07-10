@@ -25,6 +25,7 @@ import DocumentosEntidade from "@/components/documentos/DocumentosEntidade";
 import DossieCreditoEmpresa from "@/components/documentacao/DossieCreditoEmpresa";
 import Inteligencia360 from "./Inteligencia360";
 import EsteiraCredito from "./EsteiraCredito";
+import Historico360 from "./Historico360";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -2278,6 +2279,21 @@ export default function Empresas() {
                                 </div>
                               </div>
                             ))}
+                          </div>
+                        )}
+
+                        {/* Histórico 360 consolidado */}
+                        {selecionada?.id && (
+                          <div className="mt-4">
+                            <Historico360
+                              empresaId={selecionada.id}
+                              onNavegar={(aba) => {
+                                if (isAbaEmpresa(aba)) {
+                                  setAbaAtiva(aba);
+                                  if (selecionada?.id) setLocation(`/colaborador/empresas?empresa=${selecionada.id}&aba=${aba}`);
+                                }
+                              }}
+                            />
                           </div>
                         )}
                       </div>
