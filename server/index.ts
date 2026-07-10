@@ -49,6 +49,11 @@ import {
   validarPayloadNexus,
   type PayloadNexus,
 } from "./services/integracaoNexusService";
+import {
+  carregarFeatureAccessConfig,
+  getUserFeatureOverrides,
+  salvarFeatureAccessConfig,
+} from "./services/featureAccessService";
 
 const { Pool } = pkg;
 
@@ -2903,6 +2908,59 @@ async function startServer() {
     } catch (err) {
       console.error("[GET /api/me]", err);
       res.status(500).json({ error: "Erro ao obter usuário" });
+    }
+  });
+
+
+  // ─── CONFIGURAÇÃO DE MENU E FUNÇÕES ──────────────────────────────────────
+  app.get("/api/configuracao-funcoes/me", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const config = carregarFeatureAccessConfig();
+      res.json({
+        global: config.global,
+        userOverride: getUserFeatureOverrides(config, colaborador?.id),
+        updatedAt: config.updatedAt || null,
+      });
+    } catch (err) {
+      console.error("[GET /api/configuracao-funcoes/me]", err);
+      res.status(500).json({ error: "Erro ao carregar configuração de menu e funções." });
+    }
+  });
+
+  app.get("/api/configuracao-funcoes", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const cargo = (colaborador?.cargo || "").toLowerCase();
+      if (!["administrador", "admin"].includes(cargo)) {
+        res.status(403).json({ error: "Apenas administradores podem configurar menu e funções." });
+        return;
+      }
+      const config = carregarFeatureAccessConfig();
+      res.json(config);
+    } catch (err) {
+      console.error("[GET /api/configuracao-funcoes]", err);
+      res.status(500).json({ error: "Erro ao carregar configuração de menu e funções." });
+    }
+  });
+
+  app.put("/api/configuracao-funcoes", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const cargo = (colaborador?.cargo || "").toLowerCase();
+      if (!["administrador", "admin"].includes(cargo)) {
+        res.status(403).json({ error: "Apenas administradores podem configurar menu e funções." });
+        return;
+      }
+      const saved = salvarFeatureAccessConfig({
+        version: 1,
+        global: req.body?.global || {},
+        userOverrides: req.body?.userOverrides || {},
+      }, colaborador?.id || null);
+      res.json({ success: true, config: saved });
+    } catch (err) {
+      console.error("[PUT /api/configuracao-funcoes]", err);
+      res.status(500).json({ error: "Erro ao salvar configuração de menu e funções." });
     }
   });
 

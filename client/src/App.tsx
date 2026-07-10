@@ -63,6 +63,40 @@ import CadastroEmpresa from "./pages/colaborador/CadastroEmpresa";
 import DadosIncompletos from "./pages/colaborador/DadosIncompletos";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CargoRoute from "./components/CargoRoute";
+import Layout from "./pages/colaborador/Layout";
+import ConfiguracaoFuncoes from "./pages/colaborador/ConfiguracaoFuncoes";
+import { useFeatureAccess } from "@/hooks/useFeatureAccess";
+
+function FeatureGate({
+  featureKey,
+  children,
+}: {
+  featureKey: string;
+  children: React.ReactNode;
+}) {
+  const { loading, isFeatureEnabled } = useFeatureAccess();
+  if (loading) return <>{children}</>;
+  if (isFeatureEnabled(featureKey)) return <>{children}</>;
+  return (
+    <Layout title="Função indisponível">
+      <div className="min-h-full bg-slate-50 p-6">
+        <div className="mx-auto max-w-2xl rounded-3xl border border-amber-200 bg-white p-6 shadow-sm">
+          <div className="text-xs font-black uppercase tracking-[0.25em] text-amber-600">
+            Acesso controlado
+          </div>
+          <h1 className="mt-2 text-2xl font-black text-slate-950">
+            Função oculta para este usuário
+          </h1>
+          <p className="mt-2 text-sm text-slate-600">
+            Esta função foi ocultada na configuração administrativa de menu e
+            funções. Peça ao administrador para liberar o acesso caso precise
+            utilizar este módulo.
+          </p>
+        </div>
+      </div>
+    </Layout>
+  );
+}
 
 function Router() {
   return (
@@ -125,29 +159,48 @@ function Router() {
       <Route path="/colaborador/dashboard">
         {() => (
           <ProtectedRoute>
-            <ColaboradorDashboard />
+            <FeatureGate featureKey="dashboard">
+              <ColaboradorDashboard />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/calculadora">
         {() => (
           <ProtectedRoute>
-            <ColaboradorCalculadora />
+            <FeatureGate featureKey="calculadora">
+              <ColaboradorCalculadora />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/simulacoes">
         {() => (
           <ProtectedRoute>
-            <ColaboradorSimulacoes />
+            <FeatureGate featureKey="simulacoes">
+              <ColaboradorSimulacoes />
+            </FeatureGate>
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/configuracao-funcoes">
+        {() => (
+          <ProtectedRoute>
+            <CargoRoute allowedCargos={["administrador"]}>
+              <ConfiguracaoFuncoes />
+            </CargoRoute>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/usuarios">
         {() => (
           <ProtectedRoute>
-            <CargoRoute allowedCargos={['administrador', 'diretor', 'gerente comercial']}>
-              <ColaboradorUsuarios />
+            <CargoRoute
+              allowedCargos={["administrador", "diretor", "gerente comercial"]}
+            >
+              <FeatureGate featureKey="usuarios">
+                <ColaboradorUsuarios />
+              </FeatureGate>
             </CargoRoute>
           </ProtectedRoute>
         )}
@@ -155,56 +208,72 @@ function Router() {
       <Route path="/colaborador/clientes">
         {() => (
           <ProtectedRoute>
-            <ColaboradorClientes />
+            <FeatureGate featureKey="clientes-pf">
+              <ColaboradorClientes />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/crm">
         {() => (
           <ProtectedRoute>
-            <ColaboradorCRM />
+            <FeatureGate featureKey="funil-vendas">
+              <ColaboradorCRM />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/empresas/:id/acervo">
         {() => (
           <ProtectedRoute>
-            <AcervoDocumentalEmpresa />
+            <FeatureGate featureKey="clientes-pj">
+              <AcervoDocumentalEmpresa />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/empresas">
         {() => (
           <ProtectedRoute>
-            <ColaboradorEmpresas />
+            <FeatureGate featureKey="clientes-pj">
+              <ColaboradorEmpresas />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/relatorio-empresas">
         {() => (
           <ProtectedRoute>
-            <RelatorioEmpresas />
+            <FeatureGate featureKey="relatorios-pj">
+              <RelatorioEmpresas />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/cadastros-incompletos">
         {() => (
           <ProtectedRoute>
-            <DadosIncompletos />
+            <FeatureGate featureKey="cadastros-incompletos">
+              <DadosIncompletos />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/dados-incompletos">
         {() => (
           <ProtectedRoute>
-            <DadosIncompletos />
+            <FeatureGate featureKey="cadastros-incompletos">
+              <DadosIncompletos />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/triagem">
         {() => (
           <ProtectedRoute>
-            <ColaboradorTriagem />
+            <FeatureGate featureKey="triagem-leads">
+              <ColaboradorTriagem />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
@@ -225,8 +294,10 @@ function Router() {
       <Route path="/colaborador/integracoes">
         {() => (
           <ProtectedRoute>
-            <CargoRoute allowedCargos={['administrador']}>
-              <ColaboradorIntegracoes />
+            <CargoRoute allowedCargos={["administrador"]}>
+              <FeatureGate featureKey="integracoes">
+                <ColaboradorIntegracoes />
+              </FeatureGate>
             </CargoRoute>
           </ProtectedRoute>
         )}
@@ -234,35 +305,45 @@ function Router() {
       <Route path="/colaborador/assessoria">
         {() => (
           <ProtectedRoute>
-            <AssessoriaIA />
+            <FeatureGate featureKey="assessoria-ia">
+              <AssessoriaIA />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/diagnostico-credito">
         {() => (
           <ProtectedRoute>
-            <DiagnosticoCredito />
+            <FeatureGate featureKey="diagnostico-credito">
+              <DiagnosticoCredito />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/previsao-faturamento">
         {() => (
           <ProtectedRoute>
-            <PrevisaoFaturamento />
+            <FeatureGate featureKey="faturamento">
+              <PrevisaoFaturamento />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/acompanhamento-bancario">
         {() => (
           <ProtectedRoute>
-            <AcompanhamentoBancario />
+            <FeatureGate featureKey="acompanhamento-bancario">
+              <AcompanhamentoBancario />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/acompanhamento-financeiro">
         {() => (
           <ProtectedRoute>
-            <AcompanhamentoFinanceiro />
+            <FeatureGate featureKey="acompanhamento-financeiro">
+              <AcompanhamentoFinanceiro />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
@@ -276,22 +357,28 @@ function Router() {
       <Route path="/colaborador/contratos">
         {() => (
           <ProtectedRoute>
-            <GeradorContratos />
+            <FeatureGate featureKey="contratos">
+              <GeradorContratos />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/orcamentos">
         {() => (
           <ProtectedRoute>
-            <ColaboradorOrcamentos />
+            <FeatureGate featureKey="orcamentos">
+              <ColaboradorOrcamentos />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/contadores">
         {() => (
           <ProtectedRoute>
-            <CargoRoute allowedCargos={['administrador', 'diretor']}>
-              <Contadores />
+            <CargoRoute allowedCargos={["administrador", "diretor"]}>
+              <FeatureGate featureKey="contadores">
+                <Contadores />
+              </FeatureGate>
             </CargoRoute>
           </ProtectedRoute>
         )}
@@ -302,21 +389,27 @@ function Router() {
       <Route path="/colaborador/empresas/novo">
         {() => (
           <ProtectedRoute>
-            <CadastroEmpresa />
+            <FeatureGate featureKey="clientes-pj">
+              <CadastroEmpresa />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador/clientes-pf">
         {() => (
           <ProtectedRoute>
-            <ColaboradorClientes />
+            <FeatureGate featureKey="clientes-pf">
+              <ColaboradorClientes />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/colaborador">
         {() => (
           <ProtectedRoute>
-            <ColaboradorDashboard />
+            <FeatureGate featureKey="dashboard">
+              <ColaboradorDashboard />
+            </FeatureGate>
           </ProtectedRoute>
         )}
       </Route>
