@@ -18,7 +18,12 @@ import cnpjRouter from './routes/cnpj';
 import sociosDocumentosRouter from './routes/socios_documentos';
 import documentosRouter from './routes/documentos';
 import documentacaoRouter from './routes/documentacao';
-import createOrcamentosOperacoesRouter from './routes/orcamentos_operacoes';
+import createOrcamentosOperacoesRouter, {
+  garantirNumeroFinalizado as garantirOrcamentoFinalizado,
+  carregarPdfArmazenado as carregarPdfOrcamentoArmazenado,
+  gerarPdfOrcamentoComFallback,
+  salvarPdfOrcamento,
+} from './routes/orcamentos_operacoes';
 import { ETAPA_FUNIL_DEFAULT, ETAPAS_FUNIL_VALIDAS, normalizarEtapaFunil } from "../shared/funnel.ts";
 import { gerarHtmlTimbrado, getPuppeteerHeaderTemplate, getPuppeteerFooterTemplate, getDocumentStyles, CONTRATADA_DADOS, getHtmlHeaderEmbutido, getHtmlFooterEmbutido } from "./letterhead.ts";
 import { DESTRAVA_LOGO_B64, PERMUPAY_LOGO_B64 } from "./logo_constants.ts";
@@ -52,8 +57,10 @@ import {
 import {
   carregarFeatureAccessConfig,
   getUserFeatureOverrides,
+  isFeatureEnabledForUser,
   salvarFeatureAccessConfig,
 } from "./services/featureAccessService";
+import { enviarDocumento, resolverTokenPublico } from "./services/documentDeliveryService";
 
 const { Pool } = pkg;
 
@@ -1839,6 +1846,40 @@ async function startServer() {
   }
   // ─────────────────────────────────────────────────────────────────────────────
 
+  // ── Migration 070: tabela documentos_enviados (log de envio por e-mail/WhatsApp) ─
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS documentos_enviados (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tipo_documento VARCHAR(50) NOT NULL,
+        documento_id UUID NOT NULL,
+        empresa_id UUID REFERENCES empresas(id) ON DELETE SET NULL,
+        cliente_pf_id UUID REFERENCES clientes_pf(id) ON DELETE SET NULL,
+        canal VARCHAR(20) NOT NULL CHECK (canal IN ('email', 'whatsapp')),
+        destinatario VARCHAR(255) NOT NULL,
+        destinatario_nome VARCHAR(255),
+        assunto VARCHAR(300),
+        mensagem TEXT,
+        status VARCHAR(20) NOT NULL DEFAULT 'enviado' CHECK (status IN ('enviado', 'falhou', 'link_gerado')),
+        erro TEXT,
+        provedor_resposta JSONB,
+        token VARCHAR(64) UNIQUE,
+        token_expira_em TIMESTAMPTZ,
+        enviado_por UUID REFERENCES colaboradores(id) ON DELETE SET NULL,
+        enviado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_documentos_enviados_documento ON documentos_enviados (tipo_documento, documento_id);
+      CREATE INDEX IF NOT EXISTS idx_documentos_enviados_empresa ON documentos_enviados (empresa_id);
+      CREATE INDEX IF NOT EXISTS idx_documentos_enviados_enviado_por ON documentos_enviados (enviado_por);
+      CREATE INDEX IF NOT EXISTS idx_documentos_enviados_enviado_em ON documentos_enviados (enviado_em DESC);
+      CREATE INDEX IF NOT EXISTS idx_documentos_enviados_token ON documentos_enviados (token);
+      ALTER TABLE documentos_enviados ADD COLUMN IF NOT EXISTS token VARCHAR(64) UNIQUE;
+      ALTER TABLE documentos_enviados ADD COLUMN IF NOT EXISTS token_expira_em TIMESTAMPTZ;
+    `);
+    console.log('[startup] Migration 070 (documentos_enviados): OK.');
+  } catch (err: any) { console.warn('[startup] Migration 070:', err?.message); }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // body parser, CORS e no-cache já registrados no topo de startServer()
   app.use('/api/documentos', documentosRouter);
   app.use('/api/orcamentos', auth, createOrcamentosOperacoesRouter(pool));
@@ -2961,6 +3002,125 @@ async function startServer() {
     } catch (err) {
       console.error("[PUT /api/configuracao-funcoes]", err);
       res.status(500).json({ error: "Erro ao salvar configuração de menu e funções." });
+    }
+  });
+
+  // Busca os bytes do documento a partir do tipo + id. Hoje só 'orcamento' está
+  // implementado de ponta a ponta (reaproveita a mesma geração/cache de PDF já
+  // usada pelo download autenticado). Pra adicionar contrato/simulação/proposta
+  // bancária/faturamento, basta acrescentar um novo `case` aqui -- o resto do
+  // fluxo (e-mail, WhatsApp, log) já é genérico e não precisa mudar.
+  async function obterArquivoDocumento(tipoDocumento: string, documentoId: string): Promise<{ buffer: Buffer; filename: string; mimeType: string } | null> {
+    if (tipoDocumento === "orcamento") {
+      const orcamento = await garantirOrcamentoFinalizado(pool, documentoId);
+      if (!orcamento) return null;
+      let pdf = await carregarPdfOrcamentoArmazenado(orcamento.pdf_path);
+      if (!pdf) {
+        const gerado = await gerarPdfOrcamentoComFallback(orcamento);
+        pdf = gerado.pdf;
+        await salvarPdfOrcamento(pool, orcamento, pdf);
+      }
+      const nome = `${String(orcamento.numero || "orcamento").replace(/[^a-zA-Z0-9-_]/g, "_")}.pdf`;
+      return { buffer: pdf, filename: nome, mimeType: "application/pdf" };
+    }
+    return null;
+  }
+
+  // ─── POST /api/documentos/enviar — envio direto por e-mail/WhatsApp ───────
+  // Cobre orçamento hoje; contrato, simulação, proposta bancária e faturamento
+  // ficam prontos pra plugar em obterArquivoDocumento() acima. O frontend já
+  // resolve os dados de contato a partir do cadastro (empresa/cliente) e
+  // permite o usuário revisar/editar antes de confirmar -- aqui só validamos,
+  // checamos permissão, buscamos o arquivo, enviamos e registramos o log.
+  app.post("/api/documentos/enviar", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const {
+        tipo_documento, documento_id, canal, destinatario,
+        assunto, mensagem, empresa_id, cliente_pf_id,
+      } = req.body || {};
+
+      if (!tipo_documento || !documento_id) {
+        res.status(400).json({ error: "Informe tipo_documento e documento_id." });
+        return;
+      }
+      if (canal !== "email" && canal !== "whatsapp") {
+        res.status(400).json({ error: "Canal inválido. Use 'email' ou 'whatsapp'." });
+        return;
+      }
+      if (!destinatario || typeof destinatario !== "object") {
+        res.status(400).json({ error: "Informe os dados do destinatário." });
+        return;
+      }
+
+      const featureKey = canal === "email" ? "documento-action-enviar-email" : "documento-action-enviar-whatsapp";
+      const config = carregarFeatureAccessConfig();
+      if (!isFeatureEnabledForUser(config, featureKey, colaborador?.id)) {
+        res.status(403).json({ error: "Você não tem permissão para enviar documentos por este canal. Fale com um administrador." });
+        return;
+      }
+
+      const arquivo = await obterArquivoDocumento(String(tipo_documento), String(documento_id));
+      if (!arquivo) {
+        res.status(404).json({ error: `Documento (${tipo_documento}) não encontrado, ou o envio direto ainda não foi implementado para este tipo.` });
+        return;
+      }
+
+      const siteDomain = process.env.SITE_DOMAIN || "destravacredito.com";
+      const resultado = await enviarDocumento(pool, {
+        tipoDocumento: String(tipo_documento),
+        documentoId: String(documento_id),
+        canal,
+        destinatario: {
+          nome: destinatario.nome || null,
+          email: destinatario.email || null,
+          telefone: destinatario.telefone || null,
+          whatsapp: destinatario.whatsapp || null,
+        },
+        assunto: assunto || undefined,
+        mensagem: mensagem || undefined,
+        arquivo,
+        baseUrlPublica: `https://${siteDomain}`,
+        empresaId: empresa_id || null,
+        clientePfId: cliente_pf_id || null,
+        enviadoPor: colaborador?.id || null,
+      });
+
+      if (!resultado.ok) {
+        res.status(422).json(resultado);
+        return;
+      }
+      res.json(resultado);
+    } catch (err) {
+      console.error("[POST /api/documentos/enviar]", err);
+      res.status(500).json({ error: "Erro ao enviar documento." });
+    }
+  });
+
+  // ─── GET /api/documentos-publicos/:token — download SEM login ────────────
+  // Usado só pelo link de WhatsApp (wa.me não permite anexo, então mandamos
+  // link). Token aleatório de uso restrito ao documento daquele envio
+  // específico, expira em 7 dias (ver documentDeliveryService.ts). Não expõe
+  // nenhuma outra informação do sistema além do arquivo daquele envio.
+  app.get("/api/documentos-publicos/:token", async (req: Request, res: Response) => {
+    try {
+      const alvo = await resolverTokenPublico(pool, req.params.token);
+      if (!alvo) {
+        res.status(404).send("Link expirado ou inválido. Peça pro colaborador reenviar o documento.");
+        return;
+      }
+      const arquivo = await obterArquivoDocumento(alvo.tipoDocumento, alvo.documentoId);
+      if (!arquivo) {
+        res.status(404).send("Documento não encontrado.");
+        return;
+      }
+      res.setHeader("Content-Type", arquivo.mimeType);
+      res.setHeader("Content-Disposition", `inline; filename="${arquivo.filename}"`);
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.send(arquivo.buffer);
+    } catch (err) {
+      console.error("[GET /api/documentos-publicos/:token]", err);
+      res.status(500).send("Erro ao carregar documento.");
     }
   });
 

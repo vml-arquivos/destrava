@@ -51,6 +51,8 @@ export const FEATURE_CATALOG: FeatureCatalogItem[] = [
   { key: "acompanhamento-financeiro", group: "financeiro", label: "Acompanhamento Financeiro", href: "/colaborador/acompanhamento-financeiro", description: "Acompanhamento financeiro semanal." },
   { key: "faturamento", group: "financeiro", label: "Faturamento", href: "/colaborador/previsao-faturamento", description: "Declarações, previsão e relatórios de faturamento." },
   { key: "contratos", group: "documentos", label: "Contratos", href: "/colaborador/contratos", description: "Geração e gestão de contratos." },
+  { key: "documento-action-enviar-email", group: "documentos", label: "Ação Enviar Documento por E-mail", href: "/colaborador/orcamentos#enviar-email", description: "Permite enviar orçamento, contrato, simulação e demais documentos direto por e-mail, usando o cadastro do cliente." },
+  { key: "documento-action-enviar-whatsapp", group: "documentos", label: "Ação Compartilhar Documento por WhatsApp", href: "/colaborador/orcamentos#enviar-whatsapp", description: "Permite gerar link de WhatsApp pré-preenchido para enviar orçamento, contrato, simulação e demais documentos." },
   { key: "contadores", group: "gestao", label: "Contadores", href: "/colaborador/contadores", description: "Cadastro e gestão de contadores.", adminOnly: true },
   { key: "integracoes", group: "gestao", label: "Integrações n8n", href: "/colaborador/integracoes", description: "Configuração e acompanhamento de integrações.", adminOnly: true },
   { key: "usuarios", group: "gestao", label: "Usuários", href: "/colaborador/usuarios", description: "Cadastro e gestão de colaboradores.", adminOnly: true },

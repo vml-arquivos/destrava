@@ -20,8 +20,12 @@ const DEFAULT_CONFIG: FeatureAccessConfig = {
 };
 
 function getConfigDir(): string {
+  // Importante: precisa ficar dentro da MESMA árvore que o volume persistente real
+  // do Coolify (destino configurado: /app/uploads) -- gravar em qualquer outro
+  // caminho sob DATA_DIR (ex: '/app/configuracoes') não sobrevive a um redeploy,
+  // porque só '/app/uploads' está coberto pelo volume dedicado.
   const base = process.env.DATA_DIR || path.join(process.cwd(), "data");
-  return path.join(base, "configuracoes");
+  return path.join(base, "uploads", "configuracoes");
 }
 
 function getConfigPath(): string {

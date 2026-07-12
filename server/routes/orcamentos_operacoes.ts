@@ -179,7 +179,7 @@ function gerarNumeroOrcamento(): string {
   return `ORC-${stamp}-${crypto.randomBytes(2).toString("hex").toUpperCase()}`;
 }
 
-async function garantirNumeroFinalizado(pool: Pool, id: string): Promise<Row | null> {
+export async function garantirNumeroFinalizado(pool: Pool, id: string): Promise<Row | null> {
   const filtrosAtivo = await filtroOrcamentoAtivo(pool);
   const whereAtivo = filtrosAtivo.length ? ` AND ${filtrosAtivo.join(" AND ")}` : "";
   const atual = await pool.query(
@@ -729,7 +729,7 @@ async function gerarPdfOrcamentoFallback(orcamento: Row, motivo: string): Promis
   return Buffer.from(await doc.save());
 }
 
-async function gerarPdfOrcamentoComFallback(orcamento: Row): Promise<{ pdf: Buffer; fallback: boolean; reason?: string }> {
+export async function gerarPdfOrcamentoComFallback(orcamento: Row): Promise<{ pdf: Buffer; fallback: boolean; reason?: string }> {
   try {
     return { pdf: await gerarPdfOrcamentoPuppeteer(orcamento), fallback: false };
   } catch (err: any) {
@@ -739,7 +739,7 @@ async function gerarPdfOrcamentoComFallback(orcamento: Row): Promise<{ pdf: Buff
   }
 }
 
-async function salvarPdfOrcamento(pool: Pool, orcamento: Row, pdf: Buffer): Promise<string | null> {
+export async function salvarPdfOrcamento(pool: Pool, orcamento: Row, pdf: Buffer): Promise<string | null> {
   try {
     const columns = await getColumns(pool, 'orcamentos_timbrados');
     const dir = uploadsOrcamentosDir(orcamento.id);
@@ -757,7 +757,7 @@ async function salvarPdfOrcamento(pool: Pool, orcamento: Row, pdf: Buffer): Prom
   }
 }
 
-async function carregarPdfArmazenado(filePath: unknown): Promise<Buffer | null> {
+export async function carregarPdfArmazenado(filePath: unknown): Promise<Buffer | null> {
   const raw = String(filePath || '').trim();
   if (!raw) return null;
   const candidates = [

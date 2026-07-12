@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Layout from "./Layout";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { toast } from "sonner";
+import EnviarDocumento from "@/components/documentos/EnviarDocumento";
 import {
   FileSignature,
   Plus,
@@ -749,6 +750,19 @@ export default function Orcamentos() {
                   >
                     <Download className="h-4 w-4" /> PDF
                   </button>
+                  {selecionado?.id && (
+                    <EnviarDocumento
+                      tipoDocumento="orcamento"
+                      documentoId={selecionado.id}
+                      empresaId={form.empresa_id || null}
+                      clientePfId={form.cliente_pf_id || null}
+                      destinatarioPadrao={{
+                        nome: form.cliente_nome,
+                        email: form.cliente_email,
+                        telefone: form.cliente_telefone,
+                      }}
+                    />
+                  )}
                 </div>
               </div>
 
