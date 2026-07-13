@@ -1880,6 +1880,26 @@ async function startServer() {
   } catch (err: any) { console.warn('[startup] Migration 070:', err?.message); }
   // ─────────────────────────────────────────────────────────────────────────────
 
+  // ── Migration 071: desbloqueia empresas antigas que tinham bloqueado_operacional=true
+  //    só por faltar dado opcional da Receita (CNAE/natureza jurídica/capital social/
+  //    situação cadastral) -- a mesma causa já corrigida na criação/edição (ver
+  //    requireEmpresaOperacional e POST/PATCH /api/empresas), aplicada agora nos
+  //    registros que já existiam no banco antes da correção. Toda empresa com CNPJ
+  //    válido (14 dígitos) e que NÃO está marcada como duplicada continua igual e volta
+  //    a aparecer normalmente em Clientes PJ. Idempotente: só afeta quem ainda está
+  //    bloqueado por engano; rodar de novo não faz nada em quem já foi corrigido.
+  try {
+    const { rowCount } = await pool.query(`
+      UPDATE empresas
+         SET bloqueado_operacional = false
+       WHERE COALESCE(bloqueado_operacional, false) = true
+         AND COALESCE(arquivado_por_duplicidade, false) = false
+         AND regexp_replace(COALESCE(cnpj, ''), '[^0-9]', '', 'g') ~ '^[0-9]{14}$'
+    `);
+    console.log(`[startup] Migration 071 (desbloqueio de empresas antigas): OK. ${rowCount} empresa(s) desbloqueada(s).`);
+  } catch (err: any) { console.warn('[startup] Migration 071:', err?.message); }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // body parser, CORS e no-cache já registrados no topo de startServer()
   app.use('/api/documentos', documentosRouter);
   app.use('/api/orcamentos', auth, createOrcamentosOperacoesRouter(pool));
@@ -4206,16 +4226,10 @@ async function startServer() {
       if (!incluirIncompletos) {
         conditions.push(`COALESCE(e.arquivado_por_duplicidade, false) = false`);
         conditions.push(`COALESCE(e.bloqueado_operacional, false) = false`);
-        // Empresas vinculadas a acompanhamentos bancários ativos ficam sempre visíveis,
-        // independente de cadastro_completo — elas foram criadas pelo fluxo de acompanhamento.
-        conditions.push(`(
-          COALESCE(e.cadastro_completo, false) = true
-          OR EXISTS (
-            SELECT 1 FROM acompanhamentos_bancarios ab
-            WHERE ab.empresa_id = e.id
-              AND ab.status NOT IN ('encerrado', 'cancelado')
-          )
-        )`);
+        // cadastro_completo NÃO é mais exigido aqui: faltar dado opcional da Receita
+        // (CNAE/natureza jurídica/capital social/situação cadastral) não pode esconder
+        // a empresa da lista principal de Clientes PJ. Só empresa duplicada/arquivada
+        // fica de fora -- ver condições acima.
       }
       const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
       const { rows } = await pool.query(
