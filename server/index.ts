@@ -437,9 +437,9 @@ async function requireEmpresaOperacional(req: Request, res: Response, empresaId:
   );
   const e = rows[0];
   if (!e) { res.status(404).json({ error: "Empresa não encontrada" }); return false; }
-  if (e.arquivado_por_duplicidade || !e.cadastro_completo || e.bloqueado_operacional) {
+  if (e.arquivado_por_duplicidade || e.bloqueado_operacional) {
     res.status(423).json({
-      error: "Cadastro empresarial incompleto/desatualizado. Atualize e sincronize o CNPJ antes de usar em contrato, simulação ou operação.",
+      error: "Este cadastro foi arquivado/marcado como duplicado e não pode ser usado em contrato, simulação ou operação.",
       pendencias: e.cadastro_pendencias || [],
     });
     return false;
@@ -3905,8 +3905,7 @@ async function startServer() {
 
       if (tipo === "todos" || tipo === "empresas") {
         const params: any[] = [];
-        const conds = [`(COALESCE(cadastro_completo, false) = false OR COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true) AND COALESCE(cadastro_status, '') <> 'removido'`];
-        if (busca) { params.push(term); conds.push(`(razao_social ILIKE $1 OR nome_fantasia ILIKE $1 OR cnpj ILIKE $1)`); }
+        const conds = [`(COALESCE(bloqueado_operacional, false) = true OR COALESCE(arquivado_por_duplicidade, false) = true) AND COALESCE(cadastro_status, '') <> 'removido'`];
         const { rows } = await pool.query(
           `SELECT id, 'empresa' AS tipo, razao_social AS nome, nome_fantasia, cnpj AS documento,
                   cadastro_status, cadastro_pendencias, cadastro_completo, bloqueado_operacional,
@@ -5775,7 +5774,11 @@ async function startServer() {
       payload.cadastro_status = statusCadastroFromPendencias(pendencias);
       payload.cadastro_pendencias = pendencias;
       payload.cadastro_completo = pendencias.length === 0;
-      payload.bloqueado_operacional = pendencias.length > 0;
+      // bloqueado_operacional NÃO é setado aqui: faltar dado opcional da Receita (CNAE,
+      // natureza jurídica, capital social, situação cadastral) não é motivo pra esconder
+      // a empresa recém-cadastrada de simulações/contratos/seletores. Só fica bloqueada
+      // de verdade via arquivamento explícito/marcação de duplicidade (ver rotas de
+      // Cadastros Incompletos).
 
       // Compatibilidade: se a migration nova ainda não rodou, a API não quebra.
       const safeEntries = Object.entries(payload).filter(([key]) => columns.has(key));
@@ -5859,7 +5862,8 @@ async function startServer() {
       if (columns.has("cadastro_status")) updates.cadastro_status = statusCadastroFromPendencias(pendencias);
       if (columns.has("cadastro_pendencias")) updates.cadastro_pendencias = pendencias;
       if (columns.has("cadastro_completo")) updates.cadastro_completo = pendencias.length === 0;
-      if (columns.has("bloqueado_operacional")) updates.bloqueado_operacional = pendencias.length > 0;
+      // bloqueado_operacional não é recalculado aqui pelo mesmo motivo da criação (ver POST
+      // /api/empresas) -- só muda via arquivamento/duplicidade explícitos.
       if (columns.has("updated_at")) updates.updated_at = new Date().toISOString();
       const keys = Object.keys(updates);
       if (!keys.length) { res.status(400).json({ error: "Nenhum campo válido para atualizar" }); return; }
