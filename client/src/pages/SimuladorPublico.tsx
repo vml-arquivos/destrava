@@ -178,7 +178,7 @@ function calcParcela(valor: number, taxa: number, prazo: number) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function SimuladorPublico() {
-  const [step, setStep] = useState<0 | 1 | 2 | 3>(0);
+  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0);
   const [perfil, setPerfil] = useState<"empresario" | "pf" | "captador" | null>(null);
   const [linhaInteresse, setLinhaInteresse] = useState<string | null>(null);
   const [tipoPessoa, setTipoPessoa] = useState<"empresa" | "pf">("empresa");
@@ -311,7 +311,7 @@ export default function SimuladorPublico() {
           pagina_origem: "/simular",
       });
       setLeadSalvo(true);
-      setStep(3);
+      setStep(4);
     } catch (error) {
       setSubmitError(
         error instanceof Error
@@ -371,9 +371,9 @@ export default function SimuladorPublico() {
           <div className="flex items-center justify-center gap-2">
             {[
               { n: 0, label: "Perfil" },
-              { n: 1, label: "Simulação" },
-              { n: 2, label: "Sua Elegibilidade" },
-              { n: 3, label: "Resultado" },
+              { n: 1, label: "Dados de contato" },
+              { n: 2, label: "Simulação" },
+              { n: 3, label: "Oferta de análise" },
             ].map((s, i) => (
               <div key={s.n} className="flex items-center gap-2">
                 <div
@@ -482,8 +482,8 @@ export default function SimuladorPublico() {
             </div>
           )}
 
-          {/* ── STEP 2: Dados de contato (desbloqueia elegibilidade real) ── */}
-          {step === 2 && (
+          {/* ── STEP 1: Dados de contato ── */}
+          {step === 1 && (
             <div className="bg-white rounded-2xl shadow-sm border p-6 md:p-8">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
@@ -640,22 +640,21 @@ export default function SimuladorPublico() {
                 <div className="flex gap-3 mt-2">
                   <Button
                     variant="outline"
-                    onClick={() => setStep(1)}
+                    onClick={() => setStep(0)}
                     className="flex-1 border-gray-300"
                   >
-                    <ChevronLeft className="w-4 h-4 mr-1" /> Ajustar simulação
+                    <ChevronLeft className="w-4 h-4 mr-1" /> Voltar
                   </Button>
                   <Button
-                    onClick={handleSimular}
-                    disabled={enviando}
+                    onClick={() => {
+                      if (!validarStep1()) return;
+                      setSubmitError(null);
+                      setStep(2);
+                    }}
                     className="flex-[2] bg-[#0033A0] hover:bg-[#002280] text-white py-3 text-base font-semibold rounded-xl"
                   >
-                    {enviando ? "Enviando..." : (
-                      <>
-                        Confirmar minha elegibilidade
-                        <ChevronRight className="w-5 h-5 ml-1" />
-                      </>
-                    )}
+                    Continuar para simulação
+                    <ChevronRight className="w-5 h-5 ml-1" />
                   </Button>
                 </div>
                 <FormSubmitError message={submitError} />
@@ -663,11 +662,11 @@ export default function SimuladorPublico() {
             </div>
           )}
 
-          {/* ── STEP 1: Simulador com sliders (sem barreira) ── */}
-          {step === 1 && (
+          {/* ── STEP 2: Simulador com sliders ── */}
+          {step === 2 && (
             <div className="space-y-4">
               <button
-                onClick={() => setStep(0)}
+                onClick={() => setStep(1)}
                 className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-[#0033A0]"
               >
                 <ChevronLeft className="w-4 h-4" /> Voltar
@@ -875,18 +874,93 @@ export default function SimuladorPublico() {
                 </p>
 
                 <Button
-                  onClick={() => setStep(2)}
+                  onClick={() => setStep(3)}
                   className="w-full bg-[#0033A0] hover:bg-[#002280] text-white py-3 text-base font-semibold rounded-xl"
                 >
-                  Continuar e ver se você é aprovado
+                  Continuar para análise completa
                   <ChevronRight className="w-5 h-5 ml-1" />
                 </Button>
               </div>
             </div>
           )}
 
-          {/* ── STEP 3: Resultado / Confirmação ── */}
+          {/* ── STEP 3: Oferta de análise ── */}
           {step === 3 && (
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl shadow-sm border p-6 text-center">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle2 className="w-8 h-8 text-green-500" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  Sua simulação foi concluída!
+                </h2>
+                <p className="text-gray-600 mb-5">
+                  Agora um especialista poderá analisar seu perfil completo e verificar quais bancos possuem maior chance de aprovação para sua empresa.
+                </p>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5 text-left">
+                  <p className="text-sm font-semibold text-[#0033A0] mb-3">A análise completa inclui:</p>
+                  <div className="grid sm:grid-cols-2 gap-2 text-sm text-gray-700">
+                    {[
+                      "Análise individual",
+                      "Consulta personalizada",
+                      "Bancos públicos",
+                      "Bancos privados",
+                      "Linhas disponíveis",
+                      "Taxa estimada",
+                      "Documentação necessária",
+                    ].map((item) => (
+                      <div key={item} className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                        <span>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 mb-5">
+                  <div className="text-center p-3 bg-blue-50 rounded-xl">
+                    <p className="text-xs text-gray-500">Valor</p>
+                    <p className="font-bold text-[#0033A0] text-sm mt-1">{formatCurrency(valor)}</p>
+                  </div>
+                  <div className="text-center p-3 bg-blue-50 rounded-xl">
+                    <p className="text-xs text-gray-500">Prazo</p>
+                    <p className="font-bold text-[#0033A0] text-sm mt-1">{prazo} meses</p>
+                  </div>
+                  <div className="text-center p-3 bg-green-50 rounded-xl">
+                    <p className="text-xs text-gray-500">Parcela Est.</p>
+                    <p className="font-bold text-green-600 text-sm mt-1">{formatCurrency(parcela)}</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => setStep(2)}
+                    className="flex-1 border-gray-300"
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" /> Voltar
+                  </Button>
+                  <Button
+                    onClick={handleSimular}
+                    disabled={enviando}
+                    className="flex-[2] bg-[#0033A0] hover:bg-[#002280] text-white py-3 text-base font-semibold rounded-xl"
+                  >
+                    {enviando ? "Enviando..." : (
+                      <>
+                        Solicitar análise completa
+                        <ChevronRight className="w-5 h-5 ml-1" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <FormSubmitError message={submitError} />
+              </div>
+            </div>
+          )}
+
+          {/* ── STEP 4: Resultado / Confirmação ── */}
+          {step === 4 && (
             <div className="space-y-4">
               {/* Confirmação */}
               <div className="bg-white rounded-2xl shadow-sm border p-6 text-center">
