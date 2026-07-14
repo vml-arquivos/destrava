@@ -10,7 +10,14 @@ interface NavItem {
   children?: { label: string; href: string; icon?: React.ComponentType<{ className?: string }>; desc?: string }[];
 }
 
-export default function Header() {
+interface HeaderProps {
+  /** Texto do botão principal do cabeçalho. Default: "Simule seu crédito" (mantém o comportamento de sempre). */
+  ctaLabel?: string;
+  /** Link do botão principal do cabeçalho. Default: "/simular". */
+  ctaHref?: string;
+}
+
+export default function Header({ ctaLabel = "Simule seu crédito", ctaHref = "/simular" }: HeaderProps = {}) {
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -128,9 +135,9 @@ export default function Header() {
                 Área Restrita
               </Button>
             </Link>
-            <Link href="/simular">
+            <Link href={ctaHref}>
               <Button size="lg" className="font-semibold bg-[var(--color-caixa-blue)] hover:bg-blue-700">
-                Simule seu crédito
+                {ctaLabel}
               </Button>
             </Link>
           </div>
@@ -177,9 +184,9 @@ export default function Header() {
                 </div>
               ))}
               <div className="pt-4 px-2 space-y-2">
-                <Link href="/simular" onClick={() => setMobileMenuOpen(false)}>
+                <Link href={ctaHref} onClick={() => setMobileMenuOpen(false)}>
                   <Button size="lg" className="w-full font-semibold bg-[var(--color-caixa-blue)] hover:bg-blue-700">
-                    Simule seu crédito
+                    {ctaLabel}
                   </Button>
                 </Link>
                 <Link href="/colaborador/login" onClick={() => setMobileMenuOpen(false)}>

@@ -187,7 +187,7 @@ export default function CertificadoDigitalA1() {
         image="https://destrava.permupay.com.br/3.png"
         structuredData={structuredData}
       />
-      <Header />
+      <Header ctaLabel="Solicitar Certificado A1" ctaHref={CAPTURE_URL} />
 
       <main>
         <section className="relative overflow-hidden bg-[#07152f] text-white" aria-labelledby="a1-hero-title">
@@ -257,10 +257,10 @@ export default function CertificadoDigitalA1() {
                     <Clock3 className="h-7 w-7" aria-hidden="true" />
                   </div>
                   <p className="mt-7 text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">Meta de emissão após validação</p>
-                  <div className="mt-2 font-mono text-5xl font-black tracking-tight text-amber-300 sm:text-6xl" aria-label="Até uma hora">
-                    00:59:59
+                  <div className="mt-2 flex items-baseline gap-2" aria-label="Até uma hora">
+                    <span className="font-mono text-5xl font-black tracking-tight text-amber-300 sm:text-6xl">Até 1h</span>
                   </div>
-                  <p className="mt-2 text-sm text-slate-400">Indicador visual de prazo — não é uma contagem regressiva.</p>
+                  <p className="mt-2 text-sm text-slate-400">Meta de prazo, não é uma contagem regressiva.</p>
 
                   <div className="my-7 h-px bg-white/10" />
 

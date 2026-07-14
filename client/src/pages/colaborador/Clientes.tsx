@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   Users, Plus, Search, Phone, Mail, Building2,
   ChevronRight, Clock, CheckCircle, AlertCircle,
-  MessageSquare, Eye, Trash2, Star,
+  MessageSquare, Eye, Trash2, Star, Pencil,
   Calendar, RefreshCw, UserCheck, Loader2,
   GitMerge, Filter, SlidersHorizontal, Globe, Megaphone,
   UserPlus, Smartphone, TrendingUp, BarChart3,
@@ -201,6 +201,7 @@ export default function Clientes() {
   const [atividades, setAtividades] = useState<Atividade[]>([]);
   const [loadingAtividades, setLoadingAtividades] = useState(false);
   const [modalNovoCliente, setModalNovoCliente] = useState(false);
+  const [modalEditarCliente, setModalEditarCliente] = useState(false);
   const [modalAtividade, setModalAtividade] = useState(false);
   const [novaAtividade, setNovaAtividade] = useState({ tipo: "nota", descricao: "", resultado: "" });
   const [salvando, setSalvando] = useState(false);
@@ -384,6 +385,85 @@ export default function Clientes() {
       toast.success("Cliente criado com sucesso.");
     } catch (err: any) {
       toast.error(err.message || "Erro ao salvar cliente.");
+    }
+    setSalvando(false);
+  }
+
+  function abrirEditarCliente() {
+    if (!clienteSelecionado) return;
+    const c = clienteSelecionado;
+    setForm({
+      nome: c.nome || "",
+      empresa: c.empresa || "",
+      cpf_cnpj: c.cpf_cnpj || c.cpf || "",
+      telefone: c.telefone || "",
+      email: c.email || "",
+      tipo: c.tipo || c.tipo_pessoa || "pf",
+      cidade: c.cidade || "",
+      estado: c.estado || c.uf || "",
+      faturamento_anual: c.faturamento_anual ? String(c.faturamento_anual) : "",
+      segmento: c.segmento || c.profissao || "",
+      status: c.status || "lead",
+      prioridade: c.prioridade || "media",
+      observacoes: c.observacoes || "",
+      proximo_contato: (c.proximo_contato || c.proximo_followup || "").slice(0, 10),
+    });
+    setModalEditarCliente(true);
+  }
+
+  async function salvarEdicaoCliente() {
+    if (!clienteSelecionado) return;
+    const documento = form.cpf_cnpj.replace(/\D/g, "");
+    if (!form.nome || !form.telefone) return;
+    if (clienteSelecionado.tipo === "pf" && documento.length !== 11) {
+      toast.error("CPF válido é obrigatório para salvar cliente pessoa física.");
+      return;
+    }
+    setSalvando(true);
+    try {
+      let data: any;
+      if (isClientePF(clienteSelecionado)) {
+        data = await apiFetch(`/api/clientes-pf/${getApiId(clienteSelecionado)}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            nome: form.nome,
+            cpf: form.cpf_cnpj,
+            telefone: form.telefone,
+            email: form.email || null,
+            cidade: form.cidade || null,
+            uf: form.estado || null,
+            profissao: form.segmento || null,
+            observacoes: form.observacoes || null,
+            ativo: true,
+          }),
+        });
+        data = normalizeClientePF(data);
+      } else {
+        data = await apiFetch(`/api/leads/${getApiId(clienteSelecionado)}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            nome: form.nome,
+            empresa: form.empresa || null,
+            cpf_cnpj: form.cpf_cnpj || null,
+            telefone: form.telefone,
+            email: form.email || null,
+            cidade: form.cidade || null,
+            estado: form.estado || null,
+            segmento: form.segmento || null,
+            faturamento_anual: form.faturamento_anual ? Number(form.faturamento_anual) : null,
+            prioridade: form.prioridade,
+            observacoes_ia: form.observacoes || null,
+            proximo_followup: form.proximo_contato || null,
+          }),
+        });
+        data = normalizeLead(data);
+      }
+      setClientes(prev => prev.map(c => c.id === clienteSelecionado.id ? data : c));
+      setClienteSelecionado(data);
+      setModalEditarCliente(false);
+      toast.success("Cliente atualizado com sucesso.");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao atualizar cliente.");
     }
     setSalvando(false);
   }
@@ -814,6 +894,12 @@ export default function Clientes() {
                     🧮 Simulação
                   </Link>
                   <button
+                    onClick={abrirEditarCliente}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-white text-gray-700 border rounded-lg text-xs font-medium hover:bg-gray-50"
+                  >
+                    <Pencil className="w-3 h-3" /> Editar
+                  </button>
+                  <button
                     onClick={() => excluirCliente(clienteSelecionado.id)}
                     className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-medium hover:bg-red-100"
                   >
@@ -1163,6 +1249,83 @@ export default function Clientes() {
               >
                 {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                 Criar Cliente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Editar Cliente ── */}
+      {modalEditarCliente && clienteSelecionado && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b sticky top-0 bg-white z-10">
+              <h3 className="font-bold text-gray-900 text-lg">Editar Cliente</h3>
+              <p className="text-sm text-gray-500">{clienteSelecionado.nome}</p>
+            </div>
+            <div className="p-5 grid grid-cols-2 gap-4">
+              {[
+                { label: "Nome Completo *", key: "nome", type: "text", placeholder: "Nome do cliente" },
+                { label: "Empresa / Razão Social", key: "empresa", type: "text", placeholder: "Nome da empresa" },
+                { label: "Telefone / WhatsApp *", key: "telefone", type: "tel", placeholder: "(61) 9 9999-9999" },
+                { label: "E-mail", key: "email", type: "email", placeholder: "email@empresa.com" },
+                { label: form.tipo === "pf" ? "CPF *" : "CNPJ *", key: "cpf_cnpj", type: "text", placeholder: form.tipo === "pf" ? "000.000.000-00" : "00.000.000/0001-00" },
+                { label: form.tipo === "pf" ? "Profissão" : "Segmento", key: "segmento", type: "text", placeholder: form.tipo === "pf" ? "Ex: Autônomo, Servidor..." : "Ex: Agronegócio, Varejo..." },
+                { label: "Cidade", key: "cidade", type: "text", placeholder: "Brasília" },
+                { label: "Estado", key: "estado", type: "text", placeholder: "DF" },
+                ...(form.tipo === "pj" ? [{ label: "Faturamento Anual (R$)", key: "faturamento_anual", type: "number", placeholder: "500000" }] : []),
+                ...(form.tipo === "pj" ? [{ label: "Próximo Contato", key: "proximo_contato", type: "date", placeholder: "" }] : []),
+              ].map(f => (
+                <div key={f.key}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
+                  <input
+                    type={f.type}
+                    placeholder={f.placeholder}
+                    value={(form as any)[f.key]}
+                    onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              ))}
+              {!isClientePF(clienteSelecionado) && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Prioridade</label>
+                  <select
+                    value={form.prioridade}
+                    onChange={e => setForm(p => ({ ...p, prioridade: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="alta">Alta</option>
+                    <option value="media">Média</option>
+                    <option value="baixa">Baixa</option>
+                  </select>
+                </div>
+              )}
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+                <textarea
+                  value={form.observacoes}
+                  onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))}
+                  placeholder="Informações adicionais sobre o cliente..."
+                  rows={2}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="p-5 border-t flex gap-3 sticky bottom-0 bg-white">
+              <button
+                onClick={() => setModalEditarCliente(false)}
+                className="flex-1 px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={salvarEdicaoCliente}
+                disabled={salvando || !form.nome || !form.telefone || !form.cpf_cnpj}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />}
+                Salvar Alterações
               </button>
             </div>
           </div>
