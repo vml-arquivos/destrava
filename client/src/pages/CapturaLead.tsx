@@ -53,6 +53,12 @@ const PRODUTO_META: Record<string, { label: string; whatsappMsg: string; titulo:
     titulo: "Solicite seu Certificado Digital",
     subtitulo: "Preencha seus dados e nossa equipe entrará em contato para orientar sobre o melhor tipo de certificado para você.",
   },
+  "certificado-digital-a1": {
+    label: "Certificado Digital A1",
+    whatsappMsg: "Olá! Preciso emitir um Certificado Digital A1 com urgência.",
+    titulo: "Solicite seu Certificado Digital A1",
+    subtitulo: "Preencha seus dados para receber orientação sobre documentos, validação e emissão do seu certificado A1.",
+  },
   "consulta-spc-serasa": {
     label: "Consulta SPC/Serasa",
     whatsappMsg: "Olá! Quero realizar uma consulta de CPF/CNPJ no SPC/Serasa.",
@@ -150,7 +156,12 @@ function formatarTelefone(v: string): string {
 }
 
 // Produtos que são serviços (não crédito) — não mostram simulador de parcelas
-const PRODUTOS_SERVICO = ["rating-banco-central", "certificado-digital", "consulta-spc-serasa"];
+const PRODUTOS_SERVICO = [
+  "rating-banco-central",
+  "certificado-digital",
+  "certificado-digital-a1",
+  "consulta-spc-serasa",
+];
 
 export default function CapturaLead() {
   // Ler query param ?produto= da URL
