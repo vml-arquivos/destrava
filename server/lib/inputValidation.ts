@@ -51,6 +51,18 @@ export const leadInputSchema = z
 export type LoginInput = z.infer<typeof loginInputSchema>;
 export type LeadInput = z.infer<typeof leadInputSchema>;
 
+export const contactInputSchema = z
+  .object({
+    nome: z.string().trim().min(2).max(120),
+    email: z.string().trim().email().max(254),
+    telefone: z.string().trim().max(30).optional().nullable(),
+    assunto: z.string().trim().min(2).max(160),
+    mensagem: z.string().trim().min(2).max(2000),
+  })
+  .passthrough();
+
+export type ContactInput = z.infer<typeof contactInputSchema>;
+
 /**
  * Middleware genérico: valida req.body contra um schema Zod.
  * Em caso de falha, responde 400 e interrompe a cadeia — nunca deixa

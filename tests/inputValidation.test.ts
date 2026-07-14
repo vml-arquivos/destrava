@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import express from "express";
 import request from "supertest";
-import { loginInputSchema, leadInputSchema, validateBody } from "../server/lib/inputValidation";
+import { contactInputSchema, loginInputSchema, leadInputSchema, validateBody } from "../server/lib/inputValidation";
 
 function appWithValidator(schema: Parameters<typeof validateBody>[0]) {
   const app = express();
@@ -107,5 +107,30 @@ describe("leadInputSchema — comportamento hoje aceito por /api/leads não pode
     // supertest sem .send() manda corpo vazio; express.json() deixa req.body = {}
     // então este caso deve passar (objeto vazio é válido) — cobre a semântica atual.
     expect(res.status).toBe(200);
+  });
+});
+
+describe("contactInputSchema — bloqueio de spam e payloads inválidos", () => {
+  const app = appWithValidator(contactInputSchema);
+
+  it("aceita contato válido", async () => {
+    const res = await request(app).post("/test").send({
+      nome: "Maria Teste",
+      email: "maria@example.com",
+      telefone: "(61) 99999-9999",
+      assunto: "Certificado A1",
+      mensagem: "Gostaria de receber orientação.",
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("rejeita email inválido e mensagem vazia", async () => {
+    const res = await request(app).post("/test").send({
+      nome: "Maria",
+      email: "email-invalido",
+      assunto: "Contato",
+      mensagem: "",
+    });
+    expect(res.status).toBe(400);
   });
 });
