@@ -20,11 +20,11 @@ import {
 import { useState } from "react";
 
 const faqs = [
-  { q: 'O que é o Giro CAIXA Fácil?', a: 'É uma linha de crédito da CAIXA Econômica Federal voltada para capital de giro de micro, pequenas e médias empresas, com taxa pré-fixada e prazo de até 40 meses.' },
-  { q: 'Qual o valor máximo disponível?', a: 'Até R$ 1 milhão, dependendo do porte da empresa, faturamento e análise de crédito da CAIXA.' },
+  { q: 'O que é o Giro CAIXA Fácil?', a: 'É uma modalidade da CAIXA voltada a necessidades de capital de giro. Disponibilidade, público elegível e condições devem ser confirmados na instituição no momento da proposta.' },
+  { q: 'Qual o valor máximo disponível?', a: 'O limite é definido pela CAIXA conforme análise de crédito, faturamento, relacionamento e condições vigentes no momento da contratação.' },
   { q: 'Preciso ter conta na CAIXA?', a: 'Sim, é necessário ter conta corrente ativa na CAIXA Econômica Federal para contratar o Giro CAIXA Fácil.' },
-  { q: 'Qual o prazo para pagamento?', a: 'Até 40 meses para pagamento, com possibilidade de carência de até 3 meses.' },
-  { q: 'A taxa é fixa ou variável?', a: 'A taxa é pré-fixada, ou seja, você sabe exatamente quanto vai pagar desde o início do contrato, sem surpresas.' },
+  { q: 'Qual o prazo para pagamento?', a: 'Prazo e eventual carência são informados na proposta e podem variar conforme o perfil e as condições vigentes da instituição.' },
+  { q: 'Como funciona a taxa?', a: 'A taxa e o Custo Efetivo Total (CET) devem ser conferidos na proposta antes da contratação. A condição pode variar conforme a análise.' },
   { q: 'Como a Destrava me ajuda?', a: 'Nossa equipe verifica sua elegibilidade, organiza a documentação, negocia as melhores condições e acompanha o processo até a liberação do crédito.' },
 ];
 
@@ -35,9 +35,9 @@ export default function GiroCaixaFacilLP() {
     <div className="min-h-screen flex flex-col bg-white">
       <SEO
         title="Giro CAIXA Fácil - Capital de Giro para Empresas | Destrava Crédito"
-        description="Giro CAIXA Fácil: até R$ 1 milhão para capital de giro com taxa pré-fixada e prazo de até 40 meses. Assessoria completa da Destrava Crédito."
+        description="Entenda o Giro CAIXA Fácil e solicite orientação para avaliar elegibilidade, limite, prazo, taxa e CET conforme as condições vigentes da instituição."
         keywords="giro caixa fácil, capital de giro para empresas"
-        structuredData={serviceStructuredData("Giro CAIXA Fácil", "Giro CAIXA Fácil: até R$ 1 milhão para capital de giro com taxa pré-fixada e prazo de até 40 meses. Assessoria completa da Destrava Crédito.")}
+        structuredData={serviceStructuredData("Giro CAIXA Fácil", "Orientação para avaliar elegibilidade e condições do Giro CAIXA Fácil conforme a análise e as regras vigentes da instituição.")}
       />
       <Header />
 
@@ -58,19 +58,19 @@ export default function GiroCaixaFacilLP() {
               Capital de giro para MEI, Microempresas e Pequenas Empresas
             </p>
             <p className="text-lg text-white/80 leading-relaxed mb-8">
-              Linha de crédito da CAIXA Econômica Federal para capital de giro com taxa pré-fixada e prazo de até 40 meses. Até R$ 1 milhão para impulsionar o seu negócio.
+              Modalidade da CAIXA para necessidades de capital de giro, com limite, taxa, CET e prazo definidos conforme análise e condições vigentes da instituição.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link href="/simular">
-                <Button size="lg" variant="secondary" className="font-semibold">
+              <Button asChild size="lg" variant="secondary" className="font-semibold">
+                <Link href="/simular">
                   Simular Agora
-                </Button>
-              </Link>
-              <a href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20Giro+CAIXA+Fácil." target="_blank" rel="noopener noreferrer">
-                <Button size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
+                <a href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20Giro+CAIXA+Fácil." target="_blank" rel="noopener noreferrer">
                   <Phone className="h-4 w-4 mr-2" /> Falar com Especialista
-                </Button>
-              </a>
+                </a>
+              </Button>
             </div>
           </div>
         </div>
@@ -82,21 +82,21 @@ export default function GiroCaixaFacilLP() {
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <DollarSign className="h-12 w-12 text-primary mx-auto mb-4" />
-              <h3 className="font-bold text-lg mb-2">Valor Máximo</h3>
-              <p className="text-2xl font-bold text-primary mb-2">Até R$ 1M</p>
-              <p className="text-sm text-muted-foreground">Conforme análise e porte da empresa</p>
+              <h3 className="font-bold text-lg mb-2">Limite</h3>
+              <p className="text-2xl font-bold text-primary mb-2">Conforme análise</p>
+              <p className="text-sm text-muted-foreground">Definido pela instituição na proposta</p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <Percent className="h-12 w-12 text-primary mx-auto mb-4" />
               <h3 className="font-bold text-lg mb-2">Taxa de Juros</h3>
-              <p className="text-2xl font-bold text-primary mb-2">Taxa pré-fixada</p>
-              <p className="text-sm text-muted-foreground">Sem surpresas ao longo do contrato</p>
+              <p className="text-2xl font-bold text-primary mb-2">Conforme proposta</p>
+              <p className="text-sm text-muted-foreground">Compare taxa e CET antes da contratação</p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <Calendar className="h-12 w-12 text-primary mx-auto mb-4" />
               <h3 className="font-bold text-lg mb-2">Prazo</h3>
-              <p className="text-2xl font-bold text-primary mb-2">Até 40 meses</p>
-              <p className="text-sm text-muted-foreground">Com carência de até 3 meses</p>
+              <p className="text-2xl font-bold text-primary mb-2">Conforme análise</p>
+              <p className="text-sm text-muted-foreground">Prazo e eventual carência na proposta</p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <Building2 className="h-12 w-12 text-primary mx-auto mb-4" />
@@ -304,19 +304,19 @@ export default function GiroCaixaFacilLP() {
         <div className="container text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Acesse o Giro CAIXA Fácil com a Destrava</h2>
           <p className="text-lg text-white/80 mb-8 max-w-xl mx-auto">
-            Taxa pré-fixada, prazo de até 40 meses e assessoria completa. Seu capital de giro garantido.
+            Avalie elegibilidade, limite, taxa, CET e prazo com orientação especializada. A concessão depende da análise da instituição financeira.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
-            <Link href="/simular">
-              <Button size="lg" variant="secondary" className="font-semibold">
+            <Button asChild size="lg" variant="secondary" className="font-semibold">
+              <Link href="/simular">
                 Simular Agora
-              </Button>
-            </Link>
-            <a href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20Giro+CAIXA+Fácil." target="_blank" rel="noopener noreferrer">
-              <Button size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
+              <a href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20Giro+CAIXA+Fácil." target="_blank" rel="noopener noreferrer">
                 <Phone className="h-4 w-4 mr-2" /> Falar com Especialista
-              </Button>
-            </a>
+              </a>
+            </Button>
           </div>
         </div>
       </section>

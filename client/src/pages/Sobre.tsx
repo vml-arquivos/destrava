@@ -7,16 +7,16 @@ import { COMPANY } from "@/config/company";
 
 export default function Sobre() {
   const breadcrumb = breadcrumbStructuredData([
-    { name: "Início", url: "https://destrava-credito.manus.space/" },
-    { name: "Sobre", url: "https://destrava-credito.manus.space/sobre" }
+    { name: "Início", url: "https://destravacredito.com/" },
+    { name: "Sobre", url: "https://destravacredito.com/sobre" }
   ]);
 
   return (
     <div className="min-h-screen flex flex-col">
       <SEO
-        title="Sobre a Destrava Crédito - Correspondente Bancário CAIXA"
-        description="Conheça a Destrava Crédito, correspondente bancário autorizado da CAIXA. Facilitamos o acesso ao crédito empresarial com atendimento humanizado e menos burocracia."
-        keywords="sobre destrava credito, correspondente bancario caixa, credito empresarial, assessoria financeira, missao visao valores"
+        title="Sobre a Destrava Crédito — Assessoria Empresarial"
+        description="Conheça a Destrava Crédito e nossa assessoria para organização documental, diagnóstico financeiro e acesso responsável a soluções empresariais."
+        keywords="sobre destrava credito, assessoria de credito empresarial, organizacao financeira, missao visao valores"
         structuredData={breadcrumb}
       />
       <Header />
@@ -29,9 +29,9 @@ export default function Sobre() {
               Sobre a Destrava Crédito
             </h1>
             <p className="text-xl text-white/90 leading-relaxed">
-              Somos correspondentes bancários autorizados, especializados em
-              facilitar o acesso ao crédito empresarial da CAIXA Econômica
-              Federal para micro e pequenas empresas.
+              Somos especialistas em assessoria de crédito empresarial, com foco
+              em diagnóstico, organização documental e acompanhamento claro para
+              micro e pequenas empresas.
             </p>
           </div>
         </div>
@@ -51,10 +51,9 @@ export default function Sobre() {
                   desconhecimento do processo e pela complexidade burocrática.
                 </p>
                 <p>
-                  Como correspondentes bancários credenciados pela CAIXA
-                  Econômica Federal, atuamos como ponte entre o empresário e a
-                  instituição financeira, oferecendo assessoria personalizada em
-                  cada etapa do processo de solicitação de crédito.
+                  Atuamos como ponte entre o empresário e instituições
+                  financeiras, oferecendo assessoria personalizada na preparação
+                  e no acompanhamento de cada solicitação de crédito.
                 </p>
                 <p>
                   Nossa missão é democratizar o acesso ao crédito empresarial,
@@ -63,12 +62,14 @@ export default function Sobre() {
                 </p>
               </div>
             </div>
-            <div>
-              <img
-                src="/6.png"
-                alt="Profissional de negócios apresentando soluções"
-                className="rounded-lg shadow-lg"
-              />
+            <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-[#0033A0] to-[#001f66] p-8 text-white shadow-xl">
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-amber-300">Como atuamos</p>
+              <h2 className="mt-3 text-3xl font-black">Estratégia antes da proposta</h2>
+              <ul className="mt-7 space-y-4 text-white/85">
+                <li className="rounded-xl border border-white/15 bg-white/10 p-4">Diagnóstico do perfil e da finalidade do crédito</li>
+                <li className="rounded-xl border border-white/15 bg-white/10 p-4">Organização documental e financeira</li>
+                <li className="rounded-xl border border-white/15 bg-white/10 p-4">Acompanhamento consultivo da operação</li>
+              </ul>
             </div>
           </div>
         </div>
@@ -119,13 +120,13 @@ export default function Sobre() {
         </div>
       </section>
 
-      {/* O que é Correspondente Bancário */}
+      {/* O que faz uma assessoria de crédito */}
       <section className="py-20">
         <div className="container">
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold mb-6">
-                O que é um Correspondente Bancário?
+                O que faz uma assessoria de crédito?
               </h2>
               <p className="text-lg text-muted-foreground">
                 Entenda nosso papel e como podemos ajudar sua empresa
@@ -134,18 +135,15 @@ export default function Sobre() {
 
             <div className="bg-card p-8 rounded-lg border-2 border-border mb-8">
               <p className="text-lg leading-relaxed mb-6">
-                Correspondente bancário é uma empresa ou profissional autorizado
-                pelo Banco Central do Brasil a intermediar operações financeiras
-                em nome de instituições bancárias. Atuamos como facilitadores,
-                oferecendo serviços de assessoria e intermediação para produtos
-                de crédito.
+                Uma assessoria de crédito ajuda a entender necessidades,
+                organizar informações e documentos e acompanhar a apresentação
+                da demanda às instituições adequadas ao perfil do negócio.
               </p>
               <p className="text-muted-foreground leading-relaxed">
-                <strong>Importante:</strong> Como correspondentes, NÃO tomamos
-                decisões de crédito. Toda análise, aprovação e concessão de
-                crédito é realizada exclusivamente pela CAIXA Econômica Federal.
-                Nossa função é orientar, organizar documentação e facilitar o
-                processo para nossos clientes.
+                <strong>Importante:</strong> A Destrava Crédito não toma decisões
+                de crédito. Análise, aprovação, limites, taxas e contratação são
+                definidos exclusivamente pela instituição financeira. Nossa
+                função é orientar, organizar documentos e acompanhar o processo.
               </p>
             </div>
 
@@ -154,9 +152,9 @@ export default function Sobre() {
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
                   <Shield className="h-8 w-8 text-primary" />
                 </div>
-                <h3 className="font-bold mb-2">Credenciamento Oficial</h3>
+                <h3 className="font-bold mb-2">Processo transparente</h3>
                 <p className="text-sm text-muted-foreground">
-                  Autorizados pela CAIXA e regulados pelo Banco Central
+                  Escopo, custos e responsabilidades explicados antes do avanço
                 </p>
               </div>
 

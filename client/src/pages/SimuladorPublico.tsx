@@ -19,7 +19,6 @@ import {
   Clock,
   Shield,
   MessageCircle,
-  Star,
   Briefcase,
   Home,
   Car,
@@ -29,21 +28,24 @@ import {
   Award,
   Zap,
 } from "lucide-react";
+import FormSubmitError from "@/components/FormSubmitError";
+import { formatCnpj, formatCpf, isValidCnpj, isValidCpf } from "@/lib/brDocuments";
+import { submitLead } from "@/lib/leads";
 
 // ─── Produtos de crédito ──────────────────────────────────────────────────────
 const produtos = [
   {
     id: "giro-caixa",
     nome: "Giro CAIXA Fácil",
-    desc: "Capital de giro para MEI, ME e EPP",
+    desc: "Cenário educativo para capital de giro",
     tipo: "empresa",
     minValor: 5000,
     maxValor: 70000,
     minPrazo: 6,
     maxPrazo: 36,
-    minTaxa: 2.25,
-    maxTaxa: 3.6,
-    tags: ["Até R$ 70k", "2,25% a.m."],
+    minTaxa: 0.1,
+    maxTaxa: 10,
+    tags: ["Cenário editável", "Não é oferta"],
     cor: "blue",
   },
   {
@@ -55,37 +57,37 @@ const produtos = [
     maxValor: 250000,
     minPrazo: 12,
     maxPrazo: 48,
-    minTaxa: 1.5,
-    maxTaxa: 2.0,
-    tags: ["Até R$ 250k", "1,5% a 2,0% a.m."],
+    minTaxa: 0.1,
+    maxTaxa: 10,
+    tags: ["Regras vigentes", "Sujeito à análise"],
     cor: "green",
   },
   {
     id: "capital-giro",
     nome: "Capital de Giro",
-    desc: "Linhas de crédito para médias e grandes empresas",
+    desc: "Cenário educativo para capital de giro empresarial",
     tipo: "empresa",
     minValor: 50000,
     maxValor: 1000000,
     minPrazo: 12,
     maxPrazo: 36,
-    minTaxa: 2.25,
-    maxTaxa: 4.99,
-    tags: ["Até R$ 1M", "2,25% a 4,99% a.m."],
+    minTaxa: 0.1,
+    maxTaxa: 10,
+    tags: ["Cenário editável", "Consulte o CET"],
     cor: "purple",
   },
   {
     id: "credito-pessoal",
     nome: "Crédito Pessoal",
-    desc: "Empréstimo para pessoa física com análise rápida",
+    desc: "Cenário educativo para crédito de uso livre",
     tipo: "pf",
     minValor: 1000,
     maxValor: 50000,
     minPrazo: 6,
     maxPrazo: 60,
-    minTaxa: 2.5,
-    maxTaxa: 6.0,
-    tags: ["Até R$ 50k", "Aprovação rápida"],
+    minTaxa: 0.1,
+    maxTaxa: 10,
+    tags: ["Não é pré-aprovação", "Taxa editável"],
     cor: "orange",
   },
   {
@@ -97,51 +99,51 @@ const produtos = [
     maxValor: 100000,
     minPrazo: 12,
     maxPrazo: 96,
-    minTaxa: 1.5,
-    maxTaxa: 2.14,
-    tags: ["Até R$ 100k", "Menor taxa"],
+    minTaxa: 0.1,
+    maxTaxa: 10,
+    tags: ["Convênio e margem", "Condições variáveis"],
     cor: "teal",
   },
   {
     id: "financiamento-imovel",
     nome: "Financiamento Imobiliário",
-    desc: "Finance seu imóvel com as melhores condições",
+    desc: "Cenário educativo para financiamento de imóvel",
     tipo: "pf",
     minValor: 50000,
     maxValor: 1500000,
     minPrazo: 60,
     maxPrazo: 360,
-    minTaxa: 0.7,
-    maxTaxa: 1.1,
-    tags: ["Até R$ 1,5M", "Até 30 anos"],
+    minTaxa: 0.1,
+    maxTaxa: 10,
+    tags: ["Taxa editável", "Consulte a proposta"],
     cor: "indigo",
   },
   {
     id: "procred360",
     nome: "ProCred 360",
-    desc: "Juros 50% menores para MEI e microempresas (fat. até R$ 360k/ano)",
+    desc: "Programa para pequenos negócios, conforme regras vigentes",
     tipo: "empresa",
     minValor: 5000,
     maxValor: 150000,
     minPrazo: 12,
     maxPrazo: 48,
-    minTaxa: 1.5,
-    maxTaxa: 2.0,
-    tags: ["Até R$ 150k", "1,5% a 2,0% a.m."],
+    minTaxa: 0.1,
+    maxTaxa: 10,
+    tags: ["Verifique elegibilidade", "Sujeito à análise"],
     cor: "yellow",
   },
   {
     id: "peac-fgi",
-    nome: "FGI / FAMPE",
-    desc: "Capital de giro com garantia do FGI/BNDES e Aval Sebrae (FAMPE)",
+    nome: "Fundos Garantidores",
+    desc: "Cenário com garantia complementar, conforme o programa",
     tipo: "empresa",
     minValor: 5000,
     maxValor: 1000000,
     minPrazo: 12,
     maxPrazo: 48,
-    minTaxa: 1.8,
-    maxTaxa: 1.8,
-    tags: ["Até R$ 1M", "1,8% a.m."],
+    minTaxa: 0.1,
+    maxTaxa: 10,
+    tags: ["Garantia complementar", "Regras do programa"],
     cor: "emerald",
   },
   {
@@ -153,9 +155,9 @@ const produtos = [
     maxValor: 5000000,
     minPrazo: 12,
     maxPrazo: 144,
-    minTaxa: 0.68,
-    maxTaxa: 1.11,
-    tags: ["Centro-Oeste", "0,68% a 1,11% a.m."],
+    minTaxa: 0.1,
+    maxTaxa: 10,
+    tags: ["Centro-Oeste", "Conforme programação"],
     cor: "violet",
   },
 
@@ -181,14 +183,16 @@ export default function SimuladorPublico() {
     telefone: "",
     empresa: "",
     email: "",
+    documento: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [produtoSelecionado, setProdutoSelecionado] = useState(produtos[0]);
   const [valor, setValor] = useState(produtos[0].minValor);
   const [prazo, setPrazo] = useState(produtos[0].minPrazo);
-  const [taxa, setTaxa] = useState(produtos[0].minTaxa);
+  const [taxa, setTaxa] = useState(2.5);
   const [enviando, setEnviando] = useState(false);
   const [leadSalvo, setLeadSalvo] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const produtosFiltrados = produtos.filter((p) => p.tipo === tipoPessoa);
 
@@ -203,6 +207,10 @@ export default function SimuladorPublico() {
     if (!form.telefone.trim()) e.telefone = "Telefone é obrigatório";
     else if (form.telefone.replace(/\D/g, "").length < 10)
       e.telefone = "Telefone inválido";
+    if (tipoPessoa === "empresa" && !isValidCnpj(form.documento))
+      e.documento = "Informe um CNPJ válido";
+    if (tipoPessoa === "pf" && !isValidCpf(form.documento))
+      e.documento = "Informe um CPF válido";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -215,7 +223,7 @@ export default function SimuladorPublico() {
       setProdutoSelecionado(prod);
       setValor(prod.minValor);
       setPrazo(prod.minPrazo);
-      setTaxa(prod.minTaxa);
+      setTaxa(2.5);
       setStep(2);
     }
   }
@@ -224,60 +232,49 @@ export default function SimuladorPublico() {
     setProdutoSelecionado(prod);
     setValor(prod.minValor);
     setPrazo(prod.minPrazo);
-    setTaxa(prod.minTaxa);
+    setTaxa(2.5);
   }
 
   async function handleSimular() {
     setEnviando(true);
+    setSubmitError(null);
     try {
-      // Captura UTM params da URL para rastreabilidade
-      const urlParams = new URLSearchParams(window.location.search);
-      const resp = await fetch("/api/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      await submitLead({
           nome: form.nome,
           telefone: form.telefone,
           empresa: form.empresa || undefined,
           email: form.email || undefined,
-          // produto_interesse é o campo correto no schema; "produto" é alias aceito pelo backend
+          cpf_cnpj: form.documento,
+          cpfCnpj: form.documento,
           produto: produtoSelecionado.nome,
           produto_interesse: produtoSelecionado.nome,
-          // Campos com nomes exatos das colunas do banco (schema real)
           valor_solicitado: valor,
           prazo_meses: prazo,
-          // Aliases camelCase para compatibilidade com normalização do backend
           valorSolicitado: valor,
+          valorDesejado: valor,
           prazo,
           taxaEstimada: taxa,
           parcelaMensal: parcela,
           totalPagar,
-          // Mapeia corretamente: "empresa" → "pj", "pf" → "pf"
           tipoPessoa: tipoPessoa === "empresa" ? "pj" : tipoPessoa,
           tipo_pessoa: tipoPessoa === "empresa" ? "pj" : tipoPessoa,
-          // Origem explícita para rastreabilidade no funil
           origem: "simulador_publico",
           etapa_funil: "novo",
           temperatura: "frio",
-          // Contexto de rastreamento
           pagina: "/simular",
           pagina_origem: "/simular",
-          utm_source:   urlParams.get("utm_source") || undefined,
-          utm_medium:   urlParams.get("utm_medium") || undefined,
-          utm_campaign: urlParams.get("utm_campaign") || undefined,
-        }),
       });
-      if (!resp.ok) {
-        const errBody = await resp.json().catch(() => ({}));
-        console.error("[SimuladorPublico] Falha ao salvar lead:", resp.status, errBody);
-      }
       setLeadSalvo(true);
-    } catch (err) {
-      console.error("[SimuladorPublico] Erro de rede ao salvar lead:", err);
-      setLeadSalvo(true); // Mostrar resultado mesmo se falhar o salvamento
+      setStep(3);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível enviar a simulação. Tente novamente.",
+      );
+    } finally {
+      setEnviando(false);
     }
-    setEnviando(false);
-    setStep(3);
   }
 
   function formatPhone(v: string) {
@@ -293,7 +290,7 @@ export default function SimuladorPublico() {
     <>
       <SEO
         title="Simulador de Crédito Gratuito | Destrava Crédito"
-        description="Simule seu empréstimo gratuitamente. Crédito empresarial e pessoal com as melhores condições do mercado."
+        description="Monte cenários educativos de crédito empresarial e pessoal. Ajuste valor, prazo e taxa e solicite orientação. Não constitui oferta ou pré-aprovação."
       />
 
       {/* Hero */}
@@ -303,21 +300,20 @@ export default function SimuladorPublico() {
             Simulação 100% Gratuita
           </Badge>
           <h1 className="text-3xl md:text-4xl font-bold mb-3">
-            Simule seu Empréstimo e Descubra as Melhores Condições
+            Monte um Cenário de Crédito em Poucos Passos
           </h1>
           <p className="text-blue-100 text-lg mb-6">
-            Preencha seus dados e simule em segundos. Um especialista entrará em
-            contato com as melhores opções para você.
+            Ajuste valor, prazo e taxa para estimar a parcela. O resultado é educativo e um especialista pode orientar os próximos passos.
           </p>
           <div className="flex flex-wrap justify-center gap-4 text-sm text-blue-200">
             <span className="flex items-center gap-1">
               <Shield className="w-4 h-4" /> Dados protegidos
             </span>
             <span className="flex items-center gap-1">
-              <Clock className="w-4 h-4" /> Resposta em até 2h
+              <Clock className="w-4 h-4" /> Retorno em horário comercial
             </span>
             <span className="flex items-center gap-1">
-              <Star className="w-4 h-4" /> +500 empresas atendidas
+              <Briefcase className="w-4 h-4" /> Análise individual do perfil
             </span>
           </div>
         </div>
@@ -415,6 +411,33 @@ export default function SimuladorPublico() {
                 </p>
 
                 <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="documento" className="text-sm font-medium mb-1.5 block">
+                      {tipoPessoa === "empresa" ? "CNPJ" : "CPF"} *
+                    </Label>
+                    <Input
+                      id="documento"
+                      placeholder={tipoPessoa === "empresa" ? "00.000.000/0000-00" : "000.000.000-00"}
+                      value={form.documento}
+                      inputMode="numeric"
+                      aria-invalid={Boolean(errors.documento)}
+                      aria-describedby={errors.documento ? "documento-error" : undefined}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          documento:
+                            tipoPessoa === "empresa"
+                              ? formatCnpj(e.target.value)
+                              : formatCpf(e.target.value),
+                        })
+                      }
+                    />
+                    {errors.documento && (
+                      <p id="documento-error" className="text-red-500 text-xs mt-1">
+                        {errors.documento}
+                      </p>
+                    )}
+                  </div>
                   <div>
                     <Label htmlFor="nome" className="text-sm font-medium mb-1.5 block">
                       Nome Completo *
@@ -574,6 +597,9 @@ export default function SimuladorPublico() {
 
                 {/* Coluna central: sliders */}
                 <div className="md:col-span-2 bg-white rounded-2xl shadow-sm border p-5">
+                  <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                    As faixas dos controles servem apenas à calculadora e não representam limite, taxa disponível ou elegibilidade. Se você já recebeu uma proposta, use a taxa e o prazo informados nela.
+                  </div>
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
@@ -643,7 +669,7 @@ export default function SimuladorPublico() {
                     <div>
                       <div className="flex justify-between items-center mb-2">
                         <Label className="text-sm font-semibold text-gray-700">
-                          Taxa de Juros (a.m.)
+                          Taxa mensal para o cenário
                         </Label>
                         <span className="text-lg font-bold text-[#0033A0]">
                           {taxa.toFixed(2)}%
@@ -665,7 +691,7 @@ export default function SimuladorPublico() {
                         <span>{produtoSelecionado.maxTaxa}%</span>
                       </div>
                       <p className="text-xs text-gray-400 mt-1">
-                        * Taxa final depende da análise de crédito
+                        * O cálculo não inclui automaticamente CET, seguros, tarifas ou indexadores.
                       </p>
                     </div>
                   </div>
@@ -725,6 +751,7 @@ export default function SimuladorPublico() {
                     )}
                   </Button>
                 </div>
+                <FormSubmitError message={submitError} />
               </div>
             </div>
           )}
@@ -745,7 +772,7 @@ export default function SimuladorPublico() {
                 </p>
                 <p className="text-gray-500 text-sm">
                   Um especialista da Destrava Crédito entrará em contato pelo
-                  WhatsApp <strong>{form.telefone}</strong> em até 2 horas.
+                  WhatsApp <strong>{form.telefone}</strong> durante o horário comercial.
                 </p>
               </div>
 
@@ -755,16 +782,16 @@ export default function SimuladorPublico() {
                   Resumo da Sua Simulação
                 </p>
 
-                {/* Linha recomendada com justificativa */}
+                {/* Cenário selecionado */}
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
                   <div className="flex items-start gap-3">
                     <Award className="w-5 h-5 text-[#0033A0] flex-shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm font-bold text-[#0033A0]">
-                        Linha Recomendada: {produtoSelecionado.nome}
+                        Cenário selecionado: {produtoSelecionado.nome}
                       </p>
                       <p className="text-xs text-blue-700 mt-1">
-                        {produtoSelecionado.desc}. Indicada para o seu perfil ({tipoPessoa === "empresa" ? "Pessoa Jurídica" : "Pessoa Física"}) com o valor e prazo solicitados.
+                        {produtoSelecionado.desc}. Esta seleção não representa recomendação, elegibilidade ou pré-aprovação para {tipoPessoa === "empresa" ? "Pessoa Jurídica" : "Pessoa Física"}.
                       </p>
                     </div>
                   </div>
@@ -790,18 +817,12 @@ export default function SimuladorPublico() {
                   </div>
                 </div>
 
-                {/* Prazo estimado de aprovação */}
+                {/* Responsabilidade pela análise */}
                 <div className="flex items-center gap-3 bg-gray-50 rounded-xl p-3 mb-4">
                   <Zap className="w-4 h-4 text-yellow-500 flex-shrink-0" />
                   <p className="text-sm text-gray-700">
-                    <strong>Prazo estimado de aprovação:</strong>{" "}
-                    {produtoSelecionado.id === "pronampe" || produtoSelecionado.id === "procred360"
-                      ? "5 a 15 dias úteis após análise documental"
-                      : produtoSelecionado.id === "consignado"
-                      ? "1 a 3 dias úteis"
-                      : produtoSelecionado.id === "credito-pessoal"
-                      ? "24 a 72 horas"
-                      : "3 a 10 dias úteis após análise"}
+                    <strong>Análise e prazo:</strong>{" "}
+                    definidos pela instituição financeira conforme modalidade, documentos, garantias e perfil.
                   </p>
                 </div>
 
@@ -856,19 +877,19 @@ export default function SimuladorPublico() {
                     variant="outline"
                     onClick={() => {
                       setStep(1);
-                      setForm({ nome: "", telefone: "", empresa: "", email: "" });
+                      setForm({ nome: "", telefone: "", empresa: "", email: "", documento: "" });
                       setLeadSalvo(false);
                     }}
                     className="border-gray-300 text-gray-600"
                   >
                     Nova Simulação
                   </Button>
-                  <Link href="/">
-                    <Button variant="ghost" className="w-full text-gray-500 hover:text-[#0033A0]">
+                  <Button asChild variant="ghost" className="w-full text-gray-500 hover:text-[#0033A0]">
+                    <Link href="/" data-cta-position="simulador-resultado-secundario">
                       <ArrowLeft className="w-4 h-4 mr-1" />
                       Voltar à Página Inicial
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -880,10 +901,10 @@ export default function SimuladorPublico() {
       <section className="bg-white border-t py-10 px-4">
         <div className="max-w-3xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
           {[
-            { v: "+500", l: "Empresas atendidas" },
-            { v: "+15", l: "Linhas de crédito" },
-            { v: "R$ 50M+", l: "Em crédito captado" },
-            { v: "98%", l: "Satisfação" },
+            { v: "PF e PJ", l: "Perfis analisados" },
+            { v: "Digital", l: "Simulação online" },
+            { v: "LGPD", l: "Dados protegidos" },
+            { v: "Consultiva", l: "Orientação especializada" },
           ].map((s) => (
             <div key={s.l}>
               <p className="text-2xl font-bold text-[#0033A0]">{s.v}</p>

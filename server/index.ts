@@ -5,12 +5,15 @@ import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import { blogPosts } from "../client/src/data/blogPosts";
+import { getPublicSeo, normalizePathname } from "../shared/publicSeo";
+import { injectSeoHead } from "./lib/seoHtml";
 import crypto from "crypto";
 import multer from "multer";
 import pkg from "pg";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-import { auth } from "./middleware/auth.ts";
+import { auth, clearSessionCookie, setSessionCookie } from "./middleware/auth.ts";
 import { authorize, requirePermissao } from "./middleware/authorize.ts";
 import { setAuditoriaPool, registrarAuditoria, rotaAuditLogs } from "./middleware/auditoria.ts";
 import { getPermissoes, temPermissao, LISTA_CARGOS_VALIDOS, nivelHierarquico, podeGerenciar as _podeGerenciar, cargosGerenciaveis as _cargosGerenciaveis } from "../shared/cargos.ts";
@@ -35,7 +38,7 @@ import {
   calcularAcumulados,
 } from "./funcoes_acompanhamento.ts";
 import { normalizarPaginacaoCatalogo, normalizarTipoCatalogo } from "./lib/nexusCatalogo";
-import { loginInputSchema, leadInputSchema, validateBody } from "./lib/inputValidation";
+import { contactInputSchema, loginInputSchema, leadInputSchema, validateBody } from "./lib/inputValidation";
 import { closeChromium, launchChromium } from "./services/chromiumLauncher";
 import { generateBrandedPdfBuffer } from "./services/brandedPdfLayout";
 import { generateFollowupMessage, generateLeadRecommendations, generateLeadSummary, qualifyTriagemLead } from "./services/aiService";
@@ -1002,23 +1005,56 @@ async function listarConversasChatwoot({
 // ─── App ─────────────────────────────────────────────────────────────────────
 async function startServer() {
   const app = express();
+  app.set(
+    "trust proxy",
+    process.env.TRUST_PROXY_HOPS
+      ? Number(process.env.TRUST_PROXY_HOPS)
+      : process.env.NODE_ENV === "production"
+        ? 1
+        : false,
+  );
 
   // ─── Middlewares globais (DEVEM vir antes de qualquer app.use de router) ───
   // Correção 2026-07: body parser e CORS estavam registrados depois dos
   // routers /api/cnpj, /api/empresas e /api/documentacao (e depois de
   // /api/documentos e /api/orcamentos), fazendo com que POST/PUT/PATCH
   // nessas rotas chegassem com req.body indefinido e sem headers de CORS.
-  // Headers de segurança básicos (X-Frame-Options, X-Content-Type-Options, HSTS, etc.).
-  // CSP, COEP e CORP ficam desligados de propósito: o mesmo app Express serve o
-  // build estático do React (linha ~13k) e uploads em domínios/portas diferentes
-  // em dev (Vite em :5173 vs API em :4000); uma CSP/CORP padrão do helmet
-  // quebraria scripts inline do bundle e o carregamento de documentos/imagens
-  // cross-origin. Pode ser habilitada depois com uma política desenhada e testada.
+  // Política compatível com o bundle local, GA4 e mapas; bloqueia objetos,
+  // framing externo e origens de script não autorizadas.
   app.use(helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'self'"],
+        objectSrc: ["'none'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://www.googletagmanager.com"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+        fontSrc: ["'self'", "data:"],
+        connectSrc: [
+          "'self'",
+          "https://www.google-analytics.com",
+          "https://region1.google-analytics.com",
+          "https://analytics.google.com",
+          "https://www.googletagmanager.com",
+          "https://viacep.com.br",
+          "https://brasilapi.com.br",
+          "https://chatwoot.permupay.com.br",
+        ],
+        frameSrc: ["'self'", "https://www.google.com", "https://maps.google.com", "https://chatwoot.permupay.com.br"],
+        workerSrc: ["'self'", "blob:"],
+        ...(process.env.NODE_ENV === "production" ? { upgradeInsecureRequests: [] } : {}),
+      },
+    },
     crossOriginEmbedderPolicy: false,
-    crossOriginResourcePolicy: false,
+    crossOriginResourcePolicy: { policy: "same-site" },
   }));
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+    next();
+  });
 
   app.use(express.json({ limit: "5mb" }));
   app.use(express.urlencoded({ extended: true }));
@@ -1028,13 +1064,16 @@ async function startServer() {
     const siteDomain = process.env.SITE_DOMAIN || "destravacredito.com";
     const allowedOrigins = [
       `https://${siteDomain}`,
-      `http://${siteDomain}`,
-      "http://localhost:5173",
-      "http://localhost:4000",
+      `https://www.${siteDomain.replace(/^www\./, "")}`,
+      ...(process.env.NODE_ENV !== "production"
+        ? [`http://${siteDomain}`, "http://localhost:5173", "http://localhost:4000"]
+        : []),
     ];
     const origin = req.headers.origin ?? "";
-    if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== "production") {
-      res.header("Access-Control-Allow-Origin", origin || "*");
+    if (origin && allowedOrigins.includes(origin)) {
+      res.header("Access-Control-Allow-Origin", origin);
+      res.header("Access-Control-Allow-Credentials", "true");
+      res.header("Vary", "Origin");
     }
     res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
     res.header("Access-Control-Allow-Headers", "Content-Type,Authorization");
@@ -1998,6 +2037,7 @@ async function startServer() {
         { expiresIn: "24h" }
       );
       console.log(`[LOGIN] Colaborador autenticado: ${user.nome} (${user.email})`);
+      setSessionCookie(res, token);
       res.json({
         token,
         user: colaboradorData,
@@ -2009,6 +2049,11 @@ async function startServer() {
     }
   });
 
+  app.post("/api/logout", (_req: Request, res: Response) => {
+    clearSessionCookie(res);
+    res.status(204).end();
+  });
+
   // ─── LEADS API ─────────────────────────────────────────────────────────────
   app.post("/api/leads", leadsRateLimiter, validateBody(leadInputSchema, "message", { success: false }), async (req: Request, res: Response) => {
     try {
@@ -2016,7 +2061,7 @@ async function startServer() {
       const now = new Date().toISOString();
       const nome         = b.nome || "";
       const email        = b.email || null;
-      const telefoneRaw  = b.telefone || "";
+      const telefoneRaw  = String(b.telefone ?? "");
       // Normaliza telefone: remove não-dígitos, remove DDI 55 se resultar em 13 dígitos
       const telefone = (() => {
         let d = telefoneRaw.replace(/[^0-9]/g, "");
@@ -2103,6 +2148,31 @@ async function startServer() {
           ]
         );
         const triagem = tRows[0];
+        try {
+          const triagemCols = await getTableColumns("triagem_leads");
+          const attributionFields: Record<string, unknown> = {
+            utm_term: b.utm_term,
+            utm_content: b.utm_content,
+            gclid: b.gclid,
+            gbraid: b.gbraid,
+            wbraid: b.wbraid,
+            fbclid: b.fbclid,
+            msclkid: b.msclkid,
+            pagina_origem,
+            pagina_entrada: b.pagina_entrada,
+            referrer: b.referrer,
+          };
+          const entries = Object.entries(attributionFields).filter(([key, value]) => triagemCols.has(key) && value);
+          if (entries.length) {
+            await pool.query(
+              `UPDATE triagem_leads SET ${entries.map(([key], index) => `"${key}"=$${index + 1}`).join(", ")} WHERE id=$${entries.length + 1}`,
+              [...entries.map(([, value]) => value), triagem.id],
+            );
+            Object.assign(triagem, Object.fromEntries(entries));
+          }
+        } catch (error) {
+          console.warn("[TRIAGEM ATTRIBUTION]", error instanceof Error ? error.message : error);
+        }
         console.log(`[TRIAGEM] Lead do simulador salvo na fila: ${nome} — ${produto || origem}`);
 
         if (empresa_id) {
@@ -2148,6 +2218,24 @@ async function startServer() {
         if (leadCols.has("cadastro_pendencias")) upd.cadastro_pendencias = pendencias;
         if (leadCols.has("cadastro_completo")) upd.cadastro_completo = pendencias.length === 0;
         if (leadCols.has("bloqueado_operacional")) upd.bloqueado_operacional = pendencias.length > 0;
+        const attributionFields: Record<string, unknown> = {
+          utm_source,
+          utm_medium,
+          utm_campaign,
+          utm_term: b.utm_term || null,
+          utm_content: b.utm_content || null,
+          gclid: b.gclid || null,
+          gbraid: b.gbraid || null,
+          wbraid: b.wbraid || null,
+          fbclid: b.fbclid || null,
+          msclkid: b.msclkid || null,
+          pagina_origem,
+          pagina_entrada: b.pagina_entrada || null,
+          referrer: b.referrer || null,
+        };
+        for (const [key, value] of Object.entries(attributionFields)) {
+          if (leadCols.has(key) && value) upd[key] = value;
+        }
         if (Object.keys(upd).length) {
           const ks = Object.keys(upd);
           const vals = ks.map(k => upd[k]);
@@ -2538,7 +2626,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/contato", async (req: Request, res: Response) => {
+  app.post("/api/contato", leadsRateLimiter, validateBody(contactInputSchema, "message", { success: false }), async (req: Request, res: Response) => {
     try {
       const now = new Date().toISOString();
       const { rows } = await pool.query(
@@ -2556,6 +2644,33 @@ async function startServer() {
         ]
       );
       const contatoId = rows[0].id;
+      try {
+        const leadCols = await getTableColumns("leads");
+        const attributionFields: Record<string, unknown> = {
+          utm_source: req.body.utm_source,
+          utm_medium: req.body.utm_medium,
+          utm_campaign: req.body.utm_campaign,
+          utm_term: req.body.utm_term,
+          utm_content: req.body.utm_content,
+          gclid: req.body.gclid,
+          gbraid: req.body.gbraid,
+          wbraid: req.body.wbraid,
+          fbclid: req.body.fbclid,
+          msclkid: req.body.msclkid,
+          pagina_origem: req.body.pagina,
+          pagina_entrada: req.body.pagina_entrada,
+          referrer: req.body.referrer,
+        };
+        const entries = Object.entries(attributionFields).filter(([key, value]) => leadCols.has(key) && value);
+        if (entries.length) {
+          await pool.query(
+            `UPDATE leads SET ${entries.map(([key], index) => `"${key}"=$${index + 1}`).join(", ")} WHERE id=$${entries.length + 1}`,
+            [...entries.map(([, value]) => value), contatoId],
+          );
+        }
+      } catch (error) {
+        console.warn("[CONTATO ATTRIBUTION]", error instanceof Error ? error.message : error);
+      }
       console.log(`[CONTATO] Salvo: ${req.body.nome} — ${req.body.assunto}`);
 
       dispararN8n("novo_contato", {
@@ -7140,19 +7255,19 @@ As comunicações, notificações, envio de relatórios e solicitações entre a
 <p class="clause"><strong>4.3</strong> - Fica estabelecido que, caso a CONTRATANTE não contrate operações de crédito em valor igual ou superior a <strong>${valorRef}</strong> no período de vigência do contrato, ${vigenciaMeses} (${vigenciaExtenso}) meses, por motivos causados por ela, será devido à CONTRATADA, a título de honorário mínimo garantido, o valor correspondente a <strong>${taxaDesistenciaPct}% (${pctExtenso(taxaDesistenciaPct)} por cento)</strong> sobre o valor de referência pretendido inicialmente, totalizando <strong>${brl(valorDesistencia)}</strong>.</p>
 
 <p class="clause"><strong>PARÁGRAFO ÚNICO - CAUSAS DE IMPEDIMENTO A CRÉDITO POR PARTE DA CONTRATANTE</strong><br>
-As causas de impedimento a crédito por parte da CONTRATANTE são: 1 – Apontamento, direto ou indireto (replicação) de restrição financeira, fiscal ou de simples protesto, inclusive em grupo econômico e cônjuge. 2 – Rating Bacen diferente de C, B ou A. 3 – Movimentação bancária inferior à declarada no faturamento bruto e quando exigido na declaração de imposto de renda. 4 – Anotação de apontamento de fraude documental ou ideológica no Banco Central. 5 – Mudança de endereço da sede empresarial sem comunicação prévia. 6 – Falta de comprovação de endereço da sede ou endereço divergente ao registrado nos órgãos competentes.</p>
+As causas de impedimento a crédito por parte da CONTRATANTE são: 1 – Apontamento, direto ou indireto (replicação) de restrição financeira, fiscal ou de simples protesto, inclusive em grupo econômico e cônjuge. 2 – Não atendimento aos critérios internos de risco e elegibilidade definidos pela instituição financeira. 3 – Movimentação bancária inferior à declarada no faturamento bruto e quando exigido na declaração de imposto de renda. 4 – Anotação de indício de fraude documental ou ideológica em bases consultadas legitimamente. 5 – Mudança de endereço da sede empresarial sem comunicação prévia. 6 – Falta de comprovação de endereço da sede ou endereço divergente ao registrado nos órgãos competentes.</p>
 
 <p class="clause"><strong>4.4</strong> - O valor do honorário mínimo poderá ser cobrado integralmente ao final do contrato, ou em parcelas mensais, conforme acordo entre as partes.</p>
 
 <p class="clause"><strong>4.5</strong> - Caso a CONTRATANTE venha a contratar operações de crédito que, somadas, ultrapassem o valor de <strong>${valorRef}</strong> durante a vigência do contrato, ${vigenciaMeses} (${vigenciaExtenso}) meses, a CONTRATADA renunciará ao recebimento do honorário mínimo, mantendo-se exclusivamente o direito à comissão de ${comissaoPct}% sobre o valor contratado.</p>
 
-<p class="clause"><strong>4.6</strong> - Caso o Rating Bancário interno, no ato da abertura da conta ou após o término do primeiro ciclo de validação, seja inferior a <strong>"C"</strong>, será cobrado o valor mensal de <strong>${brl(custeioMensal)}</strong> a título de custeio do acompanhamento intensivo de extratos bancários, certidões fiscais e restrições comerciais ou bancárias, enquanto o Rating permanecer abaixo do nível "C".</p>
+<p class="clause"><strong>4.6</strong> - Caso os critérios internos de elegibilidade da instituição não sejam atendidos no ato da abertura da conta ou após o término do primeiro ciclo de validação, será cobrado o valor mensal de <strong>${brl(custeioMensal)}</strong> a título de custeio do acompanhamento intensivo de extratos bancários, certidões fiscais e restrições comerciais ou bancárias, enquanto persistir a situação indicada no diagnóstico.</p>
 
 <h2 class="section-title">VI – DO FLUXO OPERACIONAL E PROCEDIMENTOS TÉCNICOS</h2>
 
 <p class="clause"><strong>Cláusula 5</strong> - A execução dos serviços de assessoria para obtenção de crédito obedecerá ao rigoroso fluxo operacional descrito nos itens abaixo:</p>
 
-<p class="clause"><strong>5.1. Diagnóstico Inicial de Risco (Rating Bacen):</strong> No ato da assinatura deste contrato, a CONTRATADA realizará a consulta de classificação de risco da CONTRATANTE junto ao Sistema de Informações de Crédito (SCR) do Banco Central do Brasil.</p>
+<p class="clause"><strong>5.1. Diagnóstico Inicial de Crédito:</strong> No ato da assinatura deste contrato, mediante autorização e pelos canais adequados, a CONTRATADA orientará a obtenção e a leitura do relatório de Empréstimos e Financiamentos (SCR/Registrato), além dos demais documentos necessários. O SCR informa operações registradas; ele não atribui nota comercial nem garante crédito.</p>
 
 <p class="clause"><strong>5.2. Formalização:</strong> O início efetivo dos trabalhos técnicos está condicionado à assinatura do presente Instrumento Particular de Prestação de Serviços por ambas as partes.</p>
 
@@ -7162,18 +7277,18 @@ As causas de impedimento a crédito por parte da CONTRATANTE são: 1 – Apontam
 
 <p class="clause"><strong>5.5. Deferimento Interno e Abertura de Conta:</strong> Mediante parecer favorável da Diretoria Técnica da DESTRAVA CRÉDITO, os documentos serão processados e encaminhados para os trâmites de abertura de conta corrente de pessoa jurídica junto às instituições parceiras.</p>
 
-<p class="clause"><strong>5.6. Validação de Rating Bancário e Faturamento:</strong><br>
-&nbsp;&nbsp;&nbsp;I. Concluída a abertura da conta, será procedida a avaliação do <em>Rating</em> Bancário interno, cujo nível de elegibilidade para prosseguimento deve ser, obrigatoriamente, <strong>"A"</strong> ou <strong>"B"</strong>.<br>
-&nbsp;&nbsp;&nbsp;II. Atendido o critério de <em>Rating</em>, iniciar-se-á o ciclo de validação de faturamento pelo período de 30 (trinta) dias, encerrando-se sempre no último dia útil de cada mês.<br>
+<p class="clause"><strong>5.6. Validação de Critérios Bancários e Faturamento:</strong><br>
+&nbsp;&nbsp;&nbsp;I. Concluída a abertura da conta, a instituição financeira poderá avaliar seus critérios internos de risco e elegibilidade. Esses critérios pertencem à instituição, podem variar e não constituem classificação emitida pelo Banco Central.<br>
+&nbsp;&nbsp;&nbsp;II. Atendidos os critérios aplicáveis, iniciar-se-á o ciclo de validação de faturamento pelo período de 30 (trinta) dias, encerrando-se sempre no último dia útil de cada mês.<br>
 &nbsp;&nbsp;&nbsp;III. Somente após a validação do fluxo financeiro, a CONTRATADA formalizará a proposta de interesse em crédito perante a instituição financeira.<br>
-&nbsp;&nbsp;&nbsp;IV. Caso o <em>Rating</em> Bancário inicial seja inferior aos níveis exigidos, a CONTRATANTE deverá manter o relacionamento e a movimentação bancária sob orientação da CONTRATADA até que o nível de elegibilidade seja alcançado.</p>
+&nbsp;&nbsp;&nbsp;IV. Caso os critérios internos iniciais não sejam atendidos, a CONTRATANTE poderá manter o relacionamento e a movimentação bancária sob orientação da CONTRATADA, sem garantia de mudança da avaliação ou de concessão de crédito.</p>
 
 <p class="clause"><strong>5.7. Monitoramento de Compliance e Prevenção à Lavagem de Dinheiro (PLD):</strong><br>
 &nbsp;&nbsp;&nbsp;I. É obrigação da CONTRATANTE o envio semanal do extrato bancário da conta corrente PJ aberta para este fim, impreterivelmente às quartas-feiras (ou no primeiro dia útil subsequente).<br>
 &nbsp;&nbsp;&nbsp;II. Tal monitoramento visa analisar o perfil de movimentação financeira e mitigar riscos de apontamentos junto ao COAF (Conselho de Controle de Atividades Financeiras), em estrita observância à Lei nº 9.613/1998 (Lei de Lavagem de Dinheiro).<br>
-&nbsp;&nbsp;&nbsp;III. A CONTRATADA emitirá relatório mensal de movimentação e atualização de <em>Rating</em> até o 5º (quinto) dia útil após o fechamento do ciclo de validação.<br>
-&nbsp;&nbsp;&nbsp;IV. Caso ocorra degradação do <em>Rating</em> Bancário por culpa ou omissão da CONTRATANTE, esta deverá arcar com as taxas de serviço adicionais para novas consultas, sendo: <strong>R$ 100,00</strong> para reconsulta de Rating Bacen (SCR) e <strong>R$ 70,00</strong> para reconsulta de restrições comerciais.<br>
-&nbsp;&nbsp;&nbsp;V. Adicionalmente, caso o <em>Rating</em> Bancário interno, no ato da abertura da conta ou após o término do primeiro ciclo de validação, seja inferior a <strong>"C"</strong>, será cobrado um valor mensal de <strong>${brl(custeioMensal)}</strong> a título de custeio do acompanhamento intensivo de extratos bancários, certidões fiscais e restrições comerciais ou bancárias. Este valor será devido enquanto o <em>Rating</em> permanecer abaixo do nível "C".<br>
+&nbsp;&nbsp;&nbsp;III. A CONTRATADA emitirá relatório mensal de movimentação e acompanhamento do diagnóstico até o 5º (quinto) dia útil após o fechamento do ciclo de validação.<br>
+&nbsp;&nbsp;&nbsp;IV. Caso sejam necessárias novas consultas por culpa ou omissão da CONTRATANTE, esta deverá arcar com as taxas de serviço adicionais, sendo: <strong>R$ 100,00</strong> para nova orientação e obtenção autorizada do relatório SCR e <strong>R$ 70,00</strong> para reconsulta de restrições comerciais.<br>
+&nbsp;&nbsp;&nbsp;V. Adicionalmente, caso os critérios internos de elegibilidade da instituição não sejam atendidos no ato da abertura da conta ou após o término do primeiro ciclo de validação, será cobrado um valor mensal de <strong>${brl(custeioMensal)}</strong> a título de custeio do acompanhamento intensivo de extratos bancários, certidões fiscais e restrições comerciais ou bancárias, enquanto persistir a situação indicada no diagnóstico.<br>
 &nbsp;&nbsp;&nbsp;VI. O relatório técnico atualizado será emitido e enviado somente após a confirmação do pagamento das devidas taxas adicionais e/ou da taxa mensal de acompanhamento, conforme o caso.</p>
 
 <h2 class="section-title">VII – CONFIDENCIALIDADE</h2>
@@ -7478,14 +7593,14 @@ As comunicações entre as PARTES serão realizadas exclusivamente através dos 
 
 <p class="clause"><strong>Cláusula 4</strong> - A CONTRATADA fará jus a comissão de <strong>${comissaoPct}% (${pctExtenso(comissaoPct)} por cento)</strong> sobre qualquer valor efetivamente liberado em favor do(a) CONTRATANTE no prazo de até ${vigenciaMeses} (${vigenciaExtenso}) meses da entrega do relatório inicial. O(A) CONTRATANTE compromete-se a comunicar qualquer operação de crédito aprovada dentro do período de vigência.</p>
 
-<p class="clause"><strong>4.1</strong> - A comissão deverá ser paga ao(à) CONTRATANTE no prazo máximo de 1 (um) dia útil após a liberação do crédito, mediante transferência bancária para conta informada pela CONTRATADA.</p>
+<p class="clause"><strong>4.1</strong> - A comissão deverá ser paga pelo(a) CONTRATANTE à CONTRATADA no prazo máximo de 1 (um) dia útil após a liberação do crédito, mediante transferência bancária para conta informada pela CONTRATADA.</p>
 
 <p class="clause"><strong>4.2</strong> - A CONTRATADA declara que não realiza qualquer tipo de pagamento indevido ou comissão oculta, sendo vedada qualquer prática que contrarie a legislação anticorrupção vigente (Lei nº 12.846/2013).</p>
 
 <p class="clause"><strong>4.3</strong> - Caso o(a) CONTRATANTE não contrate operações de crédito em valor igual ou superior a <strong>${valorRef}</strong> no período de vigência, por motivos a ele(a) imputáveis, será devido à CONTRATADA honorário mínimo correspondente a <strong>${taxaDesistenciaPct}% (${pctExtenso(taxaDesistenciaPct)} por cento)</strong> sobre o valor de referência, totalizando <strong>${brl(valorDesistencia)}</strong>.</p>
 
 <p class="clause"><strong>PARÁGRAFO ÚNICO — CAUSAS DE IMPEDIMENTO A CRÉDITO POR PARTE DO(A) CONTRATANTE</strong><br>
-1 – Apontamento de restrição financeira, fiscal ou protesto, inclusive em cônjuge. 2 – Score de crédito ou Rating Bacen inadequado. 3 – Renda comprovada insuficiente para o valor pretendido. 4 – Anotação de fraude documental ou ideológica. 5 – Dados cadastrais desatualizados ou divergentes. 6 – Comprometimento de renda superior ao limite aceito pelas instituições.</p>
+1 – Apontamento de restrição financeira, fiscal ou protesto, inclusive em cônjuge. 2 – Não atendimento aos critérios internos de risco e elegibilidade da instituição financeira. 3 – Renda comprovada insuficiente para o valor pretendido. 4 – Anotação de indício de fraude documental ou ideológica em bases consultadas legitimamente. 5 – Dados cadastrais desatualizados ou divergentes. 6 – Comprometimento de renda superior ao limite aceito pelas instituições.</p>
 
 <p class="clause"><strong>4.4</strong> - O valor do honorário mínimo poderá ser cobrado integralmente ao final do contrato ou em parcelas mensais, conforme acordo entre as partes.</p>
 
@@ -11487,11 +11602,16 @@ async function registrarDocumentoContratoGerado(params: {
   });
 
   // Servir arquivos de contratos gerados e contratos sociais enviados
-  app.use('/uploads/contratos', express.static(path.resolve('uploads', 'contratos')));
-  app.use('/uploads/contratos-sociais', express.static(path.join(process.env.DATA_DIR || '/data', 'uploads', 'contratos-sociais')));
-  app.use('/uploads/empresas', express.static(path.resolve('uploads', 'empresas')));
-  app.use('/uploads/orcamentos', express.static(path.resolve('uploads', 'orcamentos')));
-  app.use('/uploads/documentos', express.static(path.join(process.env.DATA_DIR || '/var/data/destrava', 'uploads', 'documentos')));
+  const privateUploadHeaders = (res: Response) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+  };
+  app.use('/uploads/contratos', auth, express.static(path.resolve('uploads', 'contratos'), { setHeaders: privateUploadHeaders }));
+  app.use('/uploads/contratos-sociais', auth, express.static(path.join(process.env.DATA_DIR || '/data', 'uploads', 'contratos-sociais'), { setHeaders: privateUploadHeaders }));
+  app.use('/uploads/empresas', auth, express.static(path.resolve('uploads', 'empresas'), { setHeaders: privateUploadHeaders }));
+  app.use('/uploads/orcamentos', auth, express.static(path.resolve('uploads', 'orcamentos'), { setHeaders: privateUploadHeaders }));
+  app.use('/uploads/documentos', auth, express.static(path.join(process.env.DATA_DIR || '/var/data/destrava', 'uploads', 'documentos'), { setHeaders: privateUploadHeaders }));
 
   app.patch('/api/me', auth, async (req: Request, res: Response) => {
     try {
@@ -12568,7 +12688,7 @@ async function registrarDocumentoContratoGerado(params: {
 
   <h2>Movimentação consolidada por semana</h2>
   <table>
-    <thead><tr><th style="width:13%">Semana</th><th style="width:17%">Período</th><th>Entradas</th><th>Saídas</th><th>Saldo</th><th>Rating Bacen</th><th>Rating interno</th><th>Status</th></tr></thead>
+    <thead><tr><th style="width:13%">Semana</th><th style="width:17%">Período</th><th>Entradas</th><th>Saídas</th><th>Saldo</th><th>Indicador SCR</th><th>Rating interno</th><th>Status</th></tr></thead>
     <tbody>${linhasMovimentacao || textoSemanasVazias}</tbody>
   </table>
 
@@ -15353,12 +15473,50 @@ Responda em JSON com:
     ? path.resolve(__dirname, "public")
     : path.resolve(__dirname, "..", "dist", "public");
 
-  app.use(express.static(staticPath));
+  app.use(express.static(staticPath, {
+    index: false,
+    setHeaders: (res, assetPath) => {
+      if (assetPath.includes(`${path.sep}assets${path.sep}`) && /\.(?:js|css)$/i.test(assetPath)) {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      } else if (/\.(?:png|jpe?g|webp|svg|ico|woff2?)$/i.test(assetPath)) {
+        res.setHeader("Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
+      }
+    },
+  }));
 
-  app.get("*", (_req: Request, res: Response) => {
-    const indexPath = path.join(staticPath, "index.html");
+  const indexPath = path.join(staticPath, "index.html");
+  const productionIndexTemplate = process.env.NODE_ENV === "production" && fs.existsSync(indexPath)
+    ? fs.readFileSync(indexPath, "utf8")
+    : null;
+
+  app.get("*", (req: Request, res: Response) => {
     if (fs.existsSync(indexPath)) {
-      res.sendFile(indexPath);
+      const pathname = normalizePathname(req.path);
+      const blogMatch = pathname.match(/^\/blog\/([^/]+)$/);
+      const blogPost = blogMatch
+        ? blogPosts.find((post) => post.slug === decodeURIComponent(blogMatch[1]))
+        : undefined;
+      const baseSeo = blogPost
+        ? {
+            title: blogPost.title,
+            description: blogPost.excerpt,
+            type: "article" as const,
+            publishedTime: blogPost.date,
+            modifiedTime: blogPost.date,
+          }
+        : getPublicSeo(pathname);
+      const isKnownBlog = !blogMatch || Boolean(blogPost);
+      const isKnownRoute = Boolean(baseSeo) && isKnownBlog;
+      const seo = baseSeo || {
+        title: "Página não encontrada",
+        description: "A página solicitada não foi encontrada.",
+        noindex: true,
+      };
+      const html = injectSeoHead(productionIndexTemplate ?? fs.readFileSync(indexPath, "utf8"), {
+        ...seo,
+        pathname,
+      });
+      res.status(isKnownRoute && pathname !== "/404" ? 200 : 404).type("html").send(html);
     } else {
       res.status(404).send("Execute 'npm run build' para gerar os arquivos.");
     }

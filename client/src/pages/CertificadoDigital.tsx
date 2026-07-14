@@ -48,17 +48,17 @@ export default function CertificadoDigital() {
               Emita seu certificado digital com agilidade e segurança. Indispensável para emissão de nota fiscal eletrônica, acesso a sistemas governamentais e assinatura de documentos digitais.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link href="/captura?produto=certificado-digital">
-                <Button size="lg" className="bg-cyan-400 hover:bg-cyan-500 text-black font-bold px-8">
+              <Button asChild size="lg" className="bg-cyan-400 hover:bg-cyan-500 text-black font-bold px-8">
+                <Link href="/captura?produto=certificado-digital">
                   Solicitar Certificado
                   <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
-              <a href="https://wa.me/556135268355?text=Olá! Preciso de um certificado digital." target="_blank" rel="noopener noreferrer">
-                <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
+                <a href="https://wa.me/556135268355?text=Olá! Preciso de um certificado digital." target="_blank" rel="noopener noreferrer">
                   Falar com Especialista
-                </Button>
-              </a>
+                </a>
+              </Button>
             </div>
           </div>
         </div>
@@ -103,12 +103,12 @@ export default function CertificadoDigital() {
                   <p className="text-sm font-semibold text-blue-800">Ideal para:</p>
                   <p className="text-sm text-blue-700">Empresas que emitem NF-e, acessam e-CAC, e-Social, SPED e sistemas governamentais com frequência.</p>
                 </div>
-                <Link href="/captura?produto=certificado-digital">
-                  <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold">
+                <Button asChild className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold">
+                  <Link href="/captura?produto=certificado-digital">
                     Solicitar A1
                     <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               </div>
 
               {/* A3 */}
@@ -141,12 +141,12 @@ export default function CertificadoDigital() {
                   <p className="text-sm font-semibold text-purple-800">Ideal para:</p>
                   <p className="text-sm text-purple-700">Contadores, advogados, médicos, empresas que assinam contratos digitais e precisam de maior segurança.</p>
                 </div>
-                <Link href="/captura?produto=certificado-digital">
-                  <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold">
+                <Button asChild className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold">
+                  <Link href="/captura?produto=certificado-digital">
                     Solicitar A3
                     <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               </div>
             </div>
           </div>
@@ -274,17 +274,17 @@ export default function CertificadoDigital() {
               Não deixe sua empresa sem o certificado digital. Regularize hoje mesmo com a ajuda da nossa equipe especializada.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/captura?produto=certificado-digital">
-                <Button size="lg" className="bg-cyan-400 hover:bg-cyan-500 text-black font-bold px-8">
+              <Button asChild size="lg" className="bg-cyan-400 hover:bg-cyan-500 text-black font-bold px-8">
+                <Link href="/captura?produto=certificado-digital">
                   Solicitar Agora
                   <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
-              <a href="https://wa.me/556135268355?text=Olá! Preciso de um certificado digital." target="_blank" rel="noopener noreferrer">
-                <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
+                <a href="https://wa.me/556135268355?text=Olá! Preciso de um certificado digital." target="_blank" rel="noopener noreferrer">
                   Falar no WhatsApp
-                </Button>
-              </a>
+                </a>
+              </Button>
             </div>
           </div>
         </div>

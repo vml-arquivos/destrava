@@ -142,20 +142,20 @@ export default function Cgi() {
               Os valores, taxas e condições são estimativas e podem variar conforme análise de cada caso.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link href="/simular">
-                <Button size="lg" variant="secondary" className="font-semibold">
+              <Button asChild size="lg" variant="secondary" className="font-semibold">
+                <Link href="/simular">
                   Simular Agora
-                </Button>
-              </Link>
-              <a
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
+                <a
                 href={COMPANY.whatsappLinkMsg("Olá! Quero saber mais sobre o CGI — Crédito com Garantia de Imóvel.")}
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                <Button size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
                   <Phone className="h-4 w-4 mr-2" /> Falar com Especialista
-                </Button>
-              </a>
+                </a>
+              </Button>
             </div>
           </div>
         </div>
@@ -472,20 +472,20 @@ export default function Cgi() {
             A análise de viabilidade é gratuita. A aprovação final depende da instituição financeira.
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
-            <a
+            <Button asChild size="lg" variant="secondary" className="font-semibold text-lg px-8">
+              <a
               href={COMPANY.whatsappLinkMsg("Olá! Quero saber mais sobre o CGI — Crédito com Garantia de Imóvel.")}
               target="_blank"
               rel="noopener noreferrer"
             >
-              <Button size="lg" variant="secondary" className="font-semibold text-lg px-8">
                 <Phone className="h-5 w-5 mr-2" /> Falar no WhatsApp
-              </Button>
-            </a>
-            <Link href="/contato">
-              <Button size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary text-lg px-8">
+              </a>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary text-lg px-8">
+              <Link href="/contato">
                 Enviar Mensagem
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </div>
         </div>
       </section>

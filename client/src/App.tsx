@@ -1,74 +1,78 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import { lazy, Suspense } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
-import Sobre from "./pages/Sobre";
-import GiroCaixaFacil from "./pages/GiroCaixaFacil";
-import Simulacao from "./pages/Simulacao";
-import SimuladorCompleto from "./pages/SimuladorCompleto";
-import FAQ from "./pages/FAQ";
-import Produtos from "./pages/Produtos";
-import Blog from "./pages/Blog";
-import BlogPost from "./pages/BlogPost";
-import PoliticaPrivacidade from "./pages/PoliticaPrivacidade";
-import TermosUso from "./pages/TermosUso";
-import Sucesso from "./pages/Sucesso";
-import CapturaLead from "./pages/CapturaLead";
-import SimuladorPublico from "./pages/SimuladorPublico";
-import RatingBancoBrasil from "./pages/RatingBancoBrasil";
-import RatingBancoCentral from "./pages/RatingBancoCentral";
-import Pronampe from "./pages/Pronampe";
-import Procred360 from "./pages/Procred360";
-import PeacFgi from "./pages/PeacFgi";
-import Fco from "./pages/Fco";
-import Fampe from "./pages/Fampe";
-import GiroCaixaFacilLP from "./pages/GiroCaixaFacilLP";
-import CertificadoDigital from "./pages/CertificadoDigital";
-import ConsultaSPCSerasa from "./pages/ConsultaSPCSerasa";
-import CreditoEmpresas from "./pages/CreditoEmpresas";
-import CreditoPessoaFisica from "./pages/CreditoPessoaFisica";
-import Contato from "./pages/Contato";
-import Cgi from "./pages/Cgi";
-// Área do Colaborador
-import ColaboradorLogin from "./pages/colaborador/Login";
-import RecuperarSenha from "./pages/colaborador/RecuperarSenha";
-import RedefinirSenha from "./pages/colaborador/RedefinirSenha";
-import MeuPerfil from "./pages/colaborador/MeuPerfil";
-import ColaboradorDashboard from "./pages/colaborador/Dashboard";
-import ColaboradorCalculadora from "./pages/colaborador/CalculadoraPage";
-import ColaboradorSimulacoes from "./pages/colaborador/Simulacoes";
-import ColaboradorUsuarios from "./pages/colaborador/Usuarios";
-import ColaboradorClientes from "./pages/colaborador/Clientes";
-import ColaboradorIntegracoes from "./pages/colaborador/Integracoes";
-import AssessoriaIA from "./pages/colaborador/AssessoriaIA";
-import DiagnosticoCredito from "./pages/colaborador/DiagnosticoCredito";
-import PrevisaoFaturamento from "./pages/colaborador/PrevisaoFaturamento";
-import GeradorContratos from "./pages/colaborador/GeradorContratos";
-import ColaboradorOrcamentos from "./pages/colaborador/Orcamentos";
-import ColaboradorCRM from "./pages/colaborador/CRM";
-import ColaboradorEmpresas from "./pages/colaborador/Empresas";
-import AcervoDocumentalEmpresa from "./pages/colaborador/AcervoDocumentalEmpresa";
-import RelatorioEmpresas from "./pages/colaborador/RelatorioEmpresas";
-import ColaboradorTriagem from "./pages/colaborador/Triagem";
-import ColaboradorFila from "./pages/colaborador/Fila";
-import ColaboradorMeuCRM from "./pages/colaborador/MeuCRM";
-import Contadores from "./pages/colaborador/Contadores";
-import AcompanhamentoBancario from "./pages/colaborador/AcompanhamentoBancario";
-import AcompanhamentoFinanceiro from "./pages/colaborador/AcompanhamentoFinanceiro";
-import WeeklyMonitorPage from "./pages/colaborador/WeeklyMonitorPage";
-import CadastroEmpresa from "./pages/colaborador/CadastroEmpresa";
-import DadosIncompletos from "./pages/colaborador/DadosIncompletos";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CargoRoute from "./components/CargoRoute";
-import Layout from "./pages/colaborador/Layout";
-import ConfiguracaoFuncoes from "./pages/colaborador/ConfiguracaoFuncoes";
 import { useFeatureAccess } from "@/hooks/useFeatureAccess";
+import { AnalyticsObserver } from "@/lib/analytics";
+import { RouteSeoDefaults } from "@/components/SEO";
+import ConsentBanner from "@/components/ConsentBanner";
 
+const Home = lazy(() => import("./pages/Home"));
+const Sobre = lazy(() => import("./pages/Sobre"));
+const Simulacao = lazy(() => import("./pages/Simulacao"));
+const SimuladorCompleto = lazy(() => import("./pages/SimuladorCompleto"));
+const FAQ = lazy(() => import("./pages/FAQ"));
+const Produtos = lazy(() => import("./pages/Produtos"));
+const Blog = lazy(() => import("./pages/Blog"));
+const BlogPost = lazy(() => import("./pages/BlogPost"));
+const PoliticaPrivacidade = lazy(() => import("./pages/PoliticaPrivacidade"));
+const TermosUso = lazy(() => import("./pages/TermosUso"));
+const Sucesso = lazy(() => import("./pages/Sucesso"));
+const CapturaLead = lazy(() => import("./pages/CapturaLead"));
+const SimuladorPublico = lazy(() => import("./pages/SimuladorPublico"));
+const RatingBancoBrasil = lazy(() => import("./pages/RatingBancoBrasil"));
+const RatingBancoCentral = lazy(() => import("./pages/RatingBancoCentral"));
+const Pronampe = lazy(() => import("./pages/Pronampe"));
+const Procred360 = lazy(() => import("./pages/Procred360"));
+const PeacFgi = lazy(() => import("./pages/PeacFgi"));
+const Fco = lazy(() => import("./pages/Fco"));
+const Fampe = lazy(() => import("./pages/Fampe"));
+const GiroCaixaFacilLP = lazy(() => import("./pages/GiroCaixaFacilLP"));
+const CertificadoDigital = lazy(() => import("./pages/CertificadoDigital"));
 const CertificadoDigitalA1 = lazy(() => import("./pages/CertificadoDigitalA1"));
+const ConsultaSPCSerasa = lazy(() => import("./pages/ConsultaSPCSerasa"));
+const CreditoEmpresas = lazy(() => import("./pages/CreditoEmpresas"));
+const CreditoPessoaFisica = lazy(() => import("./pages/CreditoPessoaFisica"));
+const Contato = lazy(() => import("./pages/Contato"));
+const Cgi = lazy(() => import("./pages/Cgi"));
+const CalculadoraScore = lazy(() => import("./pages/CalculadoraScore"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+
+// Área do colaborador: carregada somente após navegação para o CRM.
+const ColaboradorLogin = lazy(() => import("./pages/colaborador/Login"));
+const RecuperarSenha = lazy(() => import("./pages/colaborador/RecuperarSenha"));
+const RedefinirSenha = lazy(() => import("./pages/colaborador/RedefinirSenha"));
+const MeuPerfil = lazy(() => import("./pages/colaborador/MeuPerfil"));
+const ColaboradorDashboard = lazy(() => import("./pages/colaborador/Dashboard"));
+const ColaboradorCalculadora = lazy(() => import("./pages/colaborador/CalculadoraPage"));
+const ColaboradorSimulacoes = lazy(() => import("./pages/colaborador/Simulacoes"));
+const ColaboradorUsuarios = lazy(() => import("./pages/colaborador/Usuarios"));
+const ColaboradorClientes = lazy(() => import("./pages/colaborador/Clientes"));
+const ColaboradorIntegracoes = lazy(() => import("./pages/colaborador/Integracoes"));
+const AssessoriaIA = lazy(() => import("./pages/colaborador/AssessoriaIA"));
+const DiagnosticoCredito = lazy(() => import("./pages/colaborador/DiagnosticoCredito"));
+const PrevisaoFaturamento = lazy(() => import("./pages/colaborador/PrevisaoFaturamento"));
+const GeradorContratos = lazy(() => import("./pages/colaborador/GeradorContratos"));
+const ColaboradorOrcamentos = lazy(() => import("./pages/colaborador/Orcamentos"));
+const ColaboradorCRM = lazy(() => import("./pages/colaborador/CRM"));
+const ColaboradorEmpresas = lazy(() => import("./pages/colaborador/Empresas"));
+const AcervoDocumentalEmpresa = lazy(() => import("./pages/colaborador/AcervoDocumentalEmpresa"));
+const RelatorioEmpresas = lazy(() => import("./pages/colaborador/RelatorioEmpresas"));
+const ColaboradorTriagem = lazy(() => import("./pages/colaborador/Triagem"));
+const ColaboradorFila = lazy(() => import("./pages/colaborador/Fila"));
+const ColaboradorMeuCRM = lazy(() => import("./pages/colaborador/MeuCRM"));
+const Contadores = lazy(() => import("./pages/colaborador/Contadores"));
+const AcompanhamentoBancario = lazy(() => import("./pages/colaborador/AcompanhamentoBancario"));
+const AcompanhamentoFinanceiro = lazy(() => import("./pages/colaborador/AcompanhamentoFinanceiro"));
+const WeeklyMonitorPage = lazy(() => import("./pages/colaborador/WeeklyMonitorPage"));
+const CadastroEmpresa = lazy(() => import("./pages/colaborador/CadastroEmpresa"));
+const DadosIncompletos = lazy(() => import("./pages/colaborador/DadosIncompletos"));
+const ConfiguracaoFuncoes = lazy(() => import("./pages/colaborador/ConfiguracaoFuncoes"));
+const Layout = lazy(() => import("./pages/colaborador/Layout"));
 
 function FeatureGate({
   featureKey,
@@ -101,19 +105,12 @@ function FeatureGate({
   );
 }
 
-function CertificadoDigitalA1Route() {
+function PageLoader() {
   return (
-    <Suspense
-      fallback={
-        <div
-          className="min-h-screen bg-[#07152f]"
-          role="status"
-          aria-label="Carregando página de Certificado Digital A1"
-        />
-      }
-    >
-      <CertificadoDigitalA1 />
-    </Suspense>
+    <div className="flex min-h-screen items-center justify-center bg-slate-50" role="status" aria-live="polite">
+      <span className="sr-only">Carregando página...</span>
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#0033A0]" aria-hidden="true" />
+    </div>
   );
 }
 
@@ -154,8 +151,9 @@ function Router() {
       <Route path="/rating-banco-brasil" component={RatingBancoBrasil} />
       <Route path="/rating-banco-central" component={RatingBancoCentral} />
       <Route path="/certificado-digital" component={CertificadoDigital} />
-      <Route path="/certificado-digital-a1" component={CertificadoDigitalA1Route} />
+      <Route path="/certificado-digital-a1" component={CertificadoDigitalA1} />
       <Route path="/consulta-spc-serasa" component={ConsultaSPCSerasa} />
+      <Route path="/calculadora-score" component={CalculadoraScore} />
 
       {/* Captura de Lead */}
       <Route path="/captura" component={CapturaLead} />
@@ -447,7 +445,12 @@ function App() {
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <RouteSeoDefaults />
+          <AnalyticsObserver />
+          <ConsentBanner />
+          <Suspense fallback={<PageLoader />}>
+            <Router />
+          </Suspense>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

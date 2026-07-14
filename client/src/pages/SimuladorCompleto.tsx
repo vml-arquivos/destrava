@@ -28,7 +28,6 @@ import {
   Calculator,
   TrendingUp,
   CheckCircle2,
-  XCircle,
   Info,
   DollarSign,
   Calendar,
@@ -112,8 +111,8 @@ export default function SimuladorCompleto() {
               </h1>
             </div>
             <p className="text-xl text-white/90">
-              Compare e simule todos os produtos de crédito empresarial da CAIXA
-              com a assessoria da Destrava Crédito
+              Monte cenários educativos de parcela e custo total. Use os dados
+              de uma proposta real para uma comparação mais útil.
             </p>
           </div>
         </div>
@@ -181,10 +180,10 @@ export default function SimuladorCompleto() {
                       </p>
                       <div className="flex flex-wrap gap-2">
                         <Badge variant="secondary" className="text-xs">
-                          Até R$ {(product.maxValue / 1000).toFixed(0)}k
+                          Cenário editável
                         </Badge>
                         <Badge variant="secondary" className="text-xs">
-                          {product.rateType === "pos-fixada" ? product.rateFormula : `${product.minRate}% - ${product.maxRate}% a.m.`}
+                          Não é oferta
                         </Badge>
                         {product.carenciaMonths > 0 && (
                           <Badge variant="outline" className="text-xs">
@@ -207,6 +206,9 @@ export default function SimuladorCompleto() {
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  As faixas abaixo controlam apenas a calculadora. Elas não representam limite, taxa disponível, elegibilidade ou pré-aprovação. Insira a taxa e o prazo de uma proposta para comparar o cenário.
+                </div>
                 {/* Valor do Empréstimo */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -263,7 +265,7 @@ export default function SimuladorCompleto() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label className="text-base font-semibold">
-                      Taxa de Juros (a.m.)
+                      Taxa mensal para o cenário
                     </Label>
                     <span className="text-2xl font-bold text-primary">
                       {interestRate.toFixed(2)}%
@@ -282,7 +284,7 @@ export default function SimuladorCompleto() {
                     <span>{selectedProduct.maxRate}%</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    * Taxa final depende da análise de crédito da CAIXA
+                    * Use a taxa informada na proposta. O cálculo não inclui automaticamente CET, tarifas, seguros ou indexadores.
                   </p>
                 </div>
 
@@ -381,6 +383,9 @@ export default function SimuladorCompleto() {
                 <CardTitle>Resultado da Simulação</CardTitle>
               </CardHeader>
               <CardContent>
+                <p className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                  Resultado matemático ilustrativo pelo sistema Price. Não constitui proposta e pode diferir do contrato e do CET da instituição.
+                </p>
                 <div className="grid md:grid-cols-3 gap-6 mb-6">
                   <div className="text-center p-6 bg-primary/5 rounded-lg">
                     <DollarSign className="h-8 w-8 text-primary mx-auto mb-2" />
@@ -495,30 +500,26 @@ export default function SimuladorCompleto() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  {eligibility.eligible ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-600" />
-                  ) : (
-                    <XCircle className="h-5 w-5 text-red-600" />
-                  )}
-                  Elegibilidade
+                  <Info className="h-5 w-5 text-primary" />
+                  Leitura inicial
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {eligibility.eligible ? (
                   <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                     <p className="text-sm font-medium text-green-800">
-                      ✓ Você atende aos requisitos básicos!
+                      Cenário preenchido
                     </p>
                     <p className="text-xs text-green-700 mt-1">
-                      Análise final será feita pela CAIXA
+                      Isto não representa elegibilidade ou pré-aprovação.
                     </p>
                   </div>
                 ) : (
-                  <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-sm font-medium text-red-800 mb-2">
-                      ✗ Requisitos não atendidos:
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-sm font-medium text-amber-900 mb-2">
+                      Pontos de atenção:
                     </p>
-                    <ul className="text-xs text-red-700 space-y-1">
+                    <ul className="text-xs text-amber-800 space-y-1">
                       {eligibility.reasons.map((reason, idx) => (
                         <li key={idx}>• {reason}</li>
                       ))}
@@ -554,25 +555,25 @@ export default function SimuladorCompleto() {
                 </div>
 
                 <div className="pt-4 space-y-3">
-                  <a href="/simulacao">
-                    <Button className="w-full font-semibold" size="lg">
-                      Solicitar Proposta
+                  <Button asChild className="w-full font-semibold" size="lg">
+                    <a href="/simulacao">
+                      Solicitar Orientação
                       <ArrowRight className="ml-2 h-5 w-5" />
-                    </Button>
-                  </a>
-                  <a
-                    href="https://wa.me/556135268355"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <Button
+                    </a>
+                  </Button>
+                  <Button asChild
                       variant="outline"
                       className="w-full font-semibold"
                       size="lg"
                     >
+                    <a
+                    href="https://wa.me/556135268355"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                       Falar com Assessor
-                    </Button>
-                  </a>
+                    </a>
+                  </Button>
                 </div>
               </CardContent>
             </Card>

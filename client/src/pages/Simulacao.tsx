@@ -14,9 +14,14 @@ import {
 import { CheckCircle2, FileText, Clock, Shield } from "lucide-react";
 import { useState, FormEvent } from "react";
 import { useLocation } from "wouter";
+import FormSubmitError from "@/components/FormSubmitError";
+import { submitLead } from "@/lib/leads";
+import { formatCnpj, isValidCnpj } from "@/lib/brDocuments";
 
 export default function Simulacao() {
   const [, setLocation] = useLocation();
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     nome: "",
     cnpj: "",
@@ -30,11 +35,42 @@ export default function Simulacao() {
     observacoes: "",
   });
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    // Em produção, aqui seria enviado para uma API
-    console.log("Formulário de simulação enviado:", formData);
-    setLocation("/sucesso");
+    if (!isValidCnpj(formData.cnpj)) {
+      setSubmitError("Informe um CNPJ válido para enviar a simulação.");
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await submitLead({
+        nome: formData.nome,
+        telefone: formData.whatsapp,
+        email: formData.email,
+        cpf_cnpj: formData.cnpj,
+        tipo_pessoa: "pj",
+        tipoPessoa: "pj",
+        cidade: formData.cidade,
+        estado: formData.estado,
+        valorDesejado: Number(formData.valorDesejado) || null,
+        finalidade: formData.finalidade,
+        observacoes: formData.observacoes,
+        produto_interesse: "Crédito empresarial",
+        faturamento: formData.faturamento,
+        origem: "landing_simulacao",
+        pagina: "/simulacao",
+      });
+      setLocation("/sucesso?origem=simulacao");
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível enviar sua simulação. Tente novamente.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleChange = (field: string, value: string) => {
@@ -80,7 +116,7 @@ export default function Simulacao() {
               </div>
               <h3 className="font-bold mb-1">Resposta Rápida</h3>
               <p className="text-sm text-muted-foreground">
-                Retorno em até 24h
+                Retorno em horário comercial
               </p>
             </div>
 
@@ -143,7 +179,7 @@ export default function Simulacao() {
                     required
                     value={formData.whatsapp}
                     onChange={(e) => handleChange("whatsapp", e.target.value)}
-                    placeholder="(11) 9 9999-9999"
+                    placeholder="(61) 9 9999-9999"
                   />
                 </div>
 
@@ -174,8 +210,10 @@ export default function Simulacao() {
                       type="text"
                       required
                       value={formData.cnpj}
-                      onChange={(e) => handleChange("cnpj", e.target.value)}
+                      onChange={(e) => handleChange("cnpj", formatCnpj(e.target.value))}
                       placeholder="00.000.000/0000-00"
+                      inputMode="numeric"
+                      autoComplete="off"
                     />
                   </div>
 
@@ -331,12 +369,15 @@ export default function Simulacao() {
               </div>
 
               <div className="pt-6">
+                <FormSubmitError message={submitError} />
                 <Button
                   type="submit"
                   size="lg"
-                  className="w-full font-semibold text-lg"
+                  className="mt-4 w-full font-semibold text-lg"
+                  disabled={submitting}
+                  aria-busy={submitting}
                 >
-                  Enviar Simulação
+                  {submitting ? "Enviando com segurança..." : "Enviar Simulação"}
                 </Button>
               </div>
 

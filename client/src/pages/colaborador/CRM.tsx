@@ -1027,16 +1027,16 @@ function FichaLead({
                           </div>
                           <div className="flex gap-2">
                             {iaFollowup.link_whatsapp && (
-                              <a
+                              <Button asChild size="sm" className="w-full bg-green-600 hover:bg-green-700 gap-2">
+                                <a
                                 href={iaFollowup.link_whatsapp}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex-1"
                               >
-                                <Button size="sm" className="w-full bg-green-600 hover:bg-green-700 gap-2">
                                   <Phone className="h-4 w-4" /> Abrir WhatsApp
-                                </Button>
-                              </a>
+                                </a>
+                              </Button>
                             )}
                             <Button size="sm" className="flex-1 gap-2" onClick={dispararFollowup}>
                               <Send className="h-4 w-4" /> Disparar via n8n
@@ -1541,13 +1541,11 @@ export default function CRM() {
           {/* Navegação e filtros */}
           <div className="mt-3 flex flex-col gap-3">
             <div className="flex items-center gap-2 flex-wrap">
-              <Link href="/colaborador/fila">
-                <a className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100">
+              <Link href="/colaborador/fila" className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100">
                   <ClipboardList className="h-4 w-4" />
                   Fila operacional
                   {leadsSemResponsavel > 0 && <Badge variant="secondary">{leadsSemResponsavel}</Badge>}
-                </a>
-              </Link>
+                </Link>
               <button
                 type="button"
                 onClick={() => {

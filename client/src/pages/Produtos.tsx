@@ -101,12 +101,12 @@ export default function Produtos() {
                 </div>
               </div>
 
-              <a href="https://wa.me/556135268355" target="_blank" rel="noopener noreferrer">
-                <Button className="w-full bg-[var(--color-caixa-yellow)] hover:bg-yellow-500 text-black font-bold text-sm md:text-base py-2 md:py-3 px-4 md:px-8">
+              <Button asChild className="w-full bg-[var(--color-caixa-yellow)] hover:bg-yellow-500 text-black font-bold text-sm md:text-base py-2 md:py-3 px-4 md:px-8">
+                <a href="https://wa.me/556135268355" target="_blank" rel="noopener noreferrer">
                   Conversar com Especialista
                   <ArrowRight className="w-4 md:w-5 h-4 md:h-5 ml-2" />
-                </Button>
-              </a>
+                </a>
+              </Button>
             </div>
 
             {/* PILAR 2: PRODUTOS DE CRÉDITO DISPONÍVEIS */}
@@ -123,7 +123,7 @@ export default function Produtos() {
                   <Truck className="w-5 md:w-6 h-5 md:h-6 text-[var(--color-caixa-blue)] flex-shrink-0 mt-0.5 md:mt-1" />
                   <div>
                     <p className="font-bold text-sm md:text-base text-[var(--color-caixa-blue-dark)]">Giro CAIXA Fácil</p>
-                    <p className="text-gray-600 text-xs md:text-sm">Capital de giro com aprovação rápida. Até R$ 70.000</p>
+                    <p className="text-gray-600 text-xs md:text-sm">Capital de giro sujeito às condições e à análise da CAIXA</p>
                   </div>
                 </div>
 
@@ -147,7 +147,7 @@ export default function Produtos() {
                   <DollarSign className="w-5 md:w-6 h-5 md:h-6 text-[var(--color-caixa-blue)] flex-shrink-0 mt-0.5 md:mt-1" />
                   <div>
                     <p className="font-bold text-sm md:text-base text-[var(--color-caixa-blue-dark)]">Crédito Pessoal</p>
-                    <p className="text-gray-600 text-xs md:text-sm">Para necessidades imediatas com aprovação rápida</p>
+                    <p className="text-gray-600 text-xs md:text-sm">Para diferentes finalidades, sujeito à análise da instituição</p>
                   </div>
                 </div>
 
@@ -160,12 +160,12 @@ export default function Produtos() {
                 </div>
               </div>
 
-              <a href="https://wa.me/556135268355" target="_blank" rel="noopener noreferrer">
-                <Button variant="outline" className="w-full mt-6 md:mt-8 border-[var(--color-caixa-blue)] text-[var(--color-caixa-blue)] hover:bg-blue-50 font-bold text-sm md:text-base py-2 md:py-3 px-4 md:px-8">
+              <Button asChild variant="outline" className="w-full mt-6 md:mt-8 border-[var(--color-caixa-blue)] text-[var(--color-caixa-blue)] hover:bg-blue-50 font-bold text-sm md:text-base py-2 md:py-3 px-4 md:px-8">
+                <a href="https://wa.me/556135268355" target="_blank" rel="noopener noreferrer">
                   Saber Mais Sobre Produtos
                   <ArrowRight className="w-4 md:w-5 h-4 md:h-5 ml-2" />
-                </Button>
-              </a>
+                </a>
+              </Button>
             </div>
           </div>
         </div>
@@ -183,16 +183,16 @@ export default function Produtos() {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center">
-              <a href="https://wa.me/556135268355" target="_blank" rel="noopener noreferrer">
-                <Button size="lg" className="bg-[var(--color-caixa-blue)] hover:bg-blue-700 text-white font-bold text-sm md:text-base py-2 md:py-3 px-4 md:px-8">
+              <Button asChild size="lg" className="bg-[var(--color-caixa-blue)] hover:bg-blue-700 text-white font-bold text-sm md:text-base py-2 md:py-3 px-4 md:px-8">
+                <a href="https://wa.me/556135268355" target="_blank" rel="noopener noreferrer">
                   Conversar com Especialista
-                </Button>
-              </a>
-              <Link href="/simulacao">
-                <Button size="lg" variant="outline" className="border-[var(--color-caixa-blue)] text-[var(--color-caixa-blue)] font-bold text-sm md:text-base py-2 md:py-3 px-4 md:px-8">
+                </a>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="border-[var(--color-caixa-blue)] text-[var(--color-caixa-blue)] font-bold text-sm md:text-base py-2 md:py-3 px-4 md:px-8">
+                <Link href="/simulacao">
                   Fazer Simulação
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           </div>
         </div>

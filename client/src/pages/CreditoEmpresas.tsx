@@ -23,11 +23,11 @@ const linhasCredito = [
     id: "pronampe",
     nome: "PRONAMPE",
     subtitulo: "Programa Nacional de Apoio às Micro e Pequenas Empresas",
-    descricao: "Linha de crédito do governo federal com as menores taxas do mercado para MEI, ME e EPP.",
-    taxa: "Selic + 6% a.a.",
-    valor: "Até R$ 150.000",
-    prazo: "Até 48 meses",
-    carencia: "11 meses",
+    descricao: "Programa federal para MEI, micro e pequenas empresas, sujeito às regras vigentes e à análise da instituição financeira.",
+    taxa: "Até Selic + 6% a.a.*",
+    valor: "Conforme faturamento e regras vigentes",
+    prazo: "Conforme instituição",
+    carencia: "Conforme instituição",
     publico: ["MEI", "ME", "EPP"],
     badge: "Governo Federal",
     badgeColor: "bg-green-100 text-green-800",
@@ -45,11 +45,11 @@ const linhasCredito = [
     id: "giro-caixa-facil",
     nome: "Giro CAIXA Fácil",
     subtitulo: "Capital de Giro para Micro e Pequenas Empresas",
-    descricao: "Crédito rápido para capital de giro com aprovação ágil e processo 100% digital.",
-    taxa: "A partir de 2,99% a.m.",
-    valor: "R$ 5.000 a R$ 70.000",
-    prazo: "Até 36 meses",
-    carencia: "Sem carência",
+    descricao: "Alternativa de capital de giro sujeita à disponibilidade, às condições vigentes e à análise da CAIXA.",
+    taxa: "Conforme análise e CET da proposta",
+    valor: "Conforme análise",
+    prazo: "Conforme instituição",
+    carencia: "Conforme instituição",
     publico: ["MEI", "ME", "EPP"],
     badge: "CAIXA",
     badgeColor: "bg-blue-100 text-blue-800",
@@ -68,9 +68,9 @@ const linhasCredito = [
     nome: "PRONAMP",
     subtitulo: "Programa Nacional de Apoio ao Médio Produtor Rural",
     descricao: "Financiamento para custeio e investimento de médios produtores rurais com taxas subsidiadas.",
-    taxa: "A partir de 8% a.a.",
-    valor: "Até R$ 430.000",
-    prazo: "Até 5 anos",
+    taxa: "Conforme Plano Safra vigente",
+    valor: "Conforme projeto e regras vigentes",
+    prazo: "Conforme projeto",
     carencia: "Conforme projeto",
     publico: ["Médio Produtor Rural"],
     badge: "Agronegócio",
@@ -90,9 +90,9 @@ const linhasCredito = [
     nome: "Capital de Giro - Médio Porte",
     subtitulo: "Linhas de Crédito para Empresas de Médio Porte",
     descricao: "Soluções de capital de giro personalizadas para empresas com faturamento entre R$ 4,8M e R$ 300M.",
-    taxa: "A partir de 1,5% a.m.",
-    valor: "R$ 150.000 a R$ 5.000.000",
-    prazo: "Até 60 meses",
+    taxa: "Conforme instituição e perfil",
+    valor: "Conforme análise",
+    prazo: "Conforme instituição",
     carencia: "Conforme análise",
     publico: ["Médio Porte"],
     badge: "Empresarial",
@@ -134,10 +134,10 @@ const linhasCredito = [
     nome: "Financiamento de Equipamentos",
     subtitulo: "FINAME e Leasing para Empresas",
     descricao: "Financiamento de máquinas, equipamentos e veículos para empresas de todos os portes via BNDES/FINAME.",
-    taxa: "A partir de 1,2% a.m.",
-    valor: "R$ 10.000 a R$ 10.000.000",
-    prazo: "Até 120 meses",
-    carencia: "Até 12 meses",
+    taxa: "Conforme instituição e bem financiado",
+    valor: "Conforme projeto",
+    prazo: "Conforme operação",
+    carencia: "Conforme operação",
     publico: ["MEI", "ME", "EPP", "Médio Porte", "Grande Porte"],
     badge: "BNDES/FINAME",
     badgeColor: "bg-teal-100 text-teal-800",
@@ -191,17 +191,17 @@ export default function CreditoEmpresas() {
               ))}
             </div>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link href="/simular">
-                <Button size="lg" className="bg-yellow-400 hover:bg-yellow-500 text-black font-bold px-8">
+              <Button asChild size="lg" className="bg-yellow-400 hover:bg-yellow-500 text-black font-bold px-8">
+                <Link href="/simular">
                   Simular Crédito Agora
                   <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
-              <a href="https://wa.me/556135268355?text=Olá! Preciso de crédito para minha empresa." target="_blank" rel="noopener noreferrer">
-                <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
+                <a href="https://wa.me/556135268355?text=Olá! Preciso de crédito para minha empresa." target="_blank" rel="noopener noreferrer">
                   Falar com Especialista
-                </Button>
-              </a>
+                </a>
+              </Button>
             </div>
           </div>
         </div>
@@ -212,10 +212,10 @@ export default function CreditoEmpresas() {
         <div className="container px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto">
             {[
-              { num: "+500", label: "Empresas Atendidas" },
-              { num: "R$ 50M+", label: "em Crédito Captado" },
-              { num: "6+", label: "Linhas de Crédito" },
-              { num: "24h", label: "Retorno Garantido" },
+              { num: "MEI a LTDA", label: "Perfis Empresariais" },
+              { num: "Consultiva", label: "Análise de Crédito" },
+              { num: "Múltiplas", label: "Modalidades Avaliadas" },
+              { num: "LGPD", label: "Dados Protegidos" },
             ].map((s) => (
               <div key={s.label} className="text-center">
                 <p className="text-3xl font-bold text-[var(--color-caixa-blue)]">{s.num}</p>
@@ -274,12 +274,12 @@ export default function CreditoEmpresas() {
                       ))}
                     </ul>
                   </div>
-                  <Link href="/simular">
-                    <Button className="w-full bg-white/20 hover:bg-white/30 text-white font-bold border border-white/30">
+                  <Button asChild className="w-full bg-white/20 hover:bg-white/30 text-white font-bold border border-white/30">
+                    <Link href="/simular">
                       Simular {linha.nome}
                       <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
                 </div>
               ))}
             </div>
@@ -306,12 +306,12 @@ export default function CreditoEmpresas() {
                       <span className="font-semibold text-gray-800">{linha.prazo}</span>
                     </div>
                   </div>
-                  <Link href="/simular">
-                    <Button size="sm" className="w-full bg-[var(--color-caixa-blue)] hover:bg-blue-700 text-white font-bold text-xs">
+                  <Button asChild size="sm" className="w-full bg-[var(--color-caixa-blue)] hover:bg-blue-700 text-white font-bold text-xs">
+                    <Link href="/simular">
                       Simular
                       <ArrowRight className="ml-1 h-3 w-3" />
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
                 </div>
               ))}
             </div>
@@ -382,17 +382,17 @@ export default function CreditoEmpresas() {
               Faça uma simulação gratuita e descubra qual linha de crédito é ideal para o seu negócio. Nossa equipe analisa seu perfil e apresenta as melhores opções.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/simular">
-                <Button size="lg" className="bg-yellow-400 hover:bg-yellow-500 text-black font-bold px-8">
+              <Button asChild size="lg" className="bg-yellow-400 hover:bg-yellow-500 text-black font-bold px-8">
+                <Link href="/simular">
                   Simular Crédito Grátis
                   <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
-              <a href="https://wa.me/556135268355?text=Olá! Preciso de crédito para minha empresa." target="_blank" rel="noopener noreferrer">
-                <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
+                <a href="https://wa.me/556135268355?text=Olá! Preciso de crédito para minha empresa." target="_blank" rel="noopener noreferrer">
                   Falar no WhatsApp
-                </Button>
-              </a>
+                </a>
+              </Button>
             </div>
           </div>
         </div>

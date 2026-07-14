@@ -103,9 +103,7 @@ export default function ColaboradorLogin() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-3">
                   <Label htmlFor="password">Senha</Label>
-                  <Link href="/colaborador/recuperar-senha">
-                    <a className="text-xs font-medium text-primary hover:underline">Esqueci minha senha</a>
-                  </Link>
+                  <Link href="/colaborador/recuperar-senha" className="text-xs font-medium text-primary hover:underline">Esqueci minha senha</Link>
                 </div>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

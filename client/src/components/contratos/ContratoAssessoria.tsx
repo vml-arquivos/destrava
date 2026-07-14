@@ -690,7 +690,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               PARÁGRAFO ÚNICO - CAUSAS DE IMPEDIMENTO A CRÉDITO POR PARTE DA CONTRATANTE
             </p>
             <p style={S.p}>
-              As causas de impedimento a crédito por parte da CONTRATANTE são: 1 – Apontamento, direto ou indireto (replicação) de restrição financeira, fiscal ou de simples protesto, inclusive em grupo econômico e cônjuge. 2 – Rating Bacen diferente de C, B ou A. 3 – Movimentação bancária inferior à declarada no faturamento bruto e quando exigido na declaração de imposto de renda. 4 – Anotação de apontamento de fraude documental ou ideológica no Banco Central. 5 – Mudança de endereço da sede empresarial sem comunicação prévia. 6 – Falta de comprovação de endereço da sede ou endereço divergente ao registrado nos órgãos competentes.
+              As causas de impedimento a crédito por parte da CONTRATANTE são: 1 – Apontamento, direto ou indireto (replicação) de restrição financeira, fiscal ou de simples protesto, inclusive em grupo econômico e cônjuge. 2 – Não atendimento aos critérios internos de risco e elegibilidade definidos pela instituição financeira. 3 – Movimentação bancária inferior à declarada no faturamento bruto e quando exigido na declaração de imposto de renda. 4 – Anotação de indício de fraude documental ou ideológica em bases consultadas legitimamente. 5 – Mudança de endereço da sede empresarial sem comunicação prévia. 6 – Falta de comprovação de endereço da sede ou endereço divergente ao registrado nos órgãos competentes.
             </p>
             <p style={S.p}>
               <strong>4.4</strong> - O valor do honorário mínimo poderá ser cobrado integralmente ao final do contrato, ou em parcelas mensais, conforme acordo entre as partes.
@@ -706,7 +706,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               <strong>Cláusula 5</strong> - A execução dos serviços de assessoria para obtenção de crédito obedecerá ao rigoroso fluxo operacional descrito nos itens abaixo:
             </p>
             <p style={S.p}>
-              <strong>5.1. Diagnóstico Inicial de Risco (Rating Bacen):</strong> No ato da assinatura deste contrato, a CONTRATADA realizará a consulta de classificação de risco da CONTRATANTE junto ao Sistema de Informações de Crédito (SCR) do Banco Central do Brasil.
+              <strong>5.1. Diagnóstico Inicial de Crédito:</strong> No ato da assinatura deste contrato, mediante autorização e pelos canais adequados, a CONTRATADA orientará a obtenção e a leitura do relatório de Empréstimos e Financiamentos (SCR/Registrato), além dos demais documentos necessários. O SCR informa operações registradas; ele não atribui nota comercial nem garante crédito.
             </p>
             <p style={S.p}>
               <strong>5.2. Formalização:</strong> O início efetivo dos trabalhos técnicos está condicionado à assinatura do presente Instrumento Particular de Prestação de Serviços por ambas as partes.
@@ -721,19 +721,19 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               <strong>5.5. Deferimento Interno e Abertura de Conta:</strong> Mediante parecer favorável da Diretoria Técnica da DESTRAVA CRÉDITO, os documentos serão processados e encaminhados para os trâmites de abertura de conta corrente de pessoa jurídica junto às instituições parceiras.
             </p>
             <p style={S.p}>
-              <strong>5.6. Validação de Rating Bancário e Faturamento:</strong>
+              <strong>5.6. Validação de Critérios Bancários e Faturamento:</strong>
             </p>
             <p style={S.p}>
-              &nbsp;&nbsp;&nbsp;I. Concluída a abertura da conta, será procedida a avaliação do <em>Rating</em> Bancário interno, cujo nível de elegibilidade para prosseguimento deve ser, obrigatoriamente, <strong>"A"</strong> ou <strong>"B"</strong>.
+              &nbsp;&nbsp;&nbsp;I. Concluída a abertura da conta, a instituição financeira poderá avaliar seus critérios internos de risco e elegibilidade. Esses critérios pertencem à instituição, podem variar e não constituem classificação emitida pelo Banco Central.
             </p>
             <p style={S.p}>
-              &nbsp;&nbsp;&nbsp;II. Atendido o critério de <em>Rating</em>, iniciar-se-á o ciclo de validação de faturamento pelo período de 30 (trinta) dias, encerrando-se sempre no último dia útil de cada mês.
+              &nbsp;&nbsp;&nbsp;II. Atendidos os critérios aplicáveis, iniciar-se-á o ciclo de validação de faturamento pelo período de 30 (trinta) dias, encerrando-se sempre no último dia útil de cada mês.
             </p>
             <p style={S.p}>
               &nbsp;&nbsp;&nbsp;III. Somente após a validação do fluxo financeiro, a CONTRATADA formalizará a proposta de interesse em crédito perante a instituição financeira.
             </p>
             <p style={S.p}>
-              &nbsp;&nbsp;&nbsp;IV. Caso o <em>Rating</em> Bancário inicial seja inferior aos níveis exigidos, a CONTRATANTE deverá manter o relacionamento e a movimentação bancária sob orientação da CONTRATADA até que o nível de elegibilidade seja alcançado.
+              &nbsp;&nbsp;&nbsp;IV. Caso os critérios internos iniciais não sejam atendidos, a CONTRATANTE poderá manter o relacionamento e a movimentação bancária sob orientação da CONTRATADA, sem garantia de mudança da avaliação ou de concessão de crédito.
             </p>
             <p style={S.p}>
               <strong>5.7. Monitoramento de Compliance e Prevenção à Lavagem de Dinheiro (PLD):</strong>
@@ -745,13 +745,13 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               &nbsp;&nbsp;&nbsp;II. Tal monitoramento visa analisar o perfil de movimentação financeira e mitigar riscos de apontamentos junto ao COAF (Conselho de Controle de Atividades Financeiras), em estrita observância à Lei nº 9.613/1998 (Lei de Lavagem de Dinheiro).
             </p>
             <p style={S.p}>
-              &nbsp;&nbsp;&nbsp;III. A CONTRATADA emitirá relatório mensal de movimentação e atualização de <em>Rating</em> até o 5º (quinto) dia útil após o fechamento do ciclo de validação.
+              &nbsp;&nbsp;&nbsp;III. A CONTRATADA emitirá relatório mensal de movimentação e acompanhamento do diagnóstico até o 5º (quinto) dia útil após o fechamento do ciclo de validação.
             </p>
             <p style={S.p}>
-              &nbsp;&nbsp;&nbsp;IV. Caso ocorra degradação do <em>Rating</em> Bancário por culpa ou omissão da CONTRATANTE, esta deverá arcar com as taxas de serviço adicionais para novas consultas, sendo: <strong>R$ 100,00</strong> para reconsulta de Rating Bacen (SCR) e <strong>R$ 70,00</strong> para reconsulta de restrições comerciais.
+              &nbsp;&nbsp;&nbsp;IV. Caso sejam necessárias novas consultas por culpa ou omissão da CONTRATANTE, esta deverá arcar com as taxas de serviço adicionais, sendo: <strong>R$ 100,00</strong> para nova orientação e obtenção autorizada do relatório SCR e <strong>R$ 70,00</strong> para reconsulta de restrições comerciais.
             </p>
             <p style={S.p}>
-              &nbsp;&nbsp;&nbsp;V. Adicionalmente, caso o <em>Rating</em> Bancário interno, no ato da abertura da conta ou após o término do primeiro ciclo de validação, seja inferior a <strong>"C"</strong>, será cobrado um valor mensal de <strong>{brl(d.custeio_mensal)}</strong> a título de custeio do acompanhamento intensivo de extratos bancários, certidões fiscais e restrições comerciais ou bancárias. Este valor será devido enquanto o <em>Rating</em> permanecer abaixo do nível "C".
+              &nbsp;&nbsp;&nbsp;V. Adicionalmente, caso os critérios internos de elegibilidade da instituição não sejam atendidos no ato da abertura da conta ou após o término do primeiro ciclo de validação, será cobrado um valor mensal de <strong>{brl(d.custeio_mensal)}</strong> a título de custeio do acompanhamento intensivo de extratos bancários, certidões fiscais e restrições comerciais ou bancárias, enquanto persistir a situação indicada no diagnóstico.
             </p>
             <p style={S.p}>
               &nbsp;&nbsp;&nbsp;VI. O relatório técnico atualizado será emitido e enviado somente após a confirmação do pagamento das devidas taxas adicionais e/ou da taxa mensal de acompanhamento, conforme o caso.

@@ -179,9 +179,9 @@ export default function Simulacoes() {
               <RefreshCw className="h-4 w-4 mr-1" />
               Atualizar
             </Button>
-            <Link href="/colaborador/calculadora">
-              <Button size="sm">Nova Simulação</Button>
-            </Link>
+            <Button asChild size="sm">
+              <Link href="/colaborador/calculadora">Nova Simulação</Link>
+            </Button>
           </div>
         </div>
 

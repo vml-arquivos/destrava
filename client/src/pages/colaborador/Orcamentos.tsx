@@ -1469,6 +1469,7 @@ export default function Orcamentos() {
                       className={`mb-6 flex items-center justify-between border-b-4 pb-4 ${marca === "permupay" ? "border-blue-600" : marca === "aragao" ? "border-amber-600" : "border-[#1B3A8C]"}`}
                     >
                       <img
+                        alt={`Logotipo ${marca === "permupay" ? "Permupay" : marca === "aragao" ? "Aragão Serviços" : "Destrava Crédito"}`}
                         src={
                           marca === "permupay"
                             ? "/logo-permupay.png"

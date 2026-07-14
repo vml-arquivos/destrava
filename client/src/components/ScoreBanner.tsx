@@ -16,23 +16,23 @@ export default function ScoreBanner() {
             Ferramenta Gratuita
           </div>
           <h3 className="text-2xl md:text-3xl font-bold mb-3 leading-tight">
-            Descubra seu Score de Crédito em 2 minutos!
+            Faça um diagnóstico educativo em 2 minutos
           </h3>
           <p className="text-white/80 text-lg mb-0">
-            Nossa calculadora interativa estima seu score e dá dicas personalizadas para você conseguir o crédito que sua empresa precisa.
+            A ferramenta gera um índice interno a partir das suas respostas e oferece dicas de organização. Não consulta birôs de crédito.
           </p>
         </div>
         
         <div className="flex-shrink-0">
-          <Link href="/calculadora-score">
-            <Button 
+          <Button asChild
               size="lg" 
               className="bg-[var(--color-caixa-yellow)] text-[var(--color-caixa-blue)] hover:bg-[var(--color-caixa-yellow)]/90 font-bold text-lg px-8 py-6 h-auto shadow-lg hover:scale-105 transition-all"
             >
+            <Link href="/calculadora-score">
               Calcular Meu Score
               <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
       </div>
     </div>

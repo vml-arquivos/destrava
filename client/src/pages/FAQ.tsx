@@ -107,6 +107,7 @@ export default function FAQ() {
               <Search className="absolute left-3 md:left-4 top-2.5 md:top-3.5 h-4 md:h-5 w-4 md:w-5 text-gray-400" />
               <Input
                 type="text"
+                aria-label="Buscar perguntas frequentes"
                 placeholder="Busque por palavra-chave (ex: 'crédito', 'taxa')..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -236,24 +237,24 @@ export default function FAQ() {
             Fale com um especialista da Destrava Crédito. Estamos prontos para orientar você na melhor solução de crédito para seu negócio.
           </p>
           <div className="flex flex-col sm:flex-row flex-wrap gap-3 md:gap-4 justify-center">
-            <a href="/simulacao">
-              <Button
+            <Button asChild
                 className="bg-[var(--color-caixa-yellow)] text-[var(--color-caixa-blue)] hover:bg-[var(--color-caixa-yellow)]/90 font-bold text-sm md:text-base py-2 md:py-3 px-4 md:px-6"
               >
+              <a href="/simulacao">
                 Simular Agora
-              </Button>
-            </a>
-            <a
+              </a>
+            </Button>
+            <Button asChild
+                className="bg-white text-[var(--color-caixa-blue)] hover:bg-gray-100 font-bold text-sm md:text-base py-2 md:py-3 px-4 md:px-6"
+              >
+              <a
               href="https://wa.me/556135268355?text=Ol%C3%A1! Gostaria de tirar algumas d%C3%BAvidas sobre cr%C3%A9dito."
               target="_blank"
               rel="noopener noreferrer"
             >
-              <Button
-                className="bg-white text-[var(--color-caixa-blue)] hover:bg-gray-100 font-bold text-sm md:text-base py-2 md:py-3 px-4 md:px-6"
-              >
                 Falar no WhatsApp
-              </Button>
-            </a>
+              </a>
+            </Button>
           </div>
         </div>
       </section>

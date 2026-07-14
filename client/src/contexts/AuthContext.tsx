@@ -120,6 +120,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    try {
+      await apiFetch("/api/logout", { method: "POST" });
+    } catch {
+      // A sessão local ainda deve ser encerrada se a rede estiver indisponível.
+    }
     removeToken();
     setState({ user: null, session: null, colaborador: null, loading: false, isAuthenticated: false });
     return { error: null };

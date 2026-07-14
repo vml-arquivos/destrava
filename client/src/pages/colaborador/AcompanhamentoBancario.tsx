@@ -409,7 +409,7 @@ const NOVO_FIELDS: AcompanhamentoFieldConfig[] = [
   { key: "objetivo_credito", label: "Objetivo do crédito", group: "objetivo" },
   { key: "valor_credito_pretendido", label: "Valor pretendido", type: "number", group: "objetivo" },
   { key: "linha_credito_pretendida", label: "Linha pretendida", group: "objetivo" },
-  { key: "rating_bacen_inicial", label: "Rating Bacen inicial", group: "rating" },
+  { key: "rating_bacen_inicial", label: "Indicador SCR inicial", group: "rating" },
   { key: "rating_interno_inicial", label: "Rating interno inicial", group: "rating" },
   { key: "faturamento_anual", label: "Faturamento anual", type: "number", group: "rating" },
   { key: "media_mensal", label: "Média mensal", type: "number", group: "rating" },
@@ -421,7 +421,7 @@ const EDIT_FIELDS: AcompanhamentoFieldConfig[] = [
   { key: "status", label: "Status", group: "controle" },
   { key: "data_fim_prevista", label: "Fim previsto", type: "date", group: "controle" },
   { key: "proxima_atualizacao", label: "Próxima atualização", type: "date", group: "controle" },
-  { key: "rating_bacen_atual", label: "Rating Bacen atual", group: "controle" },
+  { key: "rating_bacen_atual", label: "Indicador SCR atual", group: "controle" },
   { key: "rating_interno_atual", label: "Rating interno atual", group: "controle" },
   { key: "observacoes_finais", label: "Observações finais", textarea: true, group: "controle" },
 ];
@@ -716,7 +716,7 @@ function exportarCSV(row: Acompanhamento, prestadoraKey: PrestadoraKey = "destra
       <div class="card featured"><div class="label">Período</div><div class="value">${safe(formatDateBR(semanaAtual?.data_referencia_inicio))} a ${safe(formatDateBR(semanaAtual?.data_referencia_fim))}</div></div>
       <div class="card featured"><div class="label">Total de entradas</div><div class="value">${safe(moneyBR(totalEntradasSemana(semanaAtual)))}</div></div>
       <div class="card featured"><div class="label">Saldo semanal</div><div class="value ${Number(semanaAtual?.saldo_semanal || 0) < 0 ? "negative" : "positive"}">${safe(moneyBR(semanaAtual?.saldo_semanal))}</div></div>
-      <div class="card"><div class="label">Rating Bacen</div><div class="value">${safe(semanaAtual?.rating_bacen || row.rating_bacen_atual || "-")}</div></div>
+      <div class="card"><div class="label">Indicador SCR</div><div class="value">${safe(semanaAtual?.rating_bacen || row.rating_bacen_atual || "-")}</div></div>
       <div class="card"><div class="label">Rating interno</div><div class="value">${safe(semanaAtual?.rating_interno || row.rating_interno_atual || "-")}</div></div>
       <div class="card"><div class="label">Status</div><div class="value">${safe(labelStatus(semanaAtual?.status_semana || semanaAtual?.status || row.status_semana))}</div></div>
       <div class="card"><div class="label">Atualização</div><div class="value">${safe(formatDateBR(semanaAtual?.data_atualizacao || semanaAtual?.data_referencia_fim))}</div></div>
@@ -766,7 +766,7 @@ function exportarCSV(row: Acompanhamento, prestadoraKey: PrestadoraKey = "destra
       <thead>
         <tr>
           <th>Semana</th><th>Período</th><th>Máquina</th><th>PIX</th><th>Boleto</th><th>TED</th><th>Dinheiro</th><th>Outras</th>
-          <th>Total entradas</th><th>Saídas</th><th>Saldo</th><th>Saldo médio</th><th>Saldo final</th><th>Transações</th><th>Rating Bacen</th><th>Rating interno</th>
+          <th>Total entradas</th><th>Saídas</th><th>Saldo</th><th>Saldo médio</th><th>Saldo final</th><th>Transações</th><th>Indicador SCR</th><th>Rating interno</th>
           <th>SCR</th><th>Cenprot</th><th>Serasa</th><th>CND</th><th>PLD/AML</th><th>COAF</th><th>Status</th>
           <th>Análise</th><th>Orientação</th><th>Próxima ação</th>
         </tr>
@@ -1872,7 +1872,7 @@ export default function AcompanhamentoBancario() {
     ${pdfDiagFinal ? `<div class="note"><b>Diagnóstico técnico:</b><br/>${htmlEscape(pdfDiagFinal).replace(/\n/g, '<br/>')}</div>` : ''}
 
     <section class="kpis">
-      <div class="kpi"><b>Rating Bacen</b><strong>${htmlEscape(acomp.rating_bacen_atual || acomp.rating_bacen_inicial || "-")}</strong></div>
+      <div class="kpi"><b>Indicador SCR</b><strong>${htmlEscape(acomp.rating_bacen_atual || acomp.rating_bacen_inicial || "-")}</strong></div>
       <div class="kpi"><b>Rating Inicial</b><strong>${htmlEscape(acomp.rating_interno_inicial || "-")}</strong></div>
       <div class="kpi"><b>Rating Atual</b><strong>${htmlEscape(acomp.rating_interno_atual || "-")}</strong></div>
       <div class="kpi"><b>Faturamento anual</b><strong>${htmlEscape(moneyBR(acomp.faturamento_anual))}</strong></div>
@@ -2721,7 +2721,7 @@ export default function AcompanhamentoBancario() {
                     <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Indicadores financeiros e rating</h4>
                     <div className="grid grid-cols-2 gap-x-6 gap-y-0 sm:grid-cols-3">
                       {[
-                        { label: "Rating Bacen atual", value: detalhe.rating_bacen_atual || detalhe.rating_bacen_inicial },
+                        { label: "Indicador SCR atual", value: detalhe.rating_bacen_atual || detalhe.rating_bacen_inicial },
                         { label: "Rating interno inicial", value: detalhe.rating_interno_inicial },
                         { label: "Rating interno atual", value: detalhe.rating_interno_atual },
                         { label: "Faturamento anual", value: moneyBR(detalhe.faturamento_anual) },
@@ -2812,7 +2812,7 @@ export default function AcompanhamentoBancario() {
                             <InfoCard label="Entradas" value={moneyBR(entradasAtual)} positive />
                             <InfoCard label="Saídas" value={moneyBR(semanaAtual.total_saidas)} negative />
                             <InfoCard label="Saldo semanal" value={moneyBR(saldoAtual)} negative={saldoAtual < 0} positive={saldoAtual > 0} />
-                            <InfoCard label="Rating Bacen" value={semanaAtual.rating_bacen || detalhe.rating_bacen_atual || "-"} />
+                            <InfoCard label="Indicador SCR" value={semanaAtual.rating_bacen || detalhe.rating_bacen_atual || "-"} />
                             <InfoCard label="Rating interno" value={semanaAtual.rating_interno || detalhe.rating_interno_atual || "-"} />
                             <InfoCard label="Atualização" value={formatDateBR(semanaAtual.data_atualizacao || semanaAtual.data_referencia_fim)} />
                           </div>
@@ -3507,7 +3507,7 @@ function labelEntrada(key: string): string {
 
 function labelRating(key: string): string {
   const map: Record<string, string> = {
-    rating_bacen: "Rating Bacen",
+    rating_bacen: "Indicador SCR",
     rating_interno: "Rating interno",
     scr_status: "SCR",
     cenprot_status: "Cenprot",

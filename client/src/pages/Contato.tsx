@@ -17,10 +17,13 @@ import {
 import { useState, FormEvent } from "react";
 import { useLocation } from "wouter";
 import { COMPANY } from "@/config/company";
+import FormSubmitError from "@/components/FormSubmitError";
+import { submitContact } from "@/lib/leads";
 
 export default function Contato() {
   const [, setLocation] = useLocation();
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     nome: "",
     email: "",
@@ -36,17 +39,18 @@ export default function Contato() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setSubmitError(null);
     try {
-      await fetch("/api/contato", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, criadoEm: new Date().toISOString() }),
-      });
-    } catch {
-      // silently fail
+      await submitContact(formData);
+      setLocation("/sucesso?origem=contato");
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível enviar sua mensagem. Tente novamente.",
+      );
     } finally {
       setLoading(false);
-      setLocation("/sucesso");
     }
   };
 
@@ -139,16 +143,20 @@ export default function Contato() {
               <div className="mt-6 p-6 bg-green-50 rounded-2xl border border-green-200 text-center">
                 <MessageCircle className="h-10 w-10 text-green-600 mx-auto mb-3" />
                 <p className="font-bold text-gray-900 mb-2">Prefere o WhatsApp?</p>
-                <p className="text-sm text-gray-600 mb-4">Resposta em minutos durante o horário comercial</p>
-                <a
-                  href={COMPANY.whatsappLinkMsg("Olá! Gostaria de falar com um especialista em crédito.")}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <p className="text-sm text-gray-600 mb-4">Atendimento durante o horário comercial</p>
+                <Button
+                  asChild
+                  className="w-full bg-green-600 hover:bg-green-700 text-white font-bold"
                 >
-                  <Button className="w-full bg-green-600 hover:bg-green-700 text-white font-bold">
+                  <a
+                    href={COMPANY.whatsappLinkMsg("Olá! Gostaria de falar com um especialista em crédito.")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-cta-position="contato-whatsapp"
+                  >
                     Iniciar Conversa no WhatsApp
-                  </Button>
-                </a>
+                  </a>
+                </Button>
               </div>
             </div>
 
@@ -218,9 +226,11 @@ export default function Contato() {
                     Concordo com a <a href="/politica-privacidade" className="text-[var(--color-caixa-blue)] underline">Política de Privacidade</a> e autorizo o uso dos meus dados para contato, conforme a LGPD.
                   </label>
                 </div>
+                <FormSubmitError message={submitError} />
                 <Button
                   type="submit"
                   disabled={loading}
+                  aria-busy={loading}
                   className="w-full bg-[var(--color-caixa-blue)] hover:bg-blue-700 text-white font-bold py-3 text-base"
                 >
                   {loading ? "Enviando..." : "Enviar Mensagem"}

@@ -2,7 +2,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { blogPosts } from "@/data/blogPosts";
 import { Link } from "wouter";
-import { Calendar, Clock, ArrowRight } from "lucide-react";
+import { Calendar, Clock, ArrowRight, BookOpen } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import SEO from "@/components/SEO";
@@ -43,15 +43,12 @@ export default function Blog() {
                 >
                   <CardContent className="p-8">
                     <div className="flex flex-col md:flex-row gap-6">
-                      {/* Imagem placeholder */}
+                      {/* Capa local: evita dependência externa e deslocamento de layout */}
                       <div className="md:w-1/3 flex-shrink-0">
-                        <img
-                          src={`https://placehold.co/400x300/F7F8FA/0033A0?text=${encodeURIComponent(
-                            post.category
-                          )}`}
-                          alt={post.title}
-                          className="w-full h-48 object-cover rounded-lg"
-                        />
+                        <div className="flex h-48 w-full flex-col items-center justify-center rounded-lg bg-gradient-to-br from-blue-50 to-slate-100 px-5 text-center text-[#0033A0]" aria-hidden="true">
+                          <BookOpen className="mb-3 h-10 w-10" />
+                          <span className="text-sm font-bold">{post.category}</span>
+                        </div>
                       </div>
 
                       {/* Conteúdo */}
@@ -78,12 +75,12 @@ export default function Blog() {
                           {post.excerpt}
                         </p>
 
-                        <Link href={`/blog/${post.slug}`}>
-                          <Button variant="outline" className="group">
+                        <Button asChild variant="outline" className="group">
+                          <Link href={`/blog/${post.slug}`}>
                             Ler artigo completo
                             <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                          </Button>
-                        </Link>
+                          </Link>
+                        </Button>
                       </div>
                     </div>
                   </CardContent>
@@ -113,12 +110,12 @@ export default function Blog() {
             Faça uma simulação gratuita do Giro CAIXA Fácil e descubra como
             podemos ajudar seu negócio.
           </p>
-          <Link href="/simulacao">
-            <Button size="lg" className="font-semibold">
+          <Button asChild size="lg" className="font-semibold">
+            <Link href="/simular" data-cta-position="blog-final">
               Simular Agora
               <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
       </section>
 

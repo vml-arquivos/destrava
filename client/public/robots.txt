@@ -1,14 +1,9 @@
-# robots.txt - Destrava Crédito
-# Permite indexação das páginas públicas e protege áreas internas.
-
+# Destrava Crédito — diretivas para mecanismos de busca
 User-agent: *
 Allow: /
-
-# Áreas internas, APIs e páginas de pós-conversão não devem ser indexadas.
 Disallow: /api/
 Disallow: /colaborador/
 Disallow: /sucesso
 Disallow: /captura
 
-# Sitemap oficial
 Sitemap: https://destravacredito.com/sitemap.xml

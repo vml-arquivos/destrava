@@ -1,6 +1,7 @@
 import Header from "@/components/Header";
 import SEO from "@/components/SEO";
 import Footer from "@/components/Footer";
+import { COMPANY } from "@/config/company";
 
 export default function TermosUso() {
   return (
@@ -17,7 +18,7 @@ export default function TermosUso() {
           <div className="max-w-4xl mx-auto">
             <h1 className="text-4xl font-bold mb-8">Termos de Uso</h1>
             <p className="text-sm text-muted-foreground mb-12">
-              Última atualização: Janeiro de 2024
+              Última atualização: Julho de 2026
             </p>
 
             <div className="prose prose-lg max-w-none space-y-8">
@@ -40,13 +41,10 @@ export default function TermosUso() {
                   2. Sobre a Destrava Crédito
                 </h2>
                 <p className="text-muted-foreground leading-relaxed">
-                  A Destrava Crédito atua exclusivamente como{" "}
-                  <strong>correspondente bancário / assessoria</strong>,
-                  intermediando operações de crédito entre clientes e a CAIXA
-                  Econômica Federal. Não somos uma instituição financeira e não
+                  A Destrava Crédito atua em <strong>assessoria empresarial e de crédito</strong>,
+                  orientando clientes na preparação e no acompanhamento de operações junto a instituições financeiras. Não somos uma instituição financeira e não
                   realizamos análise, aprovação ou concessão de crédito. Todas as
-                  decisões de crédito são de responsabilidade exclusiva da CAIXA
-                  Econômica Federal.
+                  decisões de crédito são de responsabilidade exclusiva da instituição responsável pela proposta.
                 </p>
               </section>
 
@@ -57,11 +55,11 @@ export default function TermosUso() {
                 </p>
                 <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
                   <li>
-                    Orientação sobre produtos de crédito empresarial da CAIXA
+                    Orientação sobre modalidades de crédito empresarial
                   </li>
                   <li>Assessoria na preparação de documentação</li>
                   <li>
-                    Intermediação de solicitações de crédito junto à CAIXA
+                    Apoio no encaminhamento de solicitações, quando aplicável
                   </li>
                   <li>
                     Acompanhamento do processo de análise e aprovação (quando
@@ -82,13 +80,13 @@ export default function TermosUso() {
                   <p>
                     <strong>4.1. Não garantimos aprovação:</strong> A Destrava
                     Crédito não garante a aprovação de crédito. A decisão final é
-                    sempre da CAIXA Econômica Federal, baseada em sua política de
+                    sempre da instituição financeira, baseada em sua política de
                     crédito e análise individual de cada caso.
                   </p>
                   <p>
                     <strong>4.2. Condições de crédito:</strong> Taxas de juros,
                     prazos, valores e demais condições são determinados pela
-                    CAIXA e podem variar conforme o perfil do cliente e a
+                    instituição responsável e podem variar conforme o perfil do cliente e a
                     política vigente.
                   </p>
                   <p>
@@ -243,10 +241,10 @@ export default function TermosUso() {
                 <div className="mt-4 p-6 bg-muted/50 rounded-lg">
                   <p className="font-semibold mb-2">Destrava Crédito</p>
                   <p className="text-sm text-muted-foreground">
-                    E-mail: destravacreditooficial@gmail.com
+                    E-mail: <a className="underline" href={COMPANY.emailLink}>{COMPANY.email}</a>
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Telefone: (11) 9 9999-9999
+                    Telefone: <a className="underline" href={COMPANY.telefoneLink}>{COMPANY.telefone}</a>
                   </p>
                 </div>
               </section>
@@ -258,10 +256,10 @@ export default function TermosUso() {
                   </p>
                   <p className="text-sm text-muted-foreground leading-relaxed">
                     Todas as operações de crédito estão sujeitas à análise e
-                    aprovação da CAIXA Econômica Federal. As condições de
+                    aprovação da instituição financeira responsável. As condições de
                     crédito, taxas de juros e prazos variam conforme o perfil do
                     cliente e a política de crédito vigente. A Destrava Crédito
-                    atua exclusivamente como Correspondente Bancário / Assessoria,
+                    atua como assessoria,
                     não sendo responsável pela aprovação ou concessão de crédito.
                   </p>
                 </div>

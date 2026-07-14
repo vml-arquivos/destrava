@@ -9,26 +9,24 @@ interface CTAButtonProps {
   size?: "default" | "sm" | "lg";
   className?: string;
   showArrow?: boolean;
+  ctaPosition?: string;
 }
 
 export default function CTAButton({
-  href = "/simulacao",
+  href = "/simular",
   children,
   variant = "default",
   size = "lg",
   className = "",
   showArrow = true,
+  ctaPosition = "conteudo",
 }: CTAButtonProps) {
   return (
-    <Link href={href}>
-      <Button
-        variant={variant}
-        size={size}
-        className={`font-semibold ${className}`}
-      >
+    <Button asChild variant={variant} size={size} className={`font-semibold ${className}`}>
+      <Link href={href} data-cta-position={ctaPosition}>
         {children}
         {showArrow && <ArrowRight className="ml-2 h-5 w-5" />}
-      </Button>
-    </Link>
+      </Link>
+    </Button>
   );
 }

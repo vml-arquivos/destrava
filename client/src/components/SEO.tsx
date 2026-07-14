@@ -1,5 +1,13 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { useLocation } from "wouter";
+import {
+  DEFAULT_OG_IMAGE,
+  SITE_NAME,
+  SITE_URL,
+  buildFullTitle,
+  getPublicSeo,
+  normalizePathname,
+} from "@shared/publicSeo";
 
 interface SEOProps {
   title: string;
@@ -11,130 +19,179 @@ interface SEOProps {
   publishedTime?: string;
   modifiedTime?: string;
   structuredData?: object;
+  canonicalPath?: string;
+  noindex?: boolean;
+}
+
+interface ApplySeoOptions extends SEOProps {
+  location: string;
+}
+
+function updateMetaTag(name: string, content: string, property = false) {
+  const attribute = property ? "property" : "name";
+  let element = document.querySelector(`meta[${attribute}="${name}"]`) as HTMLMetaElement | null;
+  if (!element) {
+    element = document.createElement("meta");
+    element.setAttribute(attribute, name);
+    document.head.appendChild(element);
+  }
+  element.content = content;
+}
+
+function removeMetaTag(name: string, property = false) {
+  const attribute = property ? "property" : "name";
+  document.querySelector(`meta[${attribute}="${name}"]`)?.remove();
+}
+
+function applySeo({
+  title,
+  description,
+  keywords,
+  image = DEFAULT_OG_IMAGE,
+  type = "website",
+  author,
+  publishedTime,
+  modifiedTime,
+  structuredData,
+  canonicalPath,
+  noindex = false,
+  location,
+}: ApplySeoOptions) {
+  const pathname = normalizePathname(location);
+  const canonical = normalizePathname(canonicalPath || pathname);
+  const currentUrl = `${SITE_URL}${canonical === "/" ? "/" : canonical}`;
+  const fullTitle = buildFullTitle(title);
+
+  document.title = fullTitle;
+  updateMetaTag("description", description);
+  updateMetaTag("author", author || SITE_NAME);
+  updateMetaTag(
+    "robots",
+    noindex
+      ? "noindex, nofollow"
+      : "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1",
+  );
+  if (keywords) updateMetaTag("keywords", keywords);
+  else removeMetaTag("keywords");
+
+  updateMetaTag("og:title", fullTitle, true);
+  updateMetaTag("og:description", description, true);
+  updateMetaTag("og:image", image, true);
+  updateMetaTag("og:image:width", "1200", true);
+  updateMetaTag("og:image:height", "630", true);
+  updateMetaTag("og:image:alt", SITE_NAME, true);
+  updateMetaTag("og:url", currentUrl, true);
+  updateMetaTag("og:type", type, true);
+  updateMetaTag("og:site_name", SITE_NAME, true);
+  updateMetaTag("og:locale", "pt_BR", true);
+
+  updateMetaTag("twitter:card", "summary_large_image");
+  updateMetaTag("twitter:url", currentUrl);
+  updateMetaTag("twitter:title", fullTitle);
+  updateMetaTag("twitter:description", description);
+  updateMetaTag("twitter:image", image);
+
+  if (type === "article") {
+    if (author) updateMetaTag("article:author", author, true);
+    if (publishedTime) updateMetaTag("article:published_time", publishedTime, true);
+    if (modifiedTime) updateMetaTag("article:modified_time", modifiedTime, true);
+  } else {
+    removeMetaTag("article:author", true);
+    removeMetaTag("article:published_time", true);
+    removeMetaTag("article:modified_time", true);
+  }
+
+  let canonicalElement = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+  if (!canonicalElement) {
+    canonicalElement = document.createElement("link");
+    canonicalElement.rel = "canonical";
+    document.head.appendChild(canonicalElement);
+  }
+  canonicalElement.href = currentUrl;
+
+  const schema = structuredData || {
+    "@context": "https://schema.org",
+    "@graph": [
+      organizationStructuredData,
+      {
+        "@type": type === "article" ? "Article" : "WebPage",
+        name: fullTitle,
+        description,
+        url: currentUrl,
+        inLanguage: "pt-BR",
+      },
+    ],
+  };
+  let script = document.querySelector("#seo-structured-data") as HTMLScriptElement | null;
+  if (!script) {
+    script = document.createElement("script");
+    script.id = "seo-structured-data";
+    script.type = "application/ld+json";
+    document.head.appendChild(script);
+  }
+  script.textContent = JSON.stringify(schema).replaceAll("<", "\\u003c");
 }
 
 export default function SEO({
   title,
   description,
   keywords,
-  image = "https://via.placeholder.com/1200x630/0033A0/FFFFFF?text=Destrava+Cr%C3%A9dito",
+  image = DEFAULT_OG_IMAGE,
   type = "website",
   author,
   publishedTime,
   modifiedTime,
   structuredData,
+  canonicalPath,
+  noindex,
 }: SEOProps) {
   const [location] = useLocation();
-  const siteUrl = window.location.origin;
-  const currentUrl = `${siteUrl}${location}`;
-  const siteName = "Destrava Crédito";
-  const fullTitle = `${title} | ${siteName}`;
 
   useEffect(() => {
-    // Atualizar title
-    document.title = fullTitle;
+    applySeo({
+      title,
+      description,
+      keywords,
+      image,
+      type,
+      author,
+      publishedTime,
+      modifiedTime,
+      structuredData,
+      canonicalPath,
+      noindex,
+      location,
+    });
+  }, [title, description, keywords, image, location, type, author, publishedTime, modifiedTime, structuredData, canonicalPath, noindex]);
 
-    // Função helper para atualizar ou criar meta tag
-    const updateMetaTag = (name: string, content: string, property = false) => {
-      const attribute = property ? "property" : "name";
-      let element = document.querySelector(
-        `meta[${attribute}="${name}"]`
-      ) as HTMLMetaElement;
+  return null;
+}
 
-      if (!element) {
-        element = document.createElement("meta");
-        element.setAttribute(attribute, name);
-        document.head.appendChild(element);
-      }
+export function RouteSeoDefaults() {
+  const [location] = useLocation();
 
-      element.content = content;
+  useLayoutEffect(() => {
+    const routeSeo = getPublicSeo(location) || {
+      title: "Página não encontrada",
+      description: "A página solicitada não foi encontrada.",
+      noindex: true,
     };
-
-    // Meta tags básicas
-    updateMetaTag("description", description);
-    if (keywords) {
-      updateMetaTag("keywords", keywords);
-    }
-    updateMetaTag("author", author || siteName);
-
-    // Open Graph tags
-    updateMetaTag("og:title", fullTitle, true);
-    updateMetaTag("og:description", description, true);
-    updateMetaTag("og:image", image, true);
-    updateMetaTag("og:url", currentUrl, true);
-    updateMetaTag("og:type", type, true);
-    updateMetaTag("og:site_name", siteName, true);
-    updateMetaTag("og:locale", "pt_BR", true);
-
-    // Twitter Card tags
-    updateMetaTag("twitter:card", "summary_large_image");
-    updateMetaTag("twitter:title", fullTitle);
-    updateMetaTag("twitter:description", description);
-    updateMetaTag("twitter:image", image);
-
-    // Article tags (se for artigo)
-    if (type === "article") {
-      if (author) {
-        updateMetaTag("article:author", author, true);
-      }
-      if (publishedTime) {
-        updateMetaTag("article:published_time", publishedTime, true);
-      }
-      if (modifiedTime) {
-        updateMetaTag("article:modified_time", modifiedTime, true);
-      }
-    }
-
-    // Canonical URL
-    let canonical = document.querySelector(
-      'link[rel="canonical"]'
-    ) as HTMLLinkElement;
-    if (!canonical) {
-      canonical = document.createElement("link");
-      canonical.rel = "canonical";
-      document.head.appendChild(canonical);
-    }
-    canonical.href = currentUrl;
-
-    // Structured Data (JSON-LD)
-    if (structuredData) {
-      let script = document.querySelector(
-        'script[type="application/ld+json"]'
-      ) as HTMLScriptElement;
-      if (!script) {
-        script = document.createElement("script");
-        script.type = "application/ld+json";
-        document.head.appendChild(script);
-      }
-      script.textContent = JSON.stringify(structuredData);
-    }
-  }, [
-    fullTitle,
-    description,
-    keywords,
-    image,
-    currentUrl,
-    type,
-    author,
-    publishedTime,
-    modifiedTime,
-    structuredData,
-    siteName,
-  ]);
+    applySeo({ ...routeSeo, location });
+  }, [location]);
 
   return null;
 }
 
 // Structured Data helpers
 export const organizationStructuredData = {
-  "@context": "https://schema.org",
-  "@type": "ProfessionalService",
-  name: "Destrava",
+  "@type": "Organization",
+  "@id": `${SITE_URL}/#organization`,
+  name: SITE_NAME,
   description:
     "Assessoria empresarial para captação de recursos e crédito para empresas, com condução completa do processo, atendimento consultivo e acompanhamento próximo.",
-  url: "https://destrava.permupay.com.br",
-  logo: "https://destrava.permupay.com.br/destrava-logo.svg",
-  image: "https://destrava.permupay.com.br/3.png",
+  url: `${SITE_URL}/`,
+  logo: `${SITE_URL}/destrava-logo.png`,
+  image: DEFAULT_OG_IMAGE,
   telephone: "+55-61-3526-8355",
   address: {
     "@type": "PostalAddress",
@@ -142,15 +199,7 @@ export const organizationStructuredData = {
     addressLocality: "Brasília",
     addressRegion: "DF",
   },
-  sameAs: [
-    "https://www.instagram.com/destravacredito",
-    "https://www.linkedin.com/company/destravacredito",
-  ],
-  aggregateRating: {
-    "@type": "AggregateRating",
-    ratingValue: "4.8",
-    reviewCount: "127",
-  },
+  sameAs: ["https://www.instagram.com/destravacredito"],
 };
 
 export const serviceStructuredData = (serviceName: string, description: string) => ({
@@ -167,11 +216,6 @@ export const serviceStructuredData = (serviceName: string, description: string) 
   areaServed: {
     "@type": "Country",
     name: "Brasil",
-  },
-  offers: {
-    "@type": "Offer",
-    availability: "https://schema.org/InStock",
-    priceCurrency: "BRL",
   },
 });
 
@@ -210,7 +254,7 @@ export const articleStructuredData = (
       name: "Destrava",
       logo: {
         "@type": "ImageObject",
-        url: "https://destrava.permupay.com.br/destrava-logo.svg",
+        url: `${SITE_URL}/destrava-logo.png`,
       },
     },
 });

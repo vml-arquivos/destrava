@@ -129,8 +129,7 @@ export default function NotificacoesFollowup() {
                   </span>
                 </div>
                 {atrasados.slice(0, 5).map((lead) => (
-                  <Link key={lead.id} href={`/colaborador/crm?lead=${lead.id}`}>
-                    <a
+                  <Link key={lead.id} href={`/colaborador/crm?lead=${lead.id}`}
                       className="flex items-start gap-3 px-4 py-3 hover:bg-red-50 border-b border-gray-100 cursor-pointer transition-colors"
                       onClick={() => setAberto(false)}
                     >
@@ -145,8 +144,7 @@ export default function NotificacoesFollowup() {
                         </p>
                       </div>
                       <ExternalLink className="h-3.5 w-3.5 text-gray-400 flex-shrink-0 mt-0.5" />
-                    </a>
-                  </Link>
+                    </Link>
                 ))}
                 {atrasados.length > 5 && (
                   <p className="px-4 py-2 text-xs text-muted-foreground text-center">
@@ -166,8 +164,7 @@ export default function NotificacoesFollowup() {
                   </span>
                 </div>
                 {hoje.slice(0, 5).map((lead) => (
-                  <Link key={lead.id} href={`/colaborador/crm?lead=${lead.id}`}>
-                    <a
+                  <Link key={lead.id} href={`/colaborador/crm?lead=${lead.id}`}
                       className="flex items-start gap-3 px-4 py-3 hover:bg-amber-50 border-b border-gray-100 cursor-pointer transition-colors"
                       onClick={() => setAberto(false)}
                     >
@@ -184,8 +181,7 @@ export default function NotificacoesFollowup() {
                         </p>
                       </div>
                       <ExternalLink className="h-3.5 w-3.5 text-gray-400 flex-shrink-0 mt-0.5" />
-                    </a>
-                  </Link>
+                    </Link>
                 ))}
                 {hoje.length > 5 && (
                   <p className="px-4 py-2 text-xs text-muted-foreground text-center">
@@ -199,14 +195,12 @@ export default function NotificacoesFollowup() {
           {/* Footer */}
           {total > 0 && (
             <div className="px-4 py-3 border-t bg-gray-50">
-              <Link href="/colaborador/crm">
-                <a
+              <Link href="/colaborador/crm"
                   className="text-xs text-primary font-medium hover:underline"
                   onClick={() => setAberto(false)}
                 >
                   Ver todos no Funil Comercial →
-                </a>
-              </Link>
+                </Link>
             </div>
           )}
         </div>

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Destrava Crédito</title>
+  <desc id="desc">Assessoria empresarial para decisões de crédito com clareza</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#06152f"/>
+      <stop offset="1" stop-color="#0033a0"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#background)"/>
+  <circle cx="1100" cy="85" r="250" fill="#ffffff" opacity="0.05"/>
+  <circle cx="1060" cy="590" r="320" fill="#0ea5e9" opacity="0.10"/>
+  <rect x="72" y="68" width="12" height="494" rx="6" fill="url(#accent)"/>
+  <g transform="translate(120 92)">
+    <rect width="84" height="84" rx="20" fill="#fbbf24"/>
+    <path d="M23 44h26c9 0 16-7 16-16H49c0 4-3 7-7 7H23v9Zm0 8h19c4 0 7 3 7 7H23v-7Z" fill="#06152f"/>
+  </g>
+  <text x="226" y="145" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="700">Destrava Crédito</text>
+  <text x="120" y="277" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="65" font-weight="800">Crédito com estratégia,</text>
+  <text x="120" y="355" fill="#fbbf24" font-family="Arial, Helvetica, sans-serif" font-size="65" font-weight="800">clareza e acompanhamento.</text>
+  <text x="120" y="435" fill="#dbeafe" font-family="Arial, Helvetica, sans-serif" font-size="31">Assessoria empresarial para MEI, ME, EPP e LTDA.</text>
+  <rect x="120" y="497" width="480" height="58" rx="29" fill="#ffffff" opacity="0.11"/>
+  <text x="154" y="535" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700">destravacredito.com</text>
+</svg>

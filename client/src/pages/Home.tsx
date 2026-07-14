@@ -3,7 +3,6 @@ import Footer from "@/components/Footer";
 import HeroCarousel from "@/components/HeroCarousel";
 import SEO, { organizationStructuredData, faqStructuredData } from "@/components/SEO";
 import BenefitCard from "@/components/BenefitCard";
-import TestimonialCard from "@/components/TestimonialCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,9 +34,14 @@ import {
 } from "lucide-react";
 import { useState, FormEvent } from "react";
 import { useLocation, Link } from "wouter";
+import FormSubmitError from "@/components/FormSubmitError";
+import { submitLead } from "@/lib/leads";
+import { formatCnpj, isValidCnpj } from "@/lib/brDocuments";
 
 export default function Home() {
   const [, setLocation] = useLocation();
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     nome: "",
     cnpj: "",
@@ -48,10 +52,40 @@ export default function Home() {
     faturamento: "",
   });
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    console.log("Formulário enviado:", formData);
-    setLocation("/sucesso");
+    if (!isValidCnpj(formData.cnpj)) {
+      setSubmitError("Informe um CNPJ válido para solicitar o contato.");
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await submitLead({
+        nome: formData.nome,
+        telefone: formData.whatsapp,
+        email: formData.email,
+        empresa: null,
+        cpf_cnpj: formData.cnpj,
+        tipo_pessoa: "pj",
+        tipoPessoa: "pj",
+        cidade: formData.cidade,
+        estado: formData.estado,
+        finalidade: `Faturamento informado: ${formData.faturamento}`,
+        produto_interesse: "Assessoria de crédito empresarial",
+        origem: "landing_home",
+        pagina: "/",
+      });
+      setLocation("/sucesso?origem=home");
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível enviar seus dados. Tente novamente.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleChange = (field: string, value: string) => {
@@ -93,9 +127,9 @@ export default function Home() {
     <div className="min-h-screen flex flex-col">
       <SEO
         title="Destrave o crédito da sua empresa | Destrava Crédito"
-        description="Destrave o crédito da sua empresa com assessoria empresarial completa. Analisamos seu cenário, identificamos as melhores linhas de financiamento e conduzimos todo o processo, incluindo Pronampe 2026, ProCred 360 e outras opções com prazos de até 96 meses e carência de 24 meses. Simulação gratuita e atendimento consultivo."
+        description="Destrave o crédito da sua empresa com assessoria especializada. Analisamos o cenário, avaliamos linhas compatíveis e orientamos a operação com clareza. Condições sujeitas à instituição financeira."
         keywords="assessoria de crédito empresarial, consultoria de crédito, captação de recursos para empresas, destravar crédito, financiamento empresarial, Pronampe 2026, ProCred 360, crédito para MEI, crédito para microempresa, crédito para pequena empresa"
-        image="https://destravacredito.com/3.png"
+        image="https://destravacredito.com/og-image.png"
         structuredData={structuredData}
       />
       <Header />
@@ -120,28 +154,31 @@ export default function Home() {
                 Cuidamos da estruturação da demanda, do direcionamento correto e do acompanhamento da operação para que sua empresa avance com menos desgaste, mais previsibilidade e melhores condições de crédito.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 mb-10">
-                 <Link href="/simular">
-                   <Button
+                 <Button
+                     asChild
                      size="lg"
                      className="bg-[var(--color-caixa-yellow)] hover:bg-yellow-500 text-black font-bold shadow-lg w-full sm:w-auto"
                    >
-                     → Destrave seu crédito
+                     <Link href="/simular" data-cta-position="home-hero-primary">
+                       → Destrave seu crédito
+                     </Link>
                    </Button>
-                 </Link>
-                <a
-                  href="https://wa.me/556135268355"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Button
+                  asChild
+                  variant="outline"
+                  size="lg"
+                  className="font-semibold bg-white/10 border-white/30 text-white hover:bg-white/20 w-full sm:w-auto"
                 >
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    className="font-semibold bg-white/10 border-white/30 text-white hover:bg-white/20 w-full sm:w-auto"
+                  <a
+                    href="https://wa.me/556135268355"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-cta-position="home-hero-whatsapp"
                   >
                     <MessageCircle className="mr-2 h-5 w-5" />
                     Falar no WhatsApp
-                  </Button>
-                </a>
+                  </a>
+                </Button>
               </div>
 
               {/* Prova rápida */}
@@ -341,9 +378,9 @@ export default function Home() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
               {
-                logo: "/logo-pronampe.jpg",
+                logo: "/logo-pronampe.webp",
                 title: "PRONAMPE",
-                desc: "Linha de crédito federal para MEI, microempresas e pequenas empresas. Condições diferenciadas com carência e taxas abaixo do mercado.",
+                desc: "Programa federal para MEI, micro e pequenas empresas, sujeito às regras vigentes e à análise da instituição financeira.",
                 href: "/pronampe",
                 badge: "Mais popular",
                 badgeColor: "bg-green-100 text-green-700",
@@ -351,7 +388,7 @@ export default function Home() {
               {
                 logo: "/logo-procred360.webp",
                 title: "ProCred 360",
-                desc: "Programa do Governo Federal com juros subsidiados para MEI e microempresas. Parte do Programa Acredita no Primeiro Passo.",
+                desc: "Linha para MEI e microempresas, com elegibilidade e limites vinculados às regras vigentes e ao faturamento.",
                 href: "/procred360",
                 badge: "Programa Acredita",
                 badgeColor: "bg-blue-100 text-blue-700",
@@ -359,7 +396,7 @@ export default function Home() {
               {
                 logo: "/logo-caixa.png",
                 title: "Giro CAIXA Fácil",
-                desc: "Capital de giro com taxa pré-fixada e prazos estendidos pela CAIXA Econômica Federal. Ideal para manter o fluxo de caixa.",
+                desc: "Modalidade para capital de giro, com limite, taxa, CET e prazo definidos na proposta conforme análise da CAIXA.",
                 href: "/giro-caixa-facil",
                 badge: "Capital de giro",
                 badgeColor: "bg-orange-100 text-orange-700",
@@ -367,13 +404,13 @@ export default function Home() {
               {
                 logo: "/logo-bndes-fgi.jpg",
                 title: "PEAC FGI",
-                desc: "Crédito com garantia do FGI/BNDES para empresas de todos os portes. Prazos estendidos e carência para adequar ao fluxo do negócio.",
+                desc: "Programa de garantia do BNDES para apoiar operações empresariais elegíveis, sujeitas à análise da instituição financeira.",
                 href: "/peac-fgi",
                 badge: "Grandes volumes",
                 badgeColor: "bg-purple-100 text-purple-700",
               },
               {
-                logo: "/logo-fco.png",
+                logo: "/logo-fco.webp",
                 title: "FCO",
                 desc: "Financiamento do Fundo Constitucional do Centro-Oeste para empresas e produtores rurais de GO, MT, MS e DF.",
                 href: "/fco",
@@ -392,7 +429,15 @@ export default function Home() {
               <div key={linha.title} className="bg-card rounded-xl border border-border p-6 flex flex-col hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between mb-4">
                   <div className="h-12 w-24 flex items-center">
-                    <img src={linha.logo} alt={linha.title} className="max-h-12 max-w-full object-contain" />
+                    <img
+                      src={linha.logo}
+                      alt={linha.title}
+                      loading="lazy"
+                      decoding="async"
+                      width="96"
+                      height="48"
+                      className="max-h-12 max-w-full object-contain"
+                    />
                   </div>
                   <span className={`text-xs font-semibold px-2 py-1 rounded-full ${linha.badgeColor}`}>{linha.badge}</span>
                 </div>
@@ -407,37 +452,30 @@ export default function Home() {
         </div>
       </section>
 
-      {/* DEPOIMENTOS */}
+      {/* EXPECTATIVAS DO ATENDIMENTO */}
       <section className="py-20">
         <div className="container">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              O que nossos clientes dizem
+              O que você pode esperar da assessoria
             </h2>
             <p className="text-lg text-muted-foreground">
-              Empresas que encontraram na Destrava uma assessoria mais clara, próxima e comprometida com a solução.
+              Um processo consultivo, sem promessas de aprovação e com clareza sobre documentos, custos e próximos passos.
             </p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
-            <TestimonialCard
-              quote="A Destrava me ajudou a entender todo o processo e organizar os documentos. Consegui o crédito em menos de 15 dias!"
-              author="Carlos Silva"
-              role="Proprietário"
-              company="Mercadinho Bom Preço"
-            />
-            <TestimonialCard
-              quote="Atendimento excelente e muito profissional. Eles realmente entendem as necessidades de pequenos empresários como eu."
-              author="Mariana Oliveira"
-              role="MEI"
-              company="Salão Beleza Pura"
-            />
-            <TestimonialCard
-              quote="Estava com dificuldade para pagar fornecedores. Com a assessoria da Destrava, consegui organizar tudo e avançar com mais segurança."
-              author="Roberto Santos"
-              role="Sócio"
-              company="Distribuidora RS"
-            />
+            {[
+              { icon: FileCheck, title: "Documentação organizada", text: "Checklist objetivo para reduzir pendências antes do encaminhamento." },
+              { icon: Shield, title: "Condições transparentes", text: "Taxa, CET, prazo e garantias devem ser confirmados na proposta da instituição." },
+              { icon: HeadphonesIcon, title: "Acompanhamento consultivo", text: "Orientação durante as etapas, respeitando a análise e a decisão da instituição financeira." },
+            ].map((item) => (
+              <div key={item.title} className="rounded-2xl border border-border bg-card p-7 shadow-sm">
+                <item.icon className="h-9 w-9 text-primary" aria-hidden="true" />
+                <h3 className="mt-5 text-xl font-bold">{item.title}</h3>
+                <p className="mt-3 leading-relaxed text-muted-foreground">{item.text}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -516,8 +554,10 @@ export default function Home() {
                   type="text"
                   required
                   value={formData.cnpj}
-                  onChange={(e) => handleChange("cnpj", e.target.value)}
+                  onChange={(e) => handleChange("cnpj", formatCnpj(e.target.value))}
                   placeholder="00.000.000/0000-00"
+                  inputMode="numeric"
+                  autoComplete="off"
                 />
               </div>
 
@@ -530,7 +570,7 @@ export default function Home() {
                     required
                     value={formData.whatsapp}
                     onChange={(e) => handleChange("whatsapp", e.target.value)}
-                    placeholder="(11) 9 9999-9999"
+                    placeholder="(61) 9 9999-9999"
                   />
                 </div>
 
@@ -595,8 +635,16 @@ export default function Home() {
                 </Select>
               </div>
 
-              <Button type="submit" size="lg" className="w-full font-semibold">
-                → Solicitar contato
+              <FormSubmitError message={submitError} />
+
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full font-semibold"
+                disabled={submitting}
+                aria-busy={submitting}
+              >
+                {submitting ? "Enviando com segurança..." : "→ Solicitar contato"}
               </Button>
 
               <p className="text-xs text-muted-foreground text-center">

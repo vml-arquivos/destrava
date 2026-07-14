@@ -21,9 +21,9 @@ import { useState } from "react";
 
 const faqs = [
   { q: 'O que é o FAMPE?', a: 'O FAMPE é um instrumento do Sebrae que complementa as garantias exigidas pelos bancos, facilitando o acesso ao crédito para micro e pequenas empresas.' },
-  { q: 'Como funciona o aval do Sebrae?', a: 'O Sebrae complementa até 80% das garantias exigidas pelo banco, reduzindo a necessidade de o empresário oferecer bens próprios como garantia.' },
-  { q: 'Qual o valor máximo disponível?', a: 'De R$ 10.000 a R$ 700.000, dependendo do banco operador e da análise de crédito da empresa.' },
-  { q: 'Preciso ser associado ao Sebrae?', a: 'Sim, é necessário ser ou se tornar cliente do Sebrae para acessar o FAMPE. A Destrava orienta sobre o processo de associação.' },
+  { q: 'Como funciona o aval do Sebrae?', a: 'O FAMPE pode complementar as garantias da operação. O percentual e o limite são definidos conforme o regulamento vigente e a instituição financeira parceira.' },
+  { q: 'Qual o valor máximo disponível?', a: 'O valor do crédito e da garantia depende da modalidade, do porte do negócio, do regulamento vigente e da análise do banco operador.' },
+  { q: 'Preciso ser associado ao Sebrae?', a: 'O enquadramento e a jornada de atendimento dependem das regras vigentes do Sebrae e da instituição operadora. A Destrava orienta a conferência dos requisitos.' },
   { q: 'Quais bancos operam o FAMPE?', a: 'O FAMPE é operado por diversas instituições financeiras parceiras do Sebrae em todo o Brasil.' },
   { q: 'Como a Destrava me ajuda com o FAMPE?', a: 'Nossa equipe verifica sua elegibilidade, orienta sobre a associação ao Sebrae, organiza a documentação e acompanha o processo junto ao banco parceiro.' },
 ];
@@ -35,9 +35,9 @@ export default function Fampe() {
     <div className="min-h-screen flex flex-col bg-white">
       <SEO
         title="FAMPE - Fundo de Aval Sebrae para Micro e Pequenas Empresas | Destrava"
-        description="FAMPE: o Sebrae complementa até 80% das garantias para você acessar crédito de R$ 10 mil a R$ 700 mil. Assessoria completa da Destrava Crédito."
+        description="Entenda como o FAMPE pode complementar garantias em operações de crédito para pequenos negócios, conforme regulamento e análise da instituição parceira."
         keywords="fampe, fundo de aval sebrae para micro e pequenas empresas"
-        structuredData={serviceStructuredData("FAMPE", "FAMPE: o Sebrae complementa até 80% das garantias para você acessar crédito de R$ 10 mil a R$ 700 mil. Assessoria completa da Destrava Crédito.")}
+        structuredData={serviceStructuredData("FAMPE", "Orientação sobre o fundo de aval do Sebrae para pequenos negócios, conforme regulamento e análise da instituição parceira.")}
       />
       <Header />
 
@@ -58,19 +58,19 @@ export default function Fampe() {
               Fundo de Aval do Sebrae para Micro e Pequenas Empresas
             </p>
             <p className="text-lg text-white/80 leading-relaxed mb-8">
-              O Sebrae complementa até 80% das garantias exigidas pelo banco, facilitando o acesso ao crédito de R$ 10 mil a R$ 700 mil para micro e pequenas empresas.
+              O fundo de aval do Sebrae pode complementar garantias exigidas pelo banco e facilitar o acesso de pequenos negócios ao crédito, conforme regulamento e análise da instituição parceira.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Link href="/simular">
-                <Button size="lg" variant="secondary" className="font-semibold">
+              <Button asChild size="lg" variant="secondary" className="font-semibold">
+                <Link href="/simular">
                   Simular Agora
-                </Button>
-              </Link>
-              <a href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20FAMPE." target="_blank" rel="noopener noreferrer">
-                <Button size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
+                <a href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20FAMPE." target="_blank" rel="noopener noreferrer">
                   <Phone className="h-4 w-4 mr-2" /> Falar com Especialista
-                </Button>
-              </a>
+                </a>
+              </Button>
             </div>
           </div>
         </div>
@@ -82,27 +82,27 @@ export default function Fampe() {
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <DollarSign className="h-12 w-12 text-primary mx-auto mb-4" />
-              <h3 className="font-bold text-lg mb-2">Faixa de Crédito</h3>
-              <p className="text-2xl font-bold text-primary mb-2">R$ 10k a R$ 700k</p>
-              <p className="text-sm text-muted-foreground">Conforme análise do banco</p>
+              <h3 className="font-bold text-lg mb-2">Valor do Crédito</h3>
+              <p className="text-2xl font-bold text-primary mb-2">Conforme análise</p>
+              <p className="text-sm text-muted-foreground">Modalidade, porte e regulamento vigente</p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <Percent className="h-12 w-12 text-primary mx-auto mb-4" />
-              <h3 className="font-bold text-lg mb-2">Cobertura do Sebrae</h3>
-              <p className="text-2xl font-bold text-primary mb-2">Aval de até 80%</p>
-              <p className="text-sm text-muted-foreground">Das garantias exigidas</p>
+              <h3 className="font-bold text-lg mb-2">Garantia FAMPE</h3>
+              <p className="text-2xl font-bold text-primary mb-2">Complementar</p>
+              <p className="text-sm text-muted-foreground">Percentual conforme regulamento e banco</p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <Calendar className="h-12 w-12 text-primary mx-auto mb-4" />
               <h3 className="font-bold text-lg mb-2">Prazo</h3>
-              <p className="text-2xl font-bold text-primary mb-2">Até 60 meses</p>
-              <p className="text-sm text-muted-foreground">Conforme modalidade contratada</p>
+              <p className="text-2xl font-bold text-primary mb-2">Conforme operação</p>
+              <p className="text-sm text-muted-foreground">Definido pela instituição financeira</p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <Building2 className="h-12 w-12 text-primary mx-auto mb-4" />
               <h3 className="font-bold text-lg mb-2">Público-Alvo</h3>
               <p className="text-2xl font-bold text-primary mb-2">MEI / ME / EPP</p>
-              <p className="text-sm text-muted-foreground">Associados ao Sebrae</p>
+              <p className="text-sm text-muted-foreground">Conforme elegibilidade vigente</p>
             </div>
           </div>
         </div>
@@ -307,16 +307,16 @@ export default function Fampe() {
             O Sebrae complementa suas garantias. Você acessa o crédito que precisa para crescer.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
-            <Link href="/simular">
-              <Button size="lg" variant="secondary" className="font-semibold">
+            <Button asChild size="lg" variant="secondary" className="font-semibold">
+              <Link href="/simular">
                 Simular Agora
-              </Button>
-            </Link>
-            <a href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20FAMPE." target="_blank" rel="noopener noreferrer">
-              <Button size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="font-semibold border-white text-white hover:bg-white hover:text-primary">
+              <a href="https://wa.me/556135268355?text=Ol%C3%A1!%20Quero%20saber%20mais%20sobre%20o%20FAMPE." target="_blank" rel="noopener noreferrer">
                 <Phone className="h-4 w-4 mr-2" /> Falar com Especialista
-              </Button>
-            </a>
+              </a>
+            </Button>
           </div>
         </div>
       </section>

@@ -17,7 +17,7 @@ export default function Footer() {
   ];
 
   const linksServicos = [
-    { label: "Rating Banco Central", href: "/rating-banco-central" },
+    { label: "Diagnóstico de Crédito", href: "/rating-banco-central" },
     { label: "Certificado Digital", href: "/certificado-digital" },
     { label: "Consulta SPC/Serasa", href: "/consulta-spc-serasa" },
   ];

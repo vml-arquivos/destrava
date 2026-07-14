@@ -154,23 +154,17 @@ export default function Fila() {
             <p className="text-sm text-gray-500 mt-1">{descricao}</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Link href="/colaborador/fila?scope=meus">
-              <a className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "meus" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
+            <Link href="/colaborador/fila?scope=meus" className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "meus" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
                 Minha fila
-              </a>
-            </Link>
+              </Link>
             {podeVerTudo && (
               <>
-                <Link href="/colaborador/fila?scope=sem_responsavel">
-                  <a className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "sem_responsavel" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
+                <Link href="/colaborador/fila?scope=sem_responsavel" className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "sem_responsavel" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
                     Sem responsável
-                  </a>
-                </Link>
-                <Link href="/colaborador/fila">
-                  <a className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "todos" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
+                  </Link>
+                <Link href="/colaborador/fila" className={`inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium ${scope === "todos" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
                     Fila geral
-                  </a>
-                </Link>
+                  </Link>
               </>
             )}
             <Button variant="outline" onClick={carregarFila} disabled={loading}>
@@ -277,12 +271,10 @@ export default function Fila() {
                         {savingId === lead.id ? "Atribuindo..." : "Assumir lead"}
                       </Button>
                     )}
-                    <Link href={`${podeVerTudo ? "/colaborador/crm" : "/colaborador/meu-crm"}?leadId=${encodeURIComponent(lead.id)}`}>
-                      <a className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700">
+                    <Link href={`${podeVerTudo ? "/colaborador/crm" : "/colaborador/meu-crm"}?leadId=${encodeURIComponent(lead.id)}`} className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700">
                         {podeVerTudo ? "Abrir CRM geral" : "Abrir visão do agente"}
                         <ArrowRight className="h-4 w-4" />
-                      </a>
-                    </Link>
+                      </Link>
                   </div>
                 </div>
               );

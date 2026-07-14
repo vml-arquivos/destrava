@@ -29,8 +29,6 @@ import {
   Building2,
   Mail,
   DollarSign,
-  ChevronDown,
-  ChevronUp,
   MessageCircle,
   Shield,
   Clock,
@@ -38,14 +36,16 @@ import {
   Loader2,
   FileText,
 } from "lucide-react";
+import FormSubmitError from "@/components/FormSubmitError";
+import { submitLead } from "@/lib/leads";
 
 // Mapa produto (query param) → label amigável e mensagem WhatsApp
 const PRODUTO_META: Record<string, { label: string; whatsappMsg: string; titulo: string; subtitulo: string }> = {
   "rating-banco-central": {
-    label: "Rating Banco Central",
-    whatsappMsg: "Olá! Quero consultar o rating da minha empresa no Banco Central.",
-    titulo: "Solicite sua Consulta de Rating",
-    subtitulo: "Preencha seus dados e um especialista entrará em contato para iniciar a análise do seu rating no Banco Central.",
+    label: "Diagnóstico de Crédito com Dados do Banco Central",
+    whatsappMsg: "Olá! Quero entender os dados de crédito da minha empresa no SCR/Registrato.",
+    titulo: "Solicite seu Diagnóstico de Crédito",
+    subtitulo: "Preencha seus dados e um especialista entrará em contato para orientar a leitura do SCR/Registrato e a organização do perfil de crédito.",
   },
   "certificado-digital": {
     label: "Certificado Digital",
@@ -96,14 +96,6 @@ interface LeadForm {
   tipoCliente: string;
 }
 
-interface ResultadoSimulacao {
-  parcelaMin: number;
-  parcelaMax: number;
-  totalMin: number;
-  totalMax: number;
-  parcelas: number;
-}
-
 const FINALIDADES = [
   "Capital de Giro",
   "Expansão do Negócio",
@@ -125,26 +117,6 @@ const FAIXAS_VALOR = [
 ];
 
 const fmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-
-function calcularEstimativa(valorStr: string, parcelas: number): ResultadoSimulacao | null {
-  const valor = parseFloat(valorStr);
-  if (!valor || valor <= 0 || !parcelas) return null;
-  const taxaMin = 0.015;
-  const taxaMax = 0.045;
-  const parcelaMin =
-    (valor * taxaMin * Math.pow(1 + taxaMin, parcelas)) /
-    (Math.pow(1 + taxaMin, parcelas) - 1);
-  const parcelaMax =
-    (valor * taxaMax * Math.pow(1 + taxaMax, parcelas)) /
-    (Math.pow(1 + taxaMax, parcelas) - 1);
-  return {
-    parcelaMin,
-    parcelaMax,
-    totalMin: parcelaMin * parcelas,
-    totalMax: parcelaMax * parcelas,
-    parcelas,
-  };
-}
 
 function formatarTelefone(v: string): string {
   const nums = v.replace(/\D/g, "").slice(0, 11);
@@ -185,10 +157,9 @@ export default function CapturaLead() {
     tipoCliente: "empresa",
   });
   const [parcelas, setParcelas] = useState("24");
-  const [resultado, setResultado] = useState<ResultadoSimulacao | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [erros, setErros] = useState<Partial<Record<keyof LeadForm, string>>>({});
-  const [mostrarDetalhes, setMostrarDetalhes] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const set = (field: keyof LeadForm, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -209,33 +180,35 @@ export default function CapturaLead() {
     e.preventDefault();
     if (!validar()) return;
     setEnviando(true);
-    const res = isServico ? null : calcularEstimativa(form.valorDesejado, parseInt(parcelas));
-    setResultado(res);
+    setSubmitError(null);
     try {
-      await fetch("/api/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nome: form.nome,
-          telefone: form.telefone,
-          empresa: form.empresa || null,
-          email: form.email || null,
-          valorDesejado: form.valorDesejado ? parseFloat(form.valorDesejado) : null,
-          finalidade: form.finalidade || null,
-          tipoCliente: form.tipoCliente,
-          parcelas: parseInt(parcelas),
-          // Rastreamento de origem por produto
-          origem: produtoParam ? `landing_${produtoParam}` : "simulador-publico",
-          produto_interesse: meta.label || null,
-          pagina: produtoParam ? `/${produtoParam}` : "/captura",
-        }),
+      const tipoPessoa = form.tipoCliente === "empresa" ? "pj" : "pf";
+      await submitLead({
+        nome: form.nome,
+        telefone: form.telefone,
+        empresa: form.empresa || null,
+        email: form.email || null,
+        valorDesejado: form.valorDesejado ? parseFloat(form.valorDesejado) : null,
+        finalidade: form.finalidade || null,
+        tipo_pessoa: tipoPessoa,
+        tipoPessoa,
+        tipoCliente: form.tipoCliente,
+        parcelas: parseInt(parcelas),
+        origem: produtoParam ? `landing_${produtoParam}` : "landing_captura",
+        produto_interesse: meta.label || null,
+        pagina: produtoParam ? `/${produtoParam}` : "/captura",
       });
-    } catch (err) {
-      console.error("[CapturaLead] Falha ao registrar lead na API:", err);
+      setEtapa("resultado");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível enviar seus dados. Tente novamente.",
+      );
+    } finally {
+      setEnviando(false);
     }
-    setEnviando(false);
-    setEtapa("resultado");
-    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   const whatsappMsg = encodeURIComponent(
@@ -292,11 +265,11 @@ export default function CapturaLead() {
               </span>
               <span className="flex items-center gap-1.5">
                 <Clock className="h-4 w-4 text-yellow-400" />
-                Resposta em até 2h
+                Retorno em horário comercial
               </span>
               <span className="flex items-center gap-1.5">
-                <Star className="h-4 w-4 text-yellow-400" />
-                +500 empresas atendidas
+                <Shield className="h-4 w-4 text-yellow-400" />
+                Dados tratados conforme a LGPD
               </span>
             </div>
           </div>
@@ -331,6 +304,7 @@ export default function CapturaLead() {
                           key={value}
                           type="button"
                           onClick={() => set("tipoCliente", value)}
+                          aria-pressed={form.tipoCliente === value}
                           className={`flex items-center justify-center gap-2 p-3 rounded-xl border-2 text-sm font-medium transition-all ${
                             form.tipoCliente === value
                               ? "border-primary bg-primary/5 text-primary"
@@ -360,9 +334,12 @@ export default function CapturaLead() {
                             onChange={(e) => set("nome", e.target.value)}
                             placeholder="Seu nome completo"
                             className={`pl-9 ${erros.nome ? "border-destructive" : ""}`}
+                            autoComplete="name"
+                            aria-invalid={Boolean(erros.nome)}
+                            aria-describedby={erros.nome ? "nome-error" : undefined}
                           />
                         </div>
-                        {erros.nome && <p className="text-xs text-destructive">{erros.nome}</p>}
+                        {erros.nome && <p id="nome-error" className="text-xs text-destructive">{erros.nome}</p>}
                       </div>
 
                       <div className="space-y-1.5">
@@ -378,9 +355,12 @@ export default function CapturaLead() {
                             placeholder="(61) 9 9999-9999"
                             className={`pl-9 ${erros.telefone ? "border-destructive" : ""}`}
                             inputMode="tel"
+                            autoComplete="tel"
+                            aria-invalid={Boolean(erros.telefone)}
+                            aria-describedby={erros.telefone ? "telefone-error" : undefined}
                           />
                         </div>
-                        {erros.telefone && <p className="text-xs text-destructive">{erros.telefone}</p>}
+                        {erros.telefone && <p id="telefone-error" className="text-xs text-destructive">{erros.telefone}</p>}
                       </div>
 
                       {form.tipoCliente === "empresa" && (
@@ -397,6 +377,7 @@ export default function CapturaLead() {
                               onChange={(e) => set("empresa", e.target.value)}
                               placeholder="Nome da sua empresa"
                               className="pl-9"
+                              autoComplete="organization"
                             />
                           </div>
                         </div>
@@ -416,6 +397,7 @@ export default function CapturaLead() {
                             onChange={(e) => set("email", e.target.value)}
                             placeholder="seu@email.com"
                             className="pl-9"
+                            autoComplete="email"
                           />
                         </div>
                       </div>
@@ -478,15 +460,24 @@ export default function CapturaLead() {
 
                     <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
                       <Shield className="h-3.5 w-3.5 inline mr-1 text-green-600" />
-                      Seus dados são protegidos e utilizados apenas para fins de atendimento.
-                      Não compartilhamos com terceiros.
+                      Seus dados serão usados para atender esta solicitação, conforme nossa Política de Privacidade.
                     </p>
+
+                    <label className="flex items-start gap-3 text-xs leading-5 text-muted-foreground">
+                      <input type="checkbox" required className="mt-1 h-4 w-4" />
+                      <span>
+                        Li a <Link href="/politica-privacidade" className="font-semibold text-primary underline">Política de Privacidade</Link> e autorizo o contato sobre esta solicitação.
+                      </span>
+                    </label>
+
+                    <FormSubmitError message={submitError} />
 
                     <Button
                       type="submit"
                       size="lg"
                       className="w-full font-bold text-base h-14"
                       disabled={enviando}
+                      aria-busy={enviando}
                     >
                       {enviando ? (
                         <>
@@ -496,7 +487,7 @@ export default function CapturaLead() {
                       ) : isServico ? (
                         <>
                           <ArrowRight className="mr-2 h-5 w-5" />
-                          Solicitar {meta.label} — É Grátis
+                          Solicitar orientação sobre {meta.label}
                         </>
                       ) : (
                         <>
@@ -519,70 +510,35 @@ export default function CapturaLead() {
                       <CheckCircle2 className="h-8 w-8 text-green-400" />
                     </div>
                     <h2 className="text-2xl font-bold mb-1">
-                      {isServico ? `Solicitação Recebida, ${form.nome.split(" ")[0]}!` : `Simulação Concluída, ${form.nome.split(" ")[0]}!`}
+                      {isServico ? `Solicitação Recebida, ${form.nome.split(" ")[0]}!` : `Interesse Registrado, ${form.nome.split(" ")[0]}!`}
                     </h2>
                     <p className="text-white/80 text-sm">
                       {isServico
                         ? "Nossa equipe entrará em contato em breve para dar continuidade ao seu pedido."
-                        : "Veja abaixo uma estimativa baseada nas condições de mercado"}
+                        : "Nossa equipe analisará as informações antes de apresentar qualquer cenário de crédito"}
                     </p>
                   </div>
 
                   <CardContent className="p-6 space-y-5">
-                    {!isServico && resultado && form.valorDesejado ? (
-                      <>
-                        <div className="bg-gradient-to-br from-primary/5 to-transparent rounded-xl p-5 border border-primary/20">
-                          <p className="text-sm text-muted-foreground text-center mb-2">
-                            Estimativa de Parcela Mensal
-                          </p>
-                          <div className="text-center">
-                            <p className="text-3xl font-bold text-primary">
-                              {fmt.format(resultado.parcelaMin)}
-                              <span className="text-muted-foreground text-lg font-normal mx-2">a</span>
-                              {fmt.format(resultado.parcelaMax)}
-                            </p>
-                            <p className="text-sm text-muted-foreground mt-1">
-                              em {resultado.parcelas}x · taxa de 1,5% a 4,5% a.m.
-                            </p>
-                          </div>
-                        </div>
-
-                        <button
-                          className="flex items-center justify-between w-full text-sm font-medium text-muted-foreground hover:text-foreground"
-                          onClick={() => setMostrarDetalhes(!mostrarDetalhes)}
-                        >
-                          <span>Ver detalhes da estimativa</span>
-                          {mostrarDetalhes ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                        </button>
-
-                        {mostrarDetalhes && (
-                          <div className="space-y-2 text-sm border-t pt-4">
-                            {[
-                              ["Valor solicitado", fmt.format(parseFloat(form.valorDesejado))],
-                              ["Prazo", `${resultado.parcelas} meses`],
-                              ["Total mínimo estimado", fmt.format(resultado.totalMin)],
-                              ["Total máximo estimado", fmt.format(resultado.totalMax)],
-                            ].map(([label, value]) => (
-                              <div key={label} className="flex justify-between py-1.5 border-b last:border-0">
-                                <span className="text-muted-foreground">{label}</span>
-                                <span className="font-semibold">{value}</span>
-                              </div>
-                            ))}
-                            <p className="text-xs text-muted-foreground bg-amber-50 border border-amber-200 rounded-md p-2 mt-2">
-                              <strong>Aviso de Simulação:</strong> Os valores apresentados são estimativas para fins de simulação e podem variar conforme análise de crédito, documentação, perfil do cliente, garantia oferecida e condições vigentes da instituição financeira no momento da contratação. Sujeito à análise e aprovação.
-                            </p>
-                          </div>
-                        )}
-                      </>
+                    {!isServico && form.valorDesejado ? (
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-900">
+                        <p className="font-semibold">Dados enviados para orientação</p>
+                        <p className="mt-1">
+                          Valor de referência: <strong>{fmt.format(parseFloat(form.valorDesejado))}</strong> em até <strong>{parcelas} meses</strong>.
+                        </p>
+                        <p className="mt-2 text-blue-800">
+                          Taxa, CET, prazo e parcela só podem ser informados após análise da instituição financeira. Este registro não é proposta, pré-aprovação ou garantia de crédito.
+                        </p>
+                      </div>
                     ) : isServico ? (
                       <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center text-sm text-green-800">
                         <CheckCircle2 className="h-6 w-6 text-green-600 mx-auto mb-2" />
                         <p className="font-semibold">Pedido registrado com sucesso!</p>
-                        <p className="mt-1 text-green-700">Um especialista em <strong>{meta.label}</strong> entrará em contato em até 2 horas úteis.</p>
+                        <p className="mt-1 text-green-700">Um especialista em <strong>{meta.label}</strong> entrará em contato durante o horário comercial.</p>
                       </div>
                     ) : (
                       <div className="text-center py-4 text-muted-foreground text-sm">
-                        Para ver a estimativa de parcelas, informe o valor desejado na próxima simulação.
+                        Informe o valor desejado para que a equipe possa orientar os próximos passos.
                       </div>
                     )}
 
@@ -598,24 +554,29 @@ export default function CapturaLead() {
                     </div>
 
                     <div className="space-y-3">
-                      <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
-                        <Button size="lg" className="w-full font-bold bg-green-600 hover:bg-green-700 h-14">
+                      <Button asChild size="lg" className="w-full font-bold bg-green-600 hover:bg-green-700 h-14">
+                        <a
+                          href={whatsappUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          data-cta-position="captura-sucesso-whatsapp"
+                        >
                           <MessageCircle className="mr-2 h-5 w-5" />
                           Falar com Especialista no WhatsApp
                           <ArrowRight className="ml-2 h-5 w-5" />
-                        </Button>
-                      </a>
+                        </a>
+                      </Button>
                       <p className="text-xs text-center text-muted-foreground">
-                        Um especialista entrará em contato em até 2 horas úteis
+                        Um especialista entrará em contato durante o horário comercial
                       </p>
                     </div>
 
                     <Button
                       variant="ghost"
                       className="w-full text-muted-foreground"
-                      onClick={() => { setEtapa("formulario"); setResultado(null); }}
+                      onClick={() => setEtapa("formulario")}
                     >
-                      {isServico ? "Fazer nova solicitação" : "Fazer nova simulação"}
+                      {isServico ? "Fazer nova solicitação" : "Registrar outro interesse"}
                     </Button>
                   </CardContent>
                 </Card>
@@ -626,11 +587,9 @@ export default function CapturaLead() {
                     { href: "/credito-pessoal", titulo: "Crédito Pessoal", icon: User },
                     { href: "/simular", titulo: "Simulador Completo", icon: Calculator },
                   ].map((item) => (
-                    <Link key={item.href} href={item.href}>
-                      <a className="block p-3 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-all text-center">
-                        <item.icon className="h-5 w-5 text-primary mx-auto mb-1.5" />
-                        <p className="font-semibold text-xs">{item.titulo}</p>
-                      </a>
+                    <Link key={item.href} href={item.href} className="block p-3 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-all text-center">
+                      <item.icon className="h-5 w-5 text-primary mx-auto mb-1.5" />
+                      <p className="font-semibold text-xs">{item.titulo}</p>
                     </Link>
                   ))}
                 </div>
@@ -643,10 +602,10 @@ export default function CapturaLead() {
           <div className="max-w-2xl mx-auto">
             <div className="flex flex-wrap justify-center gap-8 text-center">
               {[
-                { valor: "+500", label: "Empresas atendidas" },
-                { valor: "+15", label: "Linhas de crédito" },
-                { valor: "R$ 50M+", label: "Em crédito captado" },
-                { valor: "98%", label: "Satisfação" },
+                { valor: "PF e PJ", label: "Perfis analisados" },
+                { valor: "Digital", label: "Solicitação online" },
+                { valor: "LGPD", label: "Dados protegidos" },
+                { valor: "Consultiva", label: "Orientação especializada" },
               ].map((item) => (
                 <div key={item.label}>
                   <p className="text-2xl font-bold text-primary">{item.valor}</p>

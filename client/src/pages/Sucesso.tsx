@@ -12,12 +12,12 @@ export default function Sucesso() {
       {/* Barra de retorno */}
       <div className="bg-muted/40 border-b border-border">
         <div className="container py-3">
-          <Link href="/">
-            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground gap-2 -ml-2">
+          <Button asChild variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground gap-2 -ml-2">
+            <Link href="/">
               <ArrowLeft className="h-4 w-4" />
               Voltar para o Início
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
       </div>
 
@@ -125,23 +125,23 @@ export default function Sucesso() {
 
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/">
-                <Button variant="outline" size="lg" className="w-full sm:w-auto">
+              <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
+                <Link href="/">
                   <Home className="mr-2 h-5 w-5" />
                   Voltar para o Início
-                </Button>
-              </Link>
+                </Link>
+              </Button>
 
-              <a
+              <Button asChild size="lg" className="w-full sm:w-auto font-semibold">
+                <a
                 href="https://wa.me/556135268355"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                <Button size="lg" className="w-full sm:w-auto font-semibold">
                   <MessageCircle className="mr-2 h-5 w-5" />
                   Falar no WhatsApp
-                </Button>
-              </a>
+                </a>
+              </Button>
             </div>
 
             {/* Disclaimer */}

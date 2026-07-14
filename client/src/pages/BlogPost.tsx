@@ -9,6 +9,8 @@ import { Calendar, Clock, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import SEO from "@/components/SEO";
+import { DEFAULT_OG_IMAGE, SITE_URL } from "@shared/publicSeo";
 
 // Substituímos o streamdown por react-markdown + remark-gfm.
 // O streamdown embutia mermaid + shiki como dependências diretas, criando
@@ -16,16 +18,12 @@ import remarkGfm from "remark-gfm";
 // "Cannot read properties of undefined (reading 'createContext')".
 // O react-markdown é leve (~30KB) e não tem essas dependências pesadas.
 function MarkdownContent({ children }: { children: string }) {
-  return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-      {children}
-    </ReactMarkdown>
-  );
+  return <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>;
 }
 
 export default function BlogPost() {
   const [, params] = useRoute("/blog/:slug");
-  const post = blogPosts.find((p) => p.slug === params?.slug);
+  const post = blogPosts.find(p => p.slug === params?.slug);
 
   if (!post) {
     return (
@@ -37,12 +35,12 @@ export default function BlogPost() {
             <p className="text-muted-foreground mb-8">
               O artigo que você procura não existe ou foi removido.
             </p>
-            <Link href="/blog">
-              <Button variant="outline">
+            <Button asChild variant="outline">
+              <Link href="/blog">
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Voltar para o Blog
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </div>
         </div>
         <Footer />
@@ -52,18 +50,74 @@ export default function BlogPost() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SEO
+        title={post.title}
+        description={post.excerpt}
+        type="article"
+        author="Destrava Crédito"
+        publishedTime={post.date}
+        modifiedTime={post.date}
+        image={DEFAULT_OG_IMAGE}
+        canonicalPath={`/blog/${post.slug}`}
+        structuredData={{
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "Article",
+              headline: post.title,
+              description: post.excerpt,
+              image: DEFAULT_OG_IMAGE,
+              datePublished: post.date,
+              dateModified: post.date,
+              mainEntityOfPage: `${SITE_URL}/blog/${post.slug}`,
+              author: { "@type": "Organization", name: "Destrava Crédito" },
+              publisher: {
+                "@type": "Organization",
+                name: "Destrava Crédito",
+                logo: {
+                  "@type": "ImageObject",
+                  url: `${SITE_URL}/destrava-logo.png`,
+                },
+              },
+            },
+            {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                {
+                  "@type": "ListItem",
+                  position: 1,
+                  name: "Início",
+                  item: `${SITE_URL}/`,
+                },
+                {
+                  "@type": "ListItem",
+                  position: 2,
+                  name: "Blog",
+                  item: `${SITE_URL}/blog`,
+                },
+                {
+                  "@type": "ListItem",
+                  position: 3,
+                  name: post.title,
+                  item: `${SITE_URL}/blog/${post.slug}`,
+                },
+              ],
+            },
+          ],
+        }}
+      />
       <ExitIntentPopup />
       <Header />
 
       {/* Breadcrumb e Voltar */}
       <section className="py-6 bg-muted/30 border-b border-border">
         <div className="container">
-          <Link href="/blog">
-            <Button variant="ghost" size="sm" className="mb-2">
+          <Button asChild variant="ghost" size="sm" className="mb-2">
+            <Link href="/blog">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Voltar para o Blog
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
       </section>
 
@@ -99,6 +153,9 @@ export default function BlogPost() {
       <article className="py-12">
         <div className="container">
           <div className="max-w-4xl mx-auto">
+            <aside className="mb-8 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed text-amber-950" aria-label="Aviso sobre o conteúdo">
+              Conteúdo educativo. Regras, taxas, limites e prazos podem mudar. Confirme as condições vigentes, o Custo Efetivo Total (CET) e a proposta da instituição antes de contratar. A concessão de crédito depende de análise e aprovação da instituição financeira.
+            </aside>
             <div className="prose prose-lg max-w-none">
               {/* Dividir o conteúdo para inserir o banner no meio */}
               {post.content.includes("##") ? (
@@ -147,9 +204,9 @@ export default function BlogPost() {
             <h2 className="text-2xl font-bold mb-8">Outros artigos</h2>
             <div className="grid md:grid-cols-2 gap-6">
               {blogPosts
-                .filter((p) => p.id !== post.id)
+                .filter(p => p.id !== post.id)
                 .slice(0, 2)
-                .map((relatedPost) => (
+                .map(relatedPost => (
                   <Link
                     key={relatedPost.id}
                     href={`/blog/${relatedPost.slug}`}

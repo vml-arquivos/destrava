@@ -22,32 +22,32 @@ const linhasPF = [
     id: "consignado",
     nome: "Crédito Consignado",
     subtitulo: "Desconto direto na folha de pagamento",
-    descricao: "Modalidade com as menores taxas do mercado para servidores públicos, aposentados e pensionistas do INSS.",
-    taxa: "A partir de 1,66% a.m.",
-    valor: "Até R$ 200.000",
-    prazo: "Até 96 meses",
+    descricao: "Modalidade com desconto em folha para públicos elegíveis, sujeita às regras, margem consignável e análise da instituição.",
+    taxa: "Conforme convênio e CET da proposta",
+    valor: "Conforme margem e análise",
+    prazo: "Conforme convênio",
     publico: ["Servidor Público", "Aposentado", "Pensionista INSS"],
-    badge: "Menor Taxa",
+    badge: "Consignado",
     badgeColor: "bg-green-100 text-green-800",
     destaque: true,
     icon: CreditCard,
     cor: "from-green-600 to-green-800",
     beneficios: [
-      "Menor taxa de juros do mercado",
+      "Condições ligadas ao convênio e à margem",
       "Desconto automático em folha",
       "Sem necessidade de comprovação de renda adicional",
-      "Aprovação rápida",
-      "Sem consulta ao SPC/Serasa",
+      "Processo sujeito à análise",
+      "CET informado antes da contratação",
     ],
   },
   {
     id: "pessoal",
     nome: "Crédito Pessoal",
     subtitulo: "Para necessidades imediatas",
-    descricao: "Crédito rápido para qualquer finalidade: reforma, viagem, educação, saúde ou emergências.",
-    taxa: "A partir de 2,5% a.m.",
-    valor: "R$ 1.000 a R$ 50.000",
-    prazo: "Até 60 meses",
+    descricao: "Crédito de uso livre, com limite, taxa, CET e prazo definidos conforme análise do perfil.",
+    taxa: "Conforme instituição e perfil",
+    valor: "Conforme análise",
+    prazo: "Conforme instituição",
     publico: ["Pessoa Física com renda"],
     badge: "Rápido",
     badgeColor: "bg-blue-100 text-blue-800",
@@ -55,21 +55,21 @@ const linhasPF = [
     icon: DollarSign,
     cor: "from-blue-600 to-blue-800",
     beneficios: [
-      "Aprovação em até 24 horas",
-      "Sem necessidade de garantia",
+      "Solicitação sujeita à análise",
+      "Garantias conforme a modalidade",
       "Uso livre do crédito",
       "Parcelas fixas",
-      "Processo 100% digital",
+      "Processo conforme a instituição",
     ],
   },
   {
     id: "imobiliario",
     nome: "Financiamento Imobiliário",
     subtitulo: "Realize o sonho da casa própria",
-    descricao: "Financiamento de imóveis residenciais e comerciais com as melhores condições do mercado.",
-    taxa: "A partir de 10,99% a.a.",
-    valor: "R$ 50.000 a R$ 1.500.000",
-    prazo: "Até 35 anos",
+    descricao: "Financiamento de imóveis residenciais e comerciais, sujeito à avaliação do imóvel, renda e política da instituição.",
+    taxa: "Conforme instituição e CET da proposta",
+    valor: "Conforme renda e avaliação",
+    prazo: "Conforme operação",
     publico: ["Pessoa Física"],
     badge: "CAIXA",
     badgeColor: "bg-yellow-100 text-yellow-800",
@@ -78,9 +78,9 @@ const linhasPF = [
     cor: "from-yellow-600 to-yellow-800",
     beneficios: [
       "Uso do FGTS como entrada",
-      "Prazo de até 35 anos",
-      "Taxas a partir de 10,99% a.a.",
-      "Financiamento de até 80% do imóvel",
+      "Prazo definido na proposta",
+      "Taxa e CET informados antes da contratação",
+      "Percentual financiado conforme análise",
       "Processo orientado por especialistas",
     ],
   },
@@ -88,10 +88,10 @@ const linhasPF = [
     id: "veiculo",
     nome: "Financiamento de Veículo",
     subtitulo: "Carro novo ou usado com facilidade",
-    descricao: "Financiamento de veículos novos e usados com taxas competitivas e parcelas que cabem no bolso.",
-    taxa: "A partir de 1,2% a.m.",
-    valor: "R$ 10.000 a R$ 300.000",
-    prazo: "Até 60 meses",
+    descricao: "Financiamento de veículos novos e usados, com condições definidas conforme bem, entrada, perfil e instituição.",
+    taxa: "Conforme instituição e CET da proposta",
+    valor: "Conforme bem e análise",
+    prazo: "Conforme operação",
     publico: ["Pessoa Física"],
     badge: "Veículos",
     badgeColor: "bg-purple-100 text-purple-800",
@@ -100,7 +100,7 @@ const linhasPF = [
     cor: "from-purple-600 to-purple-800",
     beneficios: [
       "Veículo novo ou usado",
-      "Entrada a partir de 20%",
+      "Entrada conforme a proposta",
       "Parcelas fixas",
       "Processo ágil",
       "Múltiplas instituições financeiras",
@@ -113,7 +113,7 @@ export default function CreditoPessoaFisica() {
     <div className="min-h-screen flex flex-col bg-white">
       <SEO
         title="Crédito para Pessoa Física - Consignado, Pessoal, Imóvel e Veículo"
-        description="Linhas de crédito para pessoa física: consignado, crédito pessoal, financiamento imobiliário e de veículos. Análise gratuita e as melhores condições do mercado."
+        description="Compare modalidades de crédito para pessoa física, como consignado, crédito pessoal e financiamentos. Condições sujeitas à análise e ao CET da proposta."
         keywords="crédito pessoal, consignado, financiamento imobiliário, financiamento veículo, crédito pessoa física, empréstimo pessoal"
         structuredData={serviceStructuredData("Crédito para Pessoa Física", "Linhas de crédito para pessoa física: consignado, pessoal, imobiliário e veículo.")}
       />
@@ -139,17 +139,17 @@ export default function CreditoPessoaFisica() {
               Encontre a melhor linha de crédito para você: consignado, crédito pessoal, financiamento de imóvel ou veículo. Análise gratuita e orientação especializada.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link href="/simular">
-                <Button size="lg" className="bg-blue-400 hover:bg-blue-500 text-black font-bold px-8">
+              <Button asChild size="lg" className="bg-blue-400 hover:bg-blue-500 text-black font-bold px-8">
+                <Link href="/simular">
                   Simular Crédito Grátis
                   <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
-              <a href="https://wa.me/556135268355?text=Olá! Preciso de crédito pessoal." target="_blank" rel="noopener noreferrer">
-                <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
+                <a href="https://wa.me/556135268355?text=Olá! Preciso de crédito pessoal." target="_blank" rel="noopener noreferrer">
                   Falar com Especialista
-                </Button>
-              </a>
+                </a>
+              </Button>
             </div>
           </div>
         </div>
@@ -200,12 +200,12 @@ export default function CreditoPessoaFisica() {
                       ))}
                     </ul>
                   </div>
-                  <Link href="/simular">
-                    <Button className="w-full bg-white/20 hover:bg-white/30 text-white font-bold border border-white/30">
+                  <Button asChild className="w-full bg-white/20 hover:bg-white/30 text-white font-bold border border-white/30">
+                    <Link href="/simular">
                       Simular {linha.nome}
                       <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
                 </div>
               ))}
             </div>
@@ -245,12 +245,12 @@ export default function CreditoPessoaFisica() {
                       </li>
                     ))}
                   </ul>
-                  <Link href="/simular">
-                    <Button className="w-full bg-[var(--color-caixa-blue)] hover:bg-blue-700 text-white font-bold text-sm">
+                  <Button asChild className="w-full bg-[var(--color-caixa-blue)] hover:bg-blue-700 text-white font-bold text-sm">
+                    <Link href="/simular">
                       Simular
                       <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
                 </div>
               ))}
             </div>
@@ -267,7 +267,7 @@ export default function CreditoPessoaFisica() {
               {[
                 { icon: Shield, title: "Análise Gratuita", desc: "Avaliamos seu perfil sem custo e sem compromisso para encontrar a melhor opção.", color: "text-blue-600", bg: "bg-blue-50" },
                 { icon: Clock, title: "Processo Ágil", desc: "Simplificamos a burocracia e acompanhamos todo o processo até a aprovação.", color: "text-green-600", bg: "bg-green-50" },
-                { icon: Star, title: "Melhores Condições", desc: "Acesso a múltiplas instituições financeiras para garantir as melhores taxas.", color: "text-yellow-600", bg: "bg-yellow-50" },
+                { icon: Star, title: "Comparação Transparente", desc: "Compare taxa, CET, prazo e valor total das propostas disponíveis para o seu perfil.", color: "text-yellow-600", bg: "bg-yellow-50" },
               ].map((v) => (
                 <div key={v.title} className="text-center p-6 bg-gray-50 rounded-2xl">
                   <div className={`w-14 h-14 rounded-2xl ${v.bg} flex items-center justify-center mx-auto mb-4`}>
@@ -291,17 +291,17 @@ export default function CreditoPessoaFisica() {
               Faça uma simulação gratuita e descubra qual linha de crédito melhor atende às suas necessidades.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/simular">
-                <Button size="lg" className="bg-blue-400 hover:bg-blue-500 text-black font-bold px-8">
+              <Button asChild size="lg" className="bg-blue-400 hover:bg-blue-500 text-black font-bold px-8">
+                <Link href="/simular">
                   Simular Agora
                   <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
-              <a href="https://wa.me/556135268355?text=Olá! Preciso de crédito pessoal." target="_blank" rel="noopener noreferrer">
-                <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
+                <a href="https://wa.me/556135268355?text=Olá! Preciso de crédito pessoal." target="_blank" rel="noopener noreferrer">
                   Falar no WhatsApp
-                </Button>
-              </a>
+                </a>
+              </Button>
             </div>
           </div>
         </div>

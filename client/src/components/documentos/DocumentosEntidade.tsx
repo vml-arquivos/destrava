@@ -92,8 +92,8 @@ const tipoDocumentoLabel: Record<string, string> = {
   certidao_casamento: "6E. Estado civil / cônjuge / averbações",
   averbacao_divorcio: "6E. Estado civil / cônjuge / averbações",
   certidao_obito: "6E. Estado civil / cônjuge / averbações",
-  rating_bacen_cnpj: "7. Consulta de rating BACEN (CNPJ)",
-  rating_bacen_cpf: "8. Consulta de rating BACEN (CPF)",
+  rating_bacen_cnpj: "7. Relatório SCR/Registrato (CNPJ)",
+  rating_bacen_cpf: "8. Relatório SCR/Registrato (CPF)",
   cenprot_cnpj: "9. Consulta CENPROT (CNPJ)",
   cenprot_cpf: "10. Consulta CENPROT (CPF)",
   cnd_rfb_cnpj: "11. CND RFB (CNPJ)",
@@ -185,7 +185,7 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
   {
     titulo: "Consultas e certidões CNPJ",
     slots: [
-      slot("7. Consulta de rating BACEN (CNPJ)", "rating_bacen_cnpj"),
+      slot("7. Relatório SCR/Registrato (CNPJ)", "rating_bacen_cnpj"),
       slot("9. Consulta CENPROT (CNPJ)", "cenprot_cnpj"),
       slot("11. CND RFB (CNPJ)", "cnd_rfb_cnpj"),
       slot("12A. Nada consta CADIN (CNPJ)", "cadin_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada." }),
@@ -200,7 +200,7 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
     titulo: "Consultas e certidões CPF dos sócios",
     descricao: "Obrigatório para todos os sócios ou sócio único. Em caso de cônjuge, incluir SCR, CCS, CCF, Serasa e CENPROT também do cônjuge.",
     slots: [
-      slot("8. Consulta de rating BACEN (CPF)", "rating_bacen_cpf"),
+      slot("8. Relatório SCR/Registrato (CPF)", "rating_bacen_cpf"),
       slot("10. Consulta CENPROT (CPF)", "cenprot_cpf"),
       slot("12. CND RFB (CPF)", "cnd_rfb_cpf"),
       slot("12A. Nada consta CADIN (CPF)", "cadin_cpf", [], { descricao: "Exigido quando a CND RFB CPF não for disponibilizada." }),

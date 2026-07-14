@@ -1,6 +1,33 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
+export const SESSION_COOKIE = "destrava_session";
+
+function cookieValue(req: Request, name: string) {
+  const cookie = req.headers.cookie || "";
+  const entry = cookie.split(";").map((item) => item.trim()).find((item) => item.startsWith(`${name}=`));
+  return entry ? decodeURIComponent(entry.slice(name.length + 1)) : null;
+}
+
+export function setSessionCookie(res: Response, token: string) {
+  res.cookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 24 * 60 * 60 * 1000,
+    path: "/",
+  });
+}
+
+export function clearSessionCookie(res: Response) {
+  res.clearCookie(SESSION_COOKIE, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    path: "/",
+  });
+}
+
 function normalizeRole(value: string | undefined | null): string {
   return (value || "")
     .normalize("NFD")
@@ -23,13 +50,20 @@ export type AuthUser = {
 
 export function auth(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  // O cookie HttpOnly existe para previews/downloads navegados diretamente.
+  // Operações mutáveis continuam exigindo Bearer, reduzindo superfície de CSRF.
+  const cookieToken = ["GET", "HEAD"].includes(req.method)
+    ? cookieValue(req, SESSION_COOKIE)
+    : null;
+  const token = bearerToken || cookieToken;
+  if (!token) {
     res.status(401).json({ error: "Token não fornecido" });
     return;
   }
 
   try {
-    const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET!) as Record<string, unknown>;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as Record<string, unknown>;
     const cargo = typeof decoded.cargo === "string" ? decoded.cargo : undefined;
     const perfil = typeof decoded.perfil === "string" ? decoded.perfil : undefined;
     const chatwootAgenteId =
@@ -58,6 +92,7 @@ export function auth(req: Request, res: Response, next: NextFunction) {
 
     req.user = user;
     req.colaborador = user;
+    if (bearerToken) setSessionCookie(res, bearerToken);
     next();
   } catch {
     res.status(401).json({ error: "Token inválido ou expirado" });

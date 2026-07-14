@@ -80,27 +80,27 @@ export default function ExitIntentPopup({ onClose }: ExitIntentPopupProps) {
           {/* Conteúdo */}
           <div className="p-6">
             <p className="text-gray-700 mb-4 font-medium">
-              Antes de ir, descubra em <span className="font-bold text-[var(--color-caixa-blue)]">2 minutos</span> qual é o seu score de crédito!
+              Antes de ir, faça em <span className="font-bold text-[var(--color-caixa-blue)]">2 minutos</span> um diagnóstico educativo do seu perfil de crédito.
             </p>
 
             <div className="bg-blue-50 border-l-4 border-[var(--color-caixa-yellow)] p-4 rounded mb-6">
               <p className="text-sm text-gray-600">
                 ✓ Análise gratuita e sem compromisso<br />
                 ✓ Dicas personalizadas para melhorar seu score<br />
-                ✓ Descubra qual crédito é ideal para você
+                ✓ Entenda pontos de atenção antes de solicitar crédito
               </p>
             </div>
 
             {/* Botões */}
             <div className="flex gap-3">
-              <Link href="/calculadora-score" className="flex-1">
-                <Button
+              <Button asChild
                   size="lg"
                   className="w-full bg-[var(--color-caixa-yellow)] text-[var(--color-caixa-blue)] hover:bg-[var(--color-caixa-yellow)]/90 font-bold"
                 >
+                <Link href="/calculadora-score" className="flex-1">
                   Calcular Meu Score
-                </Button>
-              </Link>
+                </Link>
+              </Button>
               <Button
                 variant="outline"
                 size="lg"

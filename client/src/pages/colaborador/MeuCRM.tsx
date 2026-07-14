@@ -209,17 +209,13 @@ export default function MeuCRM() {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {podeVerTudo && (
-              <Link href="/colaborador/crm">
-                <a className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              <Link href="/colaborador/crm" className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
                   <Kanban className="h-4 w-4" /> CRM completo
-                </a>
-              </Link>
+                </Link>
             )}
-            <Link href="/colaborador/fila">
-              <a className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <Link href="/colaborador/fila" className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
                 <Briefcase className="h-4 w-4" /> Fila operacional
-              </a>
-            </Link>
+              </Link>
             <Button variant="outline" onClick={carregarDados} disabled={loading}>
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
               Atualizar
@@ -338,19 +334,15 @@ export default function MeuCRM() {
                               <UserCheck className="h-4 w-4 mr-1" /> Assumir
                             </Button>
                           )}
-                          <Link href={`/colaborador/crm?leadId=${encodeURIComponent(lead.id)}`}>
-                            <a className="inline-flex">
-                              <Button size="sm" variant="outline">
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={`/colaborador/crm?leadId=${encodeURIComponent(lead.id)}`} className="inline-flex">
                                 <Eye className="h-4 w-4 mr-1" /> Detalhar
-                              </Button>
-                            </a>
-                          </Link>
-                          <Link href={`/colaborador/crm?leadId=${encodeURIComponent(lead.id)}`}>
-                            <a className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700">
+                              </Link>
+                          </Button>
+                          <Link href={`/colaborador/crm?leadId=${encodeURIComponent(lead.id)}`} className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700">
                               Abrir no CRM
                               <ArrowRight className="h-4 w-4" />
-                            </a>
-                          </Link>
+                            </Link>
                         </div>
                       </div>
 

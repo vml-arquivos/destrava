@@ -1,42 +1,57 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
+import { Link } from "wouter";
 
 interface CarouselSlide {
-  src: string;
-  alt: string;
   label: string;
+  title: string;
+  description: string;
+  href: string;
+  accent: string;
 }
 
 const slides: CarouselSlide[] = [
   {
-    src: "/carousel-pronampe.webp",
-    alt: "PRONAMPE — Programa Nacional de Apoio às Microempresas e Empresas de Pequeno Porte",
     label: "PRONAMPE",
+    title: "Crédito para micro e pequenas empresas",
+    description: "Confira elegibilidade, documentos e condições vigentes do programa antes de solicitar.",
+    href: "/pronampe",
+    accent: "from-emerald-400/30 to-emerald-900/10",
   },
   {
-    src: "/carousel-caixa.jpg",
-    alt: "Capital de Giro Caixa — Até R$ 70.000 para sua empresa",
     label: "Capital de Giro Caixa",
+    title: "Recurso para o ciclo operacional",
+    description: "Avalie limite, prazo, taxa e CET conforme a proposta e a análise da instituição.",
+    href: "/giro-caixa-facil",
+    accent: "from-sky-400/30 to-blue-900/10",
   },
   {
-    src: "/carousel-fco.jpg",
-    alt: "FCO — Fundo Constitucional de Financiamento do Centro-Oeste",
     label: "FCO",
+    title: "Financiamento para o Centro-Oeste",
+    description: "Entenda o enquadramento do projeto na programação vigente para GO, MT, MS e DF.",
+    href: "/fco",
+    accent: "from-amber-400/30 to-orange-900/10",
   },
   {
-    src: "/carousel-fgi.jpg",
-    alt: "FGI PEAC — Fundo Garantidor para Investimentos",
     label: "FGI PEAC",
+    title: "Garantia para operações empresariais",
+    description: "Saiba como o programa de garantia pode apoiar uma operação sujeita à análise bancária.",
+    href: "/peac-fgi",
+    accent: "from-violet-400/30 to-indigo-900/10",
   },
   {
-    src: "/carousel-fampe.jpg",
-    alt: "FAMPE — Fundo de Aval às Micro e Pequenas Empresas",
     label: "FAMPE",
+    title: "Garantia complementar para pequenos negócios",
+    description: "Veja como funciona o fundo do Sebrae e confirme as regras com a instituição operadora.",
+    href: "/fampe",
+    accent: "from-yellow-300/30 to-amber-900/10",
   },
   {
-    src: "/carousel-procred.jpg",
-    alt: "ProCred 360 — Crédito para micro e pequenas empresas",
     label: "ProCred 360",
+    title: "Linha voltada a pequenos negócios",
+    description: "Confira público elegível, limite vinculado ao faturamento e condições vigentes.",
+    href: "/procred360",
+    accent: "from-cyan-300/30 to-teal-900/10",
   },
 ];
 
@@ -73,7 +88,7 @@ export default function HeroCarousel() {
 
   // Autoplay
   useEffect(() => {
-    if (paused) return;
+    if (paused || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     timerRef.current = setTimeout(next, AUTOPLAY_INTERVAL);
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -96,22 +111,35 @@ export default function HeroCarousel() {
       aria-label="Carrossel de linhas de crédito"
       role="region"
     >
-      {/* Imagem principal */}
-      <div className="relative overflow-hidden rounded-2xl shadow-2xl aspect-square w-full max-w-xl mx-auto">
-        <img
+      <div className={`relative aspect-square w-full max-w-xl mx-auto overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br ${slides[current].accent} shadow-2xl`}>
+        <div
           key={current}
-          src={slides[current].src}
-          alt={slides[current].alt}
-          className={`w-full h-full object-cover transition-all ease-in-out ${transitionClass}`}
+          className={`flex h-full flex-col justify-between p-8 sm:p-12 transition-all ease-in-out ${transitionClass}`}
           style={{ transitionDuration: `${TRANSITION_DURATION}ms` }}
-          draggable={false}
-        />
-
-        {/* Gradiente inferior para legibilidade dos indicadores */}
-        <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/40 to-transparent rounded-b-2xl pointer-events-none" />
+          aria-live="polite"
+        >
+          <div>
+            <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-2 text-sm font-bold text-white backdrop-blur-sm">
+              <ShieldCheck className="h-4 w-4 text-amber-300" aria-hidden="true" />
+              Condições sujeitas à análise
+            </div>
+            <p className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-300">{slides[current].label}</p>
+            <h2 className="max-w-md text-3xl font-black leading-tight text-white sm:text-4xl">{slides[current].title}</h2>
+            <p className="mt-5 max-w-md text-base leading-relaxed text-white/80 sm:text-lg">{slides[current].description}</p>
+          </div>
+          <Link
+            href={slides[current].href}
+            data-cta-position="home-carousel"
+            className="inline-flex w-fit items-center gap-2 rounded-xl bg-white px-5 py-3 font-bold text-[#0033A0] transition hover:bg-amber-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+          >
+            Conhecer esta opção
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        </div>
 
         {/* Botão anterior */}
         <button
+          type="button"
           onClick={prev}
           className="absolute left-2 top-1/2 -translate-y-1/2 z-10 bg-black/30 hover:bg-black/55 text-white rounded-full p-1.5 transition-all duration-200 backdrop-blur-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
           aria-label="Imagem anterior"
@@ -121,6 +149,7 @@ export default function HeroCarousel() {
 
         {/* Botão próximo */}
         <button
+          type="button"
           onClick={next}
           className="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-black/30 hover:bg-black/55 text-white rounded-full p-1.5 transition-all duration-200 backdrop-blur-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
           aria-label="Próxima imagem"
@@ -132,6 +161,7 @@ export default function HeroCarousel() {
         <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 z-10">
           {slides.map((slide, i) => (
             <button
+              type="button"
               key={i}
               onClick={() => goTo(i, i > current ? "next" : "prev")}
               aria-label={`Ver ${slide.label}`}
@@ -145,9 +175,8 @@ export default function HeroCarousel() {
         </div>
       </div>
 
-      {/* Label da linha de crédito atual */}
       <p className="text-center mt-3 text-sm font-semibold text-[var(--color-caixa-yellow)] tracking-wide uppercase opacity-90 transition-opacity duration-300">
-        {slides[current].label}
+        {current + 1} de {slides.length} — {slides[current].label}
       </p>
     </div>
   );

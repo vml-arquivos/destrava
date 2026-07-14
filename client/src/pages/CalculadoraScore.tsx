@@ -10,6 +10,8 @@ import Footer from "@/components/Footer";
 import { CheckCircle2, AlertCircle, TrendingUp, ArrowRight } from "lucide-react";
 import { Link } from "wouter";
 import SEO from "@/components/SEO";
+import FormSubmitError from "@/components/FormSubmitError";
+import { submitLead } from "@/lib/leads";
 
 interface ScoreFactors {
   paymentHistory: string;
@@ -33,11 +35,13 @@ export default function CalculadoraScore() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [leadCaptured, setLeadCaptured] = useState(false);
+  const [submittingLead, setSubmittingLead] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const calculateScore = (): number => {
     let score = 300; // Base score
 
-    // Histórico de Pagamentos (35% do score - peso 350)
+    // Pesos internos e exclusivamente educativos desta ferramenta.
     switch (factors.paymentHistory) {
       case "excellent":
         score += 350;
@@ -53,7 +57,7 @@ export default function CalculadoraScore() {
         break;
     }
 
-    // Dívidas Atuais (30% do score - peso 300)
+    // Não reproduzem fórmulas proprietárias de birôs ou instituições.
     switch (factors.debts) {
       case "none":
         score += 300;
@@ -69,7 +73,7 @@ export default function CalculadoraScore() {
         break;
     }
 
-    // Tempo de Crédito (15% do score - peso 150)
+    // Histórico de relacionamento informado pelo usuário.
     switch (factors.creditAge) {
       case "long":
         score += 150;
@@ -85,7 +89,7 @@ export default function CalculadoraScore() {
         break;
     }
 
-    // Consultas Recentes (10% do score - peso 100)
+    // Consultas recentes informadas pelo usuário.
     switch (factors.creditInquiries) {
       case "none":
         score += 100;
@@ -98,7 +102,7 @@ export default function CalculadoraScore() {
         break;
     }
 
-    // Tipos de Crédito (10% do score - peso 100)
+    // Diversidade de produtos informada pelo usuário.
     switch (factors.creditTypes) {
       case "diverse":
         score += 100;
@@ -129,15 +133,15 @@ export default function CalculadoraScore() {
   const getScoreTips = (score: number) => {
     if (score >= 800) {
       return [
-        "Parabéns! Seu score está excelente.",
-        "Você tem acesso às melhores taxas de juros do mercado.",
-        "Mantenha seus pagamentos em dia para preservar seu score.",
+        "Suas respostas indicam hábitos financeiros bem organizados.",
+        "Um bom diagnóstico pode ajudar na comparação de propostas, mas não garante taxa ou aprovação.",
+        "Mantenha os pagamentos em dia e acompanhe os relatórios oficiais.",
         "Considere diversificar seus tipos de crédito.",
       ];
     }
     if (score >= 600) {
       return [
-        "Seu score está bom, mas pode melhorar.",
+        "Suas respostas indicam um perfil organizado, com pontos de melhoria.",
         "Continue pagando suas contas em dia.",
         "Evite fazer muitas consultas de crédito em pouco tempo.",
         "Tente reduzir o saldo de suas dívidas atuais.",
@@ -145,14 +149,14 @@ export default function CalculadoraScore() {
     }
     if (score >= 400) {
       return [
-        "Seu score precisa de atenção.",
+        "Alguns hábitos informados merecem atenção.",
         "Priorize quitar dívidas atrasadas.",
         "Negocie débitos antigos para limpar seu nome.",
         "Evite novos empréstimos até regularizar sua situação.",
       ];
     }
     return [
-      "Seu score está baixo e precisa de ação imediata.",
+      "As respostas indicam prioridades importantes de organização financeira.",
       "Regularize todas as dívidas em atraso o quanto antes.",
       "Considere um programa de renegociação de dívidas.",
       "Após regularizar, aguarde 3-6 meses antes de solicitar crédito.",
@@ -174,11 +178,32 @@ export default function CalculadoraScore() {
     }
   };
 
-  const handleLeadCapture = (e: React.FormEvent) => {
+  const handleLeadCapture = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Aqui você pode integrar com webhook ou API
-    console.log("Lead capturado:", { name, email, phone, score });
-    setLeadCaptured(true);
+    setSubmittingLead(true);
+    setSubmitError(null);
+    try {
+      await submitLead({
+        nome: name,
+        telefone: phone,
+        email,
+        origem: "calculadora_score",
+        produto_interesse: "Diagnóstico de score",
+        finalidade: `Índice educativo informado pela ferramenta: ${score}`,
+        score_estimado: score,
+        respostas_score: factors,
+        pagina: "/calculadora-score",
+      });
+      setLeadCaptured(true);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível enviar seus dados. Tente novamente.",
+      );
+    } finally {
+      setSubmittingLead(false);
+    }
   };
 
   const canProceed = () => {
@@ -204,8 +229,8 @@ export default function CalculadoraScore() {
   return (
     <>
       <SEO
-        title="Calculadora de Score de Crédito Gratuita | Destrava Crédito"
-        description="Calcule gratuitamente uma estimativa do seu score de crédito em 2 minutos. Descubra como melhorar seu score e aumentar suas chances de aprovação de crédito."
+        title="Diagnóstico Educativo de Perfil de Crédito | Destrava Crédito"
+        description="Responda perguntas sobre hábitos financeiros e receba um índice educativo com orientações. Não consulta nem substitui o score oficial de birôs de crédito."
         keywords="calculadora score, score de crédito, como calcular score, melhorar score, score empresarial"
         type="website"
       />
@@ -219,10 +244,10 @@ export default function CalculadoraScore() {
                 {/* Header da Calculadora */}
                 <div className="text-center mb-12">
                   <h1 className="text-4xl md:text-5xl font-bold text-[var(--color-caixa-blue)] mb-4">
-                    Calculadora de Score de Crédito
+                    Diagnóstico Educativo de Crédito
                   </h1>
                   <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-                    Responda 5 perguntas simples e descubra uma estimativa do seu score de crédito em menos de 2 minutos.
+                    Responda 5 perguntas e receba um índice educativo. Esta ferramenta não consulta o score oficial nem representa análise bancária.
                   </p>
                 </div>
 
@@ -457,10 +482,10 @@ export default function CalculadoraScore() {
                 {/* Result Screen */}
                 <div className="text-center mb-8">
                   <h1 className="text-4xl md:text-5xl font-bold text-[var(--color-caixa-blue)] mb-4">
-                    Seu Score Estimado
+                    Seu Índice Educativo
                   </h1>
                   <p className="text-lg text-gray-600">
-                    Baseado nas suas respostas, calculamos uma estimativa do seu score de crédito
+                    Resultado interno da ferramenta, calculado apenas a partir das suas respostas
                   </p>
                 </div>
 
@@ -501,7 +526,7 @@ export default function CalculadoraScore() {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-[var(--color-caixa-blue)]">
                       <TrendingUp className="h-6 w-6" />
-                      Como Melhorar Seu Score
+                      Próximos passos recomendados
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -565,11 +590,14 @@ export default function CalculadoraScore() {
                             placeholder="(61) 3526-8355"
                           />
                         </div>
+                        <FormSubmitError message={submitError} />
                         <Button
                           type="submit"
+                          disabled={submittingLead}
+                          aria-busy={submittingLead}
                           className="w-full bg-[var(--color-caixa-yellow)] text-[var(--color-caixa-blue)] hover:bg-[var(--color-caixa-yellow)]/90 font-bold"
                         >
-                          Receber Relatório Gratuito
+                          {submittingLead ? "Enviando..." : "Receber orientação gratuita"}
                         </Button>
                         <p className="text-xs text-gray-500 text-center">
                           Seus dados estão seguros. Não compartilhamos com terceiros.
@@ -582,11 +610,10 @@ export default function CalculadoraScore() {
                     <CardContent className="pt-8 pb-8 text-center">
                       <CheckCircle2 className="h-16 w-16 text-green-600 mx-auto mb-4" />
                       <h3 className="text-2xl font-bold text-green-800 mb-2">
-                        Relatório Enviado!
+                        Dados recebidos!
                       </h3>
                       <p className="text-green-700 mb-6">
-                        Enviamos seu relatório personalizado para <strong>{email}</strong>.
-                        Verifique sua caixa de entrada (e spam também).
+                        Registramos seu diagnóstico para <strong>{email}</strong>. Nossa equipe poderá entrar em contato com orientações para o seu perfil.
                       </p>
                     </CardContent>
                   </Card>
@@ -599,31 +626,34 @@ export default function CalculadoraScore() {
                       Pronto para Solicitar Crédito?
                     </h3>
                     <p className="mb-6 text-white/90">
-                      A Destrava Crédito pode ajudar você a conseguir crédito mesmo com score baixo.
-                      Fazemos a análise e indicamos as melhores opções para seu perfil.
+                      A Destrava Crédito pode orientar a organização do seu perfil e a comparação de propostas.
+                      A aprovação e as condições pertencem à instituição financeira.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                      <Link href="/simulador">
-                        <Button
+                      <Button
+                          asChild
                           size="lg"
                           className="bg-[var(--color-caixa-yellow)] text-[var(--color-caixa-blue)] hover:bg-[var(--color-caixa-yellow)]/90 font-bold"
                         >
-                          Simular Crédito Agora
+                          <Link href="/simular" data-cta-position="calculadora-resultado-primary">
+                            Simular Crédito Agora
+                          </Link>
                         </Button>
-                      </Link>
-                      <a
-                        href="https://wa.me/556135268355?text=Olá! Calculei meu score no site e gostaria de saber mais sobre crédito."
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <Button
+                        asChild
+                        size="lg"
+                        variant="outline"
+                        className="bg-white text-[var(--color-caixa-blue)] hover:bg-white/90 border-white"
                       >
-                        <Button
-                          size="lg"
-                          variant="outline"
-                          className="bg-white text-[var(--color-caixa-blue)] hover:bg-white/90 border-white"
+                        <a
+                          href="https://wa.me/556135268355?text=Olá! Preenchi o diagnóstico educativo no site e gostaria de orientação sobre crédito."
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          data-cta-position="calculadora-resultado-whatsapp"
                         >
                           Falar no WhatsApp
-                        </Button>
-                      </a>
+                        </a>
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -656,9 +686,9 @@ export default function CalculadoraScore() {
             {/* Disclaimer */}
             <div className="mt-12 p-6 bg-gray-100 rounded-lg">
               <p className="text-sm text-gray-600 text-center">
-                <strong>Importante:</strong> Esta é uma estimativa educacional baseada em fatores gerais.
-                Seu score real pode variar e só pode ser consultado oficialmente em bureaus de crédito como
-                Serasa, Boa Vista SCPC e Quod. Esta calculadora não substitui consultas oficiais.
+                <strong>Importante:</strong> Este índice é educativo e usa somente as respostas fornecidas.
+                Ele não consulta, estima ou reproduz o score de Serasa, SPC Brasil, Quod ou qualquer banco.
+                Consulte diretamente a fonte oficial para conhecer uma pontuação real.
               </p>
             </div>
           </div>

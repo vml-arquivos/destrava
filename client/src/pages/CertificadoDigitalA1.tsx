@@ -179,12 +179,12 @@ const steps = [
 
 export default function CertificadoDigitalA1() {
   return (
-    <div className="min-h-screen bg-white text-slate-950">
+    <div className="min-h-screen bg-white pb-20 text-slate-950 md:pb-0">
       <SEO
         title="Certificado Digital A1 em até 1 Hora"
         description="Emita seu Certificado Digital A1 online, com orientação especializada e suporte na instalação. Prazo sujeito à validação e disponibilidade."
         keywords="certificado digital A1, certificado A1 urgente, emitir certificado digital online, e-CNPJ A1, e-CPF A1, certificado ICP-Brasil"
-        image="https://destrava.permupay.com.br/3.png"
+        image="https://destravacredito.com/og-image.png"
         structuredData={structuredData}
       />
       <Header ctaLabel="Solicitar Certificado A1" ctaHref={CAPTURE_URL} />
@@ -206,8 +206,7 @@ export default function CertificadoDigitalA1() {
                 </div>
 
                 <h1 id="a1-hero-title" className="max-w-3xl text-4xl font-black leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl">
-                  Certificado Digital A1: <span className="text-amber-300">Pronto em 1 Hora.</span>{" "}
-                  Destrave seu Negócio Agora!
+                  Certificado Digital A1 online com emissão que <span className="text-amber-300">pode ocorrer em até 1 hora</span>
                 </h1>
 
                 <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-200 sm:text-xl">
@@ -225,13 +224,13 @@ export default function CertificadoDigitalA1() {
 
                 <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
                   <Button asChild size="lg" className="h-13 rounded-xl bg-amber-300 px-7 text-base font-black text-slate-950 shadow-lg shadow-amber-400/15 hover:bg-amber-200">
-                    <Link href={CAPTURE_URL}>
-                      Solicitar Certificado A1 em 1H
+                    <Link href={CAPTURE_URL} data-cta-position="a1-hero">
+                      Solicitar Certificado A1
                       <ArrowRight className="h-5 w-5" aria-hidden="true" />
                     </Link>
                   </Button>
                   <Button asChild size="lg" variant="outline" className="h-13 rounded-xl border-white/30 bg-transparent px-7 text-base font-bold text-white hover:bg-white/10 hover:text-white">
-                    <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
+                    <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" data-cta-position="a1-hero">
                       <MessageCircle className="h-5 w-5" aria-hidden="true" />
                       Falar com Especialista no WhatsApp
                     </a>
@@ -525,19 +524,19 @@ export default function CertificadoDigitalA1() {
           <div className="container relative px-4">
             <div className="mx-auto max-w-4xl text-center">
               <Sparkles className="mx-auto h-9 w-9 text-amber-300" aria-hidden="true" />
-              <h2 id="a1-final-cta-title" className="mt-5 text-3xl font-black tracking-tight sm:text-5xl">Não Deixe sua Empresa Parar. Garanta seu Certificado Digital A1 Agora!</h2>
+              <h2 id="a1-final-cta-title" className="mt-5 text-3xl font-black tracking-tight sm:text-5xl">Resolva sua emissão A1 com orientação do pedido à instalação</h2>
               <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-blue-100">
                 Solicite agora a orientação para seu Certificado Digital A1 e avance para a validação com os documentos certos.
               </p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                 <Button asChild size="lg" className="h-13 rounded-xl bg-amber-300 px-8 text-base font-black text-slate-950 hover:bg-amber-200">
-                  <Link href={CAPTURE_URL}>
-                    Solicitar Certificado A1 em 1H
+                  <Link href={CAPTURE_URL} data-cta-position="a1-final">
+                    Solicitar Certificado A1
                     <ArrowRight className="h-5 w-5" aria-hidden="true" />
                   </Link>
                 </Button>
                 <Button asChild size="lg" variant="outline" className="h-13 rounded-xl border-white/30 bg-transparent px-8 text-base font-bold text-white hover:bg-white/10 hover:text-white">
-                  <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
+                  <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" data-cta-position="a1-final">
                     <MessageCircle className="h-5 w-5" aria-hidden="true" />
                     Falar com Especialista no WhatsApp
                   </a>
@@ -552,6 +551,19 @@ export default function CertificadoDigitalA1() {
       </main>
 
       <Footer />
+
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 p-3 shadow-[0_-8px_30px_rgba(15,23,42,.12)] backdrop-blur md:hidden" aria-label="Ações rápidas">
+        <div className="mx-auto grid max-w-lg grid-cols-[1fr_auto] gap-2">
+          <Button asChild className="h-12 bg-amber-300 font-black text-slate-950 hover:bg-amber-200">
+            <Link href={CAPTURE_URL} data-cta-position="a1-sticky-mobile">Solicitar A1</Link>
+          </Button>
+          <Button asChild variant="outline" size="icon-lg" className="h-12 w-12 border-emerald-300 text-emerald-700">
+            <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" data-cta-position="a1-sticky-mobile" aria-label="Falar no WhatsApp">
+              <MessageCircle className="h-5 w-5" />
+            </a>
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import Header from "@/components/Header";
 import SEO from "@/components/SEO";
 import Footer from "@/components/Footer";
+import { COMPANY } from "@/config/company";
 
 export default function PoliticaPrivacidade() {
   return (
@@ -17,15 +18,15 @@ export default function PoliticaPrivacidade() {
           <div className="max-w-4xl mx-auto">
             <h1 className="text-4xl font-bold mb-8">Política de Privacidade</h1>
             <p className="text-sm text-muted-foreground mb-12">
-              Última atualização: Janeiro de 2024
+              Última atualização: Julho de 2026
             </p>
 
             <div className="prose prose-lg max-w-none space-y-8">
               <section>
                 <h2 className="text-2xl font-bold mb-4">1. Introdução</h2>
                 <p className="text-muted-foreground leading-relaxed">
-                  A Destrava Crédito, atuando como correspondente bancário
-                  autorizado, está comprometida com a proteção da privacidade e
+                  A Destrava Crédito, atuando em assessoria empresarial, está
+                  comprometida com a proteção da privacidade e
                   dos dados pessoais de seus clientes e usuários. Esta Política
                   de Privacidade descreve como coletamos, usamos, armazenamos e
                   protegemos suas informações pessoais, em conformidade com a
@@ -70,8 +71,8 @@ export default function PoliticaPrivacidade() {
                 </p>
                 <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
                   <li>
-                    Intermediar solicitações de crédito junto à CAIXA Econômica
-                    Federal
+                    Atender solicitações e orientar operações de crédito junto a
+                    instituições compatíveis com o perfil
                   </li>
                   <li>
                     Prestar assessoria e orientação sobre produtos de crédito
@@ -105,8 +106,9 @@ export default function PoliticaPrivacidade() {
                 </p>
                 <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
                   <li>
-                    <strong>Com a CAIXA Econômica Federal:</strong> para análise
-                    e processamento de solicitações de crédito
+                    <strong>Com instituições financeiras:</strong> quando
+                    necessário para atender uma solicitação, conforme o contexto
+                    da operação e as bases legais aplicáveis
                   </li>
                   <li>
                     <strong>Com prestadores de serviços:</strong> que nos
@@ -130,11 +132,10 @@ export default function PoliticaPrivacidade() {
                   5. Segurança das Informações
                 </h2>
                 <p className="text-muted-foreground leading-relaxed">
-                  Implementamos medidas técnicas e organizacionais adequadas para
+                  Adotamos medidas técnicas e organizacionais proporcionais para
                   proteger suas informações contra acesso não autorizado, perda,
-                  destruição ou alteração. Isso inclui criptografia de dados,
-                  controles de acesso, firewalls e monitoramento constante de
-                  nossos sistemas. No entanto, nenhum método de transmissão pela
+                  destruição ou alteração, incluindo controles de acesso e
+                  restrição de arquivos privados. No entanto, nenhum método de transmissão pela
                   internet ou armazenamento eletrônico é 100% seguro, e não
                   podemos garantir segurança absoluta.
                 </p>
@@ -172,18 +173,19 @@ export default function PoliticaPrivacidade() {
                   <li>Obter informações sobre compartilhamento de dados</li>
                 </ul>
                 <p className="text-muted-foreground leading-relaxed mt-4">
-                  Para exercer seus direitos, entre em contato conosco através
-                  do e-mail: destravacreditooficial@gmail.com
+                  Para exercer seus direitos, entre em contato pelo e-mail: {" "}
+                  <a className="underline" href={COMPANY.emailLink}>{COMPANY.email}</a>
                 </p>
               </section>
 
               <section>
                 <h2 className="text-2xl font-bold mb-4">8. Cookies</h2>
                 <p className="text-muted-foreground leading-relaxed">
-                  Utilizamos cookies e tecnologias similares para melhorar sua
-                  experiência em nosso site, analisar o tráfego e personalizar
-                  conteúdo. Você pode configurar seu navegador para recusar
-                  cookies, mas isso pode afetar algumas funcionalidades do site.
+                  Utilizamos recursos essenciais para o funcionamento do site. A
+                  medição de audiência e conversões, inclusive pelo Google
+                  Analytics, só é ativada após sua escolha no banner de
+                  privacidade. Você pode aceitar analytics ou manter somente os
+                  recursos essenciais. A recusa não impede o envio dos formulários.
                 </p>
               </section>
 
@@ -223,10 +225,10 @@ export default function PoliticaPrivacidade() {
                 <div className="mt-4 p-6 bg-muted/50 rounded-lg">
                   <p className="font-semibold mb-2">Destrava Crédito</p>
                   <p className="text-sm text-muted-foreground">
-                    E-mail: destravacreditooficial@gmail.com
+                    E-mail: <a className="underline" href={COMPANY.emailLink}>{COMPANY.email}</a>
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Telefone: (11) 9 9999-9999
+                    Telefone: <a className="underline" href={COMPANY.telefoneLink}>{COMPANY.telefone}</a>
                   </p>
                 </div>
               </section>
@@ -235,8 +237,7 @@ export default function PoliticaPrivacidade() {
                 <p className="text-sm text-muted-foreground italic">
                   Esta Política de Privacidade foi elaborada em conformidade com
                   a Lei Geral de Proteção de Dados (LGPD - Lei nº 13.709/2018) e
-                  demais normas aplicáveis ao setor financeiro e de
-                  correspondentes bancários.
+                  demais normas aplicáveis.
                 </p>
               </section>
             </div>

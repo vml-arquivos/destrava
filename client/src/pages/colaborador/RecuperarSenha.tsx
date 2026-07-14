@@ -69,7 +69,7 @@ export default function RecuperarSenha() {
               </div>
               <Button type="submit" size="lg" className="w-full font-semibold" disabled={loading}>{loading ? "Solicitando..." : "Solicitar redefinição"}</Button>
             </form>
-            <p className="text-center text-sm text-muted-foreground mt-6"><Link href="/colaborador/login"><a className="text-primary hover:underline">Voltar ao login</a></Link></p>
+            <p className="text-center text-sm text-muted-foreground mt-6"><Link href="/colaborador/login" className="text-primary hover:underline">Voltar ao login</Link></p>
           </div>
         </div>
       </div>
