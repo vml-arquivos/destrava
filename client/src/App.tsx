@@ -2,6 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
+import { lazy, Suspense } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
@@ -67,6 +68,8 @@ import Layout from "./pages/colaborador/Layout";
 import ConfiguracaoFuncoes from "./pages/colaborador/ConfiguracaoFuncoes";
 import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 
+const CertificadoDigitalA1 = lazy(() => import("./pages/CertificadoDigitalA1"));
+
 function FeatureGate({
   featureKey,
   children,
@@ -95,6 +98,22 @@ function FeatureGate({
         </div>
       </div>
     </Layout>
+  );
+}
+
+function CertificadoDigitalA1Route() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          className="min-h-screen bg-[#07152f]"
+          role="status"
+          aria-label="Carregando página de Certificado Digital A1"
+        />
+      }
+    >
+      <CertificadoDigitalA1 />
+    </Suspense>
   );
 }
 
@@ -135,6 +154,7 @@ function Router() {
       <Route path="/rating-banco-brasil" component={RatingBancoBrasil} />
       <Route path="/rating-banco-central" component={RatingBancoCentral} />
       <Route path="/certificado-digital" component={CertificadoDigital} />
+      <Route path="/certificado-digital-a1" component={CertificadoDigitalA1Route} />
       <Route path="/consulta-spc-serasa" component={ConsultaSPCSerasa} />
 
       {/* Captura de Lead */}
