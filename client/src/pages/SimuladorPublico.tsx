@@ -221,8 +221,7 @@ export default function SimuladorPublico() {
 
   function escolherPerfil(p: "empresario" | "pf" | "captador") {
     setPerfil(p);
-    if (p === "captador") return; // fica na própria etapa 0, mostra o card de captador
-    const tipo = p === "empresario" ? "empresa" : "pf";
+    const tipo = p === "pf" ? "pf" : "empresa";
     setTipoPessoa(tipo);
     const prods = produtos.filter((prod) => prod.tipo === tipo);
     const prod = linhaInteresse ? prods.find((prod) => prod.id === linhaInteresse) || prods[0] : prods[0];
@@ -230,7 +229,7 @@ export default function SimuladorPublico() {
     setValor(prod.minValor);
     setPrazo(prod.minPrazo);
     setTaxa(2.5);
-    setStep(1);
+    if (p !== "captador") setStep(1);
   }
 
   function escolherLinha(id: string | null) {
@@ -373,7 +372,7 @@ export default function SimuladorPublico() {
               { n: 0, label: "Perfil" },
               { n: 1, label: "Dados de contato" },
               { n: 2, label: "Simulação" },
-              { n: 3, label: "Oferta de análise" },
+              { n: 3, label: "Próximos passos" },
             ].map((s, i) => (
               <div key={s.n} className="flex items-center gap-2">
                 <div
@@ -465,19 +464,39 @@ export default function SimuladorPublico() {
               )}
 
               {perfil === "captador" && (
-                <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-6 text-center">
-                  <Award className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-                  <h3 className="font-bold text-gray-900 mb-1">Ganhe indicando clientes para a Destrava</h3>
-                  <p className="text-sm text-gray-600 mb-4">Fale com a gente pelo WhatsApp para conhecer como funciona a parceria e as comissões.</p>
-                  <a
-                    href={COMPANY.whatsappLinkMsg("Olá! Tenho interesse em ser captador/parceiro da Destrava Crédito.")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-3 rounded-xl"
-                  >
-                    <MessageCircle className="w-5 h-5" /> Falar no WhatsApp
-                  </a>
-                </div>
+                <>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">O que seu cliente procura (opcional)</p>
+                  <div className="grid sm:grid-cols-2 gap-2 mb-6">
+                    {produtos.filter((p) => p.tipo === "empresa").map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => escolherLinha(p.id)}
+                        className={`text-left px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+                          linhaInteresse === p.id ? "border-[#0033A0] bg-blue-50 text-[#0033A0]" : "border-gray-200 text-gray-600 hover:border-gray-300"
+                        }`}
+                      >
+                        {p.nome}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <Button
+                      onClick={() => { setTipoPessoa("empresa"); setStep(1); }}
+                      className="w-full bg-[#0033A0] hover:bg-[#002280] text-white py-3 text-base font-semibold rounded-xl"
+                    >
+                      Simular agora
+                      <ChevronRight className="w-5 h-5 ml-1" />
+                    </Button>
+                    <a
+                      href={COMPANY.whatsappLinkMsg("Olá! Tenho interesse em trabalhar como parceiro da Destrava Crédito.")}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 border border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-semibold px-4 py-3 rounded-xl transition-colors"
+                    >
+                      <Users className="w-5 h-5" /> Quero trabalhar com a Destrava
+                    </a>
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -677,7 +696,7 @@ export default function SimuladorPublico() {
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
                     Você é
                   </p>
-                  <div className="grid grid-cols-2 gap-2 mb-5">
+                  <div className={`grid ${perfil === "captador" ? "grid-cols-1" : "grid-cols-2"} gap-2 mb-5`}>
                     <button
                       onClick={() => mudarTipoPessoa("empresa")}
                       className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl border-2 text-sm font-medium transition-all ${
@@ -689,17 +708,19 @@ export default function SimuladorPublico() {
                       <Building2 className="w-4 h-4" />
                       Empresa
                     </button>
-                    <button
-                      onClick={() => mudarTipoPessoa("pf")}
-                      className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl border-2 text-sm font-medium transition-all ${
-                        tipoPessoa === "pf"
-                          ? "border-[#0033A0] bg-blue-50 text-[#0033A0]"
-                          : "border-gray-200 text-gray-600 hover:border-gray-300"
-                      }`}
-                    >
-                      <User className="w-4 h-4" />
-                      Pessoa Física
-                    </button>
+                    {perfil !== "captador" && (
+                      <button
+                        onClick={() => mudarTipoPessoa("pf")}
+                        className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl border-2 text-sm font-medium transition-all ${
+                          tipoPessoa === "pf"
+                            ? "border-[#0033A0] bg-blue-50 text-[#0033A0]"
+                            : "border-gray-200 text-gray-600 hover:border-gray-300"
+                        }`}
+                      >
+                        <User className="w-4 h-4" />
+                        Pessoa Física
+                      </button>
+                    )}
                   </div>
 
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
@@ -877,41 +898,40 @@ export default function SimuladorPublico() {
                   onClick={() => setStep(3)}
                   className="w-full bg-[#0033A0] hover:bg-[#002280] text-white py-3 text-base font-semibold rounded-xl"
                 >
-                  Continuar para análise completa
+                  Avançar para próximos passos
                   <ChevronRight className="w-5 h-5 ml-1" />
                 </Button>
               </div>
             </div>
           )}
 
-          {/* ── STEP 3: Oferta de análise ── */}
+          {/* ── STEP 3: Próximos passos ── */}
           {step === 3 && (
             <div className="space-y-4">
               <div className="bg-white rounded-2xl shadow-sm border p-6 text-center">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle2 className="w-8 h-8 text-green-500" />
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Zap className="w-8 h-8 text-[#0033A0]" />
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                  Sua simulação foi concluída!
+                  Simulação concluída. E agora?
                 </h2>
                 <p className="text-gray-600 mb-5">
-                  Agora um especialista poderá analisar seu perfil completo e verificar quais bancos possuem maior chance de aprovação para sua empresa.
+                  Nós estamos ao seu lado para encontrar a melhor solução. Solicite o contato de um especialista para receber assessoria consultiva, entender suas opções reais e organizar a documentação sem compromisso.
                 </p>
 
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5 text-left">
-                  <p className="text-sm font-semibold text-[#0033A0] mb-3">A análise completa inclui:</p>
+                  <p className="text-sm font-semibold text-[#0033A0] mb-3">Com a nossa assessoria, você terá:</p>
                   <div className="grid sm:grid-cols-2 gap-2 text-sm text-gray-700">
                     {[
-                      "Análise individual",
-                      "Consulta personalizada",
-                      "Bancos públicos",
-                      "Bancos privados",
-                      "Linhas disponíveis",
-                      "Taxa estimada",
-                      "Documentação necessária",
+                      "Apoio consultivo especializado",
+                      "Análise individual do perfil",
+                      "Comparação entre bancos",
+                      "Orientação sobre linhas disponíveis",
+                      "Organização de documentos",
+                      "Acompanhamento da proposta",
                     ].map((item) => (
                       <div key={item} className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                        <CheckCircle2 className="w-4 h-4 text-[#0033A0] flex-shrink-0" />
                         <span>{item}</span>
                       </div>
                     ))}
@@ -948,7 +968,7 @@ export default function SimuladorPublico() {
                   >
                     {enviando ? "Enviando..." : (
                       <>
-                        Solicitar análise completa
+                        Falar com um especialista
                         <ChevronRight className="w-5 h-5 ml-1" />
                       </>
                     )}
@@ -1094,6 +1114,7 @@ export default function SimuladorPublico() {
                     </Link>
                   </Button>
                 </div>
+
               </div>
             </div>
           )}
