@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { OfertaPosSimulacao } from "../components/OfertaPosSimulacao";
 import {
   Calculator,
   User,
@@ -197,6 +198,8 @@ export default function SimuladorPublico() {
   const [enviando, setEnviando] = useState(false);
   const [leadSalvo, setLeadSalvo] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [ofertaAberta, setOfertaAberta] = useState(false);
+  const [tipoDocumentoParceiro, setTipoDocumentoParceiro] = useState<"cpf" | "cnpj">("cpf");
 
   const produtosFiltrados = produtos.filter((p) => p.tipo === tipoPessoa);
 
@@ -211,10 +214,17 @@ export default function SimuladorPublico() {
     if (!form.telefone.trim()) e.telefone = "Telefone é obrigatório";
     else if (form.telefone.replace(/\D/g, "").length < 10)
       e.telefone = "Telefone inválido";
-    if (tipoPessoa === "empresa" && !isValidCnpj(form.documento))
-      e.documento = "Informe um CNPJ válido";
-    if (tipoPessoa === "pf" && !isValidCpf(form.documento))
-      e.documento = "Informe um CPF válido";
+    if (perfil === "captador") {
+      if (tipoDocumentoParceiro === "cpf" && !isValidCpf(form.documento))
+        e.documento = "Informe um CPF válido";
+      if (tipoDocumentoParceiro === "cnpj" && !isValidCnpj(form.documento))
+        e.documento = "Informe um CNPJ válido";
+    } else {
+      if (tipoPessoa === "empresa" && !isValidCnpj(form.documento))
+        e.documento = "Informe um CNPJ válido";
+      if (tipoPessoa === "pf" && !isValidCpf(form.documento))
+        e.documento = "Informe um CPF válido";
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -481,10 +491,10 @@ export default function SimuladorPublico() {
                   </div>
                   <div className="grid sm:grid-cols-2 gap-3">
                     <Button
-                      onClick={() => { setTipoPessoa("empresa"); setStep(1); }}
+                      onClick={() => { setTipoPessoa("empresa"); setTipoDocumentoParceiro("cpf"); setForm({ ...form, documento: "" }); setStep(1); }}
                       className="w-full bg-[#0033A0] hover:bg-[#002280] text-white py-3 text-base font-semibold rounded-xl"
                     >
-                      Simular agora
+                      Cadastre-se para simular
                       <ChevronRight className="w-5 h-5 ml-1" />
                     </Button>
                     <a
@@ -510,27 +520,51 @@ export default function SimuladorPublico() {
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">
-                    Falta pouco: confirme se você é elegível de verdade
+                    {perfil === "captador" ? "Cadastro rápido para parceiros" : "Falta pouco: confirme seus dados"}
                   </h2>
                   <p className="text-sm text-gray-500">
-                    O cenário que você montou é educativo. Com seus dados, um especialista confirma taxa real, banco que mais combina com seu perfil e próximos passos. Campos com * são obrigatórios.
+                    {perfil === "captador"
+                      ? "Identifique-se antes da primeira simulação. Você poderá montar cenários empresariais e conhecer nossa parceria sem compromisso. Campos com * são obrigatórios."
+                      : "O cenário é educativo. Com seus dados, um especialista poderá orientar sobre opções reais e próximos passos. Campos com * são obrigatórios."}
                   </p>
                 </div>
               </div>
 
               <div className="space-y-4">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  Dados de Contato
+                  {perfil === "captador" ? "Identificação do parceiro" : "Dados de contato"}
                 </p>
+
+                {perfil === "captador" && (
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                    <p className="text-sm font-semibold text-[#0033A0] mb-2">Como você deseja se cadastrar?</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setTipoDocumentoParceiro("cpf"); setForm({ ...form, documento: "" }); setErrors({ ...errors, documento: "" }); }}
+                        className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${tipoDocumentoParceiro === "cpf" ? "border-[#0033A0] bg-white text-[#0033A0]" : "border-blue-200 text-gray-600 hover:bg-white/70"}`}
+                      >
+                        Pessoa física (CPF)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setTipoDocumentoParceiro("cnpj"); setForm({ ...form, documento: "" }); setErrors({ ...errors, documento: "" }); }}
+                        className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${tipoDocumentoParceiro === "cnpj" ? "border-[#0033A0] bg-white text-[#0033A0]" : "border-blue-200 text-gray-600 hover:bg-white/70"}`}
+                      >
+                        Empresa (CNPJ)
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="documento" className="text-sm font-medium mb-1.5 block">
-                      {tipoPessoa === "empresa" ? "CNPJ" : "CPF"} *
+                      {perfil === "captador" ? (tipoDocumentoParceiro === "cpf" ? "CPF" : "CNPJ") : (tipoPessoa === "empresa" ? "CNPJ" : "CPF")} *
                     </Label>
                     <Input
                       id="documento"
-                      placeholder={tipoPessoa === "empresa" ? "00.000.000/0000-00" : "000.000.000-00"}
+                      placeholder={perfil === "captador" ? (tipoDocumentoParceiro === "cnpj" ? "00.000.000/0000-00" : "000.000.000-00") : (tipoPessoa === "empresa" ? "00.000.000/0000-00" : "000.000.000-00")}
                       value={form.documento}
                       inputMode="numeric"
                       aria-invalid={Boolean(errors.documento)}
@@ -539,9 +573,11 @@ export default function SimuladorPublico() {
                         setForm({
                           ...form,
                           documento:
-                            tipoPessoa === "empresa"
-                              ? formatCnpj(e.target.value)
-                              : formatCpf(e.target.value),
+                            perfil === "captador"
+                              ? (tipoDocumentoParceiro === "cnpj" ? formatCnpj(e.target.value) : formatCpf(e.target.value))
+                              : tipoPessoa === "empresa"
+                                ? formatCnpj(e.target.value)
+                                : formatCpf(e.target.value),
                         })
                       }
                     />
@@ -602,9 +638,11 @@ export default function SimuladorPublico() {
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="empresa" className="text-sm font-medium mb-1.5 block">
-                      {tipoPessoa === "empresa"
-                        ? "Nome da Empresa"
-                        : "Empresa (opcional)"}{" "}
+                      {perfil === "captador"
+                        ? "Empresa, escritório ou canal"
+                        : tipoPessoa === "empresa"
+                          ? "Nome da Empresa"
+                          : "Empresa (opcional)"}{" "}
                       <span className="text-gray-400 font-normal">
                         (opcional)
                       </span>
@@ -614,9 +652,11 @@ export default function SimuladorPublico() {
                       <Input
                         id="empresa"
                         placeholder={
-                          tipoPessoa === "empresa"
-                            ? "Razão social ou nome fantasia"
-                            : "Nome da empresa (se aplicável)"
+                          perfil === "captador"
+                            ? "Nome comercial (se aplicável)"
+                            : tipoPessoa === "empresa"
+                              ? "Razão social ou nome fantasia"
+                              : "Nome da empresa (se aplicável)"
                         }
                         className="pl-9"
                         value={form.empresa}
@@ -672,7 +712,7 @@ export default function SimuladorPublico() {
                     }}
                     className="flex-[2] bg-[#0033A0] hover:bg-[#002280] text-white py-3 text-base font-semibold rounded-xl"
                   >
-                    Continuar para simulação
+                    {perfil === "captador" ? "Concluir cadastro e simular" : "Continuar para simulação"}
                     <ChevronRight className="w-5 h-5 ml-1" />
                   </Button>
                 </div>
@@ -1066,27 +1106,7 @@ export default function SimuladorPublico() {
                   </a>
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      gerarPdfSimulacao({
-                        cliente: {
-                          nome: form.nome,
-                          empresa: form.empresa || undefined,
-                          telefone: form.telefone,
-                          linhaCredito: produtoSelecionado.nome,
-                        },
-                        cenarioA: {
-                          taxa,
-                          valorCredito: valor,
-                          prazo,
-                          parcela,
-                          totalFinanciamento: totalPagar,
-                          totalJuros,
-                          custoTotalOperacao: totalPagar,
-                          cenario: "sem_imposto",
-                        },
-                        modo: "simples",
-                      });
-                    }}
+                    onClick={() => setOfertaAberta(true)}
                     className="flex items-center justify-center gap-2 border-[#0033A0] text-[#0033A0] hover:bg-blue-50"
                   >
                     <FileDown className="w-4 h-4" />
@@ -1120,6 +1140,35 @@ export default function SimuladorPublico() {
           )}
         </div>
       </div>
+
+      <OfertaPosSimulacao 
+        isOpen={ofertaAberta} 
+        onOpenChange={setOfertaAberta}
+        clienteNome={form.nome}
+        clienteEmail={form.email}
+        clienteTelefone={form.telefone}
+        onDownloadGratuito={() => {
+          gerarPdfSimulacao({
+            cliente: {
+              nome: form.nome,
+              empresa: form.empresa || undefined,
+              telefone: form.telefone,
+              linhaCredito: produtoSelecionado.nome,
+            },
+            cenarioA: {
+              taxa,
+              valorCredito: valor,
+              prazo,
+              parcela,
+              totalFinanciamento: totalPagar,
+              totalJuros,
+              custoTotalOperacao: totalPagar,
+              cenario: "sem_imposto",
+            },
+            modo: "simples",
+          });
+        }}
+      />
 
       {/* Stats */}
       <section className="bg-white border-t py-10 px-4">
