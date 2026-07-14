@@ -290,6 +290,38 @@ export default function CertificadoDigitalA1() {
           </div>
         </section>
 
+        <section className="border-b border-slate-100 bg-white py-10" aria-labelledby="a1-seguranca-title">
+          <div className="container px-4">
+            <div className="mx-auto flex max-w-5xl flex-col items-center gap-8 sm:flex-row sm:items-center">
+              <svg
+                className="h-24 w-24 shrink-0 sm:h-28 sm:w-28"
+                viewBox="0 0 120 120"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                role="img"
+                aria-label="Ilustração de escudo representando segurança do processo de emissão"
+              >
+                <path d="M60 8 L104 24 V56 C104 84 86 102 60 112 C34 102 16 84 16 56 V24 Z" fill="#0c1d3b" />
+                <path d="M60 16 L96 29.5 V56 C96 79.5 81 94.5 60 103.5 C39 94.5 24 79.5 24 56 V29.5 Z" fill="#12275a" />
+                <path d="M42 59 L54 71 L80 45" stroke="#fbbf24" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              </svg>
+              <div className="text-center sm:text-left">
+                <h2 id="a1-seguranca-title" className="text-xl font-black text-slate-900 sm:text-2xl">
+                  Seu certificado, do jeito certo — com segurança de ponta a ponta
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
+                  Cada pedido passa por validação de identidade dentro das regras da ICP-Brasil, com dados tratados conforme a LGPD. Você acompanha cada etapa com um especialista de verdade, não um robô.
+                </p>
+                <ul className="mt-4 flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs font-bold uppercase tracking-wide text-slate-400 sm:justify-start">
+                  <li className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-emerald-600" aria-hidden="true" /> ICP-Brasil</li>
+                  <li className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-emerald-600" aria-hidden="true" /> Conforme LGPD</li>
+                  <li className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-emerald-600" aria-hidden="true" /> Suporte humano</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section className="border-b border-red-100 bg-red-50 py-12 sm:py-14" aria-labelledby="a1-pain-title">
           <div className="container px-4">
             <div className="mx-auto max-w-6xl rounded-3xl border border-red-200 bg-white p-6 shadow-sm sm:p-8 lg:p-10">
@@ -564,6 +596,21 @@ export default function CertificadoDigitalA1() {
           </Button>
         </div>
       </div>
+
+      {/* Botão flutuante de WhatsApp — só desktop, a barra fixa acima já cobre o mobile */}
+      <a
+        href={whatsappUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        data-cta-position="a1-floating-whatsapp"
+        aria-label={`Falar no WhatsApp com a ${COMPANY.nome} — ${COMPANY.whatsapp}`}
+        className="fixed bottom-6 right-6 z-40 hidden h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-xl shadow-emerald-900/30 transition hover:scale-105 hover:bg-emerald-600 md:flex"
+      >
+        <MessageCircle className="h-7 w-7" aria-hidden="true" />
+        <span className="absolute right-full mr-3 whitespace-nowrap rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white opacity-0 shadow-lg transition group-hover:opacity-100 pointer-events-none">
+          Falar no WhatsApp
+        </span>
+      </a>
     </div>
   );
 }
