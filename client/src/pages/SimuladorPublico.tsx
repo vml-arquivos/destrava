@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Calculator,
   User,
+  Users,
   Phone,
   Building2,
   Mail,
@@ -31,6 +32,7 @@ import {
 import FormSubmitError from "@/components/FormSubmitError";
 import { formatCnpj, formatCpf, isValidCnpj, isValidCpf } from "@/lib/brDocuments";
 import { submitLead } from "@/lib/leads";
+import { COMPANY } from "@/config/company";
 
 // ─── Produtos de crédito ──────────────────────────────────────────────────────
 const produtos = [
@@ -176,7 +178,9 @@ function calcParcela(valor: number, taxa: number, prazo: number) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function SimuladorPublico() {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<0 | 1 | 2 | 3>(0);
+  const [perfil, setPerfil] = useState<"empresario" | "pf" | "captador" | null>(null);
+  const [linhaInteresse, setLinhaInteresse] = useState<string | null>(null);
   const [tipoPessoa, setTipoPessoa] = useState<"empresa" | "pf">("empresa");
   const [form, setForm] = useState({
     nome: "",
@@ -215,17 +219,31 @@ export default function SimuladorPublico() {
     return Object.keys(e).length === 0;
   }
 
-  function handleStep1() {
-    if (validarStep1()) {
-      // Sincronizar produto com tipo de pessoa
-      const prods = produtos.filter((p) => p.tipo === tipoPessoa);
-      const prod = prods[0];
-      setProdutoSelecionado(prod);
-      setValor(prod.minValor);
-      setPrazo(prod.minPrazo);
-      setTaxa(2.5);
-      setStep(2);
-    }
+  function escolherPerfil(p: "empresario" | "pf" | "captador") {
+    setPerfil(p);
+    if (p === "captador") return; // fica na própria etapa 0, mostra o card de captador
+    const tipo = p === "empresario" ? "empresa" : "pf";
+    setTipoPessoa(tipo);
+    const prods = produtos.filter((prod) => prod.tipo === tipo);
+    const prod = linhaInteresse ? prods.find((prod) => prod.id === linhaInteresse) || prods[0] : prods[0];
+    setProdutoSelecionado(prod);
+    setValor(prod.minValor);
+    setPrazo(prod.minPrazo);
+    setTaxa(2.5);
+    setStep(1);
+  }
+
+  function escolherLinha(id: string | null) {
+    setLinhaInteresse(id);
+  }
+
+  function mudarTipoPessoa(tipo: "empresa" | "pf") {
+    setTipoPessoa(tipo);
+    const prod = produtos.filter((p) => p.tipo === tipo)[0];
+    setProdutoSelecionado(prod);
+    setValor(prod.minValor);
+    setPrazo(prod.minPrazo);
+    setTaxa(2.5);
   }
 
   function selecionarProduto(prod: (typeof produtos)[0]) {
@@ -235,10 +253,35 @@ export default function SimuladorPublico() {
     setTaxa(2.5);
   }
 
+  // Qualificação em tempo real: quem completa a simulação inteira (dados +
+  // valor + prazo) já demonstrou intenção real -- não é "frio" por padrão como
+  // estava antes. Sobe pra "quente" quando o valor pedido e o prazo indicam um
+  // pedido mais robusto dentro da faixa típica daquele produto. Isso afeta
+  // score de verdade no CRM (temperatura vale até 20/100 pontos), então influencia
+  // prioridade de atendimento -- não é só cosmético.
+  function calcularTemperatura(): "morno" | "quente" {
+    const faixaValor = produtoSelecionado.maxValor - produtoSelecionado.minValor;
+    const valorRelativo = faixaValor > 0 ? (valor - produtoSelecionado.minValor) / faixaValor : 0;
+    const prazoRelativo =
+      produtoSelecionado.maxPrazo > produtoSelecionado.minPrazo
+        ? (prazo - produtoSelecionado.minPrazo) / (produtoSelecionado.maxPrazo - produtoSelecionado.minPrazo)
+        : 0;
+    const pedidoRobusto = valorRelativo >= 0.4 || prazoRelativo >= 0.5;
+    const contatoCompleto = Boolean(form.email && form.empresa);
+    const escolheuLinhaEspecifica = Boolean(linhaInteresse);
+    return pedidoRobusto || contatoCompleto || escolheuLinhaEspecifica ? "quente" : "morno";
+  }
+
   async function handleSimular() {
+    if (!validarStep1()) return;
     setEnviando(true);
     setSubmitError(null);
     try {
+      const linhaEscolhida = produtos.find((p) => p.id === linhaInteresse)?.nome;
+      const observacaoQualificacao = [
+        perfil === "empresario" ? "Perfil: Empresário(a)." : perfil === "pf" ? "Perfil: Pessoa Física." : null,
+        linhaEscolhida ? `Linha de interesse indicada antes de simular: ${linhaEscolhida}.` : null,
+      ].filter(Boolean).join(" ");
       await submitLead({
           nome: form.nome,
           telefone: form.telefone,
@@ -258,9 +301,12 @@ export default function SimuladorPublico() {
           totalPagar,
           tipoPessoa: tipoPessoa === "empresa" ? "pj" : tipoPessoa,
           tipo_pessoa: tipoPessoa === "empresa" ? "pj" : tipoPessoa,
+          perfil_qualificacao: perfil,
+          linha_interesse: linhaEscolhida || null,
+          observacoes_ia: observacaoQualificacao || undefined,
           origem: "simulador_publico",
           etapa_funil: "novo",
-          temperatura: "frio",
+          temperatura: calcularTemperatura(),
           pagina: "/simular",
           pagina_origem: "/simular",
       });
@@ -324,8 +370,9 @@ export default function SimuladorPublico() {
         <div className="max-w-3xl mx-auto px-4 py-4">
           <div className="flex items-center justify-center gap-2">
             {[
-              { n: 1, label: "Seus Dados" },
-              { n: 2, label: "Simulação" },
+              { n: 0, label: "Perfil" },
+              { n: 1, label: "Simulação" },
+              { n: 2, label: "Sua Elegibilidade" },
               { n: 3, label: "Resultado" },
             ].map((s, i) => (
               <div key={s.n} className="flex items-center gap-2">
@@ -341,7 +388,7 @@ export default function SimuladorPublico() {
                           : "border-gray-300 text-gray-400"
                     }`}
                   >
-                    {step > s.n ? <CheckCircle2 className="w-4 h-4" /> : s.n}
+                    {step > s.n ? <CheckCircle2 className="w-4 h-4" /> : s.n + 1}
                   </div>
                   <span
                     className={`text-sm font-medium hidden sm:block ${step >= s.n ? "text-[#0033A0]" : "text-gray-400"}`}
@@ -349,7 +396,7 @@ export default function SimuladorPublico() {
                     {s.label}
                   </span>
                 </div>
-                {i < 2 && (
+                {i < 3 && (
                   <div
                     className={`w-8 sm:w-16 h-0.5 ${step > s.n ? "bg-green-500" : "bg-gray-200"}`}
                   />
@@ -362,8 +409,81 @@ export default function SimuladorPublico() {
 
       <div className="bg-gray-50 min-h-screen py-10 px-4">
         <div className="max-w-4xl mx-auto">
-          {/* ── STEP 1: Dados do cliente ── */}
-          {step === 1 && (
+          {/* ── STEP 0: Qualificação rápida (perfil + linha de interesse) ── */}
+          {step === 0 && (
+            <div className="bg-white rounded-2xl shadow-sm border p-6 md:p-8">
+              <div className="mb-6 text-center">
+                <h2 className="text-xl font-bold text-gray-900">Antes de simular, duas perguntas rápidas</h2>
+                <p className="text-sm text-gray-500 mt-1">Sem digitar nada — é só tocar. Isso ajuda a gente a te mostrar a linha certa.</p>
+              </div>
+
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Você é</p>
+              <div className="grid sm:grid-cols-3 gap-3 mb-8">
+                {[
+                  { id: "empresario" as const, icon: Building2, label: "Empresário(a)", desc: "Tenho CNPJ e busco crédito para o negócio" },
+                  { id: "pf" as const, icon: User, label: "Pessoa Física", desc: "Busco crédito pessoal ou consignado" },
+                  { id: "captador" as const, icon: Users, label: "Captador / Parceiro", desc: "Quero indicar clientes e ganhar comissão" },
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => escolherPerfil(opt.id)}
+                    className={`text-left p-4 rounded-xl border-2 transition-all ${
+                      perfil === opt.id ? "border-[#0033A0] bg-blue-50" : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <opt.icon className={`w-5 h-5 mb-2 ${perfil === opt.id ? "text-[#0033A0]" : "text-gray-500"}`} />
+                    <p className="font-semibold text-sm text-gray-900">{opt.label}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                  </button>
+                ))}
+              </div>
+
+              {(perfil === "empresario" || perfil === "pf") && (
+                <>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">O que você procura (opcional)</p>
+                  <div className="grid sm:grid-cols-2 gap-2 mb-6">
+                    {produtos.filter((p) => p.tipo === (perfil === "empresario" ? "empresa" : "pf")).map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => escolherLinha(p.id)}
+                        className={`text-left px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+                          linhaInteresse === p.id ? "border-[#0033A0] bg-blue-50 text-[#0033A0]" : "border-gray-200 text-gray-600 hover:border-gray-300"
+                        }`}
+                      >
+                        {p.nome}
+                      </button>
+                    ))}
+                  </div>
+                  <Button
+                    onClick={() => escolherPerfil(perfil)}
+                    className="w-full bg-[#0033A0] hover:bg-[#002280] text-white py-3 text-base font-semibold rounded-xl"
+                  >
+                    Simular agora
+                    <ChevronRight className="w-5 h-5 ml-1" />
+                  </Button>
+                </>
+              )}
+
+              {perfil === "captador" && (
+                <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-6 text-center">
+                  <Award className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
+                  <h3 className="font-bold text-gray-900 mb-1">Ganhe indicando clientes para a Destrava</h3>
+                  <p className="text-sm text-gray-600 mb-4">Fale com a gente pelo WhatsApp para conhecer como funciona a parceria e as comissões.</p>
+                  <a
+                    href={COMPANY.whatsappLinkMsg("Olá! Tenho interesse em ser captador/parceiro da Destrava Crédito.")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-3 rounded-xl"
+                  >
+                    <MessageCircle className="w-5 h-5" /> Falar no WhatsApp
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── STEP 2: Dados de contato (desbloqueia elegibilidade real) ── */}
+          {step === 2 && (
             <div className="bg-white rounded-2xl shadow-sm border p-6 md:p-8">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
@@ -371,38 +491,12 @@ export default function SimuladorPublico() {
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">
-                    Preencha seus dados para simular
+                    Falta pouco: confirme se você é elegível de verdade
                   </h2>
                   <p className="text-sm text-gray-500">
-                    Campos com * são obrigatórios
+                    O cenário que você montou é educativo. Com seus dados, um especialista confirma taxa real, banco que mais combina com seu perfil e próximos passos. Campos com * são obrigatórios.
                   </p>
                 </div>
-              </div>
-
-              {/* Tipo de pessoa */}
-              <div className="grid grid-cols-2 gap-3 mb-6">
-                <button
-                  onClick={() => setTipoPessoa("empresa")}
-                  className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 font-medium transition-all ${
-                    tipoPessoa === "empresa"
-                      ? "border-[#0033A0] bg-blue-50 text-[#0033A0]"
-                      : "border-gray-200 text-gray-600 hover:border-gray-300"
-                  }`}
-                >
-                  <Building2 className="w-4 h-4" />
-                  Empresa (PJ)
-                </button>
-                <button
-                  onClick={() => setTipoPessoa("pf")}
-                  className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 font-medium transition-all ${
-                    tipoPessoa === "pf"
-                      ? "border-[#0033A0] bg-blue-50 text-[#0033A0]"
-                      : "border-gray-200 text-gray-600 hover:border-gray-300"
-                  }`}
-                >
-                  <User className="w-4 h-4" />
-                  Pessoa Física (PF)
-                </button>
               </div>
 
               <div className="space-y-4">
@@ -543,23 +637,72 @@ export default function SimuladorPublico() {
                   atendimento. Não compartilhamos com terceiros.
                 </p>
 
-                <Button
-                  onClick={handleStep1}
-                  className="w-full bg-[#0033A0] hover:bg-[#002280] text-white py-3 text-base font-semibold rounded-xl mt-2"
-                >
-                  Continuar para Simulação
-                  <ChevronRight className="w-5 h-5 ml-1" />
-                </Button>
+                <div className="flex gap-3 mt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setStep(1)}
+                    className="flex-1 border-gray-300"
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" /> Ajustar simulação
+                  </Button>
+                  <Button
+                    onClick={handleSimular}
+                    disabled={enviando}
+                    className="flex-[2] bg-[#0033A0] hover:bg-[#002280] text-white py-3 text-base font-semibold rounded-xl"
+                  >
+                    {enviando ? "Enviando..." : (
+                      <>
+                        Confirmar minha elegibilidade
+                        <ChevronRight className="w-5 h-5 ml-1" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <FormSubmitError message={submitError} />
               </div>
             </div>
           )}
 
-          {/* ── STEP 2: Simulador com sliders ── */}
-          {step === 2 && (
+          {/* ── STEP 1: Simulador com sliders (sem barreira) ── */}
+          {step === 1 && (
             <div className="space-y-4">
+              <button
+                onClick={() => setStep(0)}
+                className="flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-[#0033A0]"
+              >
+                <ChevronLeft className="w-4 h-4" /> Voltar
+              </button>
               <div className="grid md:grid-cols-3 gap-4">
                 {/* Coluna esquerda: escolha do produto */}
                 <div className="bg-white rounded-2xl shadow-sm border p-5">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                    Você é
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 mb-5">
+                    <button
+                      onClick={() => mudarTipoPessoa("empresa")}
+                      className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl border-2 text-sm font-medium transition-all ${
+                        tipoPessoa === "empresa"
+                          ? "border-[#0033A0] bg-blue-50 text-[#0033A0]"
+                          : "border-gray-200 text-gray-600 hover:border-gray-300"
+                      }`}
+                    >
+                      <Building2 className="w-4 h-4" />
+                      Empresa
+                    </button>
+                    <button
+                      onClick={() => mudarTipoPessoa("pf")}
+                      className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl border-2 text-sm font-medium transition-all ${
+                        tipoPessoa === "pf"
+                          ? "border-[#0033A0] bg-blue-50 text-[#0033A0]"
+                          : "border-gray-200 text-gray-600 hover:border-gray-300"
+                      }`}
+                    >
+                      <User className="w-4 h-4" />
+                      Pessoa Física
+                    </button>
+                  </div>
+
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                     <TrendingUp className="w-3.5 h-3.5" /> Escolha o Produto
                   </p>
@@ -727,31 +870,17 @@ export default function SimuladorPublico() {
                   </div>
                 </div>
 
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => setStep(1)}
-                    className="flex-1 border-gray-300"
-                  >
-                    <ChevronLeft className="w-4 h-4 mr-1" /> Voltar
-                  </Button>
-                  <Button
-                    onClick={handleSimular}
-                    disabled={enviando}
-                    className="flex-[2] bg-[#0033A0] hover:bg-[#002280] text-white font-semibold rounded-xl"
-                  >
-                    {enviando ? (
-                      "Enviando..."
-                    ) : (
-                      <>
-                        <Calculator className="w-4 h-4 mr-2" />
-                        Solicitar Proposta — É Grátis
-                        <ChevronRight className="w-4 h-4 ml-1" />
-                      </>
-                    )}
-                  </Button>
-                </div>
-                <FormSubmitError message={submitError} />
+                <p className="text-sm text-gray-500 text-center -mt-1 mb-4">
+                  Esse valor é um cenário educativo. Quer saber se você seria aprovado de verdade, e com qual taxa?
+                </p>
+
+                <Button
+                  onClick={() => setStep(2)}
+                  className="w-full bg-[#0033A0] hover:bg-[#002280] text-white py-3 text-base font-semibold rounded-xl"
+                >
+                  Continuar e ver se você é aprovado
+                  <ChevronRight className="w-5 h-5 ml-1" />
+                </Button>
               </div>
             </div>
           )}
