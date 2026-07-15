@@ -177,7 +177,7 @@ export default function CreditoPessoaFisica() {
               <span className="text-blue-300">Pessoa Física</span>
             </h1>
             <p className="text-lg md:text-xl text-white/90 mb-8 leading-relaxed">
-              Encontre a melhor linha de crédito para você: consignado, crédito pessoal, financiamento de imóvel ou veículo. Análise gratuita e orientação especializada.
+              Encontre a melhor linha de crédito para você: consignado, crédito pessoal, financiamento de imóvel ou veículo. Análise de perfil e orientação especializada.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Button asChild size="lg" className="bg-blue-400 hover:bg-blue-500 text-black font-bold px-8">
@@ -450,7 +450,7 @@ export default function CreditoPessoaFisica() {
             <h2 className="text-3xl font-bold text-gray-900 text-center mb-12">Por que Escolher a Destrava Crédito?</h2>
             <div className="grid md:grid-cols-3 gap-6">
               {[
-                { icon: Shield, title: "Análise Gratuita", desc: "Avaliamos seu perfil sem custo e sem compromisso para encontrar a melhor opção.", color: "text-blue-600", bg: "bg-blue-50" },
+                { icon: Shield, title: "Análise de Perfil", desc: "Avaliamos seu perfil com atenção para encontrar a melhor opção disponível.", color: "text-blue-600", bg: "bg-blue-50" },
                 { icon: Clock, title: "Processo Ágil", desc: "Simplificamos a burocracia e acompanhamos todo o processo até a aprovação.", color: "text-green-600", bg: "bg-green-50" },
                 { icon: Star, title: "Comparação Transparente", desc: "Compare taxa, CET, prazo e valor total das propostas disponíveis para o seu perfil.", color: "text-yellow-600", bg: "bg-yellow-50" },
               ].map((v) => (

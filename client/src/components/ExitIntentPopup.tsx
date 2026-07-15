@@ -85,7 +85,7 @@ export default function ExitIntentPopup({ onClose }: ExitIntentPopupProps) {
 
             <div className="bg-blue-50 border-l-4 border-[var(--color-caixa-yellow)] p-4 rounded mb-6">
               <p className="text-sm text-gray-600">
-                ✓ Análise gratuita e sem compromisso<br />
+                ✓ Análise de perfil sem compromisso<br />
                 ✓ Dicas personalizadas para melhorar seu score<br />
                 ✓ Entenda pontos de atenção antes de solicitar crédito
               </p>

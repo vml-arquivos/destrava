@@ -526,7 +526,7 @@ export default function CreditoEmpresas() {
             <h2 className="text-3xl font-bold text-gray-900 text-center mb-12">Por que Escolher a Destrava Crédito?</h2>
             <div className="grid md:grid-cols-2 gap-4">
               {[
-                "Análise gratuita e sem compromisso",
+                "Análise de perfil sem compromisso",
                 "Acesso a múltiplas linhas de crédito",
                 "Especialistas em crédito empresarial",
                 "Processo simplificado e ágil",

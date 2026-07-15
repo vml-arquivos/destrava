@@ -318,8 +318,8 @@ export default function Procred360() {
               {
                 n: "01",
                 icon: Users,
-                title: "Análise Gratuita",
-                desc: "Avaliamos seu perfil e verificamos a elegibilidade sem custo.",
+                title: "Análise de Perfil",
+                desc: "Avaliamos seu perfil e verificamos a elegibilidade para o programa.",
               },
               {
                 n: "02",

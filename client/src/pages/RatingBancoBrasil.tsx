@@ -266,7 +266,7 @@ export default function RatingBancoBrasil() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button asChild size="lg" className="bg-yellow-400 hover:bg-yellow-500 text-black font-bold px-8">
                 <Link href="/simular">
-                  Solicitar Análise Gratuita
+                  Solicitar Análise de Perfil
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
               </Button>

@@ -469,7 +469,7 @@ export default function Cgi() {
             Fale com nossa equipe. Avaliamos o seu perfil e orientamos sobre as possibilidades, sem compromisso.
           </p>
           <p className="text-sm text-white/60 mb-8 italic">
-            A análise de viabilidade é gratuita. A aprovação final depende da instituição financeira.
+            A análise de viabilidade é feita pela nossa equipe especializada. A aprovação final depende da instituição financeira.
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
             <Button asChild size="lg" variant="secondary" className="font-semibold text-lg px-8">

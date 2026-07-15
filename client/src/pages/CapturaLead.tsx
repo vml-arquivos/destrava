@@ -75,7 +75,7 @@ const PRODUTO_META: Record<string, { label: string; whatsappMsg: string; titulo:
     label: "Giro CAIXA Fácil",
     whatsappMsg: "Olá! Tenho interesse no Giro CAIXA Fácil.",
     titulo: "Simule o Giro CAIXA Fácil",
-    subtitulo: "Capital de giro pela CAIXA Econômica Federal. Preencha seus dados para uma análise gratuita.",
+    subtitulo: "Capital de giro pela CAIXA Econômica Federal. Preencha seus dados para uma análise do seu perfil.",
   },
 };
 

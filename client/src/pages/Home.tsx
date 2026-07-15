@@ -196,7 +196,22 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="flex items-start justify-center mt-6 md:mt-0">
+            <div className="flex flex-col items-center justify-center mt-6 md:mt-0 gap-5">
+              <svg
+                className="h-20 w-auto opacity-90"
+                viewBox="0 0 320 90"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                role="img"
+                aria-label="Ilustração de crescimento financeiro empresarial"
+              >
+                <path d="M10 75 L70 45 L120 58 L180 20 L240 35 L310 8" stroke="#fbbf24" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                <circle cx="70" cy="45" r="6" fill="#fbbf24" />
+                <circle cx="180" cy="20" r="6" fill="#fbbf24" />
+                <circle cx="310" cy="8" r="7" fill="#fbbf24" />
+                <path d="M296 8 L310 8 L310 22" stroke="#fbbf24" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                <rect x="4" y="78" width="312" height="2" fill="white" fillOpacity="0.15" />
+              </svg>
               <HeroCarousel />
             </div>
           </div>

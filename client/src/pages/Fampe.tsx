@@ -237,7 +237,7 @@ export default function Fampe() {
           <h2 className="text-3xl font-bold mb-10 text-center">Como Funciona com a Destrava</h2>
           <div className="grid md:grid-cols-4 gap-6 max-w-5xl mx-auto">
             {[
-              { n: "01", icon: Users, title: "Análise Gratuita", desc: "Avaliamos seu perfil e verificamos a elegibilidade sem custo." },
+              { n: "01", icon: Users, title: "Análise de Perfil", desc: "Avaliamos seu perfil e verificamos a elegibilidade para o programa." },
               { n: "02", icon: FileText, title: "Organização Documental", desc: "Preparamos e organizamos toda a documentação necessária." },
               { n: "03", icon: Building2, title: "Negociação Bancária", desc: "Identificamos o banco com melhores condições e conduzimos a negociação." },
               { n: "04", icon: TrendingUp, title: "Liberação do Crédito", desc: "Acompanhamos até a aprovação e liberação do recurso na sua conta." },
