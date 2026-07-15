@@ -9,9 +9,6 @@ import {
   setBannerPool,
 } from '../models/bannerModel';
 import { requireAdmin, auth } from '../middleware/auth';
-import pkg from 'pg';
-const { Pool } = pkg;
-
 const router = Router();
 
 // Middleware para injetar o pool
@@ -22,7 +19,7 @@ router.use((req: Request, res: Response, next) => {
 });
 
 // Rotas públicas
-router.get('/:position', async (req: Request, res: Response) => {
+router.get('/position/:position', async (req: Request, res: Response) => {
   try {
     const { position } = req.params;
     const banners = await getBannersByPosition(position);
@@ -35,7 +32,7 @@ router.get('/:position', async (req: Request, res: Response) => {
 });
 
 // Rotas admin
-router.get('/admin/all', requireAdmin, async (req: Request, res: Response) => {
+router.get('/admin/all', auth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const { banners, total } = await getAllBannersAdmin(page, 20);
@@ -55,7 +52,7 @@ router.get('/admin/all', requireAdmin, async (req: Request, res: Response) => {
   }
 });
 
-router.post('/admin', requireAdmin, async (req: Request, res: Response) => {
+router.post('/admin', auth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const validated = BannerSchema.parse(req.body);
     const banner = await createBanner(validated);
@@ -67,7 +64,7 @@ router.post('/admin', requireAdmin, async (req: Request, res: Response) => {
   }
 });
 
-router.put('/admin/:id', requireAdmin, async (req: Request, res: Response) => {
+router.put('/admin/:id', auth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const validated = BannerSchema.partial().parse(req.body);
@@ -80,7 +77,7 @@ router.put('/admin/:id', requireAdmin, async (req: Request, res: Response) => {
   }
 });
 
-router.delete('/admin/:id', requireAdmin, async (req: Request, res: Response) => {
+router.delete('/admin/:id', auth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const deleted = await deleteBanner(id);

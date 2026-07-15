@@ -99,9 +99,15 @@ export function auth(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+const CMS_ADMIN_ROLES = new Set([
+  "administrador",
+  "diretor",
+  "gerente comercial",
+]);
+
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if (!req.user || !['admin', 'gestor', 'gerente'].includes(req.user.role)) {
-    res.status(403).json({ error: 'Acesso negado: privilégios de administrador necessários' });
+  if (!req.user || !CMS_ADMIN_ROLES.has(req.user.role)) {
+    res.status(403).json({ error: "Acesso negado: privilégios de gestão necessários" });
     return;
   }
   next();

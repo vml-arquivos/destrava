@@ -149,9 +149,21 @@ export async function updateBlogPost(id: string, post: Partial<BlogPost>): Promi
     updates.push(`category = $${paramIndex++}`);
     values.push(post.category);
   }
+  if (post.author !== undefined) {
+    updates.push(`author = $${paramIndex++}`);
+    values.push(post.author);
+  }
   if (post.is_published !== undefined) {
     updates.push(`is_published = $${paramIndex++}`);
     values.push(post.is_published);
+  }
+  if (post.read_time !== undefined) {
+    updates.push(`read_time = $${paramIndex++}`);
+    values.push(post.read_time);
+  }
+  if (post.featured_image_url !== undefined) {
+    updates.push(`featured_image_url = $${paramIndex++}`);
+    values.push(post.featured_image_url);
   }
   if (post.seo_title !== undefined) {
     updates.push(`seo_title = $${paramIndex++}`);
@@ -160,6 +172,10 @@ export async function updateBlogPost(id: string, post: Partial<BlogPost>): Promi
   if (post.seo_description !== undefined) {
     updates.push(`seo_description = $${paramIndex++}`);
     values.push(post.seo_description);
+  }
+  if (post.seo_keywords !== undefined) {
+    updates.push(`seo_keywords = $${paramIndex++}`);
+    values.push(post.seo_keywords);
   }
 
   updates.push(`updated_at = CURRENT_TIMESTAMP`);

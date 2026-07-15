@@ -1,6 +1,7 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import HeroCarousel from "@/components/HeroCarousel";
+import { BannerDisplay } from "@/components/BannerDisplay";
 import SEO, { organizationStructuredData, faqStructuredData } from "@/components/SEO";
 import BenefitCard from "@/components/BenefitCard";
 import { Button } from "@/components/ui/button";
@@ -202,6 +203,8 @@ export default function Home() {
         </div>
       </section>
 
+      <BannerDisplay position="home_top" ariaLabel="Destaque principal" />
+
       {/* BLOCO INSTITUCIONAL PRINCIPAL */}
       <section className="py-20 bg-muted/30">
         <div className="container">
@@ -365,6 +368,8 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <BannerDisplay position="home_middle" ariaLabel="Soluções em destaque" />
 
       {/* LINHAS DE CRÉDITO */}
       <section className="py-20 bg-muted/30">
@@ -658,6 +663,8 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <BannerDisplay position="home_bottom" ariaLabel="Conteúdo recomendado" />
 
       <Footer />
     </div>

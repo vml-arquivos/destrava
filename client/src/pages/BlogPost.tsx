@@ -3,7 +3,7 @@ import Footer from "@/components/Footer";
 import CTAButton from "@/components/CTAButton";
 import ScoreBanner from "@/components/ScoreBanner";
 import ExitIntentPopup from "@/components/ExitIntentPopup";
-import { blogPosts } from "@/data/blogPosts";
+import { useBlogPostBySlug, useBlogPosts } from "@/hooks/useBlogPosts";
 import { useRoute, Link } from "wouter";
 import { Calendar, Clock, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,21 @@ function MarkdownContent({ children }: { children: string }) {
 
 export default function BlogPost() {
   const [, params] = useRoute("/blog/:slug");
-  const post = blogPosts.find(p => p.slug === params?.slug);
+  const slug = params?.slug || "";
+  const { post, loading } = useBlogPostBySlug(slug);
+  const { posts: availablePosts } = useBlogPosts();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex flex-1 items-center justify-center py-20" aria-live="polite">
+          <p className="text-lg text-muted-foreground">Carregando artigo...</p>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (!post) {
     return (
@@ -51,13 +65,14 @@ export default function BlogPost() {
   return (
     <div className="min-h-screen flex flex-col">
       <SEO
-        title={post.title}
-        description={post.excerpt}
+        title={post.seo_title || post.title}
+        description={post.seo_description || post.excerpt}
+        keywords={post.seo_keywords}
         type="article"
-        author="Destrava Crédito"
-        publishedTime={post.date}
-        modifiedTime={post.date}
-        image={DEFAULT_OG_IMAGE}
+        author={post.author || "Destrava Crédito"}
+        publishedTime={post.published_at}
+        modifiedTime={post.updated_at}
+        image={post.featured_image_url || DEFAULT_OG_IMAGE}
         canonicalPath={`/blog/${post.slug}`}
         structuredData={{
           "@context": "https://schema.org",
@@ -66,9 +81,9 @@ export default function BlogPost() {
               "@type": "Article",
               headline: post.title,
               description: post.excerpt,
-              image: DEFAULT_OG_IMAGE,
-              datePublished: post.date,
-              dateModified: post.date,
+              image: post.featured_image_url || DEFAULT_OG_IMAGE,
+              datePublished: post.published_at,
+              dateModified: post.updated_at,
               mainEntityOfPage: `${SITE_URL}/blog/${post.slug}`,
               author: { "@type": "Organization", name: "Destrava Crédito" },
               publisher: {
@@ -134,7 +149,7 @@ export default function BlogPost() {
             <div className="flex items-center gap-6 text-muted-foreground">
               <span className="flex items-center gap-2">
                 <Calendar className="h-5 w-5" />
-                {new Date(post.date).toLocaleDateString("pt-BR", {
+                {new Date(post.published_at).toLocaleDateString("pt-BR", {
                   day: "numeric",
                   month: "long",
                   year: "numeric",
@@ -142,7 +157,7 @@ export default function BlogPost() {
               </span>
               <span className="flex items-center gap-2">
                 <Clock className="h-5 w-5" />
-                {post.readTime} de leitura
+                {post.read_time} de leitura
               </span>
             </div>
           </div>
@@ -214,7 +229,7 @@ export default function BlogPost() {
           <div className="max-w-4xl mx-auto">
             <h2 className="text-2xl font-bold mb-8">Outros artigos</h2>
             <div className="grid md:grid-cols-2 gap-6">
-              {blogPosts
+              {availablePosts
                 .filter(p => p.id !== post.id)
                 .sort((a, b) => {
                   if (a.category === post.category && b.category !== post.category) return -1;

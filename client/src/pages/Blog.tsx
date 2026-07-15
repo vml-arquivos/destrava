@@ -1,13 +1,16 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { blogPosts } from "@/data/blogPosts";
+import { useBlogPosts } from "@/hooks/useBlogPosts";
 import { Link } from "wouter";
 import { Calendar, Clock, ArrowRight, BookOpen } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import SEO from "@/components/SEO";
+import { BannerDisplay } from "@/components/BannerDisplay";
 
 export default function Blog() {
+  const { posts, loading } = useBlogPosts();
+
   return (
     <div className="min-h-screen flex flex-col">
       <SEO
@@ -31,12 +34,14 @@ export default function Blog() {
         </div>
       </section>
 
+      <BannerDisplay position="blog_top" ariaLabel="Destaque do blog" />
+
       {/* Lista de Artigos */}
       <section className="py-20">
         <div className="container">
           <div className="max-w-5xl mx-auto">
             <div className="grid gap-8">
-              {blogPosts.map((post) => (
+              {posts.map((post) => (
                 <Card
                   key={post.id}
                   className="hover:shadow-lg transition-shadow duration-300"
@@ -59,11 +64,11 @@ export default function Blog() {
                           </span>
                           <span className="flex items-center gap-1">
                             <Calendar className="h-4 w-4" />
-                            {new Date(post.date).toLocaleDateString("pt-BR")}
+                            {new Date(post.published_at).toLocaleDateString("pt-BR")}
                           </span>
                           <span className="flex items-center gap-1">
                             <Clock className="h-4 w-4" />
-                            {post.readTime}
+                            {post.read_time}
                           </span>
                         </div>
 
@@ -88,10 +93,15 @@ export default function Blog() {
               ))}
             </div>
 
-            {/* Mensagem se não houver posts */}
-            {blogPosts.length === 0 && (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground text-lg">
+            {loading && (
+              <div className="py-12 text-center" aria-live="polite">
+                <p className="text-lg text-muted-foreground">Carregando artigos...</p>
+              </div>
+            )}
+
+            {!loading && posts.length === 0 && (
+              <div className="py-12 text-center">
+                <p className="text-lg text-muted-foreground">
                   Nenhum artigo publicado ainda. Volte em breve!
                 </p>
               </div>
@@ -99,6 +109,8 @@ export default function Blog() {
           </div>
         </div>
       </section>
+
+      <BannerDisplay position="blog_sidebar" ariaLabel="Conteúdo recomendado do blog" />
 
       {/* CTA */}
       <section className="py-20 bg-muted/30">

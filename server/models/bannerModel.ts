@@ -137,9 +137,21 @@ export async function updateBanner(id: string, banner: Partial<Banner>): Promise
     updates.push(`link_url = $${paramIndex++}`);
     values.push(banner.link_url);
   }
+  if (banner.position !== undefined) {
+    updates.push(`position = $${paramIndex++}`);
+    values.push(banner.position);
+  }
   if (banner.is_active !== undefined) {
     updates.push(`is_active = $${paramIndex++}`);
     values.push(banner.is_active);
+  }
+  if (banner.start_date !== undefined) {
+    updates.push(`start_date = $${paramIndex++}`);
+    values.push(banner.start_date);
+  }
+  if (banner.end_date !== undefined) {
+    updates.push(`end_date = $${paramIndex++}`);
+    values.push(banner.end_date);
   }
   if (banner.display_order !== undefined) {
     updates.push(`display_order = $${paramIndex++}`);

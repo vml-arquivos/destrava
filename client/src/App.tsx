@@ -72,6 +72,8 @@ const WeeklyMonitorPage = lazy(() => import("./pages/colaborador/WeeklyMonitorPa
 const CadastroEmpresa = lazy(() => import("./pages/colaborador/CadastroEmpresa"));
 const DadosIncompletos = lazy(() => import("./pages/colaborador/DadosIncompletos"));
 const ConfiguracaoFuncoes = lazy(() => import("./pages/colaborador/ConfiguracaoFuncoes"));
+const GestaoBlog = lazy(() => import("./pages/colaborador/GestaoBlog"));
+const GestaoBanners = lazy(() => import("./pages/colaborador/GestaoBanners"));
 const Layout = lazy(() => import("./pages/colaborador/Layout"));
 
 function FeatureGate({
@@ -206,6 +208,24 @@ function Router() {
           <ProtectedRoute>
             <CargoRoute allowedCargos={["administrador"]}>
               <ConfiguracaoFuncoes />
+            </CargoRoute>
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/gestao-blog">
+        {() => (
+          <ProtectedRoute>
+            <CargoRoute allowedCargos={["administrador", "diretor", "gerente comercial"]}>
+              <GestaoBlog />
+            </CargoRoute>
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/colaborador/gestao-banners">
+        {() => (
+          <ProtectedRoute>
+            <CargoRoute allowedCargos={["administrador", "diretor", "gerente comercial"]}>
+              <GestaoBanners />
             </CargoRoute>
           </ProtectedRoute>
         )}

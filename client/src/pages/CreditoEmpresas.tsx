@@ -1,5 +1,6 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { BannerDisplay } from "@/components/BannerDisplay";
 import SEO, { faqStructuredData, serviceStructuredData } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -254,6 +255,8 @@ export default function CreditoEmpresas() {
           </div>
         </div>
       </section>
+
+      <BannerDisplay position="credito_empresas_banner" ariaLabel="Solução empresarial em destaque" />
 
       {/* VISÃO ESTRATÉGICA */}
       <section className="py-14 bg-white">

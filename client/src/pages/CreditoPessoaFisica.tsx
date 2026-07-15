@@ -1,5 +1,6 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { BannerDisplay } from "@/components/BannerDisplay";
 import SEO, { faqStructuredData, serviceStructuredData } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -194,6 +195,8 @@ export default function CreditoPessoaFisica() {
           </div>
         </div>
       </section>
+
+      <BannerDisplay position="credito_pessoal_banner" ariaLabel="Solução pessoal em destaque" />
 
       {/* INTRODUÇÃO E DECISÃO */}
       <section className="py-14 bg-white">

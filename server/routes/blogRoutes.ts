@@ -10,9 +10,6 @@ import {
   setBlogPool,
 } from '../models/blogModel';
 import { requireAdmin, auth } from '../middleware/auth';
-import pkg from 'pg';
-const { Pool } = pkg;
-
 const router = Router();
 
 // Middleware para injetar o pool
@@ -62,7 +59,7 @@ router.get('/posts/:slug', async (req: Request, res: Response) => {
 });
 
 // Rotas admin
-router.get('/admin/posts', requireAdmin, async (req: Request, res: Response) => {
+router.get('/admin/posts', auth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const { posts, total } = await getAllBlogPostsAdmin(page, 20);
@@ -82,7 +79,7 @@ router.get('/admin/posts', requireAdmin, async (req: Request, res: Response) => 
   }
 });
 
-router.post('/admin/posts', requireAdmin, async (req: Request, res: Response) => {
+router.post('/admin/posts', auth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const validated = BlogPostSchema.parse(req.body);
     const post = await createBlogPost(validated);
@@ -98,7 +95,7 @@ router.post('/admin/posts', requireAdmin, async (req: Request, res: Response) =>
   }
 });
 
-router.put('/admin/posts/:id', requireAdmin, async (req: Request, res: Response) => {
+router.put('/admin/posts/:id', auth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const validated = BlogPostSchema.partial().parse(req.body);
@@ -111,7 +108,7 @@ router.put('/admin/posts/:id', requireAdmin, async (req: Request, res: Response)
   }
 });
 
-router.delete('/admin/posts/:id', requireAdmin, async (req: Request, res: Response) => {
+router.delete('/admin/posts/:id', auth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const deleted = await deleteBlogPost(id);

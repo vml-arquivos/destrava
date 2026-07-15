@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { blogPosts as staticBlogPosts } from '@/data/blogPosts';
 
 export interface BlogPost {
   id: string;
@@ -18,6 +19,30 @@ export interface BlogPost {
   seo_keywords?: string;
   created_at: string;
 }
+
+function staticPostToApi(post: (typeof staticBlogPosts)[number]): BlogPost {
+  const parsedDate = new Date(post.date);
+  const safeDate = Number.isNaN(parsedDate.getTime())
+    ? new Date(0).toISOString()
+    : parsedDate.toISOString();
+
+  return {
+    id: String(post.id),
+    title: post.title,
+    slug: post.slug,
+    excerpt: post.excerpt,
+    content: post.content,
+    category: post.category,
+    author: 'Destrava Crédito',
+    published_at: safeDate,
+    updated_at: safeDate,
+    created_at: safeDate,
+    is_published: true,
+    read_time: post.readTime,
+  };
+}
+
+const staticFallbackPosts = staticBlogPosts.map(staticPostToApi);
 
 export interface BlogPostsResponse {
   posts: BlogPost[];
@@ -56,8 +81,18 @@ export function useBlogPosts(page: number = 1, category?: string) {
         setPosts(data.posts);
         setPagination(data.pagination);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erro desconhecido');
-        setPosts([]);
+        const fallback = category
+          ? staticFallbackPosts.filter(post => post.category === category)
+          : staticFallbackPosts;
+        const start = (page - 1) * 20;
+        setPosts(fallback.slice(start, start + 20));
+        setPagination({
+          page,
+          limit: 20,
+          total: fallback.length,
+          pages: Math.max(1, Math.ceil(fallback.length / 20)),
+        });
+        setError(null);
       } finally {
         setLoading(false);
       }
@@ -85,7 +120,8 @@ export function useBlogPostBySlug(slug: string) {
         const response = await fetch(`/api/blog/posts/${slug}`);
         if (!response.ok) {
           if (response.status === 404) {
-            setPost(null);
+            const fallback = staticFallbackPosts.find(item => item.slug === slug) || null;
+            setPost(fallback);
             return;
           }
           throw new Error(`Erro ao buscar post: ${response.statusText}`);
@@ -94,8 +130,9 @@ export function useBlogPostBySlug(slug: string) {
         const data: BlogPost = await response.json();
         setPost(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Erro desconhecido');
-        setPost(null);
+        const fallback = staticFallbackPosts.find(item => item.slug === slug) || null;
+        setPost(fallback);
+        setError(fallback ? null : err instanceof Error ? err.message : 'Erro desconhecido');
       } finally {
         setLoading(false);
       }

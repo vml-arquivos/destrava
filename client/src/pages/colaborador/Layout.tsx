@@ -35,6 +35,8 @@ import {
   UserCog,
   PlugZap,
   SlidersHorizontal,
+  Newspaper,
+  Image as ImageIcon,
 } from "lucide-react";
 
 const CARGOS_GESTAO = ["administrador", "diretor", "gerente comercial"];
@@ -235,6 +237,18 @@ const NAV_MODULES: NavModule[] = [
         icon: PlugZap,
         allowedCargos: ["administrador"],
         featureKey: "integracoes",
+      },
+      {
+        href: "/colaborador/gestao-blog",
+        label: "Conteúdo e SEO",
+        icon: Newspaper,
+        allowedCargos: CARGOS_GESTAO,
+      },
+      {
+        href: "/colaborador/gestao-banners",
+        label: "Banners do Site",
+        icon: ImageIcon,
+        allowedCargos: CARGOS_GESTAO,
       },
       {
         href: "/colaborador/usuarios",

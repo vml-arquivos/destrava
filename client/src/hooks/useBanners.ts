@@ -32,7 +32,7 @@ export function useBanners(position: string) {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/banners/${position}`);
+        const response = await fetch(`/api/banners/position/${encodeURIComponent(position)}`);
         if (!response.ok) {
           throw new Error(`Erro ao buscar banners: ${response.statusText}`);
         }
