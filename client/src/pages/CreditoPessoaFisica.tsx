@@ -1,6 +1,6 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import SEO, { serviceStructuredData } from "@/components/SEO";
+import SEO, { faqStructuredData, serviceStructuredData } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
@@ -15,6 +15,11 @@ import {
   Shield,
   Clock,
   Star,
+  FileText,
+  Scale,
+  SearchCheck,
+  Wallet,
+  AlertCircle,
 } from "lucide-react";
 
 const linhasPF = [
@@ -108,6 +113,41 @@ const linhasPF = [
   },
 ];
 
+const creditoPessoalFaqs = [
+  {
+    question: "Qual é a diferença entre taxa de juros e CET?",
+    answer: "A taxa de juros remunera o crédito. O Custo Efetivo Total, ou CET, reúne juros, tarifas, tributos, seguros e outros custos previstos na proposta. Para comparar alternativas, o CET e o valor total a pagar são referências mais completas do que a taxa isolada.",
+  },
+  {
+    question: "Ter renda comprovada garante a aprovação?",
+    answer: "Não. A renda é um dos elementos analisados, mas a decisão também pode considerar histórico de crédito, comprometimento de renda, documentos, modalidade escolhida e política da instituição financeira. Toda contratação permanece sujeita à análise.",
+  },
+  {
+    question: "Crédito consignado está disponível para qualquer pessoa?",
+    answer: "Não. O consignado depende de elegibilidade, convênio ativo e margem consignável. Servidores, aposentados e pensionistas podem ter acesso conforme as regras aplicáveis ao vínculo e à instituição responsável pela proposta.",
+  },
+  {
+    question: "Posso usar o FGTS no financiamento imobiliário?",
+    answer: "O uso do FGTS pode ser permitido em operações elegíveis, desde que o comprador, o imóvel e a finalidade atendam às regras vigentes. A possibilidade precisa ser confirmada durante a análise da operação.",
+  },
+  {
+    question: "Como comparar duas propostas de crédito pessoal?",
+    answer: "Compare CET, valor líquido recebido, número e valor das parcelas, total a pagar, datas de vencimento, garantias, seguros e condições para quitação antecipada. Uma parcela menor não significa necessariamente um custo total menor.",
+  },
+  {
+    question: "A simulação obriga a contratar?",
+    answer: "Não. A simulação serve para organizar a necessidade e iniciar a avaliação das alternativas. A contratação somente ocorre após apresentação das condições, análise, aceite do cliente e formalização pela instituição financeira.",
+  },
+];
+
+const creditoPessoalStructuredData = [
+  serviceStructuredData(
+    "Crédito para Pessoa Física",
+    "Orientação e comparação de modalidades de crédito para pessoa física, incluindo consignado, crédito pessoal e financiamentos.",
+  ),
+  faqStructuredData(creditoPessoalFaqs),
+];
+
 export default function CreditoPessoaFisica() {
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -115,7 +155,7 @@ export default function CreditoPessoaFisica() {
         title="Crédito para Pessoa Física - Consignado, Pessoal, Imóvel e Veículo"
         description="Compare modalidades de crédito para pessoa física, como consignado, crédito pessoal e financiamentos. Condições sujeitas à análise e ao CET da proposta."
         keywords="crédito pessoal, consignado, financiamento imobiliário, financiamento veículo, crédito pessoa física, empréstimo pessoal"
-        structuredData={serviceStructuredData("Crédito para Pessoa Física", "Linhas de crédito para pessoa física: consignado, pessoal, imobiliário e veículo.")}
+        structuredData={creditoPessoalStructuredData}
       />
       <Header />
 
@@ -151,6 +191,46 @@ export default function CreditoPessoaFisica() {
                 </a>
               </Button>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* INTRODUÇÃO E DECISÃO */}
+      <section className="py-14 bg-white">
+        <div className="container px-4">
+          <div className="max-w-5xl mx-auto grid lg:grid-cols-[1.35fr_0.65fr] gap-10 items-start">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-wider text-blue-700 mb-3">Crédito com decisão consciente</p>
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-5">A modalidade certa começa pela finalidade, não pela parcela</h2>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
+                <p>
+                  Crédito para pessoa física reúne soluções diferentes para necessidades também diferentes. Uma despesa pontual, a compra de um veículo e a aquisição de um imóvel não devem ser avaliadas com os mesmos critérios. Prazo, garantia, forma de pagamento e custo total mudam conforme a modalidade e o perfil analisado.
+                </p>
+                <p>
+                  Antes de solicitar, defina o valor realmente necessário, a finalidade do recurso e a parcela que cabe no orçamento sem comprometer despesas essenciais. Em seguida, compare propostas pelo <strong>Custo Efetivo Total (CET)</strong>, pelo valor total a pagar e pelas condições contratuais. A taxa anunciada, isoladamente, não mostra todos os custos da operação.
+                </p>
+                <p>
+                  A Destrava ajuda a organizar essas informações e a entender o caminho de análise. A concessão, os limites e as condições finais são definidos exclusivamente pela instituição financeira, conforme documentos, elegibilidade e política de crédito vigente.
+                </p>
+              </div>
+            </div>
+            <aside className="bg-blue-50 border border-blue-100 rounded-2xl p-6">
+              <Scale className="h-8 w-8 text-blue-700 mb-4" />
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Quatro perguntas antes de avançar</h3>
+              <ol className="space-y-4 text-sm text-gray-700">
+                {[
+                  "Qual problema o crédito precisa resolver?",
+                  "Qual valor é suficiente, sem contratar além do necessário?",
+                  "Qual parcela cabe no orçamento com margem de segurança?",
+                  "Qual é o CET e o total a pagar até o fim do contrato?",
+                ].map((item, index) => (
+                  <li key={item} className="flex gap-3">
+                    <span className="w-7 h-7 rounded-full bg-blue-700 text-white flex items-center justify-center font-bold flex-shrink-0">{index + 1}</span>
+                    <span className="pt-1">{item}</span>
+                  </li>
+                ))}
+              </ol>
+            </aside>
           </div>
         </div>
       </section>
@@ -252,6 +332,108 @@ export default function CreditoPessoaFisica() {
                     </Link>
                   </Button>
                 </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* COMPARATIVO */}
+      <section className="py-14 bg-white">
+        <div className="container px-4">
+          <div className="max-w-5xl mx-auto">
+            <div className="max-w-3xl mb-8">
+              <p className="text-sm font-bold uppercase tracking-wider text-blue-700 mb-3">Comparação orientativa</p>
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">Entenda quando cada solução pode fazer sentido</h2>
+              <p className="text-gray-600 leading-relaxed">
+                O quadro abaixo organiza as diferenças gerais entre as modalidades. Ele não substitui uma proposta formal nem representa promessa de aprovação, taxa ou limite.
+              </p>
+            </div>
+            <div className="overflow-x-auto rounded-2xl border border-gray-200 shadow-sm">
+              <table className="w-full min-w-[760px] text-left">
+                <thead className="bg-[#123a5a] text-white">
+                  <tr>
+                    <th className="p-4 font-semibold">Modalidade</th>
+                    <th className="p-4 font-semibold">Uso principal</th>
+                    <th className="p-4 font-semibold">Ponto de atenção</th>
+                    <th className="p-4 font-semibold">O que comparar</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
+                  <tr className="bg-white"><td className="p-4 font-semibold text-gray-900">Consignado</td><td className="p-4">Necessidades de uso livre por público elegível</td><td className="p-4">Convênio e margem consignável</td><td className="p-4">CET, prazo e impacto do desconto em folha</td></tr>
+                  <tr className="bg-gray-50"><td className="p-4 font-semibold text-gray-900">Crédito pessoal</td><td className="p-4">Despesas planejadas ou necessidade pontual</td><td className="p-4">Custo total e comprometimento de renda</td><td className="p-4">CET, parcela, total a pagar e condições</td></tr>
+                  <tr className="bg-white"><td className="p-4 font-semibold text-gray-900">Financiamento imobiliário</td><td className="p-4">Aquisição de imóvel elegível</td><td className="p-4">Entrada, avaliação, documentação e longo prazo</td><td className="p-4">Sistema de amortização, CET, seguros e total</td></tr>
+                  <tr className="bg-gray-50"><td className="p-4 font-semibold text-gray-900">Financiamento de veículo</td><td className="p-4">Compra de veículo novo ou usado</td><td className="p-4">Entrada, valor do bem e custo do contrato</td><td className="p-4">CET, prazo, parcela e valor total financiado</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* PROCESSO E DOCUMENTOS */}
+      <section className="py-14 bg-gray-50">
+        <div className="container px-4">
+          <div className="max-w-5xl mx-auto">
+            <div className="text-center max-w-3xl mx-auto mb-10">
+              <p className="text-sm font-bold uppercase tracking-wider text-blue-700 mb-3">Do planejamento à proposta</p>
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">Como funciona a análise de crédito</h2>
+              <p className="text-gray-600">O fluxo pode variar entre instituições, mas normalmente passa pelas etapas abaixo.</p>
+            </div>
+            <div className="grid md:grid-cols-4 gap-5 mb-12">
+              {[
+                { icon: Wallet, title: "1. Necessidade", desc: "Definição de finalidade, valor necessário e capacidade de pagamento." },
+                { icon: FileText, title: "2. Documentos", desc: "Organização de identificação, renda e documentos específicos da modalidade." },
+                { icon: SearchCheck, title: "3. Análise", desc: "Avaliação de elegibilidade, perfil, comprometimento de renda e política de crédito." },
+                { icon: Scale, title: "4. Comparação", desc: "Leitura de CET, parcelas, prazo, garantias e valor total antes do aceite." },
+              ].map((step) => (
+                <article key={step.title} className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+                  <step.icon className="h-7 w-7 text-blue-700 mb-4" />
+                  <h3 className="font-bold text-gray-900 mb-2">{step.title}</h3>
+                  <p className="text-sm text-gray-600 leading-relaxed">{step.desc}</p>
+                </article>
+              ))}
+            </div>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="bg-white rounded-2xl border border-gray-100 p-7">
+                <h3 className="text-xl font-bold text-gray-900 mb-4">Documentos que podem ser solicitados</h3>
+                <ul className="space-y-3 text-sm text-gray-700">
+                  {["Documento oficial de identificação e CPF", "Comprovante de residência atualizado", "Comprovantes de renda ou movimentação compatíveis", "Informações bancárias e autorizações necessárias", "Documentos do imóvel ou veículo, quando aplicável"].map((item) => (
+                    <li key={item} className="flex gap-2"><CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />{item}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="bg-amber-50 rounded-2xl border border-amber-200 p-7">
+                <AlertCircle className="h-7 w-7 text-amber-700 mb-4" />
+                <h3 className="text-xl font-bold text-gray-900 mb-4">Cuidados antes de assinar</h3>
+                <ul className="space-y-3 text-sm text-gray-700">
+                  {["Confirme o CET e o valor total a pagar", "Leia regras de atraso, seguros e tarifas", "Verifique datas de vencimento e forma de débito", "Não faça pagamentos antecipados a desconhecidos", "Guarde a proposta e o contrato formalizados"].map((item) => (
+                    <li key={item} className="flex gap-2"><CheckCircle2 className="h-5 w-5 text-amber-700 flex-shrink-0" />{item}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="py-14 bg-white">
+        <div className="container px-4">
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-10">
+              <p className="text-sm font-bold uppercase tracking-wider text-blue-700 mb-3">Dúvidas frequentes</p>
+              <h2 className="text-3xl font-bold text-gray-900">Crédito para pessoa física</h2>
+            </div>
+            <div className="space-y-3">
+              {creditoPessoalFaqs.map((faq) => (
+                <details key={faq.question} className="group rounded-xl border border-gray-200 bg-white p-5 open:shadow-sm">
+                  <summary className="cursor-pointer list-none font-semibold text-gray-900 flex items-center justify-between gap-4">
+                    {faq.question}
+                    <span aria-hidden="true" className="text-blue-700 text-xl group-open:rotate-45 transition-transform">+</span>
+                  </summary>
+                  <p className="mt-4 text-gray-600 leading-relaxed">{faq.answer}</p>
+                </details>
               ))}
             </div>
           </div>

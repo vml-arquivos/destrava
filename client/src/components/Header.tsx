@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
-import { Menu, X, ChevronDown, Building2, BarChart3, Shield, Search, Lock, Home } from "lucide-react";
+import { Menu, X, ChevronDown, Building2, BarChart3, Shield, Search, Lock, Home, UserRound, Calculator } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { COMPANY } from "@/config/company";
 
@@ -43,6 +43,8 @@ export default function Header({ ctaLabel = "Simule seu crédito", ctaHref = "/s
       label: "Serviços",
       href: "/produtos",
       children: [
+        { label: "Crédito Pessoal", href: "/credito-pessoal", icon: UserRound, desc: "Soluções de crédito para pessoa física" },
+        { label: "Calculadora de Score", href: "/calculadora-score", icon: Calculator, desc: "Estime os fatores que influenciam seu perfil de crédito" },
         { label: "Diagnóstico de Crédito", href: "/rating-banco-central", icon: BarChart3, desc: "Leitura orientada do SCR/Registrato" },
         { label: "Certificado Digital", href: "/certificado-digital", icon: Shield, desc: "A1 e A3 para PF e PJ" },
         { label: "Consulta SPC/Serasa", href: "/consulta-spc-serasa", icon: Search, desc: "CPF e CNPJ" },

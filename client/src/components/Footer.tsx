@@ -17,6 +17,8 @@ export default function Footer() {
   ];
 
   const linksServicos = [
+    { label: "Crédito Pessoal", href: "/credito-pessoal" },
+    { label: "Calculadora de Score", href: "/calculadora-score" },
     { label: "Diagnóstico de Crédito", href: "/rating-banco-central" },
     { label: "Certificado Digital", href: "/certificado-digital" },
     { label: "Consulta SPC/Serasa", href: "/consulta-spc-serasa" },

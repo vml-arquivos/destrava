@@ -21,6 +21,8 @@ import cnpjRouter from './routes/cnpj';
 import sociosDocumentosRouter from './routes/socios_documentos';
 import documentosRouter from './routes/documentos';
 import documentacaoRouter from './routes/documentacao';
+import blogRoutes from './routes/blogRoutes';
+import bannerRoutes from './routes/bannerRoutes';
 import createOrcamentosOperacoesRouter, {
   garantirNumeroFinalizado as garantirOrcamentoFinalizado,
   carregarPdfArmazenado as carregarPdfOrcamentoArmazenado,
@@ -1091,10 +1093,17 @@ async function startServer() {
   });
   // ─────────────────────────────────────────────────────────────────────────
 
+  // Injetar pool nos app.locals para acesso nas rotas
+  app.locals.pool = pool;
+  
   // Rota para consulta de CNPJ (proxy para BrasilAPI)
   app.use('/api/cnpj', cnpjRouter);
   app.use('/api/empresas', sociosDocumentosRouter);
   app.use('/api/documentacao', documentacaoRouter);
+  
+  // Rotas de blog e banners
+  app.use('/api/blog', blogRoutes);
+  app.use('/api/banners', bannerRoutes);
   const server = createServer(app);
 
   // ─── AUTO-CREATE: Company Hub / Empresas enriquecidas ──────────────────────

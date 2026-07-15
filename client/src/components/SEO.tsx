@@ -271,3 +271,8 @@ export const faqStructuredData = (faqs: { question: string; answer: string }[]) 
     },
   })),
 });
+
+export const structuredDataGraph = (...schemas: Record<string, unknown>[]) => ({
+  "@context": "https://schema.org",
+  "@graph": schemas.map(({ "@context": _context, ...schema }) => schema),
+});

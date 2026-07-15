@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite --host",
-    "build": "node --import tsx scripts/generate-seo-files.ts && vite build && node scripts/check-bundle-budget.mjs && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
+    "build": "node --import tsx scripts/generate-seo-files.ts && vite build && node scripts/prerender.mjs && node scripts/check-bundle-budget.mjs && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "build:budget": "node scripts/check-bundle-budget.mjs",
     "seo:generate": "node --import tsx scripts/generate-seo-files.ts",
     "start": "NODE_ENV=production PORT=4000 node dist/index.js",
@@ -18,7 +18,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "migrate:nexus-catalog": "node scripts/migrate-nexus-catalog.mjs"
+    "migrate:nexus-catalog": "node scripts/migrate-nexus-catalog.mjs",
+    "prerender": "node scripts/prerender.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

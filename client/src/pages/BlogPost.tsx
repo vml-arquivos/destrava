@@ -184,14 +184,25 @@ export default function BlogPost() {
         <div className="container">
           <div className="max-w-3xl mx-auto text-center">
             <h2 className="text-3xl md:text-4xl font-bold mb-6">
-              Precisa de capital de giro para sua empresa?
+              {post.category.toLowerCase().includes("pronampe") 
+                ? "Pronto para acessar o PRONAMPE?" 
+                : post.category.toLowerCase().includes("score") || post.category.toLowerCase().includes("gestão") 
+                  ? "Quer saber como está o seu score de crédito?" 
+                  : "Precisa de capital de giro para sua empresa?"}
             </h2>
             <p className="text-xl text-white/90 mb-8">
-              Faça uma simulação gratuita do Giro CAIXA Fácil e descubra como a
-              Destrava Crédito pode ajudar seu negócio a crescer.
+              {post.category.toLowerCase().includes("pronampe") 
+                ? "Nossa equipe organiza a análise e orienta a solicitação para você decidir com mais clareza e segurança." 
+                : post.category.toLowerCase().includes("score") || post.category.toLowerCase().includes("gestão") 
+                  ? "Faça uma consulta agora e descubra como a Destrava Crédito pode ajudar seu negócio a crescer." 
+                  : "Faça uma simulação gratuita e descubra como a Destrava Crédito pode ajudar seu negócio a crescer."}
             </p>
-            <CTAButton variant="secondary" size="lg">
-              Simular Agora
+            <CTAButton 
+              variant="secondary" 
+              size="lg" 
+              href={post.category.toLowerCase().includes("score") || post.category.toLowerCase().includes("gestão") ? "/calculadora-score" : "/simular"}
+            >
+              {post.category.toLowerCase().includes("score") || post.category.toLowerCase().includes("gestão") ? "Consultar Score Grátis" : "Simular Agora"}
             </CTAButton>
           </div>
         </div>
@@ -205,6 +216,11 @@ export default function BlogPost() {
             <div className="grid md:grid-cols-2 gap-6">
               {blogPosts
                 .filter(p => p.id !== post.id)
+                .sort((a, b) => {
+                  if (a.category === post.category && b.category !== post.category) return -1;
+                  if (a.category !== post.category && b.category === post.category) return 1;
+                  return 0;
+                })
                 .slice(0, 2)
                 .map(relatedPost => (
                   <Link

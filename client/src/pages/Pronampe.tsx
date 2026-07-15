@@ -1,6 +1,10 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import SEO, { serviceStructuredData } from "@/components/SEO";
+import SEO, {
+  faqStructuredData,
+  serviceStructuredData,
+  structuredDataGraph,
+} from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import {
@@ -20,33 +24,33 @@ import {
 import { useState } from "react";
 
 /**
- * FAQ atualizado para o Novo Pronampe 2026.
- * Destaca as novas regras de faturamento elegível, limite de crédito, carência e prazo.
+ * Perguntas frequentes alinhadas às condições oficiais consultadas em julho de 2026.
+ * Valores e prazos variam conforme a instituição financeira e a análise de crédito.
  */
 const faqs = [
   {
     q: "Quem pode solicitar o Novo Pronampe?",
-    a: "Micro e pequenas empresas (MEI, ME e EPP) com faturamento anual de até R$ 4,8 milhões. Para empresas lideradas por mulheres, o limite de crédito é maior, podendo chegar a 60% do faturamento anual.",
+    a: "O programa atende MEIs, microempresas e empresas de pequeno porte, observados o enquadramento legal, as regras vigentes e os critérios da instituição financeira participante.",
   },
   {
     q: "Qual o valor máximo que posso obter?",
-    a: "Pelas regras divulgadas em julho de 2026, o crédito pode chegar a até 60% da receita bruta anual anterior, observado o teto e as condições da instituição financeira.",
+    a: "O limite depende da regra vigente e da instituição. Na CAIXA, a condição divulgada é de até 50% do faturamento anual informado à Receita Federal, limitada a R$ 500 mil por CNPJ e sujeita à capacidade de pagamento e à disponibilidade de recursos.",
   },
   {
     q: "Qual a taxa de juros do Novo Pronampe?",
-    a: "A taxa de juros parte de Selic + 6% ao ano, podendo variar conforme a instituição financeira, com condições competitivas para micro e pequenas empresas.",
+    a: "Para operações a partir de 2021, o portal do Governo Federal informa taxa anual máxima de Selic acrescida de 6%. A taxa efetiva, o custo total e as demais condições devem ser confirmados na proposta da instituição financeira.",
   },
   {
     q: "Qual o prazo de pagamento?",
-    a: "Até 96 meses para pagamento, com carência de até 24 meses para começar a amortizar o principal.",
+    a: "O prazo varia por instituição e modalidade. A CAIXA divulga prazo total de até 60 meses, com carência de até 24 meses, sujeito às condições vigentes e à aprovação de crédito.",
   },
   {
     q: "Quais garantias são exigidas?",
-    a: "Aval dos sócios e apoio do Fundo Garantidor de Operações (FGO), que facilita a aprovação mesmo para empresas sem bens para oferecer como garantia.",
+    a: "As garantias e exigências variam conforme a operação e a instituição participante. O PRONAMPE pode contar com cobertura do Fundo Garantidor de Operações, mas isso não elimina a análise de crédito nem assegura a contratação.",
   },
   {
     q: "Como a Destrava Crédito me ajuda no Novo Pronampe?",
-    a: "Nossa equipe analisa o faturamento, organiza toda a documentação, identifica o banco com melhores condições e acompanha o processo até a aprovação e liberação do crédito.",
+    a: "A Destrava faz o diagnóstico inicial, orienta a organização dos documentos, compara alternativas disponíveis e acompanha a solicitação. A decisão final e as condições são exclusivas da instituição financeira.",
   },
 ];
 
@@ -56,12 +60,17 @@ export default function Pronampe() {
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <SEO
-        title="Novo Pronampe 2026 - Crédito para Micro e Pequenas Empresas | Destrava"
-        description="Novo Pronampe 2026: até R$ 500 mil, com carência de 24 meses e prazo de pagamento de 96 meses. Assessoria completa para MEI, ME e EPP."
-        keywords="novo pronampe 2026, crédito para micro e pequenas empresas, pronampe 2026, empréstimo MEI, capital de giro"
-        structuredData={serviceStructuredData(
-          "Novo Pronampe 2026",
-          "Orientação para micro e pequenas empresas avaliarem elegibilidade, documentos e condições vigentes do PRONAMPE."
+        title="PRONAMPE 2026: regras, condições e como solicitar | Destrava"
+        description="Entenda quem pode solicitar o PRONAMPE, os documentos, as condições divulgadas por instituições participantes e como preparar sua empresa para a análise."
+        keywords="PRONAMPE 2026, crédito para micro e pequenas empresas, empréstimo MEI, capital de giro, documentos PRONAMPE"
+        structuredData={structuredDataGraph(
+          serviceStructuredData(
+            "Assessoria para PRONAMPE",
+            "Orientação para pequenos negócios avaliarem elegibilidade, documentos e condições vigentes do PRONAMPE."
+          ),
+          faqStructuredData(
+            faqs.map(({ q, a }) => ({ question: q, answer: a }))
+          )
         )}
       />
       <Header />
@@ -84,14 +93,14 @@ export default function Pronampe() {
             </div>
             <h1 className="text-4xl md:text-5xl font-bold mb-4">PRONAMPE</h1>
             <p className="text-xl text-white/90 mb-2 font-medium">
-              Programa Nacional de Apoio às Micro e Pequenas Empresas – Versão
-              2026
+              Programa Nacional de Apoio às Microempresas e Empresas de Pequeno
+              Porte
             </p>
             <p className="text-lg text-white/80 leading-relaxed mb-8">
-              Até <strong>R$ 500.000</strong> de crédito, com carência de até{" "}
-              <strong>24 meses</strong> e prazo total de pagamento de{" "}
-              <strong>96 meses</strong>. A Destrava cuida de todo o processo,
-              desde a análise até a aprovação.
+              Entenda as regras vigentes, organize a documentação e compare as
+              condições disponíveis. Na CAIXA, o limite divulgado é de até{" "}
+              <strong>R$ 500 mil</strong>, sempre sujeito à análise e à
+              disponibilidade de recursos.
             </p>
             <div className="flex flex-wrap gap-3">
               <Button asChild size="lg" variant="secondary" className="font-semibold">
@@ -123,32 +132,32 @@ export default function Pronampe() {
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <DollarSign className="h-12 w-12 text-primary mx-auto mb-4" />
-              <h3 className="font-bold text-lg mb-2">Valor Máximo</h3>
+              <h3 className="font-bold text-lg mb-2">Referência CAIXA</h3>
               <p className="text-2xl font-bold text-primary mb-2">
-                Até R$ 500k
+                Até R$ 500 mil
               </p>
               <p className="text-sm text-muted-foreground">
-                Até 60% da receita anual, conforme regras vigentes
+                Até 50% do faturamento, sujeito à análise
               </p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <Percent className="h-12 w-12 text-primary mx-auto mb-4" />
               <h3 className="font-bold text-lg mb-2">Taxa de Juros</h3>
               <p className="text-2xl font-bold text-primary mb-2">
-                Selic + 6% a.a.*
+                Até Selic + 6% a.a.*
               </p>
               <p className="text-sm text-muted-foreground">
-                *Pode variar conforme a instituição financeira
+                *Teto anual informado nas fontes oficiais consultadas
               </p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border text-center">
               <Calendar className="h-12 w-12 text-primary mx-auto mb-4" />
               <h3 className="font-bold text-lg mb-2">Prazo</h3>
               <p className="text-2xl font-bold text-primary mb-2">
-                Até 96 meses
+                Até 60 meses*
               </p>
               <p className="text-sm text-muted-foreground">
-                Com carência de 24 meses
+                *Condição divulgada pela CAIXA; carência de até 24 meses
               </p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border text-center">
@@ -158,7 +167,7 @@ export default function Pronampe() {
                 MEI / ME / EPP
               </p>
               <p className="text-sm text-muted-foreground">
-                Faturamento até R$ 4,8M/ano
+                Conforme o enquadramento legal vigente
               </p>
             </div>
           </div>
@@ -234,8 +243,8 @@ export default function Pronampe() {
                 <div>
                   <h3 className="font-semibold mb-1">Refinanciamento</h3>
                   <p className="text-sm text-muted-foreground">
-                    Trocar dívidas com juros mais altos por uma taxa mais
-                    competitiva e prazo maior.
+                    Quitar operações vigentes quando essa destinação estiver
+                    admitida pelas regras e pela proposta da instituição.
                   </p>
                 </div>
               </div>
@@ -267,15 +276,15 @@ export default function Pronampe() {
                   </li>
                   <li className="flex items-start gap-2 text-sm">
                     <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                    <span>Pelo menos 1 ano de funcionamento</span>
+                    <span>Empresas novas seguem critérios específicos de cálculo</span>
                   </li>
                   <li className="flex items-start gap-2 text-sm">
                     <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                    <span>Situação regular na Receita Federal</span>
+                    <span>Cadastro e informações fiscais atualizados</span>
                   </li>
                   <li className="flex items-start gap-2 text-sm">
                     <CheckCircle2 className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                    <span>Sem restrições graves no CADIN</span>
+                    <span>Sujeição à política de crédito da instituição</span>
                   </li>
                 </ul>
               </div>
@@ -303,7 +312,7 @@ export default function Pronampe() {
                   </li>
                   <li className="flex items-start gap-2 text-sm">
                     <FileText className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
-                    <span>Extratos bancários dos últimos 3 meses</span>
+                    <span>Extratos e documentos adicionais solicitados pelo banco</span>
                   </li>
                 </ul>
               </div>
@@ -341,8 +350,8 @@ export default function Pronampe() {
               {
                 n: "04",
                 icon: TrendingUp,
-                title: "Liberação do Crédito",
-                desc: "Acompanhamos até a aprovação e liberação do recurso na sua conta.",
+                title: "Acompanhamento",
+                desc: "Acompanhamos a solicitação e ajudamos a esclarecer exigências até a decisão do banco.",
               },
             ].map(step => (
               <div key={step.n} className="text-center">
@@ -392,6 +401,49 @@ export default function Pronampe() {
         </div>
       </section>
 
+      {/* FONTES OFICIAIS */}
+      <section className="py-8 bg-muted/30">
+        <div className="container max-w-4xl">
+          <h2 className="text-2xl font-bold mb-3">Fontes oficiais consultadas</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+            Conteúdo revisado em julho de 2026. As condições podem mudar e devem
+            ser confirmadas diretamente com a instituição financeira.
+          </p>
+          <ul className="space-y-2 text-sm">
+            <li>
+              <a
+                href="https://www.gov.br/memp/pt-br/programa-acredita/novo-desenrola-brasil/novo-pronampe"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary font-medium hover:underline"
+              >
+                Ministério do Empreendedorismo — Novo PRONAMPE
+              </a>
+            </li>
+            <li>
+              <a
+                href="https://www.caixa.gov.br/empresa/credito-financiamento/capital-de-giro/pronampe/Paginas/default.aspx"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary font-medium hover:underline"
+              >
+                CAIXA — condições do PRONAMPE
+              </a>
+            </li>
+            <li>
+              <a
+                href="https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2020/lei/l13999.htm"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary font-medium hover:underline"
+              >
+                Lei nº 13.999/2020 — texto compilado
+              </a>
+            </li>
+          </ul>
+        </div>
+      </section>
+
       {/* AVISO LEGAL */}
       <section className="py-8">
         <div className="container max-w-4xl">
@@ -420,8 +472,8 @@ export default function Pronampe() {
             Pronto para acessar o PRONAMPE?
           </h2>
           <p className="text-lg text-white/80 mb-8 max-w-xl mx-auto">
-            Nossa equipe faz toda a análise e condução do processo. Você foca no
-            seu negócio.
+            Nossa equipe organiza a análise e orienta a solicitação para você
+            decidir com mais clareza e segurança.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Button asChild size="lg" variant="secondary" className="font-semibold">

@@ -1,6 +1,6 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import SEO, { serviceStructuredData } from "@/components/SEO";
+import SEO, { faqStructuredData, serviceStructuredData } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
@@ -16,6 +16,9 @@ import {
   Truck,
   Zap,
   FileText,
+  Scale,
+  SearchCheck,
+  AlertCircle,
 } from "lucide-react";
 
 const linhasCredito = [
@@ -153,6 +156,51 @@ const linhasCredito = [
   },
 ];
 
+const creditoEmpresarialFaqs = [
+  {
+    question: "Qual linha de crédito empresarial é mais adequada para a minha empresa?",
+    answer: "A escolha depende da finalidade do recurso, porte, faturamento, tempo de atividade, capacidade de pagamento, garantias disponíveis e regras vigentes de cada programa. A análise deve começar pela necessidade da empresa e só depois comparar as linhas elegíveis.",
+  },
+  {
+    question: "Ter CNPJ ativo garante a aprovação do crédito?",
+    answer: "Não. O CNPJ ativo é apenas um requisito inicial em muitas operações. A instituição financeira pode avaliar cadastro, movimentação, faturamento, endividamento, documentos, garantias e histórico de pagamento antes de decidir.",
+  },
+  {
+    question: "É possível solicitar crédito empresarial com restrição?",
+    answer: "A existência de restrições pode afetar a análise, mas os critérios variam conforme instituição e modalidade. O caminho responsável é identificar a origem da pendência, regularizar o que for possível e apresentar informações consistentes sobre a situação atual da empresa.",
+  },
+  {
+    question: "Qual é a diferença entre capital de giro e financiamento?",
+    answer: "Capital de giro costuma atender despesas operacionais e necessidades de caixa. Financiamentos normalmente estão vinculados à aquisição de um bem ou investimento específico. Finalidade, prazo, garantias e documentos tendem a ser diferentes.",
+  },
+  {
+    question: "Quais documentos costumam ser analisados?",
+    answer: "Podem ser solicitados documentos societários, comprovantes de faturamento, extratos, declarações fiscais, demonstrativos financeiros, certidões e informações dos sócios. A lista final varia conforme porte, linha e instituição.",
+  },
+  {
+    question: "A Destrava aprova ou libera o crédito?",
+    answer: "Não. A Destrava atua na orientação, organização e acompanhamento do processo. A decisão de crédito, as condições e a liberação são de responsabilidade exclusiva da instituição financeira.",
+  },
+];
+
+const creditoEmpresarialStructuredData = [
+  serviceStructuredData(
+    "Crédito para Empresas",
+    "Assessoria para organização e comparação de linhas de crédito empresarial para diferentes portes e finalidades.",
+  ),
+  faqStructuredData(creditoEmpresarialFaqs),
+];
+
+const comparativoEmpresarial = [
+  { nome: "PRONAMPE", href: "/pronampe", perfil: "MEI, micro e pequenas empresas elegíveis", finalidade: "Capital de giro e necessidades empresariais", atencao: "Regras do programa, faturamento, dados fiscais e análise bancária" },
+  { nome: "ProCred 360", href: "/procred360", perfil: "Negócios elegíveis conforme regras vigentes", finalidade: "Apoio ao desenvolvimento e à operação", atencao: "Critérios do programa, instituição operadora e disponibilidade" },
+  { nome: "Giro CAIXA Fácil", href: "/giro-caixa-facil", perfil: "Empresas elegíveis na CAIXA", finalidade: "Capital de giro", atencao: "Relacionamento, cadastro, CET e análise da instituição" },
+  { nome: "FCO", href: "/fco", perfil: "Empresas e projetos elegíveis no Centro-Oeste", finalidade: "Investimento, expansão e atividades enquadráveis", atencao: "Localização, projeto, finalidade e regras do fundo" },
+  { nome: "PEAC FGI", href: "/peac-fgi", perfil: "Empresas enquadradas nas operações participantes", finalidade: "Crédito com apoio de fundo garantidor", atencao: "Cobertura da garantia não elimina a análise de crédito" },
+  { nome: "FAMPE", href: "/fampe", perfil: "Pequenos negócios elegíveis", finalidade: "Complemento de garantia em operações participantes", atencao: "Regras do fundo, instituição e capacidade de pagamento" },
+  { nome: "CGI", href: "/credito-com-garantia-de-imovel", perfil: "Empresas ou responsáveis com imóvel elegível", finalidade: "Crédito com garantia de imóvel", atencao: "Avaliação do bem, custos, risco patrimonial e prazo" },
+];
+
 export default function CreditoEmpresas() {
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -160,7 +208,7 @@ export default function CreditoEmpresas() {
         title="Crédito para Empresas - Linhas de Crédito PJ | Destrava Crédito"
         description="Linhas de crédito para empresas de todos os portes. PRONAMPE, Giro CAIXA Fácil, PRONAMP, capital de giro para médio e grande porte, financiamento de equipamentos."
         keywords="crédito empresarial, PRONAMPE, Giro CAIXA Fácil, PRONAMP, capital de giro, financiamento empresas, crédito PJ, linhas de crédito"
-        structuredData={serviceStructuredData("Crédito para Empresas", "Linhas de crédito para empresas de todos os portes: MEI, ME, EPP, médio e grande porte.")}
+        structuredData={creditoEmpresarialStructuredData}
       />
       <Header />
 
@@ -203,6 +251,38 @@ export default function CreditoEmpresas() {
                 </a>
               </Button>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* VISÃO ESTRATÉGICA */}
+      <section className="py-14 bg-white">
+        <div className="container px-4">
+          <div className="max-w-6xl mx-auto grid lg:grid-cols-[1.3fr_0.7fr] gap-10 items-start">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-wider text-[var(--color-caixa-blue)] mb-3">Crédito com finalidade definida</p>
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-5">A linha adequada precisa combinar com o caixa, o projeto e a capacidade de pagamento</h2>
+              <div className="space-y-4 text-gray-600 leading-relaxed">
+                <p>
+                  Crédito empresarial pode financiar capital de giro, compra de equipamentos, expansão, reorganização financeira ou um projeto específico. Cada objetivo exige uma estrutura diferente. Contratar um recurso de curto prazo para um investimento de retorno longo, por exemplo, pode pressionar o caixa mesmo quando a parcela parece acessível.
+                </p>
+                <p>
+                  Uma decisão consistente começa pela leitura do fluxo de caixa, do ciclo financeiro, do valor necessário e do prazo em que o recurso deve gerar resultado. Depois, é preciso verificar elegibilidade, garantias, documentos e custo efetivo total. O faturamento isolado não determina aprovação nem indica, sozinho, quanto a empresa pode assumir.
+                </p>
+                <p>
+                  A Destrava organiza o processo e ajuda a comparar caminhos possíveis. A aprovação, os limites, as taxas e a liberação permanecem sob responsabilidade da instituição financeira e podem variar conforme o perfil e as condições vigentes.
+                </p>
+              </div>
+            </div>
+            <aside className="bg-blue-50 border border-blue-100 rounded-2xl p-7">
+              <SearchCheck className="h-8 w-8 text-[var(--color-caixa-blue)] mb-4" />
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Diagnóstico antes da proposta</h3>
+              <ul className="space-y-3 text-sm text-gray-700">
+                {["Finalidade e valor realmente necessários", "Capacidade de pagamento e sazonalidade do caixa", "Porte, faturamento e tempo de atividade", "Documentos fiscais, bancários e societários", "Garantias disponíveis e riscos da operação", "CET, prazo e valor total a pagar"].map((item) => (
+                  <li key={item} className="flex gap-2"><CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />{item}</li>
+                ))}
+              </ul>
+            </aside>
           </div>
         </div>
       </section>
@@ -319,6 +399,44 @@ export default function CreditoEmpresas() {
         </div>
       </section>
 
+      {/* TABELA COMPARATIVA */}
+      <section className="py-14 bg-white">
+        <div className="container px-4">
+          <div className="max-w-6xl mx-auto">
+            <div className="max-w-3xl mb-8">
+              <p className="text-sm font-bold uppercase tracking-wider text-[var(--color-caixa-blue)] mb-3">Mapa de alternativas</p>
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">Compare as principais linhas e mecanismos de apoio</h2>
+              <p className="text-gray-600 leading-relaxed">
+                Esta comparação é orientativa. Elegibilidade, disponibilidade, custos e condições devem ser confirmados na análise e na proposta formal da instituição financeira.
+              </p>
+            </div>
+            <div className="overflow-x-auto rounded-2xl border border-gray-200 shadow-sm">
+              <table className="w-full min-w-[980px] text-left">
+                <thead className="bg-[var(--color-caixa-blue-dark)] text-white">
+                  <tr>
+                    <th className="p-4 font-semibold">Linha</th>
+                    <th className="p-4 font-semibold">Perfil geral</th>
+                    <th className="p-4 font-semibold">Finalidade</th>
+                    <th className="p-4 font-semibold">Ponto de atenção</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
+                  {comparativoEmpresarial.map((linha, index) => (
+                    <tr key={linha.nome} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                      <td className="p-4 font-semibold"><Link href={linha.href} className="text-[var(--color-caixa-blue)] hover:underline">{linha.nome}</Link></td>
+                      <td className="p-4">{linha.perfil}</td>
+                      <td className="p-4">{linha.finalidade}</td>
+                      <td className="p-4">{linha.atencao}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-gray-500 mt-4">Fundos garantidores podem complementar garantias da operação, mas não substituem a análise nem representam aprovação automática.</p>
+          </div>
+        </div>
+      </section>
+
       {/* COMO FUNCIONA */}
       <section className="py-14 bg-white">
         <div className="container px-4">
@@ -341,6 +459,57 @@ export default function CreditoEmpresas() {
                   <h3 className="font-bold text-gray-900 mb-2">{step.title}</h3>
                   <p className="text-sm text-gray-600">{step.desc}</p>
                 </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* DOCUMENTOS E PREPARAÇÃO */}
+      <section className="py-14 bg-gray-50">
+        <div className="container px-4">
+          <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-6">
+            <div className="bg-white rounded-2xl border border-gray-100 p-7 shadow-sm">
+              <FileText className="h-8 w-8 text-[var(--color-caixa-blue)] mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Documentação que pode ser solicitada</h2>
+              <p className="text-gray-600 mb-5 leading-relaxed">A lista depende da linha e do porte, mas a preparação costuma envolver:</p>
+              <ul className="space-y-3 text-sm text-gray-700">
+                {["Contrato social e alterações ou documento equivalente", "Documentos dos sócios e representantes", "Comprovantes de faturamento e declarações fiscais", "Extratos bancários e informações de endividamento", "Balanço, balancete ou demonstrativos compatíveis com o porte", "Orçamentos, projetos e documentos de garantias, quando aplicável"].map((item) => (
+                  <li key={item} className="flex gap-2"><CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />{item}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="bg-amber-50 rounded-2xl border border-amber-200 p-7">
+              <AlertCircle className="h-8 w-8 text-amber-700 mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">O que enfraquece uma solicitação</h2>
+              <p className="text-gray-600 mb-5 leading-relaxed">Inconsistências não significam recusa automática, mas precisam ser entendidas antes do protocolo.</p>
+              <ul className="space-y-3 text-sm text-gray-700">
+                {["Valor solicitado sem relação clara com a finalidade", "Documentos divergentes ou desatualizados", "Fluxo de caixa incapaz de absorver a nova parcela", "Mistura recorrente entre finanças pessoais e empresariais", "Pendências cadastrais ou fiscais não explicadas", "Ausência de informações sobre garantias e contrapartidas"].map((item) => (
+                  <li key={item} className="flex gap-2"><Scale className="h-5 w-5 text-amber-700 flex-shrink-0" />{item}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="py-14 bg-white">
+        <div className="container px-4">
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-10">
+              <p className="text-sm font-bold uppercase tracking-wider text-[var(--color-caixa-blue)] mb-3">Dúvidas frequentes</p>
+              <h2 className="text-3xl font-bold text-gray-900">Crédito empresarial</h2>
+            </div>
+            <div className="space-y-3">
+              {creditoEmpresarialFaqs.map((faq) => (
+                <details key={faq.question} className="group rounded-xl border border-gray-200 bg-white p-5 open:shadow-sm">
+                  <summary className="cursor-pointer list-none font-semibold text-gray-900 flex items-center justify-between gap-4">
+                    {faq.question}
+                    <span aria-hidden="true" className="text-[var(--color-caixa-blue)] text-xl group-open:rotate-45 transition-transform">+</span>
+                  </summary>
+                  <p className="mt-4 text-gray-600 leading-relaxed">{faq.answer}</p>
+                </details>
               ))}
             </div>
           </div>

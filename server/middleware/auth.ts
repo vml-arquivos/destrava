@@ -99,4 +99,12 @@ export function auth(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+export function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.user || !['admin', 'gestor', 'gerente'].includes(req.user.role)) {
+    res.status(403).json({ error: 'Acesso negado: privilégios de administrador necessários' });
+    return;
+  }
+  next();
+}
+
 export { normalizeRole };
