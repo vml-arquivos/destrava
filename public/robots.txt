@@ -37,8 +37,8 @@ Disallow: /colaborador/
 Crawl-delay: 1
 
 # Sitemap
-Sitemap: https://destrava.com/sitemap.xml
-Sitemap: https://destrava.com/api/sitemap/blog
+Sitemap: https://destravacredito.com/sitemap.xml
+Sitemap: https://destravacredito.com/api/sitemap/blog
 
 # Crawl delay padrão (em segundos)
 Crawl-delay: 0.5
