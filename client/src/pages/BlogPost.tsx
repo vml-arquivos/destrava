@@ -9,14 +9,9 @@ import { Calendar, Clock, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import SEO from "@/components/SEO";
+import SEO, { blogPostingStructuredData } from "@/components/SEO";
 import { DEFAULT_OG_IMAGE, SITE_URL } from "@shared/publicSeo";
 
-// Substituímos o streamdown por react-markdown + remark-gfm.
-// O streamdown embutia mermaid + shiki como dependências diretas, criando
-// dependências circulares no bundle que causavam tela branca em produção:
-// "Cannot read properties of undefined (reading 'createContext')".
-// O react-markdown é leve (~30KB) e não tem essas dependências pesadas.
 function MarkdownContent({ children }: { children: string }) {
   return <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>;
 }
@@ -62,6 +57,41 @@ export default function BlogPost() {
     );
   }
 
+  const blogPostingSchema = blogPostingStructuredData(
+    post.title,
+    post.excerpt,
+    post.featured_image_url || DEFAULT_OG_IMAGE,
+    post.published_at,
+    post.updated_at || post.published_at,
+    post.author || "Destrava Crédito",
+    post.content,
+    `${SITE_URL}/blog/${post.slug}`
+  );
+
+  const breadcrumbSchema = {
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Início",
+        item: `${SITE_URL}/`,
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Blog",
+        item: `${SITE_URL}/blog`,
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: post.title,
+        item: `${SITE_URL}/blog/${post.slug}`,
+      },
+    ],
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <SEO
@@ -76,49 +106,7 @@ export default function BlogPost() {
         canonicalPath={`/blog/${post.slug}`}
         structuredData={{
           "@context": "https://schema.org",
-          "@graph": [
-            {
-              "@type": "Article",
-              headline: post.title,
-              description: post.excerpt,
-              image: post.featured_image_url || DEFAULT_OG_IMAGE,
-              datePublished: post.published_at,
-              dateModified: post.updated_at,
-              mainEntityOfPage: `${SITE_URL}/blog/${post.slug}`,
-              author: { "@type": "Organization", name: "Destrava Crédito" },
-              publisher: {
-                "@type": "Organization",
-                name: "Destrava Crédito",
-                logo: {
-                  "@type": "ImageObject",
-                  url: `${SITE_URL}/destrava-logo.png`,
-                },
-              },
-            },
-            {
-              "@type": "BreadcrumbList",
-              itemListElement: [
-                {
-                  "@type": "ListItem",
-                  position: 1,
-                  name: "Início",
-                  item: `${SITE_URL}/`,
-                },
-                {
-                  "@type": "ListItem",
-                  position: 2,
-                  name: "Blog",
-                  item: `${SITE_URL}/blog`,
-                },
-                {
-                  "@type": "ListItem",
-                  position: 3,
-                  name: post.title,
-                  item: `${SITE_URL}/blog/${post.slug}`,
-                },
-              ],
-            },
-          ],
+          "@graph": [blogPostingSchema, breadcrumbSchema],
         }}
       />
       <ExitIntentPopup />
@@ -172,7 +160,6 @@ export default function BlogPost() {
               Conteúdo educativo. Regras, taxas, limites e prazos podem mudar. Confirme as condições vigentes, o Custo Efetivo Total (CET) e a proposta da instituição antes de contratar. A concessão de crédito depende de análise e aprovação da instituição financeira.
             </aside>
             <div className="prose prose-lg max-w-none">
-              {/* Dividir o conteúdo para inserir o banner no meio */}
               {post.content.includes("##") ? (
                 <>
                   <MarkdownContent>

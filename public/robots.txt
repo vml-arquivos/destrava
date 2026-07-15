@@ -1,0 +1,45 @@
+# Robots.txt para Destrava — Crédito Empresarial
+# Última atualização: 2026-07-15
+
+# Permitir todos os bots (exceto regras específicas)
+User-agent: *
+Allow: /
+Disallow: /api/admin/
+Disallow: /colaborador/
+Disallow: /*.json$
+Disallow: /*?*sort=
+Disallow: /*?*filter=
+Disallow: /temp/
+Disallow: /cache/
+Disallow: /.env
+
+# Permitir acesso ao blog público
+Allow: /blog/
+Allow: /api/blog/
+
+# Permitir acesso às ferramentas públicas
+Allow: /simular
+Allow: /calculadora-score
+Allow: /faq
+
+# Google
+User-agent: Googlebot
+Allow: /
+Disallow: /api/admin/
+Disallow: /colaborador/
+Crawl-delay: 0
+
+# Bing
+User-agent: Bingbot
+Allow: /
+Disallow: /api/admin/
+Disallow: /colaborador/
+Crawl-delay: 1
+
+# Sitemap
+Sitemap: https://destrava.com/sitemap.xml
+Sitemap: https://destrava.com/api/sitemap/blog
+
+# Crawl delay padrão (em segundos)
+Crawl-delay: 0.5
+Request-rate: 30/60

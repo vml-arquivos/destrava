@@ -23,6 +23,7 @@ import documentosRouter from './routes/documentos';
 import documentacaoRouter from './routes/documentacao';
 import blogRoutes from './routes/blogRoutes';
 import bannerRoutes from './routes/bannerRoutes';
+import { createSitemapRoutes } from './routes/sitemapRoutes';
 import createOrcamentosOperacoesRouter, {
   garantirNumeroFinalizado as garantirOrcamentoFinalizado,
   carregarPdfArmazenado as carregarPdfOrcamentoArmazenado,
@@ -1101,9 +1102,10 @@ async function startServer() {
   app.use('/api/empresas', sociosDocumentosRouter);
   app.use('/api/documentacao', documentacaoRouter);
   
-  // Rotas de blog e banners
+  // Rotas de blog, banners e sitemap
   app.use('/api/blog', blogRoutes);
   app.use('/api/banners', bannerRoutes);
+  app.use('/api/sitemap', createSitemapRoutes(pool));
   const server = createServer(app);
 
   // ─── AUTO-CREATE: Company Hub / Empresas enriquecidas ──────────────────────

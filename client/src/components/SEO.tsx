@@ -272,6 +272,45 @@ export const faqStructuredData = (faqs: { question: string; answer: string }[]) 
   })),
 });
 
+export const blogPostingStructuredData = (
+  title: string,
+  description: string,
+  image: string,
+  datePublished: string,
+  dateModified: string,
+  author: string,
+  content: string,
+  url: string
+) => ({
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  headline: title,
+  description: description,
+  image: {
+    "@type": "ImageObject",
+    url: image,
+  },
+  datePublished: datePublished,
+  dateModified: dateModified,
+  author: {
+    "@type": "Organization",
+    name: author || "Destrava",
+  },
+  publisher: {
+    "@type": "Organization",
+    name: "Destrava",
+    logo: {
+      "@type": "ImageObject",
+      url: `${SITE_URL}/destrava-logo.png`,
+    },
+  },
+  mainEntityOfPage: {
+    "@type": "WebPage",
+    "@id": url,
+  },
+  articleBody: content,
+});
+
 export const structuredDataGraph = (...schemas: Record<string, unknown>[]) => ({
   "@context": "https://schema.org",
   "@graph": schemas.map(({ "@context": _context, ...schema }) => schema),
