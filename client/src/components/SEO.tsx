@@ -202,6 +202,60 @@ export const organizationStructuredData = {
   sameAs: ["https://www.instagram.com/destravacredito"],
 };
 
+// LocalBusiness/ProfessionalService por unidade física -- é o que faltava pra SEO local
+// (Organization sozinho não conta como "negócio local" pro Google). Uma entrada por
+// endereço, seguindo o padrão schema.org pra negócio com múltiplas unidades.
+// Só inclui dado real e confirmado: CEP de Brasília confirmado no Google Maps (perfil
+// verificado da empresa); Goiânia não tem CEP/geo confirmado ainda, por isso fica de fora
+// em vez de inventar.
+export const localBusinessStructuredData = [
+  {
+    "@context": "https://schema.org",
+    "@type": "ProfessionalService",
+    "@id": `${SITE_URL}/#local-brasilia`,
+    name: SITE_NAME,
+    parentOrganization: { "@id": `${SITE_URL}/#organization` },
+    telephone: "+55-61-3526-8355",
+    url: `${SITE_URL}/`,
+    image: DEFAULT_OG_IMAGE,
+    priceRange: "$$",
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: "QND 25 Lote 40 - Taguatinga Norte",
+      addressLocality: "Brasília",
+      addressRegion: "DF",
+      postalCode: "72120-250",
+      addressCountry: "BR",
+    },
+    openingHoursSpecification: [
+      { "@type": "OpeningHoursSpecification", dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], opens: "08:00", closes: "18:00" },
+      { "@type": "OpeningHoursSpecification", dayOfWeek: ["Saturday"], opens: "08:00", closes: "12:00" },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "ProfessionalService",
+    "@id": `${SITE_URL}/#local-goiania`,
+    name: SITE_NAME,
+    parentOrganization: { "@id": `${SITE_URL}/#organization` },
+    telephone: "+55-61-3526-8355",
+    url: `${SITE_URL}/`,
+    image: DEFAULT_OG_IMAGE,
+    priceRange: "$$",
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: "Praça Cel Vicente Sanches de Almeida, LT 07 Sala 03 - Crimeia Leste",
+      addressLocality: "Goiânia",
+      addressRegion: "GO",
+      addressCountry: "BR",
+    },
+    openingHoursSpecification: [
+      { "@type": "OpeningHoursSpecification", dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], opens: "08:00", closes: "18:00" },
+      { "@type": "OpeningHoursSpecification", dayOfWeek: ["Saturday"], opens: "08:00", closes: "12:00" },
+    ],
+  },
+];
+
 export const serviceStructuredData = (serviceName: string, description: string) => ({
   "@context": "https://schema.org",
   "@type": "Service",

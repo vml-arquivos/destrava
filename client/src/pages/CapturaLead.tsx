@@ -38,6 +38,8 @@ import {
 } from "lucide-react";
 import FormSubmitError from "@/components/FormSubmitError";
 import { submitLead } from "@/lib/leads";
+import { getMarketingAttribution } from "@/lib/analytics";
+import { COMPANY } from "@/config/company";
 
 // Mapa produto (query param) → label amigável e mensagem WhatsApp
 const PRODUTO_META: Record<string, { label: string; whatsappMsg: string; titulo: string; subtitulo: string }> = {
@@ -94,6 +96,9 @@ interface LeadForm {
   valorDesejado: string;
   finalidade: string;
   tipoCliente: string;
+  documentoTipo: string;
+  certificadoTipo: string;
+  certificadoSituacao: string;
 }
 
 const FINALIDADES = [
@@ -145,6 +150,7 @@ export default function CapturaLead() {
 
   const meta = PRODUTO_META[produtoParam] ?? PRODUTO_META_DEFAULT;
   const isServico = PRODUTOS_SERVICO.includes(produtoParam);
+  const isCertificado = produtoParam === "certificado-digital" || produtoParam === "certificado-digital-a1";
 
   const [etapa, setEtapa] = useState<"formulario" | "resultado">("formulario");
   const [form, setForm] = useState<LeadForm>({
@@ -155,6 +161,9 @@ export default function CapturaLead() {
     valorDesejado: "",
     finalidade: "",
     tipoCliente: "empresa",
+    documentoTipo: "cnpj",
+    certificadoTipo: "",
+    certificadoSituacao: "",
   });
   const [parcelas, setParcelas] = useState("24");
   const [enviando, setEnviando] = useState(false);
@@ -176,6 +185,16 @@ export default function CapturaLead() {
     return Object.keys(novosErros).length === 0;
   }
 
+  // Tag de urgência a partir da situação do certificado — ajuda o comercial a priorizar
+  // sem precisar perguntar de novo (quem já venceu tem prioridade sobre quem só quer orientação).
+  function tagUrgenciaCertificado(): string | null {
+    if (!isCertificado) return null;
+    if (form.certificadoSituacao === "vencido") return "vencido";
+    if (form.certificadoSituacao === "vence-em-breve") return "vence_em_breve";
+    if (form.certificadoSituacao) return "novo";
+    return null;
+  }
+
   async function handleSimular(e: FormEvent) {
     e.preventDefault();
     if (!validar()) return;
@@ -183,6 +202,14 @@ export default function CapturaLead() {
     setSubmitError(null);
     try {
       const tipoPessoa = form.tipoCliente === "empresa" ? "pj" : "pf";
+      const atribuicao = getMarketingAttribution();
+      const observacoesCertificado = isCertificado
+        ? [
+            form.documentoTipo ? `Documento: ${form.documentoTipo.toUpperCase()}.` : null,
+            form.certificadoTipo ? `Tipo de certificado: ${form.certificadoTipo.toUpperCase()}.` : null,
+            form.certificadoSituacao ? `Situação: ${form.certificadoSituacao.replace(/-/g, " ")}.` : null,
+          ].filter(Boolean).join(" ")
+        : "";
       await submitLead({
         nome: form.nome,
         telefone: form.telefone,
@@ -197,6 +224,16 @@ export default function CapturaLead() {
         origem: produtoParam ? `landing_${produtoParam}` : "landing_captura",
         produto_interesse: meta.label || null,
         pagina: produtoParam ? `/${produtoParam}` : "/captura",
+        ...(isCertificado
+          ? {
+              documento_tipo: form.documentoTipo || null,
+              certificado_tipo: form.certificadoTipo || null,
+              certificado_situacao: form.certificadoSituacao || null,
+              temperatura: tagUrgenciaCertificado(),
+              observacoes_ia: observacoesCertificado || undefined,
+            }
+          : {}),
+        ...atribuicao,
       });
       setEtapa("resultado");
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -217,9 +254,22 @@ export default function CapturaLead() {
       (form.valorDesejado && !isServico ? `Valor desejado: ${fmt.format(parseFloat(form.valorDesejado))}\n` : "") +
       (form.finalidade ? `Finalidade: ${form.finalidade}\n` : "") +
       (!isServico ? `Prazo: ${parcelas} meses\n` : "") +
-      `\nGostaria de conversar com um especialista.`
+      (isCertificado && form.certificadoTipo ? `Tipo de certificado: ${form.certificadoTipo.toUpperCase()}\n` : "") +
+      (isCertificado && form.certificadoSituacao ? `Situação: ${form.certificadoSituacao.replace(/-/g, " ")}\n` : "") +
+      `\nGostaria de conversar com um especialista.` +
+      (() => {
+        const a = getMarketingAttribution();
+        const origemTexto = [
+          a.utm_source ? `origem: ${a.utm_source}` : null,
+          a.utm_campaign ? `campanha: ${a.utm_campaign}` : null,
+          a.pagina_entrada ? `página de entrada: ${a.pagina_entrada}` : null,
+        ].filter(Boolean).join(" · ");
+        return origemTexto ? `\n\n[Contexto interno — ${origemTexto}]` : "";
+      })()
   );
-  const whatsappUrl = `https://wa.me/556135268355?text=${whatsappMsg}`;
+  const whatsappUrl = COMPANY.whatsappLink
+    ? `${COMPANY.whatsappLink}?text=${whatsappMsg}`
+    : `https://wa.me/556135268355?text=${whatsappMsg}`;
 
   const seoTitle = isServico
     ? `${meta.label} | Destrava Crédito`
@@ -402,6 +452,57 @@ export default function CapturaLead() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Qualificação específica de Certificado Digital — só aparece pra esses 2 produtos */}
+                    {isCertificado && (
+                      <div className="space-y-4">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Sobre o Certificado
+                          <span className="text-muted-foreground text-xs ml-1.5 font-normal normal-case">(ajuda a gente a te atender mais rápido)</span>
+                        </p>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <Label>Documento</Label>
+                            <Select value={form.documentoTipo} onValueChange={(v) => set("documentoTipo", v)}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="CPF ou CNPJ" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="cnpj">CNPJ (e-CNPJ)</SelectItem>
+                                <SelectItem value="cpf">CPF (e-CPF)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Tipo de certificado</Label>
+                            <Select value={form.certificadoTipo} onValueChange={(v) => set("certificadoTipo", v)}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="A1, A3 ou não sei" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="a1">A1 (arquivo digital, 1 ano)</SelectItem>
+                                <SelectItem value="a3">A3 (cartão/token, 1 a 5 anos)</SelectItem>
+                                <SelectItem value="nao-sei">Não sei, quero orientação</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Situação atual</Label>
+                          <Select value={form.certificadoSituacao} onValueChange={(v) => set("certificadoSituacao", v)}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione a situação" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="vencido">Já venceu — preciso urgente</SelectItem>
+                              <SelectItem value="vence-em-breve">Vence nos próximos 30 dias</SelectItem>
+                              <SelectItem value="primeira-via">Nunca tive, é 1ª via</SelectItem>
+                              <SelectItem value="renovacao">Tenho válido, quero renovar com antecedência</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Seção de crédito — oculta para produtos de serviço */}
                     {!isServico && (

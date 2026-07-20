@@ -3,6 +3,7 @@ import Footer from "@/components/Footer";
 import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { COMPANY } from "@/config/company";
+import { getMarketingAttribution } from "@/lib/analytics";
 import { Link } from "wouter";
 import {
   AlertTriangle,
@@ -32,10 +33,6 @@ import {
 } from "lucide-react";
 
 const CAPTURE_URL = "/captura?produto=certificado-digital-a1";
-
-const whatsappUrl = COMPANY.whatsappLinkMsg(
-  "Olá! Preciso emitir um Certificado Digital A1 e gostaria de falar com um especialista."
-);
 
 const faqs = [
   {
@@ -177,7 +174,21 @@ const steps = [
   },
 ];
 
+function montarMensagemComContexto(mensagemBase: string): string {
+  if (typeof window === "undefined") return mensagemBase;
+  const a = getMarketingAttribution();
+  const origemTexto = [
+    a.utm_source ? `origem: ${a.utm_source}` : null,
+    a.utm_campaign ? `campanha: ${a.utm_campaign}` : null,
+  ].filter(Boolean).join(" · ");
+  return origemTexto ? `${mensagemBase}\n\n[Contexto interno — ${origemTexto}]` : mensagemBase;
+}
+
 export default function CertificadoDigitalA1() {
+  const whatsappUrl = COMPANY.whatsappLinkMsg(
+    montarMensagemComContexto("Olá! Preciso emitir um Certificado Digital A1 e gostaria de falar com um especialista.")
+  );
+
   return (
     <div className="min-h-screen bg-white pb-20 text-slate-950 md:pb-0">
       <SEO
@@ -278,7 +289,12 @@ export default function CertificadoDigitalA1() {
                     ))}
                   </ul>
 
-                  <Button asChild size="lg" className="mt-8 h-12 w-full rounded-xl bg-amber-300 font-black text-slate-950 hover:bg-amber-200">
+                  <div className="mt-6 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Valor</p>
+                    <p className="text-sm font-semibold text-slate-100">Sob consulta — você recebe o valor exato em minutos, sem compromisso.</p>
+                  </div>
+
+                  <Button asChild size="lg" className="mt-4 h-12 w-full rounded-xl bg-amber-300 font-black text-slate-950 hover:bg-amber-200">
                     <Link href={CAPTURE_URL}>
                       Solicitar Certificado A1
                       <ArrowRight className="h-5 w-5" aria-hidden="true" />

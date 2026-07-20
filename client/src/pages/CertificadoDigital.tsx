@@ -1,6 +1,8 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import SEO, { serviceStructuredData } from "@/components/SEO";
+import SEO, { serviceStructuredData, faqStructuredData } from "@/components/SEO";
+import { COMPANY } from "@/config/company";
+import { getMarketingAttribution } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import {
@@ -15,7 +17,26 @@ import {
   CreditCard,
   Building2,
   User,
+  AlertTriangle,
 } from "lucide-react";
+
+const CERTIFICADO_FAQS = [
+  { question: "Qual a diferença entre certificado A1 e A3?", answer: "O A1 é um arquivo digital instalado no computador ou na nuvem, com validade de 1 ano — ideal para quem usa o certificado com frequência. O A3 fica em um token USB ou cartão inteligente, com validade de 1 a 3 anos, e pode ser levado para qualquer computador." },
+  { question: "O que acontece se meu certificado vencer?", answer: "Com o certificado vencido, a empresa perde acesso a sistemas que dependem dele, como emissão de NF-e, e-CAC, eSocial e SPED — o que pode travar a operação até a renovação ser concluída." },
+  { question: "Preciso estar presente para emitir o certificado?", answer: "Depende do tipo e da Autoridade Certificadora: alguns processos permitem validação por videoconferência, outros exigem validação presencial. Nossa equipe orienta qual caminho se aplica ao seu caso." },
+  { question: "O valor do certificado é fixo?", answer: "O valor varia conforme o tipo (A1 ou A3), o prazo de validade escolhido e a Autoridade Certificadora. Fale com a nossa equipe para receber o valor exato para o seu caso." },
+] as const;
+
+function whatsappUrlComContexto(mensagemBase: string): string {
+  if (typeof window === "undefined") return COMPANY.whatsappLinkMsg(mensagemBase);
+  const a = getMarketingAttribution();
+  const origemTexto = [
+    a.utm_source ? `origem: ${a.utm_source}` : null,
+    a.utm_campaign ? `campanha: ${a.utm_campaign}` : null,
+  ].filter(Boolean).join(" · ");
+  const mensagem = origemTexto ? `${mensagemBase}\n\n[Contexto interno — ${origemTexto}]` : mensagemBase;
+  return COMPANY.whatsappLinkMsg(mensagem);
+}
 
 export default function CertificadoDigital() {
   return (
@@ -24,7 +45,13 @@ export default function CertificadoDigital() {
         title="Certificado Digital para Empresa e Pessoa Física"
         description="Emita seu Certificado Digital A1 ou A3 para empresa (CNPJ) ou pessoa física (CPF). Necessário para emissão de NF-e, e-Social, eSocial, SPED e acesso a sistemas governamentais."
         keywords="certificado digital, certificado digital empresa, certificado digital CNPJ, certificado digital CPF, e-CNPJ, e-CPF, NF-e, nota fiscal eletrônica"
-        structuredData={serviceStructuredData("Certificado Digital", "Emissão de certificado digital A1 e A3 para empresas e pessoas físicas.")}
+        structuredData={{
+          "@context": "https://schema.org",
+          "@graph": [
+            serviceStructuredData("Certificado Digital", "Emissão de certificado digital A1 e A3 para empresas e pessoas físicas."),
+            faqStructuredData(CERTIFICADO_FAQS as unknown as { question: string; answer: string }[]),
+          ],
+        }}
       />
       <Header />
 
@@ -55,10 +82,27 @@ export default function CertificadoDigital() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
-                <a href="https://wa.me/556135268355?text=Olá! Preciso de um certificado digital." target="_blank" rel="noopener noreferrer">
+                <a href={whatsappUrlComContexto("Olá! Preciso de um certificado digital.")} target="_blank" rel="noopener noreferrer">
                   Falar com Especialista
                 </a>
               </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* URGÊNCIA: certificado vencido/vencendo */}
+      <section className="py-10 bg-red-50 border-y border-red-100">
+        <div className="container px-4">
+          <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
+            <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center shrink-0">
+              <AlertTriangle className="h-7 w-7 text-red-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Sua operação não pode parar. Certificado vencido ou vencendo?</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Sem certificado válido, a empresa perde acesso à emissão de NF-e, ao e-CAC, ao eSocial e ao SPED. Se o seu já venceu ou vence nos próximos dias, fale com a gente antes que isso trave alguma obrigação.
+              </p>
             </div>
           </div>
         </div>
@@ -83,6 +127,10 @@ export default function CertificadoDigital() {
                     <h3 className="text-2xl font-bold text-gray-900">Tipo A1</h3>
                     <p className="text-sm text-gray-500">Arquivo digital no computador</p>
                   </div>
+                </div>
+                <div className="mb-5 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Valor</p>
+                  <p className="text-sm text-blue-800">Sob consulta — resposta com o valor exato em minutos, sem compromisso.</p>
                 </div>
                 <ul className="space-y-3 mb-6">
                   {[
@@ -121,6 +169,10 @@ export default function CertificadoDigital() {
                     <h3 className="text-2xl font-bold text-gray-900">Tipo A3</h3>
                     <p className="text-sm text-gray-500">Token USB ou cartão inteligente</p>
                   </div>
+                </div>
+                <div className="mb-5 rounded-xl border border-purple-100 bg-purple-50/60 px-4 py-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-purple-700">Valor</p>
+                  <p className="text-sm text-purple-800">Sob consulta — resposta com o valor exato em minutos, sem compromisso.</p>
                 </div>
                 <ul className="space-y-3 mb-6">
                   {[
@@ -265,6 +317,23 @@ export default function CertificadoDigital() {
         </div>
       </section>
 
+      {/* FAQ */}
+      <section className="py-14 bg-white">
+        <div className="container px-4">
+          <div className="max-w-3xl mx-auto">
+            <h2 className="text-3xl font-bold text-gray-900 text-center mb-10">Perguntas Frequentes</h2>
+            <div className="space-y-4">
+              {CERTIFICADO_FAQS.map((f) => (
+                <div key={f.question} className="rounded-2xl border border-gray-100 bg-gray-50 p-5">
+                  <h3 className="font-bold text-gray-900 mb-1.5">{f.question}</h3>
+                  <p className="text-sm text-gray-600 leading-relaxed">{f.answer}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="py-14 bg-gradient-to-br from-[#1a5276] to-[#0d2b45] text-white">
         <div className="container px-4">
@@ -281,7 +350,7 @@ export default function CertificadoDigital() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 font-bold px-8">
-                <a href="https://wa.me/556135268355?text=Olá! Preciso de um certificado digital." target="_blank" rel="noopener noreferrer">
+                <a href={whatsappUrlComContexto("Olá! Preciso de um certificado digital.")} target="_blank" rel="noopener noreferrer">
                   Falar no WhatsApp
                 </a>
               </Button>
