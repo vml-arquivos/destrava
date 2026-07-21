@@ -15475,10 +15475,109 @@ Responda em JSON com:
         pool.query('SELECT * FROM contratos WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 10', [req.params.id]).catch(() => ({ rows: [] as any[] })),
         pool.query('SELECT * FROM simulacoes WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 10', [req.params.id]).catch(() => ({ rows: [] as any[] })),
       ]);
-      res.json({ empresa: empresa.rows[0], historico: historico.rows, documentos: documentos.rows, contratos: contratos.rows, simulacoes: simulacoes.rows });
+      // preview_url/download_url apontam para as rotas de integração abaixo (autenticadas
+      // pela mesma chave de integração), não para /uploads/empresas (essa exige sessão de
+      // colaborador do Destrava, que o Nexus não tem).
+      const documentosComLinks = documentos.rows.map((doc: any) => ({
+        ...doc,
+        preview_url: `/api/nexus/empresas/${req.params.id}/documentos/${doc.id}/view`,
+        download_url: `/api/nexus/empresas/${req.params.id}/documentos/${doc.id}/download`,
+      }));
+      res.json({ empresa: empresa.rows[0], historico: historico.rows, documentos: documentosComLinks, contratos: contratos.rows, simulacoes: simulacoes.rows });
     } catch (err) {
       console.error('[NEXUS] Erro ao buscar resumo da empresa:', err);
       res.status(500).json({ error: 'Erro ao buscar resumo da empresa para o Nexus.' });
+    }
+  });
+
+  async function enviarDocumentoEmpresaParaNexus(req: Request, res: Response, inline: boolean) {
+    try {
+      const empresa = await pool.query('SELECT id FROM empresas WHERE id = $1 LIMIT 1', [req.params.id]);
+      if (empresa.rows.length === 0) { res.status(404).json({ error: 'Empresa não encontrada.' }); return; }
+      const { rows } = await pool.query(
+        'SELECT * FROM empresa_documentos WHERE id = $1 AND empresa_id = $2 LIMIT 1',
+        [req.params.docId, req.params.id],
+      );
+      if (!rows.length) { res.status(404).json({ error: 'Documento não encontrado.' }); return; }
+      const doc = rows[0];
+      const resolved = resolveDocumentPath({
+        caminho_arquivo: doc.caminho_arquivo || doc.url || null,
+        nome_arquivo: doc.nome_arquivo || (doc.url ? path.basename(doc.url) : doc.nome),
+        nome_original: doc.nome || doc.nome_original || null,
+        entidade_tipo: 'empresa',
+        entidade_id: req.params.id,
+      });
+      if (!resolved.absolutePath) {
+        res.status(404).json({ error: 'Arquivo físico não localizado nos volumes do Destrava.', code: 'DOCUMENT_FILE_MISSING' });
+        return;
+      }
+      const filename = path.basename(String(doc.nome || doc.nome_original || doc.url || 'documento')).replace(/"/g, '');
+      const mime = doc.mime_type || (filename.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream');
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="${filename}"`);
+      fs.createReadStream(resolved.absolutePath).pipe(res);
+    } catch (err) {
+      console.error('[NEXUS] Erro ao enviar documento da empresa:', err);
+      res.status(500).json({ error: 'Erro ao obter documento.' });
+    }
+  }
+
+  app.get('/api/nexus/empresas/:id/documentos/:docId/download', requireNexusIntegration, (req: Request, res: Response) => {
+    void enviarDocumentoEmpresaParaNexus(req, res, false);
+  });
+  app.get('/api/nexus/empresas/:id/documentos/:docId/view', requireNexusIntegration, (req: Request, res: Response) => {
+    void enviarDocumentoEmpresaParaNexus(req, res, true);
+  });
+
+  const uploadEmpresaDocumentoNexus = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 25 * 1024 * 1024 },
+  });
+
+  // Documento enviado pelo Nexus (ex.: durante execução de uma tarefa vinculada a
+  // esta empresa) é salvo exatamente como um documento enviado pela própria tela
+  // do Destrava — mesma pasta, mesma tabela — então aparece nos dois sistemas.
+  app.post('/api/nexus/empresas/:id/documentos', requireNexusIntegration, uploadEmpresaDocumentoNexus.single('file'), async (req: Request, res: Response) => {
+    try {
+      const empresa = await pool.query('SELECT id FROM empresas WHERE id = $1 LIMIT 1', [req.params.id]);
+      if (empresa.rows.length === 0) { res.status(404).json({ error: 'Empresa não encontrada.' }); return; }
+      const file = req.file;
+      if (!file) { res.status(400).json({ error: 'Arquivo é obrigatório.' }); return; }
+
+      const dataDir = getDataDir();
+      const uploadDir = path.join(dataDir, 'uploads', 'empresas', req.params.id);
+      await fs.promises.mkdir(uploadDir, { recursive: true });
+
+      const ext = path.extname(file.originalname || '');
+      const base = path.basename(file.originalname || `doc_${Date.now()}`, ext).replace(/[^a-zA-Z0-9_.-]+/g, '_').slice(0, 90);
+      const nomeArq = `${Date.now()}_${base}${ext || ''}`;
+      const filePath = path.join(uploadDir, nomeArq);
+      await fs.promises.writeFile(filePath, file.buffer);
+
+      const tipoInformado = typeof req.body?.tipo === 'string' ? req.body.tipo : '';
+      const tipo = tipoInformado || (file.mimetype?.startsWith('image/') ? 'foto_empresa' : (ext.replace('.', '') || 'arquivo'));
+      const url = `/uploads/empresas/${req.params.id}/${nomeArq}`;
+      const origemNexus = typeof req.body?.origem_nexus === 'string' ? req.body.origem_nexus.trim() : '';
+
+      const r = await pool.query(
+        `INSERT INTO empresa_documentos (empresa_id, nome, tipo, tamanho, url)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [req.params.id, file.originalname || nomeArq, tipo, file.size, url],
+      );
+      await registrarHistoricoEmpresaSeguro(
+        req.params.id,
+        'documento_enviado',
+        `Documento enviado pelo Nexus${origemNexus ? ` (${origemNexus})` : ''}: ${file.originalname || nomeArq}`,
+        'Nexus (integração)',
+      );
+      res.status(201).json({
+        ...r.rows[0],
+        preview_url: `/api/nexus/empresas/${req.params.id}/documentos/${r.rows[0].id}/view`,
+        download_url: `/api/nexus/empresas/${req.params.id}/documentos/${r.rows[0].id}/download`,
+      });
+    } catch (err) {
+      console.error('[NEXUS] Erro ao salvar documento enviado pelo Nexus:', err);
+      res.status(500).json({ error: 'Erro ao salvar documento.' });
     }
   });
 
