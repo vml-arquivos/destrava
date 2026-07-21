@@ -50,6 +50,7 @@ export interface DocumentoAnexo {
   descricao: string;
   previewUrl: string | null; // null para PDFs
   tipo: 'imagem' | 'pdf';
+  incluirNoPdf?: boolean; // default true -- controla se este arquivo entra nas páginas do PDF do contrato
 }
 
 interface Props {
@@ -162,6 +163,7 @@ export function UploadDocumentos({ documentos, onChange, maxArquivos = 30, disab
           descricao: catDef.descricaoPadrao,
           previewUrl: isImagem ? URL.createObjectURL(file) : null,
           tipo: isImagem ? 'imagem' : 'pdf',
+          incluirNoPdf: true,
         });
       });
 
@@ -186,6 +188,9 @@ export function UploadDocumentos({ documentos, onChange, maxArquivos = 30, disab
 
   const atualizar = (id: string, campo: 'categoria' | 'descricao', valor: string) =>
     onChange(documentos.map(d => d.id === id ? { ...d, [campo]: valor } : d));
+
+  const alternarInclusao = (id: string) =>
+    onChange(documentos.map(d => d.id === id ? { ...d, incluirNoPdf: !(d.incluirNoPdf ?? true) } : d));
 
   const dragItem  = useRef<number | null>(null);
   const dragOver2 = useRef<number | null>(null);
@@ -358,6 +363,17 @@ export function UploadDocumentos({ documentos, onChange, maxArquivos = 30, disab
                       </optgroup>
                     ))}
                   </select>
+
+                  <label className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={doc.incluirNoPdf ?? true}
+                      onChange={() => alternarInclusao(doc.id)}
+                      disabled={disabled}
+                      className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-400"
+                    />
+                    Incluir este documento no PDF do contrato
+                  </label>
                 </div>
 
                 {/* Remover */}

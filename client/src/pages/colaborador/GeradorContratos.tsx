@@ -224,7 +224,10 @@ export default function GeradorContratos() {
     try {
       // Extrai documentos anexos do payload (não devem ir no JSON)
       const { _documentosAnexos, ...dadosContrato } = formData;
-      const documentos: any[] = _documentosAnexos || [];
+      const todosDocumentos: any[] = _documentosAnexos || [];
+      // Só envia pro merge quem está marcado "incluir no PDF" -- documentos desmarcados
+      // ficam de fora da geração, sem precisar removê-los da lista.
+      const documentos = todosDocumentos.filter((doc: any) => doc.incluirNoPdf ?? true);
 
       let result: any;
       if (documentos.length > 0) {
