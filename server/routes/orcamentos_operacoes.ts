@@ -817,7 +817,7 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
   router.get("/anexos/:id/download", async (req: Request, res: Response) => {
     try {
       const { rows } = await pool.query(
-        `SELECT nome_original, mime_type, storage_path
+        `SELECT orcamento_id, nome_original, mime_type, storage_path
            FROM public.orcamentos_timbrados_anexos
           WHERE id = $1
             AND COALESCE(status, 'ativo') <> 'arquivado'
@@ -826,12 +826,25 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
       );
       if (!rows.length) return res.status(404).json({ error: "Anexo não encontrado" });
       const anexo = rows[0];
-      if (!anexo.storage_path || !fs.existsSync(anexo.storage_path)) {
+
+      // Não confia só no caminho absoluto gravado na hora do upload -- se ele não for
+      // mais encontrado (ex: drift de resolução de DATA_DIR entre deploys), tenta
+      // reconstruir a partir do diretório atual antes de desistir. Mesmo padrão de
+      // resiliência já usado em resolveDocumentPath (documentStorage.ts).
+      const nomeArquivo = anexo.storage_path ? path.basename(String(anexo.storage_path)) : null;
+      const candidatos = [
+        anexo.storage_path ? String(anexo.storage_path) : null,
+        nomeArquivo ? path.join(uploadsOrcamentosDir(String(anexo.orcamento_id)), nomeArquivo) : null,
+      ].filter((v): v is string => Boolean(v));
+
+      const encontrado = candidatos.find((c) => fs.existsSync(c) && fs.statSync(c).isFile());
+      if (!encontrado) {
+        console.error("[orcamentos][anexo download] arquivo não encontrado em nenhum candidato:", { anexoId: req.params.id, candidatos });
         return res.status(404).json({ error: "Arquivo do anexo não encontrado" });
       }
       res.setHeader("Content-Type", anexo.mime_type || "application/octet-stream");
       res.setHeader("Content-Disposition", `attachment; filename="${String(anexo.nome_original || "anexo").replace(/"/g, "")}"`);
-      fs.createReadStream(anexo.storage_path).pipe(res);
+      fs.createReadStream(encontrado).pipe(res);
     } catch (err: any) {
       console.error("[orcamentos][anexo download]", err);
       res.status(500).json({ error: err?.message || "Erro ao baixar anexo" });

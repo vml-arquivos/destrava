@@ -11276,8 +11276,23 @@ async function registrarDocumentoContratoGerado(params: {
         res.status(404).json({ error: 'Contrato não encontrado' });
         return;
       }
-      const filePath = path.resolve(rows[0].pdf_path);
-      if (!fs.existsSync(filePath)) {
+      // Mesmo padrão de resiliência já usado em /api/contratos/:id/visualizar --
+      // não confia só no caminho gravado no banco, tenta reconstruir em vários
+      // caminhos possíveis antes de desistir (evita 404 por drift de DATA_DIR
+      // entre deploys).
+      const pdfPathBruto = String(rows[0].pdf_path);
+      const candidatos: string[] = [
+        path.resolve(pdfPathBruto),
+        path.join(getDataDir(), 'uploads', 'contratos', path.basename(pdfPathBruto)),
+        path.join('/app/uploads/contratos', path.basename(pdfPathBruto)),
+        path.join('/app/uploads', path.basename(pdfPathBruto)),
+      ];
+      if (process.env.DATA_DIR) {
+        candidatos.push(path.join(process.env.DATA_DIR, path.basename(pdfPathBruto)));
+      }
+      const filePath = candidatos.find((c) => fs.existsSync(c));
+      if (!filePath) {
+        console.error('[GET /api/contratos/:id/download] arquivo não encontrado em nenhum candidato:', { contratoId: req.params.id, candidatos });
         res.status(404).json({ error: 'Arquivo PDF não encontrado no servidor' });
         return;
       }

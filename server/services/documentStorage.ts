@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 
-const DEFAULT_DATA_DIR = '/app/uploads';
+const DEFAULT_DATA_DIR = '/app';
 
 export class PersistentStorageError extends Error {
   statusCode = 503;
@@ -32,13 +32,15 @@ export function getDataDir(): string {
   // Produção atual no Coolify: volume persistente montado em /app/uploads.
   // Se DATA_DIR ficou apontando para o padrão antigo (/var/data/destrava),
   // priorizamos o volume realmente montado para não bloquear upload nem perder arquivos.
+  // Retorna o PAI do volume (/app), não o volume em si -- todo chamador desta função
+  // (interno e externo) sempre completa o caminho com 'uploads/...' por conta própria.
   if (process.env.DOCUMENT_STORAGE_ALLOW_COOLIFY_UPLOADS_FALLBACK !== 'false'
     && configuredPath
     && normalizePath(configuredPath) !== normalizePath(coolifyUploads)
     && fs.existsSync(coolifyUploads)) {
     const mountPoint = findMountPoint(coolifyUploads);
     if (isDedicatedPersistentMount(coolifyUploads, mountPoint) || process.env.PERSISTENT_STORAGE_CONFIGURED === 'true') {
-      return coolifyUploads;
+      return path.dirname(coolifyUploads);
     }
   }
 
