@@ -736,6 +736,7 @@ async function buscarAnexosParaMerge(pool: Pool, orcamentoId: string): Promise<A
          FROM public.orcamentos_timbrados_anexos
         WHERE orcamento_id = $1
           AND COALESCE(status, 'ativo') <> 'arquivado'
+          AND COALESCE(incluir_no_pdf, true) = true
         ORDER BY criado_em ASC`,
       [orcamentoId],
     );
@@ -931,6 +932,34 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
     }
   });
 
+  router.patch("/anexos/:id", async (req: Request, res: Response) => {
+    try {
+      const incluir = req.body?.incluir_no_pdf;
+      if (typeof incluir !== "boolean") {
+        return res.status(400).json({ error: "Informe incluir_no_pdf (true ou false)." });
+      }
+      const result = await pool.query(
+        `UPDATE public.orcamentos_timbrados_anexos
+            SET incluir_no_pdf = $2
+          WHERE id = $1
+            AND COALESCE(status, 'ativo') <> 'arquivado'
+          RETURNING orcamento_id, incluir_no_pdf`,
+        [req.params.id, incluir],
+      );
+      if (!result.rows.length) return res.status(404).json({ error: "Anexo não encontrado" });
+      const row = result.rows[0];
+      // Invalida o PDF em cache -- a próxima geração já reflete a mudança de inclusão.
+      await pool.query(
+        `UPDATE public.orcamentos_timbrados SET pdf_path = NULL, atualizado_em = NOW() WHERE id = $1`,
+        [row.orcamento_id],
+      );
+      res.json({ ok: true, incluir_no_pdf: row.incluir_no_pdf });
+    } catch (err: any) {
+      console.error("[orcamentos][anexo incluir_no_pdf]", err);
+      res.status(500).json({ error: err?.message || "Erro ao atualizar anexo" });
+    }
+  });
+
   router.get("/", async (req: Request, res: Response) => {
     try {
       const busca = String(req.query.busca || "").trim();
@@ -995,6 +1024,7 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
       const anexos = await pool.query(
         `SELECT id, nome_original, descricao, mime_type, tamanho_bytes,
                 '/api/orcamentos/anexos/' || id || '/download' AS url,
+                COALESCE(incluir_no_pdf, true) AS incluir_no_pdf,
                 criado_em
            FROM public.orcamentos_timbrados_anexos
           WHERE orcamento_id = $1
@@ -1180,6 +1210,7 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
            VALUES ($1, 'anexo', $2, $3, $4, $5, $6, $7, $8)
            RETURNING id, nome_original, descricao, mime_type, tamanho_bytes,
                      '/api/orcamentos/anexos/' || id || '/download' AS url,
+                     incluir_no_pdf,
                      criado_em`,
           [
             id,

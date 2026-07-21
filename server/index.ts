@@ -1990,6 +1990,19 @@ async function startServer() {
   } catch (err: any) { console.warn('[startup] Migration 072:', err?.message); }
   // ─────────────────────────────────────────────────────────────────────────────
 
+  // ── Migration 073: incluir_no_pdf em orcamentos_timbrados_anexos -- permite marcar,
+  //    por documento, se ele deve ser mesclado no PDF final do orçamento ou só ficar
+  //    disponível pra baixar separado. Default true (mantém o comportamento atual --
+  //    todo anexo já existente continua sendo incluído, ninguém perde o que já tinha).
+  try {
+    await pool.query(`
+      ALTER TABLE public.orcamentos_timbrados_anexos
+        ADD COLUMN IF NOT EXISTS incluir_no_pdf BOOLEAN NOT NULL DEFAULT true;
+    `);
+    console.log('[startup] Migration 073 (incluir_no_pdf em anexos): OK.');
+  } catch (err: any) { console.warn('[startup] Migration 073:', err?.message); }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // body parser, CORS e no-cache já registrados no topo de startServer()
   app.use('/api/documentos', documentosRouter);
   app.use('/api/orcamentos', auth, createOrcamentosOperacoesRouter(pool));

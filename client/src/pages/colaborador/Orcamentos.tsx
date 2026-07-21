@@ -86,6 +86,7 @@ interface Anexo {
   tamanho_bytes?: number;
   url?: string;
   criado_em?: string;
+  incluir_no_pdf?: boolean;
 }
 
 const ASSINATURAS_PADRAO = [
@@ -585,6 +586,20 @@ export default function Orcamentos() {
       if (selecionado?.id) await abrirOrcamento(selecionado);
     } catch (err: any) {
       toast.error(err.message || "Erro ao remover anexo");
+    }
+  }
+
+  async function alternarInclusaoAnexo(anexo: Anexo) {
+    const novoValor = !(anexo.incluir_no_pdf ?? true);
+    try {
+      await apiFetch(`/api/orcamentos/anexos/${anexo.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ incluir_no_pdf: novoValor }),
+      });
+      toast.success(novoValor ? "Anexo será incluído no PDF" : "Anexo não será incluído no PDF");
+      if (selecionado?.id) await abrirOrcamento(selecionado);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao atualizar anexo");
     }
   }
 
@@ -1455,7 +1470,18 @@ export default function Orcamentos() {
                                   {fmtDate(anexo.criado_em)}
                                 </p>
                               </div>
-                              <div className="flex gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  onClick={() => alternarInclusaoAnexo(anexo)}
+                                  className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold ${
+                                    (anexo.incluir_no_pdf ?? true)
+                                      ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                      : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                                  }`}
+                                  title="Controla se este arquivo entra nas páginas do PDF gerado (download, e-mail e WhatsApp)"
+                                >
+                                  {(anexo.incluir_no_pdf ?? true) ? "✓ Incluído no PDF" : "Não incluído no PDF"}
+                                </button>
                                 <button
                                   onClick={() => baixarAnexo(anexo)}
                                   className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
