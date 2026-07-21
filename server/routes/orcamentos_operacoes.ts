@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { ChromiumLaunchError } from "../services/chromiumLauncher";
-import { generateBrandedPdfBuffer } from "../services/brandedPdfLayout";
+import { generateBrandedPdfBuffer, appendAttachmentsToPdf, type AnexoParaMerge } from "../services/brandedPdfLayout";
 import { getDataDir } from "../services/documentStorage";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
@@ -729,13 +729,54 @@ async function gerarPdfOrcamentoFallback(orcamento: Row, motivo: string): Promis
   return Buffer.from(await doc.save());
 }
 
-export async function gerarPdfOrcamentoComFallback(orcamento: Row): Promise<{ pdf: Buffer; fallback: boolean; reason?: string }> {
+async function buscarAnexosParaMerge(pool: Pool, orcamentoId: string): Promise<AnexoParaMerge[]> {
   try {
-    return { pdf: await gerarPdfOrcamentoPuppeteer(orcamento), fallback: false };
+    const { rows } = await pool.query(
+      `SELECT nome_original, mime_type, storage_path, descricao
+         FROM public.orcamentos_timbrados_anexos
+        WHERE orcamento_id = $1
+          AND COALESCE(status, 'ativo') <> 'arquivado'
+        ORDER BY criado_em ASC`,
+      [orcamentoId],
+    );
+    const resultado: AnexoParaMerge[] = [];
+    for (const row of rows) {
+      const nomeArquivo = row.storage_path ? path.basename(String(row.storage_path)) : null;
+      const candidatos = [
+        row.storage_path ? String(row.storage_path) : null,
+        nomeArquivo ? path.join(uploadsOrcamentosDir(orcamentoId), nomeArquivo) : null,
+      ].filter((v): v is string => Boolean(v));
+      const encontrado = candidatos.find((c) => fs.existsSync(c) && fs.statSync(c).isFile());
+      if (!encontrado) {
+        resultado.push({ nomeOriginal: row.nome_original || "anexo", mimeType: row.mime_type || null, buffer: null, descricao: row.descricao || null, erro: "não encontrado no armazenamento" });
+        continue;
+      }
+      try {
+        const buffer = await fs.promises.readFile(encontrado);
+        resultado.push({ nomeOriginal: row.nome_original || "anexo", mimeType: row.mime_type || null, buffer, descricao: row.descricao || null });
+      } catch (err: any) {
+        resultado.push({ nomeOriginal: row.nome_original || "anexo", mimeType: row.mime_type || null, buffer: null, descricao: row.descricao || null, erro: err?.message || "falha ao ler arquivo" });
+      }
+    }
+    return resultado;
+  } catch (err) {
+    console.error("[orcamentos][pdf] falha ao buscar anexos para merge:", err);
+    return [];
+  }
+}
+
+export async function gerarPdfOrcamentoComFallback(pool: Pool, orcamento: Row): Promise<{ pdf: Buffer; fallback: boolean; reason?: string }> {
+  const anexos = await buscarAnexosParaMerge(pool, String(orcamento.id));
+  try {
+    const base = await gerarPdfOrcamentoPuppeteer(orcamento);
+    const pdf = anexos.length ? await appendAttachmentsToPdf(base, anexos) : base;
+    return { pdf, fallback: false };
   } catch (err: any) {
     const reason = err?.message || String(err);
     console.warn('[orcamentos][pdf] usando fallback sem Chromium:', reason);
-    return { pdf: await gerarPdfOrcamentoFallback(orcamento, reason), fallback: true, reason };
+    const base = await gerarPdfOrcamentoFallback(orcamento, reason);
+    const pdf = anexos.length ? await appendAttachmentsToPdf(base, anexos) : base;
+    return { pdf, fallback: true, reason };
   }
 }
 
@@ -1085,7 +1126,7 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
       let fallbackReason = "";
 
       if (!pdf) {
-        const generated = await gerarPdfOrcamentoComFallback(orcamento);
+        const generated = await gerarPdfOrcamentoComFallback(pool, orcamento);
         pdf = generated.pdf;
         fallback = generated.fallback;
         fallbackReason = generated.reason || "";

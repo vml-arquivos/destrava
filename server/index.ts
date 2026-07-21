@@ -3202,7 +3202,7 @@ async function startServer() {
       if (!orcamento) return null;
       let pdf = await carregarPdfOrcamentoArmazenado(orcamento.pdf_path);
       if (!pdf) {
-        const gerado = await gerarPdfOrcamentoComFallback(orcamento);
+        const gerado = await gerarPdfOrcamentoComFallback(pool, orcamento);
         pdf = gerado.pdf;
         await salvarPdfOrcamento(pool, orcamento, pdf);
       }

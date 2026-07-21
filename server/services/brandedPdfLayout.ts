@@ -1,4 +1,4 @@
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, StandardFonts as StandardFontsRef, rgb as rgbRef } from "pdf-lib";
 import { DESTRAVA_LOGO_B64, PERMUPAY_LOGO_B64 } from "../logo_constants";
 import { closeChromium, launchChromium } from "./chromiumLauncher";
 
@@ -104,6 +104,93 @@ function headerTemplate(value: unknown): string {
     }
   </style><div id="hw">${content}</div>`;
 }
+
+export type AnexoParaMerge = {
+  nomeOriginal: string;
+  mimeType: string | null;
+  buffer: Buffer | null;
+  descricao?: string | null;
+  erro?: string | null; // preenchido quando o arquivo não pôde ser lido do storage
+};
+
+function isPdfMime(mime: string | null, nome: string): boolean {
+  if (mime && mime.toLowerCase().includes("pdf")) return true;
+  return /\.pdf$/i.test(nome || "");
+}
+
+function isImageMime(mime: string | null, nome: string): boolean {
+  if (mime && mime.toLowerCase().startsWith("image/")) return true;
+  return /\.(png|jpe?g)$/i.test(nome || "");
+}
+
+/**
+ * Anexa os documentos enviados junto ao orçamento/contrato como páginas de verdade
+ * no PDF final -- não é só um link separado que pode sumir de vista, o anexo passa a
+ * ser parte física do arquivo impresso/baixado. PDF: páginas copiadas direto. Imagem
+ * (jpg/png): vira uma página cheia. Outros tipos (docx, xlsx...): não dá pra "imprimir
+ * junto" visualmente, então entram só na página de manifesto no final, deixando claro
+ * pro leitor que existe um anexo daquele tipo e ele precisa ser aberto separadamente.
+ */
+export async function appendAttachmentsToPdf(
+  baseDocPdfBuffer: Buffer,
+  anexos: AnexoParaMerge[],
+): Promise<Buffer> {
+  if (!anexos.length) return baseDocPdfBuffer;
+
+  const merged = await PDFDocument.load(baseDocPdfBuffer);
+  const naoMescladosNoCorpo: AnexoParaMerge[] = [];
+
+  for (const anexo of anexos) {
+    if (anexo.erro || !anexo.buffer) {
+      naoMescladosNoCorpo.push(anexo);
+      continue;
+    }
+    try {
+      if (isPdfMime(anexo.mimeType, anexo.nomeOriginal)) {
+        const anexoDoc = await PDFDocument.load(anexo.buffer, { ignoreEncryption: true });
+        const paginas = await merged.copyPages(anexoDoc, anexoDoc.getPageIndices());
+        paginas.forEach((p) => merged.addPage(p));
+      } else if (isImageMime(anexo.mimeType, anexo.nomeOriginal)) {
+        const isPng = /\.png$/i.test(anexo.nomeOriginal) || (anexo.mimeType || "").includes("png");
+        const image = isPng ? await merged.embedPng(anexo.buffer) : await merged.embedJpg(anexo.buffer);
+        const pageWidth = 595.28;
+        const pageHeight = 841.89;
+        const margin = 40;
+        const maxW = pageWidth - margin * 2;
+        const maxH = pageHeight - margin * 2;
+        const scale = Math.min(maxW / image.width, maxH / image.height, 1);
+        const w = image.width * scale;
+        const h = image.height * scale;
+        const page = merged.addPage([pageWidth, pageHeight]);
+        page.drawImage(image, { x: (pageWidth - w) / 2, y: (pageHeight - h) / 2, width: w, height: h });
+      } else {
+        naoMescladosNoCorpo.push(anexo);
+      }
+    } catch (err: any) {
+      naoMescladosNoCorpo.push({ ...anexo, erro: err?.message || "Falha ao processar anexo" });
+    }
+  }
+
+  // Página de manifesto: sempre lista TODOS os anexos (mesclados ou não), pra deixar
+  // registrado no próprio PDF o que acompanha o documento -- inclusive os que não deu
+  // pra embutir visualmente.
+  const font = await merged.embedFont(StandardFontsRef.Helvetica);
+  const bold = await merged.embedFont(StandardFontsRef.HelveticaBold);
+  const manifestoPage = merged.addPage([595.28, 841.89]);
+  let y = 790;
+  manifestoPage.drawText("Documentos anexados a esta proposta", { x: 48, y, size: 14, font: bold, color: rgbRef(0.06, 0.18, 0.38) });
+  y -= 28;
+  anexos.forEach((a, idx) => {
+    if (y < 60) return; // manifesto simples, não pagina (lista tende a ser curta)
+    const statusTxt = a.erro ? " (arquivo não pôde ser recuperado do armazenamento)" : (isPdfMime(a.mimeType, a.nomeOriginal) || isImageMime(a.mimeType, a.nomeOriginal)) ? " (incluído nas páginas acima)" : " (anexo em arquivo separado, disponível no sistema)";
+    const linha = `${idx + 1}. ${a.nomeOriginal}${a.descricao ? ` — ${a.descricao}` : ""}${statusTxt}`;
+    manifestoPage.drawText(linha.slice(0, 110), { x: 48, y, size: 9, font, color: rgbRef(0.2, 0.24, 0.3) });
+    y -= 16;
+  });
+
+  return Buffer.from(await merged.save());
+}
+
 
 /**
  * Gera um PDF com o mesmo papel timbrado usado nos contratos:
