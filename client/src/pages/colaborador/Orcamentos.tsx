@@ -541,15 +541,23 @@ export default function Orcamentos() {
   }
 
   async function enviarAnexos() {
+    // Le direto do input no momento do clique, nao confia so no estado React espelhado --
+    // isso elimina qualquer classe de bug onde o estado fica dessincronizado do que o
+    // navegador realmente tem selecionado (ex: input remontado, closure desatualizada).
+    const arquivosAtuais = fileRef.current?.files;
+    if (!arquivosAtuais || arquivosAtuais.length === 0) {
+      toast.error("Selecione pelo menos um arquivo antes de enviar.");
+      return;
+    }
     const saved = selecionado || (await salvar());
-    if (!saved?.id || !arquivos?.length) {
-      toast.error("Selecione arquivos para anexar");
+    if (!saved?.id) {
+      toast.error("Nao foi possivel salvar o orcamento antes de anexar. Tente salvar primeiro.");
       return;
     }
     setSalvando(true);
     try {
       const fd = new FormData();
-      Array.from(arquivos).forEach((file) =>
+      Array.from(arquivosAtuais).forEach((file) =>
         fd.append("arquivos", file, file.name),
       );
       if (descricaoAnexo) fd.append("descricao", descricaoAnexo);
@@ -1402,6 +1410,12 @@ export default function Orcamentos() {
                         onChange={(e) => setArquivos(e.target.files)}
                         className="mb-3 block w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm"
                       />
+                      {arquivos && arquivos.length > 0 && (
+                        <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                          <span className="font-bold">{arquivos.length === 1 ? "1 arquivo selecionado: " : `${arquivos.length} arquivos selecionados: `}</span>
+                          {Array.from(arquivos).map((f) => f.name).join(", ")}
+                        </div>
+                      )}
                       <input
                         value={descricaoAnexo}
                         onChange={(e) => setDescricaoAnexo(e.target.value)}
