@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useFeatureAccess } from "@/hooks/useFeatureAccess";
 import { Button } from "@/components/ui/button";
 import NotificacoesFollowup from "@/components/NotificacoesFollowup";
+import NotificacoesAutomacao from "@/components/NotificacoesAutomacao";
 import {
   LayoutDashboard,
   Calculator,
@@ -549,6 +550,7 @@ export default function Layout({
           <span className="text-sm font-black text-slate-800">
             {title || "Destrava Crédito"}
           </span>
+          <NotificacoesAutomacao />
           <NotificacoesFollowup />
         </header>
 
@@ -561,6 +563,7 @@ export default function Layout({
             <p className="text-xs text-slate-400">Destrava Crédito</p>
           </div>
           <div className="flex items-center gap-3">
+            <NotificacoesAutomacao />
             <NotificacoesFollowup />
             <Link href="/colaborador/meu-perfil">
               <button className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all">

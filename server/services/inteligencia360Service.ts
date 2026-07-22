@@ -119,6 +119,30 @@ export interface Inteligencia360Result {
   // Metadados
   gerado_em: string;
   fonte: "deterministica" | "ia_assistida";
+
+  // Automation Engine (Destrava <-> Nexus) -- opcional, populado quando o
+  // chamador fornece os dados; ausência não quebra o resultado (arrays/objetos
+  // vazios), preservando compatibilidade com o comportamento anterior.
+  automacao_engine: AutomacaoEngineResumo;
+  recomendacoes_automacao: string[];
+}
+
+export interface AutomacaoEngineAcompanhamentoResumo {
+  em_andamento: boolean;
+  banco_observado: string | null;
+  semanas_total: number;
+  semanas_concluidas: number;
+  semanas_pendentes: number;
+  ultima_atualizacao_em: string | null;
+  semanas_sem_atualizacao: number;
+}
+
+export interface AutomacaoEngineResumo {
+  contrato_assessoria_ativo: boolean;
+  contrato_vigencia_fim: string | null;
+  rotina_cnd_ultima_geracao: string | null;
+  rotina_cemprot_ultima_geracao: string | null;
+  acompanhamento_bancario: AutomacaoEngineAcompanhamentoResumo | null;
 }
 
 // ─── Utilitários internos ─────────────────────────────────────────────────────
@@ -595,6 +619,85 @@ function gerarProximasAcoes(recomendacoes: Recomendacao360[], prontidao_contrato
   return acoes.slice(0, 5);
 }
 
+// ─── Automation Engine (Destrava ↔ Nexus) ─────────────────────────────────────
+
+function montarResumoAutomacao(params: {
+  contratoAssessoriaAtivo: any | null;
+  acompanhamentoAtivo: any | null;
+  atualizacoesAcompanhamento: any[];
+  eventosRotina: any[];
+}): AutomacaoEngineResumo {
+  const { contratoAssessoriaAtivo, acompanhamentoAtivo, atualizacoesAcompanhamento, eventosRotina } = params;
+
+  const eventos = safeArray<any>(eventosRotina);
+  const rotinaCnd = eventos.find((e) => e?.event_type === "RotinaCndDue");
+  const rotinaCemprot = eventos.find((e) => e?.event_type === "RotinaCemprotDue");
+
+  let acompanhamento_bancario: AutomacaoEngineAcompanhamentoResumo | null = null;
+  if (acompanhamentoAtivo) {
+    const atualizacoes = safeArray<any>(atualizacoesAcompanhamento);
+    const concluidas = atualizacoes.filter((a) => String(a?.status || "") === "concluida").length;
+    const total = atualizacoes.length;
+    const ultimaAtualizacao = atualizacoes[0]?.updated_at ?? atualizacoes[0]?.created_at ?? null;
+
+    let semanasSemAtualizacao = 0;
+    if (ultimaAtualizacao) {
+      const dias = Math.floor((Date.now() - new Date(ultimaAtualizacao).getTime()) / 86_400_000);
+      semanasSemAtualizacao = Math.max(0, Math.floor(dias / 7));
+    }
+
+    acompanhamento_bancario = {
+      em_andamento: String(acompanhamentoAtivo?.status || "") === "em_acompanhamento",
+      banco_observado: acompanhamentoAtivo?.banco_observado ?? null,
+      semanas_total: total,
+      semanas_concluidas: concluidas,
+      semanas_pendentes: Math.max(0, total - concluidas),
+      ultima_atualizacao_em: ultimaAtualizacao,
+      semanas_sem_atualizacao: semanasSemAtualizacao,
+    };
+  }
+
+  return {
+    contrato_assessoria_ativo: Boolean(contratoAssessoriaAtivo),
+    contrato_vigencia_fim: contratoAssessoriaAtivo?.data_fim_vigencia ?? null,
+    rotina_cnd_ultima_geracao: rotinaCnd?.created_at ?? null,
+    rotina_cemprot_ultima_geracao: rotinaCemprot?.created_at ?? null,
+    acompanhamento_bancario,
+  };
+}
+
+/**
+ * Recomendações em texto livre (diferente de Recomendacao360, que é
+ * estruturada) -- espelham o formato pedido para o Automation Engine, ex.:
+ * "A empresa está há 2 semanas sem atualização bancária."
+ */
+function gerarRecomendacoesAutomacao(resumo: AutomacaoEngineResumo): string[] {
+  const mensagens: string[] = [];
+  const ab = resumo.acompanhamento_bancario;
+
+  if (ab?.em_andamento && ab.semanas_sem_atualizacao >= 2) {
+    mensagens.push(`A empresa está há ${ab.semanas_sem_atualizacao} semanas sem atualização bancária.`);
+    mensagens.push("Há risco de perda de evolução do rating interno.");
+    mensagens.push("Sugere-se regularizar as movimentações bancárias o quanto antes.");
+  } else if (ab?.em_andamento && ab.semanas_pendentes > 0) {
+    mensagens.push(`Existem ${ab.semanas_pendentes} semana(s) de acompanhamento bancário pendente(s) de registro.`);
+  }
+
+  if (resumo.contrato_assessoria_ativo && resumo.contrato_vigencia_fim) {
+    const fim = new Date(`${resumo.contrato_vigencia_fim}T12:00:00Z`);
+    const diasRestantes = Math.floor((fim.getTime() - Date.now()) / 86_400_000);
+    if (Number.isFinite(diasRestantes) && diasRestantes >= 0 && diasRestantes <= 30) {
+      mensagens.push(`O contrato de assessoria vence em ${diasRestantes} dia(s) — avaliar renovação.`);
+    }
+  }
+
+  if (resumo.contrato_assessoria_ativo && !resumo.rotina_cnd_ultima_geracao) {
+    mensagens.push("Nenhuma rotina de CND foi gerada ainda para este contrato.");
+  }
+
+  return mensagens;
+}
+
 // ─── Função principal ─────────────────────────────────────────────────────────
 
 export function calcularInteligencia360(params: {
@@ -605,8 +708,15 @@ export function calcularInteligencia360(params: {
   contratos: any[];
   historico: any[];
   followups: any[];
+  // Automation Engine -- todos opcionais para não quebrar chamadores existentes.
+  acompanhamentoAtivo?: any | null;
+  atualizacoesAcompanhamento?: any[];
+  eventosRotina?: any[];
 }): Inteligencia360Result {
   const { empresa, socios, documentos, simulacoes, contratos, historico, followups } = params;
+  const acompanhamentoAtivo = params.acompanhamentoAtivo ?? null;
+  const atualizacoesAcompanhamento = safeArray<any>(params.atualizacoesAcompanhamento);
+  const eventosRotina = safeArray<any>(params.eventosRotina);
 
   // Garantir arrays seguros
   const socsArr = safeArray<any>(socios);
@@ -646,6 +756,18 @@ export function calcularInteligencia360(params: {
   // Pendências
   const { pendencias, pendencias_contrato, pendencias_credito, pendencias_faturamento, pendencias_cadastrais } =
     gerarPendencias(empresa, socsArr, docsArr);
+
+  // Automation Engine
+  const contratoAssessoriaAtivo = contsArr.find(
+    (c) => String(c?.tipo_contrato || "") === "assessoria" && String(c?.status || "") === "assinado"
+  ) ?? null;
+  const automacao_engine = montarResumoAutomacao({
+    contratoAssessoriaAtivo,
+    acompanhamentoAtivo,
+    atualizacoesAcompanhamento,
+    eventosRotina,
+  });
+  const recomendacoes_automacao = gerarRecomendacoesAutomacao(automacao_engine);
 
   // Recomendações
   const recomendacoes = gerarRecomendacoes({
@@ -763,5 +885,8 @@ export function calcularInteligencia360(params: {
 
     gerado_em: new Date().toISOString(),
     fonte: "deterministica",
+
+    automacao_engine,
+    recomendacoes_automacao,
   };
 }

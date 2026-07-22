@@ -11,6 +11,7 @@ import { injectSeoHead } from "./lib/seoHtml";
 import crypto from "crypto";
 import multer from "multer";
 import pkg from "pg";
+import type { Pool as PgPool } from "pg";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { auth, clearSessionCookie, setSessionCookie } from "./middleware/auth.ts";
@@ -24,6 +25,13 @@ import documentacaoRouter from './routes/documentacao';
 import blogRoutes from './routes/blogRoutes';
 import bannerRoutes from './routes/bannerRoutes';
 import { createSitemapRoutes } from './routes/sitemapRoutes';
+import createAutomationEngineRouter from './routes/automationEngine';
+import { iniciarAutomationScheduler } from './services/automation/scheduler';
+import { publishEvent } from './services/automation/eventBus';
+import { inserirEvento as inserirEventoAutomation } from './services/automation/outboxRepository';
+import { verificarAssinaturaRequisicao } from './middleware/webhookAuth';
+import { registerWeeklyMonitorRoutes } from './services/routesWeeklyMonitor.ts';
+import { registerAcompanhamentoBancarioNexusRoutes } from './routes/acompanhamentoBancarioNexus.ts';
 import createOrcamentosOperacoesRouter, {
   garantirNumeroFinalizado as garantirOrcamentoFinalizado,
   carregarPdfArmazenado as carregarPdfOrcamentoArmazenado,
@@ -1059,7 +1067,12 @@ async function startServer() {
     next();
   });
 
-  app.use(express.json({ limit: "5mb" }));
+  app.use(express.json({
+    limit: "5mb",
+    // Preserva o corpo bruto para verificação de assinatura HMAC do
+    // Automation Engine (webhookAuth.ts) -- não afeta o parsing normal.
+    verify: (req, _res, buf) => { (req as any).rawBody = buf; },
+  }));
   app.use(express.urlencoded({ extended: true }));
 
   // CORS
@@ -2006,6 +2019,7 @@ async function startServer() {
   // body parser, CORS e no-cache já registrados no topo de startServer()
   app.use('/api/documentos', documentosRouter);
   app.use('/api/orcamentos', auth, createOrcamentosOperacoesRouter(pool));
+  app.use('/api/automation', createAutomationEngineRouter(pool));
 
   // ─── Health check ──────────────────────────────────────────────────────────
   app.get("/api/health", async (_req: Request, res: Response) => {
@@ -4962,6 +4976,36 @@ async function startServer() {
         followups = Array.isArray(followsRows) ? followsRows : [];
       } catch { followups = []; }
 
+      // Automation Engine: acompanhamento bancário ativo + suas semanas, e as
+      // últimas rotinas CND/CEMPROT geradas para o contrato de assessoria ativo.
+      let acompanhamentoAtivo: any = null;
+      let atualizacoesAcompanhamento: any[] = [];
+      try {
+        const { rows: acompRows } = await pool.query(
+          `SELECT * FROM acompanhamentos_bancarios WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 1`,
+          [empresaId]
+        );
+        acompanhamentoAtivo = acompRows[0] || null;
+        if (acompanhamentoAtivo) {
+          const { rows: atRows } = await pool.query(
+            `SELECT * FROM acompanhamento_bancario_atualizacoes WHERE acompanhamento_id = $1 ORDER BY numero_semana DESC`,
+            [acompanhamentoAtivo.id]
+          );
+          atualizacoesAcompanhamento = atRows;
+        }
+      } catch { acompanhamentoAtivo = null; atualizacoesAcompanhamento = []; }
+
+      let eventosRotina: any[] = [];
+      try {
+        const { rows: evRows } = await pool.query(
+          `SELECT event_type, created_at FROM automation_events
+           WHERE event_type IN ('RotinaCndDue', 'RotinaCemprotDue') AND payload->>'empresa_id' = $1
+           ORDER BY created_at DESC LIMIT 10`,
+          [empresaId]
+        );
+        eventosRotina = evRows;
+      } catch { eventosRotina = []; }
+
       // Calcular inteligência 360
       const resultado = calcularInteligencia360({
         empresa,
@@ -4971,6 +5015,9 @@ async function startServer() {
         contratos,
         historico,
         followups,
+        acompanhamentoAtivo,
+        atualizacoesAcompanhamento,
+        eventosRotina,
       });
 
       res.json(resultado);
@@ -11207,8 +11254,10 @@ async function registrarDocumentoContratoGerado(params: {
             valor_referencia, valor_contrato, condicao_pagamento, taxa_comissao,
             taxa_desistencia, custeio_mensal,
             honorario_minimo_mes, honorario_minimo_total, data_assinatura,
-            foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+            foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por,
+            data_inicio_vigencia, data_fim_vigencia, prazo_contrato_meses)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
+                 $16::date, ($16::date + ($22 || ' months')::interval)::date, $22)
          RETURNING id, created_at`,
         [
           'assessoria',
@@ -11232,6 +11281,7 @@ async function registrarDocumentoContratoGerado(params: {
           hash,
           JSON.stringify(payload),
           colaborador.id,
+          prazoContratoMesesNum,
         ]
       );
 
@@ -11416,14 +11466,75 @@ async function registrarDocumentoContratoGerado(params: {
         return;
       }
       const { rows } = await pool.query(
-        `UPDATE contratos_gerados SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING id, status`,
+        `UPDATE contratos_gerados SET status = $1, updated_at = NOW() WHERE id = $2
+         RETURNING id, status, tipo_contrato, empresa_id, responsavel_contrato_id,
+                   data_assinatura, data_inicio_vigencia, data_fim_vigencia`,
         [status, req.params.id]
       );
       if (!rows.length) {
         res.status(404).json({ error: 'Contrato não encontrado' });
         return;
       }
-      res.json({ success: true, ...rows[0] });
+      const contrato = rows[0];
+      res.json({ success: true, id: contrato.id, status: contrato.status });
+
+      // Automation Engine: contrato de assessoria assinado/encerrado dispara o
+      // Workflow 1 (rotinas CND/CEMPROT). Outros tipos de contrato ainda não
+      // têm vigência persistida, então ficam fora deste evento por ora.
+      if (contrato.tipo_contrato === 'assessoria' && (status === 'assinado' || status === 'cancelado')) {
+        try {
+          const { rows: empresaRows } = await pool.query(
+            'SELECT razao_social, cnpj FROM empresas WHERE id = $1',
+            [contrato.empresa_id]
+          );
+          const { rows: respRows } = contrato.responsavel_contrato_id
+            ? await pool.query('SELECT email, nome FROM colaboradores WHERE id = $1', [contrato.responsavel_contrato_id])
+            : { rows: [] as any[] };
+          const empresa = empresaRows[0] || {};
+          const responsavel = respRows[0] || {};
+
+          if (status === 'assinado') {
+            await publishEvent(pool, {
+              eventType: 'ContratoAssinado',
+              aggregateType: 'contrato',
+              aggregateId: contrato.id,
+              idempotencyKey: `contrato:${contrato.id}:assinado`,
+              empresaId: contrato.empresa_id,
+              payload: {
+                contrato_id: contrato.id,
+                empresa_id: contrato.empresa_id,
+                empresa_nome: empresa.razao_social || null,
+                empresa_cnpj: empresa.cnpj || null,
+                responsavel_contrato_id: contrato.responsavel_contrato_id,
+                responsavel_email: responsavel.email || null,
+                responsavel_nome: responsavel.nome || null,
+                data_assinatura: contrato.data_assinatura,
+                data_inicio_vigencia: contrato.data_inicio_vigencia,
+                data_fim_vigencia: contrato.data_fim_vigencia,
+                tipo_contrato: contrato.tipo_contrato,
+              },
+            });
+          } else {
+            await publishEvent(pool, {
+              eventType: 'ContratoEncerrado',
+              aggregateType: 'contrato',
+              aggregateId: contrato.id,
+              idempotencyKey: `contrato:${contrato.id}:encerrado`,
+              empresaId: contrato.empresa_id,
+              payload: {
+                contrato_id: contrato.id,
+                empresa_id: contrato.empresa_id,
+                encerrado_em: new Date().toISOString(),
+                motivo: 'cancelado',
+              },
+            });
+          }
+        } catch (automationErr) {
+          // Falha ao publicar o evento não deve derrubar a resposta já enviada
+          // ao cliente -- o outbox/scheduler tenta de novo depois.
+          console.error('[automation-engine] Erro ao publicar evento de contrato:', automationErr);
+        }
+      }
     } catch (err) {
       console.error('[PATCH /api/contratos/:id/status]', err);
       res.status(500).json({ error: 'Erro ao atualizar status' });
@@ -13349,6 +13460,45 @@ async function registrarDocumentoContratoGerado(params: {
 
       await dispararN8n("acompanhamento_bancario_criado", { acompanhamento: rows[0] });
       res.status(201).json(rows[0]);
+
+      // Automation Engine (Workflow 2): cria automaticamente as tarefas
+      // semanais no Nexus, atribuídas ao mesmo colaborador que iniciou o
+      // acompanhamento aqui -- nunca pede escolha manual de responsável.
+      try {
+        const acompanhamento = rows[0];
+        const diasTotais = Math.max(
+          1,
+          Math.round((new Date(`${acompanhamento.data_fim_prevista}T12:00:00Z`).getTime() - new Date(`${acompanhamento.data_inicio}T12:00:00Z`).getTime()) / 86_400_000)
+        );
+        const numeroSemanas = Math.max(1, Math.ceil(diasTotais / 7));
+
+        const { rows: respRows } = responsavelFinal
+          ? await pool.query('SELECT email, nome FROM colaboradores WHERE id = $1', [responsavelFinal])
+          : { rows: [] as any[] };
+        const responsavel = respRows[0] || {};
+
+        await publishEvent(pool, {
+          eventType: 'AcompanhamentoCriado',
+          aggregateType: 'acompanhamento_bancario',
+          aggregateId: acompanhamento.id,
+          idempotencyKey: `acomp:${acompanhamento.id}:criado`,
+          empresaId: acompanhamento.empresa_id,
+          payload: {
+            acompanhamento_id: acompanhamento.id,
+            empresa_id: acompanhamento.empresa_id,
+            empresa_nome: acompanhamento.nome_empresa,
+            banco_observado: acompanhamento.banco_observado,
+            responsavel_id: responsavelFinal,
+            responsavel_email: responsavel.email || null,
+            responsavel_nome: responsavel.nome || null,
+            data_inicio: acompanhamento.data_inicio,
+            data_fim_prevista: acompanhamento.data_fim_prevista,
+            numero_semanas: numeroSemanas,
+          },
+        });
+      } catch (automationErr) {
+        console.error('[automation-engine] Erro ao publicar evento AcompanhamentoCriado:', automationErr);
+      }
     } catch (err) {
       console.error("[POST /api/acompanhamentos-bancarios]", err);
       res.status(500).json({ error: "Erro ao criar acompanhamento bancário." });
@@ -14103,6 +14253,11 @@ async function registrarDocumentoContratoGerado(params: {
     }
   });
 
+  // Módulo de inteligência semanal (analisadorSemanal.ts) -- implementado mas
+  // nunca registrado antes, o que fazia o dashboard de acompanhamento semanal
+  // (WeeklyMonitorDashboard.tsx) chamar rotas inexistentes (404) em produção.
+  registerWeeklyMonitorRoutes(app, pool, auth, requireAcessoAcompanhamento);
+  registerAcompanhamentoBancarioNexusRoutes(app, pool, auth, requireAcessoAcompanhamento);
 
   // ═══════════════════════════════════════════════════════════════════════════════
   // MÓDULO: ACOMPANHAMENTO FINANCEIRO SEMANAL
@@ -15500,7 +15655,10 @@ Responda em JSON com:
       const [historico, documentos, contratos, simulacoes] = await Promise.all([
         pool.query('SELECT * FROM empresa_historico WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 20', [req.params.id]).catch(() => ({ rows: [] as any[] })),
         pool.query('SELECT * FROM empresa_documentos WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 20', [req.params.id]).catch(() => ({ rows: [] as any[] })),
-        pool.query('SELECT * FROM contratos WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 10', [req.params.id]).catch(() => ({ rows: [] as any[] })),
+        // Correção: a tabela real é "contratos_gerados" -- "contratos" nunca existiu,
+        // então este SELECT sempre falhava e o .catch() escondia o erro, fazendo o
+        // Nexus achar que a empresa nunca teve contrato nenhum.
+        pool.query('SELECT * FROM contratos_gerados WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 10', [req.params.id]).catch(() => ({ rows: [] as any[] })),
         pool.query('SELECT * FROM simulacoes WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 10', [req.params.id]).catch(() => ({ rows: [] as any[] })),
       ]);
       // preview_url/download_url apontam para as rotas de integração abaixo (autenticadas
@@ -15609,9 +15767,105 @@ Responda em JSON com:
     }
   });
 
+  // TarefaConcluidaNexus: reflete no Destrava uma mudança feita diretamente
+  // no Nexus (usuário do Nexus editou a tarefa sem passar pelo Destrava).
+  // Só age sobre acompanhamento_semana por ora -- rotina_cnd/rotina_cemprot
+  // são executadas nativamente no Nexus e não têm estado espelhado aqui.
+  async function aplicarTarefaConcluidaNexus(pool: PgPool, payload: Record<string, unknown>): Promise<void> {
+    const origemTipo = String(payload.origem_tipo || '');
+    const origemId = String(payload.origem_id || '');
+    const numeroSemana = Number(payload.numero_semana);
+    const status = String(payload.status || '');
+    if (origemTipo !== 'acompanhamento_semana' || !origemId || !Number.isFinite(numeroSemana)) return;
+
+    const statusDestrava = ['concluida', 'aprovada'].includes(status) ? 'concluida' : null;
+    if (statusDestrava) {
+      await pool.query(
+        `UPDATE acompanhamento_bancario_atualizacoes SET status = $1, updated_at = NOW()
+         WHERE acompanhamento_id = $2 AND numero_semana = $3`,
+        [statusDestrava, origemId, numeroSemana]
+      ).catch(() => {});
+    }
+
+    const { rows } = await pool.query('SELECT empresa_id FROM acompanhamentos_bancarios WHERE id = $1', [origemId]);
+    const empresaId = rows[0]?.empresa_id;
+    if (empresaId) {
+      await registrarHistoricoEmpresaSeguro(
+        empresaId,
+        'nexus',
+        `Nexus: semana ${numeroSemana} do acompanhamento bancário atualizada para "${status}".`,
+        'Nexus Gestão'
+      ).catch(() => {});
+    }
+  }
+
+  // AlertaAutomacao: espelha no Destrava o ladder de alertas (7d/3d/1d/hoje/
+  // atrasado) que o Nexus calcula para rotinas CND/CEMPROT e acompanhamento
+  // bancário -- o Destrava não recalcula o tier, só exibe o que o Nexus decidiu.
+  async function aplicarAlertaAutomacao(pool: PgPool, payload: Record<string, unknown>): Promise<void> {
+    const tarefaId = String(payload.tarefa_id || '');
+    const empresaId = payload.empresa_id ? String(payload.empresa_id) : null;
+    const tier = String(payload.tier || '');
+    const titulo = String(payload.mensagem || payload.titulo || '');
+    if (!tarefaId || !tier || !titulo) return;
+
+    await pool.query(
+      `INSERT INTO automation_alerts_cache (tarefa_id, empresa_id, workflow_tipo, tier, titulo, prazo)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (tarefa_id, tier) DO UPDATE SET titulo = EXCLUDED.titulo, criado_em = NOW()`,
+      [tarefaId, empresaId, payload.workflow_tipo || null, tier, titulo, payload.prazo || null]
+    ).catch(() => {});
+
+    if (empresaId) {
+      await registrarHistoricoEmpresaSeguro(empresaId, 'nexus', `Nexus: ${titulo}`, 'Nexus Gestão').catch(() => {});
+    }
+  }
+
   app.post('/api/nexus/eventos', requireNexusIntegration, async (req: Request, res: Response) => {
     try {
       const body = req.body || {};
+
+      // Automation Engine: envelope estruturado (event_type/idempotency_key),
+      // usado por TarefaConcluidaNexus quando um usuário do Nexus edita
+      // diretamente uma tarefa vinda do Destrava. Exige assinatura HMAC além
+      // do segredo estático -- o formato legado abaixo continua sem exigi-la,
+      // para não quebrar quem já chama este endpoint hoje.
+      if (typeof body.event_type === 'string' && typeof body.idempotency_key === 'string') {
+        const assinatura = verificarAssinaturaRequisicao(req);
+        if (!assinatura.valido) {
+          res.status(401).json({ error: assinatura.erro });
+          return;
+        }
+
+        const eventType = body.event_type as string;
+        const idempotencyKey = body.idempotency_key as string;
+        const payload = (body.payload && typeof body.payload === 'object' ? body.payload : {}) as Record<string, unknown>;
+
+        const evento = await inserirEventoAutomation(pool, {
+          eventType,
+          aggregateType: String(body.aggregate_type || ''),
+          aggregateId: body.aggregate_id ? String(body.aggregate_id) : undefined,
+          idempotencyKey,
+          payload,
+          correlationId: body.correlation_id ? String(body.correlation_id) : undefined,
+        });
+
+        if (!evento) {
+          res.json({ ok: true, duplicado: true });
+          return;
+        }
+
+        if (eventType === 'TarefaConcluidaNexus') {
+          await aplicarTarefaConcluidaNexus(pool, payload);
+        } else if (eventType === 'AlertaAutomacao') {
+          await aplicarAlertaAutomacao(pool, payload);
+        }
+
+        res.json({ ok: true });
+        return;
+      }
+
+      // ── Formato legado (external_type/evento livre) ─────────────────────
       const externalType = String(body.external_type || 'empresa');
       const externalId = String(body.external_id || '').trim();
       const evento = String(body.evento || 'nexus.evento');
@@ -15706,6 +15960,8 @@ Responda em JSON com:
     console.log(`🌍 Ambiente: ${process.env.NODE_ENV || "development"}`);
     console.log(`🔗 n8n: ${process.env.N8N_WEBHOOK_URL ? "✅ Configurado" : "⚠️ Não configurado"}`);
   });
+
+  iniciarAutomationScheduler(pool);
 }
 
 startServer().catch(console.error);
