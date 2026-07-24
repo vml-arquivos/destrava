@@ -11257,7 +11257,7 @@ async function registrarDocumentoContratoGerado(params: {
             foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por,
             data_inicio_vigencia, data_fim_vigencia, prazo_contrato_meses)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
-                 $16::date, ($16::date + ($22 || ' months')::interval)::date, $22)
+                 $16::date, ($16::date + ($22::text || ' months')::interval)::date, $22::integer)
          RETURNING id, created_at`,
         [
           'assessoria',
