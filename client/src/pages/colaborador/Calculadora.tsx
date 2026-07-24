@@ -222,19 +222,34 @@ const BANCOS = [
   "Outro",
 ];
 
-const LINHAS = [
-  "PRONAMPE",
-  "Giro CAIXA Fácil",
-  "Capital de Giro",
-  "PRONAMP",
-  "Crédito Rural",
-  "Financiamento de Equipamentos",
-  "Crédito Imobiliário PJ",
-  "Antecipação de Recebíveis",
-  "Crédito Pessoal",
-  "Consignado",
-  "Outro",
+interface LinhaCredito {
+  nome: string;
+  prazoMaxMeses?: number;
+  carenciaMaxMeses?: number;
+  valorMaxReais?: number;
+  observacao: string;
+}
+
+// Regras reais, extraídas das próprias páginas de produto do site (Pronampe.tsx,
+// PeacFgi.tsx, Procred360.tsx) -- nunca inventadas. Onde o produto não divulga um
+// limite fixo (depende da instituição/análise), não colocamos número nenhum.
+const LINHAS_CREDITO: LinhaCredito[] = [
+  { nome: "PRONAMPE", prazoMaxMeses: 60, carenciaMaxMeses: 24, observacao: "Limite de crédito de até 50% do faturamento anual informado à Receita Federal (empresas até R$ 4,8 milhões/ano). Prazo de até 60 meses, carência de até 24 meses." },
+  { nome: "PEAC FGI", prazoMaxMeses: 96, carenciaMaxMeses: 36, observacao: "Prazo total entre 12 e 96 meses, carência entre 12 e 36 meses. Condição final negociada com a instituição financeira." },
+  { nome: "ProCred 360", valorMaxReais: 360000, carenciaMaxMeses: 24, observacao: "Limite de crédito de até R$ 360 mil. Carência de até 24 meses para começar a amortizar." },
+  { nome: "Giro CAIXA Fácil", observacao: "Limite, taxa, CET e prazo definidos conforme análise e condições vigentes da instituição — sem valor fixo divulgado." },
+  { nome: "FCO", observacao: "Prazo e carência dependem da linha e do projeto enquadrado na Programação FCO vigente e da análise do agente financeiro." },
+  { nome: "FAMPE", observacao: "Condições (limite, prazo, carência) definidas conforme análise da instituição financeira parceira." },
+  { nome: "Capital de Giro", observacao: "Linha genérica — condições definidas caso a caso com a instituição financeira." },
+  { nome: "Crédito Rural", observacao: "Condições definidas caso a caso com a instituição financeira." },
+  { nome: "Financiamento de Equipamentos", observacao: "Condições definidas caso a caso com a instituição financeira." },
+  { nome: "Crédito Imobiliário PJ", observacao: "Condições definidas caso a caso com a instituição financeira." },
+  { nome: "Antecipação de Recebíveis", observacao: "Condições definidas caso a caso com a instituição financeira." },
+  { nome: "Crédito Pessoal", observacao: "Condições definidas caso a caso com a instituição financeira." },
+  { nome: "Consignado", observacao: "Condições definidas caso a caso com a instituição financeira." },
+  { nome: "Livre / Outro", observacao: "Sem linha específica — preencha valor, prazo e taxa livremente conforme a proposta em mãos." },
 ];
+const LINHAS = LINHAS_CREDITO.map((l) => l.nome);
 
 const PRAZOS = [6, 12, 18, 24, 30, 36, 48, 60, 72, 84, 96, 120];
 
@@ -274,20 +289,24 @@ function SeletorCliente({
   const [aberto, setAberto] = useState(false);
   const [carregando, setCarregando] = useState(false);
 
+  async function carregarEmpresas(query: string) {
+    setCarregando(true);
+    try {
+      // Busca empresa já cadastrada de verdade (não lead avulso) -- é o que permite
+      // linkar empresa_id na simulação, e sem isso o PDF nunca cai no Acervo Documental.
+      // Query vazia também é válida -- o backend devolve as empresas disponíveis pro
+      // colaborador (respeitando permissão), permitindo navegar sem digitar nada.
+      const data = await apiFetch(`/api/empresas/search?q=${encodeURIComponent(query)}&limit=20`);
+      const arr: EmpresaOption[] = Array.isArray(data?.empresas) ? data.empresas : (Array.isArray(data) ? data : []);
+      setResultados(arr.slice(0, 20));
+      setAberto(true);
+    } catch { setResultados([]); }
+    setCarregando(false);
+  }
+
   useEffect(() => {
-    if (busca.length < 2) { setResultados([]); return; }
-    const t = setTimeout(async () => {
-      setCarregando(true);
-      try {
-        // Busca empresa já cadastrada de verdade (não lead avulso) -- é o que permite
-        // linkar empresa_id na simulação, e sem isso o PDF nunca cai no Acervo Documental.
-        const data = await apiFetch(`/api/empresas/search?q=${encodeURIComponent(busca)}&limit=8`);
-        const arr: EmpresaOption[] = Array.isArray(data?.empresas) ? data.empresas : (Array.isArray(data) ? data : []);
-        setResultados(arr.slice(0, 8));
-        setAberto(true);
-      } catch { setResultados([]); }
-      setCarregando(false);
-    }, 300);
+    if (busca.length < 2) return; // campo vazio já é tratado no clique/foco, não aqui
+    const t = setTimeout(() => carregarEmpresas(busca), 300);
     return () => clearTimeout(t);
   }, [busca]);
 
@@ -303,7 +322,7 @@ function SeletorCliente({
         <Input
           value={busca}
           onChange={e => setBusca(e.target.value)}
-          onFocus={() => resultados.length > 0 && setAberto(true)}
+          onFocus={() => { if (resultados.length > 0) setAberto(true); else if (busca.length < 2) carregarEmpresas(""); }}
           onBlur={() => setTimeout(() => setAberto(false), 200)}
           placeholder="Digite razão social, CNPJ ou telefone..."
           className="pl-9"
@@ -480,7 +499,7 @@ function CamposCliente({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <Label htmlFor="nome">Nome Completo <span className="text-destructive">*</span></Label>
+          <Label htmlFor="nome">Nome Completo <span className="text-muted-foreground text-xs font-normal">(opcional — puxa do sócio/responsável se a empresa tiver)</span></Label>
           <div className="relative">
             <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -553,11 +572,34 @@ function CamposEmprestimo({
   erros: Record<string, string>;
   set: (k: keyof FormBase, v: string) => void;
 }) {
+  const linhaAtiva = LINHAS_CREDITO.find((l) => l.nome === form.linhaCredito);
+  const prazosDisponiveis = linhaAtiva?.prazoMaxMeses
+    ? PRAZOS.filter((p) => p <= linhaAtiva.prazoMaxMeses!)
+    : PRAZOS;
+  const valorExcedeLimite = Boolean(
+    linhaAtiva?.valorMaxReais && parseBRL(form.valorCredito) > linhaAtiva.valorMaxReais
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 pb-1 border-b">
         <DollarSign className="h-4 w-4 text-primary" />
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dados do Empréstimo</p>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Linha de Crédito <span className="text-muted-foreground text-xs font-normal">(escolha primeiro — ajusta o prazo disponível abaixo)</span></Label>
+        <Select value={form.linhaCredito} onValueChange={(v) => set("linhaCredito", v)}>
+          <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+          <SelectContent>
+            {LINHAS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {linhaAtiva && (
+          <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mt-1">
+            {linhaAtiva.observacao}
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -570,11 +612,16 @@ function CamposEmprestimo({
               value={form.valorCredito}
               onChange={(e) => set("valorCredito", formatarMoeda(e.target.value))}
               placeholder="0,00"
-              className={`pl-9 ${erros.valorCredito ? "border-destructive" : ""}`}
+              className={`pl-9 ${erros.valorCredito || valorExcedeLimite ? "border-destructive" : ""}`}
               inputMode="numeric"
             />
           </div>
           {erros.valorCredito && <p className="text-xs text-destructive">{erros.valorCredito}</p>}
+          {valorExcedeLimite && (
+            <p className="text-xs text-destructive">
+              Acima do limite de {fmtBRL.format(linhaAtiva!.valorMaxReais!)} dessa linha — confirme com o banco antes de prosseguir.
+            </p>
+          )}
         </div>
 
         <div className="space-y-1.5">
@@ -585,11 +632,14 @@ function CamposEmprestimo({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {PRAZOS.map((p) => (
+              {prazosDisponiveis.map((p) => (
                 <SelectItem key={p} value={String(p)}>{p} meses</SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {linhaAtiva?.prazoMaxMeses && (
+            <p className="text-xs text-muted-foreground">Limitado a {linhaAtiva.prazoMaxMeses} meses nessa linha{linhaAtiva.carenciaMaxMeses ? ` (carência de até ${linhaAtiva.carenciaMaxMeses} meses)` : ""}.</p>
+          )}
         </div>
 
         <div className="space-y-1.5">
@@ -637,15 +687,6 @@ function CamposEmprestimo({
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
-          <Label>Linha de Crédito <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
-          <Select value={form.linhaCredito} onValueChange={(v) => set("linhaCredito", v)}>
-            <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-            <SelectContent>
-              {LINHAS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
       </div>
     </div>
   );
@@ -680,7 +721,6 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
 
   function validar(): boolean {
     const e: Record<string, string> = {};
-    if (!form.nome.trim()) e.nome = "Obrigatório";
     if (!form.empresa.trim() || !form.empresaId) e.empresa = "Selecione uma empresa cadastrada pela busca acima";
     if (!form.telefone.trim()) e.telefone = "Obrigatório";
     else if (form.telefone.replace(/\D/g, "").length < 10) e.telefone = "Telefone inválido";
@@ -911,7 +951,6 @@ function CenarioSemImposto({ initialData }: { initialData?: { nome: string; empr
 
   function validar(): boolean {
     const e: Record<string, string> = {};
-    if (!form.nome.trim()) e.nome = "Obrigatório";
     if (!form.empresa.trim() || !form.empresaId) e.empresa = "Selecione uma empresa cadastrada pela busca acima";
     if (!form.telefone.trim()) e.telefone = "Obrigatório";
     else if (form.telefone.replace(/\D/g, "").length < 10) e.telefone = "Telefone inválido";
@@ -1146,7 +1185,6 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
 
   function validar(): boolean {
     const e: Record<string, string> = {};
-    if (!form.nome.trim()) e.nome = "Obrigatório";
     if (!form.empresa.trim() || !form.empresaId) e.empresa = "Selecione uma empresa cadastrada pela busca acima";
     if (!form.telefone.trim()) e.telefone = "Obrigatório";
     if (!form.valorCredito) e.valorCredito = "Obrigatório";
@@ -1248,6 +1286,10 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
 
   const vc = parseBRL(form.valorCredito);
   const pc = parseFloat(form.comissao) || 0;
+  const linhaAtivaComp = LINHAS_CREDITO.find((l) => l.nome === form.linhaCredito);
+  const prazosDisponiveisComp = linhaAtivaComp?.prazoMaxMeses
+    ? PRAZOS.filter((p) => p <= linhaAtivaComp.prazoMaxMeses!)
+    : PRAZOS;
   const vf = parseBRL(form.valorFiscal);
   const pi = parseFloat(form.pctImposto) || 0;
   const prazoNum = parseInt(form.prazo) || 24;
@@ -1296,7 +1338,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {/* Nome */}
           <div className="col-span-2 space-y-1.5">
-            <Label>Nome Completo <span className="text-destructive">*</span></Label>
+            <Label>Nome Completo <span className="text-muted-foreground text-xs font-normal">(opcional — puxa do sócio/responsável se a empresa tiver)</span></Label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input value={form.nome} onChange={e => set("nome", e.target.value)} placeholder="Nome do cliente" className={`pl-9 ${erros.nome ? "border-destructive" : ""}`} />
@@ -1330,6 +1372,22 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
             <Input value={form.cpfCnpj} readOnly={Boolean(form.empresaId)} onChange={e => set("cpfCnpj", e.target.value)} placeholder="00.000.000/0001-00" className={form.empresaId ? "cursor-not-allowed bg-muted/50" : ""} title={form.empresaId ? "CNPJ vem do cadastro da empresa selecionada." : undefined} />
           </div>
 
+          {/* Linha de Crédito */}
+          <div className="col-span-2 space-y-1.5">
+            <Label>Linha de Crédito <span className="text-muted-foreground text-xs font-normal">(escolha primeiro — ajusta o prazo disponível)</span></Label>
+            <Select value={form.linhaCredito} onValueChange={v => set("linhaCredito", v)}>
+              <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+              <SelectContent>
+                {LINHAS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {linhaAtivaComp && (
+              <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mt-1">
+                {linhaAtivaComp.observacao}
+              </p>
+            )}
+          </div>
+
           {/* Valor do crédito */}
           <div className="col-span-2 space-y-1.5">
             <Label>Valor do Crédito <span className="text-destructive">*</span></Label>
@@ -1338,6 +1396,9 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
               <Input value={form.valorCredito} onChange={e => set("valorCredito", formatarMoeda(e.target.value))} placeholder="0,00" className={`pl-9 ${erros.valorCredito ? "border-destructive" : ""}`} inputMode="numeric" />
             </div>
             {erros.valorCredito && <p className="text-xs text-destructive">{erros.valorCredito}</p>}
+            {linhaAtivaComp?.valorMaxReais && vc > linhaAtivaComp.valorMaxReais && (
+              <p className="text-xs text-destructive">Acima do limite de {fmtBRL.format(linhaAtivaComp.valorMaxReais)} dessa linha.</p>
+            )}
           </div>
 
           {/* Prazo */}
@@ -1346,7 +1407,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
             <Select value={form.prazo} onValueChange={v => set("prazo", v)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {PRAZOS.map(p => <SelectItem key={p} value={String(p)}>{p}m</SelectItem>)}
+                {prazosDisponiveisComp.map(p => <SelectItem key={p} value={String(p)}>{p}m</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
