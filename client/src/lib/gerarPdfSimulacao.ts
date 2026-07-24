@@ -32,6 +32,31 @@ export interface DadosPdf {
   cenarioA?: ResultadoCenario;
   cenarioB?: ResultadoCenario;
   modo: "comparativo" | "simples";
+  /** Nome do colaborador que executou a simulação — aparece no rodapé do PDF. */
+  agenteNome?: string;
+}
+
+let logoCacheDataUrl: string | null | undefined; // undefined = ainda não tentou; null = tentou e falhou
+
+/** Carrega o mesmo logo usado no timbrado de contrato/orçamento, como data URL pro jsPDF embutir. */
+async function carregarLogoDataUrl(): Promise<string | null> {
+  if (logoCacheDataUrl !== undefined) return logoCacheDataUrl;
+  try {
+    const resp = await fetch("/logo-destrava.png");
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const blob = await resp.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+    logoCacheDataUrl = dataUrl;
+  } catch (err) {
+    console.warn("[PDF_SIMULACAO] Não foi possível carregar o logo — segue sem imagem no cabeçalho.", err);
+    logoCacheDataUrl = null;
+  }
+  return logoCacheDataUrl;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -50,7 +75,7 @@ const BRANCO = [255, 255, 255] as [number, number, number];
 const PRETO = [0, 0, 0] as [number, number, number];
 
 // ─── Gerador principal ────────────────────────────────────────────────────────
-function criarDocumentoPdfSimulacao(dados: DadosPdf): { doc: jsPDF; nomeArquivo: string } {
+async function criarDocumentoPdfSimulacao(dados: DadosPdf): Promise<{ doc: jsPDF; nomeArquivo: string }> {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const W = 210;
   const MARGIN = 15;
@@ -61,17 +86,30 @@ function criarDocumentoPdfSimulacao(dados: DadosPdf): { doc: jsPDF; nomeArquivo:
   doc.setFillColor(...AZUL);
   doc.rect(0, 0, W, 38, "F");
 
+  // Logo discreto (mesmo arquivo do timbrado de contrato/orçamento) -- identifica
+  // visualmente que é um documento oficial Destrava, sem tirar espaço do texto.
+  const logoDataUrl = await carregarLogoDataUrl();
+  const textoX = logoDataUrl ? MARGIN + 26 : MARGIN;
+  if (logoDataUrl) {
+    try {
+      // Proporção original 310x80 preservada, altura discreta de 14mm.
+      doc.addImage(logoDataUrl, "PNG", MARGIN, 12, 24.5, 6.3);
+    } catch {
+      // Se a imagem estiver corrompida/formato inesperado, segue só com o texto.
+    }
+  }
+
   doc.setTextColor(...BRANCO);
   doc.setFontSize(20);
   doc.setFont("helvetica", "bold");
-  doc.text("DESTRAVA CRÉDITO", MARGIN, 16);
+  doc.text("DESTRAVA CRÉDITO", textoX, 16);
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text("Assessoria Especializada em Crédito Empresarial e Pessoal", MARGIN, 23);
+  doc.text("Assessoria Especializada em Crédito Empresarial e Pessoal", textoX, 23);
 
   doc.setFontSize(9);
-  doc.text("destravacreditooficial@gmail.com  |  (61) 3526-8355", MARGIN, 30);
+  doc.text("destravacreditooficial@gmail.com  |  (61) 3526-8355", textoX, 30);
 
   // Data no canto direito
   const dataHoje = new Date().toLocaleDateString("pt-BR", {
@@ -165,10 +203,13 @@ function criarDocumentoPdfSimulacao(dados: DadosPdf): { doc: jsPDF; nomeArquivo:
     if (res.impostoValor && res.impostoValor > 0) {
       linhas.push(["Imposto (IOF/IR)", fmt(res.impostoValor)]);
     }
-    if (res.comissaoValor && res.comissaoValor > 0) {
-      linhas.push(["Comissão (não soma no total)", fmt(res.comissaoValor)]);
-    }
-    linhas.push(["CUSTO TOTAL DA OPERAÇÃO (SEM COMISSÃO)", fmt(res.custoTotalOperacao), true]);
+    // Comissão Destrava NÃO entra nesta tabela -- é honorário à parte, não cálculo
+    // bancário. Renderizada em bloco próprio depois do(s) cenário(s), nunca junto.
+    // Recalcula aqui dentro em vez de confiar cegamente em res.custoTotalOperacao --
+    // garante estruturalmente que a comissão nunca entra no total impresso,
+    // não importa o que o código upstream tenha calculado/enviado.
+    const custoTotalGarantido = res.totalFinanciamento + (res.impostoValor || 0);
+    linhas.push(["CUSTO TOTAL DA OPERAÇÃO (cálculo bancário)", fmt(custoTotalGarantido), true]);
 
     linhas.forEach(([label, valor, destaque], idx) => {
       const bg = idx % 2 === 0 ? CINZA_CLARO : BRANCO;
@@ -193,6 +234,27 @@ function criarDocumentoPdfSimulacao(dados: DadosPdf): { doc: jsPDF; nomeArquivo:
     return cy;
   };
 
+  // Bloco separado de honorários Destrava -- nunca dentro da caixa de cálculo bancário.
+  const renderHonorarios = (valores: number[]) => {
+    const comissao = valores.find((v) => v > 0);
+    if (!comissao) return;
+    doc.setFillColor(255, 251, 235); // âmbar claro
+    doc.setDrawColor(252, 211, 77);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(MARGIN, y, CONTENT_W, 14, 2, 2, "FD");
+    doc.setTextColor(146, 64, 14);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.text("HONORÁRIOS DESTRAVA", MARGIN + 4, y + 6);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.text("À parte — não é cálculo bancário, não soma no custo da operação", MARGIN + 4, y + 10.5);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text(fmt(comissao), W - MARGIN - 4, y + 8.5, { align: "right" });
+    y += 19;
+  };
+
   if (dados.modo === "comparativo" && dados.cenarioA && dados.cenarioB) {
     const halfW = (CONTENT_W - 5) / 2;
 
@@ -202,7 +264,7 @@ function criarDocumentoPdfSimulacao(dados: DadosPdf): { doc: jsPDF; nomeArquivo:
 
     // ── Diferença entre cenários ────────────────────────────────────────────
     const difParcela = dados.cenarioA.parcela - dados.cenarioB.parcela;
-    const difCusto = dados.cenarioA.custoTotalOperacao - dados.cenarioB.custoTotalOperacao;
+    const difCusto = (dados.cenarioA.totalFinanciamento + (dados.cenarioA.impostoValor || 0)) - (dados.cenarioB.totalFinanciamento + (dados.cenarioB.impostoValor || 0));
 
     doc.setFillColor(...AZUL_CLARO);
     doc.roundedRect(MARGIN, y, CONTENT_W, 7, 2, 2, "F");
@@ -234,11 +296,14 @@ function criarDocumentoPdfSimulacao(dados: DadosPdf): { doc: jsPDF; nomeArquivo:
     doc.text(fmt(Math.abs(difCusto)), W - MARGIN - 3, y, { align: "right" });
     y += 10;
 
+    renderHonorarios([dados.cenarioA.comissaoValor || 0, dados.cenarioB.comissaoValor || 0]);
+
   } else if (dados.cenarioA) {
     const label = dados.cenarioA.cenario === "com_imposto"
       ? "SIMULAÇÃO — COM IMPOSTO"
       : "SIMULAÇÃO — SEM IMPOSTO";
     y = renderCenario(dados.cenarioA, label, MARGIN, CONTENT_W) + 8;
+    renderHonorarios([dados.cenarioA.comissaoValor || 0]);
   }
 
   // ── Observações ────────────────────────────────────────────────────────────
@@ -277,25 +342,34 @@ function criarDocumentoPdfSimulacao(dados: DadosPdf): { doc: jsPDF; nomeArquivo:
   doc.setFillColor(...AZUL);
   doc.rect(0, 285, W, 12, "F");
   doc.setTextColor(...BRANCO);
-  doc.setFontSize(7.5);
-  doc.setFont("helvetica", "normal");
-  doc.text("Destrava Crédito  |  destravacreditooficial@gmail.com  |  (61) 3526-8355  |  Brasília/DF e Goiânia/GO", W / 2, 292, { align: "center" });
+  if (dados.agenteNome) {
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Simulação realizada por: ${dados.agenteNome}`, W / 2, 289.5, { align: "center" });
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.text("Destrava Crédito  |  destravacreditooficial@gmail.com  |  (61) 3526-8355  |  Brasília/DF e Goiânia/GO", W / 2, 294, { align: "center" });
+  } else {
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "normal");
+    doc.text("Destrava Crédito  |  destravacreditooficial@gmail.com  |  (61) 3526-8355  |  Brasília/DF e Goiânia/GO", W / 2, 292, { align: "center" });
+  }
 
   // ── Salvar ─────────────────────────────────────────────────────────────────
   const nomeArquivo = `Proposta_Destrava_${(dados.cliente.nome || "cliente").replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`;
   return { doc, nomeArquivo };
 }
 
-export function gerarArquivoPdfSimulacao(dados: DadosPdf): { blob: Blob; base64: string; nomeArquivo: string } {
-  const { doc, nomeArquivo } = criarDocumentoPdfSimulacao(dados);
+export async function gerarArquivoPdfSimulacao(dados: DadosPdf): Promise<{ blob: Blob; base64: string; nomeArquivo: string }> {
+  const { doc, nomeArquivo } = await criarDocumentoPdfSimulacao(dados);
   const blob = doc.output("blob");
   const dataUri = doc.output("datauristring");
   const base64 = String(dataUri).split(",")[1] || "";
   return { blob, base64, nomeArquivo };
 }
 
-export function gerarPdfSimulacao(dados: DadosPdf): void {
-  const { doc, nomeArquivo } = criarDocumentoPdfSimulacao(dados);
+export async function gerarPdfSimulacao(dados: DadosPdf): Promise<void> {
+  const { doc, nomeArquivo } = await criarDocumentoPdfSimulacao(dados);
   doc.save(nomeArquivo);
 }
 

@@ -79,20 +79,24 @@ async function armazenarPdfSimulacao(
 ): Promise<boolean> {
   if (!simulacaoId) return false;
   try {
-    const { base64, nomeArquivo } = gerarArquivoPdfSimulacao(dadosPdf);
+    const { base64, nomeArquivo } = await gerarArquivoPdfSimulacao(dadosPdf);
     if (!base64) return false;
-    await apiFetch(`/api/simulacoes/${simulacaoId}/pdf`, {
-      method: "POST",
-      body: JSON.stringify({
-        nome_arquivo: nomeArquivo,
-        pdf_base64: base64,
-        metadata: { modo: dadosPdf.modo, cliente: dadosPdf.cliente?.nome || null },
-      }),
-    });
+    const payload = {
+      nome_arquivo: nomeArquivo,
+      pdf_base64: base64,
+      metadata: { modo: dadosPdf.modo, cliente: dadosPdf.cliente?.nome || null },
+    };
+    try {
+      await apiFetch(`/api/simulacoes/${simulacaoId}/pdf`, { method: "POST", body: JSON.stringify(payload) });
+    } catch (primeiraFalha) {
+      // Uma falha de rede pontual não pode custar o PDF -- tenta mais uma vez antes de desistir.
+      console.warn("[PDF_SIMULACAO] Primeira tentativa falhou, tentando novamente...", primeiraFalha);
+      await apiFetch(`/api/simulacoes/${simulacaoId}/pdf`, { method: "POST", body: JSON.stringify(payload) });
+    }
     return true;
   } catch (err) {
     console.warn("[PDF_SIMULACAO] Não foi possível armazenar o PDF", err);
-    toast.warning("Simulação salva, mas o PDF não foi armazenado para reimpressão.");
+    toast.warning("Simulação salva, mas o PDF não foi armazenado para reimpressão. Tente reimprimir pela lista de simulações.");
     return false;
   }
 }
@@ -194,6 +198,10 @@ interface FormBase {
   banco: string;
   linhaCredito: string;
   observacoes: string;
+  /** Preenchido só quando a empresa foi escolhida via busca (empresa já cadastrada) --
+   *  sem isso, a simulação não tem como ficar vinculada de forma confiável à empresa,
+   *  e o PDF não entra no Acervo Documental dela. */
+  empresaId?: string;
 }
 
 interface FormComImposto extends FormBase {
@@ -246,21 +254,23 @@ const formBaseInicial: FormBase = {
 
 // ─── Busca de lead/cliente existente ────────────────────────────────────────
 
-interface LeadOption {
+interface EmpresaOption {
   id: string;
-  nome: string;
-  empresa?: string;
-  telefone: string;
-  cpf_cnpj?: string;
+  razao_social?: string;
+  nome_fantasia?: string;
+  cnpj?: string;
+  telefone?: string;
+  whatsapp?: string;
+  responsavel_nome?: string;
 }
 
 function SeletorCliente({
   onSelect,
 }: {
-  onSelect: (lead: LeadOption) => void;
+  onSelect: (empresa: EmpresaOption) => void;
 }) {
   const [busca, setBusca] = useState("");
-  const [resultados, setResultados] = useState<LeadOption[]>([]);
+  const [resultados, setResultados] = useState<EmpresaOption[]>([]);
   const [aberto, setAberto] = useState(false);
   const [carregando, setCarregando] = useState(false);
 
@@ -269,10 +279,10 @@ function SeletorCliente({
     const t = setTimeout(async () => {
       setCarregando(true);
       try {
-        const data = await apiFetch(`/api/leads?busca=${encodeURIComponent(busca)}&limit=8`);
-        const arr: LeadOption[] = Array.isArray(data)
-          ? data
-          : (data?.leads ?? []);
+        // Busca empresa já cadastrada de verdade (não lead avulso) -- é o que permite
+        // linkar empresa_id na simulação, e sem isso o PDF nunca cai no Acervo Documental.
+        const data = await apiFetch(`/api/empresas/search?q=${encodeURIComponent(busca)}&limit=8`);
+        const arr: EmpresaOption[] = Array.isArray(data?.empresas) ? data.empresas : (Array.isArray(data) ? data : []);
         setResultados(arr.slice(0, 8));
         setAberto(true);
       } catch { setResultados([]); }
@@ -285,7 +295,7 @@ function SeletorCliente({
     <div className="relative">
       <div className="flex items-center gap-2 pb-1 border-b mb-3">
         <Search className="h-4 w-4 text-primary" />
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Buscar cliente/empresa existente</p>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Buscar empresa cadastrada</p>
         <span className="text-xs text-muted-foreground ml-auto">(opcional)</span>
       </div>
       <div className="relative">
@@ -295,24 +305,29 @@ function SeletorCliente({
           onChange={e => setBusca(e.target.value)}
           onFocus={() => resultados.length > 0 && setAberto(true)}
           onBlur={() => setTimeout(() => setAberto(false), 200)}
-          placeholder="Digite nome, empresa ou telefone..."
+          placeholder="Digite razão social, CNPJ ou telefone..."
           className="pl-9"
         />
         {carregando && <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />}
       </div>
       {aberto && resultados.length > 0 && (
         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-          {resultados.map(lead => (
+          {resultados.map(empresa => (
             <button
-              key={lead.id}
+              key={empresa.id}
               type="button"
               className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b last:border-0 transition-colors"
-              onMouseDown={() => { onSelect(lead); setBusca(""); setAberto(false); }}
+              onMouseDown={() => { onSelect(empresa); setBusca(""); setAberto(false); }}
             >
-              <p className="text-sm font-medium text-gray-900">{lead.nome}</p>
-              <p className="text-xs text-gray-500">{lead.empresa || "—"} · {lead.telefone}</p>
+              <p className="text-sm font-medium text-gray-900">{empresa.razao_social || empresa.nome_fantasia || "—"}</p>
+              <p className="text-xs text-gray-500">{empresa.responsavel_nome || "—"} · {empresa.cnpj || empresa.telefone || ""}</p>
             </button>
           ))}
+        </div>
+      )}
+      {aberto && !carregando && busca.length >= 2 && resultados.length === 0 && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg px-4 py-3 text-xs text-gray-500">
+          Nenhuma empresa cadastrada encontrada. Cadastre a empresa em Clientes PJ antes de simular, ou continue preenchendo os dados manualmente abaixo.
         </div>
       )}
       {aberto && busca.length >= 2 && resultados.length === 0 && !carregando && (
@@ -366,18 +381,12 @@ function PainelResultado({
       </div>
 
       <div className="rounded-xl border-2 border-red-200 bg-red-50 p-4">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Custo Total da Operação <span className="normal-case font-normal">(sem comissão)</span></p>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Custo Total da Operação <span className="normal-case font-normal">(cálculo bancário — sem honorários Destrava)</span></p>
         <div className="space-y-0">
           <div className="flex justify-between items-center py-2 border-b border-red-100 text-sm">
             <span className="text-muted-foreground">Total do Financiamento</span>
             <span className="font-medium">{fmtBRL.format(resultado.totalFinanciamento)}</span>
           </div>
-          {resultado.comissaoValor > 0 && (
-            <div className="flex justify-between items-center py-2 border-b border-red-100 text-sm">
-              <span className="text-muted-foreground">Comissão Destrava <span className="text-xs">(informativa, não soma)</span></span>
-              <span className="font-semibold text-orange-600">{fmtBRL.format(resultado.comissaoValor)}</span>
-            </div>
-          )}
           {comImposto && resultado.impostoValor > 0 && (
             <div className="flex justify-between items-center py-2 border-b border-red-100 text-sm">
               <span className="text-muted-foreground">
@@ -387,7 +396,7 @@ function PainelResultado({
             </div>
           )}
           <div className="flex justify-between items-center pt-3 text-sm">
-            <span className="font-bold text-base">Total da Operação <span className="text-xs font-normal">(sem comissão)</span></span>
+            <span className="font-bold text-base">Total da Operação <span className="text-xs font-normal">(o que o cliente paga ao banco)</span></span>
             <span className="font-bold text-xl text-red-700">{fmtBRL.format(resultado.custoTotalOperacao)}</span>
           </div>
         </div>
@@ -406,6 +415,16 @@ function PainelResultado({
           </div>
         </div>
       </div>
+
+      {resultado.comissaoValor > 0 && (
+        <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
+          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-3">Honorários Destrava <span className="normal-case font-normal text-muted-foreground">(à parte — não é cálculo bancário, não soma no custo da operação)</span></p>
+          <div className="flex justify-between items-center py-1 text-sm">
+            <span className="text-muted-foreground">Comissão Destrava</span>
+            <span className="font-bold text-lg text-amber-700">{fmtBRL.format(resultado.comissaoValor)}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -421,7 +440,7 @@ function CamposCliente({
   form: FormBase;
   erros: Record<string, string>;
   set: (k: keyof FormBase, v: string) => void;
-  onSelectLead?: (lead: LeadOption) => void;
+  onSelectLead?: (empresa: EmpresaOption) => void;
 }) {
   return (
     <div className="space-y-4">
@@ -664,6 +683,7 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
           cliente_telefone: form.telefone,
           cliente_cpf_cnpj: form.cpfCnpj || null,
           cliente_empresa: form.empresa || null,
+          empresa_id: form.empresaId || null,
           valor_solicitado: parseBRL(form.valorCredito),
           quantidade_parcelas: parseInt(form.prazo),
           taxa_juros_mensal: parseFloat(form.taxaJuros),
@@ -683,7 +703,8 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
       await armazenarPdfSimulacao(saved?.id, {
         cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
         cenarioA: { taxa: parseFloat(form.taxaJuros), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, impostoValor: resultado.impostoValor, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "com_imposto", taxaAnualEquiv: resultado.taxaAnualEquiv, cetMensal: resultado.cetMensal, cetAnual: resultado.cetAnual },
-        modo: "simples"
+        modo: "simples",
+        agenteNome: user?.nome,
       });
       setSalvo(true);
       toast.success("Simulação salva com PDF armazenado para reimpressão!");
@@ -701,13 +722,14 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
     setErros({});
   }
 
-  function handleSelectLead(lead: LeadOption) {
+  function handleSelectLead(empresa: EmpresaOption) {
     setForm(prev => ({
       ...prev,
-      nome: lead.nome || prev.nome,
-      empresa: lead.empresa || prev.empresa,
-      telefone: lead.telefone || prev.telefone,
-      cpfCnpj: lead.cpf_cnpj || prev.cpfCnpj,
+      nome: empresa.responsavel_nome || prev.nome,
+      empresa: empresa.razao_social || empresa.nome_fantasia || prev.empresa,
+      telefone: empresa.telefone || empresa.whatsapp || prev.telefone,
+      cpfCnpj: empresa.cnpj || prev.cpfCnpj,
+      empresaId: empresa.id,
     }));
     setErros({});
   }
@@ -816,7 +838,8 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => gerarPdfSimulacao({
                   cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
                   cenarioA: resultado ? { taxa: parseFloat(form.taxaJuros), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, impostoValor: resultado.impostoValor, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "com_imposto", taxaAnualEquiv: resultado.taxaAnualEquiv, cetMensal: resultado.cetMensal, cetAnual: resultado.cetAnual } : undefined,
-                  modo: "simples"
+                  modo: "simples",
+                  agenteNome: user?.nome,
                 })}>
                   <Printer className="mr-1.5 h-4 w-4" />Exportar PDF
                 </Button>
@@ -896,6 +919,7 @@ function CenarioSemImposto({ initialData }: { initialData?: { nome: string; empr
           cliente_telefone: form.telefone,
           cliente_cpf_cnpj: form.cpfCnpj || null,
           cliente_empresa: form.empresa || null,
+          empresa_id: form.empresaId || null,
           valor_solicitado: parseBRL(form.valorCredito),
           quantidade_parcelas: parseInt(form.prazo),
           taxa_juros_mensal: parseFloat(form.taxaJuros),
@@ -913,7 +937,8 @@ function CenarioSemImposto({ initialData }: { initialData?: { nome: string; empr
       await armazenarPdfSimulacao(saved?.id, {
         cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
         cenarioA: { taxa: parseFloat(form.taxaJuros), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "sem_imposto", taxaAnualEquiv: resultado.taxaAnualEquiv, cetMensal: resultado.cetMensal, cetAnual: resultado.cetAnual },
-        modo: "simples"
+        modo: "simples",
+        agenteNome: user?.nome,
       });
       setSalvo(true);
       toast.success("Simulação salva com PDF armazenado para reimpressão!");
@@ -931,13 +956,14 @@ function CenarioSemImposto({ initialData }: { initialData?: { nome: string; empr
     setErros({});
   }
 
-  function handleSelectLead(lead: LeadOption) {
+  function handleSelectLead(empresa: EmpresaOption) {
     setForm(prev => ({
       ...prev,
-      nome: lead.nome || prev.nome,
-      empresa: lead.empresa || prev.empresa,
-      telefone: lead.telefone || prev.telefone,
-      cpfCnpj: lead.cpf_cnpj || prev.cpfCnpj,
+      nome: empresa.responsavel_nome || prev.nome,
+      empresa: empresa.razao_social || empresa.nome_fantasia || prev.empresa,
+      telefone: empresa.telefone || empresa.whatsapp || prev.telefone,
+      cpfCnpj: empresa.cnpj || prev.cpfCnpj,
+      empresaId: empresa.id,
     }));
     setErros({});
   }
@@ -991,7 +1017,8 @@ function CenarioSemImposto({ initialData }: { initialData?: { nome: string; empr
                 <Button variant="outline" size="sm" className="flex-1" onClick={() => gerarPdfSimulacao({
                   cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
                   cenarioA: resultado ? { taxa: parseFloat(form.taxaJuros), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resultado.parcelaMensal, totalFinanciamento: resultado.totalFinanciamento, totalJuros: resultado.totalJuros, comissaoValor: resultado.comissaoValor, custoTotalOperacao: resultado.custoTotalOperacao, cenario: "sem_imposto", taxaAnualEquiv: resultado.taxaAnualEquiv, cetMensal: resultado.cetMensal, cetAnual: resultado.cetAnual } : undefined,
-                  modo: "simples"
+                  modo: "simples",
+                  agenteNome: user?.nome,
                 })}>
                   <Printer className="mr-1.5 h-4 w-4" />Exportar PDF
                 </Button>
@@ -1029,6 +1056,7 @@ interface FormComparativo {
   pctImposto: string;
   // Cenário B — Sem Imposto
   taxaB: string;
+  empresaId?: string;
 }
 
 function DifTag({ a, b, campo }: { a: number; b: number; campo: "parcela" | "total" }) {
@@ -1114,6 +1142,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
         cliente_telefone: form.telefone,
         cliente_cpf_cnpj: form.cpfCnpj || null,
         cliente_empresa: form.empresa || null,
+        empresa_id: form.empresaId || null,
         valor_solicitado: parseBRL(form.valorCredito),
         quantidade_parcelas: parseInt(form.prazo),
         comissao_percentual: parseFloat(form.comissao) || null,
@@ -1139,7 +1168,8 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
         await armazenarPdfSimulacao(savedA?.id, {
           cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
           cenarioA: { taxa: parseFloat(form.taxaA), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resA.parcelaMensal, totalFinanciamento: resA.totalFinanciamento, totalJuros: resA.totalJuros, impostoValor: resA.impostoValor, comissaoValor: resA.comissaoValor, custoTotalOperacao: resA.custoTotalOperacao, cenario: "com_imposto", taxaAnualEquiv: resA.taxaAnualEquiv, cetMensal: resA.cetMensal, cetAnual: resA.cetAnual },
-          modo: "simples"
+          modo: "simples",
+          agenteNome: user?.nome,
         });
       }
       if (resB) {
@@ -1159,7 +1189,8 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
         await armazenarPdfSimulacao(savedB?.id, {
           cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
           cenarioA: { taxa: parseFloat(form.taxaB), valorCredito: parseBRL(form.valorCredito), prazo: parseInt(form.prazo), parcela: resB.parcelaMensal, totalFinanciamento: resB.totalFinanciamento, totalJuros: resB.totalJuros, comissaoValor: resB.comissaoValor, custoTotalOperacao: resB.custoTotalOperacao, cenario: "sem_imposto", taxaAnualEquiv: resB.taxaAnualEquiv, cetMensal: resB.cetMensal, cetAnual: resB.cetAnual },
-          modo: "simples"
+          modo: "simples",
+          agenteNome: user?.nome,
         });
       }
       setSalvo(true);
@@ -1191,13 +1222,14 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
   const pi = parseFloat(form.pctImposto) || 0;
   const prazoNum = parseInt(form.prazo) || 24;
 
-  function handleSelectLead(lead: LeadOption) {
+  function handleSelectLead(empresa: EmpresaOption) {
     setForm(prev => ({
       ...prev,
-      nome: lead.nome || prev.nome,
-      empresa: lead.empresa || prev.empresa,
-      telefone: lead.telefone || prev.telefone,
-      cpfCnpj: lead.cpf_cnpj || prev.cpfCnpj,
+      nome: empresa.responsavel_nome || prev.nome,
+      empresa: empresa.razao_social || empresa.nome_fantasia || prev.empresa,
+      telefone: empresa.telefone || empresa.whatsapp || prev.telefone,
+      cpfCnpj: empresa.cnpj || prev.cpfCnpj,
+      empresaId: empresa.id,
     }));
     setErros({});
   }
@@ -1457,12 +1489,6 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
                     bNum: resB?.totalFinanciamento ?? null,
                   },
                   {
-                    label: "Comissão Destrava (informativa, não soma)",
-                    a: resA ? fmtBRL.format(resA.comissaoValor) : "—",
-                    b: resB ? fmtBRL.format(resB.comissaoValor) : "—",
-                    aNum: null, bNum: null,
-                  },
-                  {
                     label: `Imposto (${pi}% s/ fiscal)`,
                     a: resA && resA.impostoValor > 0 ? fmtBRL.format(resA.impostoValor) : "R$ 0,00",
                     b: "R$ 0,00",
@@ -1485,7 +1511,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
 
                 {/* Linha de total */}
                 <tr className="bg-gray-900 text-white">
-                  <td className="px-4 py-4 font-bold text-base">Total da Operação <span className="text-xs font-normal">(sem comissão)</span></td>
+                  <td className="px-4 py-4 font-bold text-base">Total da Operação <span className="text-xs font-normal">(cálculo bancário — sem honorários Destrava)</span></td>
                   <td className="px-4 py-4 text-right font-bold text-lg text-blue-300">
                     {resA ? fmtBRL.format(resA.custoTotalOperacao) : "—"}
                   </td>
@@ -1512,13 +1538,26 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
                 ? "bg-gradient-to-r from-blue-900 to-blue-700"
                 : "bg-gradient-to-r from-green-900 to-green-700"
             } text-white`}>
-              <p className="text-white/70 text-sm mb-1">Diferença Total entre os Cenários (sem comissão)</p>
+              <p className="text-white/70 text-sm mb-1">Diferença Total entre os Cenários (cálculo bancário)</p>
               <p className="text-4xl font-bold">{fmtBRL.format(Math.abs(resA.custoTotalOperacao - resB.custoTotalOperacao))}</p>
               <p className="text-white/70 text-sm mt-2">
                 {resA.custoTotalOperacao > resB.custoTotalOperacao
                   ? "O Cenário A (com imposto) custa mais para o cliente"
                   : "O Cenário B (sem imposto) custa mais para o cliente"}
               </p>
+            </div>
+          )}
+
+          {/* Honorários Destrava — à parte, nunca somado ao cálculo bancário acima */}
+          {((resA?.comissaoValor ?? 0) > 0 || (resB?.comissaoValor ?? 0) > 0) && (
+            <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
+              <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-3">
+                Honorários Destrava <span className="normal-case font-normal text-muted-foreground">(mesma comissão nos dois cenários — não é cálculo bancário, não soma no custo da operação)</span>
+              </p>
+              <div className="flex justify-between items-center py-1 text-sm">
+                <span className="text-muted-foreground">Comissão Destrava</span>
+                <span className="font-bold text-lg text-amber-700">{fmtBRL.format((resA || resB)?.comissaoValor ?? 0)}</span>
+              </div>
             </div>
           )}
 
@@ -1540,7 +1579,8 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
                   cliente: { nome: form.nome, empresa: form.empresa, cpfCnpj: form.cpfCnpj, telefone: form.telefone, banco: form.banco, linhaCredito: form.linhaCredito, observacoes: form.observacoes },
                     cenarioA: resA ? { taxa: parseFloat(form.taxaA), valorCredito: vc, prazo: parseInt(form.prazo), parcela: resA.parcelaMensal, totalFinanciamento: resA.totalFinanciamento, totalJuros: resA.totalJuros, impostoValor: resA.impostoValor, comissaoValor: resA.comissaoValor, custoTotalOperacao: resA.custoTotalOperacao, cenario: "com_imposto", taxaAnualEquiv: resA.taxaAnualEquiv, cetMensal: resA.cetMensal, cetAnual: resA.cetAnual } : undefined,
                     cenarioB: resB ? { taxa: parseFloat(form.taxaB), valorCredito: vc, prazo: parseInt(form.prazo), parcela: resB.parcelaMensal, totalFinanciamento: resB.totalFinanciamento, totalJuros: resB.totalJuros, comissaoValor: resB.comissaoValor, custoTotalOperacao: resB.custoTotalOperacao, cenario: "sem_imposto", taxaAnualEquiv: resB.taxaAnualEquiv, cetMensal: resB.cetMensal, cetAnual: resB.cetAnual } : undefined,
-                  modo: "comparativo"
+                  modo: "comparativo",
+                  agenteNome: user?.nome,
                 });
               }
             }} className="h-12 px-5" title="Exportar PDF">

@@ -53,7 +53,7 @@ import { contactInputSchema, loginInputSchema, leadInputSchema, validateBody } f
 import { closeChromium, launchChromium } from "./services/chromiumLauncher";
 import { generateBrandedPdfBuffer } from "./services/brandedPdfLayout";
 import { generateFollowupMessage, generateLeadRecommendations, generateLeadSummary, qualifyTriagemLead } from "./services/aiService";
-import { getDataDir, resolveDocumentPath } from "./services/documentStorage";
+import { getDataDir, resolveDocumentPath, saveDocumentBuffer } from "./services/documentStorage";
 import { calcularInteligencia360 } from "./services/inteligencia360Service";
 import { calcularPropostaBancaria } from "./services/propostaBancariaService";
 import { gerarRelatorioTecnico } from "./services/relatorioTecnicoEmpresaService";
@@ -3429,14 +3429,15 @@ async function startServer() {
       const isGestor = isGestorCargo(colaborador?.cargo || "");
       const acesso = await pool.query(
         isGestor
-          ? "SELECT id, colaborador_id FROM simulacoes_colaborador WHERE id = $1"
-          : "SELECT id, colaborador_id FROM simulacoes_colaborador WHERE id = $1 AND colaborador_id = $2",
+          ? "SELECT id, colaborador_id, empresa_id, cliente_nome FROM simulacoes_colaborador WHERE id = $1"
+          : "SELECT id, colaborador_id, empresa_id, cliente_nome FROM simulacoes_colaborador WHERE id = $1 AND colaborador_id = $2",
         isGestor ? [id] : [id, colaborador.id]
       );
 
       if (!acesso.rows.length) {
         return res.status(404).json({ error: "Simulação não encontrada" });
       }
+      const simulacao = acesso.rows[0];
 
       const base64Limpo = pdf_base64.includes(",") ? pdf_base64.split(",").pop() : pdf_base64;
       const { rows } = await pool.query(
@@ -3452,6 +3453,42 @@ async function startServer() {
           metadata || {},
         ]
       );
+
+      // Registra automaticamente no Acervo Documental da empresa (mesmo sistema de
+      // armazenamento resiliente usado por contrato/documento de empresa) -- sem isso,
+      // o PDF só existia dentro de simulacao_pdfs e não aparecia junto com os outros
+      // documentos da empresa. Não bloqueia a resposta principal se falhar: a simulação
+      // já foi salva com sucesso acima, isso é um passo adicional best-effort.
+      if (simulacao.empresa_id && base64Limpo) {
+        try {
+          const buffer = Buffer.from(base64Limpo, "base64");
+          const nomeArquivoFinal = nome_arquivo || `simulacao_${id}.pdf`;
+          const { relativePath, sha256 } = await saveDocumentBuffer({
+            entidadeTipo: "empresa",
+            entidadeId: String(simulacao.empresa_id),
+            filename: nomeArquivoFinal,
+            buffer,
+          });
+          await pool.query(
+            `INSERT INTO public.documentos_arquivos
+              (entidade_tipo, entidade_id, empresa_id, simulacao_id, tipo_documento, nome_original, nome_arquivo,
+               caminho_arquivo, mime_type, tamanho_bytes, hash_arquivo, status, origem, validado, criado_por, metadados)
+             VALUES ('empresa',$1,$1,$2,'simulacao_credito',$3,$3,$4,'application/pdf',$5,$6,'ativo','simulador_colaborador',true,$7,$8::jsonb)`,
+            [
+              String(simulacao.empresa_id),
+              id,
+              nomeArquivoFinal,
+              relativePath,
+              buffer.byteLength,
+              sha256,
+              colaborador.id,
+              JSON.stringify({ agente: colaborador.nome || null }),
+            ]
+          );
+        } catch (acervoErr: any) {
+          console.warn("[simulacoes][acervo] Falha ao registrar PDF no acervo documental:", acervoErr?.message || acervoErr);
+        }
+      }
 
       res.status(201).json({ success: true, pdf: rows[0] });
     } catch (err: any) {
