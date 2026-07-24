@@ -84,41 +84,46 @@ async function criarDocumentoPdfSimulacao(dados: DadosPdf): Promise<{ doc: jsPDF
 
   // ── Cabeçalho ──────────────────────────────────────────────────────────────
   doc.setFillColor(...AZUL);
-  doc.rect(0, 0, W, 38, "F");
+  doc.rect(0, 0, W, 32, "F");
 
-  // Logo discreto (mesmo arquivo do timbrado de contrato/orçamento) -- identifica
-  // visualmente que é um documento oficial Destrava, sem tirar espaço do texto.
+  // Logo é o único identificador de marca aqui -- já traz o nome "Destrava Crédito"
+  // desenhado na própria imagem, então não repetimos o texto ao lado (mesmo padrão
+  // usado no timbrado de contrato/orçamento: só a logomarca, sem duplicar o nome).
   const logoDataUrl = await carregarLogoDataUrl();
-  const textoX = logoDataUrl ? MARGIN + 26 : MARGIN;
   if (logoDataUrl) {
     try {
-      // Proporção original 310x80 preservada, altura discreta de 14mm.
-      doc.addImage(logoDataUrl, "PNG", MARGIN, 12, 24.5, 6.3);
+      // Proporção original 310x80 preservada, tamanho maior por ser o único elemento de marca.
+      doc.addImage(logoDataUrl, "PNG", MARGIN, 8, 46.5, 12);
     } catch {
-      // Se a imagem estiver corrompida/formato inesperado, segue só com o texto.
+      // Se a imagem estiver corrompida/formato inesperado, cai no texto como reserva.
+      doc.setTextColor(...BRANCO);
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.text("DESTRAVA CRÉDITO", MARGIN, 16);
     }
+  } else {
+    doc.setTextColor(...BRANCO);
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("DESTRAVA CRÉDITO", MARGIN, 16);
   }
 
   doc.setTextColor(...BRANCO);
-  doc.setFontSize(20);
-  doc.setFont("helvetica", "bold");
-  doc.text("DESTRAVA CRÉDITO", textoX, 16);
-
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  doc.text("Assessoria Especializada em Crédito Empresarial e Pessoal", textoX, 23);
-
   doc.setFontSize(9);
-  doc.text("destravacreditooficial@gmail.com  |  (61) 3526-8355", textoX, 30);
+  doc.setFont("helvetica", "normal");
+  doc.text("Assessoria Especializada em Crédito Empresarial e Pessoal", MARGIN, 24);
+
+  doc.setFontSize(8);
+  doc.text("destravacreditooficial@gmail.com  |  (61) 3526-8355", MARGIN, 29);
 
   // Data no canto direito
   const dataHoje = new Date().toLocaleDateString("pt-BR", {
     day: "2-digit", month: "long", year: "numeric"
   });
   doc.setFontSize(8);
-  doc.text(dataHoje, W - MARGIN, 30, { align: "right" });
+  doc.text(dataHoje, W - MARGIN, 29, { align: "right" });
 
-  y = 46;
+  y = 40;
 
   // ── Título da proposta ─────────────────────────────────────────────────────
   doc.setTextColor(0, 0, 0);
@@ -209,23 +214,34 @@ async function criarDocumentoPdfSimulacao(dados: DadosPdf): Promise<{ doc: jsPDF
     // garante estruturalmente que a comissão nunca entra no total impresso,
     // não importa o que o código upstream tenha calculado/enviado.
     const custoTotalGarantido = res.totalFinanciamento + (res.impostoValor || 0);
-    linhas.push(["CUSTO TOTAL DA OPERAÇÃO (cálculo bancário)", fmt(custoTotalGarantido), true]);
+    linhas.push(["CUSTO TOTAL DA OPERAÇÃO", fmt(custoTotalGarantido), true]);
 
     linhas.forEach(([label, valor, destaque], idx) => {
       const bg = idx % 2 === 0 ? CINZA_CLARO : BRANCO;
       doc.setFillColor(...bg);
       doc.rect(xStart, cy - 4, largura, 6.5, "F");
 
-      // ✅ CORREÇÃO: spread aplicado sobre o resultado do ternário
+      // Blindagem contra sobreposição: se rótulo + valor não couberem lado a lado na
+      // largura da coluna (comparativo é a mais estreita), reduz a fonte progressivamente
+      // até caber -- evita que uma mudança futura de texto volte a sobrepor sem ninguém notar.
+      const tamanhoBase = destaque ? 9 : 8;
+      let tamanhoFonte = tamanhoBase;
+      const disponivel = largura - 6;
+      doc.setFont("helvetica", "bold");
+      while (tamanhoFonte > 6) {
+        doc.setFontSize(tamanhoFonte);
+        if (doc.getTextWidth(label) + doc.getTextWidth(valor) <= disponivel) break;
+        tamanhoFonte -= 0.5;
+      }
+
       doc.setTextColor(...(destaque ? AZUL : CINZA));
       doc.setFont("helvetica", destaque ? "bold" : "normal");
-      doc.setFontSize(destaque ? 9 : 8);
+      doc.setFontSize(tamanhoFonte);
       doc.text(label, xStart + 3, cy);
 
-      // ✅ CORREÇÃO: spread aplicado sobre o resultado do ternário
       doc.setTextColor(...(destaque ? AZUL : PRETO));
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(destaque ? 9 : 8);
+      doc.setFontSize(tamanhoFonte);
       doc.text(valor, xStart + largura - 3, cy, { align: "right" });
 
       cy += 6.5;
