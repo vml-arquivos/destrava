@@ -296,7 +296,7 @@ function SeletorCliente({
       <div className="flex items-center gap-2 pb-1 border-b mb-3">
         <Search className="h-4 w-4 text-primary" />
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Buscar empresa cadastrada</p>
-        <span className="text-xs text-muted-foreground ml-auto">(opcional)</span>
+        <span className="text-xs font-bold text-destructive ml-auto">* obrigatório</span>
       </div>
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -436,22 +436,47 @@ function CamposCliente({
   erros,
   set,
   onSelectLead,
+  onLimparEmpresa,
 }: {
   form: FormBase;
   erros: Record<string, string>;
   set: (k: keyof FormBase, v: string) => void;
   onSelectLead?: (empresa: EmpresaOption) => void;
+  onLimparEmpresa?: () => void;
 }) {
+  const empresaVinculada = Boolean(form.empresaId);
   return (
     <div className="space-y-4">
       {onSelectLead && (
-        <SeletorCliente onSelect={onSelectLead} />
+        <div>
+          <SeletorCliente onSelect={onSelectLead} />
+          <p className="text-xs text-muted-foreground mt-1.5">
+            Empresa não encontrada? {" "}
+            <a href="/colaborador/empresas?novo=1" target="_blank" rel="noreferrer" className="text-primary font-medium underline underline-offset-2">
+              Cadastre a empresa primeiro em Clientes PJ
+            </a>
+            {" "}— simulação de crédito empresarial exige empresa já cadastrada.
+          </p>
+        </div>
       )}
       <div className="flex items-center gap-2 pb-1 border-b">
         <User className="h-4 w-4 text-primary" />
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dados do Cliente</p>
         <span className="text-xs text-destructive ml-auto">* obrigatório</span>
       </div>
+
+      {empresaVinculada && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+          <p className="text-xs text-emerald-800">
+            <span className="font-bold">✓ Empresa vinculada do cadastro.</span> Razão social e CNPJ vêm do registro, sem digitar de novo.
+          </p>
+          {onLimparEmpresa && (
+            <button type="button" onClick={onLimparEmpresa} className="text-xs font-semibold text-emerald-700 underline underline-offset-2 whitespace-nowrap">
+              Trocar empresa
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1.5">
@@ -476,9 +501,11 @@ function CamposCliente({
             <Input
               id="empresa"
               value={form.empresa}
-              onChange={(e) => set("empresa", e.target.value)}
-              placeholder="Nome da empresa"
-              className={`pl-9 ${erros.empresa ? "border-destructive" : ""}`}
+              readOnly
+              onFocus={(e) => e.target.blur()}
+              placeholder="Busque e selecione a empresa acima"
+              className={`pl-9 cursor-not-allowed bg-muted/50 ${erros.empresa ? "border-destructive" : ""}`}
+              title="Selecione a empresa pela busca acima — não é possível digitar diretamente."
             />
           </div>
           {erros.empresa && <p className="text-xs text-destructive">{erros.empresa}</p>}
@@ -505,8 +532,11 @@ function CamposCliente({
           <Input
             id="cpfCnpj"
             value={form.cpfCnpj}
+            readOnly={empresaVinculada}
             onChange={(e) => set("cpfCnpj", e.target.value)}
             placeholder="00.000.000/0001-00"
+            className={empresaVinculada ? "cursor-not-allowed bg-muted/50" : ""}
+            title={empresaVinculada ? "CNPJ vem do cadastro da empresa selecionada." : undefined}
           />
         </div>
       </div>
@@ -651,7 +681,7 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
   function validar(): boolean {
     const e: Record<string, string> = {};
     if (!form.nome.trim()) e.nome = "Obrigatório";
-    if (!form.empresa.trim()) e.empresa = "Obrigatório";
+    if (!form.empresa.trim() || !form.empresaId) e.empresa = "Selecione uma empresa cadastrada pela busca acima";
     if (!form.telefone.trim()) e.telefone = "Obrigatório";
     else if (form.telefone.replace(/\D/g, "").length < 10) e.telefone = "Telefone inválido";
     if (!form.valorCredito) e.valorCredito = "Obrigatório";
@@ -743,7 +773,7 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="space-y-6">
-        <CamposCliente form={form} erros={erros} set={setBase} onSelectLead={handleSelectLead} />
+        <CamposCliente form={form} erros={erros} set={setBase} onSelectLead={handleSelectLead} onLimparEmpresa={() => setForm(prev => ({ ...prev, empresa: "", cpfCnpj: "", empresaId: undefined }))} />
         <CamposEmprestimo form={form} erros={erros} set={setBase} />
 
         <div className="space-y-4">
@@ -882,7 +912,7 @@ function CenarioSemImposto({ initialData }: { initialData?: { nome: string; empr
   function validar(): boolean {
     const e: Record<string, string> = {};
     if (!form.nome.trim()) e.nome = "Obrigatório";
-    if (!form.empresa.trim()) e.empresa = "Obrigatório";
+    if (!form.empresa.trim() || !form.empresaId) e.empresa = "Selecione uma empresa cadastrada pela busca acima";
     if (!form.telefone.trim()) e.telefone = "Obrigatório";
     else if (form.telefone.replace(/\D/g, "").length < 10) e.telefone = "Telefone inválido";
     if (!form.valorCredito) e.valorCredito = "Obrigatório";
@@ -971,7 +1001,7 @@ function CenarioSemImposto({ initialData }: { initialData?: { nome: string; empr
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="space-y-6">
-        <CamposCliente form={form} erros={erros} set={set} onSelectLead={handleSelectLead} />
+        <CamposCliente form={form} erros={erros} set={set} onSelectLead={handleSelectLead} onLimparEmpresa={() => setForm(prev => ({ ...prev, empresa: "", cpfCnpj: "", empresaId: undefined }))} />
         <CamposEmprestimo form={form} erros={erros} set={set} />
         <div className="space-y-1.5">
           <Label>Observações <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
@@ -1117,7 +1147,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
   function validar(): boolean {
     const e: Record<string, string> = {};
     if (!form.nome.trim()) e.nome = "Obrigatório";
-    if (!form.empresa.trim()) e.empresa = "Obrigatório";
+    if (!form.empresa.trim() || !form.empresaId) e.empresa = "Selecione uma empresa cadastrada pela busca acima";
     if (!form.telefone.trim()) e.telefone = "Obrigatório";
     if (!form.valorCredito) e.valorCredito = "Obrigatório";
     if (!form.taxaA) e.taxaA = "Obrigatório";
@@ -1239,11 +1269,29 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
       {/* Dados comuns */}
       <div className="bg-white rounded-2xl border p-5 space-y-5">
         <SeletorCliente onSelect={handleSelectLead} />
+        <p className="text-xs text-muted-foreground -mt-3">
+          Empresa não encontrada? {" "}
+          <a href="/colaborador/empresas?novo=1" target="_blank" rel="noreferrer" className="text-primary font-medium underline underline-offset-2">
+            Cadastre a empresa primeiro em Clientes PJ
+          </a>
+          {" "}— simulação de crédito empresarial exige empresa já cadastrada.
+        </p>
         <div className="flex items-center gap-2 pb-1 border-b">
           <User className="h-4 w-4 text-primary" />
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dados do Cliente e do Crédito</p>
           <span className="text-xs text-destructive ml-auto">* obrigatório</span>
         </div>
+
+        {form.empresaId && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+            <p className="text-xs text-emerald-800">
+              <span className="font-bold">✓ Empresa vinculada do cadastro.</span> Razão social e CNPJ vêm do registro, sem digitar de novo.
+            </p>
+            <button type="button" onClick={() => setForm(prev => ({ ...prev, empresa: "", cpfCnpj: "", empresaId: undefined }))} className="text-xs font-semibold text-emerald-700 underline underline-offset-2 whitespace-nowrap">
+              Trocar empresa
+            </button>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {/* Nome */}
@@ -1261,7 +1309,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
             <Label>Empresa <span className="text-destructive">*</span></Label>
             <div className="relative">
               <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input value={form.empresa} onChange={e => set("empresa", e.target.value)} placeholder="Razão social" className={`pl-9 ${erros.empresa ? "border-destructive" : ""}`} />
+              <Input value={form.empresa} readOnly onFocus={e => e.target.blur()} placeholder="Busque e selecione a empresa acima" className={`pl-9 cursor-not-allowed bg-muted/50 ${erros.empresa ? "border-destructive" : ""}`} title="Selecione a empresa pela busca acima — não é possível digitar diretamente." />
             </div>
             {erros.empresa && <p className="text-xs text-destructive">{erros.empresa}</p>}
           </div>
@@ -1279,7 +1327,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
           {/* CPF/CNPJ */}
           <div className="col-span-2 space-y-1.5">
             <Label>CPF / CNPJ <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
-            <Input value={form.cpfCnpj} onChange={e => set("cpfCnpj", e.target.value)} placeholder="00.000.000/0001-00" />
+            <Input value={form.cpfCnpj} readOnly={Boolean(form.empresaId)} onChange={e => set("cpfCnpj", e.target.value)} placeholder="00.000.000/0001-00" className={form.empresaId ? "cursor-not-allowed bg-muted/50" : ""} title={form.empresaId ? "CNPJ vem do cadastro da empresa selecionada." : undefined} />
           </div>
 
           {/* Valor do crédito */}

@@ -1446,6 +1446,17 @@ export default function Empresas() {
     setModalAberto(true);
   }
 
+  // Abre o modal de nova empresa automaticamente quando a página é acessada com
+  // ?novo=1 -- usado pelo link "cadastre a empresa primeiro" da Calculadora de
+  // Crédito e de outros pontos do sistema que agora exigem empresa já cadastrada.
+  useEffect(() => {
+    const queryString = location.split("?")[1] || "";
+    if (new URLSearchParams(queryString).get("novo") === "1") {
+      abrirNova();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function abrirEditar(emp: Empresa) {
     setEditando(emp);
     setForm({
