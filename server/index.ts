@@ -3550,6 +3550,47 @@ async function startServer() {
   });
 
   // ─── GET /api/simulacoes ──────────────────────────────────────────────────
+  // ── Selic Meta em tempo real (referência para a Calculadora) ────────────────
+  // Proxy pro dado público do Banco Central (série SGS 432 -- Selic Meta definida
+  // pelo COPOM). Cache em memória de 6h: a Selic muda em reuniões do COPOM
+  // (a cada ~45 dias), não faz sentido bater na API a cada carregamento de tela.
+  // Isso é só REFERÊNCIA pro colaborador (ex.: "linha X usa Selic + spread") --
+  // não define automaticamente a taxa de juros da simulação, que continua sendo
+  // negociada com o banco e digitada manualmente, como já era antes.
+  let cacheSelic: { valor: number; dataReferencia: string; atualizadoEm: number } | null = null;
+  const SELIC_CACHE_MS = 6 * 60 * 60 * 1000; // 6 horas
+
+  app.get("/api/mercado/selic", async (_req: Request, res: Response) => {
+    const agora = Date.now();
+    if (cacheSelic && (agora - cacheSelic.atualizadoEm) < SELIC_CACHE_MS) {
+      return res.json({ valor: cacheSelic.valor, dataReferencia: cacheSelic.dataReferencia, fonte: "cache", atualizadoEm: new Date(cacheSelic.atualizadoEm).toISOString() });
+    }
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const resp = await fetch(
+        "https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json",
+        { signal: controller.signal },
+      );
+      clearTimeout(timeout);
+      if (!resp.ok) throw new Error(`BCB respondeu ${resp.status}`);
+      const data: any = await resp.json();
+      const item = Array.isArray(data) ? data[0] : null;
+      const valor = item ? parseFloat(String(item.valor).replace(",", ".")) : NaN;
+      if (!item || Number.isNaN(valor)) throw new Error("Resposta do BCB em formato inesperado");
+      cacheSelic = { valor, dataReferencia: String(item.data), atualizadoEm: agora };
+      res.json({ valor, dataReferencia: String(item.data), fonte: "bcb", atualizadoEm: new Date(agora).toISOString() });
+    } catch (err: any) {
+      console.warn("[mercado/selic] Falha ao consultar BCB:", err?.message || err);
+      // Se já tivermos QUALQUER valor em cache (mesmo vencido), é melhor mostrar isso
+      // com aviso de desatualizado do que não mostrar nada -- calculadora nunca quebra.
+      if (cacheSelic) {
+        return res.json({ valor: cacheSelic.valor, dataReferencia: cacheSelic.dataReferencia, fonte: "cache_expirado", atualizadoEm: new Date(cacheSelic.atualizadoEm).toISOString() });
+      }
+      res.status(503).json({ error: "Selic indisponível no momento — consulte o valor atual diretamente com o banco.", indisponivel: true });
+    }
+  });
+
   app.get("/api/simulacoes", auth, async (req: Request, res: Response) => {
     try {
       const colaborador = (req as Request & { colaborador: any }).colaborador;
@@ -4528,8 +4569,15 @@ async function startServer() {
       const { rows } = await pool.query(
         `SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.email, e.telefone, e.whatsapp,
                 e.cidade, e.estado, e.status, e.cadastro_completo, e.bloqueado_operacional,
-                e.responsavel_nome, e.origem
+                COALESCE(NULLIF(e.responsavel_nome, ''), socio_principal.nome) AS responsavel_nome,
+                e.origem
            FROM empresas e
+           LEFT JOIN LATERAL (
+             SELECT nome FROM public.socios_empresa se
+              WHERE se.empresa_id = e.id AND COALESCE(se.ativo, true) = true
+              ORDER BY se.representante_legal DESC NULLS LAST, se.percentual_capital DESC NULLS LAST, se.created_at ASC
+              LIMIT 1
+           ) socio_principal ON true
           WHERE ${conditions.join(" AND ")}
           ORDER BY COALESCE(NULLIF(e.razao_social,''), e.nome_fantasia, e.cnpj, e.id::text) ASC
           LIMIT $${params.length}`,

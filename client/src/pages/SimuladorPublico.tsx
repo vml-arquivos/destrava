@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSelicMeta } from "@/hooks/useSelicMeta";
 import { gerarPdfSimulacao } from "@/lib/gerarPdfSimulacao";
 import { Link } from "wouter";
 import SEO from "@/components/SEO";
@@ -180,6 +181,7 @@ function calcParcela(valor: number, taxa: number, prazo: number) {
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function SimuladorPublico() {
   const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0);
+  const selicRef = useSelicMeta();
   const [perfil, setPerfil] = useState<"empresario" | "pf" | "captador" | null>(null);
   const [linhaInteresse, setLinhaInteresse] = useState<string | null>(null);
   const [tipoPessoa, setTipoPessoa] = useState<"empresa" | "pf">("empresa");
@@ -816,6 +818,12 @@ export default function SimuladorPublico() {
                       {tipoPessoa === "empresa" ? "Empresarial" : "Pessoal"}
                     </Badge>
                   </div>
+
+                  {produtoSelecionado.id === "pronampe" && selicRef && !selicRef.indisponivel && (
+                    <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mb-4">
+                      Referência oficial: Selic ({selicRef.valor.toFixed(2)}% a.a., {selicRef.dataReferencia}) + até 6% a.a. de spread. A taxa final depende do banco e da análise de crédito.
+                    </p>
+                  )}
 
                   <div className="space-y-6">
                     {/* Slider Valor */}

@@ -48,6 +48,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { useSelicMeta } from "@/hooks/useSelicMeta";
 import { useAuth } from "@/contexts/AuthContext";
 
 // ─── Formatadores ─────────────────────────────────────────────────────────────
@@ -228,15 +229,19 @@ interface LinhaCredito {
   carenciaMaxMeses?: number;
   valorMaxReais?: number;
   observacao: string;
+  /** Referência de composição de taxa (Selic + spread) só como contexto pro colaborador
+   *  -- não define a taxa da simulação, que continua sendo negociada com o banco e
+   *  digitada manualmente. */
+  spreadSobreSelic?: number;
 }
 
 // Regras reais, extraídas das próprias páginas de produto do site (Pronampe.tsx,
 // PeacFgi.tsx, Procred360.tsx) -- nunca inventadas. Onde o produto não divulga um
 // limite fixo (depende da instituição/análise), não colocamos número nenhum.
 const LINHAS_CREDITO: LinhaCredito[] = [
-  { nome: "PRONAMPE", prazoMaxMeses: 60, carenciaMaxMeses: 24, observacao: "Limite de crédito de até 50% do faturamento anual informado à Receita Federal (empresas até R$ 4,8 milhões/ano). Prazo de até 60 meses, carência de até 24 meses." },
+  { nome: "PRONAMPE", prazoMaxMeses: 60, carenciaMaxMeses: 24, spreadSobreSelic: 6, observacao: "Limite de crédito de até 50% do faturamento anual informado à Receita Federal (empresas até R$ 4,8 milhões/ano). Prazo de até 60 meses, carência de até 24 meses." },
   { nome: "PEAC FGI", prazoMaxMeses: 96, carenciaMaxMeses: 36, observacao: "Prazo total entre 12 e 96 meses, carência entre 12 e 36 meses. Condição final negociada com a instituição financeira." },
-  { nome: "ProCred 360", valorMaxReais: 360000, carenciaMaxMeses: 24, observacao: "Limite de crédito de até R$ 360 mil. Carência de até 24 meses para começar a amortizar." },
+  { nome: "ProCred 360", valorMaxReais: 360000, carenciaMaxMeses: 24, spreadSobreSelic: 5, observacao: "Limite de crédito de até R$ 360 mil. Carência de até 24 meses para começar a amortizar." },
   { nome: "Giro CAIXA Fácil", observacao: "Limite, taxa, CET e prazo definidos conforme análise e condições vigentes da instituição — sem valor fixo divulgado." },
   { nome: "FCO", observacao: "Prazo e carência dependem da linha e do projeto enquadrado na Programação FCO vigente e da análise do agente financeiro." },
   { nome: "FAMPE", observacao: "Condições (limite, prazo, carência) definidas conforme análise da instituição financeira parceira." },
@@ -579,6 +584,7 @@ function CamposEmprestimo({
   const valorExcedeLimite = Boolean(
     linhaAtiva?.valorMaxReais && parseBRL(form.valorCredito) > linhaAtiva.valorMaxReais
   );
+  const selic = useSelicMeta();
 
   return (
     <div className="space-y-4">
@@ -598,6 +604,9 @@ function CamposEmprestimo({
         {linhaAtiva && (
           <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mt-1">
             {linhaAtiva.observacao}
+            {linhaAtiva.spreadSobreSelic != null && selic && !selic.indisponivel && (
+              <> <strong>Referência de taxa: Selic ({selic.valor.toFixed(2)}% a.a., {selic.dataReferencia}) + {linhaAtiva.spreadSobreSelic}% a.a. de spread ≈ {(selic.valor + linhaAtiva.spreadSobreSelic).toFixed(2)}% a.a.</strong> Taxa final depende da análise do banco.</>
+            )}
           </p>
         )}
       </div>
@@ -1290,6 +1299,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
   const prazosDisponiveisComp = linhaAtivaComp?.prazoMaxMeses
     ? PRAZOS.filter((p) => p <= linhaAtivaComp.prazoMaxMeses!)
     : PRAZOS;
+  const selicComp = useSelicMeta();
   const vf = parseBRL(form.valorFiscal);
   const pi = parseFloat(form.pctImposto) || 0;
   const prazoNum = parseInt(form.prazo) || 24;
@@ -1384,6 +1394,9 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
             {linhaAtivaComp && (
               <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 mt-1">
                 {linhaAtivaComp.observacao}
+                {linhaAtivaComp.spreadSobreSelic != null && selicComp && !selicComp.indisponivel && (
+                  <> <strong>Referência de taxa: Selic ({selicComp.valor.toFixed(2)}% a.a., {selicComp.dataReferencia}) + {linhaAtivaComp.spreadSobreSelic}% a.a. de spread ≈ {(selicComp.valor + linhaAtivaComp.spreadSobreSelic).toFixed(2)}% a.a.</strong> Taxa final depende da análise do banco.</>
+                )}
               </p>
             )}
           </div>
