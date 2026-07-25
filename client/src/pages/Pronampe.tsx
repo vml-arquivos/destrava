@@ -42,7 +42,7 @@ const faqs = [
   },
   {
     q: "Qual o prazo de pagamento?",
-    a: "O prazo varia por instituição e modalidade. A CAIXA divulga prazo total de até 60 meses, com carência de até 24 meses, sujeito às condições vigentes e à aprovação de crédito.",
+    a: "As regras vigentes desde a Medida Provisória nº 1.355/2026 (maio de 2026) ampliaram o programa: prazo total de até 96 meses, com carência de até 24 meses. As condições exatas dependem da instituição financeira e da análise de crédito.",
   },
   {
     q: "Quais garantias são exigidas?",
@@ -154,10 +154,10 @@ export default function Pronampe() {
               <Calendar className="h-12 w-12 text-primary mx-auto mb-4" />
               <h3 className="font-bold text-lg mb-2">Prazo</h3>
               <p className="text-2xl font-bold text-primary mb-2">
-                Até 60 meses*
+                Até 96 meses*
               </p>
               <p className="text-sm text-muted-foreground">
-                *Condição divulgada pela CAIXA; carência de até 24 meses
+                *Regras vigentes desde maio/2026; carência de até 24 meses
               </p>
             </div>
             <div className="bg-card p-6 rounded-lg border border-border text-center">

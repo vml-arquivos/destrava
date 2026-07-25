@@ -253,9 +253,9 @@ interface LinhaCredito {
 // PeacFgi.tsx, Procred360.tsx) -- nunca inventadas. Onde o produto não divulga um
 // limite fixo (depende da instituição/análise), não colocamos número nenhum.
 const LINHAS_CREDITO: LinhaCredito[] = [
-  { nome: "PRONAMPE", prazoMaxMeses: 60, carenciaMaxMeses: 24, spreadSobreSelic: 6, observacao: "Limite de crédito de até 50% do faturamento anual informado à Receita Federal (empresas até R$ 4,8 milhões/ano). Prazo de até 60 meses, carência de até 24 meses." },
+  { nome: "PRONAMPE", prazoMaxMeses: 96, carenciaMaxMeses: 24, valorMaxReais: 500000, spreadSobreSelic: 6, observacao: "Regras vigentes desde a MP 1.355/2026 (maio/2026): limite de crédito de até 50% do faturamento anual informado à Receita Federal, respeitado o teto de R$ 500 mil por empresa (empresas até R$ 4,8 milhões/ano de faturamento). Prazo de até 96 meses, carência de até 24 meses." },
   { nome: "PEAC FGI", prazoMaxMeses: 96, carenciaMaxMeses: 36, observacao: "Prazo total entre 12 e 96 meses, carência entre 12 e 36 meses. Condição final negociada com a instituição financeira." },
-  { nome: "ProCred 360", valorMaxReais: 360000, carenciaMaxMeses: 24, spreadSobreSelic: 5, observacao: "Limite de crédito de até R$ 360 mil. Carência de até 24 meses para começar a amortizar." },
+  { nome: "ProCred 360", prazoMaxMeses: 96, valorMaxReais: 180000, carenciaMaxMeses: 24, spreadSobreSelic: 5, observacao: "Regras vigentes desde a MP 1.355/2026 (maio/2026): voltado a empresas com faturamento anual de até R$ 360 mil. Limite de crédito de até 50% do faturamento (60% para empresas lideradas por mulheres), respeitado o teto de R$ 180 mil por empresa. Prazo de até 96 meses, carência de até 24 meses." },
   { nome: "Giro CAIXA Fácil", observacao: "Limite, taxa, CET e prazo definidos conforme análise e condições vigentes da instituição — sem valor fixo divulgado." },
   { nome: "FCO", observacao: "Prazo e carência dependem da linha e do projeto enquadrado na Programação FCO vigente e da análise do agente financeiro." },
   { nome: "FAMPE", observacao: "Condições (limite, prazo, carência) definidas conforme análise da instituição financeira parceira." },
