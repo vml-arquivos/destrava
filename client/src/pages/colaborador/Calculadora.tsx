@@ -104,7 +104,7 @@ async function armazenarPdfSimulacao(
 
 // ─── Cálculos ─────────────────────────────────────────────────────────────────
 
-interface ResultadoCalculo {
+export interface ResultadoCalculo {
   parcelaMensal: number;
   totalFinanciamento: number;
   totalJuros: number;
@@ -115,6 +115,8 @@ interface ResultadoCalculo {
   taxaAnualEquiv: number;
   cetMensal: number;
   cetAnual: number;
+  carenciaMeses: number;
+  mesesAmortizacao: number;
 }
 
 function calcularCET(valorCredito: number, prazo: number, parcelaMensal: number): number {
@@ -132,23 +134,32 @@ function calcularCET(valorCredito: number, prazo: number, parcelaMensal: number)
   return cet; // Retorna taxa decimal mensal
 }
 
-function calcular(
+export function calcular(
   valorCredito: number,
   prazo: number,
   taxaMensal: number,
   valorFiscal: number,
   pctImposto: number,
-  pctComissao: number
+  pctComissao: number,
+  carenciaMeses: number = 0
 ): ResultadoCalculo | null {
   if (!valorCredito || !prazo || !taxaMensal) return null;
 
   const taxa = taxaMensal / 100;
+  const carencia = Math.max(0, Math.min(carenciaMeses || 0, prazo - 1)); // nunca consome o prazo inteiro
+  const mesesAmortizacao = prazo - carencia;
+
+  // Durante a carência, os juros incidem e capitalizam sobre o principal (prática
+  // padrão bancária) -- o saldo devedor cresce até começar a amortizar. Com
+  // carência=0 isso é sempre igual a valorCredito, preservando o cálculo atual
+  // exatamente como já era antes desta mudança.
+  const principalPosCarencia = valorCredito * Math.pow(1 + taxa, carencia);
 
   const parcelaMensal =
-    (valorCredito * taxa * Math.pow(1 + taxa, prazo)) /
-    (Math.pow(1 + taxa, prazo) - 1);
+    (principalPosCarencia * taxa * Math.pow(1 + taxa, mesesAmortizacao)) /
+    (Math.pow(1 + taxa, mesesAmortizacao) - 1);
 
-  const totalFinanciamento = parcelaMensal * prazo;
+  const totalFinanciamento = parcelaMensal * mesesAmortizacao;
   const totalJuros = totalFinanciamento - valorCredito;
 
   const impostoValor = valorFiscal > 0 && pctImposto > 0
@@ -167,7 +178,7 @@ function calcular(
   // CET considera apenas o valor líquido afetado por imposto/despesas financeiras da operação.
   // A comissão fica destacada separadamente e não reduz o valor liberado nesta simulação.
   const valorLiberado = Math.max(valorCredito - impostoValor, 1);
-  const cetMensalDecimal = calcularCET(valorLiberado, prazo, parcelaMensal);
+  const cetMensalDecimal = calcularCET(valorLiberado, mesesAmortizacao, parcelaMensal);
   const cetMensal = cetMensalDecimal * 100;
   const cetAnual = (Math.pow(1 + cetMensalDecimal, 12) - 1) * 100;
 
@@ -182,6 +193,8 @@ function calcular(
     taxaAnualEquiv,
     cetMensal,
     cetAnual,
+    carenciaMeses: carencia,
+    mesesAmortizacao,
   };
 }
 
@@ -194,6 +207,7 @@ interface FormBase {
   cpfCnpj: string;
   valorCredito: string;
   prazo: string;
+  carencia: string;
   taxaJuros: string;
   comissao: string;
   banco: string;
@@ -265,6 +279,7 @@ const formBaseInicial: FormBase = {
   cpfCnpj: "",
   valorCredito: "",
   prazo: "24",
+  carencia: "0",
   taxaJuros: "",
   comissao: "",
   banco: "",
@@ -581,6 +596,9 @@ function CamposEmprestimo({
   const prazosDisponiveis = linhaAtiva?.prazoMaxMeses
     ? PRAZOS.filter((p) => p <= linhaAtiva.prazoMaxMeses!)
     : PRAZOS;
+  const prazoAtual = parseInt(form.prazo) || 0;
+  const tetoCarencia = Math.min(linhaAtiva?.carenciaMaxMeses ?? 24, Math.max(prazoAtual - 1, 0));
+  const carenciasDisponiveis = [0, 3, 6, 12, 18, 24, 36].filter((c) => c <= tetoCarencia);
   const valorExcedeLimite = Boolean(
     linhaAtiva?.valorMaxReais && parseBRL(form.valorCredito) > linhaAtiva.valorMaxReais
   );
@@ -649,6 +667,19 @@ function CamposEmprestimo({
           {linhaAtiva?.prazoMaxMeses && (
             <p className="text-xs text-muted-foreground">Limitado a {linhaAtiva.prazoMaxMeses} meses nessa linha{linhaAtiva.carenciaMaxMeses ? ` (carência de até ${linhaAtiva.carenciaMaxMeses} meses)` : ""}.</p>
           )}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Carência (meses) <span className="text-muted-foreground text-xs font-normal">(opcional — sem pagamento no início)</span></Label>
+          <Select value={form.carencia} onValueChange={(v) => set("carencia", v)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {carenciasDisponiveis.map((c) => (
+                <SelectItem key={c} value={String(c)}>{c === 0 ? "Sem carência" : `${c} meses`}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">Durante a carência os juros incidem e capitalizam sobre o saldo; a amortização começa depois, sobre os {Math.max(parseInt(form.prazo) - (parseInt(form.carencia) || 0), 1)} meses restantes.</p>
         </div>
 
         <div className="space-y-1.5">
@@ -747,7 +778,7 @@ function CenarioComImposto({ initialData }: { initialData?: { nome: string; empr
     const vf = parseBRL(form.valorFiscal);
     const pi = parseFloat(form.pctImposto) || 0;
     const pc = parseFloat(form.comissao) || 0;
-    setResultado(calcular(vc, prazo, taxa, vf, pi, pc));
+    setResultado(calcular(vc, prazo, taxa, vf, pi, pc, parseInt(form.carencia) || 0));
     setSalvo(false);
   }
 
@@ -975,7 +1006,7 @@ function CenarioSemImposto({ initialData }: { initialData?: { nome: string; empr
     const prazo = parseInt(form.prazo);
     const taxa = parseFloat(form.taxaJuros);
     const pc = parseFloat(form.comissao) || 0;
-    setResultado(calcular(vc, prazo, taxa, 0, 0, pc));
+    setResultado(calcular(vc, prazo, taxa, 0, 0, pc, parseInt(form.carencia) || 0));
     setSalvo(false);
   }
 
@@ -1124,6 +1155,7 @@ interface FormComparativo {
   cpfCnpj: string;
   valorCredito: string;
   prazo: string;
+  carencia: string;
   comissao: string;
   banco: string;
   linhaCredito: string;
@@ -1156,7 +1188,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
     empresa: initialData?.empresa || "",
     telefone: initialData?.telefone ? formatarTelefone(initialData.telefone.replace(/\D/g, "")) : "",
     cpfCnpj: initialData?.cpf_cnpj || "",
-    valorCredito: "", prazo: "24", comissao: "",
+    valorCredito: "", prazo: "24", carencia: "0", comissao: "",
     banco: "", linhaCredito: "", observacoes: "",
     taxaA: "", valorFiscal: "", pctImposto: "",
     taxaB: "",
@@ -1184,8 +1216,8 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
     const taxaB = parseFloat(form.taxaB) || 0;
 
     if (vc > 0 && prazo > 0) {
-      setResA(taxaA > 0 ? calcular(vc, prazo, taxaA, vf, pi, pc) : null);
-      setResB(taxaB > 0 ? calcular(vc, prazo, taxaB, 0, 0, pc) : null);
+      setResA(taxaA > 0 ? calcular(vc, prazo, taxaA, vf, pi, pc, parseInt(form.carencia) || 0) : null);
+      setResB(taxaB > 0 ? calcular(vc, prazo, taxaB, 0, 0, pc, parseInt(form.carencia) || 0) : null);
     } else {
       setResA(null);
       setResB(null);
@@ -1282,7 +1314,7 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
   function handleLimpar() {
     setForm({
       nome: "", empresa: "", telefone: "", cpfCnpj: "",
-      valorCredito: "", prazo: "24", comissao: "",
+      valorCredito: "", prazo: "24", carencia: "0", comissao: "",
       banco: "", linhaCredito: "", observacoes: "",
       taxaA: "", valorFiscal: "", pctImposto: "",
       taxaB: "",
@@ -1299,6 +1331,9 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
   const prazosDisponiveisComp = linhaAtivaComp?.prazoMaxMeses
     ? PRAZOS.filter((p) => p <= linhaAtivaComp.prazoMaxMeses!)
     : PRAZOS;
+  const prazoAtualComp = parseInt(form.prazo) || 0;
+  const tetoCarenciaComp = Math.min(linhaAtivaComp?.carenciaMaxMeses ?? 24, Math.max(prazoAtualComp - 1, 0));
+  const carenciasDisponiveisComp = [0, 3, 6, 12, 18, 24, 36].filter((c) => c <= tetoCarenciaComp);
   const selicComp = useSelicMeta();
   const vf = parseBRL(form.valorFiscal);
   const pi = parseFloat(form.pctImposto) || 0;
@@ -1421,6 +1456,17 @@ function CenarioComparativo({ initialData }: { initialData?: { nome: string; emp
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {prazosDisponiveisComp.map(p => <SelectItem key={p} value={String(p)}>{p}m</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Carência */}
+          <div className="col-span-1 space-y-1.5">
+            <Label>Carência (meses) <span className="text-muted-foreground text-xs font-normal">(opcional)</span></Label>
+            <Select value={form.carencia} onValueChange={v => set("carencia", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {carenciasDisponiveisComp.map(c => <SelectItem key={c} value={String(c)}>{c === 0 ? "Sem carência" : `${c}m`}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

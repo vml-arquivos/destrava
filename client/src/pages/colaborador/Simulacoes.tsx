@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch, getToken } from "@/lib/api";
 import { toast } from "sonner";
+import { gerarArquivoPdfSimulacao, type DadosPdf } from "@/lib/gerarPdfSimulacao";
+import { calcular } from "./Calculadora";
 
 type SimulacaoColaborador = {
   id: string;
@@ -125,6 +127,62 @@ export default function Simulacoes() {
     }
   }
 
+  async function regenerarEAbrirPdf(sim: SimulacaoColaborador) {
+    const valor = Number(sim.valor_solicitado);
+    const prazo = Number(sim.quantidade_parcelas);
+    const taxa = Number(sim.taxa_juros_mensal);
+    if (!valor || !prazo || !taxa) {
+      toast.error("Esta simulação não tem dados suficientes salvos para recriar o PDF.");
+      return;
+    }
+    const valorFiscal = Number(sim.imposto_percentual) > 0 ? valor : 0; // aproximação: sem valor fiscal separado guardado, usa o próprio valor solicitado como base quando havia imposto
+    const resultado = calcular(valor, prazo, taxa, valorFiscal, Number(sim.imposto_percentual) || 0, Number(sim.comissao_percentual) || 0);
+    if (!resultado) {
+      toast.error("Não foi possível recalcular esta simulação para gerar o PDF.");
+      return;
+    }
+    const dados: DadosPdf = {
+      cliente: {
+        nome: sim.cliente_nome || "",
+        empresa: sim.cliente_empresa || undefined,
+        cpfCnpj: sim.cliente_cpf_cnpj || undefined,
+        telefone: sim.cliente_telefone || undefined,
+        banco: sim.banco || undefined,
+        linhaCredito: sim.linha_credito || undefined,
+        observacoes: sim.observacoes || undefined,
+      },
+      cenarioA: {
+        taxa,
+        valorCredito: valor,
+        prazo,
+        parcela: resultado.parcelaMensal,
+        totalFinanciamento: resultado.totalFinanciamento,
+        totalJuros: resultado.totalJuros,
+        impostoValor: resultado.impostoValor,
+        comissaoValor: resultado.comissaoValor,
+        custoTotalOperacao: resultado.custoTotalOperacao,
+        cenario: Number(sim.imposto_percentual) > 0 ? "com_imposto" : "sem_imposto",
+        taxaAnualEquiv: resultado.taxaAnualEquiv,
+        cetMensal: resultado.cetMensal,
+        cetAnual: resultado.cetAnual,
+      },
+      modo: "simples",
+      agenteNome: user?.nome,
+    };
+    const { blob, base64, nomeArquivo } = await gerarArquivoPdfSimulacao(dados);
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener,noreferrer");
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    toast.success("PDF recriado a partir dos dados salvos da simulação.");
+    // Best-effort: guarda pra não precisar recriar de novo da próxima vez.
+    try {
+      await apiFetch(`/api/simulacoes/${sim.id}/pdf`, {
+        method: "POST",
+        body: JSON.stringify({ nome_arquivo: nomeArquivo, pdf_base64: base64, metadata: { regenerado: true } }),
+      });
+    } catch { /* silencioso -- já abrimos o PDF pro colaborador, isso é só housekeeping */ }
+  }
+
   async function reimprimirPdf(id: string) {
     try {
       const token = getToken();
@@ -133,10 +191,14 @@ export default function Simulacoes() {
       });
 
       if (!res.ok) {
-        const msg = res.status === 404
-          ? "Esta simulação ainda não possui PDF armazenado. Salve novamente pela Calculadora para gerar o PDF permanente."
-          : "Não foi possível recuperar o PDF desta simulação.";
-        toast.error(msg);
+        // Não existe (ou falhou) o PDF salvo -- em vez de só avisar que sumiu, recria
+        // na hora a partir dos dados da própria simulação (sempre estão no banco).
+        const sim = simulacoes.find((s) => s.id === id);
+        if (sim) {
+          await regenerarEAbrirPdf(sim);
+          return;
+        }
+        toast.error("Não foi possível recuperar nem recriar o PDF desta simulação.");
         return;
       }
 
@@ -146,6 +208,16 @@ export default function Simulacoes() {
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
       console.error(err);
+      // Mesmo com erro de rede na busca do PDF salvo, tenta recriar antes de desistir.
+      const sim = simulacoes.find((s) => s.id === id);
+      if (sim) {
+        try {
+          await regenerarEAbrirPdf(sim);
+          return;
+        } catch (err2) {
+          console.error(err2);
+        }
+      }
       toast.error("Erro ao abrir PDF da simulação.");
     }
   }
