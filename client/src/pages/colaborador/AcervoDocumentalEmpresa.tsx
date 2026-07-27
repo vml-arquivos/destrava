@@ -4,7 +4,7 @@ import { ArrowLeft, Building2, FileText, ShieldCheck } from "lucide-react";
 import Layout from "./Layout";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
-import AcervoDocumentalWorkspace from "@/components/documentos/AcervoDocumentalWorkspace";
+import DocumentosEntidade from "@/components/documentos/DocumentosEntidade";
 import { formatCNPJ } from "@/utils/cnpj";
 
 type EmpresaResumo = {
@@ -100,11 +100,12 @@ export default function AcervoDocumentalEmpresa() {
           </div>
 
           {empresaId && (
-            <AcervoDocumentalWorkspace
+            <DocumentosEntidade
               entidadeTipo="empresa"
               entidadeId={empresaId}
               empresaId={empresaId}
               tiposPermitidos={TIPOS_EMPRESA}
+              titulo={empresa ? `Acervo Documental — ${empresa.razao_social || empresa.nome_fantasia || ""}` : "Acervo Documental"}
               permitirUpload
               permitirExcluir
               permitirValidar
