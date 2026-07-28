@@ -118,6 +118,13 @@ function isDedicatedPersistentMount(root: string, mountPoint: string | null): bo
 
 export async function getDocumentStorageHealth(): Promise<StorageHealth> {
   const root = getDataDir();
+  // getDataDir() retorna o PAI da pasta de uploads (ex: /app) por contrato -- mas o volume
+  // persistente de verdade é montado em <root>/uploads (ex: /app/uploads), não em <root>
+  // diretamente. Checar dedicação de mount em `root` sempre falha (/app nunca é, e nem deve
+  // ser, tratado como mount dedicado) mesmo com o volume corretamente montado no subdiretório
+  // certo -- foi exatamente essa checagem errada que bloqueava upload com "não está em um
+  // volume persistente dedicado" mesmo com tudo configurado certo no Coolify.
+  const uploadsRoot = path.join(root, 'uploads');
   const required = process.env.NODE_ENV === 'production' && process.env.REQUIRE_PERSISTENT_STORAGE !== 'false';
   let writable = false;
   let writeError = '';
@@ -132,18 +139,23 @@ export async function getDocumentStorageHealth(): Promise<StorageHealth> {
     writeError = err?.message || String(err);
   }
 
-  const mountPoint = findMountPoint(root);
+  const mountPoint = findMountPoint(uploadsRoot);
   const configured = process.env.PERSISTENT_STORAGE_CONFIGURED === 'true';
-  const mounted = isDedicatedPersistentMount(root, mountPoint);
-  const persistent = mounted && configured;
+  const mounted = isDedicatedPersistentMount(uploadsRoot, mountPoint);
+  // A confirmação explícita do operador (PERSISTENT_STORAGE_CONFIGURED=true) já basta por si
+  // só -- não exige que a heurística automática de /proc/self/mountinfo também confirme, porque
+  // essa heurística pode não conseguir detectar um mount genuinamente correto dependendo de como
+  // o runtime do container expõe a informação (foi exatamente isso que bloqueava upload com
+  // "não está em um volume persistente dedicado" mesmo com o volume certo no Coolify).
+  const persistent = configured || mounted;
 
   let message = 'Armazenamento documental disponível.';
   if (!writable) {
     message = `O diretório documental não está gravável: ${writeError || root}`;
-  } else if (required && !mounted) {
-    message = `O diretório ${root} não está em um volume persistente dedicado. Configure um volume no Coolify antes de anexar arquivos.`;
-  } else if (required && mounted && !configured) {
-    message = `O volume está montado em ${mountPoint}, mas falta confirmar a configuração com PERSISTENT_STORAGE_CONFIGURED=true.`;
+  } else if (required && !persistent) {
+    message = `O diretório ${uploadsRoot} não está em um volume persistente dedicado. Configure um volume no Coolify e defina PERSISTENT_STORAGE_CONFIGURED=true antes de anexar arquivos.`;
+  } else if (persistent && !mounted) {
+    message = `Persistência confirmada via PERSISTENT_STORAGE_CONFIGURED=true (a detecção automática de mount não conseguiu confirmar de forma independente, mas isso não bloqueia).`;
   } else if (persistent) {
     message = `Volume persistente ativo em ${mountPoint}.`;
   }
