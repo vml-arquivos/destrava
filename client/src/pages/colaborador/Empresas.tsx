@@ -478,6 +478,7 @@ function EmpresaDadosWorkspace({
   sincronizando,
   onSincronizar,
   onEditar,
+  onEditarSocio,
   onNovaSimulacao,
   onNovoContrato,
   onIniciarConversa,
@@ -491,6 +492,7 @@ function EmpresaDadosWorkspace({
   sincronizando: boolean;
   onSincronizar?: () => void;
   onEditar?: () => void;
+  onEditarSocio?: (socio: any) => void;
   onNovaSimulacao?: () => void;
   onNovoContrato?: () => void;
   onIniciarConversa?: () => void;
@@ -670,6 +672,15 @@ function EmpresaDadosWorkspace({
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-sm font-black text-slate-900 truncate">{s.nome || "Nome não informado"}</p>
                           <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${pendencias.length ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{pendencias.length ? `${pendencias.length} pendência(s)` : "Completo"}</span>
+                          {onEditarSocio && (
+                            <button
+                              type="button"
+                              onClick={() => onEditarSocio(s)}
+                              className="ml-auto rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100"
+                            >
+                              Editar
+                            </button>
+                          )}
                         </div>
                         <div className="flex flex-wrap gap-1.5 mt-1">
                           {s.qualificacao_socio && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700">{s.qualificacao_socio}</span>}
@@ -2061,6 +2072,7 @@ export default function Empresas() {
                         sincronizando={sincronizando}
                         onSincronizar={isFeatureEnabled("empresa-action-atualizar-cadastro") ? () => sincronizarDados(selecionada) : undefined}
                         onEditar={isFeatureEnabled("empresa-action-editar") ? () => abrirEditar(selecionada) : undefined}
+                        onEditarSocio={isFeatureEnabled("empresa-action-editar") ? abrirEdicaoSocio : undefined}
                         onNovaSimulacao={isFeatureEnabled("empresa-action-nova-simulacao") && isFeatureEnabled("calculadora") ? () => {
                           sessionStorage.setItem("calculadora_empresa", JSON.stringify({
                             nome: selecionada.responsavel_nome || selecionada.razao_social,

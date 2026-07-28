@@ -53,7 +53,7 @@ import { contactInputSchema, loginInputSchema, leadInputSchema, validateBody } f
 import { closeChromium, launchChromium } from "./services/chromiumLauncher";
 import { generateBrandedPdfBuffer } from "./services/brandedPdfLayout";
 import { generateFollowupMessage, generateLeadRecommendations, generateLeadSummary, qualifyTriagemLead } from "./services/aiService";
-import { getDataDir, resolveDocumentPath, saveDocumentBuffer } from "./services/documentStorage";
+import { getDataDir, resolveDocumentPath, saveDocumentBuffer, getDocumentStorageHealth } from "./services/documentStorage";
 import { calcularInteligencia360 } from "./services/inteligencia360Service";
 import { calcularPropostaBancaria } from "./services/propostaBancariaService";
 import { gerarRelatorioTecnico } from "./services/relatorioTecnicoEmpresaService";
@@ -2085,10 +2085,40 @@ async function startServer() {
   } catch (err: any) { console.warn('[startup] Migration 075:', err?.message); }
   // ─────────────────────────────────────────────────────────────────────────────
 
+  // ── Diagnóstico de armazenamento persistente -- roda no boot e fica visível direto
+  //    no log de deploy do Coolify. Resolve o problema de "descobrir só depois que os
+  //    arquivos já sumiram" -- agora dá pra ver ANTES se o caminho escolhido é mesmo
+  //    o volume persistente ou se caiu num fallback que não sobrevive a redeploy.
+  try {
+    const storageHealth = await getDocumentStorageHealth();
+    const nivel = storageHealth.persistent ? 'log' : 'warn';
+    console[nivel](
+      `[startup] Armazenamento de documentos: raiz="${storageHealth.root}" `
+      + `gravável=${storageHealth.writable} persistente=${storageHealth.persistent} `
+      + `mount="${storageHealth.mountPoint || 'não detectado'}" -- ${storageHealth.message}`
+    );
+    if (!storageHealth.persistent) {
+      console.warn('[startup] ATENÇÃO: se isso não mudar, arquivos enviados agora podem não sobreviver ao próximo redeploy. Confira GET /api/sistema/storage-health.');
+    }
+  } catch (err: any) { console.warn('[startup] Falha ao checar saúde do armazenamento:', err?.message); }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // body parser, CORS e no-cache já registrados no topo de startServer()
   app.use('/api/documentos', documentosRouter);
   app.use('/api/orcamentos', auth, createOrcamentosOperacoesRouter(pool));
   app.use('/api/automation', createAutomationEngineRouter(pool));
+
+  // Endpoint de diagnóstico -- pra confirmar em produção, a qualquer momento (não só no
+  // boot), se o armazenamento de documentos está apontando pra um volume que realmente
+  // sobrevive a redeploy. Não exige acesso a log de servidor pra investigar o problema.
+  app.get('/api/sistema/storage-health', auth, async (_req: Request, res: Response) => {
+    try {
+      const health = await getDocumentStorageHealth();
+      res.status(health.persistent ? 200 : 503).json(health);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao checar saúde do armazenamento', message: err?.message });
+    }
+  });
 
   // ─── Health check ──────────────────────────────────────────────────────────
   app.get("/api/health", async (_req: Request, res: Response) => {

@@ -34,14 +34,31 @@ export function getDataDir(): string {
   // priorizamos o volume realmente montado para não bloquear upload nem perder arquivos.
   // Retorna o PAI do volume (/app), não o volume em si -- todo chamador desta função
   // (interno e externo) sempre completa o caminho com 'uploads/...' por conta própria.
+  //
+  // IMPORTANTE: a detecção de "é mesmo um mount dedicado" (via /proc/self/mountinfo) e a
+  // flag PERSISTENT_STORAGE_CONFIGURED são só SINAIS informativos agora, não um portão
+  // obrigatório -- se qualquer um dos dois falhar silenciosamente no runtime real do
+  // Coolify (não conseguir ler mountinfo, ou a env var não estar setada), o sistema
+  // continuava caindo pra DATA_DIR e perdendo arquivo a cada redeploy, mesmo com
+  // /app/uploads existindo e sendo gravável. Confiamos em /app/uploads sempre que ele
+  // existir e DATA_DIR apontar pra outro lugar, a menos que alguém desative isso
+  // explicitamente via DOCUMENT_STORAGE_ALLOW_COOLIFY_UPLOADS_FALLBACK=false.
   if (process.env.DOCUMENT_STORAGE_ALLOW_COOLIFY_UPLOADS_FALLBACK !== 'false'
     && configuredPath
     && normalizePath(configuredPath) !== normalizePath(coolifyUploads)
     && fs.existsSync(coolifyUploads)) {
     const mountPoint = findMountPoint(coolifyUploads);
-    if (isDedicatedPersistentMount(coolifyUploads, mountPoint) || process.env.PERSISTENT_STORAGE_CONFIGURED === 'true') {
-      return path.dirname(coolifyUploads);
+    const dedicado = isDedicatedPersistentMount(coolifyUploads, mountPoint);
+    const confirmadoPorEnv = process.env.PERSISTENT_STORAGE_CONFIGURED === 'true';
+    if (!dedicado && !confirmadoPorEnv) {
+      console.warn(
+        `[documentStorage] Usando /app/uploads mesmo sem confirmação de mount dedicado `
+        + `(mountPoint detectado: ${mountPoint || 'nenhum'}, PERSISTENT_STORAGE_CONFIGURED=${process.env.PERSISTENT_STORAGE_CONFIGURED || 'não definido'}). `
+        + `DATA_DIR estava configurado para "${configured}", que seria usado no lugar se isso `
+        + `estivesse desativado -- verifique GET /api/sistema/storage-health se arquivos continuarem sumindo após redeploy.`
+      );
     }
+    return path.dirname(coolifyUploads);
   }
 
   return path.resolve(configured || DEFAULT_DATA_DIR);
