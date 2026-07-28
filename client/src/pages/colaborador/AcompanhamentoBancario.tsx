@@ -290,6 +290,17 @@ function labelStatus(status?: string | null): string {
     .replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
+/** Badge de situação de uma linha da tabela -- prioriza o status REAL do
+ *  acompanhamento (ex: 'encerrado') sobre o status_semana (situação financeira
+ *  da última semana). Sem isso, um acompanhamento encerrado continuava exibindo
+ *  o último status semanal (ex: 'Em dia'), parecendo ainda ativo. */
+function situacaoBadgeInfo(row: { status?: string | null; status_semana?: string | null }): { classe: string; label: string } {
+  if (String(row.status || "").toLowerCase() === "encerrado") {
+    return { classe: "bg-slate-100 text-slate-600 border-slate-300", label: "Encerrado" };
+  }
+  return { classe: statusBadge(row.status_semana), label: labelStatus(row.status_semana) };
+}
+
 
 function statusInteligenciaLabel(value?: string | null): string {
   const mapa: Record<string, string> = {
@@ -1975,6 +1986,7 @@ export default function AcompanhamentoBancario() {
 
   const renderActionButtons = (row: Acompanhamento) => {
     const whats = whatsappUrl(row);
+    const encerradoJa = String(row.status || "").toLowerCase() === "encerrado";
     return (
       <div className="flex flex-wrap items-center gap-1.5">
         <button
@@ -1985,21 +1997,27 @@ export default function AcompanhamentoBancario() {
           className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
           onClick={() => abrirEditarAcompanhamento(row)}
         >Editar</button>
-        <button
-          className="rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
-          disabled={saving}
-          onClick={() => sincronizarCadastroEmpresa(row)}
-          title="Puxa para este acompanhamento os mesmos dados cadastrais já atualizados no módulo Empresas"
-        >Atualizar cadastro</button>
-        <button
-          className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
-          onClick={() => abrirAtualizacao(row)}
-        >Atualizar semana</button>
-        <button
-          className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
-          onClick={() => adicionarOutroBanco(row)}
-          title="Criar acompanhamento separado para outro banco da mesma empresa"
-        >+ Banco</button>
+        {!encerradoJa && (
+          <button
+            className="rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
+            disabled={saving}
+            onClick={() => sincronizarCadastroEmpresa(row)}
+            title="Puxa para este acompanhamento os mesmos dados cadastrais já atualizados no módulo Empresas"
+          >Atualizar cadastro</button>
+        )}
+        {!encerradoJa && (
+          <button
+            className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+            onClick={() => abrirAtualizacao(row)}
+          >Atualizar semana</button>
+        )}
+        {!encerradoJa && (
+          <button
+            className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
+            onClick={() => adicionarOutroBanco(row)}
+            title="Criar acompanhamento separado para outro banco da mesma empresa"
+          >+ Banco</button>
+        )}
         {whats && (
           <a
             className="rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 transition hover:bg-green-100"
@@ -2027,14 +2045,23 @@ export default function AcompanhamentoBancario() {
           className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
           onClick={() => abrirRelatorio(row)}
         >Gerar relatório</button>
-        <button
-          className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50"
-          onClick={() => prorrogar(row.id)}
-        >Prorrogar</button>
-        <button
-          className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100"
-          onClick={() => encerrar(row.id)}
-        >Encerrar</button>
+        {!encerradoJa && (
+          <button
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50"
+            onClick={() => prorrogar(row.id)}
+          >Prorrogar</button>
+        )}
+        {!encerradoJa && (
+          <button
+            className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100"
+            onClick={() => encerrar(row.id)}
+          >Encerrar</button>
+        )}
+        {encerradoJa && (
+          <span className="rounded-lg border border-slate-300 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500">
+            Encerrado{row.observacoes_finais ? ` — ${row.observacoes_finais}` : ""}
+          </span>
+        )}
       </div>
     );
   };
@@ -2210,8 +2237,8 @@ export default function AcompanhamentoBancario() {
                             {moneyBR(saldo)}
                           </td>
                           <td className="px-3 py-4">
-                            <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${statusBadge(row.status_semana)}`}>
-                              {labelStatus(row.status_semana)}
+                            <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${situacaoBadgeInfo(row).classe}`}>
+                              {situacaoBadgeInfo(row).label}
                             </span>
                           </td>
                           <td className="px-3 py-4 text-gray-700">{row.responsavel_nome || "-"}</td>
@@ -2249,8 +2276,8 @@ export default function AcompanhamentoBancario() {
                         <h3 className="font-semibold leading-snug text-gray-900">{row.nome_empresa || "-"}</h3>
                         <p className="mt-1 text-xs text-gray-500">{row.cnpj || "-"} · {row.banco_observado || "-"}</p>
                       </div>
-                      <span className={`shrink-0 rounded-full border px-2 py-1 text-xs font-medium ${statusBadge(row.status_semana)}`}>
-                        {labelStatus(row.status_semana)}
+                      <span className={`shrink-0 rounded-full border px-2 py-1 text-xs font-medium ${situacaoBadgeInfo(row).classe}`}>
+                        {situacaoBadgeInfo(row).label}
                       </span>
                     </div>
                     {pendente && (
