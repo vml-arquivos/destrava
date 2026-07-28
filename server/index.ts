@@ -1060,7 +1060,7 @@ async function startServer() {
           "https://brasilapi.com.br",
           "https://chatwoot.permupay.com.br",
         ],
-        frameSrc: ["'self'", "https://www.google.com", "https://maps.google.com", "https://chatwoot.permupay.com.br"],
+        frameSrc: ["'self'", "blob:", "https://www.google.com", "https://maps.google.com", "https://chatwoot.permupay.com.br"],
         workerSrc: ["'self'", "blob:"],
         ...(process.env.NODE_ENV === "production" ? { upgradeInsecureRequests: [] } : {}),
       },
