@@ -35,6 +35,7 @@ export interface DadosContratoAssessoria {
   valor_contrato: number;    // valor de referência — base de todos os cálculos
   taxa_comissao: number;     // % comissão sobre crédito liberado (ex: 10)
   taxa_desistencia: number;  // % multa Cláusula 4.3 (padrão: 5)
+  taxa_inadimplencia?: number;  // % multa Cláusula 8 (padrão: mesmo valor de taxa_desistencia se não vier)
   custeio_mensal: number;    // R$ custeio Cláusula 5.7-V (padrão: 250)
   // Meta
   data_assinatura: string;   // YYYY-MM-DD
@@ -446,6 +447,17 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
                 />
                 <p className="text-[10px] text-gray-500 mt-0.5">Honorário mínimo: {brl(valorDesistencia)}</p>
               </div>
+              {/* Taxa inadimplência */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Multa por Inadimplência — Cl. 8 (%)</label>
+                <input
+                  type="number" min="1" max="100" step="0.1"
+                  value={d.taxa_inadimplencia ?? d.taxa_desistencia}
+                  onChange={e => set('taxa_inadimplencia', toNum(e.target.value))}
+                  className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+                />
+                <p className="text-[10px] text-gray-500 mt-0.5">Incide se atrasar 3 parcelas seguidas ou 5 alternadas.</p>
+              </div>
               {/* Custeio mensal */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Custeio Mensal — Cl. 5.7-V (R$)</label>
@@ -789,7 +801,7 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               <strong>8.1</strong> - A Cláusula Penal será acionada caso a CONTRATANTE atrase o pagamento de 3 (três) parcelas consecutivas ou 5 (cinco) parcelas alternadas do contrato de crédito obtido junto à instituição financeira.
             </p>
             <p style={S.p}>
-              <strong>8.2</strong> - O valor da multa será de {d.taxa_desistencia}% ({pctExtenso(d.taxa_desistencia)} por cento) sobre o valor total do crédito contratado pela CONTRATANTE junto à instituição financeira, a ser pago à CONTRATADA no prazo de 10 (dez) dias úteis após a notificação da inadimplência.
+              <strong>8.2</strong> - O valor da multa será de {d.taxa_inadimplencia ?? d.taxa_desistencia}% ({pctExtenso(d.taxa_inadimplencia ?? d.taxa_desistencia)} por cento) sobre o valor total do crédito contratado pela CONTRATANTE junto à instituição financeira, a ser pago à CONTRATADA no prazo de 10 (dez) dias úteis após a notificação da inadimplência.
             </p>
             <p style={S.p}>
               <strong>8.3</strong> - A aplicação desta Cláusula Penal não impede a CONTRATADA de buscar outras medidas legais cabíveis para a recuperação de quaisquer valores devidos, incluindo, mas não se limitando, aos honorários e comissões previstos na Cláusula 4.

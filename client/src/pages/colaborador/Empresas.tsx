@@ -1409,7 +1409,7 @@ export default function Empresas() {
       const camposAtualizados = mapCnpjDataParaEmpresa(dadosReceita, empresa);
       const atualizada = await apiFetch(`/api/empresas/${empresa.id}`, {
         method: "PATCH",
-        body: JSON.stringify(camposAtualizados),
+        body: JSON.stringify({ ...camposAtualizados, _origem: "sincronizacao_receita" }),
       });
 
       setSelecionada(atualizada);
@@ -1421,13 +1421,21 @@ export default function Empresas() {
       if (Array.isArray(sociosReload)) setSociosEmpresa(sociosReload);
 
       if (!opts.silencioso) {
-        const cidadeUf = [atualizada?.cidade, atualizada?.estado].filter(Boolean).join(" / ");
-        toast.success(
-          cidadeUf
-            ? `Cadastro atualizado e salvo: ${cidadeUf}.`
-            : "Cadastro atualizado e salvo com dados da Receita.",
-          { id: "sync" }
-        );
+        // Mostra exatamente o que mudou -- campos protegidos (contato/responsável já
+        // preenchidos manualmente) nunca aparecem aqui, porque o backend nem tenta
+        // sobrescrevê-los numa sincronização automática.
+        const alteracoes: Array<{ campo: string }> = Array.isArray(atualizada?._alteracoesReais) ? atualizada._alteracoesReais : [];
+        if (alteracoes.length === 0) {
+          toast.success("Sincronizado com a Receita — nenhuma alteração de cadastro encontrada.", { id: "sync" });
+        } else {
+          const nomesCampos: Record<string, string> = {
+            razao_social: "Razão social", nome_fantasia: "Nome fantasia", situacao_cadastral: "Situação cadastral",
+            cnae_principal: "CNAE principal", cnaes_secundarios: "CNAEs secundários", natureza_juridica: "Natureza jurídica",
+            capital_social: "Capital social", data_abertura: "Data de abertura", porte: "Porte", segmento: "Segmento",
+          };
+          const lista = alteracoes.map((a) => nomesCampos[a.campo] || a.campo).join(", ");
+          toast.success(`Cadastro atualizado pela Receita: ${lista}.`, { id: "sync", duration: 6000 });
+        }
       }
     } catch (err: any) {
       const msg = mensagemErroApi(err, "Erro ao atualizar e salvar cadastro pela Receita Federal.");

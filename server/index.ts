@@ -249,6 +249,12 @@ function emptyToNull(value: unknown): unknown {
   return value;
 }
 
+// Mesmo critério de "já tem valor preenchido" usado em socios_documentos.ts (hasValue) --
+// usado pra decidir se um campo protegido da empresa deve ser preservado numa sincronização.
+function hasValueEmpresa(value: unknown): boolean {
+  return value !== null && value !== undefined && String(value).trim() !== "";
+}
+
 function normalizeNumeric(value: unknown): number | null {
   if (value === undefined || value === null || value === "") return null;
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -2014,6 +2020,69 @@ async function startServer() {
     `);
     console.log('[startup] Migration 073 (incluir_no_pdf em anexos): OK.');
   } catch (err: any) { console.warn('[startup] Migration 073:', err?.message); }
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  // ── Migration 074: taxa_inadimplencia em contratos_gerados -- campo próprio pra
+  //    multa por inadimplência (Cláusula 8), que antes reaproveitava por engano a
+  //    taxa de desistência. Contratos existentes ficam com essa coluna vazia; o
+  //    template já trata isso caindo de volta em taxa_desistencia como fallback,
+  //    preservando o texto que já foi gerado pra contratos antigos.
+  try {
+    await pool.query(`
+      ALTER TABLE public.contratos_gerados
+        ADD COLUMN IF NOT EXISTS taxa_inadimplencia NUMERIC(6,2);
+    `);
+    console.log('[startup] Migration 074 (taxa_inadimplencia): OK.');
+  } catch (err: any) { console.warn('[startup] Migration 074:', err?.message); }
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  // ── Migration 075: catálogo de bancos parceiros e gerentes bancários -- pra
+  //    filtrar acompanhamento e proposta de crédito por banco, gerente e região.
+  //    Colunas novas em acompanhamentos_bancarios são adicionais e opcionais --
+  //    o campo de texto livre banco_observado que já existia continua funcionando
+  //    exatamente como antes, sem quebrar nenhum registro existente.
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS public.bancos_parceiros (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        nome TEXT NOT NULL UNIQUE,
+        ativo BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS public.gerentes_bancarios (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        nome TEXT NOT NULL,
+        banco_id UUID REFERENCES public.bancos_parceiros(id) ON DELETE SET NULL,
+        regiao TEXT,
+        cidade TEXT,
+        estado TEXT,
+        email TEXT,
+        telefone TEXT,
+        ativo BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_gerentes_bancarios_banco ON public.gerentes_bancarios(banco_id);
+      ALTER TABLE public.acompanhamentos_bancarios
+        ADD COLUMN IF NOT EXISTS banco_id UUID REFERENCES public.bancos_parceiros(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS gerente_id UUID REFERENCES public.gerentes_bancarios(id) ON DELETE SET NULL;
+      CREATE INDEX IF NOT EXISTS idx_acompanhamentos_bancarios_banco ON public.acompanhamentos_bancarios(banco_id);
+      CREATE INDEX IF NOT EXISTS idx_acompanhamentos_bancarios_gerente ON public.acompanhamentos_bancarios(gerente_id);
+    `);
+    // Popula com os bancos que o próprio sistema já referencia em outros lugares
+    // (lista usada na Calculadora) -- não inventa banco novo, só estrutura o que
+    // já era usado como texto solto. Idempotente: só insere quem ainda não existe.
+    const bancosConhecidos = [
+      "CAIXA Econômica Federal", "Banco do Brasil", "Bradesco", "Itaú",
+      "Santander", "Sicredi", "Sicoob", "BNB", "BNDES",
+    ];
+    for (const nome of bancosConhecidos) {
+      await pool.query(
+        `INSERT INTO public.bancos_parceiros (nome) VALUES ($1) ON CONFLICT (nome) DO NOTHING`,
+        [nome],
+      );
+    }
+    console.log('[startup] Migration 075 (catálogo de bancos e gerentes): OK.');
+  } catch (err: any) { console.warn('[startup] Migration 075:', err?.message); }
   // ─────────────────────────────────────────────────────────────────────────────
 
   // body parser, CORS e no-cache já registrados no topo de startServer()
@@ -6140,6 +6209,18 @@ async function startServer() {
     }
   });
 
+  // Campos de contato/pessoais da empresa que NÃO devem ser sobrescritos por uma
+  // sincronização automática da Receita depois de já terem valor preenchido --
+  // mesma lógica já usada pra sócios (SOCIOS_MANUAL_PROTECTED_COLUMNS em
+  // socios_documentos.ts). Dados de registro da empresa (razão social, CNAE,
+  // situação cadastral, natureza jurídica, capital social...) NÃO entram aqui de
+  // propósito -- essas sim devem sempre refletir a Receita, mesmo já preenchidas.
+  const EMPRESA_CAMPOS_PROTEGIDOS_SYNC = new Set([
+    "email", "telefone", "telefone_2", "whatsapp", "site",
+    "cep", "logradouro", "numero", "complemento", "bairro", "cidade", "estado",
+    "responsavel_nome", "responsavel_cpf", "responsavel_cargo", "responsavel_telefone", "responsavel_email",
+  ]);
+
   app.patch("/api/empresas/:id", auth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
@@ -6169,19 +6250,40 @@ async function startServer() {
         "captador_id", "analista_id", "responsavel_id",
         "cadastro_status", "cadastro_pendencias", "cadastro_completo", "bloqueado_operacional"
       ]);
-      const updates: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(req.body || {})) {
-        if (!allowed.has(key) || !columns.has(key)) continue;
-        if (["capital_social", "faturamento_anual", "limite_credito_atual"].includes(key)) updates[key] = normalizeNumeric(value);
-        else if (["numero_funcionarios", "score_serasa", "score_spc", "score_cnpj"].includes(key)) updates[key] = normalizeInteger(value);
-        else if (["cnaes_secundarios", "tags"].includes(key)) updates[key] = normalizeTextArray(value);
-        else if (["data_abertura", "data_situacao_cadastral"].includes(key)) updates[key] = normalizeDate(value);
-        else if (key === "ultima_sincronizacao_receita") updates[key] = normalizeTimestamp(value);
-        else if (key === "dados_extra_receita" && value && typeof value === "object") updates[key] = JSON.stringify(value);
-        else updates[key] = emptyToNull(value);
-      }
       const { rows: atualRows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [id]);
       const atual = atualRows[0] || {};
+
+      // Requisição vinda da sincronização automática com a Receita (não é edição
+      // manual do colaborador) -- respeita os campos protegidos.
+      const ehSincronizacaoAutomatica = req.body?._origem === "sincronizacao_receita";
+      const alteracoesReais: { campo: string; de: unknown; para: unknown }[] = [];
+
+      const updates: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(req.body || {})) {
+        if (key === "_origem") continue;
+        if (!allowed.has(key) || !columns.has(key)) continue;
+        // Sincronização automática nunca sobrescreve um campo protegido que já tem valor.
+        if (ehSincronizacaoAutomatica && EMPRESA_CAMPOS_PROTEGIDOS_SYNC.has(key) && hasValueEmpresa(atual[key])) {
+          continue;
+        }
+        let valorFinal: unknown;
+        if (["capital_social", "faturamento_anual", "limite_credito_atual"].includes(key)) valorFinal = normalizeNumeric(value);
+        else if (["numero_funcionarios", "score_serasa", "score_spc", "score_cnpj"].includes(key)) valorFinal = normalizeInteger(value);
+        else if (["cnaes_secundarios", "tags"].includes(key)) valorFinal = normalizeTextArray(value);
+        else if (["data_abertura", "data_situacao_cadastral"].includes(key)) valorFinal = normalizeDate(value);
+        else if (key === "ultima_sincronizacao_receita") valorFinal = normalizeTimestamp(value);
+        else if (key === "dados_extra_receita" && value && typeof value === "object") valorFinal = JSON.stringify(value);
+        else valorFinal = emptyToNull(value);
+
+        updates[key] = valorFinal;
+        if (ehSincronizacaoAutomatica && key !== "dados_extra_receita" && key !== "ultima_sincronizacao_receita") {
+          const valorAtualStr = atual[key] == null ? "" : String(atual[key]);
+          const valorNovoStr = valorFinal == null ? "" : String(valorFinal);
+          if (valorAtualStr !== valorNovoStr) {
+            alteracoesReais.push({ campo: key, de: atual[key], para: valorFinal });
+          }
+        }
+      }
       const combinado = { ...atual, ...updates };
       const pendencias = pendenciasEmpresa(combinado);
       if (columns.has("cadastro_status")) updates.cadastro_status = statusCadastroFromPendencias(pendencias);
@@ -6191,7 +6293,16 @@ async function startServer() {
       // /api/empresas) -- só muda via arquivamento/duplicidade explícitos.
       if (columns.has("updated_at")) updates.updated_at = new Date().toISOString();
       const keys = Object.keys(updates);
-      if (!keys.length) { res.status(400).json({ error: "Nenhum campo válido para atualizar" }); return; }
+      if (!keys.length) {
+        if (ehSincronizacaoAutomatica) {
+          // Nada mudou de verdade (ou tudo estava protegido) -- não é erro, é o caso
+          // esperado de "sincronizar sem nenhuma alteração real".
+          res.json({ ...atual, _alteracoesReais: [] });
+          return;
+        }
+        res.status(400).json({ error: "Nenhum campo válido para atualizar" });
+        return;
+      }
       const values = keys.map((k) => updates[k]);
       const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
       const { rows } = await pool.query(
@@ -6199,8 +6310,15 @@ async function startServer() {
         [...values, id]
       );
       if (rows.length === 0) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
-      await registrarHistoricoEmpresaSeguro(id, "empresa_atualizada", "Dados da empresa atualizados.", (req as any).colaborador?.nome || "Sistema");
-      res.json(rows[0]);
+      if (ehSincronizacaoAutomatica) {
+        const resumo = alteracoesReais.length
+          ? `Sincronização com a Receita atualizou: ${alteracoesReais.map((a) => a.campo).join(", ")}.`
+          : "Sincronização com a Receita: nenhuma alteração de cadastro encontrada.";
+        await registrarHistoricoEmpresaSeguro(id, "empresa_sincronizada", resumo, (req as any).colaborador?.nome || "Sistema");
+      } else {
+        await registrarHistoricoEmpresaSeguro(id, "empresa_atualizada", "Dados da empresa atualizados.", (req as any).colaborador?.nome || "Sistema");
+      }
+      res.json({ ...rows[0], _alteracoesReais: alteracoesReais });
     } catch (err: any) {
       console.error("[PATCH /api/empresas/:id]", { message: err?.message, code: err?.code, detail: err?.detail, column: err?.column });
       res.status(500).json({ error: "Erro ao atualizar empresa" });
@@ -7354,6 +7472,10 @@ async function startServer() {
     const comissaoPct   = Number(contrato.taxa_comissao ?? 10);
     const valorRefNumBruto = Number(contrato.valor_referencia ?? 0);
     const taxaDesistenciaPct = Number(contrato.taxa_desistencia ?? contrato.percentual_multa ?? 5);
+    // Campo próprio pra multa por inadimplência -- antes reaproveitava taxaDesistenciaPct por
+    // engano (a Cláusula 8 é sobre inadimplência, não desistência). Contratos antigos sem esse
+    // campo preenchido caem no mesmo valor de desistência, preservando o texto já gerado.
+    const taxaInadimplenciaPct = Number(contrato.taxa_inadimplencia ?? contrato.taxa_desistencia ?? contrato.percentual_multa ?? 5);
     const custeioMensal = Number(contrato.custeio_mensal ?? 250);
     const valorDesistencia = valorRefNumBruto * taxaDesistenciaPct / 100;
     const valorRef      = contrato.valor_referencia_formatado || new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorRefNumBruto || 0);
@@ -7505,7 +7627,7 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, 
 
 <p class="clause"><strong>8.1</strong> - A Cláusula Penal será acionada caso a CONTRATANTE atrase o pagamento de 3 (três) parcelas consecutivas ou 5 (cinco) parcelas alternadas do contrato de crédito obtido junto à instituição financeira.</p>
 
-<p class="clause"><strong>8.2</strong> - O valor da multa será de ${taxaDesistenciaPct}% (${pctExtenso(taxaDesistenciaPct)} por cento) sobre o valor total do crédito contratado pela CONTRATANTE junto à instituição financeira, a ser pago à CONTRATADA no prazo de 10 (dez) dias úteis após a notificação da inadimplência.</p>
+<p class="clause"><strong>8.2</strong> - O valor da multa será de ${taxaInadimplenciaPct}% (${pctExtenso(taxaInadimplenciaPct)} por cento) sobre o valor total do crédito contratado pela CONTRATANTE junto à instituição financeira, a ser pago à CONTRATADA no prazo de 10 (dez) dias úteis após a notificação da inadimplência.</p>
 
 <p class="clause"><strong>8.3</strong> - A aplicação desta Cláusula Penal não impede a CONTRATADA de buscar outras medidas legais cabíveis para a recuperação de quaisquer valores devidos, incluindo, mas não se limitando, aos honorários e comissões previstos na Cláusula 4.</p>
 
@@ -7712,6 +7834,7 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, 
     const comissaoPct     = Number(contrato.taxa_comissao ?? 10);
     const valorRefNumBruto = Number(contrato.valor_referencia ?? 0);
     const taxaDesistenciaPct = Number(contrato.taxa_desistencia ?? contrato.percentual_multa ?? 5);
+    const taxaInadimplenciaPct = Number(contrato.taxa_inadimplencia ?? contrato.taxa_desistencia ?? contrato.percentual_multa ?? 5);
     const custeioMensal   = Number(contrato.custeio_mensal ?? 250);
     const valorDesistencia = valorRefNumBruto * taxaDesistenciaPct / 100;
     const valorRef        = contrato.valor_referencia_formatado || new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorRefNumBruto || 0);
@@ -7834,7 +7957,7 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL i
 
 <h2 class="section-title">IX – CLÁUSULA PENAL</h2>
 
-<p class="clause"><strong>Cláusula 8</strong> - Fica estabelecida cláusula penal de ${taxaDesistenciaPct}% (${pctExtenso(taxaDesistenciaPct)} por cento) sobre o valor total do crédito contratado, aplicável em caso de inadimplência em 3 (três) parcelas consecutivas ou 5 (cinco) alternadas do crédito obtido.</p>
+<p class="clause"><strong>Cláusula 8</strong> - Fica estabelecida cláusula penal de ${taxaInadimplenciaPct}% (${pctExtenso(taxaInadimplenciaPct)} por cento) sobre o valor total do crédito contratado, aplicável em caso de inadimplência em 3 (três) parcelas consecutivas ou 5 (cinco) alternadas do crédito obtido.</p>
 
 <h2 class="section-title">X – DO FORO E CONDIÇÕES GERAIS</h2>
 
@@ -10559,7 +10682,7 @@ async function registrarDocumentoContratoGerado(params: {
         empresa_id, parceiro_id, lead_id,
         contratada_id, responsavel_contrato_id,
         // campos contrato assessoria
-        valor_referencia, taxa_comissao = 10, taxa_desistencia = 5, custeio_mensal = 250, percentual_multa,
+        valor_referencia, taxa_comissao = 10, taxa_desistencia = 5, taxa_inadimplencia, custeio_mensal = 250, percentual_multa,
         prazo_contrato_meses = 12, modo_assinatura_contratante = 'responsavel', socios_assinantes = [],
         empresa_razao_social, empresa_cnpj, empresa_endereco,
         empresa_representante, empresa_cpf_representante,
@@ -11076,6 +11199,7 @@ async function registrarDocumentoContratoGerado(params: {
         const valorRefPF        = parseNum(valor_referencia);
         const taxaComissaoPF    = parseNum(taxa_comissao, 10);
         const taxaDesistenciaPF = parseNum(taxa_desistencia !== undefined ? taxa_desistencia : percentual_multa, 5);
+        const taxaInadimplenciaPF = parseNum(taxa_inadimplencia, taxaDesistenciaPF);
         const custeioMensalPF   = parseNum(custeio_mensal, 250);
         const prazoMesesPF      = Math.max(1, Math.trunc(parseNum(prazo_contrato_meses, 12)) || 12);
 
@@ -11143,6 +11267,7 @@ async function registrarDocumentoContratoGerado(params: {
             valor_referencia_formatado: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorRefPF),
             taxa_comissao: taxaComissaoPF,
             taxa_desistencia: taxaDesistenciaPF,
+            taxa_inadimplencia: taxaInadimplenciaPF,
             custeio_mensal: custeioMensalPF,
             percentual_multa: taxaDesistenciaPF,
             data_assinatura,
@@ -11171,8 +11296,8 @@ async function registrarDocumentoContratoGerado(params: {
              (tipo_contrato, cliente_tipo, empresa_id, parceiro_id, lead_id, cliente_pf_id,
               contratada_id, responsavel_contrato_id,
               valor_referencia, taxa_comissao, data_assinatura, foro_eleito,
-              pdf_path, hash_documento, payload_snapshot, criado_por)
-           VALUES ($1,'pf',NULL,$2,NULL,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+              pdf_path, hash_documento, payload_snapshot, criado_por, taxa_desistencia, taxa_inadimplencia)
+           VALUES ($1,'pf',NULL,$2,NULL,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
            RETURNING id, created_at`,
           [
             'assessoria_pf',
@@ -11188,6 +11313,8 @@ async function registrarDocumentoContratoGerado(params: {
             hashPF,
             JSON.stringify(payloadPF),
             colaborador.id,
+            taxaDesistenciaPF,
+            taxaInadimplenciaPF,
           ]
         );
         const contratoPF = contratoPFRows[0];
@@ -11232,6 +11359,10 @@ async function registrarDocumentoContratoGerado(params: {
         taxa_desistencia !== undefined ? taxa_desistencia : percentual_multa,
         5,
       );
+      // Campo próprio -- antes a Cláusula 8 (inadimplência) reaproveitava por engano a taxa
+      // de desistência. Se não vier no payload (formulário antigo/não atualizado ainda),
+      // cai no valor de desistência como fallback, sem quebrar nada.
+      const taxaInadimplenciaNum = parseNumeroContrato(taxa_inadimplencia, taxaDesistenciaNum);
       const custeioMensalNum = parseNumeroContrato(custeio_mensal, 250);
       const prazoContratoMesesNum = Math.max(1, Math.trunc(parseNumeroContrato(prazo_contrato_meses, 12)) || 12);
 
@@ -11310,6 +11441,7 @@ async function registrarDocumentoContratoGerado(params: {
           valor_referencia_formatado: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorReferenciaNum),
           taxa_comissao: taxaComissaoNum,
           taxa_desistencia: taxaDesistenciaNum,
+          taxa_inadimplencia: taxaInadimplenciaNum,
           custeio_mensal: custeioMensalNum,
           percentual_multa: taxaDesistenciaNum, // compatibilidade com PDFs antigos
           honorario_minimo_mes: null,
@@ -11340,9 +11472,9 @@ async function registrarDocumentoContratoGerado(params: {
             taxa_desistencia, custeio_mensal,
             honorario_minimo_mes, honorario_minimo_total, data_assinatura,
             foro_eleito, pdf_path, hash_documento, payload_snapshot, criado_por,
-            data_inicio_vigencia, data_fim_vigencia, prazo_contrato_meses)
+            data_inicio_vigencia, data_fim_vigencia, prazo_contrato_meses, taxa_inadimplencia)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
-                 $16::date, ($16::date + ($22::text || ' months')::interval)::date, $22::integer)
+                 $16::date, ($16::date + ($22::text || ' months')::interval)::date, $22::integer, $23)
          RETURNING id, created_at`,
         [
           'assessoria',
@@ -11367,6 +11499,7 @@ async function registrarDocumentoContratoGerado(params: {
           JSON.stringify(payload),
           colaborador.id,
           prazoContratoMesesNum,
+          taxaInadimplenciaNum,
         ]
       );
 
@@ -13149,6 +13282,132 @@ async function registrarDocumentoContratoGerado(params: {
   app.post("/api/acompanhamentos-bancarios/:id/relatorio", auth, requireAcessoAcompanhamento, responderRelatorioAcompanhamentoBancario);
   app.post("/api/acompanhamentos-bancarios/:id/relatorio-mensal", auth, requireAcessoAcompanhamento, responderRelatorioAcompanhamentoBancario);
 
+  // ─── Catálogo de bancos parceiros e gerentes bancários ────────────────────────
+  // Usado pra filtrar acompanhamento bancário e proposta de crédito por banco,
+  // gerente e região (ex: "Sicoob, Brasília, gerente Aline").
+
+  app.get("/api/bancos-parceiros", auth, async (req: Request, res: Response) => {
+    try {
+      const somenteAtivos = req.query.ativos !== "todos";
+      const { rows } = await pool.query(
+        `SELECT * FROM public.bancos_parceiros ${somenteAtivos ? "WHERE ativo = true" : ""} ORDER BY nome ASC`
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error("[GET /api/bancos-parceiros]", err);
+      res.status(500).json({ error: "Erro ao listar bancos" });
+    }
+  });
+
+  app.post("/api/bancos-parceiros", auth, async (req: Request, res: Response) => {
+    try {
+      const nome = String(req.body?.nome || "").trim();
+      if (!nome) { res.status(400).json({ error: "Nome do banco é obrigatório" }); return; }
+      const { rows } = await pool.query(
+        `INSERT INTO public.bancos_parceiros (nome) VALUES ($1)
+         ON CONFLICT (nome) DO UPDATE SET ativo = true RETURNING *`,
+        [nome],
+      );
+      res.status(201).json(rows[0]);
+    } catch (err) {
+      console.error("[POST /api/bancos-parceiros]", err);
+      res.status(500).json({ error: "Erro ao criar banco" });
+    }
+  });
+
+  app.patch("/api/bancos-parceiros/:id", auth, async (req: Request, res: Response) => {
+    try {
+      const { nome, ativo } = req.body || {};
+      const { rows } = await pool.query(
+        `UPDATE public.bancos_parceiros SET nome = COALESCE($1, nome), ativo = COALESCE($2, ativo) WHERE id = $3 RETURNING *`,
+        [nome ?? null, typeof ativo === "boolean" ? ativo : null, req.params.id],
+      );
+      if (!rows.length) { res.status(404).json({ error: "Banco não encontrado" }); return; }
+      res.json(rows[0]);
+    } catch (err) {
+      console.error("[PATCH /api/bancos-parceiros/:id]", err);
+      res.status(500).json({ error: "Erro ao atualizar banco" });
+    }
+  });
+
+  app.get("/api/gerentes-bancarios", auth, async (req: Request, res: Response) => {
+    try {
+      const somenteAtivos = req.query.ativos !== "todos";
+      const condicoes: string[] = [];
+      const params: unknown[] = [];
+      if (somenteAtivos) condicoes.push("g.ativo = true");
+      if (req.query.banco_id) { params.push(req.query.banco_id); condicoes.push(`g.banco_id = $${params.length}`); }
+      if (req.query.regiao) { params.push(`%${req.query.regiao}%`); condicoes.push(`(g.regiao ILIKE $${params.length} OR g.cidade ILIKE $${params.length} OR g.estado ILIKE $${params.length})`); }
+      const where = condicoes.length ? `WHERE ${condicoes.join(" AND ")}` : "";
+      const { rows } = await pool.query(
+        `SELECT g.*, b.nome AS banco_nome FROM public.gerentes_bancarios g
+           LEFT JOIN public.bancos_parceiros b ON b.id = g.banco_id
+           ${where} ORDER BY g.nome ASC`,
+        params,
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error("[GET /api/gerentes-bancarios]", err);
+      res.status(500).json({ error: "Erro ao listar gerentes" });
+    }
+  });
+
+  app.post("/api/gerentes-bancarios", auth, async (req: Request, res: Response) => {
+    try {
+      const nome = String(req.body?.nome || "").trim();
+      if (!nome) { res.status(400).json({ error: "Nome do gerente é obrigatório" }); return; }
+      const { rows } = await pool.query(
+        `INSERT INTO public.gerentes_bancarios (nome, banco_id, regiao, cidade, estado, email, telefone)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [
+          nome,
+          req.body?.banco_id || null,
+          req.body?.regiao || null,
+          req.body?.cidade || null,
+          req.body?.estado || null,
+          req.body?.email || null,
+          req.body?.telefone || null,
+        ],
+      );
+      res.status(201).json(rows[0]);
+    } catch (err) {
+      console.error("[POST /api/gerentes-bancarios]", err);
+      res.status(500).json({ error: "Erro ao criar gerente" });
+    }
+  });
+
+  app.patch("/api/gerentes-bancarios/:id", auth, async (req: Request, res: Response) => {
+    try {
+      const allowed = ["nome", "banco_id", "regiao", "cidade", "estado", "email", "telefone", "ativo"];
+      const updates: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(req.body || {})) {
+        if (allowed.includes(key)) updates[key] = value;
+      }
+      const keys = Object.keys(updates);
+      if (!keys.length) { res.status(400).json({ error: "Nenhum campo válido para atualizar" }); return; }
+      const set = keys.map((k, i) => `"${k}" = $${i + 1}`).join(", ");
+      const { rows } = await pool.query(
+        `UPDATE public.gerentes_bancarios SET ${set} WHERE id = $${keys.length + 1} RETURNING *`,
+        [...keys.map((k) => updates[k]), req.params.id],
+      );
+      if (!rows.length) { res.status(404).json({ error: "Gerente não encontrado" }); return; }
+      res.json(rows[0]);
+    } catch (err) {
+      console.error("[PATCH /api/gerentes-bancarios/:id]", err);
+      res.status(500).json({ error: "Erro ao atualizar gerente" });
+    }
+  });
+
+  app.delete("/api/gerentes-bancarios/:id", auth, async (req: Request, res: Response) => {
+    try {
+      await pool.query(`UPDATE public.gerentes_bancarios SET ativo = false WHERE id = $1`, [req.params.id]);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[DELETE /api/gerentes-bancarios/:id]", err);
+      res.status(500).json({ error: "Erro ao remover gerente" });
+    }
+  });
+
   app.get("/api/acompanhamentos-bancarios", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
       const status = String(req.query.status || "todos");
@@ -13181,12 +13440,30 @@ async function registrarDocumentoContratoGerado(params: {
         conditions.push(`COALESCE(a.banco_observado, '') ILIKE $${params.length}`);
       }
 
+      if (req.query.banco_id) {
+        params.push(req.query.banco_id);
+        conditions.push(`a.banco_id = $${params.length}`);
+      }
+
+      if (req.query.gerente_id) {
+        params.push(req.query.gerente_id);
+        conditions.push(`a.gerente_id = $${params.length}`);
+      }
+
+      if (req.query.regiao) {
+        params.push(`%${req.query.regiao}%`);
+        conditions.push(`(ger.regiao ILIKE $${params.length} OR ger.cidade ILIKE $${params.length} OR ger.estado ILIKE $${params.length})`);
+      }
+
       const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
       const { rows } = await pool.query(
         `SELECT
             a.*,
             c.nome AS responsavel_nome,
+            bp.nome AS banco_parceiro_nome,
+            ger.nome AS gerente_nome,
+            ger.regiao AS gerente_regiao,
             ult.data_atualizacao AS ultima_atualizacao_em,
             ult.total_entradas AS total_entradas_ultima_semana,
             ult.total_saidas AS total_saidas_ultima_semana,
@@ -13195,6 +13472,8 @@ async function registrarDocumentoContratoGerado(params: {
             COALESCE(cont.total_atualizacoes, 0)::int AS total_atualizacoes
           FROM acompanhamentos_bancarios a
           LEFT JOIN colaboradores c ON c.id = a.responsavel_id
+          LEFT JOIN public.bancos_parceiros bp ON bp.id = a.banco_id
+          LEFT JOIN public.gerentes_bancarios ger ON ger.id = a.gerente_id
           LEFT JOIN LATERAL (
             -- REGRA INEGÓCIÁVEL: semana da data atual (nunca futura)
             -- Prioridade 1: semana em curso COM dados reais (entradas > 0)

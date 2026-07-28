@@ -920,6 +920,10 @@ export default function AcompanhamentoBancario() {
   const [search, setSearch] = useState("");
   const [statusFiltro, setStatusFiltro] = useState("todos");
   const [banco, setBanco] = useState("");
+  const [bancoIdFiltro, setBancoIdFiltro] = useState("");
+  const [gerenteIdFiltro, setGerenteIdFiltro] = useState("");
+  const [bancosCatalogo, setBancosCatalogo] = useState<Array<{ id: string; nome: string }>>([]);
+  const [gerentesCatalogo, setGerentesCatalogo] = useState<Array<{ id: string; nome: string; banco_id?: string; regiao?: string }>>([]);
   const [pendentes, setPendentes] = useState(false);
 
   const [novoOpen, setNovoOpen] = useState(false);
@@ -1014,6 +1018,9 @@ export default function AcompanhamentoBancario() {
       if (search.trim()) q.set("busca", search.trim());
       if (statusFiltro && statusFiltro !== "todos") q.set("status", statusFiltro);
       if (pendentes) q.set("pendentes", "true");
+      if (banco.trim()) q.set("banco", banco.trim());
+      if (bancoIdFiltro) q.set("banco_id", bancoIdFiltro);
+      if (gerenteIdFiltro) q.set("gerente_id", gerenteIdFiltro);
 
       const response = await fetch(
         `/api/acompanhamentos-bancarios?${q.toString()}`,
@@ -1035,6 +1042,19 @@ export default function AcompanhamentoBancario() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canAccess]);
 
+  useEffect(() => {
+    if (!canAccess) return;
+    fetch("/api/bancos-parceiros", { headers: authHeaders() })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => setBancosCatalogo(Array.isArray(data) ? data : []))
+      .catch(() => setBancosCatalogo([]));
+    fetch("/api/gerentes-bancarios", { headers: authHeaders() })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => setGerentesCatalogo(Array.isArray(data) ? data : []))
+      .catch(() => setGerentesCatalogo([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canAccess]);
+
   // ─── Filtros locais ──────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     return rows.filter((row) => {
@@ -1043,9 +1063,11 @@ export default function AcompanhamentoBancario() {
         String(row.banco_observado || "")
           .toLowerCase()
           .includes(banco.trim().toLowerCase());
-      return matchesBanco;
+      const matchesBancoId = !bancoIdFiltro || row.banco_id === bancoIdFiltro;
+      const matchesGerenteId = !gerenteIdFiltro || row.gerente_id === gerenteIdFiltro;
+      return matchesBanco && matchesBancoId && matchesGerenteId;
     });
-  }, [rows, banco]);
+  }, [rows, banco, bancoIdFiltro, gerenteIdFiltro]);
 
   // ─── Resumo ──────────────────────────────────────────────────────────────────
   const resumo = useMemo(
@@ -2151,6 +2173,26 @@ export default function AcompanhamentoBancario() {
               value={banco}
               onChange={(e) => setBanco(e.target.value)}
             />
+            <select
+              className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={bancoIdFiltro}
+              onChange={(e) => { setBancoIdFiltro(e.target.value); setGerenteIdFiltro(""); }}
+              title="Filtrar por banco parceiro cadastrado"
+            >
+              <option value="">Banco parceiro (todos)</option>
+              {bancosCatalogo.map((b) => <option key={b.id} value={b.id}>{b.nome}</option>)}
+            </select>
+            <select
+              className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={gerenteIdFiltro}
+              onChange={(e) => setGerenteIdFiltro(e.target.value)}
+              title="Filtrar por gerente responsável"
+            >
+              <option value="">Gerente (todos)</option>
+              {gerentesCatalogo
+                .filter((g) => !bancoIdFiltro || g.banco_id === bancoIdFiltro)
+                .map((g) => <option key={g.id} value={g.id}>{g.nome}{g.regiao ? ` — ${g.regiao}` : ""}</option>)}
+            </select>
             <select
               className="h-8 rounded-lg border border-slate-200 px-2.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={statusFiltro}

@@ -195,6 +195,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [valorReferencia, setValorReferencia] = useState('');
   const [taxaComissao, setTaxaComissao]       = useState('10');
   const [taxaDesistencia, setTaxaDesistencia] = useState('5');
+  const [taxaInadimplencia, setTaxaInadimplencia] = useState('5');
   const [custeioMensal, setCusteioMensal]     = useState(formatBRLCurrency(250));
   const [prazoContratoAssessoria, setPrazoContratoAssessoria] = useState('12');
   const [modoAssinaturaContratante, setModoAssinaturaContratante] = useState<'empresa' | 'responsavel' | 'socios'>('responsavel');
@@ -215,6 +216,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
   const [valorReferenciaPF, setValorReferenciaPF]                 = useState('');
   const [taxaComissaoPF, setTaxaComissaoPF]                       = useState('10');
   const [taxaDesistenciaPF, setTaxaDesistenciaPF]                 = useState('5');
+  const [taxaInadimplenciaPF, setTaxaInadimplenciaPF]             = useState('5');
   const [custeioMensalPF, setCusteioMensalPF]                     = useState(formatBRLCurrency(250));
   const [prazoAssessoriaPF, setPrazoAssessoriaPF]                 = useState('12');
   const [contratadaIdAssessoriaPF, setContratadaIdAssessoriaPF]   = useState('');
@@ -491,6 +493,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         valor_referencia: unmaskCurrencyInput(valorReferencia),
         taxa_comissao: Number(taxaComissao),
         taxa_desistencia: Number(taxaDesistencia),
+        taxa_inadimplencia: Number(taxaInadimplencia),
         custeio_mensal: unmaskCurrencyInput(custeioMensal),
         prazo_contrato_meses: Number.parseInt(prazoContratoAssessoria, 10),
         modo_assinatura_contratante: modoAssinaturaContratante,
@@ -518,6 +521,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
         valor_referencia: unmaskCurrencyInput(valorReferenciaPF),
         taxa_comissao: Number(taxaComissaoPF),
         taxa_desistencia: Number(taxaDesistenciaPF),
+        taxa_inadimplencia: Number(taxaInadimplenciaPF),
         custeio_mensal: unmaskCurrencyInput(custeioMensalPF),
         prazo_contrato_meses: Number.parseInt(prazoAssessoriaPF, 10),
         data_assinatura: dataAssinatura,
@@ -845,6 +849,14 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               <p className="text-[11px] text-gray-500 mt-1">Incide sobre o valor de referência na cláusula 4.3.</p>
             </div>
             <div>
+              <label className={lbl}>Multa por Inadimplência — Cláusula 8 (%)</label>
+              <input type="number" min="1" max="100" step="0.1" value={taxaInadimplencia}
+                onChange={e => setTaxaInadimplencia(e.target.value)} placeholder="Ex: 5" className={cls} />
+              <p className="text-[11px] text-gray-500 mt-1">Incide sobre o crédito contratado se a CONTRATANTE atrasar 3 parcelas seguidas ou 5 alternadas.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
               <label className={lbl}>Custeio Mensal — Cláusula 5.7-V (R$)</label>
               <input
                 type="text"
@@ -985,6 +997,10 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
               <div>
                 <label className={lbl}>Honorário mínimo (% sobre valor de ref.)</label>
                 <input type="number" min="0" step="0.5" value={taxaDesistenciaPF} onChange={e => setTaxaDesistenciaPF(e.target.value)} className={`${cls} text-right font-mono`} placeholder="5" />
+              </div>
+              <div>
+                <label className={lbl}>Multa por Inadimplência (%)</label>
+                <input type="number" min="0" step="0.5" value={taxaInadimplenciaPF} onChange={e => setTaxaInadimplenciaPF(e.target.value)} className={`${cls} text-right font-mono`} placeholder="5" />
               </div>
               <div>
                 <label className={lbl}>Custeio mensal (Rating abaixo de C)</label>
