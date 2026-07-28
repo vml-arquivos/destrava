@@ -13747,6 +13747,8 @@ async function registrarDocumentoContratoGerado(params: {
         agencia,
         conta,
         gerente_banco,
+        banco_id,
+        gerente_id,
         contato_banco,
         data_abertura_conta,
         objetivo_credito,
@@ -13834,11 +13836,13 @@ async function registrarDocumentoContratoGerado(params: {
           margem_seguranca_30,
           percentual_operacional,
           proxima_atualizacao,
-          observacoes_iniciais
+          observacoes_iniciais,
+          banco_id,
+          gerente_id
         ) VALUES (
           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
           $11,$12,$13,$14,$15,$16,'em_acompanhamento','inicio',
-          $17,$18,$19,$20,$20,$21,$21,$22,$23,$24,$25,$26,$27
+          $17,$18,$19,$20,$20,$21,$21,$22,$23,$24,$25,$26,$27,$28,$29
         )
         RETURNING *`,
         [
@@ -13869,6 +13873,8 @@ async function registrarDocumentoContratoGerado(params: {
           percentualOperacional,
           proximaQuartaFeira(dtInicio),
           observacoes_iniciais || null,
+          banco_id || null,
+          gerente_id || null,
         ]
       );
 
@@ -13966,6 +13972,8 @@ async function registrarDocumentoContratoGerado(params: {
         "whatsapp_cliente",
         "email_cliente",
         "banco_observado",
+        "banco_id",
+        "gerente_id",
         "agencia",
         "conta",
         "gerente_banco",
@@ -14045,6 +14053,20 @@ async function registrarDocumentoContratoGerado(params: {
       if (!keys.length) {
         res.json({ success: true });
         return;
+      }
+
+      // Acompanhamento encerrado é só consulta -- edição normal fica bloqueada, exceto
+      // quando o próprio pedido está mudando o status (reabrindo de propósito). Sem essa
+      // checagem, o botão sumir na tela não impedia editar por outra via (deep link, API
+      // direta) um acompanhamento que já devia estar congelado.
+      if (!("status" in updates)) {
+        const atualStatus = await pool.query(`SELECT status FROM acompanhamentos_bancarios WHERE id = $1`, [req.params.id]);
+        if (String(atualStatus.rows[0]?.status || "").toLowerCase() === "encerrado") {
+          res.status(409).json({
+            error: "Este acompanhamento está encerrado e só permite consulta. Para editar, reabra alterando o status primeiro.",
+          });
+          return;
+        }
       }
 
       const values = Object.values(updates);

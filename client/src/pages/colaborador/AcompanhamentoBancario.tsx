@@ -413,7 +413,7 @@ const NOVO_FIELDS: AcompanhamentoFieldConfig[] = [
   { key: "banco_observado", label: "Banco observado", required: true, group: "banco", type: "banco" },
   { key: "agencia", label: "Agência", group: "banco" },
   { key: "conta", label: "Conta", group: "banco" },
-  { key: "gerente_banco", label: "Gerente do banco", group: "banco" },
+  { key: "gerente_banco", label: "Gerente do banco", group: "banco", type: "gerente" },
   { key: "contato_banco", label: "Contato do banco", group: "banco" },
   { key: "data_abertura_conta", label: "Data de abertura/relacionamento", type: "date", group: "banco" },
   { key: "data_inicio", label: "Início do acompanhamento", type: "date", group: "banco", required: true },
@@ -1233,10 +1233,24 @@ export default function AcompanhamentoBancario() {
         ? `/api/acompanhamentos-bancarios/${editandoId}`
         : "/api/acompanhamentos-bancarios";
 
+      // Casa o texto digitado com o catálogo real (bancos_parceiros/gerentes_bancarios) --
+      // se bater um nome já cadastrado, o acompanhamento fica vinculado ao registro certo
+      // e passa a aparecer nos filtros por banco/gerente. Se não bater (banco/gerente ainda
+      // não cadastrado), segue só com o texto livre, exatamente como já funcionava.
+      const bancoTexto = String(novo.banco_observado || "").trim().toLowerCase();
+      const bancoEncontrado = bancoTexto ? bancosCatalogo.find((b) => b.nome.trim().toLowerCase() === bancoTexto) : undefined;
+      const gerenteTexto = String(novo.gerente_banco || "").trim().toLowerCase();
+      const gerenteEncontrado = gerenteTexto ? gerentesCatalogo.find((g) => g.nome.trim().toLowerCase() === gerenteTexto) : undefined;
+      const payload = {
+        ...novo,
+        banco_id: bancoEncontrado?.id || null,
+        gerente_id: gerenteEncontrado?.id || null,
+      };
+
       const response = await fetch(url, {
         method: editandoId ? "PATCH" : "POST",
         headers: authHeaders(),
-        body: JSON.stringify(novo),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) {
         const errorText = await response.text().catch(() => "");
@@ -2015,10 +2029,12 @@ export default function AcompanhamentoBancario() {
           className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
           onClick={() => carregarDetalhe(row.id)}
         >Detalhes</button>
-        <button
-          className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
-          onClick={() => abrirEditarAcompanhamento(row)}
-        >Editar</button>
+        {!encerradoJa && (
+          <button
+            className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
+            onClick={() => abrirEditarAcompanhamento(row)}
+          >Editar</button>
+        )}
         {!encerradoJa && (
           <button
             className="rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
@@ -2440,7 +2456,30 @@ export default function AcompanhamentoBancario() {
               <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
                 {NOVO_FIELDS.filter((f) => f.group === "banco").map((field) =>
                   field.type === "banco" ? (
-                    <BancoField key={field.key} label={field.label} required={field.required} value={novo[field.key] || ""} onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))} />
+                    <BancoField
+                      key={field.key}
+                      label={field.label}
+                      required={field.required}
+                      value={novo[field.key] || ""}
+                      onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))}
+                      sugestoesExtra={bancosCatalogo.map((b) => b.nome)}
+                    />
+                  ) : field.type === "gerente" ? (
+                    <GerenteField
+                      key={field.key}
+                      label={field.label}
+                      required={field.required}
+                      value={novo[field.key] || ""}
+                      onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))}
+                      sugestoes={gerentesCatalogo
+                        .filter((g) => {
+                          const bancoAtual = String(novo.banco_observado || "").trim().toLowerCase();
+                          if (!bancoAtual) return true;
+                          const bancoDoGerente = bancosCatalogo.find((b) => b.id === g.banco_id)?.nome?.toLowerCase();
+                          return !bancoDoGerente || bancoDoGerente === bancoAtual;
+                        })
+                        .map((g) => g.nome)}
+                    />
                   ) : (
                     <FieldInput key={field.key} field={field} value={novo[field.key]} onChange={(v) => setNovo((p) => ({ ...p, [field.key]: v }))} />
                   )
@@ -2729,12 +2768,14 @@ export default function AcompanhamentoBancario() {
                         <option value="permupay">PermuPay</option>
                       </select>
                     </label>
-                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(detalhe.status_semana || detalhe.status)}`}>
-                      {labelStatus(detalhe.status_semana || detalhe.status)}
+                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${situacaoBadgeInfo(detalhe).classe}`}>
+                      {situacaoBadgeInfo(detalhe).label}
                     </span>
-                    <button className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100" onClick={() => abrirEditarAcompanhamento(detalhe)}>Editar acompanhamento</button>
-                    {/* Botão Atualizar semana: só ativo se a próxima semana já iniciou */}
-                    {(() => {
+                    {String(detalhe.status || "").toLowerCase() !== "encerrado" && (
+                      <button className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100" onClick={() => abrirEditarAcompanhamento(detalhe)}>Editar acompanhamento</button>
+                    )}
+                    {/* Botão Atualizar semana: só ativo se a próxima semana já iniciou, e só pra acompanhamento ainda ativo */}
+                    {String(detalhe.status || "").toLowerCase() !== "encerrado" && (() => {
                       const campos = calcularCamposSemana(detalhe);
                       const inicioProxima = parseDateLocal(campos.data_referencia_inicio);
                       const hoje = todayLocal();
@@ -2756,7 +2797,9 @@ export default function AcompanhamentoBancario() {
                         </button>
                       );
                     })()}
-                    <button className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100" onClick={() => adicionarOutroBanco(detalhe)}>+ Outro banco</button>
+                    {String(detalhe.status || "").toLowerCase() !== "encerrado" && (
+                      <button className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100" onClick={() => adicionarOutroBanco(detalhe)}>+ Outro banco</button>
+                    )}
                     <button className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-700 transition hover:bg-teal-100" onClick={() => exportarCSV(detalhe, prestadoraRelatorio)}>Exportar XLS</button>
                     <button className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100" onClick={() => abrirRelatorio(detalhe)}>Gerar relatório</button>
                     <button className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-100" onClick={() => { setImprimirOpen(detalhe); setDetalhe(null); }}>Imprimir</button>
@@ -2766,6 +2809,11 @@ export default function AcompanhamentoBancario() {
               </div>
 
               <div className="space-y-5 overflow-y-auto bg-slate-50 px-4 py-5 sm:px-6">
+                {String(detalhe.status || "").toLowerCase() === "encerrado" && (
+                  <div className="rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm text-slate-600">
+                    <span className="font-bold text-slate-700">Acompanhamento encerrado</span> — somente consulta. Edição, atualização semanal e vínculo de outro banco ficam disponíveis apenas enquanto o acompanhamento está ativo.
+                  </div>
+                )}
                 <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <h4 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Resumo geral</h4>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-0 sm:grid-cols-3 lg:grid-cols-6">
@@ -3611,9 +3659,12 @@ function InfoCard({ label, value, positive, negative }: {
 
 // ─── Componentes auxiliares ───────────────────────────────────────────────────
 
-function BancoField({ label, required, value, onChange }: {
-  label: string; required?: boolean; value: string; onChange: (v: string) => void;
+function BancoField({ label, required, value, onChange, sugestoesExtra }: {
+  label: string; required?: boolean; value: string; onChange: (v: string) => void; sugestoesExtra?: string[];
 }) {
+  // Combina o catálogo real (bancos_parceiros) com a lista conhecida de antes -- nenhum
+  // banco que já era sugerido deixa de aparecer, só ganha os cadastrados de verdade também.
+  const opcoes = Array.from(new Set([...(sugestoesExtra || []), ...BANCOS_SUGERIDOS]));
   return (
     <label>
       <span className="mb-1 block text-xs font-medium text-gray-600">{label}{required ? " *" : ""}</span>
@@ -3626,7 +3677,28 @@ function BancoField({ label, required, value, onChange }: {
         placeholder="Digite ou selecione o banco"
       />
       <datalist id="bancos-sugeridos">
-        {BANCOS_SUGERIDOS.map((b) => <option key={b} value={b} />)}
+        {opcoes.map((b) => <option key={b} value={b} />)}
+      </datalist>
+    </label>
+  );
+}
+
+function GerenteField({ label, required, value, onChange, sugestoes }: {
+  label: string; required?: boolean; value: string; onChange: (v: string) => void; sugestoes: string[];
+}) {
+  return (
+    <label>
+      <span className="mb-1 block text-xs font-medium text-gray-600">{label}{required ? " *" : ""}</span>
+      <input
+        className="w-full rounded border border-gray-300 p-2 text-sm"
+        list="gerentes-sugeridos"
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Digite ou selecione o gerente"
+      />
+      <datalist id="gerentes-sugeridos">
+        {sugestoes.map((g) => <option key={g} value={g} />)}
       </datalist>
     </label>
   );
