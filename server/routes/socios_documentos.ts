@@ -508,14 +508,23 @@ function buildSocioPayload(empresaId: string, socio: SocioInput): Record<string,
   };
 
   const docDigits = onlyDigits(normalized.cpf_cnpj);
-  if (docDigits.length === 11 && String(normalized.fonte_dados || '').toLowerCase().includes('cpfcnpj')) {
+  const fonteNormalizada = String(normalized.fonte_dados || '').toLowerCase();
+  const veioDeLookupCpfCnpj = fonteNormalizada.includes('cpfcnpj');
+  const veioDeEdicaoManual = fonteNormalizada.includes('manual');
+  if (docDigits.length === 11 && (veioDeLookupCpfCnpj || veioDeEdicaoManual)) {
     payload.cpf_cnpj = docDigits;
+    // cpf_completo_manual é o que a proteção contra sobrescrita de sincronização
+    // (SOCIOS_MANUAL_PROTECTED_COLUMNS) de fato verifica -- sem marcar isso aqui,
+    // uma edição feita pelo formulário geral (não pela busca de CPF dedicada)
+    // ficava vulnerável a ser desfeita na próxima sincronização com a Receita/QSA.
     payload.cpf_completo_manual = docDigits;
     payload.cpf_validado = true;
-    payload.cpf_fonte = 'cpfcnpj';
-    payload.cpfcnpj_status = 'success';
-    payload.cpfcnpj_fonte = 'cpfcnpj';
-    payload.cpfcnpj_consultado_at = new Date();
+    payload.cpf_fonte = veioDeLookupCpfCnpj ? 'cpfcnpj' : 'manual';
+    if (veioDeLookupCpfCnpj) {
+      payload.cpfcnpj_status = 'success';
+      payload.cpfcnpj_fonte = 'cpfcnpj';
+      payload.cpfcnpj_consultado_at = new Date();
+    }
     payload.ultima_atualizacao_pessoal = new Date();
   }
 
@@ -545,10 +554,16 @@ async function upsertSocioEmpresa(empresaId: string, socio: SocioInput) {
   const updatePayload: Record<string, unknown> = {};
   const source = String(payload.fonte_dados || '').toLowerCase();
   const isPublicSync = source.includes('api') || source.includes('cnpj') || source.includes('opencnpj') || source.includes('brasilapi');
+  // Uma vez que o CPF do sócio foi confirmado manualmente (cpf_completo_manual
+  // preenchido), o cpf_cnpj bruto também fica protegido -- é ele que a tela exibe,
+  // então não adianta proteger só o campo "manual" separado e deixar o exibido
+  // ser sobrescrito de volta pra versão mascarada da Receita numa sincronização.
+  const cpfJaConfirmadoManualmente = hasValue(current.cpf_completo_manual);
   for (const [key, value] of Object.entries(payload)) {
     if (key === 'empresa_id') continue;
     if (!SOCIOS_BASE_COLUMNS.has(key) || !columns.has(key)) continue;
     if (SOCIOS_MANUAL_PROTECTED_COLUMNS.has(key) && hasValue(current[key]) && isPublicSync) continue;
+    if (key === 'cpf_cnpj' && cpfJaConfirmadoManualmente && isPublicSync) continue;
     if (hasValue(value)) updatePayload[key] = value;
     else if (!hasValue(current[key])) updatePayload[key] = value;
   }
