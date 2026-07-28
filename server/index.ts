@@ -19,7 +19,7 @@ import { authorize, requirePermissao } from "./middleware/authorize.ts";
 import { setAuditoriaPool, registrarAuditoria, rotaAuditLogs } from "./middleware/auditoria.ts";
 import { getPermissoes, temPermissao, LISTA_CARGOS_VALIDOS, nivelHierarquico, podeGerenciar as _podeGerenciar, cargosGerenciaveis as _cargosGerenciaveis } from "../shared/cargos.ts";
 import cnpjRouter from './routes/cnpj';
-import sociosDocumentosRouter from './routes/socios_documentos';
+import sociosDocumentosRouter, { upsertSocioEmpresa } from './routes/socios_documentos';
 import documentosRouter from './routes/documentos';
 import documentacaoRouter from './routes/documentacao';
 import blogRoutes from './routes/blogRoutes';
@@ -6317,6 +6317,26 @@ async function startServer() {
         await registrarHistoricoEmpresaSeguro(id, "empresa_sincronizada", resumo, (req as any).colaborador?.nome || "Sistema");
       } else {
         await registrarHistoricoEmpresaSeguro(id, "empresa_atualizada", "Dados da empresa atualizados.", (req as any).colaborador?.nome || "Sistema");
+      }
+
+      // Ponte pro QSA real: o campo "Sócio/Responsável" do formulário de empresa grava em
+      // empresas.responsavel_* -- sem isso, essa edição nunca chegava em socios_empresa, e o
+      // painel de QSA (que é quem calcula pendências/score) continuava mostrando os dados
+      // antigos/mascarados mesmo depois de editado aqui. Usa a mesma função de upsert do
+      // QSA, então herda a mesma proteção contra sobrescrita que já vale pra edição manual.
+      if (("responsavel_nome" in updates || "responsavel_cpf" in updates) && rows[0]?.responsavel_nome) {
+        try {
+          await upsertSocioEmpresa(id, {
+            nome: rows[0].responsavel_nome,
+            cpf_cnpj: rows[0].responsavel_cpf || null,
+            qualificacao_socio: rows[0].responsavel_cargo || null,
+            telefone: rows[0].responsavel_telefone || null,
+            email: rows[0].responsavel_email || null,
+            fonte_dados: ehSincronizacaoAutomatica ? "api_publica_cnpj" : "manual_validado",
+          } as any);
+        } catch (socioSyncErr) {
+          console.warn("[PATCH /api/empresas/:id] Falha ao sincronizar responsável com socios_empresa:", socioSyncErr);
+        }
       }
       res.json({ ...rows[0], _alteracoesReais: alteracoesReais });
     } catch (err: any) {

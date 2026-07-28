@@ -531,7 +531,7 @@ function buildSocioPayload(empresaId: string, socio: SocioInput): Record<string,
   return payload;
 }
 
-async function upsertSocioEmpresa(empresaId: string, socio: SocioInput) {
+export async function upsertSocioEmpresa(empresaId: string, socio: SocioInput) {
   const columns = await ensureSociosEmpresaSchema();
   const payload = buildSocioPayload(empresaId, socio);
   if (!payload) return null;
