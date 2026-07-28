@@ -29,6 +29,23 @@ export function getDataDir(): string {
   const configuredPath = configured ? path.resolve(configured) : '';
   const coolifyUploads = path.resolve('/app/uploads');
 
+  // Engano fácil de cometer (e foi exatamente o que aconteceu nesta instalação): configurar
+  // DATA_DIR com o mesmo valor do "Destination Path" do volume no Coolify (/app/uploads).
+  // Essa função sempre retorna o PAI da pasta de uploads -- todo chamador completa sozinho
+  // com 'uploads/...'. Se DATA_DIR aponta pro próprio /app/uploads, cada gravação vira
+  // /app/uploads/uploads/... (caminho duplicado): o arquivo continua fisicamente dentro do
+  // volume persistente (não é perdido no redeploy), mas a lógica que localiza o arquivo
+  // depois procura no caminho sem duplicar, não encontra, e mostra como indisponível.
+  if (configuredPath && normalizePath(configuredPath) === normalizePath(coolifyUploads)) {
+    console.warn(
+      `[documentStorage] DATA_DIR="${configured}" aponta pro próprio destino do volume de uploads, `
+      + `não pro pai dele -- isso duplicaria o caminho (/app/uploads/uploads/...). `
+      + `Corrigindo automaticamente para "${path.dirname(coolifyUploads)}". `
+      + `Recomendado: ajustar DATA_DIR no Coolify para "${path.dirname(coolifyUploads)}" pra não depender desse ajuste automático.`
+    );
+    return path.dirname(coolifyUploads);
+  }
+
   // Produção atual no Coolify: volume persistente montado em /app/uploads.
   // Se DATA_DIR ficou apontando para o padrão antigo (/var/data/destrava),
   // priorizamos o volume realmente montado para não bloquear upload nem perder arquivos.
