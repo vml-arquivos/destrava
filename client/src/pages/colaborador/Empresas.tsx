@@ -1523,13 +1523,18 @@ export default function Empresas() {
         score_spc: form.score_spc || null,
       };
       if (editando) {
-        await apiFetch(`/api/empresas/${editando.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+        const atualizada = await apiFetch(`/api/empresas/${editando.id}`, { method: "PATCH", body: JSON.stringify(payload) });
         if (socios.length > 0) {
           await apiFetch(`/api/empresas/${editando.id}/socios/bulk`, {
             method: "POST",
             body: JSON.stringify({ socios: normalizarSociosReceita(socios as any[]), replace: true }),
           }).catch(() => null);
         }
+        // Raiz do bug: só a lista lateral (empresas) era atualizada depois de salvar --
+        // a ficha exibida na tela usa `selecionada`, que ficava com os dados antigos até
+        // uma navegação manual ou reload forçar um novo fetch. Atualiza os dois agora.
+        setSelecionada((prev) => (prev && prev.id === editando.id ? { ...prev, ...atualizada } : prev));
+        setEmpresas((prev) => prev.map((e) => (e.id === editando.id ? { ...e, ...atualizada } : e)));
         toast.success("Empresa atualizada!");
       } else {
         const criada = await apiFetch("/api/empresas", { method: "POST", body: JSON.stringify(payload) });
