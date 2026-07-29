@@ -13738,10 +13738,14 @@ async function registrarDocumentoContratoGerado(params: {
           row.proxima_atualizacao <= hoje &&
           ["em_acompanhamento", "atualizacao_pendente", "prorrogado"].includes(row.status)
         );
+        const diasSemAtualizacao = isPendente
+          ? Math.floor((new Date(hoje + 'T00:00:00Z').getTime() - new Date(String(row.proxima_atualizacao) + 'T00:00:00Z').getTime()) / 86400000)
+          : 0;
         return {
           ...row,
           status_pendente: isPendente,
           atualizacao_pendente: isPendente,
+          dias_sem_atualizacao: diasSemAtualizacao,
           whatsapp_lembrete_url: montarWhatsappAcompanhamento(row.whatsapp_cliente || row.telefone_cliente, msg),
         };
       });

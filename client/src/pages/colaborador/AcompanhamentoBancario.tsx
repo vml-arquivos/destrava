@@ -1082,7 +1082,7 @@ export default function AcompanhamentoBancario() {
 
   // ─── Filtros locais ──────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    return rows.filter((row) => {
+    const base = rows.filter((row) => {
       const matchesBanco =
         !banco.trim() ||
         String(row.banco_observado || "")
@@ -1091,6 +1091,16 @@ export default function AcompanhamentoBancario() {
       const matchesBancoId = !bancoIdFiltro || row.banco_id === bancoIdFiltro;
       const matchesGerenteId = !gerenteIdFiltro || row.gerente_id === gerenteIdFiltro;
       return matchesBanco && matchesBancoId && matchesGerenteId;
+    });
+    // Parados (sem atualização há dias/semanas) sobem pro topo, ordenados do mais
+    // atrasado pro menos atrasado -- não ficam misturados com quem está em dia,
+    // que fica embaixo. É isso que separa visualmente quem precisa de atenção.
+    return [...base].sort((a, b) => {
+      const pendenteA = Boolean(a.status_pendente || a.atualizacao_pendente);
+      const pendenteB = Boolean(b.status_pendente || b.atualizacao_pendente);
+      if (pendenteA !== pendenteB) return pendenteA ? -1 : 1;
+      if (pendenteA && pendenteB) return (b.dias_sem_atualizacao || 0) - (a.dias_sem_atualizacao || 0);
+      return 0;
     });
   }, [rows, banco, bancoIdFiltro, gerenteIdFiltro]);
 
@@ -2332,17 +2342,36 @@ export default function AcompanhamentoBancario() {
                 ) : filtered.length === 0 ? (
                   <tr><td className="px-4 py-5 text-gray-500" colSpan={9}>Nenhum acompanhamento cadastrado.</td></tr>
                 ) : (
-                  filtered.map((row) => {
+                  filtered.map((row, index) => {
                     const pendente = row.status_pendente || row.atualizacao_pendente;
                     const saldo = Number(row.saldo_semanal || row.saldo_ultima_semana || 0);
+                    const anterior = filtered[index - 1];
+                    const pendenteAnterior = anterior ? Boolean(anterior.status_pendente || anterior.atualizacao_pendente) : null;
+                    const iniciaGrupoEmDia = !pendente && pendenteAnterior === true;
                     return (
                       <Fragment key={row.id}>
+                        {index === 0 && pendente && (
+                          <tr>
+                            <td colSpan={9} className="bg-orange-50 border-t border-orange-200 px-4 py-2 text-xs font-bold text-orange-700 uppercase tracking-wide">
+                              ⚠️ Parados — precisam de atenção ({filtered.filter((r) => r.status_pendente || r.atualizacao_pendente).length})
+                            </td>
+                          </tr>
+                        )}
+                        {iniciaGrupoEmDia && (
+                          <tr>
+                            <td colSpan={9} className="bg-slate-50 border-t border-slate-200 px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wide">
+                              Em dia
+                            </td>
+                          </tr>
+                        )}
                         <tr className="border-t border-gray-100 align-middle hover:bg-gray-50/60">
                           <td className="px-4 py-4">
                             <div className="min-w-0">
                               <div className="break-words font-semibold leading-snug text-gray-900">{row.nome_empresa || "-"}</div>
                               {pendente && (
-                                <span className="mt-1 inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-orange-700">Pendente</span>
+                                <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-orange-700">
+                                  ⚠️ {row.dias_sem_atualizacao > 0 ? `Parado há ${row.dias_sem_atualizacao} dia(s)` : "Pendente hoje"}
+                                </span>
                               )}
                             </div>
                           </td>
