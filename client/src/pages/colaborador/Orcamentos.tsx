@@ -138,6 +138,14 @@ function fmtDate(date?: string | null): string {
   return d.toLocaleDateString("pt-BR");
 }
 
+function formatFileSize(value?: number): string {
+  const bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "tamanho não informado";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function calcularTotalServicos(servicos: ServicoOrcamento[]): number {
   return servicos.reduce(
     (acc, servico) =>
@@ -429,10 +437,14 @@ export default function Orcamentos() {
             method: "POST",
             body: JSON.stringify(payload),
           });
-      setSelecionado(saved);
+      const savedComAnexos = {
+        ...saved,
+        anexos: saved?.anexos ?? selecionado?.anexos ?? [],
+      };
+      setSelecionado(savedComAnexos);
       toast.success("Orçamento salvo");
       await carregarTudo();
-      return saved;
+      return savedComAnexos;
     } catch (err: any) {
       toast.error(err.message || "Erro ao salvar orçamento");
       return null;
@@ -449,8 +461,12 @@ export default function Orcamentos() {
       const result = await apiFetch(`/api/orcamentos/${saved.id}/finalizar`, {
         method: "POST",
       });
-      const finalizado = result?.orcamento ||
+      const finalizadoBase = result?.orcamento ||
         result || { ...saved, status: "finalizado" };
+      const finalizado = {
+        ...finalizadoBase,
+        anexos: finalizadoBase?.anexos ?? saved?.anexos ?? selecionado?.anexos ?? [],
+      };
       setSelecionado(finalizado);
       setEdicaoFinalizadoLiberada(false);
       toast.success("Orçamento finalizado");
@@ -486,7 +502,13 @@ export default function Orcamentos() {
           method: "PUT",
           body: JSON.stringify({ ...form, itens: servicosParaSalvar, valor_total: valorFinal }),
         }).catch(() => null);
-        if (atualizado) { base = atualizado; setSelecionado(atualizado); }
+        if (atualizado) {
+          base = {
+            ...atualizado,
+            anexos: atualizado?.anexos ?? base?.anexos ?? selecionado?.anexos ?? [],
+          };
+          setSelecionado(base);
+        }
       } else {
         base = await salvar();
         if (!base?.id) return;
@@ -498,7 +520,11 @@ export default function Orcamentos() {
       // Garantir que está finalizado
       if (base.status !== "finalizado") {
         const result = await apiFetch(`/api/orcamentos/${base.id}/finalizar`, { method: "POST" });
-        base = result?.orcamento || base;
+        const finalizado = result?.orcamento || base;
+        base = {
+          ...finalizado,
+          anexos: finalizado?.anexos ?? base?.anexos ?? selecionado?.anexos ?? [],
+        };
         setSelecionado(base);
       }
       if (!base?.id) {
@@ -557,21 +583,50 @@ export default function Orcamentos() {
     }
     setSalvando(true);
     try {
-      const fd = new FormData();
-      Array.from(arquivosAtuais).forEach((file) =>
-        fd.append("arquivos", file, file.name),
-      );
-      if (descricaoAnexo) fd.append("descricao", descricaoAnexo);
-      await apiFetch(`/api/orcamentos/${saved.id}/anexos`, {
-        method: "POST",
-        body: fd,
-      });
-      toast.success("Documentos anexados ao orçamento");
-      setArquivos(null);
-      setDescricaoAnexo("");
-      if (fileRef.current) fileRef.current.value = "";
-      await abrirOrcamento({ ...saved, id: saved.id });
-      await carregarTudo();
+      const selecionados = Array.from(arquivosAtuais);
+      let enviados = 0;
+      const falhas: string[] = [];
+
+      // Um arquivo por requisição: mantém a seleção múltipla para o usuário, mas
+      // impede que navegador, proxy e servidor precisem manter todo o lote
+      // simultaneamente na memória.
+      for (const file of selecionados) {
+        if (file.size > 25 * 1024 * 1024) {
+          falhas.push(`${file.name} (excede 25 MB)`);
+          continue;
+        }
+        const fd = new FormData();
+        fd.append("arquivos", file, file.name);
+        if (descricaoAnexo) fd.append("descricao", descricaoAnexo);
+        try {
+          await apiFetch(`/api/orcamentos/${saved.id}/anexos`, {
+            method: "POST",
+            body: fd,
+          });
+          enviados += 1;
+        } catch (err: any) {
+          falhas.push(`${file.name} (${err?.message || "falha no envio"})`);
+        }
+      }
+
+      if (enviados > 0) {
+        toast.success(
+          enviados === 1
+            ? "1 documento anexado ao orçamento"
+            : `${enviados} documentos anexados ao orçamento`,
+        );
+        setArquivos(null);
+        setDescricaoAnexo("");
+        if (fileRef.current) fileRef.current.value = "";
+        await abrirOrcamento({ ...saved, id: saved.id });
+        await carregarTudo();
+      }
+      if (falhas.length > 0) {
+        toast.error(
+          `${falhas.length} arquivo(s) não foram enviados: ${falhas.join("; ")}`,
+          { duration: 8000 },
+        );
+      }
     } catch (err: any) {
       toast.error(err.message || "Erro ao anexar documentos");
     } finally {
@@ -739,7 +794,7 @@ export default function Orcamentos() {
                   {[
                     ["editor", "Editor"],
                     ["servicos", `Serviços (${servicosValidos.length})`],
-                    ["anexos", "Anexos"],
+                    ["anexos", `Anexos (${selecionado?.anexos?.length || 0})`],
                     ["preview", "Prévia"],
                   ].map(([id, label]) => (
                     <button
@@ -1589,6 +1644,43 @@ export default function Orcamentos() {
                         <div className="mt-1 text-xs text-blue-400">Válido por {form.validade_dias} dias</div>
                       )}
                     </div>
+
+                    {/* Relação dos documentos que acompanharão o PDF final */}
+                    {(selecionado?.anexos || []).length > 0 && (
+                      <div className="my-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="mb-3 text-sm font-black text-slate-800">
+                          Documentos anexados
+                        </div>
+                        <div className="space-y-2">
+                          {(selecionado?.anexos || []).map((anexo) => (
+                            <div
+                              key={anexo.id}
+                              className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                            >
+                              <div className="min-w-0">
+                                <div className="break-words text-sm font-bold text-slate-800">
+                                  {anexo.nome_original}
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                  {anexo.descricao || "Anexo"} · {formatFileSize(anexo.tamanho_bytes)}
+                                </div>
+                              </div>
+                              <span
+                                className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                                  (anexo.incluir_no_pdf ?? true)
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : "bg-slate-200 text-slate-600"
+                                }`}
+                              >
+                                {(anexo.incluir_no_pdf ?? true)
+                                  ? "Incluído no PDF"
+                                  : "Somente no sistema"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Assinaturas */}
                     <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-2">

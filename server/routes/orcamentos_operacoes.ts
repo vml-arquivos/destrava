@@ -636,11 +636,13 @@ function safePdfFileName(value: unknown, fallback = 'orcamento'): string {
 
 function pdfText(value: unknown): string {
   return String(value ?? '')
-    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
+    .replace(/\u00a0/g, ' ')
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
     .replace(/[–—]/g, '-')
-    .replace(/[^\u0020-\u00ff]/g, '')
+    .replace(/[^\u0020-\u007e\u00a0-\u00ff]/g, '')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
@@ -747,17 +749,23 @@ async function buscarAnexosParaMerge(pool: Pool, orcamentoId: string): Promise<A
         row.storage_path ? String(row.storage_path) : null,
         nomeArquivo ? path.join(uploadsOrcamentosDir(orcamentoId), nomeArquivo) : null,
       ].filter((v): v is string => Boolean(v));
-      const encontrado = candidatos.find((c) => fs.existsSync(c) && fs.statSync(c).isFile());
+      const encontrado = candidatos.find((c) => {
+        try {
+          return fs.existsSync(c) && fs.statSync(c).isFile();
+        } catch {
+          return false;
+        }
+      });
       if (!encontrado) {
-        resultado.push({ nomeOriginal: row.nome_original || "anexo", mimeType: row.mime_type || null, buffer: null, descricao: row.descricao || null, erro: "não encontrado no armazenamento" });
+        resultado.push({ nomeOriginal: row.nome_original || "anexo", mimeType: row.mime_type || null, filePath: null, descricao: row.descricao || null, erro: "não encontrado no armazenamento" });
         continue;
       }
-      try {
-        const buffer = await fs.promises.readFile(encontrado);
-        resultado.push({ nomeOriginal: row.nome_original || "anexo", mimeType: row.mime_type || null, buffer, descricao: row.descricao || null });
-      } catch (err: any) {
-        resultado.push({ nomeOriginal: row.nome_original || "anexo", mimeType: row.mime_type || null, buffer: null, descricao: row.descricao || null, erro: err?.message || "falha ao ler arquivo" });
-      }
+      resultado.push({
+        nomeOriginal: row.nome_original || "anexo",
+        mimeType: row.mime_type || null,
+        filePath: encontrado,
+        descricao: row.descricao || null,
+      });
     }
     return resultado;
   } catch (err) {
@@ -793,28 +801,48 @@ async function gerarPdfOrcamentoUltimoRecurso(orcamento: Row): Promise<Buffer> {
 
 export async function gerarPdfOrcamentoComFallback(pool: Pool, orcamento: Row): Promise<{ pdf: Buffer; fallback: boolean; reason?: string }> {
   const anexos = await buscarAnexosParaMerge(pool, String(orcamento.id));
+  let base: Buffer;
+  let fallback = false;
+  let reason = "";
+
   try {
-    const base = await gerarPdfOrcamentoPuppeteer(orcamento);
-    const pdf = anexos.length ? await appendAttachmentsToPdf(base, anexos) : base;
-    return { pdf, fallback: false };
+    base = await gerarPdfOrcamentoPuppeteer(orcamento);
   } catch (err: any) {
-    const reason = err?.message || String(err);
+    reason = err?.message || String(err);
     console.warn('[orcamentos][pdf] usando fallback sem Chromium:', reason);
+    fallback = true;
     try {
-      const base = await gerarPdfOrcamentoFallback(orcamento, reason);
-      const pdf = anexos.length ? await appendAttachmentsToPdf(base, anexos) : base;
-      return { pdf, fallback: true, reason };
+      base = await gerarPdfOrcamentoFallback(orcamento, reason);
     } catch (fallbackErr: any) {
-      // Nem o Puppeteer nem o fallback normal deram conta -- registra os dois motivos
-      // com detalhe (pra investigação futura) e ainda assim entrega um PDF utilizável.
       const fallbackReason = fallbackErr?.message || String(fallbackErr);
       console.error(
         `[orcamentos][pdf] fallback normal também falhou -- usando último recurso. `
         + `orcamento_id=${orcamento?.id} puppeteer="${reason}" fallback="${fallbackReason}"`
       );
-      const pdf = await gerarPdfOrcamentoUltimoRecurso(orcamento);
-      return { pdf, fallback: true, reason: `${reason} | fallback também falhou: ${fallbackReason}` };
+      base = await gerarPdfOrcamentoUltimoRecurso(orcamento);
+      reason = `${reason} | fallback também falhou: ${fallbackReason}`;
     }
+  }
+
+  if (!anexos.length) return { pdf: base, fallback, reason: reason || undefined };
+
+  try {
+    const pdf = await appendAttachmentsToPdf(base, anexos);
+    return { pdf, fallback, reason: reason || undefined };
+  } catch (mergeErr: any) {
+    // Uma falha extrema no lote de anexos nunca deve invalidar o orçamento
+    // principal. Os erros normais de cada arquivo já são tratados e registrados
+    // pelo manifesto; esta proteção cobre apenas falhas globais inesperadas.
+    const mergeReason = mergeErr?.message || String(mergeErr);
+    console.error(
+      `[orcamentos][pdf] falha global ao mesclar anexos; entregando orçamento base. `
+      + `orcamento_id=${orcamento?.id} erro="${mergeReason}"`,
+    );
+    return {
+      pdf: base,
+      fallback: true,
+      reason: [reason, `anexos: ${mergeReason}`].filter(Boolean).join(" | "),
+    };
   }
 }
 

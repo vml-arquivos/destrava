@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts as StandardFontsRef, rgb as rgbRef } from "pdf-lib";
+import fs from "fs";
 import { DESTRAVA_LOGO_B64, PERMUPAY_LOGO_B64 } from "../logo_constants";
 import { closeChromium, launchChromium } from "./chromiumLauncher";
 
@@ -108,7 +109,13 @@ function headerTemplate(value: unknown): string {
 export type AnexoParaMerge = {
   nomeOriginal: string;
   mimeType: string | null;
-  buffer: Buffer | null;
+  /**
+   * Compatibilidade com os chamadores antigos e com testes unitários. No fluxo
+   * de produção, prefira filePath para que apenas um anexo seja mantido na
+   * memória por vez durante a mesclagem.
+   */
+  buffer?: Buffer | null;
+  filePath?: string | null;
   descricao?: string | null;
   erro?: string | null; // preenchido quando o arquivo não pôde ser lido do storage
 };
@@ -119,7 +126,8 @@ function isPdfMime(mime: string | null, nome: string): boolean {
 }
 
 function isImageMime(mime: string | null, nome: string): boolean {
-  if (mime && mime.toLowerCase().startsWith("image/")) return true;
+  const normalizedMime = String(mime || "").toLowerCase();
+  if (normalizedMime === "image/png" || normalizedMime === "image/jpeg" || normalizedMime === "image/jpg") return true;
   return /\.(png|jpe?g)$/i.test(nome || "");
 }
 
@@ -143,12 +151,48 @@ function isImageMime(mime: string | null, nome: string): boolean {
  */
 function pdfSafeText(value: unknown): string {
   return String(value ?? "")
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    // U+0080..U+009F também são controles. A faixa passava pelo filtro antigo
+    // e fazia Helvetica/WinAnsi lançar "cannot encode", abortando o PDF todo.
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
+    .replace(/\u00a0/g, " ")
     .replace(/[""]/g, '"')
     .replace(/['']/g, "'")
     .replace(/[–—]/g, "-")
-    .replace(/[^\u0020-\u00ff]/g, "")
+    .replace(/[^\u0020-\u007e\u00a0-\u00ff]/g, "")
+    .replace(/\s+/g, " ")
     .trim();
+}
+
+type ResultadoAnexo = {
+  anexo: AnexoParaMerge;
+  status: "incluido" | "separado" | "erro";
+  detalhe?: string;
+};
+
+function wrapManifestText(value: unknown, maxChars = 58): string[] {
+  const words = pdfSafeText(value).split(/\s+/).filter(Boolean);
+  if (!words.length) return [""];
+  const lines: string[] = [];
+  let current = "";
+  for (let word of words) {
+    while (word.length > maxChars) {
+      if (current) {
+        lines.push(current);
+        current = "";
+      }
+      lines.push(word.slice(0, maxChars));
+      word = word.slice(maxChars);
+    }
+    if (!word) continue;
+    if (current && `${current} ${word}`.length > maxChars) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = current ? `${current} ${word}` : word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
 }
 
 export async function appendAttachmentsToPdf(
@@ -158,21 +202,49 @@ export async function appendAttachmentsToPdf(
   if (!anexos.length) return baseDocPdfBuffer;
 
   const merged = await PDFDocument.load(baseDocPdfBuffer);
-  const naoMescladosNoCorpo: AnexoParaMerge[] = [];
+  const resultados: ResultadoAnexo[] = [];
 
   for (const anexo of anexos) {
-    if (anexo.erro || !anexo.buffer) {
-      naoMescladosNoCorpo.push(anexo);
+    if (anexo.erro) {
+      resultados.push({ anexo, status: "erro", detalhe: anexo.erro });
       continue;
     }
+
+    const ehPdf = isPdfMime(anexo.mimeType, anexo.nomeOriginal);
+    const ehImagem = isImageMime(anexo.mimeType, anexo.nomeOriginal);
+    if (!ehPdf && !ehImagem) {
+      resultados.push({ anexo, status: "separado" });
+      continue;
+    }
+
+    let buffer: Buffer | null = anexo.buffer || null;
     try {
-      if (isPdfMime(anexo.mimeType, anexo.nomeOriginal)) {
-        const anexoDoc = await PDFDocument.load(anexo.buffer, { ignoreEncryption: true });
-        const paginas = await merged.copyPages(anexoDoc, anexoDoc.getPageIndices());
+      // Leitura sob demanda: evita manter todos os documentos simultaneamente
+      // na memória antes mesmo de o pdf-lib começar a processá-los.
+      if (!buffer && anexo.filePath) {
+        buffer = await fs.promises.readFile(anexo.filePath);
+      }
+      if (!buffer?.length) {
+        resultados.push({ anexo, status: "erro", detalhe: "arquivo vazio ou indisponível" });
+        continue;
+      }
+
+      if (ehPdf) {
+        const anexoDoc = await PDFDocument.load(buffer, {
+          ignoreEncryption: true,
+          updateMetadata: false,
+        });
+        const indices = anexoDoc.getPageIndices();
+        if (!indices.length) {
+          resultados.push({ anexo, status: "erro", detalhe: "PDF sem páginas" });
+          continue;
+        }
+        const paginas = await merged.copyPages(anexoDoc, indices);
         paginas.forEach((p) => merged.addPage(p));
-      } else if (isImageMime(anexo.mimeType, anexo.nomeOriginal)) {
+        resultados.push({ anexo, status: "incluido" });
+      } else if (ehImagem) {
         const isPng = /\.png$/i.test(anexo.nomeOriginal) || (anexo.mimeType || "").includes("png");
-        const image = isPng ? await merged.embedPng(anexo.buffer) : await merged.embedJpg(anexo.buffer);
+        const image = isPng ? await merged.embedPng(buffer) : await merged.embedJpg(buffer);
         const pageWidth = 595.28;
         const pageHeight = 841.89;
         const margin = 40;
@@ -183,31 +255,78 @@ export async function appendAttachmentsToPdf(
         const h = image.height * scale;
         const page = merged.addPage([pageWidth, pageHeight]);
         page.drawImage(image, { x: (pageWidth - w) / 2, y: (pageHeight - h) / 2, width: w, height: h });
-      } else {
-        naoMescladosNoCorpo.push(anexo);
+        resultados.push({ anexo, status: "incluido" });
       }
     } catch (err: any) {
-      naoMescladosNoCorpo.push({ ...anexo, erro: err?.message || "Falha ao processar anexo" });
+      resultados.push({
+        anexo,
+        status: "erro",
+        detalhe: err?.message || "falha ao processar anexo",
+      });
+    } finally {
+      // O buffer carregado via filePath não permanece referenciado no array de
+      // anexos; fica elegível para coleta antes da leitura do próximo arquivo.
+      if (!anexo.buffer) buffer = null;
     }
   }
 
-  // Página de manifesto: sempre lista TODOS os anexos (mesclados ou não), pra deixar
-  // registrado no próprio PDF o que acompanha o documento -- inclusive os que não deu
-  // pra embutir visualmente.
+  // Manifesto paginado: lista TODOS os anexos e o resultado real de cada
+  // processamento. Assim um documento inválido não derruba a proposta inteira
+  // nem aparece incorretamente como se tivesse sido incorporado.
   const font = await merged.embedFont(StandardFontsRef.Helvetica);
   const bold = await merged.embedFont(StandardFontsRef.HelveticaBold);
-  const manifestoPage = merged.addPage([595.28, 841.89]);
+  let manifestoPage = merged.addPage([595.28, 841.89]);
   let y = 790;
-  manifestoPage.drawText("Documentos anexados a esta proposta", { x: 48, y, size: 14, font: bold, color: rgbRef(0.06, 0.18, 0.38) });
-  y -= 28;
-  anexos.forEach((a, idx) => {
-    if (y < 60) return; // manifesto simples, não pagina (lista tende a ser curta)
-    const statusTxt = a.erro ? " (arquivo não pôde ser recuperado do armazenamento)" : (isPdfMime(a.mimeType, a.nomeOriginal) || isImageMime(a.mimeType, a.nomeOriginal)) ? " (incluído nas páginas acima)" : " (anexo em arquivo separado, disponível no sistema)";
-    const nomeSeguro = pdfSafeText(a.nomeOriginal) || "documento anexado";
-    const descricaoSegura = a.descricao ? pdfSafeText(a.descricao) : "";
-    const linha = `${idx + 1}. ${nomeSeguro}${descricaoSegura ? ` — ${descricaoSegura}` : ""}${statusTxt}`;
-    manifestoPage.drawText(linha.slice(0, 110), { x: 48, y, size: 9, font, color: rgbRef(0.2, 0.24, 0.3) });
-    y -= 16;
+  let manifestoPagina = 1;
+
+  const drawManifestHeader = () => {
+    const titulo = manifestoPagina === 1
+      ? "Documentos anexados a esta proposta"
+      : "Documentos anexados - continuação";
+    manifestoPage.drawText(titulo, {
+      x: 48,
+      y,
+      size: 14,
+      font: bold,
+      color: rgbRef(0.06, 0.18, 0.38),
+    });
+    y -= 28;
+  };
+
+  const ensureManifestSpace = (lineCount: number) => {
+    if (y - lineCount * 13 >= 55) return;
+    manifestoPage = merged.addPage([595.28, 841.89]);
+    manifestoPagina += 1;
+    y = 790;
+    drawManifestHeader();
+  };
+
+  drawManifestHeader();
+  resultados.forEach((resultado, idx) => {
+    const { anexo } = resultado;
+    const nomeSeguro = pdfSafeText(anexo.nomeOriginal) || "documento anexado";
+    const descricaoSegura = anexo.descricao ? pdfSafeText(anexo.descricao) : "";
+    const statusTxt = resultado.status === "incluido"
+      ? "incluído integralmente nas páginas anteriores"
+      : resultado.status === "separado"
+        ? "arquivo preservado no sistema; formato não incorporável ao PDF"
+        : `não incorporado: ${pdfSafeText(resultado.detalhe || "falha ao processar")}`;
+    const texto = `${idx + 1}. ${nomeSeguro}${descricaoSegura ? ` - ${descricaoSegura}` : ""} (${statusTxt})`;
+    const linhas = wrapManifestText(texto);
+    ensureManifestSpace(linhas.length + 1);
+    linhas.forEach((linha) => {
+      manifestoPage.drawText(linha, {
+        x: 48,
+        y,
+        size: 9,
+        font,
+        color: resultado.status === "erro"
+          ? rgbRef(0.65, 0.16, 0.16)
+          : rgbRef(0.2, 0.24, 0.3),
+      });
+      y -= 13;
+    });
+    y -= 5;
   });
 
   return Buffer.from(await merged.save());
