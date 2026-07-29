@@ -117,8 +117,8 @@ const tipoDocumentoLabel: Record<string, string> = {
   scr_cpf: "21. Relatório SCR do CPF",
   ccs_cpf: "22. Relatório CCS do CPF",
   ccf_cpf: "23. Relatório CCF do CPF",
-  consulta_serasa_cnpj: "Consulta Serasa (CNPJ)",
-  consulta_serasa_cpf: "Consulta Serasa (CPF)",
+  consulta_serasa_cnpj: "Rating (CNPJ)",
+  consulta_serasa_cpf: "Rating (CPF)",
   compartilhamento_ecac: "24. Compartilhamento eCAC por banco",
   foto_fachada: "25. Fotos da empresa",
   foto_interna_1: "25. Fotos da empresa",
@@ -205,7 +205,7 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
       slot("18. Relatório SCR do CNPJ", "scr_cnpj"),
       slot("19. Relatório CCS do CNPJ", "ccs_cnpj"),
       slot("20. Relatório CCF do CNPJ", "ccf_cnpj"),
-      slot("Consulta Serasa (CNPJ)", "consulta_serasa_cnpj"),
+      slot("Rating (CNPJ)", "consulta_serasa_cnpj"),
     ],
   },
   {
@@ -220,7 +220,7 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
       slot("21. Relatório SCR do CPF", "scr_cpf"),
       slot("22. Relatório CCS do CPF", "ccs_cpf"),
       slot("23. Relatório CCF do CPF", "ccf_cpf"),
-      slot("Consulta Serasa (CPF)", "consulta_serasa_cpf"),
+      slot("Rating (CPF)", "consulta_serasa_cpf"),
     ],
   },
   {
