@@ -2074,6 +2074,10 @@ async function startServer() {
     const bancosConhecidos = [
       "CAIXA Econômica Federal", "Banco do Brasil", "Bradesco", "Itaú",
       "Santander", "Sicredi", "Sicoob", "BNB", "BNDES",
+      "BRB - Banco Regional de Brasília", "Banco Safra", "Banco Inter",
+      "Nubank", "Banco Pan", "BTG Pactual", "Banco BV", "Banrisul",
+      "C6 Bank", "Banco Original", "Daycoval", "Banco ABC Brasil",
+      "Mercantil do Brasil",
     ];
     for (const nome of bancosConhecidos) {
       await pool.query(
@@ -2177,6 +2181,42 @@ async function startServer() {
       + `gerentes: ${gerentesVinculados} acompanhamento(s) vinculado(s), ${gerentesCriados} gerente(s) promovido(s) ao catálogo.`
     );
   } catch (err: any) { console.warn('[startup] Migration 076:', err?.message); }
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  // ── Migration 077: motivo_encerramento estruturado em acompanhamentos_bancarios --
+  //    antes só existia observacoes_finais em texto livre (por isso "Encerrado —
+  //    encerrado, declinado" e "Encerrado — ALTERAÇÃO DE DADOS..." apareciam soltos
+  //    na tela, sem dar pra filtrar de verdade por declinado/cancelado/finalizado).
+  //    Backfill só categoriza onde o padrão no texto já existente é claro -- não
+  //    força positivo/negativo pra registro antigo onde não dá pra saber com certeza
+  //    (fica null, mais seguro que adivinhar errado; a tela deixa reclassificar).
+  try {
+    await pool.query(`
+      ALTER TABLE public.acompanhamentos_bancarios
+        ADD COLUMN IF NOT EXISTS motivo_encerramento TEXT;
+    `);
+    const semMotivo = await pool.query(
+      `SELECT id, observacoes_finais FROM acompanhamentos_bancarios
+        WHERE status = 'encerrado' AND motivo_encerramento IS NULL`
+    );
+    let categorizados = 0;
+    for (const row of semMotivo.rows) {
+      const texto = String(row.observacoes_finais || "")
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // remove acento pra comparar
+      let motivo: string | null = null;
+      if (texto.includes("declin")) motivo = "declinado";
+      else if (texto.includes("cancel")) motivo = "cancelado";
+      else if (texto.includes("negativ") || texto.includes("inadimpl") || texto.includes("impedimento") || texto.includes("bloqueio")) motivo = "finalizado_negativo";
+      else if (texto.includes("positiv") || texto.includes("aprovad") || texto.includes("sucesso")) motivo = "finalizado_positivo";
+      else if (texto.includes("finaliz") || texto.includes("concl")) motivo = "finalizado"; // sem sinal claro de resultado -- não assume positivo/negativo sem ter certeza
+      if (motivo) {
+        await pool.query(`UPDATE acompanhamentos_bancarios SET motivo_encerramento = $1 WHERE id = $2`, [motivo, row.id]);
+        categorizados++;
+      }
+    }
+    console.log(`[startup] Migration 077 (motivo_encerramento + backfill): OK -- ${categorizados} de ${semMotivo.rows.length} encerrado(s) categorizado(s) automaticamente pelo texto já existente.`);
+  } catch (err: any) { console.warn('[startup] Migration 077:', err?.message); }
   // ─────────────────────────────────────────────────────────────────────────────
 
   // ── Diagnóstico de armazenamento persistente -- roda no boot e fica visível direto
@@ -13562,9 +13602,21 @@ async function registrarDocumentoContratoGerado(params: {
       const params: any[] = [];
       const conditions: string[] = [];
 
-      if (status && status !== "todos") {
+      if (status === "todos") {
+        // Por padrão a lista mostra só o que está ativo -- encerrados (finalizados,
+        // declinados, cancelados) ficam separados, com relatório próprio, não
+        // misturados no dia a dia do acompanhamento em andamento.
+        conditions.push(`a.status <> 'encerrado'`);
+      } else if (status === "todos_incluindo_encerrados") {
+        // Escape hatch explícito pra quem realmente precisar ver tudo junto.
+      } else {
         params.push(status);
         conditions.push(`a.status = $${params.length}`);
+      }
+
+      if (req.query.motivo_encerramento) {
+        params.push(req.query.motivo_encerramento);
+        conditions.push(`a.motivo_encerramento = $${params.length}`);
       }
 
       if (somentePendentes) {
@@ -14759,16 +14811,28 @@ async function registrarDocumentoContratoGerado(params: {
 
   app.post("/api/acompanhamentos-bancarios/:id/encerrar", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
     try {
-      const { observacoes_finais } = req.body || {};
+      const { observacoes_finais, motivo_encerramento } = req.body || {};
+      const motivosValidos = new Set(["declinado", "cancelado", "finalizado_positivo", "finalizado_negativo", "finalizado"]);
+      if (!motivo_encerramento || !motivosValidos.has(motivo_encerramento)) {
+        res.status(400).json({
+          error: "Selecione o motivo do encerramento (declinado, cancelado, finalizado positivo ou finalizado negativo) antes de encerrar.",
+        });
+        return;
+      }
+      if (!observacoes_finais || !String(observacoes_finais).trim()) {
+        res.status(400).json({ error: "Descreva o motivo/relatório do encerramento antes de confirmar." });
+        return;
+      }
 
       const { rows } = await pool.query(
         `UPDATE acompanhamentos_bancarios
             SET status = 'encerrado',
-                observacoes_finais = COALESCE($2, observacoes_finais),
+                motivo_encerramento = $3,
+                observacoes_finais = $2,
                 updated_at = NOW()
           WHERE id = $1
           RETURNING *`,
-        [req.params.id, observacoes_finais || null]
+        [req.params.id, String(observacoes_finais).trim(), motivo_encerramento]
       );
 
       if (!rows.length) {

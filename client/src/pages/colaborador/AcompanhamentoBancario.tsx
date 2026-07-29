@@ -290,13 +290,26 @@ function labelStatus(status?: string | null): string {
     .replace(/\b\w/g, (l) => l.toUpperCase());
 }
 
+const MOTIVO_ENCERRAMENTO_LABEL: Record<string, string> = {
+  finalizado_positivo: "Finalizado (positivo)",
+  finalizado_negativo: "Finalizado (negativo)",
+  finalizado: "Finalizado",
+  declinado: "Declinado",
+  cancelado: "Cancelado",
+};
+
 /** Badge de situação de uma linha da tabela -- prioriza o status REAL do
  *  acompanhamento (ex: 'encerrado') sobre o status_semana (situação financeira
  *  da última semana). Sem isso, um acompanhamento encerrado continuava exibindo
  *  o último status semanal (ex: 'Em dia'), parecendo ainda ativo. */
-function situacaoBadgeInfo(row: { status?: string | null; status_semana?: string | null }): { classe: string; label: string } {
+function situacaoBadgeInfo(row: { status?: string | null; status_semana?: string | null; motivo_encerramento?: string | null }): { classe: string; label: string } {
   if (String(row.status || "").toLowerCase() === "encerrado") {
-    return { classe: "bg-slate-100 text-slate-600 border-slate-300", label: "Encerrado" };
+    const motivo = row.motivo_encerramento || "";
+    const negativo = motivo === "declinado" || motivo === "cancelado" || motivo === "finalizado_negativo";
+    const label = MOTIVO_ENCERRAMENTO_LABEL[motivo] || "Encerrado";
+    return negativo
+      ? { classe: "bg-red-50 text-red-700 border-red-200", label }
+      : { classe: "bg-slate-100 text-slate-600 border-slate-300", label };
   }
   return { classe: statusBadge(row.status_semana), label: labelStatus(row.status_semana) };
 }
@@ -929,6 +942,10 @@ export default function AcompanhamentoBancario() {
   const [novoOpen, setNovoOpen] = useState(false);
   const [updOpen, setUpdOpen] = useState<Acompanhamento | null>(null);
   const [detalhe, setDetalhe] = useState<Acompanhamento | null>(null);
+  const [encerrandoRow, setEncerrandoRow] = useState<Acompanhamento | null>(null);
+  const [motivoEncerramento, setMotivoEncerramento] = useState("");
+  const [observacaoEncerramento, setObservacaoEncerramento] = useState("");
+  const [salvandoEncerramento, setSalvandoEncerramento] = useState(false);
   const [inteligenciaAcompanhamento, setInteligenciaAcompanhamento] = useState<any | null>(null);
   const [loadingInteligenciaAcompanhamento, setLoadingInteligenciaAcompanhamento] = useState(false);
   const [erroInteligenciaAcompanhamento, setErroInteligenciaAcompanhamento] = useState("");
@@ -1016,7 +1033,15 @@ export default function AcompanhamentoBancario() {
     try {
       const q = new URLSearchParams();
       if (search.trim()) q.set("busca", search.trim());
-      if (statusFiltro && statusFiltro !== "todos") q.set("status", statusFiltro);
+      if (statusFiltro && statusFiltro !== "todos") {
+        if (statusFiltro.includes("::")) {
+          const [statusParte, motivoParte] = statusFiltro.split("::");
+          q.set("status", statusParte);
+          q.set("motivo_encerramento", motivoParte);
+        } else {
+          q.set("status", statusFiltro);
+        }
+      }
       if (pendentes) q.set("pendentes", "true");
       if (banco.trim()) q.set("banco", banco.trim());
       if (bancoIdFiltro) q.set("banco_id", bancoIdFiltro);
@@ -1470,15 +1495,45 @@ export default function AcompanhamentoBancario() {
   };
 
   // ─── Encerrar ─────────────────────────────────────────────────────────────────
-  const encerrar = async (id: string) => {
-    const observacoes_finais = prompt("Observações finais do encerramento:") || "";
-    await fetch(`/api/acompanhamentos-bancarios/${id}/encerrar`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({ observacoes_finais }),
-    });
-    fetchData();
+  const encerrar = (row: Acompanhamento) => {
+    setEncerrandoRow(row);
+    setMotivoEncerramento("");
+    setObservacaoEncerramento("");
   };
+
+  const confirmarEncerramento = async () => {
+    if (!encerrandoRow) return;
+    if (!motivoEncerramento) { alert("Selecione o motivo do encerramento."); return; }
+    if (!observacaoEncerramento.trim()) { alert("Descreva o relatório/motivo do encerramento."); return; }
+    setSalvandoEncerramento(true);
+    try {
+      const resp = await fetch(`/api/acompanhamentos-bancarios/${encerrandoRow.id}/encerrar`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ motivo_encerramento: motivoEncerramento, observacoes_finais: observacaoEncerramento.trim() }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        alert(err.error || "Erro ao encerrar acompanhamento.");
+        return;
+      }
+      // Sucesso -- fecha o modal e recarrega a lista.
+      setEncerrandoRow(null);
+      fetchData();
+    } catch {
+      alert("Erro ao encerrar acompanhamento.");
+    } finally {
+      setSalvandoEncerramento(false);
+    }
+  };
+
+  const MOTIVOS_ENCERRAMENTO = [
+    { value: "finalizado_positivo", label: "Finalizado — resultado positivo" },
+    { value: "finalizado_negativo", label: "Finalizado — resultado negativo" },
+    { value: "finalizado", label: "Finalizado — sem classificação de resultado" },
+    { value: "declinado", label: "Declinado" },
+    { value: "cancelado", label: "Cancelado" },
+  ];
 
   // ─── Adicionar outro banco ────────────────────────────────────────────────────
   const adicionarOutroBanco = (row: Acompanhamento) => {
@@ -2092,7 +2147,7 @@ export default function AcompanhamentoBancario() {
         {!encerradoJa && (
           <button
             className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100"
-            onClick={() => encerrar(row.id)}
+            onClick={() => encerrar(row)}
           >Encerrar</button>
         )}
         {encerradoJa && (
@@ -2214,11 +2269,16 @@ export default function AcompanhamentoBancario() {
               value={statusFiltro}
               onChange={(e) => setStatusFiltro(e.target.value)}
             >
-              <option value="todos">Todos os status</option>
+              <option value="todos">Em andamento (ativos)</option>
               <option value="em_acompanhamento">Em acompanhamento</option>
               <option value="prorrogado">Prorrogado</option>
-              <option value="encerrado">Encerrado</option>
               <option value="pronto_credito">Pronto para crédito</option>
+              <option value="encerrado">Encerrados/finalizados (todos)</option>
+              <option value="encerrado::finalizado_positivo">↳ Finalizado — positivo</option>
+              <option value="encerrado::finalizado_negativo">↳ Finalizado — negativo</option>
+              <option value="encerrado::declinado">↳ Declinado</option>
+              <option value="encerrado::cancelado">↳ Cancelado</option>
+              <option value="todos_incluindo_encerrados">Tudo junto (ativos + encerrados)</option>
             </select>
             <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
               <input
@@ -2744,6 +2804,46 @@ export default function AcompanhamentoBancario() {
         )}
 
         {/* ── Modal — Detalhes ─────────────────────────────────────────────── */}
+        {encerrandoRow && (
+          <div className="fixed inset-0 z-50 bg-slate-900/70 p-4 flex items-center justify-center" onClick={() => !salvandoEncerramento && setEncerrandoRow(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="px-5 py-4 border-b border-slate-200">
+                <h3 className="text-base font-bold text-slate-800">Encerrar acompanhamento</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{encerrandoRow.nome_empresa} — {encerrandoRow.banco_observado}</p>
+              </div>
+              <div className="px-5 py-4 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Motivo do encerramento <span className="text-red-500">*</span></label>
+                  <select
+                    value={motivoEncerramento}
+                    onChange={(e) => setMotivoEncerramento(e.target.value)}
+                    className="w-full h-10 rounded-lg border border-slate-300 px-3 text-sm"
+                  >
+                    <option value="">Selecione...</option>
+                    {MOTIVOS_ENCERRAMENTO.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Relatório do encerramento <span className="text-red-500">*</span></label>
+                  <textarea
+                    value={observacaoEncerramento}
+                    onChange={(e) => setObservacaoEncerramento(e.target.value)}
+                    rows={4}
+                    placeholder="Descreva o motivo com detalhes -- este relatório fica registrado permanentemente com o acompanhamento."
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
+                <button type="button" onClick={() => setEncerrandoRow(null)} disabled={salvandoEncerramento} className="h-9 px-4 rounded-lg border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
+                <button type="button" onClick={confirmarEncerramento} disabled={salvandoEncerramento} className="h-9 px-4 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-50">
+                  {salvandoEncerramento ? "Encerrando..." : "Confirmar encerramento"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {detalhe && (
           <div className="fixed inset-0 z-[9999] overflow-y-auto bg-slate-900/50 p-3 sm:p-5">
             <div className="mx-auto flex min-h-[calc(100vh-40px)] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
