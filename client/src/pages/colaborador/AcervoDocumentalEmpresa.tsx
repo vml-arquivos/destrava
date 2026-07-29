@@ -24,8 +24,7 @@ const TIPOS_EMPRESA = [
   "pgdas", "pgmei", "ecf", "recibo_ecf", "recibo_pgdas", "recibo_pgmei", "defis", "dasn_simei", "recibo_defis",
   "recibo_dasn_simei", "scr_cnpj", "ccs_cnpj", "ccf_cnpj", "scr_cpf", "ccs_cpf", "ccf_cpf", "consulta_serasa_cnpj",
   "consulta_serasa_cpf", "compartilhamento_ecac", "foto_fachada", "foto_interna_1", "foto_interna_2", "foto_interna_3",
-  "faturamento_12_meses", "comprovante_faturamento", "declaracao_faturamento", "extrato_bancario", "balanco", "dre",
-  "comprovante_endereco", "procuracao", "nire", "estatuto", "outros",
+  "faturamento_12_meses", "comprovante_faturamento", "declaracao_faturamento", "outros",
 ];
 
 export default function AcervoDocumentalEmpresa() {

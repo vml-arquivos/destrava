@@ -146,6 +146,10 @@ export type DocumentoSlot = {
   descricao?: string;
   exigeNome?: boolean;
   placeholderNome?: string;
+  /** Sugestões de nome pro campo genérico "outros" -- documento raramente
+   *  obrigatório mas que às vezes precisa ser anexado (escritura, procuração...).
+   *  Continua aceitando qualquer nome digitado, isso só ajuda a escolher rápido. */
+  sugestoesNome?: string[];
   /** Obrigatório de verdade, conforme os blocos do dossiê (documentacao_blocos no
    *  backend: cnpj_receita, qsa_quadro_societario, contrato_social_alteracoes,
    *  socios_representantes, faturamento_historico). Só marcado onde há
@@ -236,7 +240,18 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
     slots: [
       slot("24. Compartilhamento eCAC por banco", "compartilhamento_ecac", [], { exigeNome: true, placeholderNome: "Banco/destinatário eCAC" }),
       slot("25. Fotos da empresa", "foto_fachada", ["foto_interna_1", "foto_interna_2", "foto_interna_3"], { descricao: "Anexe fachada e fotos internas no mesmo local." }),
-      slot("Campo outros / Documento nomeado", "outros", [], { exigeNome: true, placeholderNome: "Nome do documento" }),
+      slot("Campo outros / Documento nomeado", "outros", [
+        "extrato_bancario", "balanco", "dre", "comprovante_endereco", "procuracao", "nire", "estatuto",
+      ], {
+        exigeNome: true,
+        placeholderNome: "Nome do documento",
+        descricao: "Documentos que raramente são exigidos, mas às vezes precisam ser anexados. Escolha um nome sugerido ou digite outro.",
+        sugestoesNome: [
+          "Extrato bancário", "Balanço", "DRE", "Comprovante de endereço da empresa",
+          "Procuração", "NIRE", "Estatuto", "Escritura de imóvel", "Contrato de aluguel",
+          "Certidão de regularidade", "Alvará de funcionamento",
+        ],
+      }),
     ],
   },
 ];
@@ -653,7 +668,22 @@ export default function DocumentosEntidade({
                           </p>
                         )}
                         <div className={exigeNome ? "grid grid-cols-1 sm:grid-cols-2 gap-2" : ""}>
-                          {exigeNome && <input value={nomeCustomizadoPorTipo[tipo] || ""} onChange={(e) => setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder={documentoSlot.placeholderNome || "Nome do documento"} className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] text-slate-700" />}
+                          {exigeNome && (
+                            <>
+                              <input
+                                value={nomeCustomizadoPorTipo[tipo] || ""}
+                                onChange={(e) => setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))}
+                                placeholder={documentoSlot.placeholderNome || "Nome do documento"}
+                                className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] text-slate-700"
+                                list={documentoSlot.sugestoesNome?.length ? `sugestoes-${tipo}` : undefined}
+                              />
+                              {documentoSlot.sugestoesNome?.length ? (
+                                <datalist id={`sugestoes-${tipo}`}>
+                                  {documentoSlot.sugestoesNome.map((nome) => <option key={nome} value={nome} />)}
+                                </datalist>
+                              ) : null}
+                            </>
+                          )}
                           <input value={observacoesPorTipo[tipo] || ""} onChange={(e) => setObservacoesPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder="Observação opcional" className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-[11px] text-slate-700" />
                         </div>
                         {documentoSlot.descricao && <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded-md px-2.5 py-1.5">{documentoSlot.descricao}</p>}
