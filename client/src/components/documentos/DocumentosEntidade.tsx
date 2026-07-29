@@ -648,25 +648,31 @@ export default function DocumentosEntidade({
                       (tipoSatisfaz) => docs.some((d) => d.tipo_documento === tipoSatisfaz)
                     );
                     return (
-                      <div key={tipo} className="rounded-lg border border-slate-100 bg-white p-3 space-y-2.5 shadow-sm shadow-slate-100/30 self-start">
+                      <div key={tipo} className={`rounded-lg border p-3 space-y-2.5 self-start ${satisfeitoPorOutro ? "border-emerald-100 bg-emerald-50/40" : "border-slate-100 bg-white shadow-sm shadow-slate-100/30"}`}>
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <p className="text-xs font-bold text-slate-700 leading-tight">{documentoSlot.titulo}</p>
-                              {documentoSlot.obrigatorio && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-800 text-white shrink-0">OBRIGATÓRIO</span>}
+                              {documentoSlot.obrigatorio && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-800 text-white shrink-0">OBRIGATÓRIO</span>}
                             </div>
                             <p className="text-[10px] text-slate-400 mt-0.5">{docsTipo.length} arquivo(s) anexado(s)</p>
                           </div>
-                          <label className="h-8 inline-flex items-center justify-center gap-1 text-[11px] font-semibold bg-blue-600 text-white px-3 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors shrink-0">
-                            {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Anexar
-                            <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file); e.currentTarget.value = ""; }} />
-                          </label>
+                          {/* Já coberto por outro documento (ex: CND cobre CADIN/PGFN) -- não faz
+                              sentido oferecer anexar algo que não é mais necessário. */}
+                          {!satisfeitoPorOutro && (
+                            <label className="h-8 inline-flex items-center justify-center gap-1 text-[11px] font-semibold bg-blue-600 text-white px-3 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors shrink-0">
+                              {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Anexar
+                              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file); e.currentTarget.value = ""; }} />
+                            </label>
+                          )}
                         </div>
                         {satisfeitoPorOutro && (
-                          <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
-                            <CheckCircle className="w-3 h-3 shrink-0" /> Já coberto por outro documento anexado (ex: CND). Não é obrigatório anexar aqui também.
+                          <p className="text-[11px] text-emerald-700 flex items-center gap-1.5">
+                            <CheckCircle className="w-3 h-3 shrink-0" /> Não é necessário anexar -- já coberto por outro documento (ex: CND).
                           </p>
                         )}
+                        {!satisfeitoPorOutro && (
+                        <>
                         <div className={exigeNome ? "grid grid-cols-1 sm:grid-cols-2 gap-2" : ""}>
                           {exigeNome && (
                             <>
@@ -715,6 +721,8 @@ export default function DocumentosEntidade({
                               {docsTipo.length > 3 && <p className="text-[9px] text-slate-400">+ {docsTipo.length - 3} arquivo(s) neste mesmo campo.</p>}
                             </div>
                           </div>
+                        )}
+                        </>
                         )}
                       </div>
                     );
