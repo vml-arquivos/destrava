@@ -766,6 +766,31 @@ async function buscarAnexosParaMerge(pool: Pool, orcamentoId: string): Promise<A
   }
 }
 
+/**
+ * Último nível de segurança -- PDF minimalista sem anexos, sem formatação
+ * complexa, quase nada que possa quebrar. Só entra em ação se TANTO o Puppeteer
+ * QUANTO o fallback normal (gerarPdfOrcamentoFallback) falharem, o que não deveria
+ * acontecer nunca -- mas garante que o usuário sempre saia com um PDF em mãos em
+ * vez de um erro puro, mesmo diante de um caso não previsto nos dados.
+ */
+async function gerarPdfOrcamentoUltimoRecurso(orcamento: Row): Promise<Buffer> {
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([595.28, 841.89]);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  let y = 780;
+  const linha = (texto: string, size = 11) => {
+    page.drawText(pdfText(texto).slice(0, 90), { x: 48, y, size, font, color: rgb(0.1, 0.1, 0.1) });
+    y -= size + 8;
+  };
+  linha('ORÇAMENTO / PROPOSTA COMERCIAL', 14);
+  linha(`Número: ${orcamento?.numero || 'Rascunho'}`);
+  linha(`Cliente: ${orcamento?.cliente_nome || 'Não informado'}`);
+  linha(`Valor total: ${moneyBR(orcamento?.valor_total)}`);
+  linha('Este documento foi emitido em modo simplificado de contingência.', 9);
+  linha('Entre em contato com a Destrava Crédito para a via completa.', 9);
+  return Buffer.from(await doc.save());
+}
+
 export async function gerarPdfOrcamentoComFallback(pool: Pool, orcamento: Row): Promise<{ pdf: Buffer; fallback: boolean; reason?: string }> {
   const anexos = await buscarAnexosParaMerge(pool, String(orcamento.id));
   try {
@@ -775,9 +800,21 @@ export async function gerarPdfOrcamentoComFallback(pool: Pool, orcamento: Row): 
   } catch (err: any) {
     const reason = err?.message || String(err);
     console.warn('[orcamentos][pdf] usando fallback sem Chromium:', reason);
-    const base = await gerarPdfOrcamentoFallback(orcamento, reason);
-    const pdf = anexos.length ? await appendAttachmentsToPdf(base, anexos) : base;
-    return { pdf, fallback: true, reason };
+    try {
+      const base = await gerarPdfOrcamentoFallback(orcamento, reason);
+      const pdf = anexos.length ? await appendAttachmentsToPdf(base, anexos) : base;
+      return { pdf, fallback: true, reason };
+    } catch (fallbackErr: any) {
+      // Nem o Puppeteer nem o fallback normal deram conta -- registra os dois motivos
+      // com detalhe (pra investigação futura) e ainda assim entrega um PDF utilizável.
+      const fallbackReason = fallbackErr?.message || String(fallbackErr);
+      console.error(
+        `[orcamentos][pdf] fallback normal também falhou -- usando último recurso. `
+        + `orcamento_id=${orcamento?.id} puppeteer="${reason}" fallback="${fallbackReason}"`
+      );
+      const pdf = await gerarPdfOrcamentoUltimoRecurso(orcamento);
+      return { pdf, fallback: true, reason: `${reason} | fallback também falhou: ${fallbackReason}` };
+    }
   }
 }
 
@@ -1171,9 +1208,10 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
       if (fallbackReason) res.setHeader("X-Destrava-Pdf-Fallback-Reason", encodeURIComponent(fallbackReason.slice(0, 180)));
       res.send(pdf);
     } catch (err: any) {
-      console.error("[orcamentos][download]", err);
+      console.error(`[orcamentos][download] orcamento_id=${req.params.id}`, err);
       res.status(500).json({
         error: "Erro ao gerar PDF do orçamento. Tente novamente e verifique os logs do servidor.",
+        detalhe: String(err?.message || err || "").slice(0, 300),
         code: err?.code || "PDF_GENERATION_FAILED",
       });
     }

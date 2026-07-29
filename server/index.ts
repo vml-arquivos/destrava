@@ -2217,6 +2217,11 @@ async function startServer() {
     }
     console.log(`[startup] Migration 077 (motivo_encerramento + backfill): OK -- ${categorizados} de ${semMotivo.rows.length} encerrado(s) categorizado(s) automaticamente pelo texto já existente.`);
   } catch (err: any) { console.warn('[startup] Migration 077:', err?.message); }
+
+  // Marca de versão pra conferir rápido no log de deploy do Coolify se essa correção
+  // específica (PDF de orçamento: último recurso + detalhe do erro na resposta) está
+  // realmente no ar -- sem precisar comparar hash de commit.
+  console.log('[startup] Versão: orcamento-pdf-ultimo-recurso-2026-07-29');
   // ─────────────────────────────────────────────────────────────────────────────
 
   // ── Diagnóstico de armazenamento persistente -- roda no boot e fica visível direto
