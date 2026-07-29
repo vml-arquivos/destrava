@@ -2085,6 +2085,100 @@ async function startServer() {
   } catch (err: any) { console.warn('[startup] Migration 075:', err?.message); }
   // ─────────────────────────────────────────────────────────────────────────────
 
+  // ── Migration 076: sincroniza acompanhamentos bancários já existentes (criados
+  //    antes do catálogo de bancos/gerentes existir) com banco_id/gerente_id --
+  //    sem isso, só os acompanhamentos NOVOS ficavam filtráveis por banco/gerente,
+  //    os já cadastrados em produção continuavam com banco_id/gerente_id vazio
+  //    mesmo já tendo o nome em texto livre (banco_observado/gerente_banco).
+  //    Idempotente: só mexe em quem ainda está NULL, roda toda subida sem repetir
+  //    trabalho à toa. Nunca inventa banco/gerente novo -- só promove pro catálogo
+  //    o que a própria equipe já digitou nesses registros.
+  try {
+    // Extrai o "nome principal" de algo como "SICOOB - GO" -> "SICOOB", preservando
+    // o texto original no registro (só o vínculo com o catálogo usa a forma normalizada).
+    const nomePrincipal = (texto: string) => texto.split(/\s+-\s+/)[0].trim();
+
+    const bancosPendentes = await pool.query(
+      `SELECT DISTINCT banco_observado FROM acompanhamentos_bancarios
+        WHERE banco_id IS NULL AND banco_observado IS NOT NULL AND TRIM(banco_observado) <> ''`
+    );
+    let bancosVinculados = 0;
+    let bancosCriados = 0;
+    for (const row of bancosPendentes.rows) {
+      const textoOriginal = String(row.banco_observado).trim();
+      const nomeBusca = nomePrincipal(textoOriginal);
+      const primeiraPalavra = nomeBusca.split(/\s+/)[0];
+      let match = await pool.query(
+        `SELECT id FROM public.bancos_parceiros WHERE LOWER(nome) = LOWER($1) LIMIT 1`,
+        [nomeBusca],
+      );
+      if (!match.rows.length) {
+        // Antes de criar um banco novo, tenta bater pela primeira palavra (case-insensitive)
+        // contra o catálogo -- pega abreviação comum ("Caixa" batendo com "CAIXA Econômica
+        // Federal") sem precisar de nome idêntico, evitando fragmentar o mesmo banco em
+        // duas entradas diferentes no catálogo.
+        match = await pool.query(
+          `SELECT id FROM public.bancos_parceiros WHERE LOWER(SPLIT_PART(nome, ' ', 1)) = LOWER($1) LIMIT 1`,
+          [primeiraPalavra],
+        );
+      }
+      if (!match.rows.length) {
+        // Não existe ainda -- promove o nome que a própria equipe já usou pro catálogo,
+        // não é um banco inventado por mim, é dado real que já estava no cadastro.
+        match = await pool.query(
+          `INSERT INTO public.bancos_parceiros (nome) VALUES ($1)
+           ON CONFLICT (nome) DO UPDATE SET nome = EXCLUDED.nome
+           RETURNING id`,
+          [nomeBusca],
+        );
+        bancosCriados++;
+      }
+      const bancoId = match.rows[0].id;
+      const upd = await pool.query(
+        `UPDATE acompanhamentos_bancarios SET banco_id = $1
+           WHERE banco_id IS NULL AND banco_observado = $2`,
+        [bancoId, textoOriginal],
+      );
+      bancosVinculados += upd.rowCount || 0;
+    }
+
+    const gerentesPendentes = await pool.query(
+      `SELECT DISTINCT gerente_banco, banco_id FROM acompanhamentos_bancarios
+        WHERE gerente_id IS NULL AND gerente_banco IS NOT NULL AND TRIM(gerente_banco) <> ''`
+    );
+    let gerentesVinculados = 0;
+    let gerentesCriados = 0;
+    for (const row of gerentesPendentes.rows) {
+      const nomeGerente = String(row.gerente_banco).trim();
+      let match = await pool.query(
+        `SELECT id FROM public.gerentes_bancarios WHERE LOWER(nome) = LOWER($1) LIMIT 1`,
+        [nomeGerente],
+      );
+      if (!match.rows.length) {
+        match = await pool.query(
+          `INSERT INTO public.gerentes_bancarios (nome, banco_id) VALUES ($1, $2)
+           RETURNING id`,
+          [nomeGerente, row.banco_id || null],
+        );
+        gerentesCriados++;
+      }
+      const gerenteId = match.rows[0].id;
+      const upd = await pool.query(
+        `UPDATE acompanhamentos_bancarios SET gerente_id = $1
+           WHERE gerente_id IS NULL AND gerente_banco = $2`,
+        [gerenteId, row.gerente_banco],
+      );
+      gerentesVinculados += upd.rowCount || 0;
+    }
+
+    console.log(
+      `[startup] Migration 076 (sincronizar acompanhamentos com catálogo): OK -- `
+      + `bancos: ${bancosVinculados} acompanhamento(s) vinculado(s), ${bancosCriados} banco(s) promovido(s) ao catálogo; `
+      + `gerentes: ${gerentesVinculados} acompanhamento(s) vinculado(s), ${gerentesCriados} gerente(s) promovido(s) ao catálogo.`
+    );
+  } catch (err: any) { console.warn('[startup] Migration 076:', err?.message); }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // ── Diagnóstico de armazenamento persistente -- roda no boot e fica visível direto
   //    no log de deploy do Coolify. Resolve o problema de "descobrir só depois que os
   //    arquivos já sumiram" -- agora dá pra ver ANTES se o caminho escolhido é mesmo
