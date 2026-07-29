@@ -131,6 +131,26 @@ function isImageMime(mime: string | null, nome: string): boolean {
  * junto" visualmente, então entram só na página de manifesto no final, deixando claro
  * pro leitor que existe um anexo daquele tipo e ele precisa ser aberto separadamente.
  */
+/**
+ * pdf-lib usa a fonte padrão Helvetica com codificação WinAnsi, que NÃO suporta
+ * emoji nem boa parte do Unicode fora do Latin-1 -- só que aceita acentuação
+ * comum do PT-BR (ã, ç, é...). Nomes de arquivo e descrições de anexo vêm de
+ * texto digitado/gerado pelo usuário (ex: nome de foto salva pelo celular, que
+ * às vezes inclui emoji) e nunca passavam por essa sanitização antes de ir pro
+ * drawText() -- um caractere fora do WinAnsi quebrava a geração inteira do PDF
+ * com "WinAnsi cannot encode", sem exceção tratada em nenhum lugar da cadeia.
+ * Reproduzido e confirmado antes desta correção.
+ */
+function pdfSafeText(value: unknown): string {
+  return String(value ?? "")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/[""]/g, '"')
+    .replace(/['']/g, "'")
+    .replace(/[–—]/g, "-")
+    .replace(/[^\u0020-\u00ff]/g, "")
+    .trim();
+}
+
 export async function appendAttachmentsToPdf(
   baseDocPdfBuffer: Buffer,
   anexos: AnexoParaMerge[],
@@ -183,7 +203,9 @@ export async function appendAttachmentsToPdf(
   anexos.forEach((a, idx) => {
     if (y < 60) return; // manifesto simples, não pagina (lista tende a ser curta)
     const statusTxt = a.erro ? " (arquivo não pôde ser recuperado do armazenamento)" : (isPdfMime(a.mimeType, a.nomeOriginal) || isImageMime(a.mimeType, a.nomeOriginal)) ? " (incluído nas páginas acima)" : " (anexo em arquivo separado, disponível no sistema)";
-    const linha = `${idx + 1}. ${a.nomeOriginal}${a.descricao ? ` — ${a.descricao}` : ""}${statusTxt}`;
+    const nomeSeguro = pdfSafeText(a.nomeOriginal) || "documento anexado";
+    const descricaoSegura = a.descricao ? pdfSafeText(a.descricao) : "";
+    const linha = `${idx + 1}. ${nomeSeguro}${descricaoSegura ? ` — ${descricaoSegura}` : ""}${statusTxt}`;
     manifestoPage.drawText(linha.slice(0, 110), { x: 48, y, size: 9, font, color: rgbRef(0.2, 0.24, 0.3) });
     y -= 16;
   });
