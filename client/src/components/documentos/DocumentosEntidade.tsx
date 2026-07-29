@@ -146,6 +146,16 @@ export type DocumentoSlot = {
   descricao?: string;
   exigeNome?: boolean;
   placeholderNome?: string;
+  /** Obrigatório de verdade, conforme os blocos do dossiê (documentacao_blocos no
+   *  backend: cnpj_receita, qsa_quadro_societario, contrato_social_alteracoes,
+   *  socios_representantes, faturamento_historico). Só marcado onde há
+   *  correspondência clara e documentada -- sem chute em documento condicional. */
+  obrigatorio?: boolean;
+  /** Se algum destes tipos já estiver anexado, este campo fica satisfeito e some
+   *  da lista de pendentes -- ex: CND RFB cobre CADIN e PGFN. Regra que já existia
+   *  como texto na descrição ("Exigido quando a CND RFB não for disponibilizada"),
+   *  agora aplicada de verdade, não só escrita. */
+  satisfeitoPor?: string[];
 };
 
 export type SecaoDocumento = { titulo: string; descricao?: string; slots: DocumentoSlot[] };
@@ -163,18 +173,18 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
     descricao: "Base do dossiê empresarial para análise, envio ao banco e comparação futura pela IA.",
     slots: [
       slot("1. Contrato de prestação de serviços", "contrato_prestacao_servicos", ["contrato_assessoria"]),
-      slot("2. CNPJ / Cartão CNPJ", "cartao_cnpj", [], { descricao: "A IA/OCR deve identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral." }),
-      slot("3. QSA", "qsa"),
+      slot("2. CNPJ / Cartão CNPJ", "cartao_cnpj", [], { obrigatorio: true, descricao: "A IA/OCR deve identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral." }),
+      slot("3. QSA", "qsa", [], { obrigatorio: true }),
       slot("4. Atos da Junta Comercial", "atos_junta_comercial"),
-      slot("5. Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { descricao: "Pode receber mais de um arquivo: contrato inicial e alterações." }),
+      slot("5. Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Pode receber mais de um arquivo: contrato inicial e alterações." }),
     ],
   },
   {
     titulo: "Documentos dos sócios",
     descricao: "Use um único local para documentos que cumprem a mesma função. Não duplicamos RG, CNH e CPF em campos separados.",
     slots: [
-      slot("6A. Documento de identificação do sócio", "documento_socio", ["rg", "cnh", "cpf"], { descricao: "Anexe RG, CNH ou documento equivalente com CPF, conforme disponível." }),
-      slot("6B. Comprovante de endereço do sócio", "comprovante_residencia"),
+      slot("6A. Documento de identificação do sócio", "documento_socio", ["rg", "cnh", "cpf"], { obrigatorio: true, descricao: "Anexe RG, CNH ou documento equivalente com CPF, conforme disponível." }),
+      slot("6B. Comprovante de endereço do sócio", "comprovante_residencia", [], { obrigatorio: true }),
       slot("6C. IRPF do sócio", "irpf", ["imposto_renda"]),
       slot("6D. Recibo de entrega do IRPF", "recibo_irpf"),
       slot("6E. Estado civil / cônjuge / averbações", "certidao_casamento", ["averbacao_divorcio", "certidao_obito"], { descricao: "Use somente quando necessário: certidão de casamento, averbação de divórcio, óbito ou documento equivalente." }),
@@ -186,8 +196,8 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
       slot("7. Relatório SCR/Registrato (CNPJ)", "rating_bacen_cnpj"),
       slot("9. Consulta CENPROT (CNPJ)", "cenprot_cnpj"),
       slot("11. CND RFB (CNPJ)", "cnd_rfb_cnpj"),
-      slot("12A. Nada consta CADIN (CNPJ)", "cadin_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada." }),
-      slot("12B. Nada consta PGFN (CNPJ)", "pgfn_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada." }),
+      slot("12A. Nada consta CADIN (CNPJ)", "cadin_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cnpj"] }),
+      slot("12B. Nada consta PGFN (CNPJ)", "pgfn_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cnpj"] }),
       slot("18. Relatório SCR do CNPJ", "scr_cnpj"),
       slot("19. Relatório CCS do CNPJ", "ccs_cnpj"),
       slot("20. Relatório CCF do CNPJ", "ccf_cnpj"),
@@ -201,8 +211,8 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
       slot("8. Relatório SCR/Registrato (CPF)", "rating_bacen_cpf"),
       slot("10. Consulta CENPROT (CPF)", "cenprot_cpf"),
       slot("12. CND RFB (CPF)", "cnd_rfb_cpf"),
-      slot("12A. Nada consta CADIN (CPF)", "cadin_cpf", [], { descricao: "Exigido quando a CND RFB CPF não for disponibilizada." }),
-      slot("12B. Nada consta PGFN (CPF)", "pgfn_cpf", [], { descricao: "Exigido quando a CND RFB CPF não for disponibilizada." }),
+      slot("12A. Nada consta CADIN (CPF)", "cadin_cpf", [], { descricao: "Exigido quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
+      slot("12B. Nada consta PGFN (CPF)", "pgfn_cpf", [], { descricao: "Exigido quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
       slot("21. Relatório SCR do CPF", "scr_cpf"),
       slot("22. Relatório CCS do CPF", "ccs_cpf"),
       slot("23. Relatório CCF do CPF", "ccf_cpf"),
@@ -218,7 +228,7 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
       slot("15. Recibo de entrega da ECF, PGDAS ou PGMEI", "recibo_pgdas", ["recibo_pgmei", "recibo_ecf"], { descricao: "Anexe o recibo correspondente ao documento fiscal enviado." }),
       slot("16. DEFIS ou DASN-SIMEI", "defis", ["dasn_simei"], { descricao: "DEFIS para Simples Nacional não MEI. DASN-SIMEI para MEI." }),
       slot("17. Recibo de entrega da DEFIS, DASN-SIMEI ou ECF", "recibo_defis", ["recibo_dasn_simei", "recibo_ecf"], { descricao: "Anexe o recibo aplicável." }),
-      slot("26. Faturamento bruto dos últimos 12 meses", "faturamento_12_meses", ["comprovante_faturamento", "declaracao_faturamento"], { descricao: "Pode conter planilha, declaração ou relatório solicitado pelo banco." }),
+      slot("26. Faturamento bruto dos últimos 12 meses", "faturamento_12_meses", ["comprovante_faturamento", "declaracao_faturamento"], { obrigatorio: true, descricao: "Pode conter planilha, declaração ou relatório solicitado pelo banco." }),
     ],
   },
   {
@@ -296,6 +306,10 @@ export default function DocumentosEntidade({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentoArquivo | null>(null);
   const [secaoAtiva, setSecaoAtiva] = useState<string | null>(null);
+  // Mostra só os campos obrigatórios de cada categoria por padrão -- evita os 44 campos
+  // de uma vez. "Ver documentos complementares" revela o resto, sem esconder nada
+  // permanentemente, só evita abrir tudo de cara.
+  const [mostrarComplementares, setMostrarComplementares] = useState(false);
 
   const query = useMemo(() => {
     if (!entidadeId) return "";
@@ -580,7 +594,13 @@ export default function DocumentosEntidade({
               );
             })}
           </div>
-          {secaoAtivaObj && (
+          {secaoAtivaObj && (() => {
+            const temObrigatorios = secaoAtivaObj.slots.some((s) => s.obrigatorio);
+            const slotsVisiveis = temObrigatorios && !mostrarComplementares
+              ? secaoAtivaObj.slots.filter((s) => s.obrigatorio)
+              : secaoAtivaObj.slots;
+            const ocultos = secaoAtivaObj.slots.length - slotsVisiveis.length;
+            return (
             <div key={secaoAtivaObj.titulo} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
               <div className="flex items-start justify-between gap-3 mb-2">
                 <div>
@@ -589,17 +609,37 @@ export default function DocumentosEntidade({
                 </div>
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-500 shrink-0 whitespace-nowrap">{secaoAtivaObj.slots.length} campo(s)</span>
               </div>
+              {temObrigatorios && (
+                <button
+                  type="button"
+                  onClick={() => setMostrarComplementares((v) => !v)}
+                  className="mb-3 inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 hover:text-blue-800"
+                >
+                  {mostrarComplementares
+                    ? "Mostrar só os obrigatórios"
+                    : ocultos > 0 ? `Ver documentos complementares (${ocultos})` : "Todos os campos já são obrigatórios"}
+                </button>
+              )}
               <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3">
-                {secaoAtivaObj.slots.map((documentoSlot) => {
+                {slotsVisiveis.map((documentoSlot) => {
                     const tipo = documentoSlot.tipoUpload;
                     const docsTipo = docs.filter((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento));
                     const uploading = uploadingTipo === tipo;
                     const exigeNome = Boolean(documentoSlot.exigeNome);
+                    // Regra de anulação (ex: CND RFB cobre CADIN e PGFN) -- se algum tipo
+                    // que satisfaz este campo já foi anexado em outro lugar, não precisa
+                    // repetir aqui, mas a opção de anexar mesmo assim continua disponível.
+                    const satisfeitoPorOutro = docsTipo.length === 0 && documentoSlot.satisfeitoPor?.some(
+                      (tipoSatisfaz) => docs.some((d) => d.tipo_documento === tipoSatisfaz)
+                    );
                     return (
                       <div key={tipo} className="rounded-lg border border-slate-100 bg-white p-3 space-y-2.5 shadow-sm shadow-slate-100/30 self-start">
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="text-xs font-bold text-slate-700 leading-tight">{documentoSlot.titulo}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="text-xs font-bold text-slate-700 leading-tight">{documentoSlot.titulo}</p>
+                              {documentoSlot.obrigatorio && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-800 text-white shrink-0">OBRIGATÓRIO</span>}
+                            </div>
                             <p className="text-[10px] text-slate-400 mt-0.5">{docsTipo.length} arquivo(s) anexado(s)</p>
                           </div>
                           <label className="h-8 inline-flex items-center justify-center gap-1 text-[11px] font-semibold bg-blue-600 text-white px-3 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors shrink-0">
@@ -607,6 +647,11 @@ export default function DocumentosEntidade({
                             <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file); e.currentTarget.value = ""; }} />
                           </label>
                         </div>
+                        {satisfeitoPorOutro && (
+                          <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
+                            <CheckCircle className="w-3 h-3 shrink-0" /> Já coberto por outro documento anexado (ex: CND). Não é obrigatório anexar aqui também.
+                          </p>
+                        )}
                         <div className={exigeNome ? "grid grid-cols-1 sm:grid-cols-2 gap-2" : ""}>
                           {exigeNome && <input value={nomeCustomizadoPorTipo[tipo] || ""} onChange={(e) => setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder={documentoSlot.placeholderNome || "Nome do documento"} className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] text-slate-700" />}
                           <input value={observacoesPorTipo[tipo] || ""} onChange={(e) => setObservacoesPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder="Observação opcional" className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-[11px] text-slate-700" />
@@ -646,7 +691,8 @@ export default function DocumentosEntidade({
                   })}
                 </div>
               </div>
-            )}
+            );
+          })()}
           </div>
       )}
 
