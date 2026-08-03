@@ -789,6 +789,37 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                 {sociosEmpresaAssessoria.length === 0 ? (
                   <p className="text-xs text-amber-700">Nenhum sócio cadastrado para esta empresa. O contrato usará apenas a razão social e CNPJ da empresa como assinante.</p>
                 ) : (
+                  <>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setSociosAssinantesIds(sociosEmpresaAssessoria.map((s, idx) => s.id || `idx-${idx}`))}
+                      className="px-2.5 py-1 rounded-md border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                    >
+                      Selecionar todos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const admins = sociosEmpresaAssessoria
+                          .map((s, idx) => ({ key: s.id || `idx-${idx}`, papel: `${s.qualificacao || ''} ${s.qualificacao_socio || ''} ${s.descricao_qualificacao_socio || ''} ${s.cargo || ''}`.toLowerCase() }))
+                          .filter((s) => s.papel.includes('administrador'))
+                          .map((s) => s.key);
+                        if (admins.length === 0) { toast.warning('Nenhum sócio com qualificação de administrador identificada no QSA.'); return; }
+                        setSociosAssinantesIds(admins);
+                      }}
+                      className="px-2.5 py-1 rounded-md border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                    >
+                      Selecionar só administrador(es)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSociosAssinantesIds([])}
+                      className="px-2.5 py-1 rounded-md border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                    >
+                      Limpar seleção
+                    </button>
+                  </div>
                   <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
                     {sociosEmpresaAssessoria.map((socio, idx) => {
                       const key = socio.id || `idx-${idx}`;
@@ -815,6 +846,7 @@ export function FormGerarContrato({ onSubmit, loading, userCargo }: Props) {
                       );
                     })}
                   </div>
+                  </>
                 )}
                 {errors.sociosAssinantesAssessoria && <p className="text-red-500 text-xs mt-1">{errors.sociosAssinantesAssessoria}</p>}
               </div>

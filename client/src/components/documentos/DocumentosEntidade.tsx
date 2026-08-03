@@ -695,7 +695,16 @@ export default function DocumentosEntidade({
                         {tipo === "cartao_cnpj" && <p className="text-[11px] text-blue-700 bg-blue-50 border border-blue-100 rounded-md px-2.5 py-1.5">O usuário só anexa. O sistema/IA deverá identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral para o relatório.</p>}
                         {docsTipo.length > 0 && (
                           <div className="rounded-md border border-slate-100 bg-slate-50 p-2">
-                            <div className="space-y-1">
+                            {/* Rolagem interna só a partir de telas maiores (sm: 640px+): é só
+                                aí que o grid vira múltiplas colunas e um card com muitos
+                                arquivos (ex: "Campo outros" com 5+) estica a linha inteira e
+                                quebra a harmonia com os cards vizinhos. No celular o grid já
+                                empilha em 1 coluna só -- não existe "vizinho" pra desalinhar,
+                                então a lista cresce naturalmente, sem rolagem aninhada (rolar
+                                dentro de uma caixinha, dentro da tela que já rola, atrapalha o
+                                dedo no touch). O botão "Mostrar menos"/"ver todos" fica sempre
+                                fora da área de rolagem, nunca some ao rolar a lista. */}
+                            <div className={camposExpandidos[tipo] && docsTipo.length > 3 ? "space-y-1 sm:max-h-44 sm:overflow-y-auto sm:pr-1" : "space-y-1"}>
                               {(camposExpandidos[tipo] ? docsTipo : docsTipo.slice(0, 3)).map((doc) => (
                                 <div key={doc.id} className="flex items-center justify-between gap-2 rounded-md bg-white border border-slate-100 px-2 py-1">
                                   <div className="min-w-0">
@@ -717,16 +726,16 @@ export default function DocumentosEntidade({
                                   </div>
                                 </div>
                               ))}
-                              {docsTipo.length > 3 && (
-                                <button
-                                  type="button"
-                                  onClick={() => setCamposExpandidos((prev) => ({ ...prev, [tipo]: !prev[tipo] }))}
-                                  className="text-[9px] font-semibold text-blue-600 hover:text-blue-700"
-                                >
-                                  {camposExpandidos[tipo] ? "Mostrar menos" : `+ ${docsTipo.length - 3} arquivo(s) neste mesmo campo -- ver todos`}
-                                </button>
-                              )}
                             </div>
+                            {docsTipo.length > 3 && (
+                              <button
+                                type="button"
+                                onClick={() => setCamposExpandidos((prev) => ({ ...prev, [tipo]: !prev[tipo] }))}
+                                className="mt-1.5 text-[9px] font-semibold text-blue-600 hover:text-blue-700"
+                              >
+                                {camposExpandidos[tipo] ? "Mostrar menos" : `+ ${docsTipo.length - 3} arquivo(s) neste mesmo campo -- ver todos`}
+                              </button>
+                            )}
                           </div>
                         )}
                         </>

@@ -205,7 +205,7 @@ function dosDateTime(date = new Date()): { time: number; date: number } {
   return { time, date: dosDate };
 }
 
-function createZip(files: Array<{ name: string; data: Buffer; mtime?: Date }>): Buffer {
+export function createZip(files: Array<{ name: string; data: Buffer; mtime?: Date }>): Buffer {
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];
   let offset = 0;

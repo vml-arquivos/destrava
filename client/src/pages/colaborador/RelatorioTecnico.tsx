@@ -8,7 +8,7 @@
  */
 
 import { useState, useCallback } from "react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { toast } from "sonner";
 import {
   FileText, RefreshCw, FileDown, Send, MessageCircle,
@@ -16,6 +16,7 @@ import {
   CheckCircle2, AlertTriangle, XCircle, Info,
   Building2, Users, BarChart3, ShieldAlert, ShieldCheck,
   ShieldX, Clock, ArrowRight, Star, Zap, BookOpen,
+  Paperclip, FileArchive,
 } from "lucide-react";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -522,6 +523,8 @@ export default function RelatorioTecnico({ empresaId, onNavegar }: Props) {
   const [data, setData] = useState<RelatorioData | null>(null);
   const [loading, setLoading] = useState(false);
   const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [gerandoPdfComAnexos, setGerandoPdfComAnexos] = useState(false);
+  const [gerandoZip, setGerandoZip] = useState(false);
   const [resumoCopiado, setResumoCopiado] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
 
@@ -550,16 +553,11 @@ export default function RelatorioTecnico({ empresaId, onNavegar }: Props) {
     if (!empresaId) return;
     setGerandoPdf(true);
     try {
-      const token = localStorage.getItem("token") || sessionStorage.getItem("token") || "";
-      const res = await fetch(`/api/empresas/${empresaId}/relatorio-tecnico/pdf`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error("Erro ao gerar PDF");
-      const blob = await res.blob();
+      const { blob, filename } = await apiFetchBlob(`/api/empresas/${empresaId}/relatorio-tecnico/pdf`);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `relatorio-tecnico-${data?.identificacao?.razao_social?.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase() || "empresa"}.pdf`;
+      a.download = filename || `relatorio-tecnico-${data?.identificacao?.razao_social?.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase() || "empresa"}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("PDF gerado com sucesso!");
@@ -567,6 +565,50 @@ export default function RelatorioTecnico({ empresaId, onNavegar }: Props) {
       toast.error(err?.message || "Erro ao gerar PDF");
     } finally {
       setGerandoPdf(false);
+    }
+  }, [empresaId, data]);
+
+  // Ficha completa "com anexos, no mesmo PDF": mescla os arquivos reais do
+  // Acervo Documental (CNPJ, contrato social, CND etc.) como páginas do mesmo
+  // arquivo -- não é só uma lista dizendo que o documento existe.
+  const baixarPdfComAnexos = useCallback(async () => {
+    if (!empresaId) return;
+    setGerandoPdfComAnexos(true);
+    try {
+      const { blob, filename } = await apiFetchBlob(`/api/empresas/${empresaId}/relatorio-tecnico/pdf?anexos=1`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || `ficha-completa-${data?.identificacao?.razao_social?.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase() || "empresa"}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Ficha completa com anexos gerada com sucesso!");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao gerar ficha com anexos");
+    } finally {
+      setGerandoPdfComAnexos(false);
+    }
+  }, [empresaId, data]);
+
+  // Pacote ZIP: a ficha em PDF + cada arquivo do Acervo Documental no formato
+  // original (útil quando o formato original importa, ex: planilha, imagem em
+  // alta resolução) em vez de só embutido como página do PDF.
+  const baixarZipCompleto = useCallback(async () => {
+    if (!empresaId) return;
+    setGerandoZip(true);
+    try {
+      const { blob, filename } = await apiFetchBlob(`/api/empresas/${empresaId}/relatorio-tecnico/zip`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || `ficha-completa-${data?.identificacao?.razao_social?.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase() || "empresa"}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("ZIP com ficha e arquivos gerado com sucesso!");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao gerar ZIP da ficha completa");
+    } finally {
+      setGerandoZip(false);
     }
   }, [empresaId, data]);
 
@@ -666,6 +708,14 @@ export default function RelatorioTecnico({ empresaId, onNavegar }: Props) {
               <button onClick={baixarPdf} disabled={gerandoPdf} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold transition-all">
                 {gerandoPdf ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
                 {gerandoPdf ? "Gerando..." : "Baixar PDF"}
+              </button>
+              <button onClick={baixarPdfComAnexos} disabled={gerandoPdfComAnexos} title="Ficha completa com todos os documentos do Acervo Documental já mesclados nas páginas do mesmo PDF" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold transition-all">
+                {gerandoPdfComAnexos ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
+                {gerandoPdfComAnexos ? "Gerando..." : "Ficha + anexos (PDF único)"}
+              </button>
+              <button onClick={baixarZipCompleto} disabled={gerandoZip} title="Ficha em PDF + todos os arquivos originais do Acervo Documental, dentro de um ZIP" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold transition-all">
+                {gerandoZip ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <FileArchive className="w-3.5 h-3.5" />}
+                {gerandoZip ? "Gerando..." : "Ficha + arquivos (ZIP)"}
               </button>
               <button onClick={copiarResumo} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold transition-all">
                 {resumoCopiado ? <CheckCheck className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}

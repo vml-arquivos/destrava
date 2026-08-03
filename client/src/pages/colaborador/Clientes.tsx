@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link } from "wouter";
 import Layout from "./Layout";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { toast } from "sonner";
 import {
   Users, Plus, Search, Phone, Mail, Building2,
@@ -10,6 +10,7 @@ import {
   Calendar, RefreshCw, UserCheck, Loader2,
   GitMerge, Filter, SlidersHorizontal, Globe, Megaphone,
   UserPlus, Smartphone, TrendingUp, BarChart3,
+  Paperclip, FileArchive,
 } from "lucide-react";
 import DocumentosEntidade from "@/components/documentos/DocumentosEntidade";
 
@@ -198,6 +199,8 @@ export default function Clientes() {
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [filtroIncompleto, setFiltroIncompleto] = useState(false);
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
+  const [gerandoFichaPf, setGerandoFichaPf] = useState(false);
+  const [gerandoZipPf, setGerandoZipPf] = useState(false);
   const [atividades, setAtividades] = useState<Atividade[]>([]);
   const [loadingAtividades, setLoadingAtividades] = useState(false);
   const [modalNovoCliente, setModalNovoCliente] = useState(false);
@@ -481,6 +484,49 @@ export default function Clientes() {
       toast.success("Cliente excluído.");
     } catch (err) {
       toast.error("Erro ao excluir cliente.");
+    }
+  }
+
+  // Ficha completa do cliente PF: dados cadastrais + todos os documentos do
+  // Acervo Documental já mesclados como páginas do mesmo PDF -- não é só uma
+  // lista dizendo que o documento existe.
+  async function baixarFichaClientePf() {
+    if (!clienteSelecionado || !isClientePF(clienteSelecionado)) return;
+    setGerandoFichaPf(true);
+    try {
+      const { blob, filename } = await apiFetchBlob(`/api/clientes-pf/${getApiId(clienteSelecionado)}/ficha/pdf?anexos=1`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || `ficha-${clienteSelecionado.nome?.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase() || "cliente"}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Ficha completa com anexos gerada com sucesso!");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao gerar ficha completa");
+    } finally {
+      setGerandoFichaPf(false);
+    }
+  }
+
+  // Pacote ZIP: a ficha em PDF + cada arquivo do Acervo Documental no formato
+  // original.
+  async function baixarZipClientePf() {
+    if (!clienteSelecionado || !isClientePF(clienteSelecionado)) return;
+    setGerandoZipPf(true);
+    try {
+      const { blob, filename } = await apiFetchBlob(`/api/clientes-pf/${getApiId(clienteSelecionado)}/ficha/zip`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || `ficha-completa-${clienteSelecionado.nome?.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase() || "cliente"}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("ZIP com ficha e arquivos gerado com sucesso!");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao gerar ZIP da ficha completa");
+    } finally {
+      setGerandoZipPf(false);
     }
   }
 
@@ -1040,6 +1086,32 @@ export default function Clientes() {
                   </div>
                 )}
               </div>
+
+              {/* Ficha completa (só para cliente PF cadastrado de verdade -- um lead
+                  ainda não tem os dados cadastrais completos que a ficha exige) */}
+              {isClientePF(clienteSelecionado) && (
+                <div className="px-4 py-3 border-t flex flex-wrap items-center gap-2 bg-slate-50">
+                  <span className="text-xs font-semibold text-gray-500 uppercase mr-1">Ficha completa</span>
+                  <button
+                    onClick={baixarFichaClientePf}
+                    disabled={gerandoFichaPf}
+                    title="Dados cadastrais e todos os documentos do Acervo Documental já mesclados nas páginas do mesmo PDF"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-xs font-semibold text-slate-700 transition-all disabled:opacity-50"
+                  >
+                    {gerandoFichaPf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
+                    {gerandoFichaPf ? "Gerando..." : "Ficha + anexos (PDF único)"}
+                  </button>
+                  <button
+                    onClick={baixarZipClientePf}
+                    disabled={gerandoZipPf}
+                    title="Ficha em PDF + todos os arquivos originais do Acervo Documental, dentro de um ZIP"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-xs font-semibold text-slate-700 transition-all disabled:opacity-50"
+                  >
+                    {gerandoZipPf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileArchive className="w-3.5 h-3.5" />}
+                    {gerandoZipPf ? "Gerando..." : "Ficha + arquivos (ZIP)"}
+                  </button>
+                </div>
+              )}
 
               {/* Documentos do cliente/lead */}
               <div className="px-4 py-3 border-t">

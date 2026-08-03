@@ -20,7 +20,7 @@ import { setAuditoriaPool, registrarAuditoria, rotaAuditLogs } from "./middlewar
 import { getPermissoes, temPermissao, LISTA_CARGOS_VALIDOS, nivelHierarquico, podeGerenciar as _podeGerenciar, cargosGerenciaveis as _cargosGerenciaveis } from "../shared/cargos.ts";
 import cnpjRouter from './routes/cnpj';
 import sociosDocumentosRouter, { upsertSocioEmpresa } from './routes/socios_documentos';
-import documentosRouter from './routes/documentos';
+import documentosRouter, { createZip as createZipServer } from './routes/documentos';
 import documentacaoRouter from './routes/documentacao';
 import blogRoutes from './routes/blogRoutes';
 import bannerRoutes from './routes/bannerRoutes';
@@ -51,7 +51,7 @@ import {
 import { normalizarPaginacaoCatalogo, normalizarTipoCatalogo } from "./lib/nexusCatalogo";
 import { contactInputSchema, loginInputSchema, leadInputSchema, validateBody } from "./lib/inputValidation";
 import { closeChromium, launchChromium } from "./services/chromiumLauncher";
-import { generateBrandedPdfBuffer } from "./services/brandedPdfLayout";
+import { generateBrandedPdfBuffer, appendAttachmentsToPdf, type AnexoParaMerge } from "./services/brandedPdfLayout";
 import { generateFollowupMessage, generateLeadRecommendations, generateLeadSummary, qualifyTriagemLead } from "./services/aiService";
 import { getDataDir, resolveDocumentPath, saveDocumentBuffer, getDocumentStorageHealth, PersistentStorageError } from "./services/documentStorage";
 import { calcularInteligencia360 } from "./services/inteligencia360Service";
@@ -5256,11 +5256,12 @@ async function startServer() {
       let documentos: any[] = [];
       try {
         const { rows: docsRows } = await pool.query(
-          `SELECT id, tipo, nome_arquivo, arquivo_path, status, origem, created_at, updated_at
+          `SELECT id, tipo_documento AS tipo, COALESCE(nome_customizado, nome_original) AS nome_arquivo,
+                  caminho_arquivo AS arquivo_path, status, origem, criado_em AS created_at, atualizado_em AS updated_at
            FROM documentos_arquivos
-           WHERE entidade_tipo = 'empresa' AND entidade_id = $1
-           AND COALESCE(status, 'ativo') NOT IN ('excluido')
-           ORDER BY created_at DESC`,
+           WHERE entidade_tipo = 'empresa' AND (entidade_id = $1 OR empresa_id = $1)
+           AND excluido_em IS NULL AND COALESCE(status, 'ativo') NOT IN ('excluido')
+           ORDER BY criado_em DESC`,
           [empresaId]
         );
         documentos = Array.isArray(docsRows) ? docsRows : [];
@@ -5439,11 +5440,12 @@ async function startServer() {
       let documentos: any[] = [];
       try {
         const { rows } = await pool.query(
-          `SELECT id, tipo, nome_arquivo, arquivo_path, status, origem, created_at, updated_at
+          `SELECT id, tipo_documento AS tipo, COALESCE(nome_customizado, nome_original) AS nome_arquivo,
+                  caminho_arquivo AS arquivo_path, status, origem, criado_em AS created_at, atualizado_em AS updated_at
            FROM documentos_arquivos
-           WHERE entidade_tipo = 'empresa' AND entidade_id = $1
-           AND COALESCE(status, 'ativo') NOT IN ('excluido')
-           ORDER BY created_at DESC`,
+           WHERE entidade_tipo = 'empresa' AND (entidade_id = $1 OR empresa_id = $1)
+           AND excluido_em IS NULL AND COALESCE(status, 'ativo') NOT IN ('excluido')
+           ORDER BY criado_em DESC`,
           [empresaId]
         );
         documentos = Array.isArray(rows) ? rows : [];
@@ -5545,7 +5547,7 @@ async function startServer() {
       try { const { rows } = await pool.query("SELECT * FROM socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true", [empresaId]); socios = rows; } catch { socios = []; }
 
       let documentos: any[] = [];
-      try { const { rows } = await pool.query(`SELECT id, tipo, nome_arquivo, arquivo_path, status FROM documentos_arquivos WHERE entidade_tipo = 'empresa' AND entidade_id = $1 AND COALESCE(status,'ativo') NOT IN ('excluido')`, [empresaId]); documentos = rows; } catch { documentos = []; }
+      try { const { rows } = await pool.query(`SELECT id, tipo_documento AS tipo, COALESCE(nome_customizado, nome_original) AS nome_arquivo, caminho_arquivo AS arquivo_path, status FROM documentos_arquivos WHERE entidade_tipo = 'empresa' AND (entidade_id = $1 OR empresa_id = $1) AND excluido_em IS NULL AND COALESCE(status,'ativo') NOT IN ('excluido')`, [empresaId]); documentos = rows; } catch { documentos = []; }
 
       let simulacoes: any[] = [];
       try { const { rows } = await pool.query("SELECT id, produto, valor_solicitado, prazo_meses, status FROM simulacoes_colaborador WHERE empresa_id = $1 ORDER BY criado_em DESC", [empresaId]); simulacoes = rows; } catch { simulacoes = []; }
@@ -5676,7 +5678,7 @@ async function startServer() {
       try { const { rows } = await pool.query("SELECT * FROM socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true ORDER BY created_at ASC", [empresaId]); socios = Array.isArray(rows) ? rows : []; } catch { socios = []; }
 
       let documentos: any[] = [];
-      try { const { rows } = await pool.query(`SELECT id, tipo, nome_arquivo, arquivo_path, status, origem, created_at FROM documentos_arquivos WHERE entidade_tipo = 'empresa' AND entidade_id = $1 AND COALESCE(status,'ativo') NOT IN ('excluido') ORDER BY created_at DESC`, [empresaId]); documentos = Array.isArray(rows) ? rows : []; } catch { documentos = []; }
+      try { const { rows } = await pool.query(`SELECT id, tipo_documento AS tipo, COALESCE(nome_customizado, nome_original) AS nome_arquivo, caminho_arquivo AS arquivo_path, status, origem, criado_em AS created_at FROM documentos_arquivos WHERE entidade_tipo = 'empresa' AND (entidade_id = $1 OR empresa_id = $1) AND excluido_em IS NULL AND COALESCE(status,'ativo') NOT IN ('excluido') ORDER BY criado_em DESC`, [empresaId]); documentos = Array.isArray(rows) ? rows : []; } catch { documentos = []; }
 
       let simulacoes: any[] = [];
       try { const { rows } = await pool.query("SELECT id, produto, valor_solicitado, prazo_meses, status FROM simulacoes_colaborador WHERE empresa_id = $1 ORDER BY criado_em DESC", [empresaId]); simulacoes = Array.isArray(rows) ? rows : []; } catch { simulacoes = []; }
@@ -5740,7 +5742,7 @@ async function startServer() {
       try { const { rows } = await pool.query("SELECT id, tipo, titulo, descricao, concluido, created_at FROM empresa_followups WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 50", [empresaId]); followupsEstruturados = Array.isArray(rows) ? rows : []; } catch { followupsEstruturados = []; }
 
       let documentos: any[] = [];
-      try { const { rows } = await pool.query(`SELECT id, tipo, nome_arquivo, arquivo_path, status, origem, created_at FROM documentos_arquivos WHERE entidade_tipo = 'empresa' AND entidade_id = $1 AND COALESCE(status,'ativo') NOT IN ('excluido') ORDER BY created_at DESC`, [empresaId]); documentos = Array.isArray(rows) ? rows : []; } catch { documentos = []; }
+      try { const { rows } = await pool.query(`SELECT id, tipo_documento AS tipo, COALESCE(nome_customizado, nome_original) AS nome_arquivo, caminho_arquivo AS arquivo_path, status, origem, criado_em AS created_at FROM documentos_arquivos WHERE entidade_tipo = 'empresa' AND (entidade_id = $1 OR empresa_id = $1) AND excluido_em IS NULL AND COALESCE(status,'ativo') NOT IN ('excluido') ORDER BY criado_em DESC`, [empresaId]); documentos = Array.isArray(rows) ? rows : []; } catch { documentos = []; }
 
       let simulacoes: any[] = [];
       try { const { rows } = await pool.query("SELECT id, produto, valor_solicitado, prazo_meses, status, criado_em, created_at FROM simulacoes_colaborador WHERE empresa_id = $1 ORDER BY criado_em DESC", [empresaId]); simulacoes = Array.isArray(rows) ? rows : []; } catch { simulacoes = []; }
@@ -5957,7 +5959,7 @@ async function startServer() {
       try { const { rows } = await pool.query("SELECT * FROM socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true ORDER BY created_at ASC", [empresaId]); socios = Array.isArray(rows) ? rows : []; } catch { socios = []; }
 
       let documentos: any[] = [];
-      try { const { rows } = await pool.query(`SELECT id, tipo, nome_arquivo, arquivo_path, status, origem, created_at FROM documentos_arquivos WHERE entidade_tipo = 'empresa' AND entidade_id = $1 AND COALESCE(status,'ativo') NOT IN ('excluido') ORDER BY created_at DESC`, [empresaId]); documentos = Array.isArray(rows) ? rows : []; } catch { documentos = []; }
+      try { const { rows } = await pool.query(`SELECT id, tipo_documento AS tipo, COALESCE(nome_customizado, nome_original) AS nome_arquivo, caminho_arquivo AS arquivo_path, status, origem, criado_em AS created_at FROM documentos_arquivos WHERE entidade_tipo = 'empresa' AND (entidade_id = $1 OR empresa_id = $1) AND excluido_em IS NULL AND COALESCE(status,'ativo') NOT IN ('excluido') ORDER BY criado_em DESC`, [empresaId]); documentos = Array.isArray(rows) ? rows : []; } catch { documentos = []; }
 
       let simulacoes: any[] = [];
       try { const { rows } = await pool.query("SELECT id, produto, valor_solicitado, prazo_meses, status, criado_em FROM simulacoes_colaborador WHERE empresa_id = $1 ORDER BY criado_em DESC", [empresaId]); simulacoes = Array.isArray(rows) ? rows : []; } catch { simulacoes = []; }
@@ -6021,13 +6023,29 @@ async function startServer() {
       try { const { rows } = await pool.query("SELECT * FROM socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true ORDER BY created_at ASC", [empresaId]); socios = Array.isArray(rows) ? rows : []; } catch { socios = []; }
 
       let documentos: any[] = [];
-      try { const { rows } = await pool.query(`SELECT id, tipo, nome_arquivo, arquivo_path, status, origem, created_at, updated_at FROM documentos_arquivos WHERE entidade_tipo = 'empresa' AND entidade_id = $1 AND COALESCE(status,'ativo') NOT IN ('excluido') ORDER BY created_at DESC`, [empresaId]); documentos = Array.isArray(rows) ? rows : []; } catch { documentos = []; }
+      try {
+        const { rows } = await pool.query(
+          `SELECT id, tipo_documento AS tipo, COALESCE(nome_customizado, nome_original) AS nome_arquivo,
+                  caminho_arquivo AS arquivo_path, status, origem, criado_em AS created_at, atualizado_em AS updated_at
+             FROM documentos_arquivos
+            WHERE entidade_tipo = 'empresa' AND (entidade_id = $1 OR empresa_id = $1)
+              AND excluido_em IS NULL AND COALESCE(status,'ativo') NOT IN ('excluido')
+            ORDER BY criado_em DESC`,
+          [empresaId],
+        );
+        documentos = Array.isArray(rows) ? rows : [];
+      } catch { documentos = []; }
 
       let simulacoes: any[] = [];
       try { const { rows } = await pool.query(`SELECT id, produto, valor_solicitado, prazo_meses, status, criado_em FROM simulacoes_colaborador WHERE empresa_id = $1 ORDER BY criado_em DESC`, [empresaId]); simulacoes = Array.isArray(rows) ? rows : []; } catch { simulacoes = []; }
 
       let orcamentos: any[] = [];
-      try { const { rows } = await pool.query(`SELECT id, descricao, valor_total, status, created_at FROM orcamentos WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 10`, [empresaId]); orcamentos = Array.isArray(rows) ? rows : []; } catch { orcamentos = []; }
+      // Correção: a tabela real é "orcamentos_timbrados" -- "orcamentos" nunca existiu,
+      // então este SELECT sempre falhava (silenciosamente, via catch). Sem efeito prático
+      // hoje porque o campo "orcamentos" não é lido em nenhum lugar do serviço de relatório
+      // (gerarRelatorioTecnico não consome esse parâmetro), mas corrigido por consistência
+      // e para não mascarar um erro real no log a cada chamada.
+      try { const { rows } = await pool.query(`SELECT id, descricao, valor_total, status, criado_em AS created_at FROM orcamentos_timbrados WHERE empresa_id = $1 ORDER BY criado_em DESC LIMIT 10`, [empresaId]); orcamentos = Array.isArray(rows) ? rows : []; } catch { orcamentos = []; }
 
       let contratos: any[] = [];
       try { const { rows } = await pool.query(`SELECT id, numero_contrato, tipo_contrato, status, valor_contrato, data_assinatura, created_at FROM contratos_gerados WHERE empresa_id = $1 ORDER BY created_at DESC`, [empresaId]); contratos = Array.isArray(rows) ? rows : []; } catch { contratos = []; }
@@ -6062,6 +6080,41 @@ async function startServer() {
     }
   });
 
+  // Busca os arquivos físicos do Acervo Documental de uma empresa para mesclar
+  // como páginas reais num PDF gerado (ficha completa, relatório técnico etc.),
+  // no mesmo padrão já usado para anexos de orçamento (appendAttachmentsToPdf).
+  async function buscarAnexosEmpresaParaMerge(empresaId: string): Promise<AnexoParaMerge[]> {
+    try {
+      const { rows } = await pool.query(
+        `SELECT tipo_documento, COALESCE(nome_customizado, nome_original) AS nome_original,
+                nome_arquivo, caminho_arquivo, mime_type
+           FROM public.documentos_arquivos
+          WHERE entidade_tipo = 'empresa' AND (entidade_id = $1 OR empresa_id = $1)
+            AND excluido_em IS NULL AND status <> 'excluido'
+          ORDER BY tipo_documento, criado_em ASC`,
+        [empresaId],
+      );
+      const resultado: AnexoParaMerge[] = [];
+      for (const doc of rows as any[]) {
+        const resolved = resolveDocumentPath(doc);
+        if (!resolved.absolutePath) {
+          resultado.push({ nomeOriginal: doc.nome_original || "documento", mimeType: doc.mime_type || null, buffer: null, descricao: doc.tipo_documento || null, erro: "não encontrado no armazenamento" });
+          continue;
+        }
+        try {
+          const buffer = await fs.promises.readFile(resolved.absolutePath);
+          resultado.push({ nomeOriginal: doc.nome_original || "documento", mimeType: doc.mime_type || null, buffer, descricao: doc.tipo_documento || null });
+        } catch (err: any) {
+          resultado.push({ nomeOriginal: doc.nome_original || "documento", mimeType: doc.mime_type || null, buffer: null, descricao: doc.tipo_documento || null, erro: err?.message || "falha ao ler arquivo" });
+        }
+      }
+      return resultado;
+    } catch (err) {
+      console.error("[ficha-completa] falha ao buscar anexos para merge:", err);
+      return [];
+    }
+  }
+
   // ─── GET /api/empresas/:id/relatorio-tecnico/pdf ─────────────────
   // Gera PDF do relatório técnico premium usando Puppeteer.
   app.get("/api/empresas/:id/relatorio-tecnico/pdf", auth, async (req: Request, res: Response) => {
@@ -6078,7 +6131,18 @@ async function startServer() {
       let socios: any[] = [];
       try { const { rows } = await pool.query("SELECT * FROM socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true", [empresaId]); socios = rows; } catch { socios = []; }
       let documentos: any[] = [];
-      try { const { rows } = await pool.query(`SELECT id, tipo, nome_arquivo, arquivo_path, status FROM documentos_arquivos WHERE entidade_tipo = 'empresa' AND entidade_id = $1 AND COALESCE(status,'ativo') NOT IN ('excluido')`, [empresaId]); documentos = rows; } catch { documentos = []; }
+      try {
+        const { rows } = await pool.query(
+          `SELECT id, tipo_documento AS tipo, COALESCE(nome_customizado, nome_original) AS nome_arquivo,
+                  caminho_arquivo AS arquivo_path, status
+             FROM documentos_arquivos
+            WHERE entidade_tipo = 'empresa' AND (entidade_id = $1 OR empresa_id = $1)
+              AND excluido_em IS NULL AND COALESCE(status,'ativo') NOT IN ('excluido')
+            ORDER BY criado_em DESC`,
+          [empresaId],
+        );
+        documentos = rows;
+      } catch { documentos = []; }
       let simulacoes: any[] = [];
       try { const { rows } = await pool.query("SELECT id, produto, valor_solicitado, prazo_meses, status FROM simulacoes_colaborador WHERE empresa_id = $1 ORDER BY criado_em DESC", [empresaId]); simulacoes = rows; } catch { simulacoes = []; }
       let contratos: any[] = [];
@@ -6231,6 +6295,7 @@ async function startServer() {
       const uploadsDir = path.resolve("uploads", "relatorios-tecnicos");
       if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
       const slug = String(rel.identificacao.razao_social).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase();
+      const incluirAnexos = ["1", "true", "sim"].includes(String(req.query.anexos || "").toLowerCase());
       const fileName = `relatorio-tecnico-${slug}-${Date.now()}.pdf`;
       const filePath = path.join(uploadsDir, fileName);
 
@@ -6243,13 +6308,125 @@ async function startServer() {
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-      const stream = fs.createReadStream(filePath);
-      stream.pipe(res);
-      stream.on("end", () => fs.unlink(filePath, () => {}));
+
+      // ?anexos=1 -- ficha completa "com anexos, no mesmo PDF": mescla os arquivos
+      // reais do Acervo Documental como páginas (PDF/imagem) ou, quando o formato
+      // não permite mesclar visualmente, lista no manifesto final -- mesma técnica
+      // já usada para anexos de orçamento (appendAttachmentsToPdf). Parâmetro
+      // opcional: sem ele, o comportamento é exatamente o mesmo de antes.
+      if (incluirAnexos) {
+        const baseBuffer = await fs.promises.readFile(filePath);
+        const anexos = await buscarAnexosEmpresaParaMerge(empresaId);
+        const pdfFinal = anexos.length ? await appendAttachmentsToPdf(baseBuffer, anexos) : baseBuffer;
+        fs.unlink(filePath, () => {});
+        res.send(pdfFinal);
+      } else {
+        const stream = fs.createReadStream(filePath);
+        stream.pipe(res);
+        stream.on("end", () => fs.unlink(filePath, () => {}));
+      }
     } catch (err: any) {
       if (browser) { try { await closeChromium(browser); } catch { /* ignora */ } }
       console.error("[GET /api/empresas/:id/relatorio-tecnico/pdf]", err);
       res.status(500).json({ error: "Erro ao gerar PDF do relatório técnico", detail: err?.message });
+    }
+  });
+
+  // ─── GET /api/empresas/:id/relatorio-tecnico/zip ──────────────────────────
+  // Alternativa em pacote: a ficha (PDF, sem mesclar) + cada arquivo do Acervo
+  // Documental no formato original, dentro de um único ZIP. Útil quando o
+  // formato original importa (planilha, imagem em alta resolução etc.) em vez
+  // de ficar só embutido como página do PDF.
+  app.get("/api/empresas/:id/relatorio-tecnico/zip", auth, async (req: Request, res: Response) => {
+    let browser: any;
+    try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
+      const empresaId = req.params.id;
+      const colaborador = (req as any).colaborador;
+
+      const { rows: empresaRows } = await pool.query("SELECT * FROM empresas WHERE id = $1", [empresaId]);
+      if (empresaRows.length === 0) { res.status(404).json({ error: "Empresa não encontrada" }); return; }
+      const empresa = empresaRows[0];
+
+      let socios: any[] = [];
+      try { const { rows } = await pool.query("SELECT * FROM socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true", [empresaId]); socios = rows; } catch { socios = []; }
+      let documentosMeta: any[] = [];
+      try {
+        const { rows } = await pool.query(
+          `SELECT id, tipo_documento AS tipo, COALESCE(nome_customizado, nome_original) AS nome_arquivo,
+                  caminho_arquivo AS arquivo_path, status
+             FROM documentos_arquivos
+            WHERE entidade_tipo = 'empresa' AND (entidade_id = $1 OR empresa_id = $1)
+              AND excluido_em IS NULL AND COALESCE(status,'ativo') NOT IN ('excluido')
+            ORDER BY criado_em DESC`,
+          [empresaId],
+        );
+        documentosMeta = rows;
+      } catch { documentosMeta = []; }
+      let simulacoes: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, produto, valor_solicitado, prazo_meses, status FROM simulacoes_colaborador WHERE empresa_id = $1 ORDER BY criado_em DESC", [empresaId]); simulacoes = rows; } catch { simulacoes = []; }
+      let contratos: any[] = [];
+      try { const { rows } = await pool.query("SELECT id, numero_contrato, tipo_contrato, status, valor_contrato, data_assinatura FROM contratos_gerados WHERE empresa_id = $1 ORDER BY created_at DESC", [empresaId]); contratos = rows; } catch { contratos = []; }
+
+      const rel = gerarRelatorioTecnico({
+        empresa, socios, documentos: documentosMeta, simulacoes, orcamentos: [], contratos, historico: [],
+        responsavel_nome: colaborador?.nome || colaborador?.email || "Destrava Crédito",
+      });
+
+      const htmlSimples = gerarHtmlTimbrado(`
+        <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; padding: 32px 28px; border-radius: 12px; margin-bottom: 24px;">
+          <p style="margin:0; font-size:11px; opacity:0.7; letter-spacing:1px;">FICHA COMPLETA</p>
+          <h1 style="margin:8px 0 4px; font-size:22px; font-weight:900;">${rel.identificacao.razao_social}</h1>
+          <p style="margin:0; font-size:13px; opacity:0.85;">CNPJ: ${rel.identificacao.cnpj} &mdash; ${rel.identificacao.situacao_cadastral}</p>
+        </div>
+        <p style="font-size:12px; color:#334155; line-height:1.7;">${rel.resumo_executivo}</p>
+        <p style="font-size:11px; color:#64748b; margin-top:16px;">Este PDF acompanha, no mesmo pacote ZIP, todos os arquivos do Acervo Documental desta empresa em seu formato original. Para a ficha completa com as análises detalhadas, use "Baixar ficha (PDF completo)".</p>
+        <div style="margin-top:12px; font-size:10px; color:#94a3b8; text-align:center;">Gerado em ${new Date(rel.gerado_em).toLocaleString('pt-BR')} por ${rel.responsavel_analise} &mdash; Destrava Crédito</div>
+      `, `Ficha — ${rel.identificacao.razao_social}`);
+
+      browser = await launchChromium();
+      const page = await browser.newPage();
+      await page.setContent(htmlSimples, { waitUntil: "networkidle0" });
+      const fichaPdfBuffer: Buffer = await page.pdf({ format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "8mm", right: "8mm" } });
+      await closeChromium(browser);
+      browser = undefined;
+
+      const files: Array<{ name: string; data: Buffer; mtime?: Date }> = [];
+      const slug = String(rel.identificacao.razao_social).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase() || "empresa";
+      files.push({ name: `00_ficha-${slug}.pdf`, data: fichaPdfBuffer, mtime: new Date() });
+
+      const { rows: arquivosCompletos } = await pool.query(
+        `SELECT * FROM public.documentos_arquivos
+          WHERE entidade_tipo = 'empresa' AND (entidade_id = $1 OR empresa_id = $1)
+            AND excluido_em IS NULL AND status <> 'excluido'
+          ORDER BY tipo_documento, criado_em DESC`,
+        [empresaId],
+      );
+      const usedNames = new Map<string, number>();
+      for (const doc of arquivosCompletos as any[]) {
+        const resolved = resolveDocumentPath(doc);
+        if (!resolved.absolutePath) continue;
+        const baseName = String(doc.nome_customizado || doc.nome_original || doc.nome_arquivo || `${doc.id}.bin`)
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_.-]+/g, "_").slice(0, 140) || "arquivo";
+        const folder = String(doc.tipo_documento || "documento").replace(/[^a-zA-Z0-9_-]+/g, "_");
+        const key = `${folder}/${baseName}`;
+        const count = usedNames.get(key) || 0;
+        usedNames.set(key, count + 1);
+        const parsed = path.parse(baseName);
+        const finalName = count > 0 ? `${folder}/${parsed.name}_${count + 1}${parsed.ext}` : `${folder}/${baseName}`;
+        files.push({ name: finalName, data: await fs.promises.readFile(resolved.absolutePath), mtime: doc.criado_em ? new Date(doc.criado_em) : new Date() });
+      }
+
+      const zip = createZipServer(files);
+      const filename = `ficha-completa-${slug}-${new Date().toISOString().slice(0, 10)}.zip`;
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", String(zip.length));
+      res.send(zip);
+    } catch (err: any) {
+      if (browser) { try { await closeChromium(browser); } catch { /* ignora */ } }
+      console.error("[GET /api/empresas/:id/relatorio-tecnico/zip]", err);
+      res.status(500).json({ error: "Erro ao gerar ZIP da ficha completa", detail: err?.message });
     }
   });
 
@@ -10319,6 +10496,217 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
+  // Busca os arquivos físicos do Acervo Documental de um cliente PF para mesclar
+  // como páginas reais num PDF -- mesmo padrão usado para empresa (PJ).
+  async function buscarAnexosClientePfParaMerge(clientePfId: string): Promise<AnexoParaMerge[]> {
+    try {
+      const { rows } = await pool.query(
+        `SELECT tipo_documento, COALESCE(nome_customizado, nome_original) AS nome_original,
+                nome_arquivo, caminho_arquivo, mime_type
+           FROM public.documentos_arquivos
+          WHERE entidade_tipo = 'cliente_pf' AND (entidade_id = $1 OR cliente_pf_id = $1)
+            AND excluido_em IS NULL AND status <> 'excluido'
+          ORDER BY tipo_documento, criado_em ASC`,
+        [clientePfId],
+      );
+      const resultado: AnexoParaMerge[] = [];
+      for (const doc of rows as any[]) {
+        const resolved = resolveDocumentPath(doc);
+        if (!resolved.absolutePath) {
+          resultado.push({ nomeOriginal: doc.nome_original || "documento", mimeType: doc.mime_type || null, buffer: null, descricao: doc.tipo_documento || null, erro: "não encontrado no armazenamento" });
+          continue;
+        }
+        try {
+          const buffer = await fs.promises.readFile(resolved.absolutePath);
+          resultado.push({ nomeOriginal: doc.nome_original || "documento", mimeType: doc.mime_type || null, buffer, descricao: doc.tipo_documento || null });
+        } catch (err: any) {
+          resultado.push({ nomeOriginal: doc.nome_original || "documento", mimeType: doc.mime_type || null, buffer: null, descricao: doc.tipo_documento || null, erro: err?.message || "falha ao ler arquivo" });
+        }
+      }
+      return resultado;
+    } catch (err) {
+      console.error("[ficha-completa-pf] falha ao buscar anexos para merge:", err);
+      return [];
+    }
+  }
+
+  function gerarHtmlFichaClientePf(cliente: any, documentos: any[]): string {
+    const fmtD = (v: any) => (v === null || v === undefined || v === "") ? "Não informado" : String(v);
+    const fmtData = (v: any) => {
+      if (!v) return "Não informado";
+      try { return new Date(v).toLocaleDateString("pt-BR"); } catch { return "Não informado"; }
+    };
+    return gerarHtmlTimbrado(`
+      <style>
+        .rt-section { margin-bottom: 20px; }
+        .rt-section h2 { font-size: 13px; font-weight: 800; color: #1e40af; border-bottom: 2px solid #dbeafe; padding-bottom: 4px; margin-bottom: 10px; }
+        .rt-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        .rt-table th { background: #f8fafc; padding: 6px 10px; text-align: left; font-weight: 700; color: #475569; border-bottom: 1px solid #e2e8f0; }
+        .rt-table td { padding: 5px 10px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+        .rt-table tr:last-child td { border-bottom: none; }
+        .chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; }
+        .chip-ok { background: #dcfce7; color: #166534; }
+        .chip-err { background: #fee2e2; color: #991b1b; }
+      </style>
+      <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; padding: 32px 28px; border-radius: 12px; margin-bottom: 24px;">
+        <p style="margin:0; font-size:11px; opacity:0.7; letter-spacing:1px;">FICHA COMPLETA — PESSOA FÍSICA</p>
+        <h1 style="margin:8px 0 4px; font-size:22px; font-weight:900;">${fmtD(cliente.nome)}</h1>
+        <p style="margin:0; font-size:13px; opacity:0.85;">CPF: ${fmtD(cliente.cpf)}</p>
+      </div>
+      <div class="rt-section">
+        <h2>Dados Cadastrais</h2>
+        <table class="rt-table">
+          <tr><th>Nome</th><td>${fmtD(cliente.nome)}</td><th>CPF</th><td>${fmtD(cliente.cpf)}</td></tr>
+          <tr><th>RG</th><td>${fmtD(cliente.rg)}</td><th>Data de Nascimento</th><td>${fmtData(cliente.data_nascimento)}</td></tr>
+          <tr><th>Profissão</th><td>${fmtD(cliente.profissao)}</td><th>Estado Civil</th><td>${fmtD(cliente.estado_civil)}</td></tr>
+        </table>
+      </div>
+      <div class="rt-section">
+        <h2>Contato e Endereço</h2>
+        <table class="rt-table">
+          <tr><th>E-mail</th><td>${fmtD(cliente.email)}</td><th>Telefone</th><td>${fmtD(cliente.telefone)}</td></tr>
+          <tr><th>Endereço</th><td colspan="3">${fmtD(cliente.endereco)}</td></tr>
+          <tr><th>Cidade/UF</th><td>${fmtD(cliente.cidade)}${cliente.uf ? ' / ' + cliente.uf : ''}</td><th>CEP</th><td>${fmtD(cliente.cep)}</td></tr>
+        </table>
+      </div>
+      ${cliente.observacoes ? `<div class="rt-section"><h2>Observações</h2><p style="font-size:12px; color:#334155; line-height:1.7;">${fmtD(cliente.observacoes)}</p></div>` : ''}
+      <div class="rt-section">
+        <h2>Documentos no Acervo Documental (${documentos.length})</h2>
+        ${documentos.length > 0 ? `
+        <table class="rt-table">
+          <tr><th>Documento</th><th>Arquivo</th><th>Status</th><th>Upload</th></tr>
+          ${documentos.map((d: any) => `<tr><td>${fmtD(d.tipo_documento)}</td><td>${d.caminho_arquivo ? '<span class="chip chip-ok">✓ Sim</span>' : '<span class="chip chip-err">✗ Não</span>'}</td><td>${fmtD(d.status)}</td><td>${fmtData(d.criado_em)}</td></tr>`).join('')}
+        </table>` : '<p style="font-size:11px; color:#94a3b8;">Nenhum documento anexado ainda.</p>'}
+      </div>
+      <div style="margin-top:24px; padding:12px 16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; font-size:10px; color:#64748b; line-height:1.6;">
+        <strong>Observações:</strong> Ficha gerada a partir dos dados cadastrados no sistema. Não constitui análise de crédito.
+      </div>
+      <div style="margin-top:12px; font-size:10px; color:#94a3b8; text-align:center;">
+        Gerado em ${new Date().toLocaleString('pt-BR')} — Destrava Crédito
+      </div>
+    `, `Ficha — ${cliente.nome || "Cliente"}`);
+  }
+
+  // ─── GET /api/clientes-pf/:id/ficha/pdf ────────────────────────────────────
+  // Ficha completa do cliente PF (dados cadastrais + lista de documentos).
+  // ?anexos=1 mescla os arquivos reais do Acervo Documental como páginas do
+  // mesmo PDF, igual à opção equivalente da empresa (PJ).
+  app.get('/api/clientes-pf/:id/ficha/pdf', auth, async (req: Request, res: Response) => {
+    let browser: any;
+    try {
+      const { rows } = await pool.query('SELECT * FROM clientes_pf WHERE id=$1', [req.params.id]);
+      if (!rows.length) { res.status(404).json({ error: 'Cliente não encontrado' }); return; }
+      const cliente = rows[0];
+      let documentos: any[] = [];
+      try {
+        const docsResult = await pool.query(
+          `SELECT tipo_documento, status, caminho_arquivo, criado_em
+             FROM public.documentos_arquivos
+            WHERE entidade_tipo = 'cliente_pf' AND (entidade_id = $1 OR cliente_pf_id = $1)
+              AND excluido_em IS NULL AND status <> 'excluido'
+            ORDER BY criado_em DESC`,
+          [req.params.id],
+        );
+        documentos = docsResult.rows;
+      } catch { documentos = []; }
+
+      const html = gerarHtmlFichaClientePf(cliente, documentos);
+      const incluirAnexos = ["1", "true", "sim"].includes(String(req.query.anexos || "").toLowerCase());
+      const slug = String(cliente.nome || "cliente").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase();
+
+      browser = await launchChromium();
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: "networkidle0" });
+      const baseBuffer: Buffer = await page.pdf({ format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "8mm", right: "8mm" } });
+      await closeChromium(browser);
+      browser = undefined;
+
+      const fileName = `ficha-${slug}-${Date.now()}.pdf`;
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      if (incluirAnexos) {
+        const anexos = await buscarAnexosClientePfParaMerge(req.params.id);
+        const pdfFinal = anexos.length ? await appendAttachmentsToPdf(baseBuffer, anexos) : baseBuffer;
+        res.send(pdfFinal);
+      } else {
+        res.send(baseBuffer);
+      }
+    } catch (err: any) {
+      if (browser) { try { await closeChromium(browser); } catch { /* ignora */ } }
+      console.error("[GET /api/clientes-pf/:id/ficha/pdf]", err);
+      res.status(500).json({ error: "Erro ao gerar PDF da ficha", detail: err?.message });
+    }
+  });
+
+  // ─── GET /api/clientes-pf/:id/ficha/zip ────────────────────────────────────
+  // Ficha (PDF, sem mesclar) + todos os arquivos do Acervo Documental no
+  // formato original, dentro de um único ZIP.
+  app.get('/api/clientes-pf/:id/ficha/zip', auth, async (req: Request, res: Response) => {
+    let browser: any;
+    try {
+      const { rows } = await pool.query('SELECT * FROM clientes_pf WHERE id=$1', [req.params.id]);
+      if (!rows.length) { res.status(404).json({ error: 'Cliente não encontrado' }); return; }
+      const cliente = rows[0];
+      let documentosMeta: any[] = [];
+      try {
+        const docsResult = await pool.query(
+          `SELECT tipo_documento, status, caminho_arquivo, criado_em
+             FROM public.documentos_arquivos
+            WHERE entidade_tipo = 'cliente_pf' AND (entidade_id = $1 OR cliente_pf_id = $1)
+              AND excluido_em IS NULL AND status <> 'excluido'
+            ORDER BY criado_em DESC`,
+          [req.params.id],
+        );
+        documentosMeta = docsResult.rows;
+      } catch { documentosMeta = []; }
+
+      const html = gerarHtmlFichaClientePf(cliente, documentosMeta);
+      const slug = String(cliente.nome || "cliente").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase();
+
+      browser = await launchChromium();
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: "networkidle0" });
+      const fichaPdfBuffer: Buffer = await page.pdf({ format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "8mm", right: "8mm" } });
+      await closeChromium(browser);
+      browser = undefined;
+
+      const files: Array<{ name: string; data: Buffer; mtime?: Date }> = [{ name: `00_ficha-${slug}.pdf`, data: fichaPdfBuffer, mtime: new Date() }];
+
+      const { rows: arquivosCompletos } = await pool.query(
+        `SELECT * FROM public.documentos_arquivos
+          WHERE entidade_tipo = 'cliente_pf' AND (entidade_id = $1 OR cliente_pf_id = $1)
+            AND excluido_em IS NULL AND status <> 'excluido'
+          ORDER BY tipo_documento, criado_em DESC`,
+        [req.params.id],
+      );
+      const usedNames = new Map<string, number>();
+      for (const doc of arquivosCompletos as any[]) {
+        const resolved = resolveDocumentPath(doc);
+        if (!resolved.absolutePath) continue;
+        const baseName = String(doc.nome_customizado || doc.nome_original || doc.nome_arquivo || `${doc.id}.bin`)
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_.-]+/g, "_").slice(0, 140) || "arquivo";
+        const folder = String(doc.tipo_documento || "documento").replace(/[^a-zA-Z0-9_-]+/g, "_");
+        const key = `${folder}/${baseName}`;
+        const count = usedNames.get(key) || 0;
+        usedNames.set(key, count + 1);
+        const parsed = path.parse(baseName);
+        const finalName = count > 0 ? `${folder}/${parsed.name}_${count + 1}${parsed.ext}` : `${folder}/${baseName}`;
+        files.push({ name: finalName, data: await fs.promises.readFile(resolved.absolutePath), mtime: doc.criado_em ? new Date(doc.criado_em) : new Date() });
+      }
+
+      const zip = createZipServer(files);
+      const filename = `ficha-completa-${slug}-${new Date().toISOString().slice(0, 10)}.zip`;
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", String(zip.length));
+      res.send(zip);
+    } catch (err: any) {
+      if (browser) { try { await closeChromium(browser); } catch { /* ignora */ } }
+      console.error("[GET /api/clientes-pf/:id/ficha/zip]", err);
+      res.status(500).json({ error: "Erro ao gerar ZIP da ficha completa", detail: err?.message });
+    }
+  });
+
   app.post('/api/clientes-pf', auth, async (req: Request, res: Response) => {
     try {
       const {
@@ -12181,6 +12569,17 @@ async function registrarDocumentoContratoGerado(params: {
            VALUES ('empresa',$1,$2,'contrato_prestacao_servicos',$3,$4,$5,NULL,'application/pdf',$6,'ativo','upload_manual',true,$7,$8::jsonb)`,
           [rows[0].empresa_id, req.params.id, nomeOriginal, path.basename(salvo.absolutePath), salvo.absolutePath, buffer.byteLength, ((req as any).colaborador || (req as any).user)?.id || null, JSON.stringify({ origem_endpoint: '/api/contratos/:id/anexo-assinado', sha256: salvo.sha256 })]
         ).catch((docErr) => console.warn('[documentos_arquivos] Falha ao registrar contrato assinado:', docErr?.message || docErr));
+
+        // Registro histórico obrigatório: toda vez que um contrato assinado é anexado
+        // (ou substituído), fica registrado na aba Histórico da empresa com data, autor
+        // e nome do arquivo -- não só no banco de dados de forma invisível.
+        const autorNome = (req as any).colaborador?.nome || (req as any).colaborador?.email || (req as any).user?.nome || (req as any).user?.email || null;
+        await registrarHistoricoEmpresaSeguro(
+          rows[0].empresa_id,
+          'contrato_assinado_anexado',
+          `Contrato assinado anexado: ${nomeOriginal} (contrato ${rows[0].id})`,
+          autorNome,
+        );
       }
       res.json({ success: true, ...rows[0] });
     } catch (err) {
