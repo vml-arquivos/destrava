@@ -3,6 +3,7 @@ import Layout from "./Layout";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { toast } from "sonner";
 import EnviarDocumento from "@/components/documentos/EnviarDocumento";
+import { labelTipoDocumento, formatBytes, formatDate, type DocumentoArquivo } from "@/components/documentos/DocumentosEntidade";
 import {
   FileSignature,
   Plus,
@@ -10,6 +11,7 @@ import {
   Save,
   CheckCircle2,
   Download,
+  DownloadCloud,
   Paperclip,
   Trash2,
   Building2,
@@ -20,6 +22,9 @@ import {
   PackagePlus,
   BadgeDollarSign,
   Pencil,
+  FolderOpen,
+  Loader2,
+  X,
 } from "lucide-react";
 
 type TipoCliente = "empresa" | "pessoa_fisica" | "livre";
@@ -138,14 +143,6 @@ function fmtDate(date?: string | null): string {
   return d.toLocaleDateString("pt-BR");
 }
 
-function formatFileSize(value?: number): string {
-  const bytes = Number(value || 0);
-  if (!Number.isFinite(bytes) || bytes <= 0) return "tamanho não informado";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 function calcularTotalServicos(servicos: ServicoOrcamento[]): number {
   return servicos.reduce(
     (acc, servico) =>
@@ -209,6 +206,16 @@ export default function Orcamentos() {
   const [arquivos, setArquivos] = useState<FileList | null>(null);
   const [descricaoAnexo, setDescricaoAnexo] = useState("");
   const fileRef = useRef<HTMLInputElement | null>(null);
+  // Anexar do Acervo Documental: reaproveita documentos que a empresa/cliente já
+  // tem armazenados (CNPJ, contrato social, CND etc.) sem precisar re-enviar do
+  // computador. Cópia física própria do anexo -- excluir aqui nunca afeta o
+  // Acervo Documental original.
+  const [modalAcervoAberto, setModalAcervoAberto] = useState(false);
+  const [carregandoAcervo, setCarregandoAcervo] = useState(false);
+  const [documentosAcervo, setDocumentosAcervo] = useState<DocumentoArquivo[]>([]);
+  const [selecionadosAcervo, setSelecionadosAcervo] = useState<Record<string, boolean>>({});
+  const [anexandoAcervo, setAnexandoAcervo] = useState(false);
+  const [baixandoTodos, setBaixandoTodos] = useState(false);
 
   const marca = form.marca as MarcaOrcamento;
   const isFinalizado = selecionado?.status === "finalizado";
@@ -437,14 +444,10 @@ export default function Orcamentos() {
             method: "POST",
             body: JSON.stringify(payload),
           });
-      const savedComAnexos = {
-        ...saved,
-        anexos: saved?.anexos ?? selecionado?.anexos ?? [],
-      };
-      setSelecionado(savedComAnexos);
+      setSelecionado(saved);
       toast.success("Orçamento salvo");
       await carregarTudo();
-      return savedComAnexos;
+      return saved;
     } catch (err: any) {
       toast.error(err.message || "Erro ao salvar orçamento");
       return null;
@@ -461,12 +464,8 @@ export default function Orcamentos() {
       const result = await apiFetch(`/api/orcamentos/${saved.id}/finalizar`, {
         method: "POST",
       });
-      const finalizadoBase = result?.orcamento ||
+      const finalizado = result?.orcamento ||
         result || { ...saved, status: "finalizado" };
-      const finalizado = {
-        ...finalizadoBase,
-        anexos: finalizadoBase?.anexos ?? saved?.anexos ?? selecionado?.anexos ?? [],
-      };
       setSelecionado(finalizado);
       setEdicaoFinalizadoLiberada(false);
       toast.success("Orçamento finalizado");
@@ -502,13 +501,7 @@ export default function Orcamentos() {
           method: "PUT",
           body: JSON.stringify({ ...form, itens: servicosParaSalvar, valor_total: valorFinal }),
         }).catch(() => null);
-        if (atualizado) {
-          base = {
-            ...atualizado,
-            anexos: atualizado?.anexos ?? base?.anexos ?? selecionado?.anexos ?? [],
-          };
-          setSelecionado(base);
-        }
+        if (atualizado) { base = atualizado; setSelecionado(atualizado); }
       } else {
         base = await salvar();
         if (!base?.id) return;
@@ -520,11 +513,7 @@ export default function Orcamentos() {
       // Garantir que está finalizado
       if (base.status !== "finalizado") {
         const result = await apiFetch(`/api/orcamentos/${base.id}/finalizar`, { method: "POST" });
-        const finalizado = result?.orcamento || base;
-        base = {
-          ...finalizado,
-          anexos: finalizado?.anexos ?? base?.anexos ?? selecionado?.anexos ?? [],
-        };
+        base = result?.orcamento || base;
         setSelecionado(base);
       }
       if (!base?.id) {
@@ -583,54 +572,105 @@ export default function Orcamentos() {
     }
     setSalvando(true);
     try {
-      const selecionados = Array.from(arquivosAtuais);
-      let enviados = 0;
-      const falhas: string[] = [];
-
-      // Um arquivo por requisição: mantém a seleção múltipla para o usuário, mas
-      // impede que navegador, proxy e servidor precisem manter todo o lote
-      // simultaneamente na memória.
-      for (const file of selecionados) {
-        if (file.size > 25 * 1024 * 1024) {
-          falhas.push(`${file.name} (excede 25 MB)`);
-          continue;
-        }
-        const fd = new FormData();
-        fd.append("arquivos", file, file.name);
-        if (descricaoAnexo) fd.append("descricao", descricaoAnexo);
-        try {
-          await apiFetch(`/api/orcamentos/${saved.id}/anexos`, {
-            method: "POST",
-            body: fd,
-          });
-          enviados += 1;
-        } catch (err: any) {
-          falhas.push(`${file.name} (${err?.message || "falha no envio"})`);
-        }
-      }
-
-      if (enviados > 0) {
-        toast.success(
-          enviados === 1
-            ? "1 documento anexado ao orçamento"
-            : `${enviados} documentos anexados ao orçamento`,
-        );
-        setArquivos(null);
-        setDescricaoAnexo("");
-        if (fileRef.current) fileRef.current.value = "";
-        await abrirOrcamento({ ...saved, id: saved.id });
-        await carregarTudo();
-      }
-      if (falhas.length > 0) {
-        toast.error(
-          `${falhas.length} arquivo(s) não foram enviados: ${falhas.join("; ")}`,
-          { duration: 8000 },
-        );
-      }
+      const fd = new FormData();
+      Array.from(arquivosAtuais).forEach((file) =>
+        fd.append("arquivos", file, file.name),
+      );
+      if (descricaoAnexo) fd.append("descricao", descricaoAnexo);
+      await apiFetch(`/api/orcamentos/${saved.id}/anexos`, {
+        method: "POST",
+        body: fd,
+      });
+      toast.success("Documentos anexados ao orçamento");
+      setArquivos(null);
+      setDescricaoAnexo("");
+      if (fileRef.current) fileRef.current.value = "";
+      await abrirOrcamento({ ...saved, id: saved.id });
+      await carregarTudo();
     } catch (err: any) {
       toast.error(err.message || "Erro ao anexar documentos");
     } finally {
       setSalvando(false);
+    }
+  }
+
+  async function abrirModalAcervo() {
+    const saved = selecionado || (await salvar());
+    if (!saved?.id) {
+      toast.error("Não foi possível salvar o orçamento antes de abrir o Acervo Documental. Tente salvar primeiro.");
+      return;
+    }
+    const entidadeTipo = saved.empresa_id ? "empresa" : saved.cliente_pf_id ? "cliente_pf" : null;
+    const entidadeId = saved.empresa_id || saved.cliente_pf_id || null;
+    if (!entidadeTipo || !entidadeId) {
+      toast.error("Este orçamento é de cliente livre (sem cadastro vinculado), então não tem Acervo Documental pra reaproveitar.");
+      return;
+    }
+    setModalAcervoAberto(true);
+    setSelecionadosAcervo({});
+    setCarregandoAcervo(true);
+    try {
+      const params = new URLSearchParams({ entidade_tipo: entidadeTipo, entidade_id: entidadeId });
+      const data = await apiFetch(`/api/documentos?${params.toString()}`);
+      setDocumentosAcervo(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao carregar documentos do Acervo Documental.");
+      setDocumentosAcervo([]);
+    } finally {
+      setCarregandoAcervo(false);
+    }
+  }
+
+  function fecharModalAcervo() {
+    setModalAcervoAberto(false);
+  }
+
+  function alternarSelecaoAcervo(id: string) {
+    setSelecionadosAcervo((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  async function anexarSelecionadosDoAcervo() {
+    const ids = Object.keys(selecionadosAcervo).filter((id) => selecionadosAcervo[id]);
+    if (!ids.length) {
+      toast.error("Selecione pelo menos um documento do Acervo Documental.");
+      return;
+    }
+    if (!selecionado?.id) return;
+    setAnexandoAcervo(true);
+    try {
+      const resultado = await apiFetch(`/api/orcamentos/${selecionado.id}/anexos/do-acervo`, {
+        method: "POST",
+        body: JSON.stringify({ documento_ids: ids }),
+      });
+      const total = resultado?.anexos?.length || 0;
+      if (total > 0) toast.success(`${total} documento(s) anexado(s) a partir do Acervo Documental.`);
+      if (resultado?.sem_arquivo_fisico?.length) {
+        toast.error(`${resultado.sem_arquivo_fisico.length} documento(s) selecionado(s) não têm arquivo físico disponível e não foram copiados.`);
+      }
+      setModalAcervoAberto(false);
+      await abrirOrcamento(selecionado);
+      await carregarTudo();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao anexar documentos do Acervo Documental.");
+    } finally {
+      setAnexandoAcervo(false);
+    }
+  }
+
+  async function baixarTodosAnexos() {
+    if (!selecionado?.id) return;
+    if (!(selecionado.anexos || []).length) {
+      toast.error("Este orçamento não tem anexos para baixar.");
+      return;
+    }
+    setBaixandoTodos(true);
+    try {
+      const { blob, filename } = await apiFetchBlob(`/api/orcamentos/${selecionado.id}/anexos/download-todos`);
+      downloadBlob(blob, filename || `anexos-orcamento-${selecionado.numero || selecionado.id}.zip`);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao baixar todos os anexos.");
+    } finally {
+      setBaixandoTodos(false);
     }
   }
 
@@ -794,7 +834,7 @@ export default function Orcamentos() {
                   {[
                     ["editor", "Editor"],
                     ["servicos", `Serviços (${servicosValidos.length})`],
-                    ["anexos", `Anexos (${selecionado?.anexos?.length || 0})`],
+                    ["anexos", "Anexos"],
                     ["preview", "Prévia"],
                   ].map(([id, label]) => (
                     <button
@@ -1492,18 +1532,38 @@ export default function Orcamentos() {
                         placeholder="Descrição opcional dos anexos"
                         className="mb-3 h-10 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-300"
                       />
-                      <button
-                        onClick={enviarAnexos}
-                        disabled={salvando || !arquivos?.length}
-                        className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        <Paperclip className="h-4 w-4" /> Enviar anexos
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={enviarAnexos}
+                          disabled={salvando || !arquivos?.length}
+                          className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          <Paperclip className="h-4 w-4" /> Enviar anexos
+                        </button>
+                        <button
+                          onClick={abrirModalAcervo}
+                          disabled={salvando}
+                          className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-white px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                          title="Reaproveitar documentos que já estão no Acervo Documental da empresa/cliente, sem re-enviar do computador"
+                        >
+                          <FolderOpen className="h-4 w-4" /> Anexar do Acervo Documental
+                        </button>
+                      </div>
                     </div>
 
                     <div className="rounded-3xl border border-slate-200 bg-white">
-                      <div className="border-b border-slate-100 px-4 py-3 text-sm font-black text-slate-900">
-                        Documentos anexados
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+                        <span className="text-sm font-black text-slate-900">Documentos anexados</span>
+                        {(selecionado?.anexos || []).length > 0 && (
+                          <button
+                            onClick={baixarTodosAnexos}
+                            disabled={baixandoTodos}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            {baixandoTodos ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <DownloadCloud className="h-3.5 w-3.5" />}
+                            Baixar todos ({(selecionado?.anexos || []).length})
+                          </button>
+                        )}
                       </div>
                       <div className="divide-y divide-slate-100">
                         {(selecionado?.anexos || []).length === 0 ? (
@@ -1645,43 +1705,6 @@ export default function Orcamentos() {
                       )}
                     </div>
 
-                    {/* Relação dos documentos que acompanharão o PDF final */}
-                    {(selecionado?.anexos || []).length > 0 && (
-                      <div className="my-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <div className="mb-3 text-sm font-black text-slate-800">
-                          Documentos anexados
-                        </div>
-                        <div className="space-y-2">
-                          {(selecionado?.anexos || []).map((anexo) => (
-                            <div
-                              key={anexo.id}
-                              className="flex flex-col gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-                            >
-                              <div className="min-w-0">
-                                <div className="break-words text-sm font-bold text-slate-800">
-                                  {anexo.nome_original}
-                                </div>
-                                <div className="text-xs text-slate-500">
-                                  {anexo.descricao || "Anexo"} · {formatFileSize(anexo.tamanho_bytes)}
-                                </div>
-                              </div>
-                              <span
-                                className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                                  (anexo.incluir_no_pdf ?? true)
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : "bg-slate-200 text-slate-600"
-                                }`}
-                              >
-                                {(anexo.incluir_no_pdf ?? true)
-                                  ? "Incluído no PDF"
-                                  : "Somente no sistema"}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
                     {/* Assinaturas */}
                     <div className="mt-10 grid grid-cols-1 gap-8 sm:grid-cols-2">
                       {(form.assinaturas || []).map((a: any, idx: number) => (
@@ -1700,6 +1723,74 @@ export default function Orcamentos() {
           </div>
         </div>
       </div>
+
+      {modalAcervoAberto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex h-14 items-center justify-between gap-3 border-b border-slate-200 px-4">
+              <div>
+                <p className="text-sm font-bold text-slate-800">Anexar do Acervo Documental</p>
+                <p className="text-[11px] text-slate-400">Escolha documentos já armazenados no sistema para este orçamento -- nada é reenviado do zero.</p>
+              </div>
+              <button onClick={fecharModalAcervo} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              {carregandoAcervo ? (
+                <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Carregando documentos do Acervo Documental...
+                </div>
+              ) : documentosAcervo.length === 0 ? (
+                <div className="py-10 text-center text-sm text-slate-500">
+                  Nenhum documento encontrado no Acervo Documental deste cadastro ainda.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {documentosAcervo.map((doc) => (
+                    <label
+                      key={doc.id}
+                      className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-100 p-3 hover:bg-slate-50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selecionadosAcervo[doc.id])}
+                        onChange={() => alternarSelecaoAcervo(doc.id)}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                      <FileText className="h-4 w-4 shrink-0 text-blue-500" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-semibold text-slate-700">
+                          {doc.nome_customizado || doc.nome_original}
+                        </p>
+                        <p className="truncate text-[11px] text-slate-400">
+                          {labelTipoDocumento(doc.tipo_documento)} · {formatBytes(doc.tamanho_bytes)} · {formatDate(doc.criado_em)}
+                        </p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col justify-end gap-2 border-t border-slate-100 p-4 sm:flex-row">
+              <button
+                onClick={fecharModalAcervo}
+                className="h-10 rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={anexarSelecionadosDoAcervo}
+                disabled={anexandoAcervo || documentosAcervo.length === 0}
+                className="h-10 rounded-lg bg-blue-600 px-4 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {anexandoAcervo ? <Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="mr-1 inline h-3.5 w-3.5" />}
+                Anexar selecionados
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }

@@ -6,7 +6,7 @@ import path from "path";
 import crypto from "crypto";
 import { ChromiumLaunchError } from "../services/chromiumLauncher";
 import { generateBrandedPdfBuffer, appendAttachmentsToPdf, type AnexoParaMerge } from "../services/brandedPdfLayout";
-import { getDataDir } from "../services/documentStorage";
+import { getDataDir, resolveDocumentPath } from "../services/documentStorage";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 const upload = multer({
@@ -45,6 +45,102 @@ async function getColumns(pool: Pool, tableName: string): Promise<Set<string>> {
     [tableName],
   );
   return new Set(rows.map((r: { column_name: string }) => r.column_name));
+}
+
+// ─── ZIP local (mesmo padrão store-only usado em server/routes/documentos.ts,
+// sem dependência externa) -- reaproveitado aqui pra "baixar todos os anexos". ──
+function sanitizeZipFileName(original: string): string {
+  const base = path.basename(original || "arquivo");
+  const normalized = base.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return normalized.replace(/[^a-zA-Z0-9_.-]+/g, "_").replace(/^\.+/, "").slice(0, 140) || "arquivo";
+}
+
+function escapeZipName(name: string): Buffer {
+  return Buffer.from(name.replace(/\\/g, "/").replace(/^\/+/, ""), "utf8");
+}
+
+const zipCrcTable = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[i] = c >>> 0;
+  }
+  return table;
+})();
+
+function zipCrc32(buffer: Buffer): number {
+  let crc = 0xffffffff;
+  for (let i = 0; i < buffer.length; i++) crc = zipCrcTable[(crc ^ buffer[i]) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function zipDosDateTime(date = new Date()): { time: number; date: number } {
+  const year = Math.max(1980, date.getFullYear());
+  const time = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+  return { time, date: dosDate };
+}
+
+function createZip(files: Array<{ name: string; data: Buffer; mtime?: Date }>): Buffer {
+  const localParts: Buffer[] = [];
+  const centralParts: Buffer[] = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const name = escapeZipName(file.name);
+    const data = file.data;
+    const crc = zipCrc32(data);
+    const dt = zipDosDateTime(file.mtime || new Date());
+
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0x0800, 6);
+    local.writeUInt16LE(0, 8);
+    local.writeUInt16LE(dt.time, 10);
+    local.writeUInt16LE(dt.date, 12);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    local.writeUInt16LE(0, 28);
+    localParts.push(local, name, data);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0x0800, 8);
+    central.writeUInt16LE(0, 10);
+    central.writeUInt16LE(dt.time, 12);
+    central.writeUInt16LE(dt.date, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(name.length, 28);
+    central.writeUInt16LE(0, 30);
+    central.writeUInt16LE(0, 32);
+    central.writeUInt16LE(0, 34);
+    central.writeUInt16LE(0, 36);
+    central.writeUInt32LE(0, 38);
+    central.writeUInt32LE(offset, 42);
+    centralParts.push(central, name);
+    offset += local.length + name.length + data.length;
+  }
+
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(centralSize, 12);
+  end.writeUInt32LE(offset, 16);
+  end.writeUInt16LE(0, 20);
+
+  return Buffer.concat([...localParts, ...centralParts, end]);
 }
 
 function safeDate(value: unknown): string | null {
@@ -636,13 +732,11 @@ function safePdfFileName(value: unknown, fallback = 'orcamento'): string {
 
 function pdfText(value: unknown): string {
   return String(value ?? '')
-    .replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
-    .replace(/\u00a0/g, ' ')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
     .replace(/[–—]/g, '-')
-    .replace(/[^\u0020-\u007e\u00a0-\u00ff]/g, '')
-    .replace(/\s+/g, ' ')
+    .replace(/[^\u0020-\u00ff]/g, '')
     .trim();
 }
 
@@ -749,23 +843,17 @@ async function buscarAnexosParaMerge(pool: Pool, orcamentoId: string): Promise<A
         row.storage_path ? String(row.storage_path) : null,
         nomeArquivo ? path.join(uploadsOrcamentosDir(orcamentoId), nomeArquivo) : null,
       ].filter((v): v is string => Boolean(v));
-      const encontrado = candidatos.find((c) => {
-        try {
-          return fs.existsSync(c) && fs.statSync(c).isFile();
-        } catch {
-          return false;
-        }
-      });
+      const encontrado = candidatos.find((c) => fs.existsSync(c) && fs.statSync(c).isFile());
       if (!encontrado) {
-        resultado.push({ nomeOriginal: row.nome_original || "anexo", mimeType: row.mime_type || null, filePath: null, descricao: row.descricao || null, erro: "não encontrado no armazenamento" });
+        resultado.push({ nomeOriginal: row.nome_original || "anexo", mimeType: row.mime_type || null, buffer: null, descricao: row.descricao || null, erro: "não encontrado no armazenamento" });
         continue;
       }
-      resultado.push({
-        nomeOriginal: row.nome_original || "anexo",
-        mimeType: row.mime_type || null,
-        filePath: encontrado,
-        descricao: row.descricao || null,
-      });
+      try {
+        const buffer = await fs.promises.readFile(encontrado);
+        resultado.push({ nomeOriginal: row.nome_original || "anexo", mimeType: row.mime_type || null, buffer, descricao: row.descricao || null });
+      } catch (err: any) {
+        resultado.push({ nomeOriginal: row.nome_original || "anexo", mimeType: row.mime_type || null, buffer: null, descricao: row.descricao || null, erro: err?.message || "falha ao ler arquivo" });
+      }
     }
     return resultado;
   } catch (err) {
@@ -801,48 +889,28 @@ async function gerarPdfOrcamentoUltimoRecurso(orcamento: Row): Promise<Buffer> {
 
 export async function gerarPdfOrcamentoComFallback(pool: Pool, orcamento: Row): Promise<{ pdf: Buffer; fallback: boolean; reason?: string }> {
   const anexos = await buscarAnexosParaMerge(pool, String(orcamento.id));
-  let base: Buffer;
-  let fallback = false;
-  let reason = "";
-
   try {
-    base = await gerarPdfOrcamentoPuppeteer(orcamento);
+    const base = await gerarPdfOrcamentoPuppeteer(orcamento);
+    const pdf = anexos.length ? await appendAttachmentsToPdf(base, anexos) : base;
+    return { pdf, fallback: false };
   } catch (err: any) {
-    reason = err?.message || String(err);
+    const reason = err?.message || String(err);
     console.warn('[orcamentos][pdf] usando fallback sem Chromium:', reason);
-    fallback = true;
     try {
-      base = await gerarPdfOrcamentoFallback(orcamento, reason);
+      const base = await gerarPdfOrcamentoFallback(orcamento, reason);
+      const pdf = anexos.length ? await appendAttachmentsToPdf(base, anexos) : base;
+      return { pdf, fallback: true, reason };
     } catch (fallbackErr: any) {
+      // Nem o Puppeteer nem o fallback normal deram conta -- registra os dois motivos
+      // com detalhe (pra investigação futura) e ainda assim entrega um PDF utilizável.
       const fallbackReason = fallbackErr?.message || String(fallbackErr);
       console.error(
         `[orcamentos][pdf] fallback normal também falhou -- usando último recurso. `
         + `orcamento_id=${orcamento?.id} puppeteer="${reason}" fallback="${fallbackReason}"`
       );
-      base = await gerarPdfOrcamentoUltimoRecurso(orcamento);
-      reason = `${reason} | fallback também falhou: ${fallbackReason}`;
+      const pdf = await gerarPdfOrcamentoUltimoRecurso(orcamento);
+      return { pdf, fallback: true, reason: `${reason} | fallback também falhou: ${fallbackReason}` };
     }
-  }
-
-  if (!anexos.length) return { pdf: base, fallback, reason: reason || undefined };
-
-  try {
-    const pdf = await appendAttachmentsToPdf(base, anexos);
-    return { pdf, fallback, reason: reason || undefined };
-  } catch (mergeErr: any) {
-    // Uma falha extrema no lote de anexos nunca deve invalidar o orçamento
-    // principal. Os erros normais de cada arquivo já são tratados e registrados
-    // pelo manifesto; esta proteção cobre apenas falhas globais inesperadas.
-    const mergeReason = mergeErr?.message || String(mergeErr);
-    console.error(
-      `[orcamentos][pdf] falha global ao mesclar anexos; entregando orçamento base. `
-      + `orcamento_id=${orcamento?.id} erro="${mergeReason}"`,
-    );
-    return {
-      pdf: base,
-      fallback: true,
-      reason: [reason, `anexos: ${mergeReason}`].filter(Boolean).join(" | "),
-    };
   }
 }
 
@@ -1303,6 +1371,157 @@ export default function createOrcamentosOperacoesRouter(pool: Pool) {
     } catch (err: any) {
       console.error("[orcamentos][anexos]", err);
       res.status(500).json({ error: err?.message || "Erro ao enviar anexos" });
+    }
+  });
+
+  // Anexa ao orçamento uma CÓPIA de documentos já existentes no Acervo Documental
+  // da empresa/cliente (documentos_arquivos) -- sem exigir novo upload do zero.
+  // É uma cópia física (mesmo mecanismo de storage do upload direto), não uma
+  // referência: excluir o anexo do orçamento depois nunca afeta o documento
+  // original no Acervo Documental, e vice-versa. Restrito aos documentos da
+  // mesma empresa/cliente do orçamento -- não é possível copiar documento de
+  // outro cadastro.
+  router.post("/:id/anexos/do-acervo", async (req: Request, res: Response) => {
+    try {
+      const id = String(req.params.id || "").trim();
+      const documentoIdsBrutos: unknown[] = Array.isArray(req.body?.documento_ids) ? req.body.documento_ids : [];
+      const documentoIds: string[] = Array.from(new Set(documentoIdsBrutos.map((v) => String(v || "").trim()).filter((v) => v.length > 0)));
+      if (!documentoIds.length) return res.status(400).json({ error: "Informe ao menos um documento do Acervo Documental." });
+      if (documentoIds.length > 30) return res.status(400).json({ error: "Selecione no máximo 30 documentos por vez." });
+
+      const filtrosAtivo = await filtroOrcamentoAtivo(pool);
+      const whereAtivo = filtrosAtivo.length ? ` AND ${filtrosAtivo.join(" AND ")}` : "";
+      const orcamentoResult = await pool.query(
+        `SELECT id, empresa_id, cliente_pf_id FROM public.orcamentos_timbrados WHERE id = $1${whereAtivo} LIMIT 1`,
+        [id],
+      );
+      if (!orcamentoResult.rows.length) return res.status(404).json({ error: "Orçamento não encontrado" });
+      const orcamento = orcamentoResult.rows[0];
+      if (!orcamento.empresa_id && !orcamento.cliente_pf_id) {
+        return res.status(400).json({ error: "Este orçamento não está vinculado a uma empresa ou cliente com Acervo Documental." });
+      }
+
+      const placeholders = documentoIds.map((_: string, idx: number) => `$${idx + 3}`).join(",");
+      const docsResult = await pool.query(
+        `SELECT * FROM public.documentos_arquivos
+          WHERE excluido_em IS NULL AND status <> 'excluido'
+            AND (empresa_id = $1 OR cliente_pf_id = $2)
+            AND id IN (${placeholders})`,
+        [orcamento.empresa_id || null, orcamento.cliente_pf_id || null, ...documentoIds],
+      );
+      if (!docsResult.rows.length) {
+        return res.status(404).json({ error: "Nenhum dos documentos selecionados pertence a este cadastro no Acervo Documental." });
+      }
+
+      const dir = uploadsOrcamentosDir(id);
+      await fs.promises.mkdir(dir, { recursive: true });
+      const inseridos: Row[] = [];
+      const semArquivo: string[] = [];
+      for (const doc of docsResult.rows as any[]) {
+        const resolved = resolveDocumentPath(doc);
+        if (!resolved.absolutePath) { semArquivo.push(doc.nome_customizado || doc.nome_original || doc.id); continue; }
+        const buffer = await fs.promises.readFile(resolved.absolutePath);
+        const ext = path.extname(doc.nome_arquivo || doc.nome_original || "");
+        const safeName = `${crypto.randomUUID()}${ext}`;
+        const storagePath = path.join(dir, safeName);
+        await fs.promises.writeFile(storagePath, buffer);
+        const hash = crypto.createHash("sha256").update(buffer).digest("hex");
+        const nomeOriginal = doc.nome_customizado || doc.nome_original || path.basename(resolved.absolutePath);
+        const result = await pool.query(
+          `INSERT INTO public.orcamentos_timbrados_anexos
+             (orcamento_id, tipo, descricao, nome_original, mime_type, tamanho_bytes, storage_path, hash_sha256, criado_por)
+           VALUES ($1, 'acervo_documental', $2, $3, $4, $5, $6, $7, $8)
+           RETURNING id, nome_original, descricao, mime_type, tamanho_bytes,
+                     '/api/orcamentos/anexos/' || id || '/download' AS url,
+                     incluir_no_pdf,
+                     criado_em`,
+          [
+            id,
+            `Copiado do Acervo Documental (${doc.tipo_documento || "documento"})`,
+            nomeOriginal,
+            doc.mime_type || "application/octet-stream",
+            buffer.length,
+            storagePath,
+            hash,
+            (req as any)?.colaborador?.id || null,
+          ],
+        );
+        inseridos.push(result.rows[0]);
+      }
+
+      if (inseridos.length) {
+        await pool.query(
+          `UPDATE public.orcamentos_timbrados
+              SET anexos_count = COALESCE(anexos_count, 0) + $2,
+                  atualizado_em = NOW(),
+                  pdf_path = NULL
+            WHERE id = $1`,
+          [id, inseridos.length],
+        );
+      }
+      res.status(inseridos.length ? 201 : 404).json({
+        ok: inseridos.length > 0,
+        anexos: inseridos,
+        sem_arquivo_fisico: semArquivo,
+      });
+    } catch (err: any) {
+      console.error("[orcamentos][anexos do-acervo]", err);
+      res.status(500).json({ error: err?.message || "Erro ao anexar documentos do Acervo Documental" });
+    }
+  });
+
+  // Baixa TODOS os anexos ativos do orçamento em um único ZIP -- contraparte em
+  // lote do "Baixar" individual que já existe por anexo.
+  router.get("/:id/anexos/download-todos", async (req: Request, res: Response) => {
+    try {
+      const id = String(req.params.id || "").trim();
+      const filtrosAtivo = await filtroOrcamentoAtivo(pool);
+      const whereAtivo = filtrosAtivo.length ? ` AND ${filtrosAtivo.join(" AND ")}` : "";
+      const orcamentoResult = await pool.query(
+        `SELECT id, numero FROM public.orcamentos_timbrados WHERE id = $1${whereAtivo} LIMIT 1`,
+        [id],
+      );
+      if (!orcamentoResult.rows.length) return res.status(404).json({ error: "Orçamento não encontrado" });
+
+      const anexosResult = await pool.query(
+        `SELECT id, nome_original, storage_path, criado_em
+           FROM public.orcamentos_timbrados_anexos
+          WHERE orcamento_id = $1
+            AND COALESCE(status, 'ativo') <> 'arquivado'
+          ORDER BY criado_em ASC`,
+        [id],
+      );
+      if (!anexosResult.rows.length) return res.status(404).json({ error: "Este orçamento não tem anexos para baixar." });
+
+      const files: Array<{ name: string; data: Buffer; mtime?: Date }> = [];
+      const usedNames = new Map<string, number>();
+      for (const anexo of anexosResult.rows as any[]) {
+        const nomeArquivo = anexo.storage_path ? path.basename(String(anexo.storage_path)) : null;
+        const candidatos = [
+          anexo.storage_path ? String(anexo.storage_path) : null,
+          nomeArquivo ? path.join(uploadsOrcamentosDir(id), nomeArquivo) : null,
+        ].filter((v): v is string => Boolean(v));
+        const encontrado = candidatos.find((c) => fs.existsSync(c) && fs.statSync(c).isFile());
+        if (!encontrado) continue;
+        const baseName = sanitizeZipFileName(anexo.nome_original || `${anexo.id}.bin`);
+        const count = usedNames.get(baseName) || 0;
+        usedNames.set(baseName, count + 1);
+        const parsed = path.parse(baseName);
+        const finalName = count > 0 ? `${parsed.name}_${count + 1}${parsed.ext}` : baseName;
+        files.push({ name: finalName, data: await fs.promises.readFile(encontrado), mtime: anexo.criado_em ? new Date(anexo.criado_em) : new Date() });
+      }
+      if (!files.length) return res.status(404).json({ error: "Os registros existem, mas os arquivos físicos não foram encontrados no servidor." });
+
+      const zip = createZip(files);
+      const nomeOrcamento = sanitizeZipFileName(orcamentoResult.rows[0].numero || id);
+      const filename = `anexos-orcamento-${nomeOrcamento}.zip`;
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", String(zip.length));
+      res.send(zip);
+    } catch (err: any) {
+      console.error("[orcamentos][anexos download-todos]", err);
+      res.status(500).json({ error: err?.message || "Erro ao baixar todos os anexos" });
     }
   });
 

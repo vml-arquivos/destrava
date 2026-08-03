@@ -53,7 +53,7 @@ import { contactInputSchema, loginInputSchema, leadInputSchema, validateBody } f
 import { closeChromium, launchChromium } from "./services/chromiumLauncher";
 import { generateBrandedPdfBuffer } from "./services/brandedPdfLayout";
 import { generateFollowupMessage, generateLeadRecommendations, generateLeadSummary, qualifyTriagemLead } from "./services/aiService";
-import { getDataDir, resolveDocumentPath, saveDocumentBuffer, getDocumentStorageHealth } from "./services/documentStorage";
+import { getDataDir, resolveDocumentPath, saveDocumentBuffer, getDocumentStorageHealth, PersistentStorageError } from "./services/documentStorage";
 import { calcularInteligencia360 } from "./services/inteligencia360Service";
 import { calcularPropostaBancaria } from "./services/propostaBancariaService";
 import { gerarRelatorioTecnico } from "./services/relatorioTecnicoEmpresaService";
@@ -1848,6 +1848,13 @@ async function startServer() {
   // ── Migration 067: corrige CHECK constraint de documentos_arquivos ────────
   // O banco em produção pode ter versão antiga da constraint que rejeita tipos
   // válidos como 'irpf', 'comprovante_endereco', etc. Esta migration reconstrói.
+  // Migration 078 (2026-08, db/migrations/078_documentos_enquadramento_situacao_fiscal.sql):
+  // adicionados 'enquadramento_tributario_cnpj/cpf' e 'situacao_fiscal_cnpj/cpf' --
+  // o checklist do Acervo Documental já tinha esses campos no frontend, mas o INSERT
+  // falhava com "violates check constraint documentos_arquivos_tipo_chk" porque a
+  // constraint nunca foi atualizada. Reproduzido e confirmado com teste real em
+  // Postgres antes da correção. (Número escolhido para não colidir com a Migration
+  // 073 já existente abaixo, de orcamentos_timbrados_anexos.)
   try {
     await pool.query(`
       DO $$
@@ -1867,8 +1874,10 @@ async function startServer() {
           'imposto_renda','irpf','recibo_irpf',
           'certidao_casamento','averbacao_divorcio','certidao_obito',
           'rating_bacen_cnpj','cenprot_cnpj','cnd_rfb_cnpj','cadin_cnpj','pgfn_cnpj',
+          'enquadramento_tributario_cnpj','situacao_fiscal_cnpj',
           'scr_cnpj','ccs_cnpj','ccf_cnpj','consulta_serasa_cnpj',
           'rating_bacen_cpf','cenprot_cpf','cnd_rfb_cpf','cadin_cpf','pgfn_cpf',
+          'enquadramento_tributario_cpf','situacao_fiscal_cpf',
           'scr_cpf','ccs_cpf','ccf_cpf','consulta_serasa_cpf',
           'simples_nacional','pgdas','pgmei','ecf',
           'recibo_ecf','recibo_pgdas','recibo_pgmei',
@@ -12139,24 +12148,40 @@ async function registrarDocumentoContratoGerado(params: {
       const conteudo = arquivo_base64 || pdf_base64;
       if (!conteudo) { res.status(400).json({ error: 'Informe o PDF assinado em base64.' }); return; }
       const base64 = String(conteudo).includes(',') ? String(conteudo).split(',').pop()! : String(conteudo);
-      const uploadsDir = path.resolve('uploads', 'contratos', 'assinados');
-      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-      const fileName = `${crypto.randomUUID()}-${String(nome_arquivo || 'contrato-assinado.pdf').replace(/[^a-zA-Z0-9_.-]/g, '-')}`;
-      const pdfPath = path.join(uploadsDir, fileName);
-      fs.writeFileSync(pdfPath, Buffer.from(base64, 'base64'));
+      const buffer = Buffer.from(base64, 'base64');
+      const nomeOriginal = String(nome_arquivo || 'contrato-assinado.pdf');
+
+      // Consolidado no mesmo armazenamento resiliente usado pelo resto do Acervo
+      // Documental (mesma raiz persistente, gravação atômica, checagem de integridade) --
+      // antes usava um caminho relativo próprio (path.resolve('uploads', ...)), fora do
+      // sistema central e sem as mesmas proteções.
+      const salvo = await saveDocumentBuffer({
+        entidadeTipo: 'contrato',
+        entidadeId: req.params.id,
+        filename: `${crypto.randomUUID()}-${nomeOriginal.replace(/[^a-zA-Z0-9_.-]/g, '-')}`,
+        buffer,
+      });
+
       const { rows } = await pool.query(
         `UPDATE contratos_gerados SET status='assinado', assinado_em=NOW(), assinado_pdf_path=$1, updated_at=NOW()
-          WHERE id=$2 RETURNING id, status, assinado_em, assinado_pdf_path`,
-        [pdfPath, req.params.id]
+          WHERE id=$2 RETURNING id, status, assinado_em, assinado_pdf_path, empresa_id`,
+        [salvo.absolutePath, req.params.id]
       );
       if (!rows.length) { res.status(404).json({ error: 'Contrato não encontrado' }); return; }
-      await pool.query(
-        `INSERT INTO public.documentos_arquivos
-          (entidade_tipo, entidade_id, contrato_id, tipo_documento, nome_original, nome_arquivo, caminho_arquivo, url_arquivo,
-           mime_type, tamanho_bytes, status, origem, validado, criado_por, metadados)
-         VALUES ('contrato',$1,$1,'contrato_assinado',$2,$3,$4,NULL,'application/pdf',$5,'ativo','upload_manual',true,$6,$7::jsonb)`,
-        [req.params.id, nome_arquivo || 'contrato-assinado.pdf', fileName, pdfPath, Buffer.from(base64, 'base64').byteLength, ((req as any).colaborador || (req as any).user)?.id || null, JSON.stringify({ origem_endpoint: '/api/contratos/:id/anexo-assinado' })]
-      ).catch((docErr) => console.warn('[documentos_arquivos] Falha ao registrar contrato assinado:', docErr?.message || docErr));
+
+      // tipo_documento = contrato_prestacao_servicos (não contrato_assinado) -- é o mesmo
+      // tipo que o campo "1. Contrato de prestação de serviços" do checklist já procura
+      // (matchTipos inclui esse tipo), então o contrato assinado aparece no lugar certo
+      // do Acervo Documental em vez de cair na categoria genérica de sobra.
+      if (rows[0].empresa_id) {
+        await pool.query(
+          `INSERT INTO public.documentos_arquivos
+            (entidade_tipo, entidade_id, contrato_id, tipo_documento, nome_original, nome_arquivo, caminho_arquivo, url_arquivo,
+             mime_type, tamanho_bytes, status, origem, validado, criado_por, metadados)
+           VALUES ('empresa',$1,$2,'contrato_prestacao_servicos',$3,$4,$5,NULL,'application/pdf',$6,'ativo','upload_manual',true,$7,$8::jsonb)`,
+          [rows[0].empresa_id, req.params.id, nomeOriginal, path.basename(salvo.absolutePath), salvo.absolutePath, buffer.byteLength, ((req as any).colaborador || (req as any).user)?.id || null, JSON.stringify({ origem_endpoint: '/api/contratos/:id/anexo-assinado', sha256: salvo.sha256 })]
+        ).catch((docErr) => console.warn('[documentos_arquivos] Falha ao registrar contrato assinado:', docErr?.message || docErr));
+      }
       res.json({ success: true, ...rows[0] });
     } catch (err) {
       console.error('[POST /api/contratos/:id/anexo-assinado]', err);
@@ -16255,9 +16280,25 @@ Responda em JSON com:
     try {
       const empresa = await pool.query('SELECT * FROM empresas WHERE id = $1 LIMIT 1', [req.params.id]);
       if (empresa.rows.length === 0) { res.status(404).json({ error: 'Empresa não encontrada.' }); return; }
-      const [historico, documentos, contratos, simulacoes] = await Promise.all([
+      const [historico, documentosAtuais, documentosLegado, contratos, simulacoes] = await Promise.all([
         pool.query('SELECT * FROM empresa_historico WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 20', [req.params.id]).catch(() => ({ rows: [] as any[] })),
-        pool.query('SELECT * FROM empresa_documentos WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 20', [req.params.id]).catch(() => ({ rows: [] as any[] })),
+        // Fonte real dos documentos hoje: o Acervo Documental (documentos_arquivos), a
+        // mesma tabela usada pelo checklist do colaborador. Antes esta rota só lia
+        // "empresa_documentos" -- uma tabela legada que nenhuma tela do Acervo Documental
+        // grava mais -- então o Nexus mostrava "nenhum documento" para praticamente toda
+        // empresa, mesmo com dezenas de arquivos anexados no Destrava.
+        pool.query(
+          `SELECT id, tipo_documento, nome_original, nome_customizado, nome_arquivo, caminho_arquivo,
+                  mime_type, tamanho_bytes, status, validado, criado_em
+             FROM public.documentos_arquivos
+            WHERE entidade_tipo = 'empresa' AND entidade_id = $1
+              AND excluido_em IS NULL AND status <> 'excluido'
+            ORDER BY criado_em DESC LIMIT 200`,
+          [req.params.id]
+        ).catch(() => ({ rows: [] as any[] })),
+        // Mantido só para não perder acesso a arquivos antigos enviados antes da
+        // consolidação no Acervo Documental -- nenhum upload novo grava mais aqui.
+        pool.query('SELECT * FROM empresa_documentos WHERE empresa_id = $1 ORDER BY created_at DESC LIMIT 50', [req.params.id]).catch(() => ({ rows: [] as any[] })),
         // Correção: a tabela real é "contratos_gerados" -- "contratos" nunca existiu,
         // então este SELECT sempre falhava e o .catch() escondia o erro, fazendo o
         // Nexus achar que a empresa nunca teve contrato nenhum.
@@ -16267,11 +16308,30 @@ Responda em JSON com:
       // preview_url/download_url apontam para as rotas de integração abaixo (autenticadas
       // pela mesma chave de integração), não para /uploads/empresas (essa exige sessão de
       // colaborador do Destrava, que o Nexus não tem).
-      const documentosComLinks = documentos.rows.map((doc: any) => ({
-        ...doc,
-        preview_url: `/api/nexus/empresas/${req.params.id}/documentos/${doc.id}/view`,
-        download_url: `/api/nexus/empresas/${req.params.id}/documentos/${doc.id}/download`,
-      }));
+      const documentosComLinks = [
+        ...documentosAtuais.rows.map((doc: any) => ({
+          id: doc.id,
+          nome: doc.nome_customizado || doc.nome_original,
+          tipo: doc.tipo_documento,
+          tamanho: doc.tamanho_bytes,
+          created_at: doc.criado_em,
+          status_validacao: doc.validado ? 'validado' : (doc.status === 'pendente_validacao' ? 'pendente' : null),
+          origem_destrava: 'acervo_documental',
+          preview_url: `/api/nexus/empresas/${req.params.id}/documentos/${doc.id}/view`,
+          download_url: `/api/nexus/empresas/${req.params.id}/documentos/${doc.id}/download`,
+        })),
+        ...documentosLegado.rows.map((doc: any) => ({
+          id: doc.id,
+          nome: doc.nome,
+          tipo: doc.tipo,
+          tamanho: doc.tamanho,
+          created_at: doc.created_at,
+          status_validacao: null,
+          origem_destrava: 'legado',
+          preview_url: `/api/nexus/empresas/${req.params.id}/documentos/${doc.id}/view`,
+          download_url: `/api/nexus/empresas/${req.params.id}/documentos/${doc.id}/download`,
+        })),
+      ].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
       res.json({ empresa: empresa.rows[0], historico: historico.rows, documentos: documentosComLinks, contratos: contratos.rows, simulacoes: simulacoes.rows });
     } catch (err) {
       console.error('[NEXUS] Erro ao buscar resumo da empresa:', err);
@@ -16283,25 +16343,56 @@ Responda em JSON com:
     try {
       const empresa = await pool.query('SELECT id FROM empresas WHERE id = $1 LIMIT 1', [req.params.id]);
       if (empresa.rows.length === 0) { res.status(404).json({ error: 'Empresa não encontrada.' }); return; }
-      const { rows } = await pool.query(
-        'SELECT * FROM empresa_documentos WHERE id = $1 AND empresa_id = $2 LIMIT 1',
+
+      // Acervo Documental (documentos_arquivos) primeiro -- é onde está praticamente
+      // todo documento anexado pelo colaborador via checklist hoje.
+      const atual = await pool.query(
+        `SELECT * FROM public.documentos_arquivos
+          WHERE id = $1 AND entidade_tipo = 'empresa' AND entidade_id = $2 AND excluido_em IS NULL LIMIT 1`,
         [req.params.docId, req.params.id],
       );
-      if (!rows.length) { res.status(404).json({ error: 'Documento não encontrado.' }); return; }
-      const doc = rows[0];
-      const resolved = resolveDocumentPath({
-        caminho_arquivo: doc.caminho_arquivo || doc.url || null,
-        nome_arquivo: doc.nome_arquivo || (doc.url ? path.basename(doc.url) : doc.nome),
-        nome_original: doc.nome || doc.nome_original || null,
-        entidade_tipo: 'empresa',
-        entidade_id: req.params.id,
-      });
+
+      let resolved: { absolutePath: string | null };
+      let nomeParaArquivo: string | null;
+      let mimeParaArquivo: string | undefined;
+
+      if (atual.rows.length) {
+        const doc = atual.rows[0];
+        resolved = resolveDocumentPath({
+          caminho_arquivo: doc.caminho_arquivo,
+          nome_arquivo: doc.nome_arquivo,
+          nome_original: doc.nome_original,
+          entidade_tipo: 'empresa',
+          entidade_id: req.params.id,
+        });
+        nomeParaArquivo = doc.nome_customizado || doc.nome_original;
+        mimeParaArquivo = doc.mime_type;
+      } else {
+        // Fallback: registro legado (empresa_documentos) -- preservado para não perder
+        // acesso a arquivos antigos enviados antes da consolidação no Acervo Documental.
+        const legado = await pool.query(
+          'SELECT * FROM empresa_documentos WHERE id = $1 AND empresa_id = $2 LIMIT 1',
+          [req.params.docId, req.params.id],
+        );
+        if (!legado.rows.length) { res.status(404).json({ error: 'Documento não encontrado.' }); return; }
+        const doc = legado.rows[0];
+        resolved = resolveDocumentPath({
+          caminho_arquivo: doc.caminho_arquivo || doc.url || null,
+          nome_arquivo: doc.nome_arquivo || (doc.url ? path.basename(doc.url) : doc.nome),
+          nome_original: doc.nome || doc.nome_original || null,
+          entidade_tipo: 'empresa',
+          entidade_id: req.params.id,
+        });
+        nomeParaArquivo = doc.nome || doc.nome_original || null;
+        mimeParaArquivo = doc.mime_type;
+      }
+
       if (!resolved.absolutePath) {
         res.status(404).json({ error: 'Arquivo físico não localizado nos volumes do Destrava.', code: 'DOCUMENT_FILE_MISSING' });
         return;
       }
-      const filename = path.basename(String(doc.nome || doc.nome_original || doc.url || 'documento')).replace(/"/g, '');
-      const mime = doc.mime_type || (filename.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream');
+      const filename = path.basename(String(nomeParaArquivo || 'documento')).replace(/"/g, '');
+      const mime = mimeParaArquivo || (filename.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream');
       res.setHeader('Content-Type', mime);
       res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="${filename}"`);
       fs.createReadStream(resolved.absolutePath).pipe(res);
@@ -16324,8 +16415,14 @@ Responda em JSON com:
   });
 
   // Documento enviado pelo Nexus (ex.: durante execução de uma tarefa vinculada a
-  // esta empresa) é salvo exatamente como um documento enviado pela própria tela
-  // do Destrava — mesma pasta, mesma tabela — então aparece nos dois sistemas.
+  // esta empresa) é salvo no Acervo Documental de verdade -- mesmo armazenamento
+  // central (saveDocumentBuffer) e mesma tabela (documentos_arquivos) que o
+  // checklist do colaborador usa -- então aparece de fato nos dois sistemas.
+  // Antes gravava em "empresa_documentos", uma tabela legada que nenhuma tela do
+  // Acervo Documental lê, então o arquivo enviado pelo Nexus nunca aparecia pro
+  // colaborador no Destrava. Cai no campo "Campo outros / Documento nomeado" do
+  // checklist -- é um documento que chegou de fora, sem tipo específico conhecido,
+  // igual a um anexo avulso feito manualmente por um colaborador.
   app.post('/api/nexus/empresas/:id/documentos', requireNexusIntegration, uploadEmpresaDocumentoNexus.single('file'), async (req: Request, res: Response) => {
     try {
       const empresa = await pool.query('SELECT id FROM empresas WHERE id = $1 LIMIT 1', [req.params.id]);
@@ -16333,30 +16430,40 @@ Responda em JSON com:
       const file = req.file;
       if (!file) { res.status(400).json({ error: 'Arquivo é obrigatório.' }); return; }
 
-      const dataDir = getDataDir();
-      const uploadDir = path.join(dataDir, 'uploads', 'empresas', req.params.id);
-      await fs.promises.mkdir(uploadDir, { recursive: true });
-
-      const ext = path.extname(file.originalname || '');
-      const base = path.basename(file.originalname || `doc_${Date.now()}`, ext).replace(/[^a-zA-Z0-9_.-]+/g, '_').slice(0, 90);
-      const nomeArq = `${Date.now()}_${base}${ext || ''}`;
-      const filePath = path.join(uploadDir, nomeArq);
-      await fs.promises.writeFile(filePath, file.buffer);
-
-      const tipoInformado = typeof req.body?.tipo === 'string' ? req.body.tipo : '';
-      const tipo = tipoInformado || (file.mimetype?.startsWith('image/') ? 'foto_empresa' : (ext.replace('.', '') || 'arquivo'));
-      const url = `/uploads/empresas/${req.params.id}/${nomeArq}`;
       const origemNexus = typeof req.body?.origem_nexus === 'string' ? req.body.origem_nexus.trim() : '';
+      const nomeOriginal = file.originalname || `documento-nexus-${Date.now()}`;
+      const ext = path.extname(nomeOriginal || '');
+      const nomeArquivo = `${crypto.randomUUID()}${ext || ''}`;
+
+      const salvo = await saveDocumentBuffer({
+        entidadeTipo: 'empresa',
+        entidadeId: req.params.id,
+        filename: nomeArquivo,
+        buffer: file.buffer,
+      });
+
+      const nomeCustomizado = origemNexus ? `Enviado pelo Nexus — ${origemNexus}` : 'Enviado pelo Nexus';
+      const hash = crypto.createHash('sha256').update(file.buffer).digest('hex');
 
       const r = await pool.query(
-        `INSERT INTO empresa_documentos (empresa_id, nome, tipo, tamanho, url)
-         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-        [req.params.id, file.originalname || nomeArq, tipo, file.size, url],
-      );
+        `INSERT INTO public.documentos_arquivos
+          (entidade_tipo, entidade_id, empresa_id, tipo_documento, nome_original, nome_customizado, nome_arquivo,
+           caminho_arquivo, mime_type, tamanho_bytes, hash_arquivo, status, origem, obrigatorio, validado, metadados)
+         VALUES ('empresa',$1,$1,'outros',$2,$3,$4,$5,$6,$7,$8,'ativo','importado_api',false,false,$9::jsonb)
+         RETURNING id, tipo_documento, nome_original, nome_customizado, nome_arquivo, mime_type, tamanho_bytes, status, criado_em`,
+        [
+          req.params.id, nomeOriginal, nomeCustomizado, nomeArquivo, salvo.relativePath,
+          file.mimetype, file.size, hash,
+          JSON.stringify({ origem_endpoint: '/api/nexus/empresas/:id/documentos', origem_nexus: origemNexus || null, sha256: hash }),
+        ],
+      ).catch(async (err) => {
+        await fs.promises.unlink(salvo.absolutePath).catch(() => undefined);
+        throw err;
+      });
       await registrarHistoricoEmpresaSeguro(
         req.params.id,
         'documento_enviado',
-        `Documento enviado pelo Nexus${origemNexus ? ` (${origemNexus})` : ''}: ${file.originalname || nomeArq}`,
+        `Documento enviado pelo Nexus${origemNexus ? ` (${origemNexus})` : ''}: ${nomeOriginal}`,
         'Nexus (integração)',
       );
       res.status(201).json({
@@ -16366,7 +16473,8 @@ Responda em JSON com:
       });
     } catch (err) {
       console.error('[NEXUS] Erro ao salvar documento enviado pelo Nexus:', err);
-      res.status(500).json({ error: 'Erro ao salvar documento.' });
+      const status = err instanceof PersistentStorageError ? err.statusCode : 500;
+      res.status(status).json({ error: (err as any)?.message || 'Erro ao salvar documento.' });
     }
   });
 

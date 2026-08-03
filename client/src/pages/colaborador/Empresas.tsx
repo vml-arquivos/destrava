@@ -1268,6 +1268,28 @@ export default function Empresas() {
       toast.error(err?.message || "Erro ao baixar contrato");
     }
   }
+  async function handleAnexarContratoAssinado(contratoId: string, file: File) {
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",").pop() || "");
+        reader.onerror = () => reject(new Error("Falha ao ler o arquivo"));
+        reader.readAsDataURL(file);
+      });
+      await apiFetch(`/api/contratos/${contratoId}/anexo-assinado`, {
+        method: "POST",
+        body: JSON.stringify({ arquivo_base64: base64, nome_arquivo: file.name }),
+      });
+      toast.success("Contrato assinado anexado. Rotinas de acompanhamento (CENPROT semanal, CND mensal) começam a valer a partir de agora.");
+      await carregarEmpresas();
+      if (selecionada) {
+        const atualizada = await apiFetch(`/api/empresas/${selecionada.id}`).catch(() => null);
+        if (atualizada) setSelecionada((prev) => (prev ? { ...prev, ...atualizada } : prev));
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao anexar contrato assinado");
+    }
+  }
   // ─────────────────────────────────────────────────────────────────────────
 
   const carregarEmpresas = useCallback(async () => {
@@ -2541,6 +2563,22 @@ export default function Empresas() {
                                     >
                                       <Download className="w-3.5 h-3.5" />
                                     </button>
+                                    <label
+                                      className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
+                                      title={cont.status === "assinado" ? "Substituir contrato assinado" : "Anexar contrato assinado -- ativa CENPROT semanal e CND mensal"}
+                                    >
+                                      <Upload className="w-3.5 h-3.5" />
+                                      <input
+                                        type="file"
+                                        accept=".pdf"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) handleAnexarContratoAssinado(cont.id, file);
+                                          e.currentTarget.value = "";
+                                        }}
+                                      />
+                                    </label>
                                   </div>
                                 )}
                               </div>

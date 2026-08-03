@@ -179,7 +179,7 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
       slot("1. Contrato de prestação de serviços", "contrato_prestacao_servicos", ["contrato_assessoria"]),
       slot("2. CNPJ / Cartão CNPJ", "cartao_cnpj", [], { obrigatorio: true, descricao: "A IA/OCR deve identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral." }),
       slot("3. QSA", "qsa", [], { obrigatorio: true }),
-      slot("4. Atos da Junta Comercial", "atos_junta_comercial"),
+      slot("4. Atos da Junta Comercial", "atos_junta_comercial", [], { obrigatorio: true }),
       slot("5. Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Pode receber mais de um arquivo: contrato inicial e alterações." }),
     ],
   },
@@ -197,12 +197,13 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
   {
     titulo: "Consultas e certidões CNPJ",
     slots: [
-      slot("7. Relatório SCR/Registrato (CNPJ)", "rating_bacen_cnpj"),
+      slot("7. Relatório SCR/Registrato (CNPJ)", "rating_bacen_cnpj", ["scr_cnpj"]),
+      slot("Enquadramento tributário (CNPJ)", "enquadramento_tributario_cnpj", [], { descricao: "Documento que comprova o regime tributário atual da empresa (Simples Nacional, Lucro Presumido, Lucro Real ou MEI)." }),
       slot("9. Consulta CENPROT (CNPJ)", "cenprot_cnpj"),
       slot("11. CND RFB (CNPJ)", "cnd_rfb_cnpj"),
+      slot("Relatório de Situação Fiscal (CNPJ)", "situacao_fiscal_cnpj", [], { descricao: "Exigido junto com CADIN e PGFN quando a CND RFB CNPJ não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cnpj"] }),
       slot("12A. Nada consta CADIN (CNPJ)", "cadin_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cnpj"] }),
       slot("12B. Nada consta PGFN (CNPJ)", "pgfn_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cnpj"] }),
-      slot("18. Relatório SCR do CNPJ", "scr_cnpj"),
       slot("19. Relatório CCS do CNPJ", "ccs_cnpj"),
       slot("20. Relatório CCF do CNPJ", "ccf_cnpj"),
       slot("Rating (CNPJ)", "consulta_serasa_cnpj"),
@@ -212,12 +213,13 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
     titulo: "Consultas e certidões CPF dos sócios",
     descricao: "Obrigatório para todos os sócios ou sócio único. Em caso de cônjuge, incluir SCR, CCS, CCF, Serasa e CENPROT também do cônjuge.",
     slots: [
-      slot("8. Relatório SCR/Registrato (CPF)", "rating_bacen_cpf"),
+      slot("8. Relatório SCR/Registrato (CPF)", "rating_bacen_cpf", ["scr_cpf"]),
+      slot("Enquadramento tributário (CPF)", "enquadramento_tributario_cpf", [], { descricao: "Documento que comprova o enquadramento tributário do sócio como pessoa física, quando aplicável." }),
       slot("10. Consulta CENPROT (CPF)", "cenprot_cpf"),
       slot("12. CND RFB (CPF)", "cnd_rfb_cpf"),
+      slot("Relatório de Situação Fiscal (CPF)", "situacao_fiscal_cpf", [], { descricao: "Exigido junto com CADIN e PGFN quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
       slot("12A. Nada consta CADIN (CPF)", "cadin_cpf", [], { descricao: "Exigido quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
       slot("12B. Nada consta PGFN (CPF)", "pgfn_cpf", [], { descricao: "Exigido quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
-      slot("21. Relatório SCR do CPF", "scr_cpf"),
       slot("22. Relatório CCS do CPF", "ccs_cpf"),
       slot("23. Relatório CCF do CPF", "ccf_cpf"),
       slot("Rating (CPF)", "consulta_serasa_cpf"),
@@ -325,6 +327,10 @@ export default function DocumentosEntidade({
   // de uma vez. "Ver documentos complementares" revela o resto, sem esconder nada
   // permanentemente, só evita abrir tudo de cara.
   const [mostrarComplementares, setMostrarComplementares] = useState(false);
+  // Quais campos têm a lista de arquivos expandida pra ver todos, não só os 3 primeiros --
+  // antes "+N arquivo(s) neste mesmo campo" era só texto informativo, sem jeito nenhum
+  // de realmente ver/abrir esses arquivos extras.
+  const [camposExpandidos, setCamposExpandidos] = useState<Record<string, boolean>>({});
 
   const query = useMemo(() => {
     if (!entidadeId) return "";
@@ -697,7 +703,7 @@ export default function DocumentosEntidade({
                         {docsTipo.length > 0 && (
                           <div className="rounded-md border border-slate-100 bg-slate-50 p-2">
                             <div className="space-y-1">
-                              {docsTipo.slice(0, 3).map((doc) => (
+                              {(camposExpandidos[tipo] ? docsTipo : docsTipo.slice(0, 3)).map((doc) => (
                                 <div key={doc.id} className="flex items-center justify-between gap-2 rounded-md bg-white border border-slate-100 px-2 py-1">
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-1 flex-wrap">
@@ -718,7 +724,15 @@ export default function DocumentosEntidade({
                                   </div>
                                 </div>
                               ))}
-                              {docsTipo.length > 3 && <p className="text-[9px] text-slate-400">+ {docsTipo.length - 3} arquivo(s) neste mesmo campo.</p>}
+                              {docsTipo.length > 3 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setCamposExpandidos((prev) => ({ ...prev, [tipo]: !prev[tipo] }))}
+                                  className="text-[9px] font-semibold text-blue-600 hover:text-blue-700"
+                                >
+                                  {camposExpandidos[tipo] ? "Mostrar menos" : `+ ${docsTipo.length - 3} arquivo(s) neste mesmo campo -- ver todos`}
+                                </button>
+                              )}
                             </div>
                           </div>
                         )}

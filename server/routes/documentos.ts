@@ -42,9 +42,11 @@ const TIPOS_DOCUMENTO = [
   'imposto_renda', 'irpf', 'recibo_irpf', 'certidao_casamento', 'averbacao_divorcio', 'certidao_obito',
   // Certidões CNPJ
   'rating_bacen_cnpj', 'cenprot_cnpj', 'cnd_rfb_cnpj', 'cadin_cnpj', 'pgfn_cnpj',
+  'enquadramento_tributario_cnpj', 'situacao_fiscal_cnpj',
   'scr_cnpj', 'ccs_cnpj', 'ccf_cnpj', 'consulta_serasa_cnpj',
   // Certidões CPF
   'rating_bacen_cpf', 'cenprot_cpf', 'cnd_rfb_cpf', 'cadin_cpf', 'pgfn_cpf',
+  'enquadramento_tributario_cpf', 'situacao_fiscal_cpf',
   'scr_cpf', 'ccs_cpf', 'ccf_cpf', 'consulta_serasa_cpf',
   // Fiscal / Tributário
   'simples_nacional', 'pgdas', 'pgmei', 'ecf',
@@ -63,12 +65,14 @@ const TIPOS_DOCUMENTO = [
 const DOCUMENTOS_PESSOAIS = new Set([
   'documento_socio', 'rg', 'cpf', 'cnh', 'comprovante_residencia', 'imposto_renda', 'irpf', 'recibo_irpf',
   'certidao_casamento', 'averbacao_divorcio', 'certidao_obito', 'rating_bacen_cpf', 'cenprot_cpf',
-  'cnd_rfb_cpf', 'cadin_cpf', 'pgfn_cpf', 'scr_cpf', 'ccs_cpf', 'ccf_cpf', 'consulta_serasa_cpf',
+  'cnd_rfb_cpf', 'cadin_cpf', 'pgfn_cpf', 'enquadramento_tributario_cpf', 'situacao_fiscal_cpf',
+  'scr_cpf', 'ccs_cpf', 'ccf_cpf', 'consulta_serasa_cpf',
 ]);
 const DOCUMENTOS_EMPRESA = new Set([
   'contrato_prestacao_servicos', 'contrato_assessoria', 'cartao_cnpj', 'qsa', 'atos_junta_comercial',
   'contrato_social', 'alteracao_contratual', 'comprovante_endereco', 'rating_bacen_cnpj', 'cenprot_cnpj',
-  'cnd_rfb_cnpj', 'cadin_cnpj', 'pgfn_cnpj', 'simples_nacional', 'pgdas', 'pgmei', 'ecf',
+  'cnd_rfb_cnpj', 'cadin_cnpj', 'pgfn_cnpj', 'enquadramento_tributario_cnpj', 'situacao_fiscal_cnpj',
+  'simples_nacional', 'pgdas', 'pgmei', 'ecf',
   'recibo_ecf', 'recibo_pgdas', 'recibo_pgmei', 'defis', 'dasn_simei', 'recibo_defis', 'recibo_dasn_simei',
   'scr_cnpj', 'ccs_cnpj', 'ccf_cnpj', 'consulta_serasa_cnpj', 'compartilhamento_ecac', 'foto_fachada',
   'foto_interna_1', 'foto_interna_2', 'foto_interna_3', 'faturamento_12_meses', 'nire', 'estatuto',
