@@ -1365,6 +1365,18 @@ export default function Empresas() {
     return () => { cancelado = true; };
   }, [location, empresas, selecionada?.id]);
 
+  // ── Acervo Documental sempre abre direto na página exclusiva ────────────────
+  // Rede de segurança: qualquer caminho que ainda ative abaAtiva === "documentos"
+  // (link antigo salvo, Histórico 360, etc.) é redirecionado imediatamente para
+  // a página exclusiva do acervo, em vez de mostrar o card intermediário com o
+  // botão "Abrir acervo documental". navegarParaAba() já cobre o clique direto
+  // na aba; este efeito cobre os demais casos sem duplicar lógica.
+  useEffect(() => {
+    if (abaAtiva === "documentos" && selecionada?.id) {
+      setLocation(`/colaborador/empresas/${selecionada.id}/acervo`);
+    }
+  }, [abaAtiva, selecionada?.id]);
+
   // ── Carregar detalhe ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!selecionada) return;
@@ -1636,6 +1648,12 @@ export default function Empresas() {
     const destino = abaPermitida(aba) ? aba : primeiraAbaPermitida();
     if (destino !== aba) {
       toast.info("Esta função está oculta para este usuário.");
+    }
+    // Acervo Documental abre direto na página exclusiva -- sem o card
+    // intermediário com o botão "Abrir acervo documental".
+    if (destino === "documentos" && selecionada?.id) {
+      setLocation(`/colaborador/empresas/${selecionada.id}/acervo`);
+      return;
     }
     setAbaAtiva(destino);
     if (opts?.abrirFollowup && destino === "followup") setShowFollowupForm(true);
@@ -2399,32 +2417,15 @@ export default function Empresas() {
                     )
 
                     /* ── ACERVO DOCUMENTAL ── */
+                    // Não mostra mais o card com o botão "Abrir acervo documental": o
+                    // useEffect logo acima já redireciona direto para a página exclusiva
+                    // assim que abaAtiva vira "documentos". Este bloco só cobre o instante
+                    // entre o clique e o redirecionamento, para nunca aparecer em branco.
                     : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "documentos" ? (
                       <div className="p-3 fade-in">
-                        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                            <div className="flex min-w-0 items-center gap-3">
-                              <div className="h-11 w-11 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm shrink-0">
-                                <FileText className="h-5 w-5" />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-blue-600">Acervo documental</p>
-                                <h3 className="text-base font-black text-slate-950 leading-tight">Documentos da empresa</h3>
-                                <p className="mt-0.5 text-xs text-slate-500">Uploads, visualização, validação e preservação em área exclusiva.</p>
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{documentos.length + contratosSociais.length} registro(s)</span>
-                              <button
-                                type="button"
-                                disabled={!selecionada?.id}
-                                onClick={() => selecionada?.id && setLocation(`/colaborador/empresas/${selecionada.id}/acervo`)}
-                                className="h-10 px-4 rounded-xl bg-blue-600 text-white text-xs font-bold shadow-sm hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 shrink-0"
-                              >
-                                <ExternalLink className="h-4 w-4" /> Abrir acervo
-                              </button>
-                            </div>
-                          </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex items-center justify-center gap-3 text-slate-500">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <p className="text-sm font-semibold">Abrindo acervo documental...</p>
                         </div>
                       </div>
                     ) : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "simulacoes" ? (

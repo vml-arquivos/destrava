@@ -5635,11 +5635,11 @@ async function startServer() {
         </div>
       `, `Proposta Bancária — ${proposta.empresa.razao_social}`);
 
-      const uploadsDir = require('path').resolve("uploads", "propostas-bancarias");
-      if (!require('fs').existsSync(uploadsDir)) require('fs').mkdirSync(uploadsDir, { recursive: true });
+      const uploadsDir = path.resolve("uploads", "propostas-bancarias");
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
       const slug = String(proposta.empresa.razao_social).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase();
       const fileName = `proposta-bancaria-${slug}-${Date.now()}.pdf`;
-      const filePath = require('path').join(uploadsDir, fileName);
+      const filePath = path.join(uploadsDir, fileName);
 
       browser = await launchChromium();
       const page = await browser.newPage();
@@ -5650,9 +5650,9 @@ async function startServer() {
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-      const stream = require('fs').createReadStream(filePath);
+      const stream = fs.createReadStream(filePath);
       stream.pipe(res);
-      stream.on("end", () => require('fs').unlink(filePath, () => {}));
+      stream.on("end", () => fs.unlink(filePath, () => {}));
     } catch (err: any) {
             if (browser) { try { await closeChromium(browser); } catch { /* ignora */ } }
       console.error("[GET /api/empresas/:id/proposta-bancaria/pdf]", err);
@@ -6228,11 +6228,11 @@ async function startServer() {
         </div>
       `, `Relatório Técnico — ${rel.identificacao.razao_social}`);
 
-      const uploadsDir = require('path').resolve("uploads", "relatorios-tecnicos");
-      if (!require('fs').existsSync(uploadsDir)) require('fs').mkdirSync(uploadsDir, { recursive: true });
+      const uploadsDir = path.resolve("uploads", "relatorios-tecnicos");
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
       const slug = String(rel.identificacao.razao_social).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase();
       const fileName = `relatorio-tecnico-${slug}-${Date.now()}.pdf`;
-      const filePath = require('path').join(uploadsDir, fileName);
+      const filePath = path.join(uploadsDir, fileName);
 
       browser = await launchChromium();
       const page = await browser.newPage();
@@ -6243,9 +6243,9 @@ async function startServer() {
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-      const stream = require('fs').createReadStream(filePath);
+      const stream = fs.createReadStream(filePath);
       stream.pipe(res);
-      stream.on("end", () => require('fs').unlink(filePath, () => {}));
+      stream.on("end", () => fs.unlink(filePath, () => {}));
     } catch (err: any) {
       if (browser) { try { await closeChromium(browser); } catch { /* ignora */ } }
       console.error("[GET /api/empresas/:id/relatorio-tecnico/pdf]", err);

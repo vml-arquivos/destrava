@@ -171,77 +171,49 @@ const slot = (titulo: string, tipoUpload: string, matchTipos?: string[], extra: 
   ...extra,
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+// Reorganizado em 3 abas (2026-08): Identidade do CNPJ, Documentação da
+// Empresa e Documentação dos Sócios. Isso é 100% reorganização visual --
+// nenhum "tipoUpload"/tipo_documento foi removido, renomeado na base ou
+// duplicado. Os campos de PGDAS, recibo do PGDAS, DEFIS e recibo da DEFIS já
+// existiam ("pgdas", "recibo_pgdas", "defis", "recibo_defis") e só ganharam
+// título/descrição mais claros -- não foi criado nenhum campo novo para não
+// duplicar o que já existia. O mesmo vale para IRPF do sócio ("irpf") e o
+// recibo de entrega ("recibo_irpf"), que já existiam e só mudaram de aba.
 export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
   {
-    titulo: "Documentos principais da empresa",
-    descricao: "Base do dossiê empresarial para análise, envio ao banco e comparação futura pela IA.",
+    titulo: "Identidade do CNPJ",
+    descricao: "Os 4 documentos que identificam a empresa perante a Receita e a Junta Comercial. Base obrigatória de qualquer dossiê.",
     slots: [
-      slot("1. Contrato de prestação de serviços", "contrato_prestacao_servicos", ["contrato_assessoria"]),
-      slot("2. CNPJ / Cartão CNPJ", "cartao_cnpj", [], { obrigatorio: true, descricao: "A IA/OCR deve identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral." }),
-      slot("3. QSA", "qsa", [], { obrigatorio: true }),
-      slot("4. Atos da Junta Comercial", "atos_junta_comercial", [], { obrigatorio: true }),
-      slot("5. Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Pode receber mais de um arquivo: contrato inicial e alterações." }),
+      slot("Cartão CNPJ", "cartao_cnpj", [], { obrigatorio: true, descricao: "A IA/OCR deve identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral." }),
+      slot("QSA (Quadro Societário)", "qsa", [], { obrigatorio: true }),
+      slot("Atos da Junta Comercial", "atos_junta_comercial", [], { obrigatorio: true }),
+      slot("Enquadramento tributário", "enquadramento_tributario_cnpj", [], { obrigatorio: true, descricao: "Documento que comprova o regime tributário atual da empresa (Simples Nacional, Lucro Presumido, Lucro Real ou MEI)." }),
     ],
   },
   {
-    titulo: "Documentos dos sócios",
-    descricao: "Use um único local para documentos que cumprem a mesma função. Não duplicamos RG, CNH e CPF em campos separados.",
+    titulo: "Documentação da Empresa",
+    descricao: "Todo o restante referente à empresa: contrato social, consultas e certidões do CNPJ, fiscal/tributário, faturamento, eCAC, fotos e outros.",
     slots: [
-      slot("6A. Documento de identificação do sócio", "documento_socio", ["rg", "cnh", "cpf"], { obrigatorio: true, descricao: "Anexe RG, CNH ou documento equivalente com CPF, conforme disponível." }),
-      slot("6B. Comprovante de endereço do sócio", "comprovante_residencia", [], { obrigatorio: true }),
-      slot("6C. IRPF do sócio", "irpf", ["imposto_renda"]),
-      slot("6D. Recibo de entrega do IRPF", "recibo_irpf"),
-      slot("6E. Estado civil / cônjuge / averbações", "certidao_casamento", ["averbacao_divorcio", "certidao_obito"], { descricao: "Use somente quando necessário: certidão de casamento, averbação de divórcio, óbito ou documento equivalente." }),
-    ],
-  },
-  {
-    titulo: "Consultas e certidões CNPJ",
-    slots: [
-      slot("7. Relatório SCR/Registrato (CNPJ)", "rating_bacen_cnpj", ["scr_cnpj"]),
-      slot("Enquadramento tributário (CNPJ)", "enquadramento_tributario_cnpj", [], { descricao: "Documento que comprova o regime tributário atual da empresa (Simples Nacional, Lucro Presumido, Lucro Real ou MEI)." }),
-      slot("9. Consulta CENPROT (CNPJ)", "cenprot_cnpj"),
-      slot("11. CND RFB (CNPJ)", "cnd_rfb_cnpj"),
+      slot("Contrato de prestação de serviços", "contrato_prestacao_servicos", ["contrato_assessoria"]),
+      slot("Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Pode receber mais de um arquivo: contrato inicial e alterações." }),
+      slot("Relatório SCR/Registrato (CNPJ)", "rating_bacen_cnpj", ["scr_cnpj"]),
+      slot("Consulta CENPROT (CNPJ)", "cenprot_cnpj"),
+      slot("CND RFB (CNPJ)", "cnd_rfb_cnpj"),
       slot("Relatório de Situação Fiscal (CNPJ)", "situacao_fiscal_cnpj", [], { descricao: "Exigido junto com CADIN e PGFN quando a CND RFB CNPJ não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cnpj"] }),
-      slot("12A. Nada consta CADIN (CNPJ)", "cadin_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cnpj"] }),
-      slot("12B. Nada consta PGFN (CNPJ)", "pgfn_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cnpj"] }),
-      slot("19. Relatório CCS do CNPJ", "ccs_cnpj"),
-      slot("20. Relatório CCF do CNPJ", "ccf_cnpj"),
+      slot("Nada consta CADIN (CNPJ)", "cadin_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cnpj"] }),
+      slot("Nada consta PGFN (CNPJ)", "pgfn_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cnpj"] }),
+      slot("Relatório CCS do CNPJ", "ccs_cnpj"),
+      slot("Relatório CCF do CNPJ", "ccf_cnpj"),
       slot("Rating (CNPJ)", "consulta_serasa_cnpj"),
-    ],
-  },
-  {
-    titulo: "Consultas e certidões CPF dos sócios",
-    descricao: "Obrigatório para todos os sócios ou sócio único. Em caso de cônjuge, incluir SCR, CCS, CCF, Serasa e CENPROT também do cônjuge.",
-    slots: [
-      slot("8. Relatório SCR/Registrato (CPF)", "rating_bacen_cpf", ["scr_cpf"]),
-      slot("Enquadramento tributário (CPF)", "enquadramento_tributario_cpf", [], { descricao: "Documento que comprova o enquadramento tributário do sócio como pessoa física, quando aplicável." }),
-      slot("10. Consulta CENPROT (CPF)", "cenprot_cpf"),
-      slot("12. CND RFB (CPF)", "cnd_rfb_cpf"),
-      slot("Relatório de Situação Fiscal (CPF)", "situacao_fiscal_cpf", [], { descricao: "Exigido junto com CADIN e PGFN quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
-      slot("12A. Nada consta CADIN (CPF)", "cadin_cpf", [], { descricao: "Exigido quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
-      slot("12B. Nada consta PGFN (CPF)", "pgfn_cpf", [], { descricao: "Exigido quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
-      slot("22. Relatório CCS do CPF", "ccs_cpf"),
-      slot("23. Relatório CCF do CPF", "ccf_cpf"),
-      slot("Rating (CPF)", "consulta_serasa_cpf"),
-    ],
-  },
-  {
-    titulo: "Fiscal, tributário e faturamento",
-    descricao: "A IA deve interpretar regime tributário e exigir DEFIS, DASN-SIMEI ou ECF conforme o caso.",
-    slots: [
-      slot("13. Consulta de optante pelo Simples Nacional", "simples_nacional"),
-      slot("14. PGDAS, ECF ou PGMEI", "pgdas", ["pgmei", "ecf"], { descricao: "Anexe o arquivo aplicável ao regime tributário." }),
-      slot("15. Recibo de entrega da ECF, PGDAS ou PGMEI", "recibo_pgdas", ["recibo_pgmei", "recibo_ecf"], { descricao: "Anexe o recibo correspondente ao documento fiscal enviado." }),
-      slot("16. DEFIS ou DASN-SIMEI", "defis", ["dasn_simei"], { descricao: "DEFIS para Simples Nacional não MEI. DASN-SIMEI para MEI." }),
-      slot("17. Recibo de entrega da DEFIS, DASN-SIMEI ou ECF", "recibo_defis", ["recibo_dasn_simei", "recibo_ecf"], { descricao: "Anexe o recibo aplicável." }),
-      slot("26. Faturamento bruto dos últimos 12 meses", "faturamento_12_meses", ["comprovante_faturamento", "declaracao_faturamento"], { obrigatorio: true, descricao: "Pode conter planilha, declaração ou relatório solicitado pelo banco." }),
-    ],
-  },
-  {
-    titulo: "eCAC, fotos e outros",
-    slots: [
-      slot("24. Compartilhamento eCAC por banco", "compartilhamento_ecac", [], { exigeNome: true, placeholderNome: "Banco/destinatário eCAC" }),
-      slot("25. Fotos da empresa", "foto_fachada", ["foto_interna_1", "foto_interna_2", "foto_interna_3"], { descricao: "Anexe fachada e fotos internas no mesmo local." }),
+      slot("Consulta de optante pelo Simples Nacional", "simples_nacional"),
+      slot("PGDAS", "pgdas", ["pgmei", "ecf"], { descricao: "Declaração de faturamento do Simples Nacional. Se a empresa não for optante do Simples, anexe aqui o PGMEI (MEI) ou a ECF (Lucro Presumido/Real), conforme o regime tributário." }),
+      slot("Recibo de entrega do PGDAS", "recibo_pgdas", ["recibo_pgmei", "recibo_ecf"], { descricao: "Recibo de entrega correspondente ao PGDAS, PGMEI ou ECF anexado acima." }),
+      slot("DEFIS", "defis", ["dasn_simei"], { descricao: "Declaração anual da empresa. DEFIS para optantes do Simples Nacional (não MEI); DASN-SIMEI para MEI." }),
+      slot("Recibo de entrega da DEFIS", "recibo_defis", ["recibo_dasn_simei"], { descricao: "Recibo de entrega correspondente à DEFIS ou DASN-SIMEI anexada acima." }),
+      slot("Faturamento bruto dos últimos 12 meses", "faturamento_12_meses", ["comprovante_faturamento", "declaracao_faturamento"], { obrigatorio: true, descricao: "Pode conter planilha, declaração ou relatório solicitado pelo banco." }),
+      slot("Compartilhamento eCAC por banco", "compartilhamento_ecac", [], { exigeNome: true, placeholderNome: "Banco/destinatário eCAC" }),
+      slot("Fotos da empresa", "foto_fachada", ["foto_interna_1", "foto_interna_2", "foto_interna_3"], { descricao: "Anexe fachada e fotos internas no mesmo local." }),
       slot("Campo outros / Documento nomeado", "outros", [
         "extrato_bancario", "balanco", "dre", "comprovante_endereco", "procuracao", "nire", "estatuto",
       ], {
@@ -254,6 +226,27 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
           "Certidão de regularidade", "Alvará de funcionamento",
         ],
       }),
+    ],
+  },
+  {
+    titulo: "Documentação dos Sócios",
+    descricao: "Identificação dos sócios e toda a documentação/consultas de CPF vinculadas a eles. Use um único local para documentos que cumprem a mesma função -- não duplicamos RG, CNH e CPF em campos separados.",
+    slots: [
+      slot("Documento de identificação do sócio", "documento_socio", ["rg", "cnh", "cpf"], { obrigatorio: true, descricao: "Anexe RG, CNH ou documento equivalente com CPF, conforme disponível." }),
+      slot("Comprovante de endereço do sócio", "comprovante_residencia", [], { obrigatorio: true }),
+      slot("Declaração de Imposto de Renda (IRPF) do sócio", "irpf", ["imposto_renda"], { descricao: "Declaração completa de imposto de renda da pessoa física do sócio." }),
+      slot("Recibo de entrega da Declaração de Imposto de Renda (IRPF)", "recibo_irpf", [], { descricao: "Recibo de entrega correspondente à declaração de IRPF anexada acima." }),
+      slot("Estado civil / cônjuge / averbações", "certidao_casamento", ["averbacao_divorcio", "certidao_obito"], { descricao: "Use somente quando necessário: certidão de casamento, averbação de divórcio, óbito ou documento equivalente." }),
+      slot("Relatório SCR/Registrato (CPF)", "rating_bacen_cpf", ["scr_cpf"]),
+      slot("Enquadramento tributário (CPF)", "enquadramento_tributario_cpf", [], { descricao: "Documento que comprova o enquadramento tributário do sócio como pessoa física, quando aplicável." }),
+      slot("Consulta CENPROT (CPF)", "cenprot_cpf"),
+      slot("CND RFB (CPF)", "cnd_rfb_cpf"),
+      slot("Relatório de Situação Fiscal (CPF)", "situacao_fiscal_cpf", [], { descricao: "Exigido junto com CADIN e PGFN quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
+      slot("Nada consta CADIN (CPF)", "cadin_cpf", [], { descricao: "Exigido quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
+      slot("Nada consta PGFN (CPF)", "pgfn_cpf", [], { descricao: "Exigido quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
+      slot("Relatório CCS do CPF", "ccs_cpf"),
+      slot("Relatório CCF do CPF", "ccf_cpf"),
+      slot("Rating (CPF)", "consulta_serasa_cpf"),
     ],
   },
 ];

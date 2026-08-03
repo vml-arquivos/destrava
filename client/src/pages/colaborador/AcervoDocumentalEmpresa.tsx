@@ -49,12 +49,16 @@ export default function AcervoDocumentalEmpresa() {
   function voltarParaEmpresa() {
     if (!empresaId) return setLocation("/colaborador/empresas");
     try {
+      // "aba: documentos" não é mais usado aqui de propósito: como o clique em
+      // Acervo Documental agora abre direto esta página, voltar com
+      // aba=documentos criaria um vaivém automático de volta pro acervo.
+      // "visao_geral" é o destino seguro de retorno.
       sessionStorage.setItem(
         "destrava_empresa_retorno_acervo",
-        JSON.stringify({ empresaId, aba: "documentos", ts: Date.now() }),
+        JSON.stringify({ empresaId, aba: "visao_geral", ts: Date.now() }),
       );
     } catch {}
-    setLocation(`/colaborador/empresas?empresa=${empresaId}&aba=documentos`);
+    setLocation(`/colaborador/empresas?empresa=${empresaId}&aba=visao_geral`);
   }
 
   return (
