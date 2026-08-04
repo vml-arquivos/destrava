@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Building2, FileText, Plus, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch, getToken } from '../../lib/api';
@@ -7,6 +7,7 @@ import Layout from './Layout';
 import { FormGerarContrato } from '../../components/contratos/FormGerarContrato';
 import { ListaContratos } from '../../components/contratos/ListaContratos';
 import { ContratoAssessoria, type DadosContratoAssessoria } from '../../components/contratos/ContratoAssessoria';
+import { EditarContratoDialog } from '../../components/contratos/EditarContratoDialog';
 
 interface Parceiro {
   id: string;
@@ -66,6 +67,8 @@ interface Contrato {
   created_at: string;
   pdf_path?: string;
   criado_por_nome?: string;
+  assinado_em?: string | null;
+  assinado_pdf_path?: string | null;
 }
 
 export default function GeradorContratos() {
@@ -88,6 +91,8 @@ export default function GeradorContratos() {
   // Visualizador de assessoria — abre em vez de gerar PDF direto
   const [dadosAssessoria, setDadosAssessoria]         = useState<DadosContratoAssessoria | null>(null);
   const [loadingPdfAssessoria, setLoadingPdfAssessoria] = useState(false);
+  const [contratoEmEdicao, setContratoEmEdicao] = useState<string | null>(null);
+  const fecharEdicaoContrato = useCallback(() => setContratoEmEdicao(null), []);
 
   // Hierarquia: admin/diretor/gerente vê tudo
   function normCargo(c: string | undefined) {
@@ -96,6 +101,7 @@ export default function GeradorContratos() {
   const CARGOS_VE_TUDO = ['administrador', 'admin', 'diretor', 'gerente comercial', 'gerente', 'gestor'];
   const podeTudo = CARGOS_VE_TUDO.includes(normCargo(userCargo));
   const podeExcluir = ['administrador', 'admin', 'diretor'].includes(normCargo(userCargo));
+  const podeEditar = ['administrador', 'admin', 'diretor', 'gerente comercial', 'gerente', 'gestor'].includes(normCargo(userCargo));
 
   // Novo parceiro
   const [novoParceiro, setNovoParceiro]   = useState({ nome: '', cpf: '', email: '', telefone: '' });
@@ -594,6 +600,8 @@ export default function GeradorContratos() {
                 userCargo={userCargo}
                 podeTudo={podeTudo}
                 podeExcluir={podeExcluir}
+                podeEditar={podeEditar}
+                onEdit={setContratoEmEdicao}
               />
             )}
           </div>
@@ -921,6 +929,13 @@ export default function GeradorContratos() {
         )}
       </div>
     </Layout>
+
+    <EditarContratoDialog
+      contratoId={contratoEmEdicao}
+      aberto={!!contratoEmEdicao}
+      onClose={fecharEdicaoContrato}
+      onSaved={carregarContratos}
+    />
 
     {/* ── Visualizador de assessoria — renderizado sobre o Layout ── */}
     {dadosAssessoria && (

@@ -12326,9 +12326,13 @@ async function registrarDocumentoContratoGerado(params: {
         return;
       }
       const { rows } = await pool.query(
-        `UPDATE contratos_gerados SET status = $1, updated_at = NOW() WHERE id = $2
+        `UPDATE contratos_gerados
+            SET status = $1,
+                assinado_em = CASE WHEN $1 = 'assinado' OR status = 'assinado' THEN COALESCE(assinado_em, NOW()) ELSE assinado_em END,
+                updated_at = NOW()
+          WHERE id = $2
          RETURNING id, status, tipo_contrato, empresa_id, responsavel_contrato_id,
-                   data_assinatura, data_inicio_vigencia, data_fim_vigencia`,
+                   data_assinatura, data_inicio_vigencia, data_fim_vigencia, assinado_em`,
         [status, req.params.id]
       );
       if (!rows.length) {
@@ -12437,7 +12441,7 @@ async function registrarDocumentoContratoGerado(params: {
       params.push(parseInt(limit) || 100);
       params.push(parseInt(offset) || 0);
       const { rows } = await pool.query(
-        `SELECT cg.id, cg.tipo_contrato, cg.status, cg.data_assinatura, cg.created_at,
+        `SELECT cg.id, cg.tipo_contrato, cg.status, cg.data_assinatura, cg.assinado_em, cg.assinado_pdf_path, cg.created_at,
                 cg.valor_referencia, cg.valor_contrato, cg.condicao_pagamento,
                 cg.foro_eleito, cg.hash_documento, cg.pdf_path,
                 cg.empresa_id, cg.lead_id, cg.parceiro_id, cg.criado_por,
@@ -12471,6 +12475,249 @@ async function registrarDocumentoContratoGerado(params: {
     }
   });
 
+  const CARGOS_PODEM_EDITAR_CONTRATO = new Set([
+    'administrador', 'admin', 'diretor', 'gerente comercial', 'gerente', 'gestor',
+  ]);
+
+  function normalizarCargoContrato(valor: unknown): string {
+    return String(valor || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+  }
+
+  function usuarioPodeEditarContrato(req: Request): boolean {
+    const colaborador = (req as any).colaborador || (req as any).user || {};
+    return CARGOS_PODEM_EDITAR_CONTRATO.has(
+      normalizarCargoContrato(colaborador.cargo || colaborador.role || colaborador.perfil),
+    );
+  }
+
+  function contratoEstaAssinado(contrato: any): boolean {
+    return normalizarCargoContrato(contrato?.status) === 'assinado'
+      || !!contrato?.assinado_em
+      || !!contrato?.assinado_pdf_path;
+  }
+
+  function objetoSimplesContrato(valor: unknown): valor is Record<string, any> {
+    return !!valor && typeof valor === 'object' && !Array.isArray(valor);
+  }
+
+  function sanitizarPayloadEdicaoContrato(valor: any, profundidade = 0): any {
+    if (profundidade > 7) return null;
+    if (valor === null || valor === undefined) return valor ?? null;
+    if (typeof valor === 'string') return valor.slice(0, 30000);
+    if (typeof valor === 'number') return Number.isFinite(valor) ? valor : null;
+    if (typeof valor === 'boolean') return valor;
+    if (Array.isArray(valor)) {
+      return valor.slice(0, 100).map(item => sanitizarPayloadEdicaoContrato(item, profundidade + 1));
+    }
+    if (!objetoSimplesContrato(valor)) return null;
+
+    const resultado: Record<string, any> = {};
+    for (const [chave, conteudo] of Object.entries(valor)) {
+      if (['__proto__', 'prototype', 'constructor'].includes(chave)) continue;
+      if (chave.length > 120) continue;
+      resultado[chave] = sanitizarPayloadEdicaoContrato(conteudo, profundidade + 1);
+    }
+    return resultado;
+  }
+
+  function mesclarPayloadContrato(base: any, alteracoes: any): any {
+    if (!objetoSimplesContrato(base) || !objetoSimplesContrato(alteracoes)) {
+      return alteracoes === undefined ? base : alteracoes;
+    }
+    const resultado: Record<string, any> = { ...base };
+    for (const [chave, valor] of Object.entries(alteracoes)) {
+      resultado[chave] = objetoSimplesContrato(valor) && objetoSimplesContrato(resultado[chave])
+        ? mesclarPayloadContrato(resultado[chave], valor)
+        : valor;
+    }
+    return resultado;
+  }
+
+  const CAMPOS_ESTRUTURA_CONTRATO_IMUTAVEIS = new Set([
+    'id', 'logo_url', 'cabecalho_html', 'rodape_html', 'cor_primaria', 'cor_secundaria',
+    'assinatura_url', 'template', 'template_html', 'layout', 'layout_html', 'html', 'css',
+    'estilos', 'clausulas', 'conteudo_html', 'created_at', 'updated_at',
+  ]);
+
+  function campoEstruturalContrato(chave: string): boolean {
+    return CAMPOS_ESTRUTURA_CONTRATO_IMUTAVEIS.has(chave)
+      || chave.startsWith('__')
+      || chave.endsWith('_id');
+  }
+
+  function preservarEstruturaContrato(original: any, editado: any): any {
+    if (!objetoSimplesContrato(editado)) return editado;
+    const base = objetoSimplesContrato(original) ? original : {};
+    const resultado: Record<string, any> = {};
+
+    for (const [chave, valor] of Object.entries(editado)) {
+      if (campoEstruturalContrato(chave)) {
+        if (Object.prototype.hasOwnProperty.call(base, chave)) resultado[chave] = base[chave];
+        continue;
+      }
+      resultado[chave] = objetoSimplesContrato(valor) && objetoSimplesContrato(base[chave])
+        ? preservarEstruturaContrato(base[chave], valor)
+        : valor;
+    }
+
+    for (const [chave, valor] of Object.entries(base)) {
+      if (campoEstruturalContrato(chave) && !Object.prototype.hasOwnProperty.call(resultado, chave)) {
+        resultado[chave] = valor;
+      }
+    }
+    return resultado;
+  }
+
+  function montarPayloadContratoExistente(contrato: any): any {
+    const snapshot = objetoSimplesContrato(contrato?.payload_snapshot) ? contrato.payload_snapshot : {};
+    const edits = objetoSimplesContrato(contrato?.dados_editaveis) ? contrato.dados_editaveis : {};
+    if (objetoSimplesContrato(edits.__payload)) {
+      return mesclarPayloadContrato(snapshot, edits.__payload);
+    }
+    const { __payload: _ignorado, ...editsLegados } = edits;
+    return {
+      ...snapshot,
+      contrato: {
+        ...(objetoSimplesContrato(snapshot.contrato) ? snapshot.contrato : {}),
+        ...editsLegados,
+      },
+    };
+  }
+
+  function numeroContratoEditavel(valor: any, fallback: number | null = null): number | null {
+    if (valor === undefined || valor === null || valor === '') return fallback;
+    if (typeof valor === 'number') return Number.isFinite(valor) ? valor : fallback;
+    let texto = String(valor).trim().replace(/\s/g, '').replace(/R\$/gi, '');
+    if (texto.includes(',') && texto.includes('.')) texto = texto.replace(/\./g, '').replace(',', '.');
+    else if (texto.includes(',')) texto = texto.replace(',', '.');
+    const numero = Number.parseFloat(texto);
+    return Number.isFinite(numero) ? numero : fallback;
+  }
+
+  function formatarDataContratoExtenso(dataIso: string): string {
+    return new Date(`${dataIso}T12:00:00`).toLocaleDateString('pt-BR', {
+      day: '2-digit', month: 'long', year: 'numeric',
+    });
+  }
+
+  function prepararPayloadContratoEditado(contrato: any, entrada: any): {
+    payload: any;
+    dataAssinatura: string;
+    foroEleito: string;
+    localAssinatura: string | null;
+    observacoes: string | null;
+    valorReferencia: number | null;
+    valorContrato: number | null;
+    condicaoPagamento: string | null;
+    taxaComissao: number | null;
+    taxaDesistencia: number | null;
+    taxaInadimplencia: number | null;
+    custeioMensal: number | null;
+    prazoContratoMeses: number | null;
+  } {
+    const atual = montarPayloadContratoExistente(contrato);
+    const seguro = sanitizarPayloadEdicaoContrato(entrada);
+    if (!objetoSimplesContrato(seguro)) throw new Error('Payload de edição inválido.');
+
+    const payloadMesclado = mesclarPayloadContrato(atual, seguro);
+    const payload = preservarEstruturaContrato(atual, payloadMesclado);
+    payload.contrato = objetoSimplesContrato(payload.contrato) ? payload.contrato : {};
+
+    // Identificação é imutável: edição nunca altera número, protocolo ou sequência.
+    payload.contrato = {
+      ...payload.contrato,
+      ...identificacaoContratoExistente(contrato),
+    };
+
+    const dataAssinatura = String(
+      payload.contrato.data_assinatura || contrato.data_assinatura || '',
+    ).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dataAssinatura)) {
+      throw new Error('Informe uma data válida para o contrato.');
+    }
+
+    const foroEleito = String(payload.contrato.foro_eleito || contrato.foro_eleito || '').trim();
+    if (!foroEleito) throw new Error('Informe o foro eleito.');
+
+    payload.contrato.data_assinatura = dataAssinatura;
+    payload.contrato.data_assinatura_formatada = formatarDataContratoExtenso(dataAssinatura);
+    payload.contrato.foro_eleito = foroEleito;
+
+    const localAssinatura = String(
+      payload.contrato.cidade_assinatura || contrato.local_assinatura || '',
+    ).trim() || null;
+    if (localAssinatura) payload.contrato.cidade_assinatura = localAssinatura;
+
+    const observacoes = payload.contrato.observacoes === undefined
+      ? (contrato.observacoes ?? null)
+      : String(payload.contrato.observacoes || '').trim() || null;
+
+    const tipo = String(contrato.tipo_contrato || 'assessoria');
+    let valorReferencia = numeroContratoEditavel(contrato.valor_referencia, null);
+    let valorContrato = numeroContratoEditavel(contrato.valor_contrato, null);
+
+    if (tipo === 'assessoria' || tipo === 'assessoria_pf') {
+      valorReferencia = numeroContratoEditavel(payload.contrato.valor_referencia, valorReferencia);
+      if (valorReferencia === null || valorReferencia <= 0) {
+        throw new Error('Informe um valor de referência válido.');
+      }
+      payload.contrato.valor_referencia = valorReferencia;
+      payload.contrato.valor_referencia_formatado = new Intl.NumberFormat('pt-BR', {
+        style: 'currency', currency: 'BRL',
+      }).format(valorReferencia);
+    } else if (['limpa_nome', 'limpa_bacen', 'rating'].includes(tipo)) {
+      valorContrato = numeroContratoEditavel(payload.contrato.valor_contrato, valorContrato);
+      if (valorContrato === null || valorContrato <= 0) {
+        throw new Error('Informe um valor de contrato válido.');
+      }
+      payload.contrato.valor_contrato = valorContrato;
+      payload.contrato.valor_contrato_formatado = new Intl.NumberFormat('pt-BR', {
+        style: 'currency', currency: 'BRL',
+      }).format(valorContrato);
+    }
+
+    const camposNumericos = [
+      'taxa_comissao', 'taxa_desistencia', 'taxa_inadimplencia', 'percentual_multa',
+      'custeio_mensal', 'vigencia_meses', 'prazo_contrato_meses', 'prazo_entrega_dias',
+      'prazo_garantia_meses', 'prazo_execucao_dias_uteis', 'prazo_atualizacao_orgao_dias',
+      'prazo_acompanhamento_dias', 'prazo_prorrogacao_dias', 'percentual_destrava',
+      'percentual_parceiro', 'prazo_pagamento_dias_uteis', 'aviso_previo_rescisao_dias',
+    ];
+    for (const campo of camposNumericos) {
+      if (payload.contrato[campo] !== undefined && payload.contrato[campo] !== null && payload.contrato[campo] !== '') {
+        const normalizado = numeroContratoEditavel(payload.contrato[campo], null);
+        if (normalizado !== null) payload.contrato[campo] = normalizado;
+      }
+    }
+
+    const condicaoPagamento = payload.contrato.condicao_pagamento === undefined
+      ? (contrato.condicao_pagamento ?? null)
+      : String(payload.contrato.condicao_pagamento || '').trim() || null;
+
+    return {
+      payload,
+      dataAssinatura,
+      foroEleito,
+      localAssinatura,
+      observacoes,
+      valorReferencia,
+      valorContrato,
+      condicaoPagamento,
+      taxaComissao: numeroContratoEditavel(payload.contrato.taxa_comissao, numeroContratoEditavel(contrato.taxa_comissao, null)),
+      taxaDesistencia: numeroContratoEditavel(payload.contrato.taxa_desistencia, numeroContratoEditavel(contrato.taxa_desistencia, null)),
+      taxaInadimplencia: numeroContratoEditavel(payload.contrato.taxa_inadimplencia, numeroContratoEditavel(contrato.taxa_inadimplencia, null)),
+      custeioMensal: numeroContratoEditavel(payload.contrato.custeio_mensal, numeroContratoEditavel(contrato.custeio_mensal, null)),
+      prazoContratoMeses: numeroContratoEditavel(
+        payload.contrato.vigencia_meses ?? payload.contrato.prazo_contrato_meses,
+        numeroContratoEditavel(contrato.prazo_contrato_meses, null),
+      ),
+    };
+  }
+
   async function buscarContratoDetalhado(id: string) {
     const { rows } = await pool.query(
       `SELECT cg.*,
@@ -12495,30 +12742,35 @@ async function registrarDocumentoContratoGerado(params: {
     return rows[0] || null;
   }
 
-  async function renderizarPdfContratoExistente(contrato: any): Promise<{ pdfPath: string; hash: string }> {
-    const payload = {
-      ...(contrato.payload_snapshot || {}),
-      contrato: {
-        ...((contrato.payload_snapshot || {}).contrato || {}),
-        ...(contrato.dados_editaveis || {}),
-        ...identificacaoContratoExistente(contrato),
-      },
+  async function renderizarPdfContratoExistente(
+    contrato: any,
+    opcoes: { temporario?: boolean } = {},
+  ): Promise<{ pdfPath: string; finalPdfPath: string; hash: string }> {
+    const payload = montarPayloadContratoExistente(contrato);
+    payload.contrato = {
+      ...(objetoSimplesContrato(payload.contrato) ? payload.contrato : {}),
+      ...identificacaoContratoExistente(contrato),
     };
+
     let html: string;
     switch (contrato.tipo_contrato) {
       case 'limpa_nome': html = await gerarHtmlContratoLimpaNome(payload); break;
       case 'limpa_bacen': html = await gerarHtmlContratoBacen(payload); break;
       case 'rating': html = await gerarHtmlContratoRating(payload); break;
       case 'parceria_comercial': html = await gerarHtmlContratoParceriaComercial(payload); break;
+      case 'assessoria_pf': html = await gerarHtmlContratoAssessoriaPF(payload); break;
       default: html = await gerarHtmlContrato(payload); break;
     }
     const uploadsDir = path.resolve('uploads', 'contratos');
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
     const fileName = `${nomeArquivoSeguroContrato(payload?.contrato?.protocolo_contrato, `contrato-${contrato.tipo_contrato || 'gerado'}`)}.pdf`;
-    const pdfPath = path.join(uploadsDir, fileName);
+    const finalPdfPath = path.join(uploadsDir, fileName);
+    const pdfPath = opcoes.temporario
+      ? path.join(uploadsDir, `.${fileName}.${crypto.randomUUID()}.tmp.pdf`)
+      : finalPdfPath;
     await gerarPdfComLayout(html, payload, pdfPath);
     const hash = await calcularHashArquivo(pdfPath);
-    return { pdfPath, hash };
+    return { pdfPath, finalPdfPath, hash };
   }
 
   app.get('/api/contratos/:id', auth, async (req: Request, res: Response) => {
@@ -12533,52 +12785,227 @@ async function registrarDocumentoContratoGerado(params: {
   });
 
   app.patch('/api/contratos/:id', auth, async (req: Request, res: Response) => {
+    let pdfTemporario: string | null = null;
+    let pdfFinal: string | null = null;
+    let backupPdf: string | null = null;
+    let pdfFinalSubstituido = false;
+    let commitConcluido = false;
+    let client: any = null;
+
     try {
-      const permitido = ['gerado', 'assinado', 'cancelado'];
-      const { dados_editaveis, status, data_assinatura, foro_eleito, local_assinatura, observacoes } = req.body || {};
-      if (status && !permitido.includes(status)) {
-        res.status(400).json({ error: 'Status inválido.' });
+      if (!usuarioPodeEditarContrato(req)) {
+        res.status(403).json({ error: 'Apenas Administradores, Diretores e Gerentes podem editar contratos.' });
         return;
       }
-      const { rows } = await pool.query(
+
+      const contrato = await buscarContratoDetalhado(req.params.id);
+      if (!contrato) {
+        res.status(404).json({ error: 'Contrato não encontrado' });
+        return;
+      }
+      if (contratoEstaAssinado(contrato)) {
+        res.status(409).json({ error: 'Contrato assinado não pode ser editado.' });
+        return;
+      }
+
+      const body = req.body || {};
+      if (body.status !== undefined) {
+        res.status(400).json({ error: 'O status do contrato deve ser alterado pela ação específica de status.' });
+        return;
+      }
+
+      let entrada: any;
+      if (objetoSimplesContrato(body.payload_editado)) {
+        entrada = body.payload_editado;
+      } else if (objetoSimplesContrato(body.dados_editaveis)) {
+        entrada = objetoSimplesContrato(body.dados_editaveis.__payload)
+          ? body.dados_editaveis.__payload
+          : { contrato: body.dados_editaveis };
+      } else {
+        entrada = { contrato: {} };
+      }
+
+      const sobrescritasContrato: Record<string, any> = {};
+      for (const campo of ['data_assinatura', 'foro_eleito', 'local_assinatura', 'observacoes']) {
+        if (body[campo] !== undefined) {
+          sobrescritasContrato[campo === 'local_assinatura' ? 'cidade_assinatura' : campo] = body[campo];
+        }
+      }
+      if (Object.keys(sobrescritasContrato).length) {
+        entrada = mesclarPayloadContrato(entrada, { contrato: sobrescritasContrato });
+      }
+
+      const preparado = prepararPayloadContratoEditado(contrato, entrada);
+      const dadosEditaveisPersistidos = { __payload: preparado.payload };
+      const contratoParaRender = {
+        ...contrato,
+        dados_editaveis: dadosEditaveisPersistidos,
+        data_assinatura: preparado.dataAssinatura,
+        foro_eleito: preparado.foroEleito,
+        local_assinatura: preparado.localAssinatura,
+        observacoes: preparado.observacoes,
+        valor_referencia: preparado.valorReferencia,
+        valor_contrato: preparado.valorContrato,
+        condicao_pagamento: preparado.condicaoPagamento,
+        taxa_comissao: preparado.taxaComissao,
+        taxa_desistencia: preparado.taxaDesistencia,
+        taxa_inadimplencia: preparado.taxaInadimplencia,
+        custeio_mensal: preparado.custeioMensal,
+        prazo_contrato_meses: preparado.prazoContratoMeses,
+      };
+
+      const renderizado = await renderizarPdfContratoExistente(contratoParaRender, { temporario: true });
+      const arquivoTemporario = renderizado.pdfPath;
+      const arquivoFinal = renderizado.finalPdfPath;
+      pdfTemporario = arquivoTemporario;
+      pdfFinal = arquivoFinal;
+
+      client = await pool.connect();
+      await client.query('BEGIN');
+      const prazoMeses = preparado.prazoContratoMeses === null
+        ? null
+        : Math.max(1, Math.trunc(preparado.prazoContratoMeses));
+
+      const { rows } = await client.query(
         `UPDATE contratos_gerados SET
-           dados_editaveis=COALESCE($1::jsonb, dados_editaveis),
-           status=COALESCE($2, status),
-           data_assinatura=COALESCE($3::date, data_assinatura),
-           foro_eleito=COALESCE($4, foro_eleito),
-           local_assinatura=COALESCE($5, local_assinatura),
-           observacoes=COALESCE($6, observacoes),
+           dados_editaveis=$1::jsonb,
+           data_assinatura=$2::date,
+           foro_eleito=$3,
+           local_assinatura=$4,
+           observacoes=$5,
+           valor_referencia=$6,
+           valor_contrato=$7,
+           condicao_pagamento=$8,
+           taxa_comissao=$9,
+           taxa_desistencia=$10,
+           taxa_inadimplencia=$11,
+           custeio_mensal=$12,
+           prazo_contrato_meses=$13,
+           data_inicio_vigencia=CASE WHEN tipo_contrato IN ('assessoria','assessoria_pf') THEN $2::date ELSE data_inicio_vigencia END,
+           data_fim_vigencia=CASE
+             WHEN tipo_contrato IN ('assessoria','assessoria_pf') AND $13::integer IS NOT NULL
+             THEN ($2::date + ($13::text || ' months')::interval)::date
+             ELSE data_fim_vigencia
+           END,
+           pdf_path=$14,
+           hash_documento=$15,
+           pdf_regenerado_em=NOW(),
            updated_at=NOW()
-         WHERE id=$7 RETURNING *`,
+         WHERE id=$16
+           AND status <> 'assinado'
+           AND assinado_em IS NULL
+           AND assinado_pdf_path IS NULL
+         RETURNING *`,
         [
-          dados_editaveis ? JSON.stringify(dados_editaveis) : null,
-          status || null,
-          data_assinatura || null,
-          foro_eleito || null,
-          local_assinatura || null,
-          observacoes || null,
+          JSON.stringify(dadosEditaveisPersistidos),
+          preparado.dataAssinatura,
+          preparado.foroEleito,
+          preparado.localAssinatura,
+          preparado.observacoes,
+          preparado.valorReferencia,
+          preparado.valorContrato,
+          preparado.condicaoPagamento,
+          preparado.taxaComissao,
+          preparado.taxaDesistencia,
+          preparado.taxaInadimplencia,
+          preparado.custeioMensal,
+          prazoMeses,
+          arquivoFinal,
+          renderizado.hash,
           req.params.id,
-        ]
+        ],
       );
-      if (!rows.length) { res.status(404).json({ error: 'Contrato não encontrado' }); return; }
-      res.json(rows[0]);
-    } catch (err) {
+      if (!rows.length) {
+        throw new Error('O contrato foi assinado durante a edição e não pode mais ser alterado.');
+      }
+
+      if (fs.existsSync(arquivoFinal)) {
+        backupPdf = `${arquivoFinal}.${crypto.randomUUID()}.bak`;
+        await fs.promises.rename(arquivoFinal, backupPdf);
+      }
+      await fs.promises.rename(arquivoTemporario, arquivoFinal);
+      pdfTemporario = null;
+      pdfFinalSubstituido = true;
+
+      await client.query('COMMIT');
+      commitConcluido = true;
+
+      if (backupPdf && fs.existsSync(backupPdf)) {
+        await fs.promises.unlink(backupPdf).catch(() => undefined);
+        backupPdf = null;
+      }
+
+      const autor = (req as any).colaborador || (req as any).user || {};
+      if (rows[0].empresa_id) {
+        await registrarHistoricoEmpresaSeguro(
+          rows[0].empresa_id,
+          'contrato_editado',
+          `Contrato ${rows[0].protocolo_contrato || rows[0].numero_contrato || rows[0].id} editado antes da assinatura.`,
+          autor.nome || autor.email || null,
+        ).catch((historicoErr: any) => {
+          console.warn('[contrato-editado] Falha ao registrar histórico:', historicoErr?.message || historicoErr);
+        });
+      }
+
+      res.json({
+        ...rows[0],
+        success: true,
+        pdf_url: `/uploads/contratos/${path.basename(arquivoFinal)}`,
+      });
+    } catch (err: any) {
+      if (client && !commitConcluido) {
+        await client.query('ROLLBACK').catch(() => undefined);
+      }
+
+      if (!commitConcluido) {
+        if (pdfFinalSubstituido && pdfFinal && fs.existsSync(pdfFinal)) {
+          await fs.promises.unlink(pdfFinal).catch(() => undefined);
+        }
+        if (backupPdf && pdfFinal && fs.existsSync(backupPdf)) {
+          await fs.promises.rename(backupPdf, pdfFinal).catch(() => undefined);
+        }
+      }
+      if (pdfTemporario && fs.existsSync(pdfTemporario)) {
+        await fs.promises.unlink(pdfTemporario).catch(() => undefined);
+      }
+
       console.error('[PATCH /api/contratos/:id]', err);
-      res.status(500).json({ error: 'Erro ao atualizar contrato' });
+      const mensagem = err?.message || 'Erro ao atualizar contrato';
+      const status = /assinado durante|não pode ser editado/i.test(mensagem)
+        ? 409
+        : /payload|informe|inválid|status do contrato/i.test(mensagem)
+          ? 400
+          : 500;
+      res.status(status).json({ error: mensagem });
+    } finally {
+      client?.release();
     }
   });
 
   app.post('/api/contratos/:id/regenerar', auth, async (req: Request, res: Response) => {
     try {
+      if (!usuarioPodeEditarContrato(req)) {
+        res.status(403).json({ error: 'Apenas Administradores, Diretores e Gerentes podem regenerar contratos.' });
+        return;
+      }
       const contrato = await buscarContratoDetalhado(req.params.id);
       if (!contrato) { res.status(404).json({ error: 'Contrato não encontrado' }); return; }
+      if (contratoEstaAssinado(contrato)) {
+        res.status(409).json({ error: 'Contrato assinado não pode ter o PDF regenerado.' });
+        return;
+      }
       const { pdfPath, hash } = await renderizarPdfContratoExistente(contrato);
       const { rows } = await pool.query(
         `UPDATE contratos_gerados
             SET pdf_path=$1, hash_documento=$2, pdf_regenerado_em=NOW(), updated_at=NOW()
-          WHERE id=$3 RETURNING id, pdf_path, hash_documento, pdf_regenerado_em`,
+          WHERE id=$3 AND status <> 'assinado' AND assinado_em IS NULL AND assinado_pdf_path IS NULL
+          RETURNING id, pdf_path, hash_documento, pdf_regenerado_em`,
         [pdfPath, hash, req.params.id]
       );
+      if (!rows.length) {
+        res.status(409).json({ error: 'O contrato foi assinado e não pode mais ser regenerado.' });
+        return;
+      }
       res.json({ success: true, ...rows[0], pdf_url: `/uploads/contratos/${path.basename(pdfPath)}` });
     } catch (err) {
       console.error('[POST /api/contratos/:id/regenerar]', err);

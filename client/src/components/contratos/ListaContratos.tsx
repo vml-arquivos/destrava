@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Download, CheckCircle, XCircle, Trash2, Eye, RefreshCw, Upload } from 'lucide-react';
+import { Download, CheckCircle, XCircle, Trash2, Eye, RefreshCw, Upload, Pencil } from 'lucide-react';
 import { apiFetch, getToken } from '../../lib/api';
 import { toast } from 'sonner';
 
@@ -28,6 +28,8 @@ interface Contrato {
   created_at: string;
   pdf_path?: string;
   criado_por_nome?: string;
+  assinado_em?: string | null;
+  assinado_pdf_path?: string | null;
 }
 
 interface Props {
@@ -37,6 +39,8 @@ interface Props {
   userCargo?: string;
   podeTudo?: boolean;
   podeExcluir?: boolean;
+  podeEditar?: boolean;
+  onEdit?: (id: string) => void;
 }
 
 const formatBRL = (v: number | undefined | null) => {
@@ -57,6 +61,7 @@ const formatData = (value: string | null | undefined): string => {
 
 const tipoLabel: Record<string, string> = {
   assessoria:          'Assessoria',
+  assessoria_pf:       'Assessoria PF',
   limpa_nome:          'L. Nome',
   limpa_bacen:         'L. BACEN',
   rating:              'Rating',
@@ -65,6 +70,7 @@ const tipoLabel: Record<string, string> = {
 
 const tipoLabelFull: Record<string, string> = {
   assessoria:          'Assessoria',
+  assessoria_pf:       'Assessoria PF',
   limpa_nome:          'Limpa Nome',
   limpa_bacen:         'Limpa BACEN',
   rating:              'Rating',
@@ -73,6 +79,7 @@ const tipoLabelFull: Record<string, string> = {
 
 const tipoCor: Record<string, string> = {
   assessoria:          'bg-blue-100 text-blue-800',
+  assessoria_pf:       'bg-sky-100 text-sky-800',
   limpa_nome:          'bg-purple-100 text-purple-800',
   limpa_bacen:         'bg-indigo-100 text-indigo-800',
   rating:              'bg-amber-100 text-amber-800',
@@ -108,7 +115,7 @@ const nomeArquivoContrato = (contrato: Contrato): string => {
     .replace(/^-|-$/g, '')}.pdf`;
 };
 
-export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo, podeTudo, podeExcluir: podeExcluirProp }: Props) {
+export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo, podeTudo, podeExcluir: podeExcluirProp, podeEditar = false, onEdit }: Props) {
   const podeExcluirContrato = podeExcluirProp ?? podeExcluirCargo(userCargo);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deletingBatch, setDeletingBatch] = useState(false);
@@ -340,6 +347,7 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
               const tipoCorClass = tipoCor[c.tipo_contrato || ''] || 'bg-gray-100 text-gray-700';
               const numRef = c.protocolo_contrato || c.numero_contrato;
               const responsavel = c.responsavel_contrato_nome || c.criado_por_nome || '—';
+              const contratoAssinado = c.status === 'assinado' || !!c.assinado_em || !!c.assinado_pdf_path;
 
               return (
                 <tr
@@ -419,13 +427,24 @@ export function ListaContratos({ contratos, onStatusChange, onDelete, userCargo,
                       >
                         <Download className="w-3.5 h-3.5" />
                       </button>
-                      <button
-                        onClick={() => handleRegenerar(c.id)}
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-amber-200 bg-white hover:bg-amber-50 text-amber-600"
-                        title="Regenerar PDF"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                      </button>
+                      {podeEditar && !contratoAssinado && onEdit && (
+                        <button
+                          onClick={() => onEdit(c.id)}
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-cyan-200 bg-white hover:bg-cyan-50 text-cyan-700"
+                          title="Editar contrato"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {podeEditar && !contratoAssinado && (
+                        <button
+                          onClick={() => handleRegenerar(c.id)}
+                          className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-amber-200 bg-white hover:bg-amber-50 text-amber-600"
+                          title="Regenerar PDF"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button
                         onClick={() => handleUploadAssinado(c.id)}
                         className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-purple-200 bg-white hover:bg-purple-50 text-purple-600"
