@@ -1033,6 +1033,14 @@ export default function Empresas() {
   const [consultandoCpfSocioId, setConsultandoCpfSocioId] = useState<string | null>(null);
   const [simulacoesEmpresa, setSimulacoesEmpresa] = useState<any[]>([]);
   const [contratosEmpresa, setContratosEmpresa] = useState<any[]>([]);
+  // Confirmação antes de anexar/substituir o contrato assinado: como uma
+  // empresa pode ter mais de um tipo de contrato (assessoria, limpa nome,
+  // rating...), o modal deixa explícito QUAL contrato (número + tipo) está
+  // prestes a ser substituído, e exige confirmação de que as assinaturas de
+  // todas as partes foram conferidas antes de trocar o status pra "assinado".
+  const [modalAnexoAssinado, setModalAnexoAssinado] = useState<{ contrato: any; file: File } | null>(null);
+  const [confirmouAssinaturas, setConfirmouAssinaturas] = useState(false);
+  const [enviandoAnexoAssinado, setEnviandoAnexoAssinado] = useState(false);
   const [loadingDetalhe, setLoadingDetalhe] = useState(false);
   const [novaObs, setNovaObs] = useState("");
   const [novoFollowup, setNovoFollowup] = useState({ titulo: "", tipo: "ligacao", data_agendada: "", descricao: "" });
@@ -1269,6 +1277,7 @@ export default function Empresas() {
     }
   }
   async function handleAnexarContratoAssinado(contratoId: string, file: File) {
+    setEnviandoAnexoAssinado(true);
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -1286,9 +1295,20 @@ export default function Empresas() {
         const atualizada = await apiFetch(`/api/empresas/${selecionada.id}`).catch(() => null);
         if (atualizada) setSelecionada((prev) => (prev ? { ...prev, ...atualizada } : prev));
       }
+      setModalAnexoAssinado(null);
+      setConfirmouAssinaturas(false);
     } catch (err: any) {
       toast.error(err?.message || "Erro ao anexar contrato assinado");
+    } finally {
+      setEnviandoAnexoAssinado(false);
     }
+  }
+  // Abre a confirmação em vez de anexar direto -- garante que o colaborador
+  // vê explicitamente qual contrato (número + tipo) está prestes a substituir
+  // antes de o upload de verdade acontecer.
+  function abrirConfirmacaoAnexoAssinado(contrato: any, file: File) {
+    setConfirmouAssinaturas(false);
+    setModalAnexoAssinado({ contrato, file });
   }
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -2566,17 +2586,22 @@ export default function Empresas() {
                                       <Download className="w-3.5 h-3.5" />
                                     </button>
                                     <label
-                                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${assinado ? "text-slate-400 hover:text-purple-600 hover:bg-purple-50" : "text-amber-600 bg-amber-50 hover:bg-amber-100"}`}
+                                      className={
+                                        assinado
+                                          ? "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors text-slate-500 border border-slate-200 hover:bg-slate-50"
+                                          : "inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-bold cursor-pointer transition-colors text-white bg-amber-600 hover:bg-amber-700 shadow-sm"
+                                      }
                                       title={assinado ? "Substituir contrato assinado" : "Anexar contrato assinado -- ativa CENPROT semanal e CND mensal"}
                                     >
                                       <Upload className="w-3.5 h-3.5" />
+                                      {assinado ? "Substituir assinado" : "Anexar contrato assinado"}
                                       <input
                                         type="file"
                                         accept=".pdf"
                                         className="hidden"
                                         onChange={(e) => {
                                           const file = e.target.files?.[0];
-                                          if (file) handleAnexarContratoAssinado(cont.id, file);
+                                          if (file) abrirConfirmacaoAnexoAssinado(cont, file);
                                           e.currentTarget.value = "";
                                         }}
                                       />
@@ -2953,6 +2978,73 @@ export default function Empresas() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Confirmação antes de anexar/substituir o contrato assinado -- deixa
+          explícito qual contrato (número + tipo) está sendo trocado, já que
+          uma empresa pode ter mais de um tipo de contrato de prestação de
+          serviço firmado com a Destrava (assessoria, limpa nome, rating...).
+          Só depois de marcar a confirmação de que as assinaturas de todas as
+          partes foram conferidas é que o upload de verdade acontece. */}
+      {modalAnexoAssinado && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/70 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-start gap-3">
+              <div className="h-10 w-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <Upload className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-slate-800">Confirmar contrato assinado</p>
+                <p className="text-xs text-slate-500 mt-0.5">Confira se este é o contrato certo antes de enviar.</p>
+              </div>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs text-slate-400 uppercase font-semibold tracking-wide">Contrato que será substituído</p>
+                <p className="text-sm font-bold text-slate-800 mt-1">
+                  {modalAnexoAssinado.contrato.numero_contrato || modalAnexoAssinado.contrato.protocolo_contrato || `Contrato #${modalAnexoAssinado.contrato.id?.slice(0, 8)}`}
+                </p>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  📋 Tipo: <strong>{modalAnexoAssinado.contrato.tipo_contrato || "não especificado"}</strong>
+                </p>
+                <p className="text-xs text-slate-500 mt-1 truncate">📄 Arquivo: {modalAnexoAssinado.file.name}</p>
+              </div>
+              {contratosEmpresa.length > 1 && (
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5">
+                  Esta empresa tem {contratosEmpresa.length} contratos firmados. Confirme acima que o tipo é o mesmo do contrato que o cliente assinou antes de continuar.
+                </p>
+              )}
+              <label className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={confirmouAssinaturas}
+                  onChange={(e) => setConfirmouAssinaturas(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300"
+                />
+                <span>Confirmo que revisei o PDF anexado e as assinaturas de todas as partes (contratante e contratada) estão presentes, no local correto.</span>
+              </label>
+            </div>
+            <div className="px-5 py-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
+              <button
+                type="button"
+                onClick={() => { setModalAnexoAssinado(null); setConfirmouAssinaturas(false); }}
+                disabled={enviandoAnexoAssinado}
+                className="h-9 px-4 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAnexarContratoAssinado(modalAnexoAssinado.contrato.id, modalAnexoAssinado.file)}
+                disabled={!confirmouAssinaturas || enviandoAnexoAssinado}
+                className="h-9 px-4 rounded-lg bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                {enviandoAnexoAssinado ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                {enviandoAnexoAssinado ? "Enviando..." : "Confirmar e anexar"}
+              </button>
+            </div>
           </div>
         </div>
       )}

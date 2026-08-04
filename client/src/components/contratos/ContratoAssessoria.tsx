@@ -269,6 +269,43 @@ const S: Record<string, CSSProperties> = {
     color: '#475569',
     margin: '0 0 2px',
   },
+  // ── Grupo de assinaturas de UMA parte (CONTRATANTE ou CONTRATADA): cabeçalho
+  // com razão social/CNPJ + uma linha de cartões, um por assinante, cada um
+  // com sua própria linha e espaço de assinatura. Substitui o antigo sigBox
+  // compartilhado, que empilhava vários nomes de sócio sobre a mesma linha.
+  partyGroup: {
+    maxWidth: '180mm',
+    margin: '0 auto 22px',
+  },
+  partyHeading: {
+    fontSize: '8pt',
+    fontWeight: 800,
+    color: '#1e3a5f',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    textAlign: 'center',
+    margin: '0 0 14px',
+    paddingBottom: '4px',
+    borderBottom: '1px solid #cbd5e1',
+  },
+  indRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: '18px 16px',
+  },
+  indCard: {
+    flex: '0 1 52mm',
+    maxWidth: '58mm',
+    textAlign: 'center',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+  },
+  indSpace: {
+    height: '48px',
+    width: '100%',
+  },
   cityDate: {
     textAlign: 'right',
     margin: '28px 0 36px 0',
@@ -822,23 +859,38 @@ export function ContratoAssessoria({ dados, documentosAnexos = [], onClose, onGe
               <strong>{d.cidade_assinatura || 'BRASÍLIA – DF'}, {formatDate(d.data_assinatura)}.</strong>
             </p>
 
-            {/* Assinaturas — 1ª linha: CONTRATANTE e CONTRATADA */}
-            <div style={S.sigGrid}>
-              <div style={S.sigBox}>
-                <div style={S.sigLine} />
+            {/* Assinaturas — cada assinante com sua própria linha/espaço,
+                agrupados por parte (CONTRATANTE / CONTRATADA) sob um
+                cabeçalho com razão social e CNPJ. Antes, quando havia mais de
+                um sócio assinante, todos os nomes eram empilhados como texto
+                sobre UMA ÚNICA linha/espaço compartilhado (sigBox) -- não é
+                profissional pedir que várias pessoas assinem fisicamente na
+                mesma linha. */}
+            <div style={S.partyGroup}>
+              <p style={S.partyHeading}>
+                CONTRATANTE — {d.empresa_razao_social || 'CONTRATANTE'}{d.empresa_cnpj ? ` · CNPJ: ${d.empresa_cnpj}` : ''}
+              </p>
+              <div style={S.indRow}>
                 {assinantesContratante.map((s, i) => (
-                  <p key={`${s.nome}-${i}`} style={S.sigName}>{s.nome}</p>
+                  <div key={`${s.nome}-${i}`} style={S.indCard}>
+                    <div style={S.indSpace} />
+                    <div style={S.sigLine} />
+                    <p style={S.sigName}>{s.nome}</p>
+                    {s.cpf && <p style={S.sigSub}>CPF: {s.cpf}</p>}
+                    {(s.cargo || (s as SignatarioContratanteAssessoria).qualificacao) && <p style={S.sigSub}>{s.cargo || (s as SignatarioContratanteAssessoria).qualificacao}</p>}
+                  </div>
                 ))}
-                <p style={S.sigName}>{d.empresa_razao_social || 'CONTRATANTE'}</p>
-                {d.empresa_cnpj && <p style={S.sigSub}>CNPJ: {d.empresa_cnpj}</p>}
-                <p style={S.sigSub}>CONTRATANTE</p>
               </div>
-              <div style={S.sigBox}>
-                <div style={S.sigLine} />
-                <p style={S.sigName}>{representanteContratada}</p>
-                <p style={S.sigName}>DESTRAVA CRÉDITO LTDA</p>
-                <p style={S.sigSub}>CNPJ: 35.427.182/0001-66</p>
-                <p style={S.sigSub}>CONTRATADA</p>
+            </div>
+            <div style={S.partyGroup}>
+              <p style={S.partyHeading}>CONTRATADA — DESTRAVA CRÉDITO LTDA · CNPJ: 35.427.182/0001-66</p>
+              <div style={S.indRow}>
+                <div style={S.indCard}>
+                  <div style={S.indSpace} />
+                  <div style={S.sigLine} />
+                  <p style={S.sigName}>{representanteContratada}</p>
+                  <p style={S.sigSub}>Sócio Administrador</p>
+                </div>
               </div>
             </div>
 
