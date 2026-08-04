@@ -2494,7 +2494,7 @@ export default function Empresas() {
                         <div className="flex items-center justify-between mb-2">
                           <div>
                             <h3 className="text-sm font-semibold text-slate-700">Contratos Firmados</h3>
-                            <p className="text-xs text-slate-400 mt-0.5">Acordos e termos de serviço gerados e assinados entre a plataforma e o cliente.</p>
+                            <p className="text-xs text-slate-400 mt-0.5">Contrato de prestação de serviços entre a Destrava e o cliente. Ao gerar, fica "aguardando assinatura"; a prestação de serviço só começa depois que o contrato assinado é anexado aqui.</p>
                           </div>
                           <span className="text-xs text-slate-400">{contratosEmpresa.length} registro(s)</span>
                         </div>
@@ -2505,25 +2505,26 @@ export default function Empresas() {
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            {contratosEmpresa.map((cont: any) => (
-                              <div key={cont.id} className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors">
-                                <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center shrink-0">
-                                  <span className="text-base">📄</span>
+                            {contratosEmpresa.map((cont: any) => {
+                              const assinado = cont.status === "assinado" || cont.status === "ativo";
+                              const cancelado = cont.status === "cancelado";
+                              const statusLabel = assinado ? "Assinado" : cancelado ? "Cancelado" : "Aguardando assinatura";
+                              const statusCls = assinado ? "bg-green-100 text-green-700" : cancelado ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700";
+                              return (
+                              <div key={cont.id} className={`flex items-start gap-3 p-3 rounded-xl border bg-white hover:bg-slate-50 transition-colors ${assinado ? "border-slate-200" : cancelado ? "border-red-100" : "border-amber-200"}`}>
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${assinado ? "bg-green-50" : cancelado ? "bg-red-50" : "bg-amber-50"}`}>
+                                  <span className="text-base">{assinado ? "✅" : cancelado ? "🚫" : "⏳"}</span>
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <p className="text-sm font-medium text-slate-800">
                                       {cont.numero_contrato || cont.protocolo_contrato || `Contrato #${cont.id?.slice(0,8)}`}
                                     </p>
-                                    {cont.status && (
-                                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
-                                        cont.status === "ativo" || cont.status === "assinado" ? "bg-green-100 text-green-700" :
-                                        cont.status === "cancelado" ? "bg-red-100 text-red-700" :
-                                        cont.status === "pendente" ? "bg-yellow-100 text-yellow-700" :
-                                        "bg-slate-100 text-slate-600"
-                                      }`}>{cont.status}</span>
-                                    )}
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${statusCls}`}>{statusLabel}</span>
                                   </div>
+                                  {!assinado && !cancelado && (
+                                    <p className="text-[11px] text-amber-700 mt-1">Contrato gerado, aguardando o cliente assinar. A prestação de serviço (CENPROT semanal, CND mensal) só começa depois que o contrato assinado for anexado abaixo.</p>
+                                  )}
                                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
                                     {cont.tipo_contrato && (
                                       <span className="text-xs text-slate-500">📋 {cont.tipo_contrato}</span>
@@ -2533,9 +2534,9 @@ export default function Empresas() {
                                         💰 {Number(cont.valor_contrato).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                                       </span>
                                     )}
-                                    {cont.data_assinatura && (
-                                      <span className="text-xs text-slate-500">
-                                        ✍️ {new Date(cont.data_assinatura).toLocaleDateString("pt-BR")}
+                                    {cont.assinado_em && (
+                                      <span className="text-xs text-emerald-600 font-medium">
+                                        ✍️ Assinado em {new Date(cont.assinado_em).toLocaleDateString("pt-BR")}
                                       </span>
                                     )}
                                   </div>
@@ -2544,7 +2545,7 @@ export default function Empresas() {
                                       <span className="text-xs text-slate-400">👤 {cont.responsavel_nome}</span>
                                     )}
                                     <span className="text-xs text-slate-400">
-                                      {cont.created_at ? new Date(cont.created_at).toLocaleDateString("pt-BR") : "—"}
+                                      Gerado em {cont.created_at ? new Date(cont.created_at).toLocaleDateString("pt-BR") : "—"}
                                     </span>
                                   </div>
                                 </div>
@@ -2565,8 +2566,8 @@ export default function Empresas() {
                                       <Download className="w-3.5 h-3.5" />
                                     </button>
                                     <label
-                                      className="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
-                                      title={cont.status === "assinado" ? "Substituir contrato assinado" : "Anexar contrato assinado -- ativa CENPROT semanal e CND mensal"}
+                                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${assinado ? "text-slate-400 hover:text-purple-600 hover:bg-purple-50" : "text-amber-600 bg-amber-50 hover:bg-amber-100"}`}
+                                      title={assinado ? "Substituir contrato assinado" : "Anexar contrato assinado -- ativa CENPROT semanal e CND mensal"}
                                     >
                                       <Upload className="w-3.5 h-3.5" />
                                       <input
@@ -2583,7 +2584,8 @@ export default function Empresas() {
                                   </div>
                                 )}
                               </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         )}
                       </div>

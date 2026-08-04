@@ -6030,6 +6030,7 @@ async function startServer() {
              FROM documentos_arquivos
             WHERE entidade_tipo = 'empresa' AND (entidade_id = $1 OR empresa_id = $1)
               AND excluido_em IS NULL AND COALESCE(status,'ativo') NOT IN ('excluido')
+              AND tipo_documento NOT IN ('contrato_prestacao_servicos','contrato_assessoria')
             ORDER BY criado_em DESC`,
           [empresaId],
         );
@@ -6091,6 +6092,7 @@ async function startServer() {
            FROM public.documentos_arquivos
           WHERE entidade_tipo = 'empresa' AND (entidade_id = $1 OR empresa_id = $1)
             AND excluido_em IS NULL AND status <> 'excluido'
+            AND tipo_documento NOT IN ('contrato_prestacao_servicos','contrato_assessoria')
           ORDER BY tipo_documento, criado_em ASC`,
         [empresaId],
       );
@@ -6138,6 +6140,7 @@ async function startServer() {
              FROM documentos_arquivos
             WHERE entidade_tipo = 'empresa' AND (entidade_id = $1 OR empresa_id = $1)
               AND excluido_em IS NULL AND COALESCE(status,'ativo') NOT IN ('excluido')
+              AND tipo_documento NOT IN ('contrato_prestacao_servicos','contrato_assessoria')
             ORDER BY criado_em DESC`,
           [empresaId],
         );
@@ -6358,6 +6361,7 @@ async function startServer() {
              FROM documentos_arquivos
             WHERE entidade_tipo = 'empresa' AND (entidade_id = $1 OR empresa_id = $1)
               AND excluido_em IS NULL AND COALESCE(status,'ativo') NOT IN ('excluido')
+              AND tipo_documento NOT IN ('contrato_prestacao_servicos','contrato_assessoria')
             ORDER BY criado_em DESC`,
           [empresaId],
         );
@@ -6399,6 +6403,7 @@ async function startServer() {
         `SELECT * FROM public.documentos_arquivos
           WHERE entidade_tipo = 'empresa' AND (entidade_id = $1 OR empresa_id = $1)
             AND excluido_em IS NULL AND status <> 'excluido'
+            AND tipo_documento NOT IN ('contrato_prestacao_servicos','contrato_assessoria')
           ORDER BY tipo_documento, criado_em DESC`,
         [empresaId],
       );
@@ -7033,7 +7038,9 @@ async function startServer() {
            cg.status,
            cg.valor_contrato,
            cg.data_assinatura,
+           cg.assinado_em,
            cg.pdf_path,
+           cg.assinado_pdf_path,
            cg.created_at,
            cg.updated_at,
            col_resp.nome AS responsavel_nome
@@ -7884,14 +7891,43 @@ async function startServer() {
       : representantePrincipalContratante.nome
         ? [representantePrincipalContratante]
         : [];
-    const linhasAssinantesContratanteHtml = assinantesContratante.map((s: any) => `
-      <p class="sig-name-label">${escapeHtmlContrato(s.nome || '')}</p>
-    `).join('');
     const representanteContratadaNome = contratada.representante || 'FERNANDO ELI OLIVEIRA MARQUES';
     const representantesTexto = representantesContratante
       .map((s: any) => `${s.nome || ''}${s.cpf ? `, CPF n° ${s.cpf}` : ''}${s.cargo || s.qualificacao ? `, ${s.cargo || s.qualificacao}` : ''}`)
       .filter(Boolean)
       .join('; ');
+
+    // ── Bloco de assinaturas profissionalizado ──────────────────────────────
+    // Antes, quando a CONTRATANTE tinha mais de um sócio assinante, todos os
+    // nomes eram empilhados como texto sobre UMA ÚNICA linha/espaço de
+    // assinatura compartilhada -- várias pessoas teriam que assinar
+    // fisicamente na mesma linha, o que não é profissional nem segue prática
+    // usual de contrato brasileiro com múltiplos representantes. Agora cada
+    // assinante (sócio, diretor etc.) recebe seu próprio espaço, sua própria
+    // linha, nome, CPF e qualificação -- os assinantes de uma mesma parte
+    // ficam agrupados sob um cabeçalho com a razão social/CNPJ daquela parte,
+    // sem nenhuma assinatura dividindo linha com outra.
+    type AssinaturaIndividual = { nome: string; cpf?: string; papel?: string };
+    const cartaoAssinaturaIndividual = (a: AssinaturaIndividual): string => `
+      <div class="sig-ind-card">
+        <div class="sig-space"></div>
+        <div class="sig-line-bar"></div>
+        <p class="sig-name-label">${escapeHtmlContrato(a.nome || '')}</p>
+        ${a.cpf ? `<p class="sig-detail">CPF: ${escapeHtmlContrato(a.cpf)}</p>` : ''}
+        ${a.papel ? `<p class="sig-detail">${escapeHtmlContrato(a.papel)}</p>` : ''}
+      </div>`;
+    const grupoAssinaturaParte = (papelParte: string, nomeParte: string, documento: string, labelDocumento: string, assinantes: AssinaturaIndividual[]): string => `
+      <div class="sig-party-group">
+        <p class="sig-party-heading">${escapeHtmlContrato(papelParte)} — ${escapeHtmlContrato(nomeParte || papelParte)}${documento ? ` · ${labelDocumento}: ${escapeHtmlContrato(documento)}` : ''}</p>
+        <div class="sig-ind-row">
+          ${assinantes.map(cartaoAssinaturaIndividual).join('')}
+        </div>
+      </div>`;
+    const assinantesContratanteInfo: AssinaturaIndividual[] = (assinantesContratante.length ? assinantesContratante : [{ nome: contratante.razao_social || 'CONTRATANTE' }])
+      .map((s: any) => ({ nome: s.nome || '', cpf: s.cpf || s.documento || '', papel: s.cargo || s.qualificacao || '' }));
+    const assinantesContratadaInfo: AssinaturaIndividual[] = [
+      { nome: representanteContratadaNome, cpf: contratada.cpf_representante || '', papel: contratada.cargo_representante || 'Representante legal' },
+    ];
 
     const body = `
 <h1 class="doc-title">CONTRATO DE ASSESSORIA EMPRESARIAL PARA ACESSO A LINHAS DE CRÉDITO</h1>
@@ -8016,29 +8052,14 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, 
 
 <div class="sig-final-block">
 
-  <!-- ── 1ª linha: CONTRATANTE e CONTRATADA ── -->
-  <div class="sig-main-grid sig-main-grid--2">
-    <div class="sig-card">
-      <div class="sig-space"></div>
-      <div class="sig-line-bar"></div>
-      ${linhasAssinantesContratanteHtml}
-      <p class="sig-name-label">${escapeHtmlContrato(contratante.razao_social || 'CONTRATANTE')}</p>
-      <p class="sig-detail">CNPJ: ${escapeHtmlContrato(contratante.cnpj || '')}</p>
-      <p class="sig-role">CONTRATANTE</p>
-    </div>
-    <div class="sig-card">
-      <div class="sig-space"></div>
-      <div class="sig-line-bar"></div>
-      <p class="sig-name-label">${escapeHtmlContrato(representanteContratadaNome)}</p>
-      <p class="sig-name-label">${escapeHtmlContrato(contratada.razao_social || 'CONTRATADA')}</p>
-      <p class="sig-detail">CNPJ: ${escapeHtmlContrato(contratada.cnpj || '')}</p>
-      <p class="sig-role">CONTRATADA</p>
-    </div>
-  </div>
+  <!-- ── Cada parte com seus assinantes individuais, um por um, cada qual com
+       sua própria linha e espaço de assinatura -- nunca dividindo linha. ── -->
+  ${grupoAssinaturaParte('CONTRATANTE', contratante.razao_social, contratante.cnpj, 'CNPJ', assinantesContratanteInfo)}
+  ${grupoAssinaturaParte('CONTRATADA', contratada.razao_social, contratada.cnpj, 'CNPJ', assinantesContratadaInfo)}
 
   <div class="sig-divider"></div>
 
-  <!-- ── 2ª linha: UMA TESTEMUNHA à esquerda e PARCEIRO COMERCIAL à direita ── -->
+  <!-- ── TESTEMUNHA e, se houver, PARCEIRO COMERCIAL ── -->
   <div class="sig-witness-grid">
     <div class="sig-witness-card">
       <div class="sig-witness-space"></div>
@@ -8076,6 +8097,41 @@ ${temParceiro ? `<p class="clause"><strong>6.1</strong> - O PARCEIRO COMERCIAL, 
       margin-top: 36px;
       page-break-inside: avoid;
       break-inside: avoid;
+    }
+
+    /* ── Grupo de assinaturas de UMA parte (CONTRATANTE ou CONTRATADA):
+       cabeçalho com razão social/CNPJ + uma linha de cartões, um por
+       assinante, cada um com sua própria linha e espaço de assinatura. ── */
+    .sig-party-group {
+      margin: 0 auto 12mm;
+      max-width: 185mm;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .sig-party-heading {
+      font-size: 8pt;
+      font-weight: 800;
+      color: #1e3a5f;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      text-align: center;
+      margin: 0 0 8mm;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #cbd5e1;
+    }
+    .sig-ind-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10mm 8mm;
+    }
+    .sig-ind-card {
+      flex: 0 1 52mm;
+      max-width: 58mm;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
 
     /* Grade principal: 3 colunas (com parceiro) ou 2 colunas */

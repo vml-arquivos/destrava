@@ -195,7 +195,6 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
     titulo: "Documentação da Empresa",
     descricao: "Todo o restante referente à empresa: contrato social, consultas e certidões do CNPJ, fiscal/tributário, faturamento, eCAC, fotos e outros.",
     slots: [
-      slot("Contrato de prestação de serviços", "contrato_prestacao_servicos", ["contrato_assessoria"]),
       slot("Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Pode receber mais de um arquivo: contrato inicial e alterações." }),
       slot("Relatório SCR/Registrato (CNPJ)", "rating_bacen_cnpj", ["scr_cnpj"]),
       slot("Consulta CENPROT (CNPJ)", "cenprot_cnpj"),
@@ -254,6 +253,17 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
 const TODOS_SLOTS = SECOES_DOCUMENTAIS.flatMap((secao) => secao.slots);
 const TIPO_PARA_SLOT = new Map<string, DocumentoSlot>();
 TODOS_SLOTS.forEach((documentoSlot) => documentoSlot.matchTipos.forEach((tipo) => TIPO_PARA_SLOT.set(tipo, documentoSlot)));
+
+// O contrato de prestação de serviços entre a Destrava e a empresa não é um
+// documento de análise de crédito -- é um documento operacional que já tem
+// seu próprio lugar (aba "Contratos Firmados", com o ciclo gerado -> assinado).
+// Excluído de forma explícita aqui (não só removido de SECOES_DOCUMENTAIS)
+// porque, sem isso, o mecanismo de segurança que nunca esconde um tipo de
+// documento já anexado (`docs.forEach((doc) => set.add(doc.tipo_documento))`
+// em slotsDaTela) faria ele reaparecer sozinho na seção "Outros documentos do
+// sistema" assim que um contrato assinado fosse anexado -- o arquivo continua
+// 100% acessível pela aba Contratos Firmados, só não é exibido nesta tela.
+const TIPOS_FORA_DO_CHECKLIST_CREDITO = new Set(["contrato_prestacao_servicos", "contrato_assessoria"]);
 
 export function labelTipoDocumento(tipo: string) {
   const documentoSlot = TIPO_PARA_SLOT.get(tipo);
@@ -341,13 +351,21 @@ export default function DocumentosEntidade({
     setLoading(true);
     try {
       const data = await apiFetch(`/api/documentos?${query}`);
-      setDocs(Array.isArray(data) ? data : []);
+      const lista = Array.isArray(data) ? data : [];
+      // O contrato de prestação de serviços (Destrava <-> empresa) não é documento
+      // de análise de crédito -- vive só na aba "Contratos Firmados". Filtrado
+      // apenas para entidadeTipo="empresa" (esta tela específica de Acervo
+      // Documental); o arquivo em si nunca é tocado, só não some aqui.
+      const filtrada = entidadeTipo === "empresa"
+        ? lista.filter((doc: DocumentoArquivo) => !TIPOS_FORA_DO_CHECKLIST_CREDITO.has(doc.tipo_documento))
+        : lista;
+      setDocs(filtrada);
     } catch (err: any) {
       toast.error(err?.message || "Erro ao carregar documentos.");
     } finally {
       setLoading(false);
     }
-  }, [entidadeId, query]);
+  }, [entidadeId, query, entidadeTipo]);
 
   useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
