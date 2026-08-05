@@ -95,6 +95,8 @@ export interface Inteligencia360Result {
   pendencias_credito: string[];
   pendencias_faturamento: string[];
   pendencias_cadastrais: string[];
+  pontos_atencao: string[];
+  consistencia_documental_avancada: ConsistenciaDocumentalAvancada360;
 
   // Histórico
   simulacoes: any[];
@@ -125,6 +127,30 @@ export interface Inteligencia360Result {
   // vazios), preservando compatibilidade com o comportamento anterior.
   automacao_engine: AutomacaoEngineResumo;
   recomendacoes_automacao: string[];
+}
+
+export interface AlertaDocumental360 {
+  codigo: string;
+  mensagem: string;
+  severidade: "critica" | "alta" | "media" | "baixa";
+  recomendacao?: string;
+  tipo_analise?: string;
+}
+
+export interface ConsistenciaDocumentalAvancada360 {
+  disponivel: boolean;
+  analises_processadas: number;
+  tipos_analisados: string[];
+  alertas: AlertaDocumental360[];
+  total_criticos: number;
+  total_altos: number;
+  total_medios: number;
+  total_baixos: number;
+  penalidade_score: number;
+}
+
+interface Queryable360 {
+  query: (text: string, values?: any[]) => Promise<{ rows: any[] }>;
 }
 
 export interface AutomacaoEngineAcompanhamentoResumo {
@@ -160,6 +186,140 @@ function safeNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function parseJsonSeguro(value: unknown): any {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try { return JSON.parse(String(value)); } catch { return null; }
+}
+
+function normalizarSeveridade360(value: unknown): AlertaDocumental360["severidade"] {
+  const text = String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (text.includes("critic")) return "critica";
+  if (text.includes("alt")) return "alta";
+  if (text.includes("baix")) return "baixa";
+  return "media";
+}
+
+function consolidarConsistenciaDocumental(analisesInput: unknown): ConsistenciaDocumentalAvancada360 {
+  const analises = safeArray<any>(analisesInput);
+  const alertas: AlertaDocumental360[] = [];
+  const tipos = new Set<string>();
+  const vistos = new Set<string>();
+
+  for (const analise of analises) {
+    const resultado = parseJsonSeguro(analise?.resultado) || {};
+    const tipo = String(resultado?.tipo_analise || analise?.tipo_analise || analise?.prompt_codigo || analise?.tipo_documento || "analise_documental");
+    tipos.add(tipo);
+    const lista = safeArray<any>(resultado?.alertas).length > 0
+      ? safeArray<any>(resultado.alertas)
+      : safeArray<any>(analise?.pendencias);
+    for (const item of lista) {
+      const mensagem = String(item?.mensagem || item?.descricao || "Divergência documental identificada.").trim();
+      const codigo = String(item?.codigo || `${tipo}_${mensagem}`).trim();
+      const key = `${codigo}|${mensagem}`;
+      if (vistos.has(key)) continue;
+      vistos.add(key);
+      alertas.push({
+        codigo,
+        mensagem,
+        severidade: normalizarSeveridade360(item?.severidade),
+        recomendacao: item?.recomendacao ? String(item.recomendacao) : undefined,
+        tipo_analise: tipo,
+      });
+    }
+  }
+
+  const total_criticos = alertas.filter(a => a.severidade === "critica").length;
+  const total_altos = alertas.filter(a => a.severidade === "alta").length;
+  const total_medios = alertas.filter(a => a.severidade === "media").length;
+  const total_baixos = alertas.filter(a => a.severidade === "baixa").length;
+  const penalidade_score = Math.min(35, total_criticos * 15 + total_altos * 8 + total_medios * 3 + total_baixos);
+
+  return {
+    disponivel: analises.length > 0,
+    analises_processadas: analises.length,
+    tipos_analisados: Array.from(tipos),
+    alertas,
+    total_criticos,
+    total_altos,
+    total_medios,
+    total_baixos,
+    penalidade_score,
+  };
+}
+
+function elevarRisco(
+  atual: Inteligencia360Result["risco_credito"],
+  consistencia: ConsistenciaDocumentalAvancada360,
+): Inteligencia360Result["risco_credito"] {
+  const ordem = { baixo: 0, medio: 1, alto: 2, critico: 3 } as const;
+  let alvo: Inteligencia360Result["risco_credito"] = "baixo";
+  if (consistencia.total_criticos > 0) alvo = "critico";
+  else if (consistencia.total_altos > 0) alvo = "alto";
+  else if (consistencia.total_medios > 0) alvo = "medio";
+  return ordem[alvo] > ordem[atual] ? alvo : atual;
+}
+
+function recomendacoesConsistenciaDocumental(consistencia: ConsistenciaDocumentalAvancada360): Recomendacao360[] {
+  const recomendacoes: Recomendacao360[] = [];
+  const alertasQsa = consistencia.alertas.filter(a => /qsa/i.test(`${a.codigo} ${a.tipo_analise || ""}`));
+  const alertasSimples = consistencia.alertas.filter(a => /simples/i.test(`${a.codigo} ${a.tipo_analise || ""}`));
+  const alertasJunta = consistencia.alertas.filter(a => /junta|atos_junta/i.test(`${a.codigo} ${a.tipo_analise || ""}`));
+
+  if (alertasQsa.length > 0) {
+    recomendacoes.push({
+      titulo: "Solicitar novo QSA atualizado",
+      prioridade: alertasQsa.some(a => ["critica", "alta"].includes(a.severidade)) ? "alta" : "media",
+      motivo: "A análise documental identificou divergências entre o quadro societário anexado e os dados cadastrais.",
+      acao: "Solicitar QSA, contrato social ou alteração contratual atualizada e revisar os sócios.",
+      modulo: "documentos",
+    });
+  }
+  if (alertasSimples.length > 0) {
+    recomendacoes.push({
+      titulo: "Verificar situação do Simples Nacional",
+      prioridade: alertasSimples.some(a => ["critica", "alta"].includes(a.severidade)) ? "alta" : "media",
+      motivo: "Há alerta relacionado à condição tributária ou possível exclusão do Simples Nacional.",
+      acao: "Consultar o Portal do Simples Nacional e anexar comprovante atualizado.",
+      modulo: "documentos",
+    });
+  }
+  if (alertasJunta.length > 0) {
+    recomendacoes.push({
+      titulo: "Validar alterações recentes na Junta Comercial",
+      prioridade: alertasJunta.some(a => ["critica", "alta"].includes(a.severidade)) ? "alta" : "media",
+      motivo: "Ato societário recente ou divergente pode alterar sócios, razão social ou capital social.",
+      acao: "Conferir o último ato arquivado e atualizar os dados empresariais antes da decisão de crédito.",
+      modulo: "documentos",
+    });
+  }
+  return recomendacoes;
+}
+
+export async function buscarAnalisesDocumentaisAvancadas(empresaId: string, db: Queryable360): Promise<any[]> {
+  try {
+    const { rows } = await db.query(
+      `SELECT DISTINCT ON (dei.prompt_codigo)
+              dei.id, dei.arquivo_id, dei.status, dei.prompt_codigo, dei.modelo,
+              dei.resultado, dei.campos_extraidos, dei.pendencias, dei.erros,
+              dei.nivel_confianca, dei.processado_em, dei.atualizado_em,
+              da.tipo_documento
+         FROM public.documentos_extracoes_ia dei
+         JOIN public.documentos_arquivos da ON da.id = dei.arquivo_id
+        WHERE (da.empresa_id = $1 OR (da.entidade_tipo = 'empresa' AND da.entidade_id = $1))
+          AND da.excluido_em IS NULL
+          AND dei.prompt_codigo = ANY($2::text[])
+          AND dei.status IN ('concluido', 'revisao_humana')
+        ORDER BY dei.prompt_codigo, dei.processado_em DESC NULLS LAST, dei.atualizado_em DESC`,
+      [empresaId, ["qsa_extract", "simples_extract", "atos_junta_extract"]],
+    );
+    return safeArray<any>(rows);
+  } catch (error: any) {
+    console.warn("[inteligencia360Service] Análises documentais avançadas indisponíveis; fluxo determinístico preservado:", error?.message || error);
+    return [];
+  }
 }
 
 function calcularScoreDestrava(params: {
@@ -712,11 +872,15 @@ export function calcularInteligencia360(params: {
   acompanhamentoAtivo?: any | null;
   atualizacoesAcompanhamento?: any[];
   eventosRotina?: any[];
+  // Resultados persistidos de QSA, Simples e atos da Junta. Opcional para preservar chamadores existentes.
+  analisesDocumentais?: any[];
 }): Inteligencia360Result {
   const { empresa, socios, documentos, simulacoes, contratos, historico, followups } = params;
   const acompanhamentoAtivo = params.acompanhamentoAtivo ?? null;
   const atualizacoesAcompanhamento = safeArray<any>(params.atualizacoesAcompanhamento);
   const eventosRotina = safeArray<any>(params.eventosRotina);
+  const analisesDocumentais = safeArray<any>(params.analisesDocumentais);
+  const consistencia_documental_avancada = consolidarConsistenciaDocumental(analisesDocumentais);
 
   // Garantir arrays seguros
   const socsArr = safeArray<any>(socios);
@@ -729,18 +893,21 @@ export function calcularInteligencia360(params: {
   // Cálculos principais
   const saude_cadastral = classificarSaudeCadastral(empresa);
   const saude_documental = classificarSaudeDocumental(docsArr);
-  const risco_documental = classificarRiscoDocumental(empresa, docsArr, socsArr);
-  const risco_credito = classificarRiscoCredito(empresa, socsArr);
+  let risco_documental = classificarRiscoDocumental(empresa, docsArr, socsArr);
+  let risco_credito = classificarRiscoCredito(empresa, socsArr);
   const prontidao_contrato = calcularProntidaoContrato(empresa, socsArr, docsArr);
   const prontidao_proposta_bancaria = calcularProntidaoProposta(empresa, docsArr, simsArr);
 
-  const score_destrava = calcularScoreDestrava({
+  const scoreBase = calcularScoreDestrava({
     empresa,
     socios: socsArr,
     documentos: docsArr,
     simulacoes: simsArr,
     contratos: contsArr,
   });
+  const score_destrava = Math.max(0, scoreBase - consistencia_documental_avancada.penalidade_score);
+  risco_credito = elevarRisco(risco_credito, consistencia_documental_avancada);
+  risco_documental = elevarRisco(risco_documental, consistencia_documental_avancada);
 
   // Documentos
   const documentos_com_arquivo = docsArr.filter(d => d?.arquivo_path || d?.url || d?.file_path).length;
@@ -756,6 +923,13 @@ export function calcularInteligencia360(params: {
   // Pendências
   const { pendencias, pendencias_contrato, pendencias_credito, pendencias_faturamento, pendencias_cadastrais } =
     gerarPendencias(empresa, socsArr, docsArr);
+
+  const pontos_atencao = consistencia_documental_avancada.alertas.map((alerta) => alerta.mensagem);
+  for (const alerta of consistencia_documental_avancada.alertas) {
+    if (!pendencias.some((item) => item.descricao === alerta.mensagem)) {
+      pendencias.push({ tipo: "documental", descricao: alerta.mensagem, severidade: alerta.severidade });
+    }
+  }
 
   // Automation Engine
   const contratoAssessoriaAtivo = contsArr.find(
@@ -778,6 +952,12 @@ export function calcularInteligencia360(params: {
     contratos: contsArr,
     pendencias,
   });
+  const recomendacoesDocumentais = recomendacoesConsistenciaDocumental(consistencia_documental_avancada);
+  for (const recomendacao of recomendacoesDocumentais) {
+    if (!recomendacoes.some((item) => item.titulo === recomendacao.titulo)) recomendacoes.push(recomendacao);
+  }
+  const ordemPrioridade = { alta: 0, media: 1, baixa: 2 } as const;
+  recomendacoes.sort((a, b) => ordemPrioridade[a.prioridade] - ordemPrioridade[b.prioridade]);
 
   // Diagnóstico e caminho
   const diagnostico_geral = gerarDiagnosticoGeral({
@@ -870,6 +1050,8 @@ export function calcularInteligencia360(params: {
     pendencias_credito,
     pendencias_faturamento,
     pendencias_cadastrais,
+    pontos_atencao,
+    consistencia_documental_avancada,
 
     simulacoes: simsArr,
     contratos: contsArr,
@@ -884,7 +1066,7 @@ export function calcularInteligencia360(params: {
     caminho_sugerido,
 
     gerado_em: new Date().toISOString(),
-    fonte: "deterministica",
+    fonte: consistencia_documental_avancada.disponivel ? "ia_assistida" : "deterministica",
 
     automacao_engine,
     recomendacoes_automacao,

@@ -3,6 +3,7 @@ import { Router, Request, Response } from 'express';
 import pkg from 'pg';
 import { auth } from '../middleware/auth';
 import { analisarCnpjReceitaCartaoEmpresa, buscarUltimaAnaliseCnpjEmpresa, limparAnalisesCnpjEmpresa } from '../services/analiseCnpjReceitaCartao';
+import { analiseDocumentalService, type TipoAnaliseDocumental } from '../services/analiseDocumentalEspecializada';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -737,16 +738,196 @@ router.delete('/blocos/:blocoEntidadeId/documentos/:documentoId', auth, async (r
   }
 });
 
+const ANALISE_ESPECIALIZADA_POR_TIPO: Partial<Record<string, { tipo: TipoAnaliseDocumental; promptCodigo: string }>> = {
+  qsa: { tipo: 'qsa', promptCodigo: 'qsa_extract' },
+  simples_nacional: { tipo: 'simples_nacional', promptCodigo: 'simples_extract' },
+  atos_junta_comercial: { tipo: 'atos_junta_comercial', promptCodigo: 'atos_junta_extract' },
+};
+
+async function executarAnaliseDocumentalEspecializada(params: {
+  extracaoId: string;
+  empresaId: string;
+  arquivoId: string;
+  tipo: TipoAnaliseDocumental;
+}) {
+  const { extracaoId, empresaId, arquivoId, tipo } = params;
+  try {
+    await pool.query(
+      `UPDATE public.documentos_extracoes_ia
+          SET status = 'processando', erros = '[]'::jsonb
+        WHERE id = $1`,
+      [extracaoId],
+    );
+
+    const resultado = tipo === 'qsa'
+      ? await analiseDocumentalService.analisarQSA(empresaId, arquivoId)
+      : tipo === 'simples_nacional'
+        ? await analiseDocumentalService.analisarSimplesNacional(empresaId, arquivoId)
+        : await analiseDocumentalService.analisarAtosJuntaComercial(empresaId, arquivoId);
+
+    await pool.query(
+      `UPDATE public.documentos_extracoes_ia
+          SET status = $2,
+              modelo = $3,
+              campos_extraidos = $4::jsonb,
+              resultado = $5::jsonb,
+              nivel_confianca = $6,
+              pendencias = $7::jsonb,
+              erros = '[]'::jsonb,
+              processado_em = NOW()
+        WHERE id = $1`,
+      [
+        extracaoId,
+        resultado.status,
+        resultado.modelo_ia,
+        JSON.stringify(resultado.dados_extraidos || {}),
+        JSON.stringify(resultado),
+        resultado.nivel_confianca,
+        JSON.stringify(resultado.alertas || []),
+      ],
+    );
+  } catch (error: any) {
+    console.warn('[AnaliseDocumentalEspecializada] Falha controlada na análise:', tipo, arquivoId, error?.message || error);
+    await pool.query(
+      `UPDATE public.documentos_extracoes_ia
+          SET status = 'falhou',
+              resultado = $2::jsonb,
+              erros = $3::jsonb,
+              processado_em = NOW()
+        WHERE id = $1`,
+      [
+        extracaoId,
+        JSON.stringify({ tipo_analise: tipo, empresa_id: empresaId, arquivo_id: arquivoId, status: 'falhou' }),
+        JSON.stringify([{ codigo: 'analise_documental_falhou', mensagem: String(error?.message || 'Falha não identificada') }]),
+      ],
+    ).catch((updateError: any) => {
+      console.warn('[AnaliseDocumentalEspecializada] Não foi possível registrar a falha da extração:', updateError?.message || updateError);
+    });
+  }
+}
+
+async function registrarExtracaoEspecializada(params: {
+  arquivoId: string;
+  blocoEntidadeId: string | null;
+  promptCodigo: string;
+}) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`documento-ia:${params.arquivoId}:${params.promptCodigo}`]);
+    const existente = await client.query(
+      `SELECT *
+         FROM public.documentos_extracoes_ia
+        WHERE arquivo_id = $1 AND prompt_codigo = $2
+        ORDER BY atualizado_em DESC, criado_em DESC
+        LIMIT 1`,
+      [params.arquivoId, params.promptCodigo],
+    );
+
+    let extracao: any;
+    let deveProcessar = true;
+    if (existente.rows[0]) {
+      const statusAtual = String(existente.rows[0].status || '');
+      const atualizadoEm = new Date(existente.rows[0].atualizado_em || existente.rows[0].criado_em || 0).getTime();
+      const pendenteRecente = statusAtual === 'pendente'
+        && Number.isFinite(atualizadoEm)
+        && Date.now() - atualizadoEm < 5 * 60 * 1000;
+      const emAndamento = statusAtual === 'processando' || pendenteRecente;
+      deveProcessar = !emAndamento;
+
+      if (emAndamento) {
+        // Não toca no timestamp nem limpa resultado enquanto outra execução está em andamento.
+        extracao = existente.rows[0];
+      } else {
+        const atualizada = await client.query(
+          `UPDATE public.documentos_extracoes_ia
+              SET entidade_bloco_id = COALESCE($2, entidade_bloco_id),
+                  status = 'pendente',
+                  prompt_versao = '1.0.0',
+                  resultado = '{}'::jsonb,
+                  campos_extraidos = '{}'::jsonb,
+                  pendencias = '[]'::jsonb,
+                  erros = '[]'::jsonb,
+                  processado_em = NULL
+            WHERE id = $1
+            RETURNING *`,
+          [existente.rows[0].id, params.blocoEntidadeId],
+        );
+        extracao = atualizada.rows[0];
+      }
+    } else {
+      const inserida = await client.query(
+        `INSERT INTO public.documentos_extracoes_ia
+          (arquivo_id, entidade_bloco_id, status, prompt_codigo, prompt_versao, resultado, campos_extraidos, pendencias, erros)
+         VALUES ($1,$2,'pendente',$3,'1.0.0','{}'::jsonb,'{}'::jsonb,'[]'::jsonb,'[]'::jsonb)
+         RETURNING *`,
+        [params.arquivoId, params.blocoEntidadeId, params.promptCodigo],
+      );
+      extracao = inserida.rows[0];
+    }
+    await client.query('COMMIT');
+    return { extracao, deveProcessar };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 router.post('/ia/documentos/:documentoId/extrair', auth, async (req: Request, res: Response) => {
   try {
     const { bloco_entidade_id, prompt_codigo } = req.body || {};
-    const { rows } = await pool.query(
-      `INSERT INTO public.documentos_extracoes_ia (arquivo_id, entidade_bloco_id, status, prompt_codigo, prompt_versao, resultado, pendencias)
-       VALUES ($1,$2,'pendente',$3,'1.0.0','{}'::jsonb,'[]'::jsonb)
-       RETURNING *`,
-      [req.params.documentoId, bloco_entidade_id || null, prompt_codigo || null]
+    const arquivoId = req.params.documentoId;
+    const documentoResult = await pool.query(
+      `SELECT id, empresa_id, entidade_id, entidade_tipo, tipo_documento
+         FROM public.documentos_arquivos
+        WHERE id = $1
+          AND excluido_em IS NULL
+          AND COALESCE(status, 'ativo') <> 'excluido'
+        LIMIT 1`,
+      [arquivoId],
     );
-    res.status(202).json({ message: 'Processamento registrado como pendente.', extracao: rows[0] });
+    const documento = documentoResult.rows[0];
+    if (!documento) { res.status(404).json({ error: 'Documento não encontrado' }); return; }
+
+    const configuracao = ANALISE_ESPECIALIZADA_POR_TIPO[String(documento.tipo_documento || '')];
+    if (!configuracao) {
+      const { rows } = await pool.query(
+        `INSERT INTO public.documentos_extracoes_ia (arquivo_id, entidade_bloco_id, status, prompt_codigo, prompt_versao, resultado, pendencias)
+         VALUES ($1,$2,'pendente',$3,'1.0.0','{}'::jsonb,'[]'::jsonb)
+         RETURNING *`,
+        [arquivoId, bloco_entidade_id || null, prompt_codigo || null],
+      );
+      res.status(202).json({ message: 'Processamento registrado como pendente.', extracao: rows[0] });
+      return;
+    }
+
+    const empresaId = documento.empresa_id || (documento.entidade_tipo === 'empresa' ? documento.entidade_id : null);
+    if (!empresaId) { res.status(422).json({ error: 'Documento especializado sem vínculo válido com uma empresa.' }); return; }
+
+    const { extracao, deveProcessar } = await registrarExtracaoEspecializada({
+      arquivoId,
+      blocoEntidadeId: bloco_entidade_id || null,
+      promptCodigo: configuracao.promptCodigo,
+    });
+
+    if (deveProcessar) {
+      setImmediate(() => {
+        void executarAnaliseDocumentalEspecializada({
+          extracaoId: extracao.id,
+          empresaId,
+          arquivoId,
+          tipo: configuracao.tipo,
+        });
+      });
+    }
+
+    res.status(202).json({
+      message: deveProcessar ? 'Processamento especializado registrado como pendente.' : 'Documento já está em processamento.',
+      extracao,
+      tipo_analise: configuracao.tipo,
+    });
   } catch (err: any) {
     console.error('[POST /api/documentacao/ia/documentos/:documentoId/extrair]', err);
     res.status(500).json({ error: 'Erro ao registrar processamento do documento' });

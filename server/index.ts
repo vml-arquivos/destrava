@@ -54,7 +54,7 @@ import { closeChromium, launchChromium } from "./services/chromiumLauncher";
 import { generateBrandedPdfBuffer, appendAttachmentsToPdf, type AnexoParaMerge } from "./services/brandedPdfLayout";
 import { generateFollowupMessage, generateLeadRecommendations, generateLeadSummary, qualifyTriagemLead } from "./services/aiService";
 import { getDataDir, resolveDocumentPath, saveDocumentBuffer, getDocumentStorageHealth, PersistentStorageError } from "./services/documentStorage";
-import { calcularInteligencia360 } from "./services/inteligencia360Service";
+import { buscarAnalisesDocumentaisAvancadas, calcularInteligencia360 } from "./services/inteligencia360Service";
 import { calcularPropostaBancaria } from "./services/propostaBancariaService";
 import { gerarRelatorioTecnico } from "./services/relatorioTecnicoEmpresaService";
 import { calcularPendencias } from "./services/pendenciasEmpresaService";
@@ -5339,6 +5339,9 @@ async function startServer() {
         eventosRotina = evRows;
       } catch { eventosRotina = []; }
 
+      // Consistência Documental Avançada: falhas/tabela ausente não interrompem o motor determinístico.
+      const analisesDocumentais = await buscarAnalisesDocumentaisAvancadas(empresaId, pool);
+
       // Calcular inteligência 360
       const resultado = calcularInteligencia360({
         empresa,
@@ -5351,6 +5354,7 @@ async function startServer() {
         acompanhamentoAtivo,
         atualizacoesAcompanhamento,
         eventosRotina,
+        analisesDocumentais,
       });
 
       res.json(resultado);
@@ -5394,6 +5398,8 @@ async function startServer() {
         pendencias_credito: [],
         pendencias_faturamento: [],
         pendencias_cadastrais: [],
+        pontos_atencao: [],
+        consistencia_documental_avancada: { disponivel: false, analises_processadas: 0, tipos_analisados: [], alertas: [], total_criticos: 0, total_altos: 0, total_medios: 0, total_baixos: 0, penalidade_score: 0 },
         simulacoes: [],
         contratos: [],
         faturamento: null,
