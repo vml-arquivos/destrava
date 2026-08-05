@@ -274,6 +274,24 @@ export function validarSimplesExtraido(empresa: any, dados: any): AlertaDocument
   }
 
   if (!cnpjDocumento) alertas.push({ codigo: 'simples_cnpj_nao_extraido', campo: 'cnpj', mensagem: 'Não foi possível confirmar o CNPJ no comprovante do Simples Nacional.', severidade: 'media', recomendacao: 'Realizar conferência humana do documento.' });
+
+  // Histórico de exclusão anterior: mesmo com a empresa optante hoje, um
+  // período de exclusão no passado (ex: por débito ou pendência) é um sinal
+  // relevante para a jornada de crédito da empresa -- registra como ponto de
+  // atenção informativo, não bloqueante, para ficar visível no histórico.
+  const periodosAnteriores = Array.isArray(dados?.periodos_exclusao_anteriores) ? dados.periodos_exclusao_anteriores : [];
+  if (periodosAnteriores.length) {
+    const maisRecente = periodosAnteriores[periodosAnteriores.length - 1];
+    alertas.push({
+      codigo: 'simples_historico_exclusao_anterior',
+      campo: 'periodos_exclusao_anteriores',
+      mensagem: `A empresa já esteve excluída do Simples Nacional no passado (${periodosAnteriores.length} período(s) registrado(s), o mais recente até ${maisRecente?.data_final || 'data não informada'}${maisRecente?.motivo ? `, motivo: ${maisRecente.motivo}` : ''}). Situação atual permanece a informada acima.`,
+      severidade: 'baixa',
+      valor_documento: periodosAnteriores,
+      recomendacao: 'Considerar o histórico na análise de risco, mesmo que a situação atual esteja regularizada.',
+    });
+  }
+
   return uniqueAlerts(alertas);
 }
 
@@ -329,6 +347,15 @@ function normalizarDadosQsa(dados: any): Record<string, any> {
 }
 
 function normalizarDadosSimples(dados: any): Record<string, any> {
+  const periodosExclusaoAnteriores = Array.isArray(dados?.periodos_exclusao_anteriores)
+    ? dados.periodos_exclusao_anteriores
+        .map((periodo: any) => ({
+          data_inicial: parseDate(periodo?.data_inicial),
+          data_final: parseDate(periodo?.data_final),
+          motivo: periodo?.motivo ? String(periodo.motivo).trim() : null,
+        }))
+        .filter((periodo: any) => periodo.data_inicial)
+    : [];
   return {
     ...dados,
     cnpj: dados?.cnpj ? String(dados.cnpj).trim() : null,
@@ -337,6 +364,7 @@ function normalizarDadosSimples(dados: any): Record<string, any> {
     data_exclusao_simples: parseDate(dados?.data_exclusao_simples),
     agendamento_exclusao: normalizarBooleano(dados?.agendamento_exclusao),
     motivo_exclusao: dados?.motivo_exclusao ? String(dados.motivo_exclusao).trim() : null,
+    periodos_exclusao_anteriores: periodosExclusaoAnteriores,
     confianca: normalizarConfianca(dados?.confianca),
   };
 }
@@ -446,9 +474,10 @@ Responda SOMENTE JSON válido, sem markdown e sem comentários:
   "data_exclusao_simples": "YYYY-MM-DD ou null",
   "agendamento_exclusao": false,
   "motivo_exclusao": "texto ou null",
+  "periodos_exclusao_anteriores": [{"data_inicial":"YYYY-MM-DD","data_final":"YYYY-MM-DD ou null","motivo":"texto ou null"}],
   "confianca": 0.0
 }
-Não invente dados. Diferencie exclusão já efetivada de agendamento de exclusão. Use null quando a informação não estiver visível. Confianca deve estar entre 0 e 1.`;
+Não invente dados. Diferencie exclusão já efetivada de agendamento de exclusão. Em "periodos_exclusao_anteriores", liste TODOS os períodos anteriores em que a empresa não esteve optante (seção "Períodos Anteriores" do documento), mesmo que ela seja optante atualmente -- é histórico, não situação corrente. Use lista vazia se não houver nenhum. Use null quando a informação não estiver visível. Confianca deve estar entre 0 e 1.`;
 }
 
 function promptAtosJunta(): string {

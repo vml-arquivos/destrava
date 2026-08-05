@@ -81,6 +81,51 @@ describe('Consistência Documental Avançada no motor 360', () => {
     expect(resultado.pontos_atencao).toEqual([]);
     expect(resultado.fonte).toBe('deterministica');
   });
+
+  it('status_aptidao é "EMPRESA APTA" quando não há alerta grave', () => {
+    const resultado = calcularInteligencia360(base);
+    expect(resultado.status_aptidao).toBe('EMPRESA APTA');
+    expect(resultado.motivos_aptidao).toEqual([]);
+  });
+
+  it('status_aptidao vira "PONTOS DE ATENÇÃO" com alerta crítico da análise documental, com o motivo detalhado', () => {
+    const resultado = calcularInteligencia360({
+      ...base,
+      analisesDocumentais: [{
+        prompt_codigo: 'simples_extract',
+        resultado: {
+          tipo_analise: 'simples_nacional',
+          alertas: [{
+            codigo: 'simples_exclusao_agendada',
+            mensagem: 'Exclusão do Simples Nacional agendada.',
+            severidade: 'critica',
+          }],
+        },
+      }],
+    });
+    expect(resultado.status_aptidao).toBe('PONTOS DE ATENÇÃO');
+    expect(resultado.motivos_aptidao).toContain('Exclusão do Simples Nacional agendada.');
+  });
+
+  it('alerta de severidade BAIXA não derruba status_aptidao, mas continua visível em pontos_atencao', () => {
+    const resultado = calcularInteligencia360({
+      ...base,
+      analisesDocumentais: [{
+        prompt_codigo: 'simples_extract',
+        resultado: {
+          tipo_analise: 'simples_nacional',
+          alertas: [{
+            codigo: 'simples_historico_exclusao_anterior',
+            mensagem: 'A empresa já esteve excluída do Simples Nacional no passado.',
+            severidade: 'baixa',
+          }],
+        },
+      }],
+    });
+    expect(resultado.status_aptidao).toBe('EMPRESA APTA');
+    expect(resultado.motivos_aptidao).toEqual([]);
+    expect(resultado.pontos_atencao).toContain('A empresa já esteve excluída do Simples Nacional no passado.');
+  });
 });
 
 describe('busca das análises documentais persistidas', () => {

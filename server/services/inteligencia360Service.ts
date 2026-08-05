@@ -98,6 +98,13 @@ export interface Inteligencia360Result {
   pontos_atencao: string[];
   consistencia_documental_avancada: ConsistenciaDocumentalAvancada360;
 
+  // Status de aptidão consolidado: rótulo direto, pensado para exibição na
+  // tela e para decisão rápida antes de montar proposta de crédito. Deriva
+  // dos mesmos sinais já calculados acima (risco_credito, pendências e
+  // alertas documentais) -- não introduz nenhuma fonte de dado nova.
+  status_aptidao: "EMPRESA APTA" | "PONTOS DE ATENÇÃO";
+  motivos_aptidao: string[];
+
   // Histórico
   simulacoes: any[];
   contratos: any[];
@@ -248,6 +255,40 @@ function consolidarConsistenciaDocumental(analisesInput: unknown): ConsistenciaD
     total_baixos,
     penalidade_score,
   };
+}
+
+// Status de aptidão consolidado ("EMPRESA APTA" / "PONTOS DE ATENÇÃO"):
+// combina risco de crédito, pendências de severidade alta/crítica e os
+// alertas da análise documental avançada (QSA, Simples Nacional, Atos da
+// Junta) num único rótulo direto para a tela, com os motivos detalhados.
+// Critério: só é "APTA" se não houver NENHUM sinal crítico ou alto em
+// nenhuma das três fontes -- qualquer um deles já classifica como "PONTOS
+// DE ATENÇÃO", mesmo que os outros dois estejam limpos.
+function calcularStatusAptidao(params: {
+  riscoCredito: Inteligencia360Result["risco_credito"];
+  pendencias: Pendencia360[];
+  consistenciaDocumental: ConsistenciaDocumentalAvancada360;
+}): { status_aptidao: Inteligencia360Result["status_aptidao"]; motivos_aptidao: string[] } {
+  const { riscoCredito, pendencias, consistenciaDocumental } = params;
+  const motivos: string[] = [];
+
+  if (riscoCredito === "alto" || riscoCredito === "critico") {
+    motivos.push(`Risco de crédito classificado como ${riscoCredito === "critico" ? "crítico" : "alto"}.`);
+  }
+
+  const pendenciasGraves = pendencias.filter((p) => p?.severidade === "alta" || p?.severidade === "critica");
+  for (const pendencia of pendenciasGraves) {
+    if (pendencia?.descricao) motivos.push(pendencia.descricao);
+  }
+
+  for (const alerta of consistenciaDocumental.alertas) {
+    if ((alerta.severidade === "alta" || alerta.severidade === "critica") && !motivos.includes(alerta.mensagem)) {
+      motivos.push(alerta.mensagem);
+    }
+  }
+
+  const status_aptidao: Inteligencia360Result["status_aptidao"] = motivos.length > 0 ? "PONTOS DE ATENÇÃO" : "EMPRESA APTA";
+  return { status_aptidao, motivos_aptidao: motivos };
 }
 
 function elevarRisco(
@@ -931,6 +972,12 @@ export function calcularInteligencia360(params: {
     }
   }
 
+  const { status_aptidao, motivos_aptidao } = calcularStatusAptidao({
+    riscoCredito: risco_credito,
+    pendencias,
+    consistenciaDocumental: consistencia_documental_avancada,
+  });
+
   // Automation Engine
   const contratoAssessoriaAtivo = contsArr.find(
     (c) => String(c?.tipo_contrato || "") === "assessoria" && String(c?.status || "") === "assinado"
@@ -1052,6 +1099,8 @@ export function calcularInteligencia360(params: {
     pendencias_cadastrais,
     pontos_atencao,
     consistencia_documental_avancada,
+    status_aptidao,
+    motivos_aptidao,
 
     simulacoes: simsArr,
     contratos: contsArr,

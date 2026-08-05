@@ -467,7 +467,7 @@ async function requireEmpresaOperacional(req: Request, res: Response, empresaId:
   return true;
 }
 
-async function registrarHistoricoEmpresaSeguro(empresaId: string, tipo: string, descricao: string, autor?: string | null): Promise<void> {
+export async function registrarHistoricoEmpresaSeguro(empresaId: string, tipo: string, descricao: string, autor?: string | null): Promise<void> {
   try {
     const columns = await getTableColumns("empresa_historico");
     if (!columns.has("empresa_id") || !columns.has("descricao")) return;

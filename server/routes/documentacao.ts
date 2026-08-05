@@ -16,6 +16,29 @@ const pool = new Pool({
 
 const router = Router();
 
+// Registro na "jornada da empresa" (empresa_historico) quando a análise
+// documental encontra algo relevante -- mesmo padrão já usado em outros
+// pontos do sistema (contrato assinado, contrato editado). Implementado
+// localmente (não importado de server/index.ts) para não criar dependência
+// circular entre o router e o monólito que o registra via app.use(); nunca
+// deve derrubar o fluxo principal da análise se falhar.
+async function registrarHistoricoAnaliseDocumental(empresaId: string, tipo: string, descricao: string): Promise<void> {
+  try {
+    await pool.query(
+      `INSERT INTO empresa_historico (empresa_id, tipo, descricao, autor) VALUES ($1, $2, $3, $4)`,
+      [empresaId, tipo, descricao, 'IA — Análise Documental'],
+    );
+  } catch (err) {
+    console.warn('[AnaliseDocumentalEspecializada] Falha ao registrar histórico da empresa:', (err as any)?.message || err);
+  }
+}
+
+const LABEL_TIPO_ANALISE: Record<TipoAnaliseDocumental, string> = {
+  qsa: 'QSA/Contrato Social',
+  simples_nacional: 'Enquadramento Tributário/Simples Nacional',
+  atos_junta_comercial: 'Atos da Junta Comercial',
+};
+
 const BLOCO_CODIGOS = [
   'cnpj_receita',
   'qsa_quadro_societario',
@@ -786,6 +809,20 @@ async function executarAnaliseDocumentalEspecializada(params: {
         JSON.stringify(resultado.alertas || []),
       ],
     );
+
+    // "Jornada da empresa": alertas de severidade alta/crítica encontrados
+    // pela IA ficam registrados no histórico -- mesmo que sejam corrigidos
+    // depois, fica visível que já existiu esse ponto de atenção (ex: "Consulta
+    // do Simples Nacional identificou agendamento de exclusão").
+    const alertasRelevantes = (resultado.alertas || []).filter((a) => a.severidade === 'alta' || a.severidade === 'critica');
+    if (alertasRelevantes.length) {
+      const resumo = alertasRelevantes.slice(0, 3).map((a) => a.mensagem).join(' | ');
+      await registrarHistoricoAnaliseDocumental(
+        empresaId,
+        'analise_documental_ia',
+        `${LABEL_TIPO_ANALISE[tipo]}: ${resumo}`,
+      );
+    }
   } catch (error: any) {
     console.warn('[AnaliseDocumentalEspecializada] Falha controlada na análise:', tipo, arquivoId, error?.message || error);
     await pool.query(
