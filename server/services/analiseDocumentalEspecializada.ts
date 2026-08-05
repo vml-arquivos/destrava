@@ -274,24 +274,6 @@ export function validarSimplesExtraido(empresa: any, dados: any): AlertaDocument
   }
 
   if (!cnpjDocumento) alertas.push({ codigo: 'simples_cnpj_nao_extraido', campo: 'cnpj', mensagem: 'Não foi possível confirmar o CNPJ no comprovante do Simples Nacional.', severidade: 'media', recomendacao: 'Realizar conferência humana do documento.' });
-
-  // Histórico de exclusão anterior: mesmo com a empresa optante hoje, um
-  // período de exclusão no passado (ex: por débito ou pendência) é um sinal
-  // relevante para a jornada de crédito da empresa -- registra como ponto de
-  // atenção informativo, não bloqueante, para ficar visível no histórico.
-  const periodosAnteriores = Array.isArray(dados?.periodos_exclusao_anteriores) ? dados.periodos_exclusao_anteriores : [];
-  if (periodosAnteriores.length) {
-    const maisRecente = periodosAnteriores[periodosAnteriores.length - 1];
-    alertas.push({
-      codigo: 'simples_historico_exclusao_anterior',
-      campo: 'periodos_exclusao_anteriores',
-      mensagem: `A empresa já esteve excluída do Simples Nacional no passado (${periodosAnteriores.length} período(s) registrado(s), o mais recente até ${maisRecente?.data_final || 'data não informada'}${maisRecente?.motivo ? `, motivo: ${maisRecente.motivo}` : ''}). Situação atual permanece a informada acima.`,
-      severidade: 'baixa',
-      valor_documento: periodosAnteriores,
-      recomendacao: 'Considerar o histórico na análise de risco, mesmo que a situação atual esteja regularizada.',
-    });
-  }
-
   return uniqueAlerts(alertas);
 }
 
@@ -326,6 +308,25 @@ export function validarAtosJuntaExtraidos(empresa: any, dados: any): AlertaDocum
   }
 
   if (!cnpjDocumento) alertas.push({ codigo: 'junta_cnpj_nao_extraido', campo: 'cnpj', mensagem: 'Não foi possível confirmar o CNPJ no ato da Junta Comercial.', severidade: 'media', recomendacao: 'Realizar conferência humana do documento.' });
+
+  // Histórico completo de arquivamentos (ex: certidão "Lista de Arquivamentos"):
+  // documenta quantas alterações já houve e quando foi a mais recente -- info
+  // relevante para a jornada da empresa mesmo quando não é um ato isolado.
+  const historico = Array.isArray(dados?.historico_arquivamentos) ? dados.historico_arquivamentos.filter(Boolean) : [];
+  if (historico.length) {
+    const alteracoes = historico.filter((i: any) => /alterac/i.test(normalizeText(i?.tipo_ato || '')));
+    const maisRecente = historico[historico.length - 1];
+    const diasUltimoAto = diffDays(parseDate(maisRecente?.data));
+    alertas.push({
+      codigo: 'junta_historico_arquivamentos',
+      campo: 'historico_arquivamentos',
+      mensagem: `Histórico da Junta Comercial: ${historico.length} arquivamento(s) registrado(s), sendo ${alteracoes.length} alteração(ões). Ato mais recente: ${maisRecente?.tipo_ato || 'não identificado'} em ${maisRecente?.data || 'data não informada'}.`,
+      severidade: diasUltimoAto !== null && diasUltimoAto >= 0 && diasUltimoAto <= 30 ? 'media' : 'baixa',
+      valor_documento: historico,
+      recomendacao: diasUltimoAto !== null && diasUltimoAto <= 30 ? 'Alteração registrada há menos de 30 dias -- confirmar se já refletida no cadastro e nos documentos societários.' : undefined,
+    });
+  }
+
   return uniqueAlerts(alertas);
 }
 
@@ -347,15 +348,6 @@ function normalizarDadosQsa(dados: any): Record<string, any> {
 }
 
 function normalizarDadosSimples(dados: any): Record<string, any> {
-  const periodosExclusaoAnteriores = Array.isArray(dados?.periodos_exclusao_anteriores)
-    ? dados.periodos_exclusao_anteriores
-        .map((periodo: any) => ({
-          data_inicial: parseDate(periodo?.data_inicial),
-          data_final: parseDate(periodo?.data_final),
-          motivo: periodo?.motivo ? String(periodo.motivo).trim() : null,
-        }))
-        .filter((periodo: any) => periodo.data_inicial)
-    : [];
   return {
     ...dados,
     cnpj: dados?.cnpj ? String(dados.cnpj).trim() : null,
@@ -364,7 +356,6 @@ function normalizarDadosSimples(dados: any): Record<string, any> {
     data_exclusao_simples: parseDate(dados?.data_exclusao_simples),
     agendamento_exclusao: normalizarBooleano(dados?.agendamento_exclusao),
     motivo_exclusao: dados?.motivo_exclusao ? String(dados.motivo_exclusao).trim() : null,
-    periodos_exclusao_anteriores: periodosExclusaoAnteriores,
     confianca: normalizarConfianca(dados?.confianca),
   };
 }
@@ -377,14 +368,27 @@ function normalizarDadosAtos(dados: any): Record<string, any> {
       : null,
     data_alteracao: parseDate(socio?.data_alteracao),
   })) : [];
+  const historicoArquivamentos = Array.isArray(dados?.historico_arquivamentos)
+    ? dados.historico_arquivamentos
+        .map((item: any) => ({
+          numero: item?.numero ? String(item.numero).trim() : null,
+          data: parseDate(item?.data),
+          tipo_ato: item?.tipo_ato ? String(item.tipo_ato).trim() : null,
+        }))
+        .filter((item: any) => item.data)
+        .sort((a: any, b: any) => String(a.data).localeCompare(String(b.data)))
+    : [];
   return {
     ...dados,
     cnpj: dados?.cnpj ? String(dados.cnpj).trim() : null,
     razao_social: dados?.razao_social ? String(dados.razao_social).trim() : null,
+    nire: dados?.nire ? String(dados.nire).trim() : null,
     tipo_ato: dados?.tipo_ato ? String(dados.tipo_ato).trim() : null,
     data_registro: parseDate(dados?.data_registro),
     capital_social_atual: asNumber(dados?.capital_social_atual),
     socios_alterados: sociosAlterados,
+    historico_arquivamentos: historicoArquivamentos,
+    total_alteracoes_historico: historicoArquivamentos.filter((i: any) => /alterac/i.test(normalizeText(i.tipo_ato || ''))).length,
     confianca: normalizarConfianca(dados?.confianca),
   };
 }
@@ -474,26 +478,27 @@ Responda SOMENTE JSON válido, sem markdown e sem comentários:
   "data_exclusao_simples": "YYYY-MM-DD ou null",
   "agendamento_exclusao": false,
   "motivo_exclusao": "texto ou null",
-  "periodos_exclusao_anteriores": [{"data_inicial":"YYYY-MM-DD","data_final":"YYYY-MM-DD ou null","motivo":"texto ou null"}],
   "confianca": 0.0
 }
-Não invente dados. Diferencie exclusão já efetivada de agendamento de exclusão. Em "periodos_exclusao_anteriores", liste TODOS os períodos anteriores em que a empresa não esteve optante (seção "Períodos Anteriores" do documento), mesmo que ela seja optante atualmente -- é histórico, não situação corrente. Use lista vazia se não houver nenhum. Use null quando a informação não estiver visível. Confianca deve estar entre 0 e 1.`;
+Não invente dados. Diferencie exclusão já efetivada de agendamento de exclusão. Use null quando a informação não estiver visível. Confianca deve estar entre 0 e 1.`;
 }
 
 function promptAtosJunta(): string {
-  return `Você é um auditor de atos societários registrados em Junta Comercial brasileira. Extraia os dados do ato anexado.
+  return `Você é um auditor de atos societários registrados em Junta Comercial brasileira. Extraia os dados do ato ou da certidão/lista de arquivamentos anexada.
 Responda SOMENTE JSON válido, sem markdown e sem comentários:
 {
   "documento_compativel": true,
   "cnpj": "00.000.000/0000-00 ou null",
   "razao_social": "texto ou null",
-  "tipo_ato": "Contrato Social|Alteração Contratual|Consolidação|Outro|null",
-  "data_registro": "YYYY-MM-DD ou null",
+  "nire": "texto ou null",
+  "tipo_ato": "Contrato Social|Alteração Contratual|Consolidação|Certidão de Arquivamentos|Outro|null",
+  "data_registro": "YYYY-MM-DD ou null (data do ato mais recente)",
   "capital_social_atual": 0.00,
   "socios_alterados": [{"nome":"texto","tipo_alteracao":"entrada|saida|percentual","data_alteracao":"YYYY-MM-DD ou null"}],
+  "historico_arquivamentos": [{"numero":"texto ou null","data":"YYYY-MM-DD","tipo_ato":"texto (ex: ALTERAÇÃO, CONTRATO, ENQUADRAMENTO DE MICROEMPRESA)"}],
   "confianca": 0.0
 }
-Extraia apenas informações expressas no documento. Não deduza alterações que não estejam descritas. Capital social deve ser numérico. Use null quando não estiver visível. Confianca deve estar entre 0 e 1.`;
+Se o documento for uma lista/certidão de arquivamentos (ex: "Lista de Arquivamentos" da Junta Comercial), preencha "historico_arquivamentos" com TODOS os itens listados, do mais antigo ao mais recente -- é esse histórico completo que interessa, não só o último. Se for um único ato/alteração, preencha também "data_registro" e "socios_alterados" para esse ato específico. Extraia apenas informações expressas no documento. Não deduza alterações que não estejam descritas. Capital social deve ser numérico. Use null quando não estiver visível. Confianca deve estar entre 0 e 1.`;
 }
 
 export class AnaliseDocumentalService {

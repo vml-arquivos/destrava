@@ -16,32 +16,11 @@ const pool = new Pool({
 
 const router = Router();
 
-// Registro na "jornada da empresa" (empresa_historico) quando a análise
-// documental encontra algo relevante -- mesmo padrão já usado em outros
-// pontos do sistema (contrato assinado, contrato editado). Implementado
-// localmente (não importado de server/index.ts) para não criar dependência
-// circular entre o router e o monólito que o registra via app.use(); nunca
-// deve derrubar o fluxo principal da análise se falhar.
-async function registrarHistoricoAnaliseDocumental(empresaId: string, tipo: string, descricao: string): Promise<void> {
-  try {
-    await pool.query(
-      `INSERT INTO empresa_historico (empresa_id, tipo, descricao, autor) VALUES ($1, $2, $3, $4)`,
-      [empresaId, tipo, descricao, 'IA — Análise Documental'],
-    );
-  } catch (err) {
-    console.warn('[AnaliseDocumentalEspecializada] Falha ao registrar histórico da empresa:', (err as any)?.message || err);
-  }
-}
-
-const LABEL_TIPO_ANALISE: Record<TipoAnaliseDocumental, string> = {
-  qsa: 'QSA/Contrato Social',
-  simples_nacional: 'Enquadramento Tributário/Simples Nacional',
-  atos_junta_comercial: 'Atos da Junta Comercial',
-};
-
 const BLOCO_CODIGOS = [
   'cnpj_receita',
   'qsa_quadro_societario',
+  'atos_junta_comercial',
+  'enquadramento_tributario',
   'contrato_social_alteracoes',
   'socios_representantes',
   'endereco_contatos',
@@ -199,21 +178,23 @@ async function ensureBlocosCatalogo() {
     VALUES
       ('cnpj_receita', 'CNPJ / Receita Federal', 'Dados oficiais de CNPJ e situação cadastral.', 'empresa', true, 1, '{"prioridade":"imediata"}'::jsonb),
       ('qsa_quadro_societario', 'QSA / Quadro Societário', 'Quadro de Sócios e Administradores da empresa.', 'empresa', true, 2, '{"prioridade":"imediata"}'::jsonb),
-      ('contrato_social_alteracoes', 'Contrato Social e Alterações', 'Contrato social vigente e alterações.', 'empresa', true, 3, '{}'::jsonb),
-      ('socios_representantes', 'Sócios, Administradores e Representantes', 'Dados e documentos dos sócios/representantes.', 'socio', true, 4, '{}'::jsonb),
-      ('endereco_contatos', 'Endereço, Contatos e Dados Operacionais', 'Endereço, contatos e dados operacionais.', 'empresa', false, 5, '{}'::jsonb),
-      ('faturamento_historico', 'Faturamento Histórico', 'Histórico mensal de faturamento.', 'empresa', true, 6, '{}'::jsonb),
-      ('previsao_faturamento', 'Previsão de Faturamento', 'Projeção de faturamento.', 'empresa', false, 7, '{}'::jsonb),
-      ('demonstracoes_contabeis_fiscais', 'Demonstrações Contábeis e Fiscais', 'Balanço, DRE, ECD, ECF e declarações.', 'empresa', false, 8, '{}'::jsonb),
-      ('extratos_movimentacao_bancaria', 'Extratos Bancários e Movimentação', 'Extratos e movimentação bancária.', 'empresa', false, 9, '{}'::jsonb),
-      ('acompanhamento_bancario', 'Acompanhamento Bancário', 'Monitoramento bancário e rating.', 'empresa', false, 10, '{}'::jsonb),
-      ('acompanhamento_financeiro', 'Acompanhamento Financeiro', 'Pagamentos, parcelas e inadimplência.', 'empresa', false, 11, '{}'::jsonb),
-      ('certidoes_regularidade', 'Certidões e Regularidade', 'Certidões, protestos e restrições.', 'empresa', false, 12, '{}'::jsonb),
-      ('scr_endividamento', 'SCR / Endividamento', 'Relatórios SCR/BACEN e endividamento.', 'empresa', false, 13, '{}'::jsonb),
-      ('garantias', 'Garantias', 'Garantias vinculadas a operações/contratos.', 'empresa', false, 14, '{}'::jsonb),
-      ('contratos_gerados', 'Contratos Gerados', 'Contratos e PDFs gerados.', 'empresa', false, 15, '{}'::jsonb),
-      ('pendencias_documentais', 'Pendências Documentais', 'Pendências consolidadas do dossiê.', 'empresa', true, 16, '{}'::jsonb),
-      ('analise_ia_credito', 'Parecer de Crédito', 'Parecer consolidado com revisão humana.', 'empresa', false, 17, '{}'::jsonb)
+      ('atos_junta_comercial', 'Atos da Junta Comercial', 'Histórico de arquivamentos, alterações contratuais e capital social registrados na Junta Comercial.', 'empresa', true, 3, '{"prioridade":"imediata"}'::jsonb),
+      ('enquadramento_tributario', 'Enquadramento Tributário', 'Regime tributário atual da empresa (Simples Nacional, MEI, Lucro Presumido ou Lucro Real).', 'empresa', true, 4, '{"prioridade":"imediata"}'::jsonb),
+      ('contrato_social_alteracoes', 'Contrato Social e Alterações', 'Contrato social vigente e alterações.', 'empresa', true, 5, '{}'::jsonb),
+      ('socios_representantes', 'Sócios, Administradores e Representantes', 'Dados e documentos dos sócios/representantes.', 'socio', true, 6, '{}'::jsonb),
+      ('endereco_contatos', 'Endereço, Contatos e Dados Operacionais', 'Endereço, contatos e dados operacionais.', 'empresa', false, 7, '{}'::jsonb),
+      ('faturamento_historico', 'Faturamento Histórico', 'Histórico mensal de faturamento.', 'empresa', true, 8, '{}'::jsonb),
+      ('previsao_faturamento', 'Previsão de Faturamento', 'Projeção de faturamento.', 'empresa', false, 9, '{}'::jsonb),
+      ('demonstracoes_contabeis_fiscais', 'Demonstrações Contábeis e Fiscais', 'Balanço, DRE, ECD, ECF e declarações.', 'empresa', false, 10, '{}'::jsonb),
+      ('extratos_movimentacao_bancaria', 'Extratos Bancários e Movimentação', 'Extratos e movimentação bancária.', 'empresa', false, 11, '{}'::jsonb),
+      ('acompanhamento_bancario', 'Acompanhamento Bancário', 'Monitoramento bancário e rating.', 'empresa', false, 12, '{}'::jsonb),
+      ('acompanhamento_financeiro', 'Acompanhamento Financeiro', 'Pagamentos, parcelas e inadimplência.', 'empresa', false, 13, '{}'::jsonb),
+      ('certidoes_regularidade', 'Certidões e Regularidade', 'Certidões, protestos e restrições.', 'empresa', false, 14, '{}'::jsonb),
+      ('scr_endividamento', 'SCR / Endividamento', 'Relatórios SCR/BACEN e endividamento.', 'empresa', false, 15, '{}'::jsonb),
+      ('garantias', 'Garantias', 'Garantias vinculadas a operações/contratos.', 'empresa', false, 16, '{}'::jsonb),
+      ('contratos_gerados', 'Contratos Gerados', 'Contratos e PDFs gerados.', 'empresa', false, 17, '{}'::jsonb),
+      ('pendencias_documentais', 'Pendências Documentais', 'Pendências consolidadas do dossiê.', 'empresa', true, 18, '{}'::jsonb),
+      ('analise_ia_credito', 'Parecer de Crédito', 'Parecer consolidado com revisão humana.', 'empresa', false, 19, '{}'::jsonb)
     ON CONFLICT (codigo) DO UPDATE SET
       nome_amigavel = EXCLUDED.nome_amigavel,
       descricao = EXCLUDED.descricao,
@@ -343,16 +324,29 @@ function dadosQsa(empresa: any, socios: any[]) {
     ...normalizeArray(empresa.dados_fontes_cnpj),
   ].filter(Boolean);
 
-  const sociosCadastro = socios.map((s) => ({
-    id: s.id,
-    nome: s.nome || null,
-    cpf_cnpj: s.cpf_cnpj || null,
-    qualificacao: s.qualificacao_socio || s.qualificacao || null,
-    cargo: s.cargo || null,
-    percentual_participacao: asNumber(s.percentual_participacao),
-    administrador: !!s.administrador,
-    representante_legal: !!s.representante_legal,
-    assina_contrato: !!s.assina_contrato,
+  const sociosCadastro = socios.map((s) => {
+    const qualificacaoTexto = s.qualificacao_socio || s.qualificacao || null;
+    // O QSA real da Receita ("49-Sócio-Administrador") já entra corretamente
+    // no texto de qualificação, mas antes o dossiê só confiava na coluna
+    // booleana socios_empresa.administrador -- se um sócio foi cadastrado
+    // manualmente (ex: por upload de documento) sem alguém marcar essa
+    // caixinha à parte, o texto dizia "Administrador" só pra tela mostrar
+    // "Não" logo abaixo, e o sistema tratava a empresa como sem nenhum
+    // assinante/administrador identificado. Mesmo padrão de inferência por
+    // texto já usado em outro lugar deste arquivo -- só reaproveitado aqui
+    // como reforço, nunca como única fonte (a coluna booleana, quando
+    // marcada, sempre prevalece).
+    const administradorPorTexto = String(qualificacaoTexto || s.cargo || '').toLowerCase().includes('administr');
+    return {
+      id: s.id,
+      nome: s.nome || null,
+      cpf_cnpj: s.cpf_cnpj || null,
+      qualificacao: qualificacaoTexto,
+      cargo: s.cargo || null,
+      percentual_participacao: asNumber(s.percentual_participacao),
+      administrador: !!s.administrador || administradorPorTexto,
+      representante_legal: !!s.representante_legal,
+      assina_contrato: !!s.assina_contrato,
     data_entrada_sociedade: s.data_entrada_sociedade || null,
     fonte_dados: s.fonte_dados || 'cadastro_manual',
     cpfhub_status: s.cpfhub_status || null,
@@ -368,11 +362,21 @@ function dadosQsa(empresa: any, socios: any[]) {
       telefone: s.telefone || s.whatsapp || null,
       endereco: [s.logradouro, s.numero, s.bairro, s.cidade, s.uf].filter(Boolean).join(', ') || null,
     },
-  }));
+  };
+  });
 
   const sociosReceitaMapeados = sociosReceita.map(mapSocioReceita).filter((s) => s.nome || s.cpf_cnpj || s.qualificacao);
   const proprietarioInferido = sociosCadastro.length === 0 && sociosReceitaMapeados.length === 0 ? montarProprietarioInferido(empresa) : null;
-  const sociosConsolidados = sociosCadastro.length > 0 ? sociosCadastro : (sociosReceitaMapeados.length > 0 ? sociosReceitaMapeados : (proprietarioInferido ? [proprietarioInferido] : []));
+  let sociosConsolidados = sociosCadastro.length > 0 ? sociosCadastro : (sociosReceitaMapeados.length > 0 ? sociosReceitaMapeados : (proprietarioInferido ? [proprietarioInferido] : []));
+
+  // Regra automática: havendo um único sócio no quadro, ele é necessariamente
+  // o administrador -- não existe outra pessoa pra dividir a administração.
+  // Sem essa regra, um sócio único cadastrado sem qualificação/coluna
+  // administrador marcada aparecia como "sem administrador identificado" por
+  // falta de preenchimento manual, mesmo sendo matematicamente óbvio.
+  if (sociosConsolidados.length === 1 && !sociosConsolidados[0].administrador) {
+    sociosConsolidados = [{ ...sociosConsolidados[0], administrador: true }];
+  }
 
   return {
     total_socios_cadastrados: socios.length,
@@ -384,6 +388,70 @@ function dadosQsa(empresa: any, socios: any[]) {
     socios: sociosConsolidados,
     socios_receita_json: sociosReceitaMapeados,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Atos da Junta Comercial e Enquadramento Tributário: os outros dois dos 4
+// documentos "iniciais" (junto com CNPJ e QSA) que compõem "Identidade do
+// CNPJ" no checklist do Acervo Documental. Reaproveita o mesmo motor de
+// leitura por IA (analiseDocumentalService) já usado e testado -- não duplica
+// lógica de extração/validação, só monta o bloco do dossiê com o resultado.
+// ─────────────────────────────────────────────────────────────────────────
+
+function severidadeParaPendencia(sev: string): 'alta' | 'media' | 'baixa' {
+  return sev === 'critica' ? 'alta' : (sev === 'media' || sev === 'baixa') ? sev : 'alta';
+}
+
+async function montarAtosJuntaDados(empresaId: string): Promise<{ dados: Record<string, any>; pendencias: Pendencia[] }> {
+  const docs = await listarDocumentosEmpresaPorTipos(empresaId, ['atos_junta_comercial']);
+  if (!docs.length) {
+    return {
+      dados: { anexado: false },
+      pendencias: [{ codigo: 'atos_junta_nao_anexado', mensagem: 'Atos da Junta Comercial ainda não anexados.', severidade: 'alta', origem: 'documentos_arquivos', recomendacao: 'Anexar os Atos da Junta Comercial (ato constitutivo ou última alteração registrada) no Acervo Documental.' }],
+    };
+  }
+  const docMaisRecente = docs[0];
+  try {
+    const analise = await analiseDocumentalService.analisarAtosJuntaComercial(empresaId, docMaisRecente.id);
+    const pendencias: Pendencia[] = analise.alertas.map((a) => ({
+      codigo: a.codigo, mensagem: a.mensagem, severidade: severidadeParaPendencia(a.severidade), origem: 'atos_junta_comercial', recomendacao: a.recomendacao,
+    }));
+    return {
+      dados: { anexado: true, documento_id: docMaisRecente.id, status_leitura: analise.status, lido_em: analise.analisado_em, ...analise.dados_extraidos },
+      pendencias,
+    };
+  } catch (err: any) {
+    return {
+      dados: { anexado: true, documento_id: docMaisRecente.id, status_leitura: 'pendente_ocr' },
+      pendencias: [{ codigo: 'atos_junta_pendente_ocr', mensagem: 'Atos da Junta Comercial anexados, mas ainda não foi possível ler o conteúdo automaticamente.', severidade: 'baixa', origem: 'atos_junta_comercial', recomendacao: 'Configurar GEMINI_API_KEY para leitura automática ou submeter para revisão humana.' }],
+    };
+  }
+}
+
+async function montarEnquadramentoDados(empresaId: string): Promise<{ dados: Record<string, any>; pendencias: Pendencia[] }> {
+  const docs = await listarDocumentosEmpresaPorTipos(empresaId, ['enquadramento_tributario_cnpj']);
+  if (!docs.length) {
+    return {
+      dados: { anexado: false },
+      pendencias: [{ codigo: 'enquadramento_nao_anexado', mensagem: 'Enquadramento Tributário ainda não anexado.', severidade: 'alta', origem: 'documentos_arquivos', recomendacao: 'Anexar o Enquadramento Tributário (Termo de Opção pelo Simples Nacional, Certificado MEI ou equivalente) no Acervo Documental.' }],
+    };
+  }
+  const docMaisRecente = docs[0];
+  try {
+    const analise = await analiseDocumentalService.analisarSimplesNacional(empresaId, docMaisRecente.id);
+    const pendencias: Pendencia[] = analise.alertas.map((a) => ({
+      codigo: a.codigo, mensagem: a.mensagem, severidade: severidadeParaPendencia(a.severidade), origem: 'enquadramento_tributario', recomendacao: a.recomendacao,
+    }));
+    return {
+      dados: { anexado: true, documento_id: docMaisRecente.id, status_leitura: analise.status, lido_em: analise.analisado_em, ...analise.dados_extraidos },
+      pendencias,
+    };
+  } catch (err: any) {
+    return {
+      dados: { anexado: true, documento_id: docMaisRecente.id, status_leitura: 'pendente_ocr' },
+      pendencias: [{ codigo: 'enquadramento_pendente_ocr', mensagem: 'Enquadramento Tributário anexado, mas ainda não foi possível ler o regime automaticamente.', severidade: 'baixa', origem: 'enquadramento_tributario', recomendacao: 'Configurar GEMINI_API_KEY para leitura automática ou submeter para revisão humana.' }],
+    };
+  }
 }
 
 function pendenciasQsa(socios: any[], empresa?: any): Pendencia[] {
@@ -492,6 +560,83 @@ async function vincularDocumentosAutomaticos(empresaId: string) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Prontidão da "Identidade do CNPJ" (os 4 documentos iniciais: Cartão CNPJ,
+// QSA, Enquadramento Tributário e Atos da Junta Comercial). Regra de negócio:
+// só considera "tudo ok, pode avançar" quando:
+//   1) situação cadastral ativa;
+//   2) empresa com 12+ meses de abertura (política de crédito para empresas
+//      novas é diferente -- não bloqueia, mas não é "pronta" pra seguir
+//      igual a uma empresa madura);
+//   3) nenhuma pendência de severidade alta/crítica nos 4 blocos (CNPJ
+//      divergente, sócio não localizado na Receita, capital social
+//      incompatível, alteração recente não refletida etc.);
+//   4) enquadramento tributário identificado -- MEI não é bloqueio (MEI pode
+//      avançar), mas gera um aviso estratégico específico, porque nem toda
+//      linha de crédito aceita MEI, e isso muda a estratégia da próxima fase.
+// Isso alimenta o botão/CTA "Avançar para a próxima etapa" no relatório.
+// ─────────────────────────────────────────────────────────────────────────
+async function avaliarProntidaoIdentidadeCnpj(
+  empresaId: string,
+  empresa: any,
+  cnpjPendencias: Pendencia[],
+  qsaPendencias: Pendencia[],
+  atosJuntaPendencias: Pendencia[],
+  enquadramentoPendencias: Pendencia[],
+  enquadramentoDados: Record<string, any>,
+) {
+  const analiseCnpj = await buscarUltimaAnaliseCnpjEmpresa(empresaId).catch(() => null);
+  const resultadoCnpj = (analiseCnpj?.resultado && typeof analiseCnpj.resultado === 'object') ? analiseCnpj.resultado : {};
+  const idadeMeses: number | null = resultadoCnpj?.campos_receita?.idade_meses ?? null;
+
+  const motivos: string[] = [];
+  const pontosPositivos: string[] = [];
+
+  const situacaoAtiva = isSituacaoAtiva(empresa.situacao_cadastral);
+  if (situacaoAtiva) pontosPositivos.push('Situação cadastral ativa na Receita Federal.');
+  else motivos.push(`Situação cadastral "${empresa.situacao_cadastral || 'não informada'}" impede o avanço -- só empresas ativas seguem para a próxima etapa.`);
+
+  let empresaApta12Meses: boolean | null = null;
+  if (idadeMeses !== null) {
+    empresaApta12Meses = idadeMeses >= 12;
+    if (empresaApta12Meses) pontosPositivos.push(`Empresa com ${idadeMeses} meses de abertura -- acima dos 12 meses mínimos para solicitar crédito.`);
+    else motivos.push(`Empresa com apenas ${idadeMeses} meses de abertura -- abaixo dos 12 meses mínimos para a maioria das linhas de crédito. Direcionar para linhas específicas de empresas novas.`);
+  } else {
+    motivos.push('Tempo de abertura ainda não confirmado -- gerar/atualizar a Análise de CNPJ antes de avançar.');
+  }
+
+  const regime = String(enquadramentoDados?.regime_tributario || '').trim();
+  const ehMei = /\bmei\b/i.test(regime) || empresa?.opcao_mei === true;
+  if (regime) {
+    pontosPositivos.push(`Enquadramento tributário identificado: ${regime}.`);
+    if (ehMei) motivos.push('Empresa enquadrada como MEI -- algumas linhas de crédito não aceitam esse enquadramento. Isso não impede a análise, mas direciona a estratégia para as linhas compatíveis com MEI.');
+  }
+
+  const pendenciasGraves = [...cnpjPendencias, ...qsaPendencias, ...atosJuntaPendencias, ...enquadramentoPendencias]
+    .filter((p) => p.severidade === 'alta');
+  for (const p of pendenciasGraves) motivos.push(p.mensagem);
+
+  // MEI é aviso estratégico, não impede o avanço -- some da lista de bloqueios.
+  const motivosBloqueio = motivos.filter((m) => !m.includes('MEI'));
+  const apto = motivosBloqueio.length === 0;
+
+  return {
+    apto_para_avancar: apto,
+    idade_meses: idadeMeses,
+    situacao_cadastral_ativa: situacaoAtiva,
+    empresa_apta_12_meses: empresaApta12Meses,
+    enquadramento_tributario: regime || null,
+    empresa_mei: ehMei,
+    score_cnpj: analiseCnpj?.score_cnpj ?? null,
+    motivos_pendentes: motivosBloqueio,
+    avisos_estrategicos: motivos.filter((m) => m.includes('MEI')),
+    pontos_positivos: pontosPositivos,
+    diagnostico: apto
+      ? `Identidade do CNPJ completa e consistente: CNPJ, QSA, Enquadramento Tributário e Atos da Junta Comercial conferem entre si e com os dados da Receita Federal. ${empresaApta12Meses ? 'Empresa apta a solicitar crédito (mais de 12 meses de abertura).' : ''} Pronta para avançar à próxima etapa: documentação da empresa, documentação dos sócios e certidões (CND e demais).`
+      : `Identidade do CNPJ ainda com ${motivosBloqueio.length} ponto(s) a resolver antes de avançar para a próxima etapa de análise.`,
+  };
+}
+
 async function montarDossieCreditoEmpresa(empresaId: string) {
   await ensureBlocosCatalogo();
   const empresa = await getEmpresa(empresaId);
@@ -504,6 +649,12 @@ async function montarDossieCreditoEmpresa(empresaId: string) {
   const cnpjBloco = await ensureEmpresaBloco(empresaId, 'cnpj_receita', montarCnpjDados(empresa), cnpjPendencias, 'receita');
   const qsaBloco = await ensureEmpresaBloco(empresaId, 'qsa_quadro_societario', dadosQsa(empresa, socios), qsaPendencias, socios.length ? 'receita' : 'sistema');
 
+  const atosJunta = await montarAtosJuntaDados(empresaId);
+  await ensureEmpresaBloco(empresaId, 'atos_junta_comercial', atosJunta.dados, atosJunta.pendencias, 'documento_ia');
+
+  const enquadramento = await montarEnquadramentoDados(empresaId);
+  await ensureEmpresaBloco(empresaId, 'enquadramento_tributario', enquadramento.dados, enquadramento.pendencias, 'documento_ia');
+
   const docsContrato = await listarDocumentosEmpresaPorTipos(empresaId, ['contrato_social', 'alteracao_contratual', 'estatuto', 'procuracao']);
   await ensureEmpresaBloco(
     empresaId,
@@ -515,11 +666,16 @@ async function montarDossieCreditoEmpresa(empresaId: string) {
 
   await ensureEmpresaBloco(empresaId, 'pendencias_documentais', {
     gerado_em: new Date().toISOString(),
-    pendencias_por_bloco: { cnpj_receita: cnpjPendencias.length, qsa_quadro_societario: qsaPendencias.length },
-  }, [...cnpjPendencias, ...qsaPendencias], 'sistema');
+    pendencias_por_bloco: {
+      cnpj_receita: cnpjPendencias.length,
+      qsa_quadro_societario: qsaPendencias.length,
+      atos_junta_comercial: atosJunta.pendencias.length,
+      enquadramento_tributario: enquadramento.pendencias.length,
+    },
+  }, [...cnpjPendencias, ...qsaPendencias, ...atosJunta.pendencias, ...enquadramento.pendencias], 'sistema');
 
   for (const codigo of BLOCO_CODIGOS) {
-    if (['cnpj_receita', 'qsa_quadro_societario', 'contrato_social_alteracoes', 'pendencias_documentais'].includes(codigo)) continue;
+    if (['cnpj_receita', 'qsa_quadro_societario', 'atos_junta_comercial', 'enquadramento_tributario', 'contrato_social_alteracoes', 'pendencias_documentais'].includes(codigo)) continue;
     await ensureEmpresaBloco(empresaId, codigo, {}, [], 'sistema');
   }
   await ensureSocioBlocos(empresaId, socios);
@@ -559,6 +715,11 @@ async function montarDossieCreditoEmpresa(empresaId: string) {
   );
 
   const pendencias = blocos.flatMap((b: any) => Array.isArray(b.pendencias) ? b.pendencias.map((p: any) => ({ ...p, bloco_codigo: b.codigo, bloco_nome: b.nome_amigavel })) : []);
+
+  const identidadeCnpj = await avaliarProntidaoIdentidadeCnpj(
+    empresaId, empresa, cnpjPendencias, qsaPendencias, atosJunta.pendencias, enquadramento.pendencias, enquadramento.dados,
+  );
+
   return {
     empresa: {
       id: empresa.id,
@@ -568,6 +729,7 @@ async function montarDossieCreditoEmpresa(empresaId: string) {
       situacao_cadastral: empresa.situacao_cadastral,
       ultima_sincronizacao_receita: empresa.ultima_sincronizacao_receita || empresa.atualizado_receita_em || null,
     },
+    identidade_cnpj: identidadeCnpj,
     resumo: {
       total_blocos: blocos.length,
       blocos_completos: blocos.filter((b: any) => b.completo).length,
@@ -809,20 +971,6 @@ async function executarAnaliseDocumentalEspecializada(params: {
         JSON.stringify(resultado.alertas || []),
       ],
     );
-
-    // "Jornada da empresa": alertas de severidade alta/crítica encontrados
-    // pela IA ficam registrados no histórico -- mesmo que sejam corrigidos
-    // depois, fica visível que já existiu esse ponto de atenção (ex: "Consulta
-    // do Simples Nacional identificou agendamento de exclusão").
-    const alertasRelevantes = (resultado.alertas || []).filter((a) => a.severidade === 'alta' || a.severidade === 'critica');
-    if (alertasRelevantes.length) {
-      const resumo = alertasRelevantes.slice(0, 3).map((a) => a.mensagem).join(' | ');
-      await registrarHistoricoAnaliseDocumental(
-        empresaId,
-        'analise_documental_ia',
-        `${LABEL_TIPO_ANALISE[tipo]}: ${resumo}`,
-      );
-    }
   } catch (error: any) {
     console.warn('[AnaliseDocumentalEspecializada] Falha controlada na análise:', tipo, arquivoId, error?.message || error);
     await pool.query(
