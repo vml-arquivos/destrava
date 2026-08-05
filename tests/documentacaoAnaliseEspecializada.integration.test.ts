@@ -104,6 +104,39 @@ describe('POST /api/documentacao/ia/documentos/:documentoId/extrair', () => {
   });
 
 
+  it('reconhece o comprovante de enquadramento como análise do Simples Nacional', async () => {
+    mocks.analisarSimples.mockResolvedValue({
+      ...resultadoQsa,
+      tipo_analise: 'simples_nacional',
+      dados_extraidos: { cnpj: '12.345.678/0001-90', situacao_simples: 'Optante' },
+      alertas: [],
+      status: 'concluido',
+    });
+    mocks.poolQuery.mockImplementation(async (text: string) => {
+      if (text.includes('FROM public.documentos_arquivos')) {
+        return { rows: [{ id: 'doc-simples', empresa_id: 'empresa-1', entidade_id: 'empresa-1', entidade_tipo: 'empresa', tipo_documento: 'enquadramento_tributario_cnpj' }] };
+      }
+      return { rows: [] };
+    });
+    mocks.clientQuery.mockImplementation(async (text: string) => {
+      if (text.includes('FROM public.documentos_extracoes_ia')) return { rows: [] };
+      if (text.includes('INSERT INTO public.documentos_extracoes_ia')) {
+        return { rows: [{ id: 'extracao-simples', arquivo_id: 'doc-simples', prompt_codigo: 'simples_extract', status: 'pendente' }] };
+      }
+      return { rows: [] };
+    });
+
+    const response = await request(appTeste())
+      .post('/api/documentacao/ia/documentos/doc-simples/extrair')
+      .send({});
+
+    expect(response.status).toBe(202);
+    expect(response.body.tipo_analise).toBe('simples_nacional');
+    expect(response.body.extracao.prompt_codigo).toBe('simples_extract');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mocks.analisarSimples).toHaveBeenCalledWith('empresa-1', 'doc-simples');
+  });
+
   it('não dispara análise duplicada quando já existe extração pendente recente', async () => {
     mocks.poolQuery.mockImplementation(async (text: string) => {
       if (text.includes('FROM public.documentos_arquivos')) {

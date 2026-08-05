@@ -10,6 +10,7 @@ import {
   onlyDigits,
   parseDate,
 } from '../utils/helpers';
+import { extrairDocumentoLocal, type TipoDocumentoLocal } from './extracaoDocumentalLocal';
 
 const { Pool } = pkg;
 
@@ -169,6 +170,10 @@ export function validarQsaExtraida(empresa: any, sociosReceita: any[], dados: an
   if (dados?.documento_compativel === false) {
     alertas.push({ codigo: 'qsa_documento_incompativel', mensagem: 'O arquivo não foi reconhecido como QSA, Contrato Social ou ato societário compatível.', severidade: 'alta', recomendacao: 'Reclassificar o arquivo ou anexar o documento societário correto.' });
   }
+  const confiancaExtracao = normalizarConfianca(dados?.confianca);
+  if (dados?.extracao_parcial === true || (confiancaExtracao !== null && confiancaExtracao < 0.6)) {
+    alertas.push({ codigo: 'qsa_extracao_inconclusiva', mensagem: 'A leitura automática do QSA ficou abaixo do nível mínimo de confiança.', severidade: 'alta', recomendacao: 'Revisar o documento ou executar OCR externo antes de liberar o avanço.' });
+  }
   const cnpjDocumento = onlyDigits(dados?.cnpj);
   const cnpjReceita = onlyDigits(empresa?.cnpj);
   if (cnpjDocumento && cnpjReceita && cnpjDocumento !== cnpjReceita) {
@@ -248,6 +253,10 @@ export function validarSimplesExtraido(empresa: any, dados: any): AlertaDocument
   if (dados?.documento_compativel === false) {
     alertas.push({ codigo: 'simples_documento_incompativel', mensagem: 'O arquivo não foi reconhecido como comprovante do Simples Nacional.', severidade: 'alta', recomendacao: 'Reclassificar o arquivo ou anexar o comprovante correto.' });
   }
+  const confiancaExtracao = normalizarConfianca(dados?.confianca);
+  if (dados?.extracao_parcial === true || (confiancaExtracao !== null && confiancaExtracao < 0.6)) {
+    alertas.push({ codigo: 'simples_extracao_inconclusiva', mensagem: 'A leitura automática do enquadramento tributário ficou abaixo do nível mínimo de confiança.', severidade: 'alta', recomendacao: 'Revisar o documento ou executar OCR externo antes de liberar o avanço.' });
+  }
   const cnpjDocumento = onlyDigits(dados?.cnpj);
   const cnpjReceita = onlyDigits(empresa?.cnpj);
   if (cnpjDocumento && cnpjReceita && cnpjDocumento !== cnpjReceita) {
@@ -281,6 +290,10 @@ export function validarAtosJuntaExtraidos(empresa: any, dados: any): AlertaDocum
   const alertas: AlertaDocumental[] = [];
   if (dados?.documento_compativel === false) {
     alertas.push({ codigo: 'junta_documento_incompativel', mensagem: 'O arquivo não foi reconhecido como ato da Junta Comercial.', severidade: 'alta', recomendacao: 'Reclassificar o arquivo ou anexar o ato registrado correto.' });
+  }
+  const confiancaExtracao = normalizarConfianca(dados?.confianca);
+  if (dados?.extracao_parcial === true || (confiancaExtracao !== null && confiancaExtracao < 0.6)) {
+    alertas.push({ codigo: 'junta_extracao_inconclusiva', mensagem: 'A leitura automática dos Atos da Junta ficou abaixo do nível mínimo de confiança.', severidade: 'alta', recomendacao: 'Revisar o documento ou executar OCR externo antes de liberar o avanço.' });
   }
   const cnpjDocumento = onlyDigits(dados?.cnpj);
   const cnpjReceita = onlyDigits(empresa?.cnpj);
@@ -352,6 +365,14 @@ function normalizarDadosSimples(dados: any): Record<string, any> {
     ...dados,
     cnpj: dados?.cnpj ? String(dados.cnpj).trim() : null,
     situacao_simples: dados?.situacao_simples ? String(dados.situacao_simples).trim() : null,
+    regime_tributario: dados?.regime_tributario
+      ? String(dados.regime_tributario).trim()
+      : normalizarBooleano(dados?.opcao_mei) === true
+        ? 'MEI / SIMEI'
+        : normalizarSituacaoSimples(dados?.situacao_simples) === 'optante'
+          ? 'Simples Nacional'
+          : dados?.situacao_simples ? String(dados.situacao_simples).trim() : null,
+    opcao_mei: normalizarBooleano(dados?.opcao_mei),
     data_opcao_simples: parseDate(dados?.data_opcao_simples),
     data_exclusao_simples: parseDate(dados?.data_exclusao_simples),
     agendamento_exclusao: normalizarBooleano(dados?.agendamento_exclusao),
@@ -503,6 +524,7 @@ Se o documento for uma lista/certidão de arquivamentos (ex: "Lista de Arquivame
 
 export class AnaliseDocumentalService {
   private ultimoModeloUsado: string | null = null;
+  private ultimaFonteExtracao: 'local' | 'gemini' | 'injetada' | null = null;
 
   constructor(
     private readonly db: Queryable = defaultPool,
@@ -510,7 +532,10 @@ export class AnaliseDocumentalService {
   ) {}
 
   private async extrairComIA(arquivoPath: string, prompt: string, mimeType: string): Promise<any> {
-    if (this.extratorInjetado) return this.extratorInjetado(arquivoPath, prompt, mimeType);
+    if (this.extratorInjetado) {
+      this.ultimaFonteExtracao = 'injetada';
+      return this.extratorInjetado(arquivoPath, prompt, mimeType);
+    }
 
     if (String(process.env.GEMINI_DOCUMENT_OCR_ENABLED || 'true').toLowerCase() === 'false') {
       throw new Error('Análise documental Gemini desativada por GEMINI_DOCUMENT_OCR_ENABLED=false.');
@@ -557,7 +582,8 @@ export class AnaliseDocumentalService {
         const parsed = extrairJson(responseText);
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Gemini retornou JSON documental inválido.');
         this.ultimoModeloUsado = modelName;
-        return parsed;
+        this.ultimaFonteExtracao = 'gemini';
+        return { ...parsed, fonte_extracao: parsed?.fonte_extracao || 'gemini_document_ocr' };
       } catch (error) {
         ultimoErro = error;
         console.warn('[AnaliseDocumentalService] Falha na extração Gemini; tentando fallback quando disponível:', modelName, (error as any)?.message || error);
@@ -565,6 +591,57 @@ export class AnaliseDocumentalService {
     }
 
     throw ultimoErro instanceof Error ? ultimoErro : new Error('Não foi possível extrair o documento com IA.');
+  }
+
+  private async extrairHibrido(
+    arquivoPath: string,
+    prompt: string,
+    mimeType: string,
+    tipo: TipoDocumentoLocal,
+  ): Promise<any> {
+    if (this.extratorInjetado) return this.extrairComIA(arquivoPath, prompt, mimeType);
+
+    const resolvedPath = await resolverCaminhoSeguro(arquivoPath);
+    const thresholdConfigurado = Number(process.env.LOCAL_DOCUMENT_CONFIDENCE_MIN || 0.72);
+    const threshold = Number.isFinite(thresholdConfigurado)
+      ? Math.max(0.4, Math.min(0.95, thresholdConfigurado))
+      : 0.72;
+
+    let local: Awaited<ReturnType<typeof extrairDocumentoLocal>> | null = null;
+    try {
+      local = await extrairDocumentoLocal(resolvedPath, mimeType, tipo);
+      if (local.legivel && local.confianca >= threshold && local.dados?.documento_compativel !== false) {
+        this.ultimoModeloUsado = 'local:pdftotext-v1';
+        this.ultimaFonteExtracao = 'local';
+        return {
+          ...local.dados,
+          confianca: local.confianca,
+          fonte_extracao: 'local_deterministica',
+          mecanismo_extracao: local.mecanismo,
+        };
+      }
+    } catch (error: any) {
+      console.warn('[AnaliseDocumentalService] Extração local falhou de forma controlada:', tipo, error?.message || error);
+    }
+
+    try {
+      return await this.extrairComIA(arquivoPath, prompt, mimeType);
+    } catch (error: any) {
+      if (local?.legivel && local.dados && Object.keys(local.dados).length > 0) {
+        console.warn('[AnaliseDocumentalService] Gemini indisponível; mantendo extração local parcial para revisão humana:', tipo, error?.message || error);
+        this.ultimoModeloUsado = 'local:pdftotext-v1-parcial';
+        this.ultimaFonteExtracao = 'local';
+        return {
+          ...local.dados,
+          confianca: local.confianca,
+          fonte_extracao: 'local_deterministica',
+          mecanismo_extracao: local.mecanismo,
+          extracao_parcial: true,
+          motivo_extracao_parcial: local.motivo || error?.message || 'Extração local abaixo do limiar de confiança.',
+        };
+      }
+      throw error;
+    }
   }
 
   private async carregarContexto(empresaId: string, arquivoId: string): Promise<{ empresa: any; socios: any[]; documento: DocumentoArquivoRow }> {
@@ -594,24 +671,27 @@ export class AnaliseDocumentalService {
 
   async analisarQSA(empresaId: string, arquivoId: string): Promise<AnaliseDocumentalResult> {
     this.ultimoModeloUsado = null;
+    this.ultimaFonteExtracao = null;
     const { empresa, socios, documento } = await this.carregarContexto(empresaId, arquivoId);
-    const dados = normalizarDadosQsa(await this.extrairComIA(documento.caminho_arquivo!, promptQsa(), documento.mime_type || 'application/pdf'));
+    const dados = normalizarDadosQsa(await this.extrairHibrido(documento.caminho_arquivo!, promptQsa(), documento.mime_type || 'application/pdf', 'qsa'));
     const alertas = validarQsaExtraida(empresa, socios, dados);
     return criarResultado('qsa', empresaId, arquivoId, dados, alertas, this.ultimoModeloUsado);
   }
 
   async analisarSimplesNacional(empresaId: string, arquivoId: string): Promise<AnaliseDocumentalResult> {
     this.ultimoModeloUsado = null;
+    this.ultimaFonteExtracao = null;
     const { empresa, documento } = await this.carregarContexto(empresaId, arquivoId);
-    const dados = normalizarDadosSimples(await this.extrairComIA(documento.caminho_arquivo!, promptSimples(), documento.mime_type || 'application/pdf'));
+    const dados = normalizarDadosSimples(await this.extrairHibrido(documento.caminho_arquivo!, promptSimples(), documento.mime_type || 'application/pdf', 'simples_nacional'));
     const alertas = validarSimplesExtraido(empresa, dados);
     return criarResultado('simples_nacional', empresaId, arquivoId, dados, alertas, this.ultimoModeloUsado);
   }
 
   async analisarAtosJuntaComercial(empresaId: string, arquivoId: string): Promise<AnaliseDocumentalResult> {
     this.ultimoModeloUsado = null;
+    this.ultimaFonteExtracao = null;
     const { empresa, documento } = await this.carregarContexto(empresaId, arquivoId);
-    const dados = normalizarDadosAtos(await this.extrairComIA(documento.caminho_arquivo!, promptAtosJunta(), documento.mime_type || 'application/pdf'));
+    const dados = normalizarDadosAtos(await this.extrairHibrido(documento.caminho_arquivo!, promptAtosJunta(), documento.mime_type || 'application/pdf', 'atos_junta_comercial'));
     const alertas = validarAtosJuntaExtraidos(empresa, dados);
     return criarResultado('atos_junta_comercial', empresaId, arquivoId, dados, alertas, this.ultimoModeloUsado);
   }

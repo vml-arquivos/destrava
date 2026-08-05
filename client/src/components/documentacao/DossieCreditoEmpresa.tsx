@@ -3,6 +3,7 @@ import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import {
   AlertTriangle,
+  ArrowRight,
   Building2,
   CheckCircle,
   ChevronDown,
@@ -63,6 +64,41 @@ type BlocoDossie = {
   atualizacao_em?: string;
 };
 
+type DocumentoInicialStatus = {
+  nome: string;
+  anexado: boolean;
+  analisado: boolean;
+  consistente: boolean;
+  status: "ok" | "divergente" | "aguardando_analise" | "nao_anexado" | string;
+};
+
+type IdentidadeCnpj = {
+  etapa: string;
+  proxima_etapa: string;
+  apto_para_avancar: boolean;
+  botao_avancar_disponivel?: boolean;
+  quatro_documentos_ok?: boolean;
+  documentos_iniciais?: Record<string, DocumentoInicialStatus>;
+  idade_meses?: number | null;
+  situacao_cadastral_ativa?: boolean;
+  empresa_apta_12_meses?: boolean | null;
+  enquadramento_tributario?: string | null;
+  empresa_mei?: boolean;
+  estrategia_alternativa_disponivel?: boolean;
+  score_cnpj?: number | null;
+  motivos_pendentes?: string[];
+  avisos_estrategicos?: string[];
+  pontos_positivos?: string[];
+  diagnostico?: string;
+  relatorio?: {
+    conclusao?: string;
+    documentos_conferidos?: number;
+    total_documentos_iniciais?: number;
+    bloqueios?: number;
+    avisos?: number;
+  };
+};
+
 type DossieResponse = {
   empresa: {
     id: string;
@@ -72,6 +108,7 @@ type DossieResponse = {
     situacao_cadastral?: string;
     ultima_sincronizacao_receita?: string;
   };
+  identidade_cnpj?: IdentidadeCnpj;
   resumo: {
     total_blocos: number;
     blocos_completos: number;
@@ -499,7 +536,101 @@ function AnaliseCnpjCard({ analise, onGerar, loading }: { analise: AnaliseCnpjEm
   );
 }
 
-export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita }: { empresaId?: string; onAtualizarReceita?: () => void }) {
+function ProntidaoIdentidadeCard({
+  identidade,
+  onAvancar,
+}: {
+  identidade?: IdentidadeCnpj;
+  onAvancar?: () => void;
+}) {
+  if (!identidade) return null;
+  const documentos = Object.values(identidade.documentos_iniciais || {});
+  const bloqueios = identidade.motivos_pendentes || [];
+  const avisos = identidade.avisos_estrategicos || [];
+  const positivos = identidade.pontos_positivos || [];
+  const apto = identidade.apto_para_avancar === true;
+
+  const statusLabel = (item: DocumentoInicialStatus) => {
+    if (item.consistente) return "Analisado e consistente";
+    if (!item.anexado) return "Não anexado";
+    if (!item.analisado) return "Aguardando análise";
+    return "Revisão necessária";
+  };
+
+  return (
+    <section className={`rounded-2xl border p-4 ${apto ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/50"}`}>
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            {apto ? <ShieldCheck className="w-5 h-5 text-emerald-700" /> : <ShieldAlert className="w-5 h-5 text-amber-700" />}
+            <h3 className="text-sm font-extrabold text-slate-900">Prontidão da Identidade Empresarial</h3>
+            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-extrabold ${apto ? "border-emerald-200 bg-white text-emerald-700" : "border-amber-200 bg-white text-amber-800"}`}>
+              {apto ? "Tudo OK — pode avançar" : "Avanço ainda bloqueado"}
+            </span>
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-slate-700 max-w-4xl">{identidade.diagnostico}</p>
+        </div>
+        {apto && onAvancar && (
+          <button
+            type="button"
+            onClick={onAvancar}
+            className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-sm transition-colors hover:bg-emerald-700"
+          >
+            Avançar para próxima etapa <ArrowRight className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
+        {documentos.map((item) => (
+          <div key={item.nome} className="rounded-xl border border-white/80 bg-white p-3 shadow-sm">
+            <div className="flex items-start gap-2">
+              {item.consistente
+                ? <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />}
+              <div className="min-w-0">
+                <p className="text-xs font-extrabold text-slate-800">{item.nome}</p>
+                <p className={`mt-1 text-[11px] font-semibold ${item.consistente ? "text-emerald-700" : "text-amber-700"}`}>{statusLabel(item)}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-slate-400">Documentos OK</span><b className="block text-base text-slate-900">{identidade.relatorio?.documentos_conferidos ?? 0}/4</b></div>
+        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-slate-400">Tempo de abertura</span><b className="block text-base text-slate-900">{identidade.idade_meses == null ? "Não confirmado" : `${identidade.idade_meses} meses`}</b></div>
+        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-slate-400">Enquadramento</span><b className="block truncate text-sm text-slate-900">{identidade.enquadramento_tributario || "Não identificado"}</b></div>
+        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-slate-400">Score CNPJ</span><b className="block text-base text-slate-900">{identidade.score_cnpj ?? "—"}</b></div>
+      </div>
+
+      {(bloqueios.length > 0 || avisos.length > 0 || positivos.length > 0) && (
+        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <div className="rounded-xl border border-emerald-100 bg-white p-3">
+            <p className="text-xs font-extrabold text-emerald-800">Confirmações</p>
+            <div className="mt-2 space-y-1">{positivos.length ? positivos.map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-emerald-800">• {item}</p>) : <p className="text-[11px] text-slate-500">Aguardando confirmações.</p>}</div>
+          </div>
+          <div className="rounded-xl border border-red-100 bg-white p-3">
+            <p className="text-xs font-extrabold text-red-800">Bloqueios para avanço</p>
+            <div className="mt-2 space-y-1">{bloqueios.length ? bloqueios.map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-red-800">• {item}</p>) : <p className="text-[11px] text-emerald-700">Nenhum bloqueio.</p>}</div>
+          </div>
+          <div className="rounded-xl border border-amber-100 bg-white p-3">
+            <p className="text-xs font-extrabold text-amber-800">Avisos estratégicos</p>
+            <div className="mt-2 space-y-1">{avisos.length ? avisos.map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-amber-800">• {item}</p>) : <p className="text-[11px] text-slate-500">Sem avisos adicionais.</p>}</div>
+          </div>
+        </div>
+      )}
+
+      {!apto && (
+        <p className="mt-3 text-[11px] font-semibold text-slate-600">
+          O botão de avanço é exibido somente quando os quatro documentos iniciais estiverem analisados e consistentes, a empresa estiver ativa, possuir 12 meses ou mais e não estiver enquadrada como MEI.
+        </p>
+      )}
+    </section>
+  );
+}
+
+export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, onAvancar }: { empresaId?: string; onAtualizarReceita?: () => void; onAvancar?: () => void }) {
   const [dossie, setDossie] = useState<DossieResponse | null>(null);
   const [analiseCnpj, setAnaliseCnpj] = useState<AnaliseCnpjEmpresa | null>(null);
   const [loading, setLoading] = useState(false);
@@ -617,6 +748,8 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita }: 
       </div>
 
       <AnaliseCnpjCard analise={analiseCnpj} onGerar={gerarAnaliseCnpj} loading={gerandoAnaliseCnpj} />
+
+      <ProntidaoIdentidadeCard identidade={dossie?.identidade_cnpj} onAvancar={onAvancar} />
 
       {dossie?.pendencias?.some((p) => p.severidade === "alta") && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800 flex items-start gap-2">

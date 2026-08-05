@@ -19,6 +19,7 @@ import {
   parseDate,
   tempoAberturaDescricao,
 } from '../utils/helpers';
+import { extrairDocumentoLocal } from './extracaoDocumentalLocal';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -318,6 +319,35 @@ Regras:
 - Confianca deve ir de 0 a 1.`;
 }
 
+function adaptarExtracaoCartaoLocal(dados: Record<string, any>, confianca: number): ExtracaoCartao {
+  return {
+    cnpj: firstNonEmpty(dados.cnpj),
+    matriz_filial: firstNonEmpty(dados.matriz_filial),
+    data_abertura: parseDate(dados.data_abertura),
+    nome_empresarial: firstNonEmpty(dados.nome_empresarial, dados.razao_social),
+    nome_fantasia: firstNonEmpty(dados.nome_fantasia),
+    cnae_principal: firstNonEmpty(dados.cnae_principal),
+    natureza_juridica: firstNonEmpty(dados.natureza_juridica),
+    porte: firstNonEmpty(dados.porte),
+    endereco_completo: firstNonEmpty(dados.endereco_completo),
+    cep: firstNonEmpty(dados.cep),
+    logradouro: firstNonEmpty(dados.logradouro),
+    numero: firstNonEmpty(dados.numero),
+    complemento: firstNonEmpty(dados.complemento),
+    bairro: firstNonEmpty(dados.bairro),
+    municipio: firstNonEmpty(dados.municipio, dados.cidade),
+    uf: firstNonEmpty(dados.uf),
+    situacao_cadastral: firstNonEmpty(dados.situacao_cadastral),
+    data_situacao_cadastral: parseDate(dados.data_situacao_cadastral),
+    data_emissao: parseDate(dados.data_emissao),
+    data_emissao_texto: firstNonEmpty(dados.data_emissao_texto),
+    modelo: 'local:pdftotext-v1',
+    fonte: 'local_deterministica',
+    confianca: normalizarConfianca(confianca),
+    raw_text: null,
+  };
+}
+
 async function gerarGeminiCartao(modelName: string, doc: DocCartao, buffer: Buffer): Promise<ExtracaoCartao | null> {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) return null;
@@ -375,12 +405,26 @@ async function gerarGeminiCartao(modelName: string, doc: DocCartao, buffer: Buff
 }
 
 async function tentarExtrairCartaoComGemini(doc: DocCartao | null): Promise<ExtracaoCartao | null> {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  if (!geminiOcrEnabled() || !apiKey || !doc?.caminho_arquivo) return null;
+  if (!doc?.caminho_arquivo) return null;
   if (!documentoSuportadoPorGemini(doc)) return null;
 
   const filePath = await resolverCaminhoDocumento(doc.caminho_arquivo);
   if (!filePath) return null;
+
+  try {
+    const local = await extrairDocumentoLocal(filePath, inferirMimeDocumento(doc), 'cartao_cnpj');
+    const limiarConfigurado = Number(process.env.LOCAL_DOCUMENT_CONFIDENCE_MIN || 0.72);
+    const limiar = Number.isFinite(limiarConfigurado) ? Math.max(0.4, Math.min(0.95, limiarConfigurado)) : 0.72;
+    if (local.legivel && local.confianca >= limiar && local.dados?.documento_compativel !== false) {
+      const extracaoLocal = adaptarExtracaoCartaoLocal(local.dados, local.confianca);
+      if (extracaoTemQualidade(extracaoLocal)) return extracaoLocal;
+    }
+  } catch (error: any) {
+    console.warn('[analiseCnpjReceitaCartao] Extração local do Cartão CNPJ falhou de forma controlada:', error?.message || error);
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!geminiOcrEnabled() || !apiKey) return null;
 
   try {
     const buffer = await fs.readFile(filePath);

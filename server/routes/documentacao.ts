@@ -3,7 +3,8 @@ import { Router, Request, Response } from 'express';
 import pkg from 'pg';
 import { auth } from '../middleware/auth';
 import { analisarCnpjReceitaCartaoEmpresa, buscarUltimaAnaliseCnpjEmpresa, limparAnalisesCnpjEmpresa } from '../services/analiseCnpjReceitaCartao';
-import { analiseDocumentalService, type TipoAnaliseDocumental } from '../services/analiseDocumentalEspecializada';
+import { analiseDocumentalService, type AnaliseDocumentalResult, type TipoAnaliseDocumental } from '../services/analiseDocumentalEspecializada';
+import { ensureDocumentacaoSchema } from '../services/documentacaoSchema';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -173,6 +174,7 @@ async function columnExists(tableName: string, columnName: string): Promise<bool
 }
 
 async function ensureBlocosCatalogo() {
+  await ensureDocumentacaoSchema(pool);
   await pool.query(`
     INSERT INTO public.documentacao_blocos (codigo, nome_amigavel, descricao, entidade_principal, obrigatorio, ordem, configuracao)
     VALUES
@@ -402,54 +404,179 @@ function severidadeParaPendencia(sev: string): 'alta' | 'media' | 'baixa' {
   return sev === 'critica' ? 'alta' : (sev === 'media' || sev === 'baixa') ? sev : 'alta';
 }
 
-async function montarAtosJuntaDados(empresaId: string): Promise<{ dados: Record<string, any>; pendencias: Pendencia[] }> {
-  const docs = await listarDocumentosEmpresaPorTipos(empresaId, ['atos_junta_comercial']);
+async function buscarAnaliseEspecializadaPersistida(
+  arquivoId: string,
+  promptCodigo: string,
+): Promise<AnaliseDocumentalResult | null> {
+  if (!(await tableExists('documentos_extracoes_ia'))) return null;
+  const { rows } = await pool.query(
+    `SELECT resultado, status
+       FROM public.documentos_extracoes_ia
+      WHERE arquivo_id = $1
+        AND prompt_codigo = $2
+        AND status IN ('concluido', 'revisao_humana')
+      ORDER BY processado_em DESC NULLS LAST, atualizado_em DESC, criado_em DESC
+      LIMIT 1`,
+    [arquivoId, promptCodigo],
+  );
+  const resultado = rows[0]?.resultado;
+  return resultado && typeof resultado === 'object' && resultado.tipo_analise ? resultado as AnaliseDocumentalResult : null;
+}
+
+async function persistirAnaliseEspecializada(
+  arquivoId: string,
+  promptCodigo: string,
+  resultado: AnaliseDocumentalResult,
+): Promise<void> {
+  const { extracao } = await registrarExtracaoEspecializada({
+    arquivoId,
+    blocoEntidadeId: null,
+    promptCodigo,
+  });
+  await pool.query(
+    `UPDATE public.documentos_extracoes_ia
+        SET status = $2,
+            modelo = $3,
+            campos_extraidos = $4::jsonb,
+            resultado = $5::jsonb,
+            nivel_confianca = $6,
+            pendencias = $7::jsonb,
+            erros = '[]'::jsonb,
+            processado_em = NOW()
+      WHERE id = $1`,
+    [
+      extracao.id,
+      resultado.status,
+      resultado.modelo_ia,
+      JSON.stringify(resultado.dados_extraidos || {}),
+      JSON.stringify(resultado),
+      resultado.nivel_confianca,
+      JSON.stringify(resultado.alertas || []),
+    ],
+  );
+}
+
+async function obterAnaliseEspecializada(params: {
+  empresaId: string;
+  arquivoId: string;
+  tipo: TipoAnaliseDocumental;
+  promptCodigo: string;
+  processar: boolean;
+}): Promise<AnaliseDocumentalResult | null> {
+  const persistida = await buscarAnaliseEspecializadaPersistida(params.arquivoId, params.promptCodigo);
+  if (persistida) return persistida;
+  if (!params.processar) return null;
+
+  const resultado = params.tipo === 'qsa'
+    ? await analiseDocumentalService.analisarQSA(params.empresaId, params.arquivoId)
+    : params.tipo === 'simples_nacional'
+      ? await analiseDocumentalService.analisarSimplesNacional(params.empresaId, params.arquivoId)
+      : await analiseDocumentalService.analisarAtosJuntaComercial(params.empresaId, params.arquivoId);
+  await persistirAnaliseEspecializada(params.arquivoId, params.promptCodigo, resultado);
+  return resultado;
+}
+
+async function montarQsaDocumentalDados(
+  empresaId: string,
+  processar: boolean,
+): Promise<{ dados: Record<string, any>; pendencias: Pendencia[] }> {
+  const docs = await listarDocumentosEmpresaPorTipos(empresaId, ['qsa']);
   if (!docs.length) {
     return {
-      dados: { anexado: false },
-      pendencias: [{ codigo: 'atos_junta_nao_anexado', mensagem: 'Atos da Junta Comercial ainda não anexados.', severidade: 'alta', origem: 'documentos_arquivos', recomendacao: 'Anexar os Atos da Junta Comercial (ato constitutivo ou última alteração registrada) no Acervo Documental.' }],
+      dados: { anexado: false, analisado: false },
+      pendencias: [{ codigo: 'qsa_documento_nao_anexado', mensagem: 'Documento QSA ainda não anexado.', severidade: 'alta', origem: 'documentos_arquivos', recomendacao: 'Anexar o QSA no Acervo Documental.' }],
     };
   }
   const docMaisRecente = docs[0];
   try {
-    const analise = await analiseDocumentalService.analisarAtosJuntaComercial(empresaId, docMaisRecente.id);
-    const pendencias: Pendencia[] = analise.alertas.map((a) => ({
-      codigo: a.codigo, mensagem: a.mensagem, severidade: severidadeParaPendencia(a.severidade), origem: 'atos_junta_comercial', recomendacao: a.recomendacao,
-    }));
+    const analise = await obterAnaliseEspecializada({
+      empresaId,
+      arquivoId: docMaisRecente.id,
+      tipo: 'qsa',
+      promptCodigo: 'qsa_extract',
+      processar,
+    });
+    if (!analise) {
+      return {
+        dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'aguardando_analise' },
+        pendencias: [{ codigo: 'qsa_aguardando_analise', mensagem: 'QSA anexado e aguardando análise documental.', severidade: 'alta', origem: 'qsa', recomendacao: 'Use Recalcular dossiê para executar a conferência do documento.' }],
+      };
+    }
     return {
-      dados: { anexado: true, documento_id: docMaisRecente.id, status_leitura: analise.status, lido_em: analise.analisado_em, ...analise.dados_extraidos },
-      pendencias,
+      dados: { anexado: true, analisado: true, documento_id: docMaisRecente.id, status_leitura: analise.status, lido_em: analise.analisado_em, modelo: analise.modelo_ia, ...analise.dados_extraidos },
+      pendencias: analise.alertas.map((a) => ({ codigo: a.codigo, mensagem: a.mensagem, severidade: severidadeParaPendencia(a.severidade), origem: 'qsa', recomendacao: a.recomendacao })),
     };
   } catch (err: any) {
+    console.warn('[Dossie] Falha controlada na análise do QSA:', err?.message || err);
     return {
-      dados: { anexado: true, documento_id: docMaisRecente.id, status_leitura: 'pendente_ocr' },
-      pendencias: [{ codigo: 'atos_junta_pendente_ocr', mensagem: 'Atos da Junta Comercial anexados, mas ainda não foi possível ler o conteúdo automaticamente.', severidade: 'baixa', origem: 'atos_junta_comercial', recomendacao: 'Configurar GEMINI_API_KEY para leitura automática ou submeter para revisão humana.' }],
+      dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'pendente_ocr' },
+      pendencias: [{ codigo: 'qsa_pendente_ocr', mensagem: 'QSA anexado, mas a leitura automática ainda não foi concluída.', severidade: 'alta', origem: 'qsa', recomendacao: 'Revisar o documento ou habilitar o OCR externo para arquivos sem camada textual.' }],
     };
   }
 }
 
-async function montarEnquadramentoDados(empresaId: string): Promise<{ dados: Record<string, any>; pendencias: Pendencia[] }> {
-  const docs = await listarDocumentosEmpresaPorTipos(empresaId, ['enquadramento_tributario_cnpj']);
+async function montarAtosJuntaDados(
+  empresaId: string,
+  processar: boolean,
+): Promise<{ dados: Record<string, any>; pendencias: Pendencia[] }> {
+  const docs = await listarDocumentosEmpresaPorTipos(empresaId, ['atos_junta_comercial']);
   if (!docs.length) {
     return {
-      dados: { anexado: false },
-      pendencias: [{ codigo: 'enquadramento_nao_anexado', mensagem: 'Enquadramento Tributário ainda não anexado.', severidade: 'alta', origem: 'documentos_arquivos', recomendacao: 'Anexar o Enquadramento Tributário (Termo de Opção pelo Simples Nacional, Certificado MEI ou equivalente) no Acervo Documental.' }],
+      dados: { anexado: false, analisado: false },
+      pendencias: [{ codigo: 'atos_junta_nao_anexado', mensagem: 'Atos da Junta Comercial ainda não anexados.', severidade: 'alta', origem: 'documentos_arquivos', recomendacao: 'Anexar os Atos da Junta Comercial no Acervo Documental.' }],
     };
   }
   const docMaisRecente = docs[0];
   try {
-    const analise = await analiseDocumentalService.analisarSimplesNacional(empresaId, docMaisRecente.id);
-    const pendencias: Pendencia[] = analise.alertas.map((a) => ({
-      codigo: a.codigo, mensagem: a.mensagem, severidade: severidadeParaPendencia(a.severidade), origem: 'enquadramento_tributario', recomendacao: a.recomendacao,
-    }));
+    const analise = await obterAnaliseEspecializada({ empresaId, arquivoId: docMaisRecente.id, tipo: 'atos_junta_comercial', promptCodigo: 'atos_junta_extract', processar });
+    if (!analise) {
+      return {
+        dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'aguardando_analise' },
+        pendencias: [{ codigo: 'atos_junta_aguardando_analise', mensagem: 'Atos da Junta anexados e aguardando análise documental.', severidade: 'alta', origem: 'atos_junta_comercial', recomendacao: 'Use Recalcular dossiê para executar a conferência do documento.' }],
+      };
+    }
     return {
-      dados: { anexado: true, documento_id: docMaisRecente.id, status_leitura: analise.status, lido_em: analise.analisado_em, ...analise.dados_extraidos },
-      pendencias,
+      dados: { anexado: true, analisado: true, documento_id: docMaisRecente.id, status_leitura: analise.status, lido_em: analise.analisado_em, modelo: analise.modelo_ia, ...analise.dados_extraidos },
+      pendencias: analise.alertas.map((a) => ({ codigo: a.codigo, mensagem: a.mensagem, severidade: severidadeParaPendencia(a.severidade), origem: 'atos_junta_comercial', recomendacao: a.recomendacao })),
     };
   } catch (err: any) {
+    console.warn('[Dossie] Falha controlada na análise dos Atos da Junta:', err?.message || err);
     return {
-      dados: { anexado: true, documento_id: docMaisRecente.id, status_leitura: 'pendente_ocr' },
-      pendencias: [{ codigo: 'enquadramento_pendente_ocr', mensagem: 'Enquadramento Tributário anexado, mas ainda não foi possível ler o regime automaticamente.', severidade: 'baixa', origem: 'enquadramento_tributario', recomendacao: 'Configurar GEMINI_API_KEY para leitura automática ou submeter para revisão humana.' }],
+      dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'pendente_ocr' },
+      pendencias: [{ codigo: 'atos_junta_pendente_ocr', mensagem: 'Atos da Junta anexados, mas a leitura automática ainda não foi concluída.', severidade: 'alta', origem: 'atos_junta_comercial', recomendacao: 'Revisar o documento ou habilitar o OCR externo para arquivos sem camada textual.' }],
+    };
+  }
+}
+
+async function montarEnquadramentoDados(
+  empresaId: string,
+  processar: boolean,
+): Promise<{ dados: Record<string, any>; pendencias: Pendencia[] }> {
+  const docs = await listarDocumentosEmpresaPorTipos(empresaId, ['enquadramento_tributario_cnpj', 'simples_nacional']);
+  if (!docs.length) {
+    return {
+      dados: { anexado: false, analisado: false },
+      pendencias: [{ codigo: 'enquadramento_nao_anexado', mensagem: 'Enquadramento Tributário ainda não anexado.', severidade: 'alta', origem: 'documentos_arquivos', recomendacao: 'Anexar o comprovante de enquadramento tributário no Acervo Documental.' }],
+    };
+  }
+  const docMaisRecente = docs[0];
+  try {
+    const analise = await obterAnaliseEspecializada({ empresaId, arquivoId: docMaisRecente.id, tipo: 'simples_nacional', promptCodigo: 'simples_extract', processar });
+    if (!analise) {
+      return {
+        dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'aguardando_analise' },
+        pendencias: [{ codigo: 'enquadramento_aguardando_analise', mensagem: 'Enquadramento Tributário anexado e aguardando análise documental.', severidade: 'alta', origem: 'enquadramento_tributario', recomendacao: 'Use Recalcular dossiê para executar a conferência do documento.' }],
+      };
+    }
+    return {
+      dados: { anexado: true, analisado: true, documento_id: docMaisRecente.id, status_leitura: analise.status, lido_em: analise.analisado_em, modelo: analise.modelo_ia, ...analise.dados_extraidos },
+      pendencias: analise.alertas.map((a) => ({ codigo: a.codigo, mensagem: a.mensagem, severidade: severidadeParaPendencia(a.severidade), origem: 'enquadramento_tributario', recomendacao: a.recomendacao })),
+    };
+  } catch (err: any) {
+    console.warn('[Dossie] Falha controlada na análise do Enquadramento Tributário:', err?.message || err);
+    return {
+      dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'pendente_ocr' },
+      pendencias: [{ codigo: 'enquadramento_pendente_ocr', mensagem: 'Enquadramento Tributário anexado, mas a leitura automática ainda não foi concluída.', severidade: 'alta', origem: 'enquadramento_tributario', recomendacao: 'Revisar o documento ou habilitar o OCR externo para arquivos sem camada textual.' }],
     };
   }
 }
@@ -565,95 +692,176 @@ async function vincularDocumentosAutomaticos(empresaId: string) {
 // QSA, Enquadramento Tributário e Atos da Junta Comercial). Regra de negócio:
 // só considera "tudo ok, pode avançar" quando:
 //   1) situação cadastral ativa;
-//   2) empresa com 12+ meses de abertura (política de crédito para empresas
-//      novas é diferente -- não bloqueia, mas não é "pronta" pra seguir
-//      igual a uma empresa madura);
+//   2) empresa com 12+ meses de abertura para o fluxo padrão;
 //   3) nenhuma pendência de severidade alta/crítica nos 4 blocos (CNPJ
 //      divergente, sócio não localizado na Receita, capital social
 //      incompatível, alteração recente não refletida etc.);
-//   4) enquadramento tributário identificado -- MEI não é bloqueio (MEI pode
-//      avançar), mas gera um aviso estratégico específico, porque nem toda
-//      linha de crédito aceita MEI, e isso muda a estratégia da próxima fase.
+//   4) enquadramento tributário identificado e empresa fora do MEI.
+//      Empresas MEI recebem estratégia alternativa, sem liberar o fluxo padrão.
 // Isso alimenta o botão/CTA "Avançar para a próxima etapa" no relatório.
 // ─────────────────────────────────────────────────────────────────────────
-async function avaliarProntidaoIdentidadeCnpj(
-  empresaId: string,
-  empresa: any,
-  cnpjPendencias: Pendencia[],
-  qsaPendencias: Pendencia[],
-  atosJuntaPendencias: Pendencia[],
-  enquadramentoPendencias: Pendencia[],
-  enquadramentoDados: Record<string, any>,
-) {
-  const analiseCnpj = await buscarUltimaAnaliseCnpjEmpresa(empresaId).catch(() => null);
-  const resultadoCnpj = (analiseCnpj?.resultado && typeof analiseCnpj.resultado === 'object') ? analiseCnpj.resultado : {};
-  const idadeMeses: number | null = resultadoCnpj?.campos_receita?.idade_meses ?? null;
+async function avaliarProntidaoIdentidadeCnpj(params: {
+  empresaId: string;
+  empresa: any;
+  docsCartao: any[];
+  cnpjPendencias: Pendencia[];
+  qsaPendencias: Pendencia[];
+  atosJuntaPendencias: Pendencia[];
+  enquadramentoPendencias: Pendencia[];
+  qsaDados: Record<string, any>;
+  atosJuntaDados: Record<string, any>;
+  enquadramentoDados: Record<string, any>;
+}) {
+  const analiseCnpj = await buscarUltimaAnaliseCnpjEmpresa(params.empresaId).catch(() => null);
+  const resultadoCnpj = analiseCnpj?.resultado && typeof analiseCnpj.resultado === 'object' ? analiseCnpj.resultado : {};
+  const idadeMeses: number | null = resultadoCnpj?.campos_receita?.idade_meses ?? analiseCnpj?.idade_meses ?? null;
 
-  const motivos: string[] = [];
+  const bloqueios: string[] = [];
+  const avisos: string[] = [];
   const pontosPositivos: string[] = [];
+  const addBloqueio = (mensagem: string) => { if (mensagem && !bloqueios.includes(mensagem)) bloqueios.push(mensagem); };
+  const addAviso = (mensagem: string) => { if (mensagem && !avisos.includes(mensagem)) avisos.push(mensagem); };
 
-  const situacaoAtiva = isSituacaoAtiva(empresa.situacao_cadastral);
+  const situacaoAtiva = isSituacaoAtiva(params.empresa.situacao_cadastral);
   if (situacaoAtiva) pontosPositivos.push('Situação cadastral ativa na Receita Federal.');
-  else motivos.push(`Situação cadastral "${empresa.situacao_cadastral || 'não informada'}" impede o avanço -- só empresas ativas seguem para a próxima etapa.`);
+  else addBloqueio(`Situação cadastral "${params.empresa.situacao_cadastral || 'não informada'}" impede o avanço.`);
 
-  let empresaApta12Meses: boolean | null = null;
-  if (idadeMeses !== null) {
-    empresaApta12Meses = idadeMeses >= 12;
-    if (empresaApta12Meses) pontosPositivos.push(`Empresa com ${idadeMeses} meses de abertura -- acima dos 12 meses mínimos para solicitar crédito.`);
-    else motivos.push(`Empresa com apenas ${idadeMeses} meses de abertura -- abaixo dos 12 meses mínimos para a maioria das linhas de crédito. Direcionar para linhas específicas de empresas novas.`);
-  } else {
-    motivos.push('Tempo de abertura ainda não confirmado -- gerar/atualizar a Análise de CNPJ antes de avançar.');
+  const empresaApta12Meses = idadeMeses === null ? null : idadeMeses >= 12;
+  if (empresaApta12Meses === true) pontosPositivos.push(`Empresa com ${idadeMeses} meses de abertura, acima do mínimo operacional de 12 meses.`);
+  else if (empresaApta12Meses === false) addBloqueio(`Empresa com ${idadeMeses} meses de abertura, abaixo dos 12 meses definidos para o fluxo padrão.`);
+  else addBloqueio('Tempo de abertura ainda não confirmado pela análise do CNPJ.');
+
+  const alertasCnpj = [
+    ...(Array.isArray(analiseCnpj?.alertas) ? analiseCnpj.alertas : []),
+    ...(Array.isArray(analiseCnpj?.divergencias) ? analiseCnpj.divergencias : []),
+    ...(Array.isArray(resultadoCnpj?.alertas) ? resultadoCnpj.alertas : []),
+    ...(Array.isArray(resultadoCnpj?.divergencias) ? resultadoCnpj.divergencias : []),
+  ];
+  const cnpjTemDivergenciaGrave = alertasCnpj.some((item: any) => ['alta', 'critica'].includes(String(item?.severidade || '').toLowerCase()) || item?.divergente === true);
+  const cartaoAnexado = params.docsCartao.length > 0 || analiseCnpj?.cartao_anexado === true;
+  const cartaoAnalisado = !!analiseCnpj && analiseCnpj?.cartao_pendente_ocr !== true;
+  const cartaoConsistente = cartaoAnexado && cartaoAnalisado && !cnpjTemDivergenciaGrave;
+  if (!cartaoAnexado) addBloqueio('Cartão CNPJ não anexado.');
+  else if (!cartaoAnalisado) addBloqueio('Cartão CNPJ anexado, mas a leitura e conferência ainda não foram concluídas.');
+  else if (!cartaoConsistente) addBloqueio('Cartão CNPJ possui divergência relevante com os dados da Receita Federal.');
+  else pontosPositivos.push('Cartão CNPJ analisado e convergente com a Receita Federal.');
+
+  const qsaAnexado = params.qsaDados?.anexado === true;
+  const qsaAnalisado = params.qsaDados?.analisado === true;
+  const qsaTemGrave = params.qsaPendencias.some((p) => p.severidade === 'alta');
+  const qsaConsistente = qsaAnexado && qsaAnalisado && !qsaTemGrave;
+  if (!qsaAnexado) addBloqueio('Documento QSA não anexado.');
+  else if (!qsaAnalisado) addBloqueio('QSA anexado, mas a análise documental ainda não foi concluída.');
+  else if (qsaTemGrave) addBloqueio('QSA possui divergências societárias relevantes.');
+  else pontosPositivos.push('QSA analisado, com sócios e administradores consistentes.');
+
+  const atosAnexado = params.atosJuntaDados?.anexado === true;
+  const atosAnalisado = params.atosJuntaDados?.analisado === true;
+  const atosTemGrave = params.atosJuntaPendencias.some((p) => p.severidade === 'alta');
+  const atosConsistente = atosAnexado && atosAnalisado && !atosTemGrave;
+  if (!atosAnexado) addBloqueio('Atos da Junta Comercial não anexados.');
+  else if (!atosAnalisado) addBloqueio('Atos da Junta anexados, mas a análise ainda não foi concluída.');
+  else if (atosTemGrave) addBloqueio('Atos da Junta possuem divergências relevantes.');
+  else pontosPositivos.push('Atos da Junta Comercial analisados e convergentes.');
+
+  const enquadramentoAnexado = params.enquadramentoDados?.anexado === true;
+  const enquadramentoAnalisado = params.enquadramentoDados?.analisado === true;
+  const enquadramentoTemGrave = params.enquadramentoPendencias.some((p) => p.severidade === 'alta');
+  const regime = String(params.enquadramentoDados?.regime_tributario || params.empresa?.regime_tributario || '').trim();
+  const situacaoSimples = String(params.enquadramentoDados?.situacao_simples || '').trim();
+  const enquadramentoIdentificado = !!regime || !!situacaoSimples;
+  const enquadramentoConsistente = enquadramentoAnexado && enquadramentoAnalisado && enquadramentoIdentificado && !enquadramentoTemGrave;
+  if (!enquadramentoAnexado) addBloqueio('Comprovante de enquadramento tributário não anexado.');
+  else if (!enquadramentoAnalisado) addBloqueio('Enquadramento tributário anexado, mas a análise ainda não foi concluída.');
+  else if (!enquadramentoIdentificado) addBloqueio('Regime tributário não identificado no documento analisado.');
+  else if (enquadramentoTemGrave) addBloqueio('Enquadramento tributário possui divergência relevante.');
+  else pontosPositivos.push(`Enquadramento tributário identificado e conferido: ${regime || situacaoSimples}.`);
+
+  const textoEnquadramento = [regime, situacaoSimples, params.empresa?.porte, params.empresa?.natureza_juridica].filter(Boolean).join(' ');
+  const ehMei = params.enquadramentoDados?.opcao_mei === true
+    || params.empresa?.opcao_mei === true
+    || /\bmei\b|microempreendedor individual|simei/i.test(textoEnquadramento);
+  if (ehMei) {
+    addBloqueio('Empresa enquadrada como MEI. O fluxo padrão de crédito empresarial não será liberado; deve ser criada estratégia específica para linhas compatíveis com MEI.');
+    addAviso('MEI pode seguir em uma estratégia alternativa, sem ser descartado da assessoria.');
   }
 
-  const regime = String(enquadramentoDados?.regime_tributario || '').trim();
-  const ehMei = /\bmei\b/i.test(regime) || empresa?.opcao_mei === true;
-  if (regime) {
-    pontosPositivos.push(`Enquadramento tributário identificado: ${regime}.`);
-    if (ehMei) motivos.push('Empresa enquadrada como MEI -- algumas linhas de crédito não aceitam esse enquadramento. Isso não impede a análise, mas direciona a estratégia para as linhas compatíveis com MEI.');
-  }
+  const todasPendencias = [
+    ...params.cnpjPendencias,
+    ...params.qsaPendencias,
+    ...params.atosJuntaPendencias,
+    ...params.enquadramentoPendencias,
+  ];
+  for (const pendencia of todasPendencias.filter((p) => p.severidade === 'alta')) addBloqueio(pendencia.mensagem);
+  for (const pendencia of todasPendencias.filter((p) => p.severidade === 'media')) addAviso(pendencia.mensagem);
 
-  const pendenciasGraves = [...cnpjPendencias, ...qsaPendencias, ...atosJuntaPendencias, ...enquadramentoPendencias]
-    .filter((p) => p.severidade === 'alta');
-  for (const p of pendenciasGraves) motivos.push(p.mensagem);
-
-  // MEI é aviso estratégico, não impede o avanço -- some da lista de bloqueios.
-  const motivosBloqueio = motivos.filter((m) => !m.includes('MEI'));
-  const apto = motivosBloqueio.length === 0;
+  const documentosIniciais = {
+    cartao_cnpj: { nome: 'Cartão CNPJ', anexado: cartaoAnexado, analisado: cartaoAnalisado, consistente: cartaoConsistente, status: cartaoConsistente ? 'ok' : cartaoAnalisado ? 'divergente' : cartaoAnexado ? 'aguardando_analise' : 'nao_anexado' },
+    qsa: { nome: 'QSA', anexado: qsaAnexado, analisado: qsaAnalisado, consistente: qsaConsistente, status: qsaConsistente ? 'ok' : qsaAnalisado ? 'divergente' : qsaAnexado ? 'aguardando_analise' : 'nao_anexado' },
+    enquadramento_tributario: { nome: 'Enquadramento Tributário', anexado: enquadramentoAnexado, analisado: enquadramentoAnalisado, consistente: enquadramentoConsistente, status: enquadramentoConsistente ? 'ok' : enquadramentoAnalisado ? 'divergente' : enquadramentoAnexado ? 'aguardando_analise' : 'nao_anexado' },
+    atos_junta_comercial: { nome: 'Atos da Junta Comercial', anexado: atosAnexado, analisado: atosAnalisado, consistente: atosConsistente, status: atosConsistente ? 'ok' : atosAnalisado ? 'divergente' : atosAnexado ? 'aguardando_analise' : 'nao_anexado' },
+  };
+  const quatroDocumentosOk = Object.values(documentosIniciais).every((item) => item.consistente);
+  const apto = situacaoAtiva && empresaApta12Meses === true && quatroDocumentosOk && !ehMei && bloqueios.length === 0;
 
   return {
+    etapa: 'identidade_cnpj',
+    proxima_etapa: 'documentos_empresa_socios_certidoes',
     apto_para_avancar: apto,
+    botao_avancar_disponivel: apto,
+    quatro_documentos_ok: quatroDocumentosOk,
+    documentos_iniciais: documentosIniciais,
     idade_meses: idadeMeses,
     situacao_cadastral_ativa: situacaoAtiva,
     empresa_apta_12_meses: empresaApta12Meses,
-    enquadramento_tributario: regime || null,
+    enquadramento_tributario: regime || situacaoSimples || null,
     empresa_mei: ehMei,
+    estrategia_alternativa_disponivel: ehMei,
     score_cnpj: analiseCnpj?.score_cnpj ?? null,
-    motivos_pendentes: motivosBloqueio,
-    avisos_estrategicos: motivos.filter((m) => m.includes('MEI')),
+    motivos_pendentes: bloqueios,
+    avisos_estrategicos: avisos,
     pontos_positivos: pontosPositivos,
+    relatorio: {
+      conclusao: apto ? 'APTO_PARA_AVANCAR' : 'PENDENTE',
+      documentos_conferidos: Object.values(documentosIniciais).filter((item) => item.consistente).length,
+      total_documentos_iniciais: 4,
+      bloqueios: bloqueios.length,
+      avisos: avisos.length,
+    },
     diagnostico: apto
-      ? `Identidade do CNPJ completa e consistente: CNPJ, QSA, Enquadramento Tributário e Atos da Junta Comercial conferem entre si e com os dados da Receita Federal. ${empresaApta12Meses ? 'Empresa apta a solicitar crédito (mais de 12 meses de abertura).' : ''} Pronta para avançar à próxima etapa: documentação da empresa, documentação dos sócios e certidões (CND e demais).`
-      : `Identidade do CNPJ ainda com ${motivosBloqueio.length} ponto(s) a resolver antes de avançar para a próxima etapa de análise.`,
+      ? 'Identidade empresarial validada: os quatro documentos iniciais estão analisados, convergentes e sem impedimentos. A empresa está ativa, possui pelo menos 12 meses de abertura e não é MEI. Pode avançar para documentos da empresa, documentos dos sócios, certidões e estratégia de crédito.'
+      : `A etapa Identidade do CNPJ possui ${bloqueios.length} bloqueio(s). O avanço só será liberado após os quatro documentos iniciais estarem analisados e consistentes, a empresa estar ativa, ter 12 meses ou mais e não estar enquadrada como MEI.`,
   };
 }
 
-async function montarDossieCreditoEmpresa(empresaId: string) {
+async function montarDossieCreditoEmpresa(empresaId: string, options: { processarDocumentos?: boolean; usuarioId?: string | null } = {}) {
   await ensureBlocosCatalogo();
+  if (options.processarDocumentos) {
+    try {
+      await analisarCnpjReceitaCartaoEmpresa(empresaId, options.usuarioId || null);
+    } catch (error: any) {
+      console.warn('[Dossie] Análise do Cartão CNPJ não interrompeu o recálculo:', error?.message || error);
+    }
+  }
   const empresa = await getEmpresa(empresaId);
   if (!empresa) return null;
   const socios = await getSociosEmpresa(empresaId);
-  const docsCnpj = await listarDocumentosEmpresaPorTipos(empresaId, ['cartao_cnpj', 'certidao', 'consulta_receita']);
-  const cnpjPendencias = pendenciasCnpj(empresa, docsCnpj);
-  const qsaPendencias = pendenciasQsa(socios, empresa);
+  const docsCnpj = await listarDocumentosEmpresaPorTipos(empresaId, ['cartao_cnpj', 'cnpj_cartao', 'certidao', 'consulta_receita']);
+  const docsCartao = docsCnpj.filter((doc: any) => ['cartao_cnpj', 'cnpj_cartao'].includes(String(doc.tipo_documento || '')));
+  const cnpjPendencias = pendenciasCnpj(empresa, docsCartao);
+  const qsaCadastroPendencias = pendenciasQsa(socios, empresa);
+  const qsaDocumental = await montarQsaDocumentalDados(empresaId, !!options.processarDocumentos);
+  const qsaPendencias = [...qsaCadastroPendencias, ...qsaDocumental.pendencias];
+  const qsaDadosCompletos = { ...dadosQsa(empresa, socios), analise_documental: qsaDocumental.dados };
 
   const cnpjBloco = await ensureEmpresaBloco(empresaId, 'cnpj_receita', montarCnpjDados(empresa), cnpjPendencias, 'receita');
-  const qsaBloco = await ensureEmpresaBloco(empresaId, 'qsa_quadro_societario', dadosQsa(empresa, socios), qsaPendencias, socios.length ? 'receita' : 'sistema');
+  const qsaBloco = await ensureEmpresaBloco(empresaId, 'qsa_quadro_societario', qsaDadosCompletos, qsaPendencias, socios.length ? 'receita' : 'sistema');
 
-  const atosJunta = await montarAtosJuntaDados(empresaId);
-  await ensureEmpresaBloco(empresaId, 'atos_junta_comercial', atosJunta.dados, atosJunta.pendencias, 'documento_ia');
+  const atosJunta = await montarAtosJuntaDados(empresaId, !!options.processarDocumentos);
+  await ensureEmpresaBloco(empresaId, 'atos_junta_comercial', atosJunta.dados, atosJunta.pendencias, 'ia');
 
-  const enquadramento = await montarEnquadramentoDados(empresaId);
-  await ensureEmpresaBloco(empresaId, 'enquadramento_tributario', enquadramento.dados, enquadramento.pendencias, 'documento_ia');
+  const enquadramento = await montarEnquadramentoDados(empresaId, !!options.processarDocumentos);
+  await ensureEmpresaBloco(empresaId, 'enquadramento_tributario', enquadramento.dados, enquadramento.pendencias, 'ia');
 
   const docsContrato = await listarDocumentosEmpresaPorTipos(empresaId, ['contrato_social', 'alteracao_contratual', 'estatuto', 'procuracao']);
   await ensureEmpresaBloco(
@@ -716,9 +924,18 @@ async function montarDossieCreditoEmpresa(empresaId: string) {
 
   const pendencias = blocos.flatMap((b: any) => Array.isArray(b.pendencias) ? b.pendencias.map((p: any) => ({ ...p, bloco_codigo: b.codigo, bloco_nome: b.nome_amigavel })) : []);
 
-  const identidadeCnpj = await avaliarProntidaoIdentidadeCnpj(
-    empresaId, empresa, cnpjPendencias, qsaPendencias, atosJunta.pendencias, enquadramento.pendencias, enquadramento.dados,
-  );
+  const identidadeCnpj = await avaliarProntidaoIdentidadeCnpj({
+    empresaId,
+    empresa,
+    docsCartao,
+    cnpjPendencias,
+    qsaPendencias,
+    atosJuntaPendencias: atosJunta.pendencias,
+    enquadramentoPendencias: enquadramento.pendencias,
+    qsaDados: qsaDocumental.dados,
+    atosJuntaDados: atosJunta.dados,
+    enquadramentoDados: enquadramento.dados,
+  });
 
   return {
     empresa: {
@@ -828,7 +1045,8 @@ router.get('/empresa/:empresaId/pendencias', auth, async (req: Request, res: Res
 
 router.post('/empresa/:empresaId/recalcular', auth, async (req: Request, res: Response) => {
   try {
-    const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
+    const user = (req as any).colaborador || (req as any).user;
+    const dossie = await montarDossieCreditoEmpresa(req.params.empresaId, { processarDocumentos: true, usuarioId: user?.id || null });
     if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
     res.json(dossie);
   } catch (err: any) {
@@ -926,6 +1144,7 @@ router.delete('/blocos/:blocoEntidadeId/documentos/:documentoId', auth, async (r
 const ANALISE_ESPECIALIZADA_POR_TIPO: Partial<Record<string, { tipo: TipoAnaliseDocumental; promptCodigo: string }>> = {
   qsa: { tipo: 'qsa', promptCodigo: 'qsa_extract' },
   simples_nacional: { tipo: 'simples_nacional', promptCodigo: 'simples_extract' },
+  enquadramento_tributario_cnpj: { tipo: 'simples_nacional', promptCodigo: 'simples_extract' },
   atos_junta_comercial: { tipo: 'atos_junta_comercial', promptCodigo: 'atos_junta_extract' },
 };
 
@@ -1062,6 +1281,7 @@ async function registrarExtracaoEspecializada(params: {
 
 router.post('/ia/documentos/:documentoId/extrair', auth, async (req: Request, res: Response) => {
   try {
+    await ensureDocumentacaoSchema(pool);
     const { bloco_entidade_id, prompt_codigo } = req.body || {};
     const arquivoId = req.params.documentoId;
     const documentoResult = await pool.query(
@@ -1121,6 +1341,7 @@ router.post('/ia/documentos/:documentoId/extrair', auth, async (req: Request, re
 
 router.post('/ia/empresa/:empresaId/analisar', auth, async (req: Request, res: Response) => {
   try {
+    await ensureDocumentacaoSchema(pool);
     const user = (req as any).colaborador || (req as any).user;
     const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
     if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }

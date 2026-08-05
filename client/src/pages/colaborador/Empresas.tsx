@@ -2153,6 +2153,7 @@ export default function Empresas() {
                       <DossieCreditoEmpresa
                         empresaId={selecionada?.id}
                         onAtualizarReceita={selecionada ? () => sincronizarDados(selecionada) : undefined}
+                        onAvancar={abaPermitida("documentos") ? () => navegarParaAba("documentos") : undefined}
                       />
                     )
 

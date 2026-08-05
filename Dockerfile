@@ -66,6 +66,7 @@ RUN apt-get update \
        libgbm1 \
        libnss3 \
        libpango-1.0-0 \
+       poppler-utils \
        libx11-6 \
        libx11-xcb1 \
        libxcb1 \

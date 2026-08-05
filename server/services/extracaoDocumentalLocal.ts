@@ -1,0 +1,376 @@
+import { execFile } from 'node:child_process';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import { normalizeText, onlyDigits, parseDate } from '../utils/helpers';
+
+const execFileAsync = promisify(execFile);
+
+export type TipoDocumentoLocal = 'cartao_cnpj' | 'qsa' | 'simples_nacional' | 'atos_junta_comercial';
+
+export interface ExtracaoDocumentalLocalResult {
+  tipo: TipoDocumentoLocal;
+  disponivel: boolean;
+  legivel: boolean;
+  mecanismo: 'pdftotext';
+  texto: string;
+  dados: Record<string, any>;
+  confianca: number;
+  motivo?: string;
+}
+
+function clamp(value: number): number {
+  return Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+}
+
+function textoNormalizado(value: unknown): string {
+  return normalizeText(value).replace(/\s+/g, ' ').trim();
+}
+
+function linhasTexto(texto: string): string[] {
+  return String(texto || '')
+    .replace(/\u0000/g, '')
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((linha) => linha.replace(/[\t ]+/g, ' ').trim())
+    .filter(Boolean);
+}
+
+function pareceRotulo(linha: string): boolean {
+  const n = textoNormalizado(linha);
+  if (!n) return false;
+  const rotulos = [
+    'numero de inscricao', 'data de abertura', 'nome empresarial', 'nome fantasia',
+    'titulo do estabelecimento', 'codigo e descricao', 'atividade economica principal',
+    'natureza juridica', 'logradouro', 'numero', 'complemento', 'cep', 'bairro',
+    'municipio', 'uf', 'situacao cadastral', 'data da situacao cadastral', 'porte',
+    'capital social', 'nome nome empresarial', 'qualificacao', 'cnpj', 'nire',
+    'data do registro', 'data de registro', 'situacao no simples nacional',
+  ];
+  return rotulos.some((rotulo) => n === rotulo || n.startsWith(`${rotulo}:`) || n.startsWith(`${rotulo} (`));
+}
+
+function valorAposRotulo(linhas: string[], aliases: string[], limite = 3): string | null {
+  const aliasesNorm = aliases.map(textoNormalizado);
+  for (let i = 0; i < linhas.length; i += 1) {
+    const linha = linhas[i];
+    const normalizada = textoNormalizado(linha);
+    const alias = aliasesNorm.find((item) => normalizada === item || normalizada.startsWith(`${item}:`) || normalizada.startsWith(`${item} `));
+    if (!alias) continue;
+
+    const posDoisPontos = linha.indexOf(':');
+    if (posDoisPontos >= 0) {
+      const inline = linha.slice(posDoisPontos + 1).trim();
+      if (inline) return inline;
+    }
+
+    const restoNormalizado = normalizada.slice(alias.length).replace(/^\s*[-–—:]\s*/, '').trim();
+    if (restoNormalizado && restoNormalizado !== normalizada) {
+      const indiceOriginal = linha.toLocaleLowerCase('pt-BR').indexOf(alias.split(' ')[0]);
+      if (indiceOriginal >= 0) {
+        const candidato = linha.slice(indiceOriginal + alias.length).replace(/^\s*[-–—:]\s*/, '').trim();
+        if (candidato) return candidato;
+      }
+    }
+
+    for (let offset = 1; offset <= limite && i + offset < linhas.length; offset += 1) {
+      const candidato = linhas[i + offset];
+      if (!candidato || pareceRotulo(candidato)) continue;
+      return candidato;
+    }
+  }
+  return null;
+}
+
+function primeiroCnpj(texto: string): string | null {
+  const match = String(texto || '').match(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/);
+  return match?.[0] || null;
+}
+
+function formatarCnpj(value: string | null): string | null {
+  const digits = onlyDigits(value);
+  if (digits.length !== 14) return value;
+  return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+}
+
+function numeroMonetario(value: unknown): number | null {
+  const raw = String(value ?? '').replace(/R\$/gi, '').trim();
+  if (!raw) return null;
+  const matches = raw.match(/-?[\d.]+(?:,\d{1,2})?|-?\d+(?:\.\d{1,2})?/g);
+  if (!matches?.length) return null;
+  const token = matches[matches.length - 1];
+  let normalized = token;
+  if (token.includes(',')) normalized = token.replace(/\./g, '').replace(',', '.');
+  else if ((token.match(/\./g) || []).length > 1) normalized = token.replace(/\./g, '');
+  const n = Number(normalized.replace(/[^\d.-]/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
+function dataProximaDe(texto: string, expressao: RegExp): string | null {
+  const match = texto.match(expressao);
+  if (!match) return null;
+  const data = match.slice(1).find((item) => item && /^\d{2}\/\d{2}\/\d{4}$/.test(item));
+  return parseDate(data || null);
+}
+
+function limparValor(value: string | null): string | null {
+  if (!value) return null;
+  const clean = value.replace(/\s+/g, ' ').replace(/^[-–—:]+\s*/, '').trim();
+  return clean && clean !== '-' ? clean : null;
+}
+
+function parseCartaoCnpj(texto: string): { dados: Record<string, any>; confianca: number } {
+  const linhas = linhasTexto(texto);
+  const norm = textoNormalizado(texto);
+  const compativel = norm.includes('comprovante de inscricao e de situacao cadastral')
+    || norm.includes('cadastro nacional da pessoa juridica');
+
+  const numeroInscricao = valorAposRotulo(linhas, ['número de inscrição', 'numero de inscricao']);
+  const cnpj = formatarCnpj(primeiroCnpj(numeroInscricao || texto));
+  const dataAbertura = parseDate(valorAposRotulo(linhas, ['data de abertura']));
+  const nomeEmpresarial = limparValor(valorAposRotulo(linhas, ['nome empresarial']));
+  const nomeFantasia = limparValor(valorAposRotulo(linhas, ['título do estabelecimento (nome de fantasia)', 'titulo do estabelecimento', 'nome de fantasia']));
+  const cnae = limparValor(valorAposRotulo(linhas, ['código e descrição da atividade econômica principal', 'codigo e descricao da atividade economica principal']));
+  const natureza = limparValor(valorAposRotulo(linhas, ['código e descrição da natureza jurídica', 'codigo e descricao da natureza juridica']));
+  const porte = limparValor(valorAposRotulo(linhas, ['porte']));
+  const situacao = limparValor(valorAposRotulo(linhas, ['situação cadastral', 'situacao cadastral']));
+  const dataSituacao = parseDate(valorAposRotulo(linhas, ['data da situação cadastral', 'data da situacao cadastral']));
+  const cep = limparValor(valorAposRotulo(linhas, ['cep']));
+  const logradouro = limparValor(valorAposRotulo(linhas, ['logradouro']));
+  const numero = limparValor(valorAposRotulo(linhas, ['número', 'numero']));
+  const complemento = limparValor(valorAposRotulo(linhas, ['complemento']));
+  const bairro = limparValor(valorAposRotulo(linhas, ['bairro/distrito', 'bairro distrito']));
+  const municipio = limparValor(valorAposRotulo(linhas, ['município', 'municipio']));
+  const uf = limparValor(valorAposRotulo(linhas, ['uf']));
+  const emissaoMatch = texto.match(/emitido\s+no\s+dia\s+(\d{2}\/\d{2}\/\d{4})(?:\s+às?\s+([\d:]+))?/i);
+  const matrizFilial = /\bfilial\b/i.test(numeroInscricao || '') ? 'filial' : /\bmatriz\b/i.test(numeroInscricao || '') ? 'matriz' : null;
+
+  const campos = [cnpj, dataAbertura, nomeEmpresarial, cnae, natureza, porte, situacao, dataSituacao];
+  const preenchidos = campos.filter(Boolean).length;
+  const confianca = clamp((compativel ? 0.2 : 0) + (preenchidos / campos.length) * 0.75 + (emissaoMatch ? 0.05 : 0));
+  return {
+    dados: {
+      documento_e_cartao_cnpj: compativel,
+      documento_compativel: compativel,
+      cnpj,
+      matriz_filial: matrizFilial,
+      data_abertura: dataAbertura,
+      nome_empresarial: nomeEmpresarial,
+      nome_fantasia: nomeFantasia,
+      cnae_principal: cnae,
+      natureza_juridica: natureza,
+      porte,
+      endereco_completo: [logradouro, numero, complemento, bairro, municipio, uf, cep].filter(Boolean).join(', ') || null,
+      cep,
+      logradouro,
+      numero,
+      complemento,
+      bairro,
+      municipio,
+      uf,
+      situacao_cadastral: situacao,
+      data_situacao_cadastral: dataSituacao,
+      data_emissao: parseDate(emissaoMatch?.[1] || null),
+      data_emissao_texto: emissaoMatch?.[0] || null,
+      confianca,
+      fonte_extracao: 'local_deterministica',
+    },
+    confianca,
+  };
+}
+
+function parseQsa(texto: string): { dados: Record<string, any>; confianca: number } {
+  const linhas = linhasTexto(texto);
+  const norm = textoNormalizado(texto);
+  const compativel = norm.includes('quadro de socios e administradores')
+    || norm.includes('quadro societario')
+    || norm.includes('capital social')
+    || norm.includes('qualificacao do socio');
+  const cnpj = formatarCnpj(primeiroCnpj(texto));
+  const razaoSocial = limparValor(valorAposRotulo(linhas, ['nome empresarial', 'razão social', 'razao social']));
+  const capitalLinha = valorAposRotulo(linhas, ['capital social']);
+  const capitalSocial = numeroMonetario(capitalLinha);
+  const dataRegistro = parseDate(valorAposRotulo(linhas, ['data de registro', 'data do registro', 'data de arquivamento']));
+
+  const socios: Array<{ nome: string; qualificacao: string | null; cpf_cnpj: string | null }> = [];
+  const nomesRotulo = new Set(['nome nome empresarial', 'nome do socio', 'nome socio', 'socio']);
+  for (let i = 0; i < linhas.length; i += 1) {
+    const linhaNorm = textoNormalizado(linhas[i]).replace(/[\/]/g, ' ');
+    if (!Array.from(nomesRotulo).some((rotulo) => linhaNorm === rotulo || linhaNorm.startsWith(`${rotulo}:`))) continue;
+    const nome = limparValor(linhas[i].includes(':') ? linhas[i].split(':').slice(1).join(':') : linhas[i + 1] || null);
+    if (!nome || pareceRotulo(nome)) continue;
+    let qualificacao: string | null = null;
+    let cpfCnpj: string | null = null;
+    for (let j = i + 1; j <= Math.min(i + 8, linhas.length - 1); j += 1) {
+      const atualNorm = textoNormalizado(linhas[j]);
+      if (atualNorm.startsWith('qualificacao')) {
+        qualificacao = limparValor(linhas[j].includes(':') ? linhas[j].split(':').slice(1).join(':') : linhas[j + 1] || null);
+      }
+      const doc = linhas[j].match(/\b(?:\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})\b/);
+      if (doc) cpfCnpj = doc[0];
+    }
+    if (!socios.some((socio) => textoNormalizado(socio.nome) === textoNormalizado(nome))) {
+      socios.push({ nome, qualificacao, cpf_cnpj: cpfCnpj });
+    }
+  }
+
+  const pontuacao = (compativel ? 0.15 : 0)
+    + (cnpj ? 0.25 : 0)
+    + (razaoSocial ? 0.1 : 0)
+    + (capitalSocial !== null ? 0.2 : 0)
+    + (socios.length ? 0.3 : 0);
+  const confianca = clamp(pontuacao);
+  return {
+    dados: {
+      documento_compativel: compativel,
+      cnpj,
+      razao_social: razaoSocial,
+      capital_social: capitalSocial,
+      socios,
+      data_registro: dataRegistro,
+      confianca,
+      fonte_extracao: 'local_deterministica',
+    },
+    confianca,
+  };
+}
+
+function parseSimples(texto: string): { dados: Record<string, any>; confianca: number } {
+  const norm = textoNormalizado(texto);
+  const compativel = norm.includes('simples nacional') || norm.includes('consulta optantes') || norm.includes('simei');
+  const cnpj = formatarCnpj(primeiroCnpj(texto));
+  const naoOptante = /n[aã]o\s+optante\s+pelo\s+simples\s+nacional/i.test(texto) || norm.includes('situacao no simples nacional nao optante');
+  const excluido = /exclu[ií]d[oa]\s+do\s+simples/i.test(texto) || norm.includes('exclusao do simples nacional efetivada');
+  const optante = !naoOptante && !excluido && (/optante\s+pelo\s+simples\s+nacional/i.test(texto) || norm.includes('situacao no simples nacional optante'));
+  const simei = /optante\s+pelo\s+simei/i.test(texto) || norm.includes('situacao no simei optante');
+  const agendamento = norm.includes('agendamento') && norm.includes('exclus');
+  const dataOpcao = dataProximaDe(texto, /(?:optante\s+pelo\s+simples\s+nacional\s+desde|data\s+de\s+op[cç][aã]o)\D{0,40}(\d{2}\/\d{2}\/\d{4})/i);
+  const dataExclusao = dataProximaDe(texto, /(?:data\s+(?:de|da)\s+exclus[aã]o|exclu[ií]d[oa]\s+em)\D{0,40}(\d{2}\/\d{2}\/\d{4})/i);
+  const situacao = excluido ? 'Excluído' : naoOptante ? 'Não Optante' : optante ? 'Optante' : null;
+  const regime = simei ? 'MEI / SIMEI' : optante ? 'Simples Nacional' : situacao;
+  const confianca = clamp((compativel ? 0.25 : 0) + (cnpj ? 0.35 : 0) + (situacao ? 0.3 : 0) + ((dataOpcao || dataExclusao || agendamento) ? 0.1 : 0));
+  return {
+    dados: {
+      documento_compativel: compativel,
+      cnpj,
+      situacao_simples: situacao,
+      regime_tributario: regime,
+      data_opcao_simples: dataOpcao,
+      data_exclusao_simples: dataExclusao,
+      agendamento_exclusao: agendamento,
+      motivo_exclusao: null,
+      opcao_mei: simei,
+      confianca,
+      fonte_extracao: 'local_deterministica',
+    },
+    confianca,
+  };
+}
+
+function parseAtosJunta(texto: string): { dados: Record<string, any>; confianca: number } {
+  const linhas = linhasTexto(texto);
+  const norm = textoNormalizado(texto);
+  const compativel = norm.includes('junta comercial') || norm.includes('lista de arquivamentos') || norm.includes('certidao simplificada') || norm.includes('nire');
+  const cnpj = formatarCnpj(primeiroCnpj(texto));
+  const razaoSocial = limparValor(valorAposRotulo(linhas, ['nome empresarial', 'razão social', 'razao social']));
+  const nire = limparValor(valorAposRotulo(linhas, ['nire', 'número de identificação do registro de empresas', 'numero de identificacao do registro de empresas']));
+  const capitalSocial = numeroMonetario(valorAposRotulo(linhas, ['capital social', 'capital social atual']));
+
+  const historico: Array<{ numero: string | null; data: string; tipo_ato: string | null }> = [];
+  for (const linha of linhas) {
+    const dataMatch = linha.match(/\b(\d{2}\/\d{2}\/\d{4})\b/);
+    if (!dataMatch) continue;
+    const linhaNorm = textoNormalizado(linha);
+    if (!/(alterac|contrato|consolidac|enquadramento|arquivamento|constituic|transformac|extinc|ata)/.test(linhaNorm)) continue;
+    const numeroMatch = linha.match(/\b\d{6,15}\b/);
+    historico.push({
+      numero: numeroMatch?.[0] || null,
+      data: parseDate(dataMatch[1]) || dataMatch[1],
+      tipo_ato: limparValor(linha.replace(dataMatch[0], '').replace(numeroMatch?.[0] || '', '')),
+    });
+  }
+  const historicoUnico = historico.filter((item, index, arr) => arr.findIndex((outro) => `${outro.data}|${outro.numero}|${outro.tipo_ato}` === `${item.data}|${item.numero}|${item.tipo_ato}`) === index)
+    .sort((a, b) => String(a.data).localeCompare(String(b.data)));
+  const dataRegistro = historicoUnico.at(-1)?.data || parseDate(valorAposRotulo(linhas, ['data de registro', 'data do registro', 'último arquivamento', 'ultimo arquivamento']));
+  const tipoAto = historicoUnico.at(-1)?.tipo_ato || limparValor(valorAposRotulo(linhas, ['tipo do ato', 'ato/evento', 'ato evento']));
+
+  const sociosAlterados: Array<{ nome: string; tipo_alteracao: 'entrada' | 'saida' | 'percentual'; data_alteracao: string | null }> = [];
+  for (const linha of linhas) {
+    const n = textoNormalizado(linha);
+    let tipo: 'entrada' | 'saida' | 'percentual' | null = null;
+    if (/(admissao|entrada|ingresso) de socio/.test(n)) tipo = 'entrada';
+    else if (/(retirada|saida|exclusao) de socio/.test(n)) tipo = 'saida';
+    else if (/(alteracao|cessao) de (quotas|participacao)/.test(n)) tipo = 'percentual';
+    if (!tipo) continue;
+    const data = parseDate(linha.match(/\b\d{2}\/\d{2}\/\d{4}\b/)?.[0] || null);
+    sociosAlterados.push({ nome: linha, tipo_alteracao: tipo, data_alteracao: data });
+  }
+
+  const confianca = clamp((compativel ? 0.2 : 0) + (cnpj ? 0.25 : 0) + (razaoSocial ? 0.15 : 0) + (nire ? 0.1 : 0) + (historicoUnico.length ? 0.3 : 0));
+  return {
+    dados: {
+      documento_compativel: compativel,
+      cnpj,
+      razao_social: razaoSocial,
+      nire,
+      tipo_ato: tipoAto,
+      data_registro: dataRegistro,
+      capital_social_atual: capitalSocial,
+      socios_alterados: sociosAlterados,
+      historico_arquivamentos: historicoUnico,
+      confianca,
+      fonte_extracao: 'local_deterministica',
+    },
+    confianca,
+  };
+}
+
+export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: string): { dados: Record<string, any>; confianca: number } {
+  if (tipo === 'cartao_cnpj') return parseCartaoCnpj(texto);
+  if (tipo === 'qsa') return parseQsa(texto);
+  if (tipo === 'simples_nacional') return parseSimples(texto);
+  return parseAtosJunta(texto);
+}
+
+export async function extrairDocumentoLocal(
+  arquivoPath: string,
+  mimeType: string | null | undefined,
+  tipo: TipoDocumentoLocal,
+): Promise<ExtracaoDocumentalLocalResult> {
+  const effectiveMime = String(mimeType || '').toLowerCase().split(';')[0].trim();
+  const isPdf = effectiveMime === 'application/pdf' || path.extname(arquivoPath).toLowerCase() === '.pdf';
+  if (!isPdf) {
+    return { tipo, disponivel: true, legivel: false, mecanismo: 'pdftotext', texto: '', dados: {}, confianca: 0, motivo: 'Extração local disponível apenas para PDF textual.' };
+  }
+
+  const timeout = Number(process.env.LOCAL_PDF_TEXT_TIMEOUT_MS || 15000);
+  const maxBuffer = Number(process.env.LOCAL_PDF_TEXT_MAX_BYTES || 8 * 1024 * 1024);
+  try {
+    const { stdout } = await execFileAsync(
+      process.env.PDFTOTEXT_BINARY || 'pdftotext',
+      ['-layout', '-nopgbrk', arquivoPath, '-'],
+      {
+        timeout: Number.isFinite(timeout) && timeout > 0 ? timeout : 15000,
+        maxBuffer: Number.isFinite(maxBuffer) && maxBuffer > 0 ? maxBuffer : 8 * 1024 * 1024,
+        encoding: 'utf8',
+      },
+    );
+    const texto = String(stdout || '').replace(/\u0000/g, '').trim();
+    if (texto.length < 20) {
+      return { tipo, disponivel: true, legivel: false, mecanismo: 'pdftotext', texto, dados: {}, confianca: 0, motivo: 'PDF sem camada textual útil; OCR externo ou revisão humana é necessário.' };
+    }
+    const { dados, confianca } = analisarTextoDocumentoLocal(tipo, texto);
+    return { tipo, disponivel: true, legivel: true, mecanismo: 'pdftotext', texto, dados, confianca };
+  } catch (error: any) {
+    const indisponivel = error?.code === 'ENOENT';
+    return {
+      tipo,
+      disponivel: !indisponivel,
+      legivel: false,
+      mecanismo: 'pdftotext',
+      texto: '',
+      dados: {},
+      confianca: 0,
+      motivo: indisponivel ? 'Binário pdftotext não está instalado neste ambiente.' : String(error?.message || 'Falha na extração textual local.'),
+    };
+  }
+}
