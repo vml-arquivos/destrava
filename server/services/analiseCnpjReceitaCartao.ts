@@ -227,9 +227,19 @@ function normalizarConfianca(value: unknown): number | null {
 function extracaoTemQualidade(extracao: ExtracaoCartao | null): boolean {
   if (!extracao) return false;
   const confianca = normalizarConfianca(extracao.confianca);
-  const temCamposCriticos = !!(extracao.cnpj && extracao.data_abertura && extracao.data_emissao && extracao.situacao_cadastral);
-  if (!temCamposCriticos) return false;
-  if (confianca !== null && confianca < 0.72) return false;
+  const camposIdentidade = [
+    extracao.data_abertura,
+    extracao.nome_empresarial,
+    extracao.cnae_principal,
+    extracao.natureza_juridica,
+    extracao.situacao_cadastral,
+  ].filter(Boolean).length;
+  // A data de emissão é uma validação de atualidade, não a condição para dizer
+  // que o documento foi lido. Quando ela não for identificada, o relatório
+  // deve mostrar uma pendência clara, nunca voltar para "aguardando análise".
+  const temIdentidadeMinima = !!extracao.cnpj && camposIdentidade >= 3;
+  if (!temIdentidadeMinima) return false;
+  if (confianca !== null && confianca < 0.55) return false;
   return true;
 }
 
@@ -388,7 +398,7 @@ async function gerarGeminiCartao(modelName: string, doc: DocCartao, buffer: Buff
 }
 
 async function tentarExtrairCartaoComGemini(doc: DocCartao | null): Promise<ExtracaoCartao | null> {
-  if (!doc?.caminho_arquivo) return null;
+  if (!doc) return null;
   if (!documentoSuportadoPorGemini(doc)) return null;
 
   const filePath = await resolverCaminhoDocumento(doc);
@@ -396,9 +406,7 @@ async function tentarExtrairCartaoComGemini(doc: DocCartao | null): Promise<Extr
 
   try {
     const local = await extrairDocumentoLocal(filePath, inferirMimeDocumento(doc), 'cartao_cnpj');
-    const limiarConfigurado = Number(process.env.LOCAL_DOCUMENT_CONFIDENCE_MIN || 0.72);
-    const limiar = Number.isFinite(limiarConfigurado) ? Math.max(0.4, Math.min(0.95, limiarConfigurado)) : 0.72;
-    if (local.legivel && local.confianca >= limiar && local.dados?.documento_compativel !== false) {
+    if (local.dados?.documento_compativel !== false && Object.keys(local.dados || {}).length > 0) {
       const extracaoLocal = adaptarExtracaoCartaoLocal(local.dados, local.confianca);
       if (extracaoTemQualidade(extracaoLocal)) return extracaoLocal;
     }
@@ -706,8 +714,8 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
       }
     } else {
       statusValidadeCartao = extracaoGemini ? 'nao_verificado' : 'pendente';
-      alertas.push({ codigo: 'cartao_cnpj_pendente_ocr', mensagem: 'Cartão CNPJ anexado, mas a data de emissão ainda não foi identificada.', severidade: 'media', recomendacao: 'Configurar GEMINI_API_KEY para OCR automático ou submeter documento para revisão humana.' });
-      pontosAtencao.push('Cartão CNPJ pendente de leitura IA/OCR para validar data de emissão.');
+      alertas.push({ codigo: 'cartao_cnpj_emissao_nao_confirmada', mensagem: 'O Cartão CNPJ foi lido, mas a data de emissão não pôde ser confirmada no arquivo.', severidade: 'alta', recomendacao: 'Confirmar visualmente a data de emissão ou anexar um Cartão CNPJ atualizado e legível.' });
+      pontosAtencao.push('Data de emissão do Cartão CNPJ não confirmada; o documento foi analisado, mas exige correção antes do avanço.');
     }
   }
 
@@ -742,7 +750,13 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
 
   const { score, risco } = calcularScore({ camposReceita, cartao, extracao: camposCartao, divergencias, alertas, socios });
   const diagnostico = gerarDiagnostico({ empresa, camposReceita, cartao, statusValidadeCartao, diasEmissaoCartao, score, risco, alertas, recomendacoes });
-  const status = !cartao ? 'pendente_documento' : (statusValidadeCartao === 'pendente' ? 'pendente_ocr' : (alertas.some((a) => a.severidade === 'critica') ? 'revisao_humana' : 'concluida'));
+  const cartaoFoiLido = !!extracaoGemini;
+  const exigeRevisao = alertas.some((a) => a.severidade === 'critica' || a.severidade === 'alta');
+  const status = !cartao
+    ? 'pendente_documento'
+    : !cartaoFoiLido
+      ? 'pendente_ocr'
+      : exigeRevisao ? 'revisao_humana' : 'concluida';
   const resultado = {
     campos_receita: camposReceita,
     campos_cartao: camposCartao,
@@ -789,7 +803,7 @@ export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criado
       dataEmissaoCartao,
       diasEmissaoCartao,
       statusValidadeCartao,
-      !!cartao && !dataEmissaoCartao,
+      !!cartao && !cartaoFoiLido,
       !!cartao,
       JSON.stringify(camposReceita),
       JSON.stringify(camposCartao),
@@ -830,7 +844,7 @@ function gerarDiagnostico(args: { empresa: any; camposReceita: any; cartao: DocC
   if (args.cartao) {
     if (args.statusValidadeCartao === 'valido') partes.push(`O Cartão CNPJ foi anexado e está dentro do prazo de validade documental (${args.diasEmissaoCartao} dias desde a emissão).`);
     else if (args.statusValidadeCartao === 'vencido') partes.push(`O Cartão CNPJ foi anexado, porém está vencido para análise documental (${args.diasEmissaoCartao} dias desde a emissão).`);
-    else partes.push('O Cartão CNPJ foi anexado, mas ainda depende de leitura IA/OCR ou revisão para confirmar a data de emissão e os campos do arquivo.');
+    else partes.push('O Cartão CNPJ foi analisado, porém a data de emissão ainda precisa de confirmação antes do avanço.');
   } else {
     partes.push('O Cartão CNPJ ainda não foi anexado ao acervo documental.');
   }

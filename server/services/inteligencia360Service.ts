@@ -43,7 +43,8 @@ export interface DocumentoIdentidade360 {
   anexado: boolean;
   analisado: boolean;
   consistente: boolean;
-  status: "ok" | "nao_anexado" | "aguardando_analise" | "revisao_necessaria";
+  status: "ok" | "nao_anexado" | "aguardando_analise" | "falha_leitura" | "revisao_necessaria";
+  diagnostico?: string | null;
 }
 
 export interface EtapaIdentidadeDocumental360 {
@@ -381,7 +382,7 @@ export async function buscarAnalisesDocumentaisAvancadas(empresaId: string, db: 
         WHERE (da.empresa_id = $1 OR (da.entidade_tipo = 'empresa' AND da.entidade_id = $1))
           AND da.excluido_em IS NULL
           AND dei.prompt_codigo = ANY($2::text[])
-          AND dei.status IN ('concluido', 'revisao_humana')
+          AND dei.status IN ('concluido', 'revisao_humana', 'falhou')
         ORDER BY dei.prompt_codigo, dei.processado_em DESC NULLS LAST, dei.atualizado_em DESC`,
       [empresaId, ["qsa_extract", "simples_extract", "atos_junta_extract"]],
     );
@@ -974,12 +975,17 @@ export function consolidarEtapaIdentidadeDocumental(params: {
   const porPrompt = new Map<string, any>();
   for (const analise of analises) porPrompt.set(String(analise?.prompt_codigo || ""), analise);
 
-  const cartaoAnexado = tiposAnexados.has("cartao_cnpj");
+  const cartaoAnexado = tiposAnexados.has("cartao_cnpj") || tiposAnexados.has("cnpj_cartao");
   const qsaAnexado = tiposAnexados.has("qsa");
   const atosAnexado = tiposAnexados.has("atos_junta_comercial");
   const enquadramentoAnexado = tiposAnexados.has("enquadramento_tributario_cnpj") || tiposAnexados.has("simples_nacional");
 
-  const cartaoAnalisado = Boolean(analiseCnpj && ["concluida", "revisao_humana"].includes(String(analiseCnpj.status || "")));
+  const cartaoAnalisado = Boolean(
+    analiseCnpj
+    && analiseCnpj?.cartao_anexado === true
+    && analiseCnpj?.cartao_pendente_ocr !== true
+    && ["concluida", "revisao_humana"].includes(String(analiseCnpj.status || "")),
+  );
   const cartaoBloqueios = [
     ...safeArray<any>(analiseCnpj?.alertas),
     ...safeArray<any>(analiseCnpj?.divergencias),
@@ -988,10 +994,12 @@ export function consolidarEtapaIdentidadeDocumental(params: {
 
   function statusEspecializado(prompt: string, anexado: boolean) {
     const analise = porPrompt.get(prompt);
+    const falhou = String(analise?.status || "") === "falhou";
     const analisado = Boolean(analise && ["concluido", "revisao_humana"].includes(String(analise.status || "")));
     const graves = analise ? alertasGravesResultado(analise.resultado) : [];
     const consistente = anexado && analisado && graves.length === 0 && String(analise?.status) === "concluido";
-    return { analise, analisado, consistente, graves };
+    const erro = safeArray<any>(analise?.erros)[0]?.mensagem || safeArray<any>(analise?.pendencias)[0]?.mensagem || null;
+    return { analise, analisado, consistente, graves, falhou, erro };
   }
 
   const qsa = statusEspecializado("qsa_extract", qsaAnexado);
@@ -1004,20 +1012,23 @@ export function consolidarEtapaIdentidadeDocumental(params: {
     anexado: boolean,
     analisado: boolean,
     consistente: boolean,
+    falhou = false,
+    diagnostico: string | null = null,
   ): DocumentoIdentidade360 => ({
     codigo,
     nome,
     anexado,
     analisado,
     consistente,
-    status: consistente ? "ok" : !anexado ? "nao_anexado" : !analisado ? "aguardando_analise" : "revisao_necessaria",
+    status: consistente ? "ok" : !anexado ? "nao_anexado" : falhou ? "falha_leitura" : !analisado ? "aguardando_analise" : "revisao_necessaria",
+    diagnostico,
   });
 
   const documentos = [
-    montarDocumento("cartao_cnpj", "Cartão CNPJ", cartaoAnexado, cartaoAnalisado, cartaoConsistente),
-    montarDocumento("qsa", "QSA / Quadro Societário", qsaAnexado, qsa.analisado, qsa.consistente),
-    montarDocumento("atos_junta_comercial", "Atos da Junta Comercial", atosAnexado, atos.analisado, atos.consistente),
-    montarDocumento("enquadramento_tributario", "Enquadramento Tributário", enquadramentoAnexado, enquadramento.analisado, enquadramento.consistente),
+    montarDocumento("cartao_cnpj", "Cartão CNPJ", cartaoAnexado, cartaoAnalisado, cartaoConsistente, false, analiseCnpj?.diagnostico || null),
+    montarDocumento("qsa", "QSA / Quadro Societário", qsaAnexado, qsa.analisado, qsa.consistente, qsa.falhou, qsa.erro),
+    montarDocumento("atos_junta_comercial", "Atos da Junta Comercial", atosAnexado, atos.analisado, atos.consistente, atos.falhou, atos.erro),
+    montarDocumento("enquadramento_tributario", "Enquadramento Tributário", enquadramentoAnexado, enquadramento.analisado, enquadramento.consistente, enquadramento.falhou, enquadramento.erro),
   ];
 
   const situacao = normalizarTexto360(params.empresa?.situacao_cadastral || analiseCnpj?.situacao_cadastral);
@@ -1033,7 +1044,8 @@ export function consolidarEtapaIdentidadeDocumental(params: {
   const bloqueios: string[] = [];
   for (const doc of documentos) {
     if (!doc.anexado) bloqueios.push(`${doc.nome} ainda não foi anexado.`);
-    else if (!doc.analisado) bloqueios.push(`${doc.nome} está anexado, mas ainda não foi analisado.`);
+    else if (doc.status === "falha_leitura") bloqueios.push(doc.diagnostico || `${doc.nome} apresentou falha na leitura automática.`);
+    else if (!doc.analisado) bloqueios.push(`${doc.nome} está anexado, mas o processamento ainda não foi concluído.`);
     else if (!doc.consistente) bloqueios.push(`${doc.nome} possui divergência que exige revisão.`);
   }
   for (const alerta of [...cartaoBloqueios, ...qsa.graves, ...atos.graves, ...enquadramento.graves]) {

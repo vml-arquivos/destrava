@@ -55,6 +55,7 @@ interface DocumentoArquivoRow {
   nome_arquivo?: string | null;
   hash_arquivo?: string | null;
   caminho_arquivo?: string | null;
+  url_arquivo?: string | null;
   mime_type?: string | null;
   tipo_documento?: string | null;
 }
@@ -630,20 +631,31 @@ export class AnaliseDocumentalService {
     try {
       return await this.extrairComIA(arquivoPath, prompt, mimeType);
     } catch (error: any) {
-      if (local?.legivel && local.dados && Object.keys(local.dados).length > 0) {
+      // A ausência de Gemini não transforma uma leitura local executada em
+      // "aguardando análise". Quando o OCR/pdftotext conseguiu extrair algum
+      // conteúdo estruturado, persistimos o resultado como parcial e o motor
+      // determinístico gera as pendências objetivas para revisão humana.
+      // Assim a tela sempre mostra o que foi lido e por que não pode avançar.
+      const temDadosLocais = !!local?.dados && Object.keys(local.dados).some((chave) => {
+        const valor = local?.dados?.[chave];
+        return valor !== null && valor !== undefined && valor !== ''
+          && !(Array.isArray(valor) && valor.length === 0)
+          && !(typeof valor === 'object' && !Array.isArray(valor) && Object.keys(valor).length === 0);
+      });
+      if (temDadosLocais) {
         console.warn('[AnaliseDocumentalService] Gemini indisponível; mantendo extração local parcial para revisão humana:', tipo, error?.message || error);
-        this.ultimoModeloUsado = `local:${local.mecanismo}-v1-parcial`;
+        this.ultimoModeloUsado = `local:${local?.mecanismo || 'ocr'}-v1-parcial`;
         this.ultimaFonteExtracao = 'local';
         return {
-          ...local.dados,
-          confianca: local.confianca,
+          ...local!.dados,
+          confianca: local!.confianca,
           fonte_extracao: 'local_deterministica',
-          mecanismo_extracao: local.mecanismo,
+          mecanismo_extracao: local!.mecanismo,
           extracao_parcial: true,
-          motivo_extracao_parcial: local.motivo || error?.message || 'Extração local abaixo do limiar de confiança.',
+          motivo_extracao_parcial: local!.motivo || error?.message || 'Extração local abaixo do limiar de confiança.',
         };
       }
-      throw error;
+      throw new Error(`${tipo}: ${local?.motivo || error?.message || 'não foi possível ler o documento pelo OCR interno nem pela IA externa.'}`);
     }
   }
 
@@ -652,7 +664,7 @@ export class AnaliseDocumentalService {
       this.db.query('SELECT * FROM public.empresas WHERE id = $1 LIMIT 1', [empresaId]),
       this.db.query('SELECT * FROM public.socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true ORDER BY nome ASC', [empresaId]),
       this.db.query(
-        `SELECT id, empresa_id, entidade_id, entidade_tipo, nome_original, nome_arquivo, hash_arquivo, caminho_arquivo, mime_type, tipo_documento
+        `SELECT id, empresa_id, entidade_id, entidade_tipo, nome_original, nome_arquivo, hash_arquivo, caminho_arquivo, url_arquivo, mime_type, tipo_documento
            FROM public.documentos_arquivos
           WHERE id = $1
             AND excluido_em IS NULL
@@ -668,7 +680,9 @@ export class AnaliseDocumentalService {
     if (!documento) throw new Error('Documento não encontrado para análise.');
     const pertenceEmpresa = documento.empresa_id === empresaId || (documento.entidade_tipo === 'empresa' && documento.entidade_id === empresaId);
     if (!pertenceEmpresa) throw new Error('Documento não pertence à empresa informada.');
-    if (!documento.caminho_arquivo) throw new Error('Documento não possui arquivo armazenado.');
+    // Registros antigos podem ter caminho_arquivo vazio e ainda assim possuir
+    // nome_arquivo/url_arquivo válidos. O mesmo resolvedor usado pelo Acervo
+    // deve ter a oportunidade de localizar esses arquivos antes de declarar falha.
 
     // Usa o mesmo resolvedor do Acervo Documental. Assim, o arquivo que pode ser
     // visualizado/baixado também pode ser lido pela análise, independentemente de

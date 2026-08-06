@@ -425,6 +425,15 @@ export default function DocumentosEntidade({
     const slotsIdentidade = SECOES_DOCUMENTAIS.find((secao) => secao.titulo === "Identidade do CNPJ")?.slots || [];
     return slotsIdentidade.filter((documentoSlot) => docs.some((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento))).length;
   }, [docs]);
+  const identidadeInicialFingerprint = useMemo(() => {
+    const slotsIdentidade = SECOES_DOCUMENTAIS.find((secao) => secao.titulo === "Identidade do CNPJ")?.slots || [];
+    return slotsIdentidade
+      .map((documentoSlot) => {
+        const doc = docs.find((item) => documentoSlot.matchTipos.includes(item.tipo_documento));
+        return `${documentoSlot.tipoUpload}:${doc?.id || "ausente"}:${doc?.atualizado_em || doc?.criado_em || ""}`;
+      })
+      .join("|");
+  }, [docs]);
 
 
   // Quando o quarto documento é anexado (ou quando uma empresa antiga com 4/4 é
@@ -432,8 +441,9 @@ export default function DocumentosEntidade({
   // executa a análise uma única vez. Não abre outra tela nem cria botões extras.
   useEffect(() => {
     if (entidadeTipo !== "empresa" || !empresaId || identidadeInicialPreenchida !== 4) return;
-    if (analiseAutomaticaRef.current === empresaId) return;
-    analiseAutomaticaRef.current = empresaId;
+    const chaveAnalise = `${empresaId}:${identidadeInicialFingerprint}`;
+    if (analiseAutomaticaRef.current === chaveAnalise) return;
+    analiseAutomaticaRef.current = chaveAnalise;
 
     let ativo = true;
     void (async () => {
@@ -444,13 +454,13 @@ export default function DocumentosEntidade({
         if (!precisaAnalisar || !ativo) return;
 
         setGerandoLaudo(true);
-        const resultado = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-inicial`, { method: "POST" });
+        const resultado = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-inicial/iniciar`, {
+          method: "POST",
+          body: JSON.stringify({ forcar: false }),
+        });
         if (!ativo) return;
-        if (resultado?.identidade_cnpj?.apto_para_avancar) {
+        if (resultado?.dossie?.identidade_cnpj?.apto_para_avancar) {
           toast.success("Relatório inicial concluído. A empresa pode avançar para a próxima etapa.");
-        } else {
-          const analisados = resultado?.processamento_inicial?.analisados ?? 0;
-          toast.info(`Relatório inicial atualizado: ${analisados}/4 documento(s) analisado(s).`);
         }
       } catch (error: any) {
         if (ativo) console.warn("[DocumentosEntidade] análise automática não concluída:", error?.message || error);
@@ -460,7 +470,7 @@ export default function DocumentosEntidade({
     })();
 
     return () => { ativo = false; };
-  }, [entidadeTipo, empresaId, identidadeInicialPreenchida]);
+  }, [entidadeTipo, empresaId, identidadeInicialPreenchida, identidadeInicialFingerprint]);
 
   function abrirChecklistExportacao() {
     if (!docs.length) { toast.error("Não há documentos anexados para exportar."); return; }
@@ -661,7 +671,7 @@ export default function DocumentosEntidade({
                 className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {gerandoLaudo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-                {gerandoLaudo ? "Gerando relatório..." : "Abrir relatório inicial"}
+                {gerandoLaudo ? "Lendo documentos..." : "Ver relatório inicial"}
               </button>
             )}
           </div>

@@ -17,6 +17,12 @@ const pool = new Pool({
 
 const router = Router();
 
+// A leitura de quatro PDFs/OCR pode ultrapassar o timeout do proxy. O trabalho
+// pesado roda fora da requisição HTTP e a interface consulta o mesmo dossiê
+// persistido até a conclusão. A rota síncrona antiga continua disponível para
+// integrações existentes.
+const analisesIniciaisEmAndamento = new Map<string, Promise<void>>();
+
 const BLOCO_CODIGOS = [
   'cnpj_receita',
   'qsa_quadro_societario',
@@ -231,7 +237,7 @@ async function listarDocumentosEmpresaPorTipos(empresaId: string, tipos: string[
   if (!(await tableExists('documentos_arquivos'))) return [];
   const { rows } = await pool.query(
     `SELECT id, entidade_tipo, entidade_id, empresa_id, socio_id, contrato_id, simulacao_id, tipo_documento,
-            nome_original, nome_arquivo, mime_type, tamanho_bytes, status, validado, criado_em, atualizado_em, observacoes, metadados
+            nome_original, nome_arquivo, mime_type, tamanho_bytes, status, validado, criado_em, atualizado_em, observacoes, metadados, resultado_validacao
        FROM public.documentos_arquivos
       WHERE excluido_em IS NULL
         AND status <> 'excluido'
@@ -404,6 +410,34 @@ function severidadeParaPendencia(sev: string): 'alta' | 'media' | 'baixa' {
   return sev === 'critica' ? 'alta' : (sev === 'media' || sev === 'baixa') ? sev : 'alta';
 }
 
+function mensagemSeguraFalhaLeitura(tipo: string, error: unknown): string {
+  const original = String((error as any)?.message || error || '').trim();
+  const normalizada = original.toLowerCase();
+  if (normalizada.includes('não localizado') || normalizada.includes('nao localizado') || normalizada.includes('enoent')) {
+    return `${tipo}: o arquivo está registrado no acervo, mas o arquivo físico não foi localizado no armazenamento persistente.`;
+  }
+  if (normalizada.includes('tesseract') || normalizada.includes('pdftotext') || normalizada.includes('pdftoppm')) {
+    return `${tipo}: o leitor interno de PDF/OCR não está disponível ou não conseguiu concluir a leitura deste arquivo.`;
+  }
+  if (normalizada.includes('gemini') || normalizada.includes('api_key') || normalizada.includes('api key')) {
+    return `${tipo}: a leitura interna ficou inconclusiva e o mecanismo externo de apoio não conseguiu concluir o processamento.`;
+  }
+  if (normalizada.includes('formato não suportado') || normalizada.includes('formato nao suportado') || normalizada.includes('tipo de arquivo não suportado')) {
+    return `${tipo}: o formato anexado não é compatível com a leitura automática. Anexe PDF, PNG ou JPG legível.`;
+  }
+  if (normalizada.includes('timeout')) {
+    return `${tipo}: o tempo máximo de leitura foi excedido. Tente novamente; se persistir, anexe uma versão mais leve ou legível.`;
+  }
+  return `${tipo}: a leitura automática não pôde ser concluída. O arquivo permanece preservado e precisa ser reprocessado ou revisado.`;
+}
+
+function resumoAnaliseEspecializada(analise: AnaliseDocumentalResult, nome: string): string {
+  const alertas = Array.isArray(analise.alertas) ? analise.alertas : [];
+  const relevante = alertas.find((alerta) => alerta.severidade === 'critica' || alerta.severidade === 'alta') || alertas[0];
+  if (relevante?.mensagem) return relevante.mensagem;
+  return `${nome} lido e cruzado com os dados cadastrais da empresa, sem divergência impeditiva.`;
+}
+
 async function buscarAnaliseEspecializadaPersistida(
   arquivoId: string,
   promptCodigo: string,
@@ -421,6 +455,29 @@ async function buscarAnaliseEspecializadaPersistida(
   );
   const resultado = rows[0]?.resultado;
   return resultado && typeof resultado === 'object' && resultado.tipo_analise ? resultado as AnaliseDocumentalResult : null;
+}
+
+async function buscarFalhaAnaliseEspecializada(
+  arquivoId: string,
+  promptCodigo: string,
+): Promise<{ mensagem: string; processado_em: string | null } | null> {
+  if (!(await tableExists('documentos_extracoes_ia'))) return null;
+  const { rows } = await pool.query(
+    `SELECT erros, pendencias, processado_em
+       FROM public.documentos_extracoes_ia
+      WHERE arquivo_id = $1
+        AND prompt_codigo = $2
+        AND status = 'falhou'
+      ORDER BY processado_em DESC NULLS LAST, atualizado_em DESC, criado_em DESC
+      LIMIT 1`,
+    [arquivoId, promptCodigo],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const erros = Array.isArray(row.erros) ? row.erros : [];
+  const pendencias = Array.isArray(row.pendencias) ? row.pendencias : [];
+  const mensagem = String(erros[0]?.mensagem || pendencias[0]?.mensagem || 'Falha de leitura documental.');
+  return { mensagem, processado_em: row.processado_em || null };
 }
 
 async function persistirAnaliseEspecializada(
@@ -456,6 +513,33 @@ async function persistirAnaliseEspecializada(
   );
 }
 
+async function persistirFalhaAnaliseEspecializada(
+  arquivoId: string,
+  promptCodigo: string,
+  error: unknown,
+): Promise<void> {
+  try {
+    const { extracao } = await registrarExtracaoEspecializada({
+      arquivoId,
+      blocoEntidadeId: null,
+      promptCodigo,
+    });
+    const mensagem = String((error as any)?.message || error || 'Falha de leitura documental').slice(0, 1200);
+    await pool.query(
+      `UPDATE public.documentos_extracoes_ia
+          SET status = 'falhou',
+              erros = $2::jsonb,
+              pendencias = $2::jsonb,
+              processado_em = NOW(),
+              atualizado_em = NOW()
+        WHERE id = $1`,
+      [extracao.id, JSON.stringify([{ codigo: 'falha_leitura_documental', mensagem }])],
+    );
+  } catch (persistError: any) {
+    console.warn('[Dossiê] Não foi possível persistir a falha de leitura documental:', persistError?.message || persistError);
+  }
+}
+
 async function obterAnaliseEspecializada(params: {
   empresaId: string;
   arquivoId: string;
@@ -486,6 +570,7 @@ async function obterAnaliseEspecializada(params: {
       console.warn('[Dossiê] Reprocessamento indisponível; mantendo última análise válida:', params.promptCodigo, error?.message || error);
       return persistida;
     }
+    await persistirFalhaAnaliseEspecializada(params.arquivoId, params.promptCodigo, error);
     throw error;
   }
 }
@@ -512,20 +597,55 @@ async function montarQsaDocumentalDados(
       reprocessar: processar,
     });
     if (!analise) {
+      const falhaPersistida = await buscarFalhaAnaliseEspecializada(docMaisRecente.id, 'qsa_extract');
+      if (falhaPersistida) {
+        const mensagem = mensagemSeguraFalhaLeitura('QSA', falhaPersistida.mensagem);
+        return {
+          dados: { anexado: true, analisado: false, tentativa_realizada: true, documento_id: docMaisRecente.id, status_leitura: 'falha_leitura', erro_processamento: mensagem, diagnostico: mensagem, lido_em: falhaPersistida.processado_em },
+          pendencias: [{ codigo: 'qsa_falha_leitura', mensagem, severidade: 'alta', origem: 'qsa', recomendacao: 'Verificar o arquivo e tentar a leitura novamente.' }],
+        };
+      }
       return {
-        dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'aguardando_analise' },
+        dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'aguardando_analise', diagnostico: 'QSA anexado e aguardando o processamento automático do relatório inicial.' },
         pendencias: [{ codigo: 'qsa_aguardando_analise', mensagem: 'QSA anexado e aguardando análise documental.', severidade: 'alta', origem: 'qsa', recomendacao: 'A análise inicial é executada automaticamente; abra o relatório para acompanhar o resultado.' }],
       };
     }
     return {
-      dados: { anexado: true, analisado: true, documento_id: docMaisRecente.id, status_leitura: analise.status, lido_em: analise.analisado_em, modelo: analise.modelo_ia, ...analise.dados_extraidos },
+      dados: {
+        anexado: true,
+        analisado: true,
+        tentativa_realizada: true,
+        documento_id: docMaisRecente.id,
+        status_leitura: analise.status,
+        lido_em: analise.analisado_em,
+        modelo: analise.modelo_ia,
+        nivel_confianca: analise.nivel_confianca,
+        fonte_extracao: analise.dados_extraidos?.fonte_extracao || analise.modelo_ia || null,
+        diagnostico: resumoAnaliseEspecializada(analise, 'QSA'),
+        ...analise.dados_extraidos,
+      },
       pendencias: analise.alertas.map((a) => ({ codigo: a.codigo, mensagem: a.mensagem, severidade: severidadeParaPendencia(a.severidade), origem: 'qsa', recomendacao: a.recomendacao })),
     };
   } catch (err: any) {
     console.warn('[Dossie] Falha controlada na análise do QSA:', err?.message || err);
+    const mensagem = mensagemSeguraFalhaLeitura('QSA', err);
     return {
-      dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'pendente_ocr' },
-      pendencias: [{ codigo: 'qsa_pendente_ocr', mensagem: 'QSA anexado, mas a leitura automática ainda não foi concluída.', severidade: 'alta', origem: 'qsa', recomendacao: 'Revisar o documento ou habilitar o OCR externo para arquivos sem camada textual.' }],
+      dados: {
+        anexado: true,
+        analisado: false,
+        tentativa_realizada: processar,
+        documento_id: docMaisRecente.id,
+        status_leitura: processar ? 'falha_leitura' : 'aguardando_analise',
+        erro_processamento: processar ? mensagem : null,
+        diagnostico: processar ? mensagem : 'QSA anexado e aguardando o processamento automático do relatório inicial.',
+      },
+      pendencias: [{
+        codigo: processar ? 'qsa_falha_leitura' : 'qsa_aguardando_analise',
+        mensagem: processar ? mensagem : 'QSA anexado e aguardando análise documental.',
+        severidade: 'alta',
+        origem: 'qsa',
+        recomendacao: processar ? 'Verificar o arquivo anexado e executar novamente o relatório inicial.' : 'A análise será executada automaticamente ao abrir o relatório inicial.',
+      }],
     };
   }
 }
@@ -545,20 +665,55 @@ async function montarAtosJuntaDados(
   try {
     const analise = await obterAnaliseEspecializada({ empresaId, arquivoId: docMaisRecente.id, tipo: 'atos_junta_comercial', promptCodigo: 'atos_junta_extract', processar, reprocessar: processar });
     if (!analise) {
+      const falhaPersistida = await buscarFalhaAnaliseEspecializada(docMaisRecente.id, 'atos_junta_extract');
+      if (falhaPersistida) {
+        const mensagem = mensagemSeguraFalhaLeitura('Atos da Junta Comercial', falhaPersistida.mensagem);
+        return {
+          dados: { anexado: true, analisado: false, tentativa_realizada: true, documento_id: docMaisRecente.id, status_leitura: 'falha_leitura', erro_processamento: mensagem, diagnostico: mensagem, lido_em: falhaPersistida.processado_em },
+          pendencias: [{ codigo: 'atos_junta_falha_leitura', mensagem, severidade: 'alta', origem: 'atos_junta_comercial', recomendacao: 'Verificar o arquivo e tentar a leitura novamente.' }],
+        };
+      }
       return {
-        dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'aguardando_analise' },
+        dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'aguardando_analise', diagnostico: 'Atos da Junta anexados e aguardando o processamento automático do relatório inicial.' },
         pendencias: [{ codigo: 'atos_junta_aguardando_analise', mensagem: 'Atos da Junta anexados e aguardando análise documental.', severidade: 'alta', origem: 'atos_junta_comercial', recomendacao: 'A análise inicial é executada automaticamente; abra o relatório para acompanhar o resultado.' }],
       };
     }
     return {
-      dados: { anexado: true, analisado: true, documento_id: docMaisRecente.id, status_leitura: analise.status, lido_em: analise.analisado_em, modelo: analise.modelo_ia, ...analise.dados_extraidos },
+      dados: {
+        anexado: true,
+        analisado: true,
+        tentativa_realizada: true,
+        documento_id: docMaisRecente.id,
+        status_leitura: analise.status,
+        lido_em: analise.analisado_em,
+        modelo: analise.modelo_ia,
+        nivel_confianca: analise.nivel_confianca,
+        fonte_extracao: analise.dados_extraidos?.fonte_extracao || analise.modelo_ia || null,
+        diagnostico: resumoAnaliseEspecializada(analise, 'Atos da Junta Comercial'),
+        ...analise.dados_extraidos,
+      },
       pendencias: analise.alertas.map((a) => ({ codigo: a.codigo, mensagem: a.mensagem, severidade: severidadeParaPendencia(a.severidade), origem: 'atos_junta_comercial', recomendacao: a.recomendacao })),
     };
   } catch (err: any) {
     console.warn('[Dossie] Falha controlada na análise dos Atos da Junta:', err?.message || err);
+    const mensagem = mensagemSeguraFalhaLeitura('Atos da Junta Comercial', err);
     return {
-      dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'pendente_ocr' },
-      pendencias: [{ codigo: 'atos_junta_pendente_ocr', mensagem: 'Atos da Junta anexados, mas a leitura automática ainda não foi concluída.', severidade: 'alta', origem: 'atos_junta_comercial', recomendacao: 'Revisar o documento ou habilitar o OCR externo para arquivos sem camada textual.' }],
+      dados: {
+        anexado: true,
+        analisado: false,
+        tentativa_realizada: processar,
+        documento_id: docMaisRecente.id,
+        status_leitura: processar ? 'falha_leitura' : 'aguardando_analise',
+        erro_processamento: processar ? mensagem : null,
+        diagnostico: processar ? mensagem : 'Atos da Junta anexados e aguardando o processamento automático do relatório inicial.',
+      },
+      pendencias: [{
+        codigo: processar ? 'atos_junta_falha_leitura' : 'atos_junta_aguardando_analise',
+        mensagem: processar ? mensagem : 'Atos da Junta anexados e aguardando análise documental.',
+        severidade: 'alta',
+        origem: 'atos_junta_comercial',
+        recomendacao: processar ? 'Verificar o arquivo anexado e executar novamente o relatório inicial.' : 'A análise será executada automaticamente ao abrir o relatório inicial.',
+      }],
     };
   }
 }
@@ -578,20 +733,55 @@ async function montarEnquadramentoDados(
   try {
     const analise = await obterAnaliseEspecializada({ empresaId, arquivoId: docMaisRecente.id, tipo: 'simples_nacional', promptCodigo: 'simples_extract', processar, reprocessar: processar });
     if (!analise) {
+      const falhaPersistida = await buscarFalhaAnaliseEspecializada(docMaisRecente.id, 'simples_extract');
+      if (falhaPersistida) {
+        const mensagem = mensagemSeguraFalhaLeitura('Enquadramento Tributário', falhaPersistida.mensagem);
+        return {
+          dados: { anexado: true, analisado: false, tentativa_realizada: true, documento_id: docMaisRecente.id, status_leitura: 'falha_leitura', erro_processamento: mensagem, diagnostico: mensagem, lido_em: falhaPersistida.processado_em },
+          pendencias: [{ codigo: 'enquadramento_falha_leitura', mensagem, severidade: 'alta', origem: 'enquadramento_tributario', recomendacao: 'Verificar o arquivo e tentar a leitura novamente.' }],
+        };
+      }
       return {
-        dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'aguardando_analise' },
+        dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'aguardando_analise', diagnostico: 'Enquadramento Tributário anexado e aguardando o processamento automático do relatório inicial.' },
         pendencias: [{ codigo: 'enquadramento_aguardando_analise', mensagem: 'Enquadramento Tributário anexado e aguardando análise documental.', severidade: 'alta', origem: 'enquadramento_tributario', recomendacao: 'A análise inicial é executada automaticamente; abra o relatório para acompanhar o resultado.' }],
       };
     }
     return {
-      dados: { anexado: true, analisado: true, documento_id: docMaisRecente.id, status_leitura: analise.status, lido_em: analise.analisado_em, modelo: analise.modelo_ia, ...analise.dados_extraidos },
+      dados: {
+        anexado: true,
+        analisado: true,
+        tentativa_realizada: true,
+        documento_id: docMaisRecente.id,
+        status_leitura: analise.status,
+        lido_em: analise.analisado_em,
+        modelo: analise.modelo_ia,
+        nivel_confianca: analise.nivel_confianca,
+        fonte_extracao: analise.dados_extraidos?.fonte_extracao || analise.modelo_ia || null,
+        diagnostico: resumoAnaliseEspecializada(analise, 'Enquadramento Tributário'),
+        ...analise.dados_extraidos,
+      },
       pendencias: analise.alertas.map((a) => ({ codigo: a.codigo, mensagem: a.mensagem, severidade: severidadeParaPendencia(a.severidade), origem: 'enquadramento_tributario', recomendacao: a.recomendacao })),
     };
   } catch (err: any) {
     console.warn('[Dossie] Falha controlada na análise do Enquadramento Tributário:', err?.message || err);
+    const mensagem = mensagemSeguraFalhaLeitura('Enquadramento Tributário', err);
     return {
-      dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'pendente_ocr' },
-      pendencias: [{ codigo: 'enquadramento_pendente_ocr', mensagem: 'Enquadramento Tributário anexado, mas a leitura automática ainda não foi concluída.', severidade: 'alta', origem: 'enquadramento_tributario', recomendacao: 'Revisar o documento ou habilitar o OCR externo para arquivos sem camada textual.' }],
+      dados: {
+        anexado: true,
+        analisado: false,
+        tentativa_realizada: processar,
+        documento_id: docMaisRecente.id,
+        status_leitura: processar ? 'falha_leitura' : 'aguardando_analise',
+        erro_processamento: processar ? mensagem : null,
+        diagnostico: processar ? mensagem : 'Enquadramento Tributário anexado e aguardando o processamento automático do relatório inicial.',
+      },
+      pendencias: [{
+        codigo: processar ? 'enquadramento_falha_leitura' : 'enquadramento_aguardando_analise',
+        mensagem: processar ? mensagem : 'Enquadramento Tributário anexado e aguardando análise documental.',
+        severidade: 'alta',
+        origem: 'enquadramento_tributario',
+        recomendacao: processar ? 'Verificar o arquivo anexado e executar novamente o relatório inicial.' : 'A análise será executada automaticamente ao abrir o relatório inicial.',
+      }],
     };
   }
 }
@@ -674,8 +864,11 @@ async function ensureSocioBlocos(empresaId: string, socios: any[]) {
 
 async function vincularDocumentosAutomaticos(empresaId: string) {
   const regras: Array<{ codigo: BlocoCodigo; tipos: string[] }> = [
-    { codigo: 'cnpj_receita', tipos: ['cartao_cnpj', 'certidao', 'consulta_receita'] },
-    { codigo: 'qsa_quadro_societario', tipos: ['documento_socio', 'cpf', 'rg', 'cnh', 'comprovante_residencia', 'procuracao'] },
+    { codigo: 'cnpj_receita', tipos: ['cartao_cnpj', 'cnpj_cartao', 'certidao', 'consulta_receita'] },
+    { codigo: 'qsa_quadro_societario', tipos: ['qsa'] },
+    { codigo: 'atos_junta_comercial', tipos: ['atos_junta_comercial'] },
+    { codigo: 'enquadramento_tributario', tipos: ['enquadramento_tributario_cnpj', 'simples_nacional'] },
+    { codigo: 'socios_representantes', tipos: ['documento_socio', 'cpf', 'rg', 'cnh', 'comprovante_residencia', 'procuracao'] },
     { codigo: 'contrato_social_alteracoes', tipos: ['contrato_social', 'alteracao_contratual', 'estatuto', 'procuracao'] },
     { codigo: 'faturamento_historico', tipos: ['comprovante_faturamento', 'declaracao_faturamento', 'dre', 'balanco', 'nota_fiscal'] },
     { codigo: 'demonstracoes_contabeis_fiscais', tipos: ['dre', 'balanco', 'balancete', 'imposto_renda', 'ecd', 'ecf'] },
@@ -719,6 +912,7 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
   empresaId: string;
   empresa: any;
   docsCartao: any[];
+  erroProcessamentoCartao?: string | null;
   cnpjPendencias: Pendencia[];
   qsaPendencias: Pendencia[];
   atosJuntaPendencias: Pendencia[];
@@ -729,13 +923,20 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
 }) {
   const analiseCnpj = await buscarUltimaAnaliseCnpjEmpresa(params.empresaId).catch(() => null);
   const resultadoCnpj = analiseCnpj?.resultado && typeof analiseCnpj.resultado === 'object' ? analiseCnpj.resultado : {};
-  const idadeMeses: number | null = resultadoCnpj?.campos_receita?.idade_meses ?? analiseCnpj?.idade_meses ?? null;
+  const camposReceita = analiseCnpj?.campos_receita && typeof analiseCnpj.campos_receita === 'object'
+    ? analiseCnpj.campos_receita
+    : (resultadoCnpj?.campos_receita || {});
+  const camposCartao = analiseCnpj?.campos_cartao && typeof analiseCnpj.campos_cartao === 'object'
+    ? analiseCnpj.campos_cartao
+    : (resultadoCnpj?.campos_cartao || {});
+  const idadeMeses: number | null = camposReceita?.idade_meses ?? analiseCnpj?.idade_meses ?? null;
 
   const bloqueios: string[] = [];
   const avisos: string[] = [];
   const pontosPositivos: string[] = [];
   const addBloqueio = (mensagem: string) => { if (mensagem && !bloqueios.includes(mensagem)) bloqueios.push(mensagem); };
   const addAviso = (mensagem: string) => { if (mensagem && !avisos.includes(mensagem)) avisos.push(mensagem); };
+  const primeiraPendencia = (pendencias: Pendencia[]) => pendencias.find((p) => p.severidade === 'alta') || pendencias[0];
 
   const situacaoAtiva = isSituacaoAtiva(params.empresa.situacao_cadastral);
   if (situacaoAtiva) pontosPositivos.push('Situação cadastral ativa na Receita Federal.');
@@ -754,9 +955,11 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
   ];
   const cnpjTemDivergenciaGrave = alertasCnpj.some((item: any) => ['alta', 'critica'].includes(String(item?.severidade || '').toLowerCase()) || item?.divergente === true);
   const cartaoAnexado = params.docsCartao.length > 0 || analiseCnpj?.cartao_anexado === true;
-  const cartaoAnalisado = !!analiseCnpj && analiseCnpj?.cartao_pendente_ocr !== true;
+  const cartaoAnalisado = !!analiseCnpj && analiseCnpj?.cartao_anexado === true && analiseCnpj?.cartao_pendente_ocr !== true;
   const cartaoConsistente = cartaoAnexado && cartaoAnalisado && !cnpjTemDivergenciaGrave;
+  const cartaoFalhou = cartaoAnexado && !cartaoAnalisado && !!params.erroProcessamentoCartao;
   if (!cartaoAnexado) addBloqueio('Cartão CNPJ não anexado.');
+  else if (cartaoFalhou) addBloqueio(params.erroProcessamentoCartao!);
   else if (!cartaoAnalisado) addBloqueio('Cartão CNPJ anexado, mas a leitura e conferência ainda não foram concluídas.');
   else if (!cartaoConsistente) addBloqueio('Cartão CNPJ possui divergência relevante com os dados da Receita Federal.');
   else pontosPositivos.push('Cartão CNPJ analisado e convergente com a Receita Federal.');
@@ -766,7 +969,7 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
   const qsaTemGrave = params.qsaPendencias.some((p) => p.severidade === 'alta');
   const qsaConsistente = qsaAnexado && qsaAnalisado && !qsaTemGrave;
   if (!qsaAnexado) addBloqueio('Documento QSA não anexado.');
-  else if (!qsaAnalisado) addBloqueio('QSA anexado, mas a análise documental ainda não foi concluída.');
+  else if (!qsaAnalisado) addBloqueio(params.qsaDados?.erro_processamento || 'QSA anexado, mas a análise documental ainda não foi concluída.');
   else if (qsaTemGrave) addBloqueio('QSA possui divergências societárias relevantes.');
   else pontosPositivos.push('QSA analisado, com sócios e administradores consistentes.');
 
@@ -775,7 +978,7 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
   const atosTemGrave = params.atosJuntaPendencias.some((p) => p.severidade === 'alta');
   const atosConsistente = atosAnexado && atosAnalisado && !atosTemGrave;
   if (!atosAnexado) addBloqueio('Atos da Junta Comercial não anexados.');
-  else if (!atosAnalisado) addBloqueio('Atos da Junta anexados, mas a análise ainda não foi concluída.');
+  else if (!atosAnalisado) addBloqueio(params.atosJuntaDados?.erro_processamento || 'Atos da Junta anexados, mas a análise ainda não foi concluída.');
   else if (atosTemGrave) addBloqueio('Atos da Junta possuem divergências relevantes.');
   else pontosPositivos.push('Atos da Junta Comercial analisados e convergentes.');
 
@@ -787,7 +990,7 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
   const enquadramentoIdentificado = !!regime || !!situacaoSimples;
   const enquadramentoConsistente = enquadramentoAnexado && enquadramentoAnalisado && enquadramentoIdentificado && !enquadramentoTemGrave;
   if (!enquadramentoAnexado) addBloqueio('Comprovante de enquadramento tributário não anexado.');
-  else if (!enquadramentoAnalisado) addBloqueio('Enquadramento tributário anexado, mas a análise ainda não foi concluída.');
+  else if (!enquadramentoAnalisado) addBloqueio(params.enquadramentoDados?.erro_processamento || 'Enquadramento tributário anexado, mas a análise ainda não foi concluída.');
   else if (!enquadramentoIdentificado) addBloqueio('Regime tributário não identificado no documento analisado.');
   else if (enquadramentoTemGrave) addBloqueio('Enquadramento tributário possui divergência relevante.');
   else pontosPositivos.push(`Enquadramento tributário identificado e conferido: ${regime || situacaoSimples}.`);
@@ -810,11 +1013,97 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
   for (const pendencia of todasPendencias.filter((p) => p.severidade === 'alta')) addBloqueio(pendencia.mensagem);
   for (const pendencia of todasPendencias.filter((p) => p.severidade === 'media')) addAviso(pendencia.mensagem);
 
+  const statusDocumento = (anexado: boolean, analisado: boolean, consistente: boolean, falha: boolean) => {
+    if (consistente) return 'ok';
+    if (!anexado) return 'nao_anexado';
+    if (falha) return 'falha_leitura';
+    if (!analisado) return 'aguardando_analise';
+    return 'divergente';
+  };
+
+  const cartaoPendencia = alertasCnpj.find((item: any) => ['critica', 'alta'].includes(String(item?.severidade || '').toLowerCase())) || alertasCnpj[0];
+  const qsaPendencia = primeiraPendencia(params.qsaPendencias);
+  const atosPendencia = primeiraPendencia(params.atosJuntaPendencias);
+  const enquadramentoPendencia = primeiraPendencia(params.enquadramentoPendencias);
+
   const documentosIniciais = {
-    cartao_cnpj: { nome: 'Cartão CNPJ', anexado: cartaoAnexado, analisado: cartaoAnalisado, consistente: cartaoConsistente, status: cartaoConsistente ? 'ok' : cartaoAnalisado ? 'divergente' : cartaoAnexado ? 'aguardando_analise' : 'nao_anexado' },
-    qsa: { nome: 'QSA', anexado: qsaAnexado, analisado: qsaAnalisado, consistente: qsaConsistente, status: qsaConsistente ? 'ok' : qsaAnalisado ? 'divergente' : qsaAnexado ? 'aguardando_analise' : 'nao_anexado' },
-    enquadramento_tributario: { nome: 'Enquadramento Tributário', anexado: enquadramentoAnexado, analisado: enquadramentoAnalisado, consistente: enquadramentoConsistente, status: enquadramentoConsistente ? 'ok' : enquadramentoAnalisado ? 'divergente' : enquadramentoAnexado ? 'aguardando_analise' : 'nao_anexado' },
-    atos_junta_comercial: { nome: 'Atos da Junta Comercial', anexado: atosAnexado, analisado: atosAnalisado, consistente: atosConsistente, status: atosConsistente ? 'ok' : atosAnalisado ? 'divergente' : atosAnexado ? 'aguardando_analise' : 'nao_anexado' },
+    cartao_cnpj: {
+      codigo: 'cartao_cnpj',
+      nome: 'Cartão CNPJ',
+      anexado: cartaoAnexado,
+      analisado: cartaoAnalisado,
+      consistente: cartaoConsistente,
+      status: statusDocumento(cartaoAnexado, cartaoAnalisado, cartaoConsistente, cartaoFalhou),
+      diagnostico: cartaoConsistente
+        ? 'Documento lido. CNPJ, razão social, CNAE, natureza jurídica, porte e situação cadastral convergem com a Receita Federal.'
+        : params.erroProcessamentoCartao || cartaoPendencia?.mensagem || (cartaoAnexado ? 'Documento anexado; a leitura automática ainda precisa ser concluída.' : 'Documento não anexado.'),
+      fonte: camposCartao?.fonte_extracao || analiseCnpj?.fonte_receita || null,
+      confianca: camposCartao?.confianca ?? null,
+      campos_principais: {
+        cnpj: camposCartao?.cnpj || camposReceita?.cnpj || params.empresa?.cnpj || null,
+        razao_social: camposCartao?.nome_empresarial || camposReceita?.razao_social || params.empresa?.razao_social || null,
+        cnae: camposCartao?.cnae_principal || camposReceita?.cnae_principal || params.empresa?.cnae_principal || null,
+        situacao_cadastral: camposCartao?.situacao_cadastral || camposReceita?.situacao_cadastral || params.empresa?.situacao_cadastral || null,
+      },
+    },
+    qsa: {
+      codigo: 'qsa',
+      nome: 'QSA / Quadro Societário',
+      anexado: qsaAnexado,
+      analisado: qsaAnalisado,
+      consistente: qsaConsistente,
+      status: statusDocumento(qsaAnexado, qsaAnalisado, qsaConsistente, params.qsaDados?.status_leitura === 'falha_leitura'),
+      diagnostico: qsaConsistente
+        ? 'Documento lido. CNPJ, capital social e quadro societário foram conferidos com o cadastro da empresa.'
+        : params.qsaDados?.diagnostico || qsaPendencia?.mensagem || (qsaAnexado ? 'Documento anexado; a análise societária ainda precisa ser concluída.' : 'Documento não anexado.'),
+      fonte: params.qsaDados?.fonte_extracao || params.qsaDados?.modelo || null,
+      confianca: params.qsaDados?.nivel_confianca ?? params.qsaDados?.confianca ?? null,
+      campos_principais: {
+        cnpj: params.qsaDados?.cnpj || null,
+        razao_social: params.qsaDados?.razao_social || null,
+        capital_social: params.qsaDados?.capital_social ?? null,
+        socios_identificados: Array.isArray(params.qsaDados?.socios) ? params.qsaDados.socios.length : null,
+      },
+    },
+    enquadramento_tributario: {
+      codigo: 'enquadramento_tributario',
+      nome: 'Enquadramento Tributário',
+      anexado: enquadramentoAnexado,
+      analisado: enquadramentoAnalisado,
+      consistente: enquadramentoConsistente,
+      status: statusDocumento(enquadramentoAnexado, enquadramentoAnalisado, enquadramentoConsistente, params.enquadramentoDados?.status_leitura === 'falha_leitura'),
+      diagnostico: enquadramentoConsistente
+        ? `Documento lido. Regime tributário confirmado: ${regime || situacaoSimples}.`
+        : params.enquadramentoDados?.diagnostico || enquadramentoPendencia?.mensagem || (enquadramentoAnexado ? 'Documento anexado; o enquadramento ainda precisa ser confirmado.' : 'Documento não anexado.'),
+      fonte: params.enquadramentoDados?.fonte_extracao || params.enquadramentoDados?.modelo || null,
+      confianca: params.enquadramentoDados?.nivel_confianca ?? params.enquadramentoDados?.confianca ?? null,
+      campos_principais: {
+        cnpj: params.enquadramentoDados?.cnpj || null,
+        regime_tributario: regime || null,
+        situacao_simples: situacaoSimples || null,
+        exclusao_agendada: params.enquadramentoDados?.agendamento_exclusao === true,
+      },
+    },
+    atos_junta_comercial: {
+      codigo: 'atos_junta_comercial',
+      nome: 'Atos da Junta Comercial',
+      anexado: atosAnexado,
+      analisado: atosAnalisado,
+      consistente: atosConsistente,
+      status: statusDocumento(atosAnexado, atosAnalisado, atosConsistente, params.atosJuntaDados?.status_leitura === 'falha_leitura'),
+      diagnostico: atosConsistente
+        ? 'Documento lido. Identidade empresarial, capital e atos registrados foram cruzados com os dados atuais da empresa.'
+        : params.atosJuntaDados?.diagnostico || atosPendencia?.mensagem || (atosAnexado ? 'Documento anexado; os atos registrados ainda precisam ser conferidos.' : 'Documento não anexado.'),
+      fonte: params.atosJuntaDados?.fonte_extracao || params.atosJuntaDados?.modelo || null,
+      confianca: params.atosJuntaDados?.nivel_confianca ?? params.atosJuntaDados?.confianca ?? null,
+      campos_principais: {
+        cnpj: params.atosJuntaDados?.cnpj || null,
+        razao_social: params.atosJuntaDados?.razao_social || null,
+        tipo_ato: params.atosJuntaDados?.tipo_ato || null,
+        data_registro: params.atosJuntaDados?.data_registro || null,
+        capital_social: params.atosJuntaDados?.capital_social_atual ?? null,
+      },
+    },
   };
   const quatroDocumentosOk = Object.values(documentosIniciais).every((item) => item.consistente);
   const apto = situacaoAtiva && empresaApta12Meses === true && quatroDocumentosOk && !ehMei && bloqueios.length === 0;
@@ -839,23 +1128,29 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
     relatorio: {
       conclusao: apto ? 'APTO_PARA_AVANCAR' : 'PENDENTE',
       documentos_conferidos: Object.values(documentosIniciais).filter((item) => item.consistente).length,
+      documentos_analisados: Object.values(documentosIniciais).filter((item) => item.analisado).length,
+      falhas_leitura: Object.values(documentosIniciais).filter((item) => item.status === 'falha_leitura').length,
       total_documentos_iniciais: 4,
       bloqueios: bloqueios.length,
       avisos: avisos.length,
     },
     diagnostico: apto
-      ? 'Identidade empresarial validada: os quatro documentos iniciais estão analisados, convergentes e sem impedimentos. A empresa está ativa, possui pelo menos 12 meses de abertura e não é MEI. Pode avançar para documentos da empresa, documentos dos sócios, certidões e estratégia de crédito.'
-      : `A etapa Identidade do CNPJ possui ${bloqueios.length} bloqueio(s). O avanço só será liberado após os quatro documentos iniciais estarem analisados e consistentes, a empresa estar ativa, ter 12 meses ou mais e não estar enquadrada como MEI.`,
+      ? 'Identidade empresarial validada: os quatro documentos iniciais estão analisados, convergentes e sem impedimentos. A empresa pode avançar para a próxima etapa documental e estratégica.'
+      : Object.values(documentosIniciais).some((item) => item.status === 'falha_leitura')
+        ? 'A leitura foi executada, mas um ou mais arquivos apresentaram falha técnica ou baixa legibilidade. O relatório abaixo informa exatamente qual documento precisa ser reprocessado ou substituído.'
+        : `A etapa Identidade do CNPJ possui ${bloqueios.length} bloqueio(s). Corrija somente os pontos indicados no relatório; o avanço será liberado automaticamente quando os quatro documentos estiverem consistentes.`,
   };
 }
 
 async function montarDossieCreditoEmpresa(empresaId: string, options: { processarDocumentos?: boolean; usuarioId?: string | null } = {}) {
   await ensureBlocosCatalogo();
+  let erroProcessamentoCartao: string | null = null;
   if (options.processarDocumentos) {
     try {
       await analisarCnpjReceitaCartaoEmpresa(empresaId, options.usuarioId || null);
     } catch (error: any) {
-      console.warn('[Dossie] Análise do Cartão CNPJ não interrompeu o recálculo:', error?.message || error);
+      erroProcessamentoCartao = mensagemSeguraFalhaLeitura('Cartão CNPJ', error);
+      console.warn('[Dossie] Análise do Cartão CNPJ não interrompeu o relatório:', error?.message || error);
     }
   }
   const empresa = await getEmpresa(empresaId);
@@ -863,9 +1158,37 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
   const socios = await getSociosEmpresa(empresaId);
   const docsCnpj = await listarDocumentosEmpresaPorTipos(empresaId, ['cartao_cnpj', 'cnpj_cartao', 'certidao', 'consulta_receita']);
   const docsCartao = docsCnpj.filter((doc: any) => ['cartao_cnpj', 'cnpj_cartao'].includes(String(doc.tipo_documento || '')));
+  if (options.processarDocumentos && docsCartao[0]?.id) {
+    if (erroProcessamentoCartao) {
+      await pool.query(
+        `UPDATE public.documentos_arquivos
+            SET resultado_validacao = COALESCE(resultado_validacao, '{}'::jsonb) || $2::jsonb,
+                atualizado_em = NOW()
+          WHERE id = $1`,
+        [docsCartao[0].id, JSON.stringify({ analise_inicial_erro: { mensagem: erroProcessamentoCartao, ocorrido_em: new Date().toISOString() } })],
+      ).catch(() => undefined);
+    } else {
+      await pool.query(
+        `UPDATE public.documentos_arquivos
+            SET resultado_validacao = COALESCE(resultado_validacao, '{}'::jsonb) - 'analise_inicial_erro',
+                atualizado_em = NOW()
+          WHERE id = $1`,
+        [docsCartao[0].id],
+      ).catch(() => undefined);
+    }
+  }
+  const erroCartaoPersistido = options.processarDocumentos && !erroProcessamentoCartao
+    ? null
+    : (erroProcessamentoCartao || docsCartao[0]?.resultado_validacao?.analise_inicial_erro?.mensagem || null);
   const cnpjPendencias = pendenciasCnpj(empresa, docsCartao);
   const qsaCadastroPendencias = pendenciasQsa(socios, empresa);
-  const qsaDocumental = await montarQsaDocumentalDados(empresaId, !!options.processarDocumentos);
+  // Os três documentos especializados são independentes. Processá-los em paralelo
+  // reduz o tempo total e evita que um PDF mais pesado bloqueie toda a etapa.
+  const [qsaDocumental, atosJunta, enquadramento] = await Promise.all([
+    montarQsaDocumentalDados(empresaId, !!options.processarDocumentos),
+    montarAtosJuntaDados(empresaId, !!options.processarDocumentos),
+    montarEnquadramentoDados(empresaId, !!options.processarDocumentos),
+  ]);
   // As pendências cadastrais do sócio (telefone, RG, endereço, profissão etc.)
   // pertencem à etapa seguinte. Elas continuam visíveis no bloco QSA, porém não
   // podem bloquear a validação inicial dos quatro documentos da identidade.
@@ -876,10 +1199,7 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
   const cnpjBloco = await ensureEmpresaBloco(empresaId, 'cnpj_receita', montarCnpjDados(empresa), cnpjPendencias, 'receita');
   const qsaBloco = await ensureEmpresaBloco(empresaId, 'qsa_quadro_societario', qsaDadosCompletos, qsaPendencias, socios.length ? 'receita' : 'sistema');
 
-  const atosJunta = await montarAtosJuntaDados(empresaId, !!options.processarDocumentos);
   await ensureEmpresaBloco(empresaId, 'atos_junta_comercial', atosJunta.dados, atosJunta.pendencias, 'ia');
-
-  const enquadramento = await montarEnquadramentoDados(empresaId, !!options.processarDocumentos);
   await ensureEmpresaBloco(empresaId, 'enquadramento_tributario', enquadramento.dados, enquadramento.pendencias, 'ia');
 
   const docsContrato = await listarDocumentosEmpresaPorTipos(empresaId, ['contrato_social', 'alteracao_contratual', 'estatuto', 'procuracao']);
@@ -947,6 +1267,7 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
     empresaId,
     empresa,
     docsCartao,
+    erroProcessamentoCartao: erroCartaoPersistido,
     cnpjPendencias,
     qsaPendencias: qsaPendenciasIdentidade,
     atosJuntaPendencias: atosJunta.pendencias,
@@ -1062,6 +1383,75 @@ router.get('/empresa/:empresaId/pendencias', auth, async (req: Request, res: Res
   }
 });
 
+function iniciarAnaliseInicialEmSegundoPlano(empresaId: string, usuarioId: string | null): boolean {
+  if (analisesIniciaisEmAndamento.has(empresaId)) return false;
+  const trabalho = (async () => {
+    try {
+      await montarDossieCreditoEmpresa(empresaId, { processarDocumentos: true, usuarioId });
+      console.info('[Análise inicial] Processamento concluído:', empresaId);
+    } catch (error: any) {
+      console.error('[Análise inicial] Processamento em segundo plano falhou:', empresaId, error?.message || error);
+    }
+  })().finally(() => {
+    analisesIniciaisEmAndamento.delete(empresaId);
+  });
+  analisesIniciaisEmAndamento.set(empresaId, trabalho);
+  return true;
+}
+
+router.post('/empresa/:empresaId/analise-inicial/iniciar', auth, async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).colaborador || (req as any).user;
+    const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
+    if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+
+    const documentos = Object.values(dossie.identidade_cnpj?.documentos_iniciais || {}) as Array<any>;
+    const quatroAnexados = documentos.length === 4 && documentos.every((item) => item?.anexado === true);
+    if (!quatroAnexados) {
+      res.status(422).json({
+        error: 'Anexe Cartão CNPJ, QSA, Atos da Junta e Enquadramento Tributário antes de gerar o relatório inicial.',
+        processando: false,
+        dossie,
+      });
+      return;
+    }
+
+    const forcar = req.body?.forcar === true;
+    const precisaProcessar = forcar || documentos.some((item) => !item?.analisado || item?.status === 'falha_leitura');
+    const iniciado = precisaProcessar
+      ? iniciarAnaliseInicialEmSegundoPlano(req.params.empresaId, user?.id || null)
+      : false;
+
+    res.status(iniciado || analisesIniciaisEmAndamento.has(req.params.empresaId) ? 202 : 200).json({
+      aceito: true,
+      iniciado,
+      processando: analisesIniciaisEmAndamento.has(req.params.empresaId),
+      dossie,
+    });
+  } catch (err: any) {
+    console.error('[POST análise inicial/iniciar]', err);
+    res.status(500).json({ error: 'Não foi possível iniciar o relatório inicial.' });
+  }
+});
+
+router.get('/empresa/:empresaId/analise-inicial/status', auth, async (req: Request, res: Response) => {
+  try {
+    const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
+    if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+    const documentos = Object.values(dossie.identidade_cnpj?.documentos_iniciais || {}) as Array<any>;
+    res.json({
+      processando: analisesIniciaisEmAndamento.has(req.params.empresaId),
+      analisados: documentos.filter((item) => item?.analisado).length,
+      consistentes: documentos.filter((item) => item?.consistente).length,
+      falhas: documentos.filter((item) => item?.status === 'falha_leitura').map((item) => ({ codigo: item?.codigo, documento: item?.nome, mensagem: item?.diagnostico })),
+      dossie,
+    });
+  } catch (err: any) {
+    console.error('[GET análise inicial/status]', err);
+    res.status(500).json({ error: 'Não foi possível consultar o status do relatório inicial.' });
+  }
+});
+
 async function analisarDocumentosIniciaisHandler(req: Request, res: Response) {
   try {
     const user = (req as any).colaborador || (req as any).user;
@@ -1074,12 +1464,16 @@ async function analisarDocumentosIniciaisHandler(req: Request, res: Response) {
     const documentos = Object.values(dossie.identidade_cnpj?.documentos_iniciais || {}) as Array<any>;
     const analisados = documentos.filter((item) => item?.analisado).length;
     const consistentes = documentos.filter((item) => item?.consistente).length;
+    const falhas = documentos
+      .filter((item) => item?.status === 'falha_leitura')
+      .map((item) => ({ codigo: item?.codigo, documento: item?.nome, mensagem: item?.diagnostico || 'Falha de leitura não detalhada.' }));
     res.json({
       ...dossie,
       processamento_inicial: {
         executado: true,
         analisados,
         consistentes,
+        falhas,
         total: 4,
         apto_para_avancar: dossie.identidade_cnpj?.apto_para_avancar === true,
         executado_em: new Date().toISOString(),

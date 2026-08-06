@@ -68,6 +68,7 @@ interface EtapaIdentidadeDocumental {
     analisado: boolean;
     consistente: boolean;
     status: string;
+    diagnostico?: string | null;
   }>;
   situacao_cadastral_ativa: boolean;
   empresa_apta_12_meses: boolean | null;
@@ -382,9 +383,9 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
               <button
                 type="button"
                 onClick={() => onNavegar("dossie_credito")}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-black text-white ${aptoInicial ? "bg-emerald-600 hover:bg-emerald-700" : "bg-blue-600 hover:bg-blue-700"}`}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
               >
-                {aptoInicial ? "Ver relatório e avançar" : "Abrir relatório inicial"} <ArrowRight className="h-3.5 w-3.5" />
+                Ver laudo inicial <ArrowRight className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
@@ -401,9 +402,10 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
                   {doc.consistente ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" /> : <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600" />}
                   <div>
                     <p className="text-xs font-black text-slate-800">{doc.nome}</p>
-                    <p className={`mt-1 text-[11px] font-semibold ${doc.consistente ? "text-emerald-700" : "text-amber-700"}`}>
-                      {doc.consistente ? "Lido e consistente" : !doc.anexado ? "Não anexado" : !doc.analisado ? "Aguardando análise" : "Revisão necessária"}
+                    <p className={`mt-1 text-[11px] font-semibold ${doc.consistente ? "text-emerald-700" : doc.status === "falha_leitura" ? "text-red-700" : "text-amber-700"}`}>
+                      {doc.consistente ? "Lido e consistente" : !doc.anexado ? "Não anexado" : doc.status === "falha_leitura" ? "Falha na leitura" : !doc.analisado ? "Processamento pendente" : "Revisão necessária"}
                     </p>
+                    {doc.diagnostico && <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-slate-500">{doc.diagnostico}</p>}
                   </div>
                 </div>
               </div>
