@@ -50,6 +50,107 @@ describe('validação documental especializada', () => {
     expect(alertas.some((a) => a.codigo === 'qsa_capital_social_divergente')).toBe(true);
   });
 
+  it('não exige dados pessoais do sócio na Etapa 1 quando nome e vínculo societário conferem', () => {
+    const alertas = validarQsaExtraida(
+      { cnpj: '52.008.360/0001-33', razao_social: 'PALUMA BURGER LTDA', capital_social: 65_000 },
+      [{ nome: 'Jonnathas Rodrigues Pires', qualificacao: 'Sócio-Administrador' }],
+      {
+        cnpj: '52.008.360/0001-33',
+        razao_social: 'PALUMA BURGER LTDA',
+        capital_social: 65_000,
+        socios: [{ nome: 'JONNATHAS RODRIGUES PIRES', qualificacao: 'Sócio-Administrador' }],
+        confianca: 0.95,
+      },
+    );
+
+    expect(alertas).toEqual([]);
+  });
+
+  it('confirma quem é Sócio-Administrador sem exigir CPF, RG, endereço ou estado civil', () => {
+    const alertas = validarQsaExtraida(
+      { cnpj: '52.008.360/0001-33', razao_social: 'PALUMA BURGER LTDA', capital_social: 65_000 },
+      [{ nome: 'Jonnathas Rodrigues Pires', qualificacao_socio: 'Sócio-Administrador' }],
+      {
+        cnpj: '52.008.360/0001-33',
+        razao_social: 'PALUMA BURGER LTDA',
+        capital_social: 65_000,
+        socios: [{ nome: 'JONNATHAS RODRIGUES PIRES', qualificacao: '49-Sócio-Administrador' }],
+        confianca: 0.95,
+      },
+    );
+
+    expect(alertas).toEqual([]);
+  });
+
+  it('bloqueia quando a qualificação do administrador diverge entre QSA e Receita', () => {
+    const alertas = validarQsaExtraida(
+      { cnpj: '52.008.360/0001-33', razao_social: 'PALUMA BURGER LTDA', capital_social: 65_000 },
+      [{ nome: 'Jonnathas Rodrigues Pires', qualificacao_socio: 'Sócio-Administrador' }],
+      {
+        cnpj: '52.008.360/0001-33',
+        razao_social: 'PALUMA BURGER LTDA',
+        capital_social: 65_000,
+        socios: [{ nome: 'JONNATHAS RODRIGUES PIRES', qualificacao: 'Sócio' }],
+        confianca: 0.95,
+      },
+    );
+
+    expect(alertas.some((a) => a.codigo === 'qsa_qualificacao_administrador_divergente')).toBe(true);
+  });
+
+  it('não aprova a Etapa 1 quando o QSA não permite identificar a qualificação societária', () => {
+    const alertas = validarQsaExtraida(
+      { cnpj: '52.008.360/0001-33', razao_social: 'PALUMA BURGER LTDA', capital_social: 65_000 },
+      [{ nome: 'Jonnathas Rodrigues Pires', qualificacao_socio: 'Sócio-Administrador' }],
+      {
+        cnpj: '52.008.360/0001-33',
+        razao_social: 'PALUMA BURGER LTDA',
+        capital_social: 65_000,
+        socios: [{ nome: 'JONNATHAS RODRIGUES PIRES', qualificacao: null }],
+        confianca: 0.9,
+      },
+    );
+
+    expect(alertas.some((a) => a.codigo === 'qsa_qualificacao_nao_extraida')).toBe(true);
+    expect(alertas.some((a) => a.codigo === 'qsa_administrador_nao_identificado')).toBe(true);
+  });
+
+  it('ignora registros genéricos da Receita e não cria sócio fictício "não identificado"', () => {
+    const alertas = validarQsaExtraida(
+      { cnpj: '52.008.360/0001-33', razao_social: 'PALUMA BURGER LTDA' },
+      [
+        { nome: 'Jonnathas Rodrigues Pires' },
+        { nome: 'Não identificado' },
+      ],
+      {
+        cnpj: '52.008.360/0001-33',
+        razao_social: 'PALUMA BURGER LTDA',
+        socios: [{ nome: 'JONNATHAS RODRIGUES PIRES' }],
+        confianca: 0.9,
+      },
+    );
+
+    expect(alertas.some((a) => a.mensagem.toLowerCase().includes('não identificado'))).toBe(false);
+    expect(alertas.some((a) => a.codigo.includes('socio_'))).toBe(false);
+  });
+
+  it('gera uma única falha de leitura quando nenhum sócio é extraído, sem divergências individuais falsas', () => {
+    const alertas = validarQsaExtraida(
+      { cnpj: '52.008.360/0001-33', razao_social: 'PALUMA BURGER LTDA' },
+      [{ nome: 'Jonnathas Rodrigues Pires' }],
+      {
+        cnpj: '52.008.360/0001-33',
+        razao_social: 'PALUMA BURGER LTDA',
+        socios: [],
+        confianca: 0.5,
+        extracao_parcial: true,
+      },
+    );
+
+    expect(alertas.some((a) => a.codigo === 'qsa_socios_nao_extraidos')).toBe(true);
+    expect(alertas.filter((a) => a.codigo === 'qsa_socio_receita_ausente_documento')).toHaveLength(0);
+  });
+
   it('classifica agendamento de exclusão do Simples como crítico', () => {
     const alertas = validarSimplesExtraido(
       { cnpj: '12.345.678/0001-90', opcao_pelo_simples: true },

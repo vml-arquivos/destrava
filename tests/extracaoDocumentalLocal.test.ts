@@ -62,6 +62,29 @@ describe('extração documental local determinística', () => {
     expect(resultado.confianca).toBeGreaterThanOrEqual(0.8);
   });
 
+  it('extrai o sócio do layout horizontal oficial do QSA sem exigir CPF ou documentos pessoais', () => {
+    const texto = `
+      QUADRO DE SÓCIOS E ADMINISTRADORES - QSA
+      CNPJ
+      52.008.360/0001-33
+      NOME EMPRESARIAL
+      PALUMA BURGER LTDA
+      CAPITAL SOCIAL
+      R$ 65.000,00
+      NOME/NOME EMPRESARIAL                         QUALIFICAÇÃO
+      JONNATHAS RODRIGUES PIRES                     49-Sócio-Administrador
+    `;
+
+    const resultado = analisarTextoDocumentoLocal('qsa', texto);
+
+    expect(resultado.dados.socios).toHaveLength(1);
+    expect(resultado.dados.socios[0].nome).toBe('JONNATHAS RODRIGUES PIRES');
+    expect(resultado.dados.socios[0].qualificacao).toContain('Sócio-Administrador');
+    expect(resultado.dados.socios[0].cpf_cnpj).toBeNull();
+    expect(resultado.dados.extracao_parcial).toBe(false);
+    expect(resultado.confianca).toBeGreaterThanOrEqual(0.8);
+  });
+
   it('identifica Simples Nacional, SIMEI e agendamento de exclusão', () => {
     const texto = `
       CONSULTA OPTANTES

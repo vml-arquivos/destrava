@@ -295,11 +295,13 @@ function parseCartaoCnpj(texto: string): { dados: Record<string, any>; confianca
 
 function parseQsa(texto: string): { dados: Record<string, any>; confianca: number } {
   const linhas = linhasTexto(texto);
+  const linhasLayout = String(texto || '').replace(/\u0000/g, '').replace(/\r/g, '').split('\n');
   const norm = textoNormalizado(texto);
   const compativel = norm.includes('quadro de socios e administradores')
     || norm.includes('quadro societario')
     || norm.includes('capital social')
-    || norm.includes('qualificacao do socio');
+    || norm.includes('qualificacao do socio')
+    || norm.includes('nome nome empresarial');
   const cnpj = formatarCnpj(primeiroCnpj(texto));
   const razaoSocial = limparValor(valorAposRotulo(linhas, ['nome empresarial', 'razão social', 'razao social']));
   const capitalLinha = valorAposRotulo(linhas, ['capital social']);
@@ -307,31 +309,114 @@ function parseQsa(texto: string): { dados: Record<string, any>; confianca: numbe
   const dataRegistro = parseDate(valorAposRotulo(linhas, ['data de registro', 'data do registro', 'data de arquivamento']));
 
   const socios: Array<{ nome: string; qualificacao: string | null; cpf_cnpj: string | null }> = [];
-  const nomesRotulo = new Set(['nome nome empresarial', 'nome do socio', 'nome socio', 'socio']);
+  const nomeSocioValido = (value: string | null): value is string => {
+    const clean = limparValor(value);
+    if (!clean) return false;
+    const n = textoNormalizado(clean).replace(/[\/]/g, ' ');
+    if (pareceRotulo(clean)) return false;
+    if (/^(?:nome|nome nome empresarial|nome do socio|socio|qualificacao|cpf|cnpj)$/.test(n)) return false;
+    if (/(quadro de socios|capital social|nome empresarial|comprovante|cadastro nacional|data de abertura)/.test(n)) return false;
+    if (/^(?:nao identificado|nao informado|sem identificacao)$/.test(n)) return false;
+    if (primeiroCnpj(clean) || /^\d{2}\/\d{2}\/\d{4}$/.test(clean)) return false;
+    return /[A-Za-zÀ-ÿ]/.test(clean) && clean.replace(/[^A-Za-zÀ-ÿ]/g, '').length >= 4;
+  };
+  const adicionarSocio = (nomeBruto: string | null, qualificacaoBruta: string | null, documentoBruto: string | null) => {
+    let nome = limparValor(nomeBruto);
+    let qualificacao = limparValor(qualificacaoBruta);
+    if (!nome) return;
+
+    const nomeComQualificacao = nome.match(/^(.+?)\s+((?:\d{1,3}\s*-\s*)?(?:s[oó]cio(?:-administrador)?|administrador|titular|empres[aá]rio|representante).*)$/i);
+    if (nomeComQualificacao) {
+      nome = nomeComQualificacao[1].trim();
+      if (!qualificacao || textoNormalizado(qualificacao) === textoNormalizado(nomeBruto)) qualificacao = nomeComQualificacao[2].trim();
+    }
+
+    // PDFs oficiais às vezes unem nome e qualificação na mesma linha. A
+    // separação por duas ou mais colunas preserva o nome sem exigir CPF, RG ou
+    // qualquer outro dado pessoal nesta etapa.
+    const colunas = nome.split(/\s{2,}/).map((item) => item.trim()).filter(Boolean);
+    if (colunas.length > 1 && !qualificacao) {
+      const possivelQualificacao = colunas.find((item, index) => index > 0 && /s[oó]cio|administrador|titular|empres[aá]rio|representante/i.test(item));
+      if (possivelQualificacao) {
+        qualificacao = possivelQualificacao;
+        nome = colunas[0];
+      }
+    }
+    nome = nome
+      .replace(/^nome(?:\/nome empresarial| nome empresarial| do s[oó]cio| s[oó]cio)?\s*[:\-]?\s*/i, '')
+      .trim();
+    if (!nomeSocioValido(nome)) return;
+    const documento = String(documentoBruto || '').match(/\b(?:\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})\b/)?.[0] || null;
+    const chave = textoNormalizado(nome).replace(/[^a-z0-9]/g, '');
+    const existente = socios.find((socio) => textoNormalizado(socio.nome).replace(/[^a-z0-9]/g, '') === chave);
+    if (existente) {
+      if (!existente.qualificacao && qualificacao) existente.qualificacao = qualificacao;
+      if (!existente.cpf_cnpj && documento) existente.cpf_cnpj = documento;
+      return;
+    }
+    socios.push({ nome, qualificacao, cpf_cnpj: documento });
+  };
+
+  // 1) Grade horizontal preservada pelo pdftotext -layout.
+  for (let i = 0; i < linhasLayout.length; i += 1) {
+    const cabecalho = linhasLayout[i];
+    const cabecalhoNorm = normalizarLinhaLayout(cabecalho).replace(/\//g, ' ');
+    if (!cabecalhoNorm.includes('nome nome empresarial') || !cabecalhoNorm.includes('qualificacao')) continue;
+    const posNome = cabecalhoNorm.indexOf('nome nome empresarial');
+    const posQualificacao = cabecalhoNorm.indexOf('qualificacao', posNome + 1);
+    if (posNome < 0 || posQualificacao <= posNome) continue;
+    for (let j = i + 1; j <= Math.min(i + 12, linhasLayout.length - 1); j += 1) {
+      const linha = linhasLayout[j];
+      const linhaNorm = textoNormalizado(linha);
+      if (!linhaNorm) continue;
+      if (/(capital social|data de registro|informacoes da empresa|codigo e descricao|comprovante de inscricao)/.test(linhaNorm)) break;
+      const nomeColuna = limparValor(linha.slice(posNome, posQualificacao));
+      const qualificacaoColuna = limparValor(linha.slice(posQualificacao));
+      const documento = linha.match(/\b(?:\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})\b/)?.[0] || null;
+      adicionarSocio(nomeColuna, qualificacaoColuna, documento);
+    }
+  }
+
+  // 2) Blocos verticais e linhas com rótulo/valor.
+  const nomesRotulo = ['nome nome empresarial', 'nome do socio', 'nome socio'];
   for (let i = 0; i < linhas.length; i += 1) {
     const linhaNorm = textoNormalizado(linhas[i]).replace(/[\/]/g, ' ');
-    if (!Array.from(nomesRotulo).some((rotulo) => linhaNorm === rotulo || linhaNorm.startsWith(`${rotulo}:`))) continue;
-    const nome = limparValor(linhas[i].includes(':') ? linhas[i].split(':').slice(1).join(':') : linhas[i + 1] || null);
-    if (!nome || pareceRotulo(nome)) continue;
+    if (!nomesRotulo.some((rotulo) => linhaNorm === rotulo || linhaNorm.startsWith(`${rotulo}:`) || linhaNorm.startsWith(`${rotulo} `))) continue;
+    let nome = linhas[i].includes(':') ? linhas[i].split(':').slice(1).join(':') : null;
+    if (!nome || !nomeSocioValido(nome)) {
+      for (let offset = 1; offset <= 3 && i + offset < linhas.length; offset += 1) {
+        if (nomeSocioValido(linhas[i + offset])) {
+          nome = linhas[i + offset];
+          break;
+        }
+      }
+    }
     let qualificacao: string | null = null;
     let cpfCnpj: string | null = null;
-    for (let j = i + 1; j <= Math.min(i + 8, linhas.length - 1); j += 1) {
+    for (let j = i + 1; j <= Math.min(i + 10, linhas.length - 1); j += 1) {
       const atualNorm = textoNormalizado(linhas[j]);
+      if (j > i + 1 && nomesRotulo.some((rotulo) => atualNorm.replace(/[\/]/g, ' ').startsWith(rotulo))) break;
       if (atualNorm.startsWith('qualificacao')) {
         qualificacao = limparValor(linhas[j].includes(':') ? linhas[j].split(':').slice(1).join(':') : linhas[j + 1] || null);
+      } else if (!qualificacao && /s[oó]cio|administrador|titular|empres[aá]rio|representante/i.test(linhas[j])) {
+        qualificacao = linhas[j];
       }
       const doc = linhas[j].match(/\b(?:\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})\b/);
       if (doc) cpfCnpj = doc[0];
     }
-    if (!socios.some((socio) => textoNormalizado(socio.nome) === textoNormalizado(nome))) {
-      socios.push({ nome, qualificacao, cpf_cnpj: cpfCnpj });
-    }
+    adicionarSocio(nome, qualificacao, cpfCnpj);
   }
 
-  const pontuacao = (compativel ? 0.15 : 0)
+  // 3) Último fallback para tabelas achatadas: NOME  QUALIFICAÇÃO.
+  for (const linha of linhasLayout) {
+    const match = linha.match(/^\s*([A-ZÀ-Ü][A-ZÀ-Ü '.&-]{4,}?)\s{2,}((?:\d{1,3}\s*-\s*)?(?:S[ÓO]CIO|ADMINISTRADOR|TITULAR|EMPRES[ÁA]RIO|REPRESENTANTE).*)$/i);
+    if (match) adicionarSocio(match[1], match[2], linha);
+  }
+
+  const pontuacao = (compativel ? 0.2 : 0)
     + (cnpj ? 0.25 : 0)
     + (razaoSocial ? 0.1 : 0)
-    + (capitalSocial !== null ? 0.2 : 0)
+    + (capitalSocial !== null ? 0.15 : 0)
     + (socios.length ? 0.3 : 0);
   const confianca = clamp(pontuacao);
   return {
@@ -342,6 +427,7 @@ function parseQsa(texto: string): { dados: Record<string, any>; confianca: numbe
       capital_social: capitalSocial,
       socios,
       data_registro: dataRegistro,
+      extracao_parcial: socios.length === 0,
       confianca,
       fonte_extracao: 'local_deterministica',
     },

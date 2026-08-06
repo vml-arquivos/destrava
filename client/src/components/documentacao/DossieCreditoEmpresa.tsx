@@ -650,7 +650,15 @@ function ProntidaoIdentidadeCard({
   const resumoCampos = (item: DocumentoInicialStatus) => {
     const campos = item.campos_principais || {};
     if (item.codigo === "cartao_cnpj") return [campos.cnpj, campos.razao_social, campos.cnae].filter(Boolean).map(String).slice(0, 3);
-    if (item.codigo === "qsa") return [campos.cnpj, campos.socios_identificados != null ? `${campos.socios_identificados} sócio(s)` : null, campos.capital_social != null ? formatMoney(campos.capital_social) : null].filter(Boolean).map(String);
+    if (item.codigo === "qsa") {
+      const administradores = Array.isArray(campos.administradores) ? campos.administradores.filter(Boolean) : [];
+      return [
+        campos.cnpj,
+        campos.socios_identificados != null ? `${campos.socios_identificados} sócio(s)` : null,
+        administradores.length ? `Administrador: ${administradores.join(", ")}` : null,
+        campos.capital_social != null ? formatMoney(campos.capital_social) : null,
+      ].filter(Boolean).map(String);
+    }
     if (item.codigo === "enquadramento_tributario") return [campos.regime_tributario, campos.situacao_simples].filter(Boolean).map(String);
     return [campos.tipo_ato, campos.data_registro, campos.capital_social != null ? formatMoney(campos.capital_social) : null].filter(Boolean).map(String);
   };

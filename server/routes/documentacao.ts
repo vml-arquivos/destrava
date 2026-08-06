@@ -1188,7 +1188,7 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
       consistente: qsaConsistente,
       status: statusDocumento(qsaAnexado, qsaAnalisado, qsaConsistente, params.qsaDados?.status_leitura === 'falha_leitura'),
       diagnostico: qsaConsistente
-        ? 'Documento lido. CNPJ, capital social e quadro societário foram conferidos com o cadastro da empresa.'
+        ? 'Documento lido. CNPJ, razão social, capital social, nomes dos sócios e qualificações societárias foram conferidos com a Receita Federal.'
         : params.qsaDados?.diagnostico || qsaPendencia?.mensagem || (qsaAnexado ? 'Documento anexado; a análise societária ainda precisa ser concluída.' : 'Documento não anexado.'),
       fonte: params.qsaDados?.fonte_extracao || params.qsaDados?.modelo || null,
       confianca: params.qsaDados?.nivel_confianca ?? params.qsaDados?.confianca ?? null,
@@ -1197,6 +1197,19 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
         razao_social: params.qsaDados?.razao_social || null,
         capital_social: params.qsaDados?.capital_social ?? null,
         socios_identificados: Array.isArray(params.qsaDados?.socios) ? params.qsaDados.socios.length : null,
+        socios: Array.isArray(params.qsaDados?.socios)
+          ? params.qsaDados.socios.map((socio: any) => ({
+              nome: socio?.nome || null,
+              qualificacao: socio?.qualificacao || null,
+              administrador: /administrador|titular|empres[aá]rio individual/i.test(String(socio?.qualificacao || '')),
+            }))
+          : [],
+        administradores: Array.isArray(params.qsaDados?.socios)
+          ? params.qsaDados.socios
+              .filter((socio: any) => /administrador|titular|empres[aá]rio individual/i.test(String(socio?.qualificacao || '')))
+              .map((socio: any) => socio?.nome)
+              .filter(Boolean)
+          : [],
       },
     },
     enquadramento_tributario: {
@@ -1342,14 +1355,21 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
   const cnpjPendencias = pendenciasCnpj(empresa, docsCartao);
   const qsaCadastroPendencias = pendenciasQsa(socios, empresa);
   // As pendências cadastrais do sócio (telefone, RG, endereço, profissão etc.)
-  // pertencem à etapa seguinte. Elas continuam visíveis no bloco QSA, porém não
-  // podem bloquear a validação inicial dos quatro documentos da identidade.
+  // pertencem à etapa seguinte. Elas são preservadas nos blocos individuais
+  // dos sócios, mas não aparecem no bloco QSA da Etapa 1 e não podem ser
+  // confundidas com divergência societária do documento.
   const qsaPendenciasIdentidade = qsaDocumental.pendencias;
-  const qsaPendencias = [...qsaPendenciasIdentidade, ...qsaCadastroPendencias];
-  const qsaDadosCompletos = { ...dadosQsa(empresa, socios), analise_documental: qsaDocumental.dados };
+  const qsaDadosCompletos = {
+    ...dadosQsa(empresa, socios),
+    analise_documental: qsaDocumental.dados,
+    proxima_etapa: {
+      pendencias_dados_pessoais: qsaCadastroPendencias.length,
+      descricao: 'Dados pessoais, contato, endereço e documentos dos sócios serão tratados somente após a aprovação da Etapa 1.',
+    },
+  };
 
   const cnpjBloco = await ensureEmpresaBloco(empresaId, 'cnpj_receita', montarCnpjDados(empresa), cnpjPendencias, 'receita');
-  const qsaBloco = await ensureEmpresaBloco(empresaId, 'qsa_quadro_societario', qsaDadosCompletos, qsaPendencias, socios.length ? 'receita' : 'sistema');
+  const qsaBloco = await ensureEmpresaBloco(empresaId, 'qsa_quadro_societario', qsaDadosCompletos, qsaPendenciasIdentidade, socios.length ? 'receita' : 'sistema');
 
   await ensureEmpresaBloco(empresaId, 'atos_junta_comercial', atosJunta.dados, atosJunta.pendencias, 'ia');
   await ensureEmpresaBloco(empresaId, 'enquadramento_tributario', enquadramento.dados, enquadramento.pendencias, 'ia');
@@ -1367,11 +1387,14 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
     gerado_em: new Date().toISOString(),
     pendencias_por_bloco: {
       cnpj_receita: cnpjPendencias.length,
-      qsa_quadro_societario: qsaPendencias.length,
+      qsa_quadro_societario: qsaPendenciasIdentidade.length,
       atos_junta_comercial: atosJunta.pendencias.length,
       enquadramento_tributario: enquadramento.pendencias.length,
     },
-  }, [...cnpjPendencias, ...qsaPendencias, ...atosJunta.pendencias, ...enquadramento.pendencias], 'sistema');
+    pendencias_proxima_etapa: {
+      socios_representantes: qsaCadastroPendencias.length,
+    },
+  }, [...cnpjPendencias, ...qsaPendenciasIdentidade, ...atosJunta.pendencias, ...enquadramento.pendencias], 'sistema');
 
   for (const codigo of BLOCO_CODIGOS) {
     if (['cnpj_receita', 'qsa_quadro_societario', 'atos_junta_comercial', 'enquadramento_tributario', 'contrato_social_alteracoes', 'pendencias_documentais'].includes(codigo)) continue;
