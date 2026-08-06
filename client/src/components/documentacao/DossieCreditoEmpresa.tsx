@@ -336,56 +336,48 @@ function BlocoCnpj({ bloco }: { bloco: BlocoDossie }) {
 }
 
 function BlocoQsa({ bloco }: { bloco: BlocoDossie }) {
-  const socios = Array.isArray(bloco.dados_estruturados?.socios) ? bloco.dados_estruturados.socios : [];
+  const dados = bloco.dados_estruturados || {};
+  const socios = Array.isArray(dados.socios)
+    ? dados.socios.filter((s: any) => s?.nome && !/^(?:não|nao) identificado$/i.test(String(s.nome).trim()))
+    : [];
+
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-        <MiniCampo label="Sócios cadastrados" value={bloco.dados_estruturados?.total_socios_cadastrados ?? 0} />
-        <MiniCampo label="QSA Receita JSON" value={bloco.dados_estruturados?.total_socios_receita_json ?? 0} />
-        <MiniCampo label="Exibidos no dossiê" value={bloco.dados_estruturados?.total_socios_consolidados ?? socios.length} />
-        <MiniCampo label="Origem QSA" value={bloco.dados_estruturados?.origem_qsa_exibido} />
+      <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
+        <p className="text-xs font-extrabold text-blue-900">Conferência societária da Etapa 1</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-blue-800">
+          Nesta etapa são conferidos somente CNPJ, razão social, capital social, nome, qualificação e identificação do Sócio-Administrador.
+        </p>
       </div>
-      {bloco.dados_estruturados?.proprietario_inferido && (
-        <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
-          Empresa individual/MEI: proprietário/administrador exibido a partir dos dados cadastrais. Confirme CPF completo e documentos pessoais na aba Sócios.
-        </div>
-      )}
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <MiniCampo label="CNPJ" value={formatCnpj(dados.cnpj)} />
+        <MiniCampo label="Razão social" value={dados.razao_social} />
+        <MiniCampo label="Capital social" value={formatMoney(dados.capital_social)} />
+      </div>
+
       {socios.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-200 p-4 text-xs text-slate-500 text-center">
-          Nenhum sócio/QSA disponível. Use “Atualizar dados societários” na aba Sócios ou cadastre sócio/proprietário manualmente.
+        <div className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500">
+          Nenhum sócio foi confirmado na leitura atual do QSA.
         </div>
       ) : (
-        <div className="space-y-2">
-          {socios.slice(0, 10).map((s: any) => {
-            const c = s.campos_complementares || {};
-            return (
-              <div key={s.id || s.nome} className="rounded-lg border border-slate-100 bg-white p-3 text-xs">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <b className="text-slate-800">{s.nome || "Sócio sem nome"}</b>
-                  <div className="flex flex-wrap gap-1">
-                    <span className="text-[11px] rounded-full px-2 py-0.5 border border-slate-200 bg-slate-50 text-slate-600">{s.qualificacao || "Qualificação pendente"}</span>
-                    {s.fonte_dados && <span className="text-[11px] rounded-full px-2 py-0.5 border border-blue-100 bg-blue-50 text-blue-700">Fonte: {s.fonte_dados}</span>}
-                  </div>
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+          {socios.map((s: any, index: number) => (
+            <div key={`${s.nome}-${index}`} className="rounded-lg border border-slate-100 bg-white p-3 text-xs">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="font-extrabold text-slate-800">{s.nome}</p>
+                  <p className="mt-1 text-[11px] text-slate-600">Qualificação: <b>{s.qualificacao || "Não identificada"}</b></p>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 mt-2">
-                  <MiniCampo label="CPF/CNPJ" value={s.cpf_cnpj || "Pendente"} />
-                  <MiniCampo label="Administrador" value={formatBool(s.administrador)} />
-                  <MiniCampo label="Representante legal" value={formatBool(s.representante_legal)} />
-                  <MiniCampo label="Assina contrato" value={formatBool(s.assina_contrato)} />
-                  <MiniCampo label="Participação" value={s.percentual_participacao !== null && s.percentual_participacao !== undefined ? `${s.percentual_participacao}%` : "Não informado"} />
-                  <MiniCampo label="Entrada" value={formatDate(s.data_entrada_sociedade)} />
-                  <MiniCampo label="Profissão/Cargo" value={c.profissao || s.cargo} />
-                  <MiniCampo label="Estado civil" value={c.estado_civil} />
-                  <MiniCampo label="RG" value={c.rg} />
-                  <MiniCampo label="E-mail" value={c.email} />
-                  <MiniCampo label="Telefone" value={c.telefone} />
-                  <MiniCampo label="Endereço" value={c.endereco} />
-                </div>
+                <span className={`rounded-full border px-2 py-1 text-[10px] font-extrabold ${s.administrador ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+                  {s.administrador ? "Sócio-Administrador" : "Sócio"}
+                </span>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       )}
+
       <DocumentosDoBloco documentos={bloco.documentos} />
     </div>
   );
@@ -651,12 +643,15 @@ function ProntidaoIdentidadeCard({
     const campos = item.campos_principais || {};
     if (item.codigo === "cartao_cnpj") return [campos.cnpj, campos.razao_social, campos.cnae].filter(Boolean).map(String).slice(0, 3);
     if (item.codigo === "qsa") {
-      const administradores = Array.isArray(campos.administradores) ? campos.administradores.filter(Boolean) : [];
+      const socios = Array.isArray(campos.socios) ? campos.socios : [];
+      const resumoSocios = socios
+        .filter((socio: any) => socio?.nome && !/^(?:não|nao) identificado$/i.test(String(socio.nome).trim()))
+        .map((socio: any) => `${socio.nome} — ${socio.qualificacao || (socio.administrador ? "Sócio-Administrador" : "Sócio")}`);
       return [
-        campos.cnpj,
-        campos.socios_identificados != null ? `${campos.socios_identificados} sócio(s)` : null,
-        administradores.length ? `Administrador: ${administradores.join(", ")}` : null,
-        campos.capital_social != null ? formatMoney(campos.capital_social) : null,
+        campos.cnpj ? `CNPJ ${campos.cnpj}` : null,
+        campos.razao_social ? `Razão social: ${campos.razao_social}` : null,
+        campos.capital_social != null ? `Capital: ${formatMoney(campos.capital_social)}` : null,
+        ...resumoSocios.map((socio: string) => `Sócio: ${socio}`),
       ].filter(Boolean).map(String);
     }
     if (item.codigo === "enquadramento_tributario") return [campos.regime_tributario, campos.situacao_simples].filter(Boolean).map(String);
@@ -708,7 +703,7 @@ function ProntidaoIdentidadeCard({
                   <p className={`mt-0.5 text-[11px] font-bold ${cor === "emerald" ? "text-emerald-700" : cor === "red" ? "text-red-700" : processando && !item.analisado ? "text-blue-700" : "text-amber-700"}`}>{statusLabel(item)}</p>
                 </div>
               </div>
-              {resumos.length > 0 && <p className="mt-2 line-clamp-2 text-[10px] font-semibold leading-relaxed text-slate-600">{resumos.join(" · ")}</p>}
+              {resumos.length > 0 && <p className={`mt-2 text-[10px] font-semibold leading-relaxed text-slate-600 ${item.codigo === "qsa" ? "line-clamp-4" : "line-clamp-2"}`}>{resumos.join(" · ")}</p>}
               {!item.consistente && item.diagnostico && <p className="mt-2 line-clamp-3 text-[10px] leading-relaxed text-slate-500">{item.diagnostico}</p>}
             </article>
           );

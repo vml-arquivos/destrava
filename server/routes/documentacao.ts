@@ -3,7 +3,7 @@ import { Router, Request, Response } from 'express';
 import pkg from 'pg';
 import { auth } from '../middleware/auth';
 import { analisarCnpjReceitaCartaoEmpresa, buscarUltimaAnaliseCnpjEmpresa, limparAnalisesCnpjEmpresa } from '../services/analiseCnpjReceitaCartao';
-import { analiseDocumentalService, type AnaliseDocumentalResult, type TipoAnaliseDocumental } from '../services/analiseDocumentalEspecializada';
+import { analiseDocumentalService, QSA_ANALYSIS_VERSION, type AnaliseDocumentalResult, type TipoAnaliseDocumental } from '../services/analiseDocumentalEspecializada';
 import { ensureDocumentacaoSchema } from '../services/documentacaoSchema';
 
 const { Pool } = pkg;
@@ -23,6 +23,8 @@ const router = Router();
 // documentos. A rota síncrona antiga continua disponível para integrações.
 const analisesIniciaisEmAndamento = new Map<string, Promise<void>>();
 const TIPO_ANALISE_INICIAL = 'identidade_cnpj_inicial';
+const VERSAO_ANALISE_DOCUMENTAL: Record<string, string> = { qsa_extract: QSA_ANALYSIS_VERSION, simples_extract: '1.0.0', atos_junta_extract: '1.0.0' };
+const versaoPromptDocumental = (promptCodigo: string) => VERSAO_ANALISE_DOCUMENTAL[promptCodigo] || '1.0.0';
 
 const BLOCO_CODIGOS = [
   'cnpj_receita',
@@ -558,7 +560,7 @@ async function buscarAnaliseEspecializadaPersistida(
 ): Promise<AnaliseDocumentalResult | null> {
   if (!(await tableExists('documentos_extracoes_ia'))) return null;
   const { rows } = await pool.query(
-    `SELECT resultado, status
+    `SELECT resultado, status, prompt_versao
        FROM public.documentos_extracoes_ia
       WHERE arquivo_id = $1
         AND prompt_codigo = $2
@@ -567,8 +569,15 @@ async function buscarAnaliseEspecializadaPersistida(
       LIMIT 1`,
     [arquivoId, promptCodigo],
   );
-  const resultado = rows[0]?.resultado;
-  return resultado && typeof resultado === 'object' && resultado.tipo_analise ? resultado as AnaliseDocumentalResult : null;
+  const row = rows[0];
+  const resultado = row?.resultado;
+  if (!resultado || typeof resultado !== 'object' || !resultado.tipo_analise) return null;
+  const versaoEsperada = versaoPromptDocumental(promptCodigo);
+  const versaoResultado = String((resultado as any).versao_motor || (resultado as any).dados_extraidos?.versao_motor || row?.prompt_versao || '');
+  // Resultados antigos do QSA continham validações pessoais e podiam manter o
+  // falso “não identificado”. Eles não podem ser reaproveitados pela Etapa 1.
+  if (promptCodigo === 'qsa_extract' && versaoResultado !== versaoEsperada) return null;
+  return resultado as AnaliseDocumentalResult;
 }
 
 async function buscarFalhaAnaliseEspecializada(
@@ -603,6 +612,7 @@ async function persistirAnaliseEspecializada(
     arquivoId,
     blocoEntidadeId: null,
     promptCodigo,
+    promptVersao: versaoPromptDocumental(promptCodigo),
   });
   await pool.query(
     `UPDATE public.documentos_extracoes_ia
@@ -637,6 +647,7 @@ async function persistirFalhaAnaliseEspecializada(
       arquivoId,
       blocoEntidadeId: null,
       promptCodigo,
+      promptVersao: versaoPromptDocumental(promptCodigo),
     });
     const mensagem = String((error as any)?.message || error || 'Falha de leitura documental').slice(0, 1200);
     await pool.query(
@@ -662,6 +673,7 @@ async function obterAnaliseEspecializada(params: {
   processar: boolean;
   reprocessar?: boolean;
 }): Promise<AnaliseDocumentalResult | null> {
+  const promptVersao = versaoPromptDocumental(params.promptCodigo);
   const persistida = await buscarAnaliseEspecializadaPersistida(params.arquivoId, params.promptCodigo);
   // GETs continuam reaproveitando o último laudo persistido. Já o comando
   // explícito de recalcular força nova leitura dos arquivos atuais, evitando
@@ -673,6 +685,7 @@ async function obterAnaliseEspecializada(params: {
     arquivoId: params.arquivoId,
     blocoEntidadeId: null,
     promptCodigo: params.promptCodigo,
+    promptVersao,
   });
   if (!registro.deveProcessar) return persistida;
   await pool.query(
@@ -1359,13 +1372,25 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
   // dos sócios, mas não aparecem no bloco QSA da Etapa 1 e não podem ser
   // confundidas com divergência societária do documento.
   const qsaPendenciasIdentidade = qsaDocumental.pendencias;
+  // O bloco QSA da Etapa 1 contém exclusivamente a conferência societária.
+  // Dados pessoais permanecem preservados em socios_empresa e nos blocos da
+  // próxima etapa, mas não são exibidos nem avaliados aqui.
+  const sociosEtapa1 = socios
+    .filter((socio: any) => socio?.nome && !/^(?:não|nao) identificado$/i.test(String(socio.nome).trim()))
+    .map((socio: any) => ({
+      nome: socio.nome,
+      qualificacao: socio.qualificacao_socio || socio.qualificacao || socio.cargo || null,
+      administrador: socio.administrador === true || socio.representante_legal === true || /administrador|titular|empres[aá]rio individual/i.test(String(socio.qualificacao_socio || socio.qualificacao || socio.cargo || '')),
+    }));
   const qsaDadosCompletos = {
-    ...dadosQsa(empresa, socios),
+    cnpj: empresa.cnpj || null,
+    razao_social: empresa.razao_social || null,
+    capital_social: empresa.capital_social ?? null,
+    socios: sociosEtapa1,
+    total_socios: sociosEtapa1.length,
+    administradores: sociosEtapa1.filter((socio: any) => socio.administrador).map((socio: any) => socio.nome),
     analise_documental: qsaDocumental.dados,
-    proxima_etapa: {
-      pendencias_dados_pessoais: qsaCadastroPendencias.length,
-      descricao: 'Dados pessoais, contato, endereço e documentos dos sócios serão tratados somente após a aprovação da Etapa 1.',
-    },
+    campos_avaliados_etapa_1: ['cnpj', 'razao_social', 'capital_social', 'socios.nome', 'socios.qualificacao', 'socios.administrador'],
   };
 
   const cnpjBloco = await ensureEmpresaBloco(empresaId, 'cnpj_receita', montarCnpjDados(empresa), cnpjPendencias, 'receita');
@@ -1919,6 +1944,7 @@ async function registrarExtracaoEspecializada(params: {
   arquivoId: string;
   blocoEntidadeId: string | null;
   promptCodigo: string;
+  promptVersao?: string;
 }) {
   const client = await pool.connect();
   try {
@@ -1953,7 +1979,7 @@ async function registrarExtracaoEspecializada(params: {
           `UPDATE public.documentos_extracoes_ia
               SET entidade_bloco_id = COALESCE($2, entidade_bloco_id),
                   status = 'pendente',
-                  prompt_versao = '1.0.0',
+                  prompt_versao = $3,
                   resultado = '{}'::jsonb,
                   campos_extraidos = '{}'::jsonb,
                   pendencias = '[]'::jsonb,
@@ -1961,7 +1987,7 @@ async function registrarExtracaoEspecializada(params: {
                   processado_em = NULL
             WHERE id = $1
             RETURNING *`,
-          [existente.rows[0].id, params.blocoEntidadeId],
+          [existente.rows[0].id, params.blocoEntidadeId, params.promptVersao || versaoPromptDocumental(params.promptCodigo)],
         );
         extracao = atualizada.rows[0];
       }
@@ -1969,9 +1995,9 @@ async function registrarExtracaoEspecializada(params: {
       const inserida = await client.query(
         `INSERT INTO public.documentos_extracoes_ia
           (arquivo_id, entidade_bloco_id, status, prompt_codigo, prompt_versao, resultado, campos_extraidos, pendencias, erros)
-         VALUES ($1,$2,'pendente',$3,'1.0.0','{}'::jsonb,'{}'::jsonb,'[]'::jsonb,'[]'::jsonb)
+         VALUES ($1,$2,'pendente',$3,$4,'{}'::jsonb,'{}'::jsonb,'[]'::jsonb,'[]'::jsonb)
          RETURNING *`,
-        [params.arquivoId, params.blocoEntidadeId, params.promptCodigo],
+        [params.arquivoId, params.blocoEntidadeId, params.promptCodigo, params.promptVersao || versaoPromptDocumental(params.promptCodigo)],
       );
       extracao = inserida.rows[0];
     }
