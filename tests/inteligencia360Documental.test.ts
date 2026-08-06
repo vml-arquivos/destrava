@@ -149,82 +149,15 @@ describe('Etapa 1 — Identidade do CNPJ', () => {
   const documentosIniciais = [
     { tipo: 'cartao_cnpj', arquivo_path: '/docs/cartao.pdf', status: 'validado' },
     { tipo: 'qsa', arquivo_path: '/docs/qsa.pdf', status: 'validado' },
-    { tipo: 'atos_junta_comercial', arquivo_path: '/docs/junta.pdf', status: 'validado' },
     { tipo: 'enquadramento_tributario_cnpj', arquivo_path: '/docs/simples.pdf', status: 'validado' },
   ];
   const analisesOk = [
     { prompt_codigo: 'qsa_extract', status: 'concluido', resultado: { tipo_analise: 'qsa', alertas: [] } },
-    { prompt_codigo: 'atos_junta_extract', status: 'concluido', resultado: { tipo_analise: 'atos_junta_comercial', alertas: [] } },
     { prompt_codigo: 'simples_extract', status: 'concluido', resultado: { tipo_analise: 'simples_nacional', alertas: [] } },
   ];
-  const analiseCnpjOk = { status: 'concluida', cartao_anexado: true, cartao_pendente_ocr: false, idade_meses: 35, alertas: [], divergencias: [], situacao_cadastral: 'Ativa', porte: 'Micro Empresa' };
+  const analiseCnpjOk = { status: 'concluida', idade_meses: 35, alertas: [], divergencias: [], situacao_cadastral: 'Ativa', porte: 'Micro Empresa' };
 
-
-
-  it('não exige os quatro documentos antes de a análise documental ser iniciada', () => {
-    const resultado = consolidarEtapaIdentidadeDocumental({
-      empresa: { situacao_cadastral: 'Ativa', data_abertura: '2023-01-01', regime_tributario: 'Simples Nacional' },
-      documentos: [{ tipo: 'cartao_cnpj', arquivo_path: '/docs/cartao.pdf', status: 'validado' }],
-      analisesDocumentais: [],
-      analiseCnpj: null,
-      analiseInicial: null,
-    });
-
-    expect(resultado.analise_iniciada).toBe(false);
-    expect(resultado.status_fluxo).toBe('nao_iniciada');
-    expect(resultado.documentos_anexados).toBe(1);
-    expect(resultado.bloqueios).toEqual([]);
-    expect(resultado.apto_para_avancar).toBe(false);
-  });
-
-  it('não transforma uma extração isolada em início formal da análise documental', () => {
-    const resultado = consolidarEtapaIdentidadeDocumental({
-      empresa: { situacao_cadastral: 'Ativa', data_abertura: '2023-01-01', regime_tributario: 'Simples Nacional' },
-      documentos: [
-        { tipo: 'cartao_cnpj', arquivo_path: '/docs/cartao.pdf', status: 'validado' },
-        { tipo: 'qsa', arquivo_path: '/docs/qsa.pdf', status: 'validado' },
-      ],
-      analisesDocumentais: [{ prompt_codigo: 'qsa_extract', status: 'concluido', resultado: { tipo_analise: 'qsa', alertas: [] } }],
-      analiseCnpj: null,
-      analiseInicial: null,
-    });
-
-    expect(resultado.analise_iniciada).toBe(false);
-    expect(resultado.status_fluxo).toBe('nao_iniciada');
-    expect(resultado.bloqueios).toEqual([]);
-  });
-
-  it('mostra documentação pronta sem iniciar automaticamente quando os quatro arquivos existem', () => {
-    const resultado = consolidarEtapaIdentidadeDocumental({
-      empresa: { situacao_cadastral: 'Ativa', data_abertura: '2023-01-01', regime_tributario: 'Simples Nacional' },
-      documentos: documentosIniciais,
-      analisesDocumentais: [],
-      analiseCnpj: null,
-      analiseInicial: null,
-    });
-
-    expect(resultado.analise_iniciada).toBe(false);
-    expect(resultado.documentacao_completa).toBe(true);
-    expect(resultado.status_fluxo).toBe('pronta_para_iniciar');
-    expect(resultado.bloqueios).toEqual([]);
-  });
-
-  it('passa a exigir conformidade documental somente após o início explícito da análise', () => {
-    const resultado = consolidarEtapaIdentidadeDocumental({
-      empresa: { situacao_cadastral: 'Ativa', data_abertura: '2023-01-01', regime_tributario: 'Simples Nacional' },
-      documentos: documentosIniciais,
-      analisesDocumentais: [],
-      analiseCnpj: null,
-      analiseInicial: { status: 'em_analise' },
-    });
-
-    expect(resultado.analise_iniciada).toBe(true);
-    expect(resultado.status_fluxo).toBe('processando');
-    expect(resultado.bloqueios.length).toBeGreaterThan(0);
-    expect(resultado.apto_para_avancar).toBe(false);
-  });
-
-  it('libera a próxima etapa somente com os quatro documentos analisados e consistentes', () => {
+  it('libera a Etapa 2 somente com os três documentos iniciais analisados e consistentes', () => {
     const resultado = consolidarEtapaIdentidadeDocumental({
       empresa: { situacao_cadastral: 'Ativa', data_abertura: '2023-01-01', regime_tributario: 'Simples Nacional', porte: 'ME' },
       documentos: documentosIniciais,
@@ -232,7 +165,7 @@ describe('Etapa 1 — Identidade do CNPJ', () => {
       analiseCnpj: analiseCnpjOk,
     });
 
-    expect(resultado.documentos_ok).toBe(4);
+    expect(resultado.documentos_ok).toBe(3);
     expect(resultado.apto_para_avancar).toBe(true);
     expect(resultado.bloqueios).toEqual([]);
   });
@@ -255,12 +188,12 @@ describe('Etapa 1 — Identidade do CNPJ', () => {
     const resultado = consolidarEtapaIdentidadeDocumental({
       empresa: { situacao_cadastral: 'Ativa', data_abertura: '2023-01-01', regime_tributario: 'Simples Nacional' },
       documentos: documentosIniciais,
-      analisesDocumentais: analisesOk.filter((item) => item.prompt_codigo !== 'atos_junta_extract'),
+      analisesDocumentais: analisesOk.filter((item) => item.prompt_codigo !== 'qsa_extract'),
       analiseCnpj: analiseCnpjOk,
     });
 
     expect(resultado.apto_para_avancar).toBe(false);
-    expect(resultado.bloqueios.some((item) => item.includes('Atos da Junta') && item.includes('ainda não foi analisado'))).toBe(true);
+    expect(resultado.bloqueios.some((item) => item.includes('QSA') && item.includes('ainda não foi analisado'))).toBe(true);
   });
 
   it('bloqueia o avanço em divergência alta e mantém a mensagem concreta no relatório', () => {

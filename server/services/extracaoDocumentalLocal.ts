@@ -7,7 +7,7 @@ import { normalizeText, onlyDigits, parseDate } from '../utils/helpers';
 
 const execFileAsync = promisify(execFile);
 
-export type TipoDocumentoLocal = 'cartao_cnpj' | 'qsa' | 'simples_nacional' | 'atos_junta_comercial';
+export type TipoDocumentoLocal = 'cartao_cnpj' | 'qsa' | 'simples_nacional' | 'atos_junta_comercial' | 'contrato_social_alteracao';
 
 export interface ExtracaoDocumentalLocalResult {
   tipo: TipoDocumentoLocal;
@@ -120,106 +120,6 @@ function limparValor(value: string | null): string | null {
   return clean && clean !== '-' ? clean : null;
 }
 
-function valorAposRotuloExato(linhas: string[], aliases: string[], limite = 3): string | null {
-  const aliasesNorm = aliases.map(textoNormalizado);
-  for (let i = 0; i < linhas.length; i += 1) {
-    const linha = linhas[i];
-    const normalizada = textoNormalizado(linha);
-    const alias = aliasesNorm.find((item) => normalizada === item || normalizada.startsWith(`${item}:`));
-    if (!alias) continue;
-
-    const posDoisPontos = linha.indexOf(':');
-    if (posDoisPontos >= 0) {
-      const inline = limparValor(linha.slice(posDoisPontos + 1));
-      if (inline) return inline;
-    }
-
-    for (let offset = 1; offset <= limite && i + offset < linhas.length; offset += 1) {
-      const candidato = linhas[i + offset];
-      if (!candidato || pareceRotulo(candidato)) continue;
-      return candidato;
-    }
-  }
-  return null;
-}
-
-type CampoLayout = { chave: string; aliases: string[] };
-
-function normalizarLinhaLayout(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-}
-
-/**
- * O PDF oficial do Cartão CNPJ usa uma grade horizontal. O pdftotext -layout
- * preserva as colunas, por exemplo:
- *   LOGRADOURO          NÚMERO       COMPLEMENTO
- *   RUA EXEMPLO         123          SALA 01
- * O extrator antigo achatava os espaços e acabava usando "NÚMERO
- * COMPLEMENTO" como endereço e o próprio CNPJ como número. Esta função lê a
- * linha mantendo as posições das colunas e só aceita o bloco quando todos os
- * rótulos esperados estão presentes na ordem correta.
- */
-function extrairColunasDaLinhaSeguinte(texto: string, campos: CampoLayout[]): Record<string, string | null> {
-  const linhas = String(texto || '').replace(/\u0000/g, '').replace(/\r/g, '').split('\n');
-  for (let i = 0; i < linhas.length; i += 1) {
-    const linhaRotulos = linhas[i];
-    const normalizada = normalizarLinhaLayout(linhaRotulos);
-    const posicoes: number[] = [];
-    let cursor = 0;
-    let encontrouTodos = true;
-
-    for (const campo of campos) {
-      let melhor = -1;
-      for (const alias of campo.aliases) {
-        const idx = normalizada.indexOf(normalizarLinhaLayout(alias), cursor);
-        if (idx >= 0 && (melhor < 0 || idx < melhor)) melhor = idx;
-      }
-      if (melhor < 0) {
-        encontrouTodos = false;
-        break;
-      }
-      posicoes.push(melhor);
-      cursor = melhor + 1;
-    }
-    if (!encontrouTodos) continue;
-
-    let indiceValor = i + 1;
-    while (indiceValor < linhas.length && !linhas[indiceValor].trim()) indiceValor += 1;
-    if (indiceValor >= linhas.length) break;
-    const linhaValor = linhas[indiceValor];
-    const resultado: Record<string, string | null> = {};
-    campos.forEach((campo, indice) => {
-      const inicio = posicoes[indice];
-      const fim = indice + 1 < posicoes.length ? posicoes[indice + 1] : linhaValor.length;
-      resultado[campo.chave] = limparValor(linhaValor.slice(inicio, fim));
-    });
-    return resultado;
-  }
-  return Object.fromEntries(campos.map((campo) => [campo.chave, null]));
-}
-
-function limparCampoEndereco(campo: 'logradouro' | 'numero' | 'complemento' | 'cep' | 'bairro' | 'municipio' | 'uf', value: string | null): string | null {
-  const clean = limparValor(value);
-  if (!clean) return null;
-  const norm = textoNormalizado(clean);
-  const contemRotuloOuCabecalho = /(comprovante de inscricao|cadastro nacional|numero de inscricao|data de abertura|bairro distrito municipio|logradouro numero complemento|situacao cadastral)/.test(norm);
-  if (contemRotuloOuCabecalho) return null;
-  if (campo !== 'cep' && campo !== 'numero' && primeiroCnpj(clean)) return null;
-  if (campo === 'cep') return onlyDigits(clean).length === 8 ? clean : null;
-  if (campo === 'uf') return /^[A-Za-z]{2}$/.test(clean) ? clean.toUpperCase() : null;
-  if (campo === 'numero') {
-    if (clean.length > 24 || /comprovante|inscricao|cadastro|complemento|lemento|numero|número|\//i.test(clean)) return null;
-    return clean;
-  }
-  if ((campo === 'bairro' || campo === 'municipio') && (!/[A-Za-zÀ-ÿ]/.test(clean) || clean.length > 100)) return null;
-  if (campo === 'logradouro' && (!/[A-Za-zÀ-ÿ]/.test(clean) || clean.length > 180)) return null;
-  if (campo === 'complemento' && clean.length > 160) return null;
-  return clean;
-}
-
 function parseCartaoCnpj(texto: string): { dados: Record<string, any>; confianca: number } {
   const linhas = linhasTexto(texto);
   const norm = textoNormalizado(texto);
@@ -236,25 +136,13 @@ function parseCartaoCnpj(texto: string): { dados: Record<string, any>; confianca
   const porte = limparValor(valorAposRotulo(linhas, ['porte']));
   const situacao = limparValor(valorAposRotulo(linhas, ['situação cadastral', 'situacao cadastral']));
   const dataSituacao = parseDate(valorAposRotulo(linhas, ['data da situação cadastral', 'data da situacao cadastral']));
-  const primeiraLinhaEndereco = extrairColunasDaLinhaSeguinte(texto, [
-    { chave: 'logradouro', aliases: ['logradouro'] },
-    { chave: 'numero', aliases: ['número', 'numero'] },
-    { chave: 'complemento', aliases: ['complemento'] },
-  ]);
-  const segundaLinhaEndereco = extrairColunasDaLinhaSeguinte(texto, [
-    { chave: 'cep', aliases: ['cep'] },
-    { chave: 'bairro', aliases: ['bairro/distrito', 'bairro distrito'] },
-    { chave: 'municipio', aliases: ['município', 'municipio'] },
-    { chave: 'uf', aliases: ['uf'] },
-  ]);
-  const cep = limparCampoEndereco('cep', segundaLinhaEndereco.cep || valorAposRotuloExato(linhas, ['cep']));
-  const logradouro = limparCampoEndereco('logradouro', primeiraLinhaEndereco.logradouro || valorAposRotuloExato(linhas, ['logradouro']));
-  const numero = limparCampoEndereco('numero', primeiraLinhaEndereco.numero || valorAposRotuloExato(linhas, ['número', 'numero']));
-  const complemento = limparCampoEndereco('complemento', primeiraLinhaEndereco.complemento || valorAposRotuloExato(linhas, ['complemento']));
-  const bairro = limparCampoEndereco('bairro', segundaLinhaEndereco.bairro || valorAposRotuloExato(linhas, ['bairro/distrito', 'bairro distrito']));
-  const municipio = limparCampoEndereco('municipio', segundaLinhaEndereco.municipio || valorAposRotuloExato(linhas, ['município', 'municipio']));
-  const uf = limparCampoEndereco('uf', segundaLinhaEndereco.uf || valorAposRotuloExato(linhas, ['uf']));
-  const enderecoConfiavel = Boolean(logradouro && (cep || (municipio && uf)));
+  const cep = limparValor(valorAposRotulo(linhas, ['cep']));
+  const logradouro = limparValor(valorAposRotulo(linhas, ['logradouro']));
+  const numero = limparValor(valorAposRotulo(linhas, ['número', 'numero']));
+  const complemento = limparValor(valorAposRotulo(linhas, ['complemento']));
+  const bairro = limparValor(valorAposRotulo(linhas, ['bairro/distrito', 'bairro distrito']));
+  const municipio = limparValor(valorAposRotulo(linhas, ['município', 'municipio']));
+  const uf = limparValor(valorAposRotulo(linhas, ['uf']));
   const emissaoMatch = texto.match(/emitido\s+no\s+dia\s+(\d{2}\/\d{2}\/\d{4})(?:\s+às?\s+([\d:]+))?/i);
   const matrizFilial = /\bfilial\b/i.test(numeroInscricao || '') ? 'filial' : /\bmatriz\b/i.test(numeroInscricao || '') ? 'matriz' : null;
 
@@ -273,8 +161,7 @@ function parseCartaoCnpj(texto: string): { dados: Record<string, any>; confianca
       cnae_principal: cnae,
       natureza_juridica: natureza,
       porte,
-      endereco_completo: enderecoConfiavel ? [logradouro, numero, complemento, bairro, municipio, uf, cep].filter(Boolean).join(', ') : null,
-      endereco_confiavel: enderecoConfiavel,
+      endereco_completo: [logradouro, numero, complemento, bairro, municipio, uf, cep].filter(Boolean).join(', ') || null,
       cep,
       logradouro,
       numero,
@@ -293,168 +180,43 @@ function parseCartaoCnpj(texto: string): { dados: Record<string, any>; confianca
   };
 }
 
-export function parseQsa(texto: string): { dados: Record<string, any>; confianca: number } {
+function parseQsa(texto: string): { dados: Record<string, any>; confianca: number } {
   const linhas = linhasTexto(texto);
-  const linhasLayout = String(texto || '').replace(/\u0000/g, '').replace(/\r/g, '').split('\n');
   const norm = textoNormalizado(texto);
   const compativel = norm.includes('quadro de socios e administradores')
     || norm.includes('quadro societario')
     || norm.includes('capital social')
-    || norm.includes('qualificacao do socio')
-    || norm.includes('nome nome empresarial');
+    || norm.includes('qualificacao do socio');
   const cnpj = formatarCnpj(primeiroCnpj(texto));
-  const razaoSocial = limparValor(valorAposRotulo(linhas, ['nome empresarial', 'razão social', 'razao social']));
+  const razaoSocial = limparValor(valorAposRotulo(linhas, ['nome empresarial', 'razão social', 'razao social']))
+    || limparValor(linhas.find((linha) => /\b(?:ltda|limitada|eireli|s\/?a)\b/i.test(linha) && !/qualificacao|socio|administrador/i.test(linha)) || null);
   const capitalLinha = valorAposRotulo(linhas, ['capital social']);
   const capitalSocial = numeroMonetario(capitalLinha);
   const dataRegistro = parseDate(valorAposRotulo(linhas, ['data de registro', 'data do registro', 'data de arquivamento']));
 
-  const socios: Array<{ nome: string; qualificacao: string | null; administrador: boolean }> = [];
-  const nomeSocioValido = (value: string | null): value is string => {
-    const clean = limparValor(value);
-    if (!clean) return false;
-    const n = textoNormalizado(clean).replace(/[\/]/g, ' ');
-    if (pareceRotulo(clean)) return false;
-    if (/^(?:nome|nome nome empresarial|nome do socio|socio|qualificacao|cpf|cnpj)$/.test(n)) return false;
-    if (/(quadro de socios|capital social|nome empresarial|qualificacao|comprovante|cadastro nacional|data de abertura)/.test(n)) return false;
-    if (razaoSocial && textoNormalizado(razaoSocial) === textoNormalizado(clean)) return false;
-    if (/^(?:nao identificado|nao informado|sem identificacao)$/.test(n)) return false;
-    if (primeiroCnpj(clean) || /^\d{2}\/\d{2}\/\d{4}$/.test(clean)) return false;
-    return /[A-Za-zÀ-ÿ]/.test(clean) && clean.replace(/[^A-Za-zÀ-ÿ]/g, '').length >= 4;
-  };
-  const ehAdministrador = (qualificacao: string | null) => /administrador|titular|empres[aá]rio individual/i.test(String(qualificacao || ''));
-  const adicionarSocio = (nomeBruto: string | null, qualificacaoBruta: string | null) => {
-    let nome = limparValor(nomeBruto);
-    let qualificacao = limparValor(qualificacaoBruta);
-    if (!nome) return;
-
-    const nomeComQualificacao = nome.match(/^(.+?)\s+((?:\d{1,3}\s*-\s*)?(?:s[oó]cio(?:-administrador)?|administrador|titular|empres[aá]rio|representante).*)$/i);
-    if (nomeComQualificacao) {
-      nome = nomeComQualificacao[1].trim();
-      if (!qualificacao || textoNormalizado(qualificacao) === textoNormalizado(nomeBruto)) qualificacao = nomeComQualificacao[2].trim();
-    }
-
-    const colunas = nome.split(/\s{2,}/).map((item) => item.trim()).filter(Boolean);
-    if (colunas.length > 1 && !qualificacao) {
-      const possivelQualificacao = colunas.find((item, index) => index > 0 && /s[oó]cio|administrador|titular|empres[aá]rio|representante/i.test(item));
-      if (possivelQualificacao) {
-        qualificacao = possivelQualificacao;
-        nome = colunas[0];
-      }
-    }
-    nome = nome
-      .replace(/^nome(?:\/nome empresarial| nome empresarial| do s[oó]cio| s[oó]cio)?\s*[:\-]?\s*/i, '')
-      .trim();
-    if (!nomeSocioValido(nome)) return;
-    const chave = textoNormalizado(nome).replace(/[^a-z0-9]/g, '');
-    const existenteSobreposto = socios.find((socio) => {
-      const chaveExistente = textoNormalizado(socio.nome).replace(/[^a-z0-9]/g, '');
-      return chaveExistente === chave || chave.includes(chaveExistente) || chaveExistente.includes(chave);
-    });
-    const existente = existenteSobreposto;
-    if (existente) {
-      if (!existente.qualificacao && qualificacao) existente.qualificacao = qualificacao;
-      existente.administrador = existente.administrador || ehAdministrador(qualificacao);
-      return;
-    }
-    socios.push({ nome, qualificacao, administrador: ehAdministrador(qualificacao) });
-  };
-
-  // 1) Grade horizontal preservada pelo pdftotext -layout.
-  for (let i = 0; i < linhasLayout.length; i += 1) {
-    const cabecalho = linhasLayout[i];
-    const cabecalhoNorm = normalizarLinhaLayout(cabecalho).replace(/\//g, ' ');
-    if (!cabecalhoNorm.includes('nome nome empresarial') || !cabecalhoNorm.includes('qualificacao')) continue;
-    const posNome = cabecalhoNorm.indexOf('nome nome empresarial');
-    const posQualificacao = cabecalhoNorm.indexOf('qualificacao', posNome + 1);
-    if (posNome < 0 || posQualificacao <= posNome) continue;
-    for (let j = i + 1; j <= Math.min(i + 12, linhasLayout.length - 1); j += 1) {
-      const linha = linhasLayout[j];
-      const linhaNorm = textoNormalizado(linha);
-      if (!linhaNorm) continue;
-      if (/(capital social|data de registro|informacoes da empresa|codigo e descricao|comprovante de inscricao)/.test(linhaNorm)) break;
-      const nomeColuna = limparValor(linha.slice(posNome, posQualificacao));
-      const qualificacaoColuna = limparValor(linha.slice(posQualificacao));
-      adicionarSocio(nomeColuna, qualificacaoColuna);
-    }
-  }
-
-  // 2) Blocos verticais e linhas com rótulo/valor.
-  const nomesRotulo = ['nome nome empresarial', 'nome do socio', 'nome socio'];
+  const socios: Array<{ nome: string; qualificacao: string | null; administrador: boolean | null }> = [];
+  const nomesRotulo = new Set(['nome nome empresarial', 'nome do socio', 'nome socio', 'socio']);
   for (let i = 0; i < linhas.length; i += 1) {
     const linhaNorm = textoNormalizado(linhas[i]).replace(/[\/]/g, ' ');
-    if (!nomesRotulo.some((rotulo) => linhaNorm === rotulo || linhaNorm.startsWith(`${rotulo}:`) || linhaNorm.startsWith(`${rotulo} `))) continue;
-    let nome = linhas[i].includes(':') ? linhas[i].split(':').slice(1).join(':') : null;
-    if (!nome || !nomeSocioValido(nome)) {
-      for (let offset = 1; offset <= 3 && i + offset < linhas.length; offset += 1) {
-        if (nomeSocioValido(linhas[i + offset])) {
-          nome = linhas[i + offset];
-          break;
-        }
-      }
-    }
+    if (!Array.from(nomesRotulo).some((rotulo) => linhaNorm === rotulo || linhaNorm.startsWith(`${rotulo}:`))) continue;
+    const nome = limparValor(linhas[i].includes(':') ? linhas[i].split(':').slice(1).join(':') : linhas[i + 1] || null);
+    if (!nome || pareceRotulo(nome)) continue;
     let qualificacao: string | null = null;
-    for (let j = i + 1; j <= Math.min(i + 10, linhas.length - 1); j += 1) {
+    for (let j = i + 1; j <= Math.min(i + 8, linhas.length - 1); j += 1) {
       const atualNorm = textoNormalizado(linhas[j]);
-      if (j > i + 1 && nomesRotulo.some((rotulo) => atualNorm.replace(/[\/]/g, ' ').startsWith(rotulo))) break;
       if (atualNorm.startsWith('qualificacao')) {
         qualificacao = limparValor(linhas[j].includes(':') ? linhas[j].split(':').slice(1).join(':') : linhas[j + 1] || null);
-      } else if (!qualificacao && /s[oó]cio|administrador|titular|empres[aá]rio|representante/i.test(linhas[j])) {
-        qualificacao = linhas[j];
       }
     }
-    adicionarSocio(nome, qualificacao);
-  }
-
-  // 3) Documento achatado em uma única linha pelo OCR/pdftotext.
-  const textoCompacto = String(texto || '').replace(/\s+/g, ' ').trim();
-  const blocosCompactos = textoCompacto.matchAll(/NOME\s*\/\s*NOME\s+EMPRESARIAL\s+(.{4,160}?)\s+QUALIFICA(?:Ç|C)[AÃ]O(?:\s+DO\s+S[ÓO]CIO)?\s+(.{3,100}?)(?=\s+NOME\s*\/\s*NOME\s+EMPRESARIAL|\s+CAPITAL\s+SOCIAL|$)/gi);
-  for (const bloco of blocosCompactos) adicionarSocio(bloco[1], bloco[2]);
-
-  // 4) Captura o valor quando rótulo e nome aparecem na mesma linha.
-  for (let i = 0; i < linhas.length; i += 1) {
-    const linha = linhas[i];
-    const inlineNome = linha.match(/nome\s*\/\s*nome\s+empresarial\s*[:\-]?\s*(.+)$/i)
-      || linha.match(/nome\s+do\s+s[óo]cio\s*[:\-]?\s*(.+)$/i);
-    if (!inlineNome || !nomeSocioValido(inlineNome[1])) continue;
-    let qualificacao: string | null = null;
-    for (let j = i; j <= Math.min(i + 8, linhas.length - 1); j += 1) {
-      const q = linhas[j].match(/qualifica(?:ç|c)[aã]o(?:\s+do\s+s[óo]cio)?\s*[:\-]?\s*(.*)$/i);
-      if (q) {
-        qualificacao = limparValor(q[1]) || limparValor(linhas[j + 1] || null);
-        break;
-      }
-      if (/s[óo]cio|administrador|titular|empres[aá]rio|representante/i.test(linhas[j]) && j > i) {
-        qualificacao = linhas[j];
-        break;
-      }
-    }
-    adicionarSocio(inlineNome[1], qualificacao);
-  }
-
-  // 5) Parte da qualificação e procura o nome nas linhas anteriores.
-  for (let i = 0; i < linhas.length; i += 1) {
-    const linhaQualificacaoNorm = textoNormalizado(linhas[i]);
-    if (/quadro de socios|qualificacao$/.test(linhaQualificacaoNorm)) continue;
-    if (!/(?:\d{1,3}\s*-\s*)?(?:s[óo]cio(?:-administrador)?|administrador|titular|empres[aá]rio|representante)/i.test(linhas[i])) continue;
-    for (let offset = 1; offset <= 5 && i - offset >= 0; offset += 1) {
-      const candidato = linhas[i - offset];
-      if (nomeSocioValido(candidato)) {
-        adicionarSocio(candidato, linhas[i]);
-        break;
-      }
+    if (!socios.some((socio) => textoNormalizado(socio.nome) === textoNormalizado(nome))) {
+      socios.push({ nome, qualificacao, administrador: qualificacao ? /administrador|administradora|titular/i.test(qualificacao) : null });
     }
   }
 
-  // 6) Tabelas preservadas por colunas: NOME  QUALIFICAÇÃO.
-  for (const linha of linhasLayout) {
-    const match = linha.match(/^\s*([A-ZÀ-Ü][A-ZÀ-Ü '.&-]{4,}?)\s{2,}((?:\d{1,3}\s*-\s*)?(?:S[ÓO]CIO|ADMINISTRADOR|TITULAR|EMPRES[ÁA]RIO|REPRESENTANTE).*)$/i);
-    if (match) adicionarSocio(match[1], match[2]);
-  }
-
-  const pontuacao = (compativel ? 0.2 : 0)
+  const pontuacao = (compativel ? 0.15 : 0)
     + (cnpj ? 0.25 : 0)
     + (razaoSocial ? 0.1 : 0)
-    + (capitalSocial !== null ? 0.15 : 0)
+    + (capitalSocial !== null ? 0.2 : 0)
     + (socios.length ? 0.3 : 0);
   const confianca = clamp(pontuacao);
   return {
@@ -465,9 +227,6 @@ export function parseQsa(texto: string): { dados: Record<string, any>; confianca
       capital_social: capitalSocial,
       socios,
       data_registro: dataRegistro,
-      extracao_parcial: socios.length === 0,
-      campos_etapa_1: ['cnpj', 'razao_social', 'capital_social', 'socios.nome', 'socios.qualificacao', 'socios.administrador'],
-      versao_motor: 'qsa-identidade-v4',
       confianca,
       fonte_extracao: 'local_deterministica',
     },
@@ -482,12 +241,8 @@ function parseSimples(texto: string): { dados: Record<string, any>; confianca: n
   const naoOptante = /n[aã]o\s+optante\s+pelo\s+simples\s+nacional/i.test(texto) || /situacao\s+no\s+simples\s+nacional\W{0,8}nao\s+optante/i.test(norm);
   const excluido = /exclu[ií]d[oa]\s+do\s+simples/i.test(texto) || norm.includes('exclusao do simples nacional efetivada');
   const optante = !naoOptante && !excluido && (/optante\s+pelo\s+simples\s+nacional/i.test(texto) || /situacao\s+no\s+simples\s+nacional\W{0,8}optante/i.test(norm));
-  const naoSimei = /n[aã]o\s+optante\s+pelo\s+simei/i.test(texto)
-    || /situa[cç][aã]o\s+no\s+simei\W{0,12}n[aã]o\s+optante/i.test(texto);
-  const simei = !naoSimei && (/optante\s+pelo\s+simei/i.test(texto) || norm.includes('situacao no simei optante'));
-  const semAgendamento = /n[aã]o\s+(?:h[aá]|existe|possui)\s+agendamento/i.test(texto)
-    || /sem\s+agendamento/i.test(texto);
-  const agendamento = !semAgendamento && norm.includes('agendamento') && norm.includes('exclus');
+  const simei = /optante\s+pelo\s+simei/i.test(texto) || norm.includes('situacao no simei optante');
+  const agendamento = norm.includes('agendamento') && norm.includes('exclus');
   const dataOpcao = dataProximaDe(texto, /(?:optante\s+pelo\s+simples\s+nacional\s+desde|data\s+de\s+op[cç][aã]o)\D{0,40}(\d{2}\/\d{2}\/\d{4})/i);
   const dataExclusao = dataProximaDe(texto, /(?:data\s+(?:de|da)\s+exclus[aã]o|exclu[ií]d[oa]\s+em)\D{0,40}(\d{2}\/\d{2}\/\d{4})/i);
   const situacao = excluido ? 'Excluído' : naoOptante ? 'Não Optante' : optante ? 'Optante' : null;
@@ -511,32 +266,129 @@ function parseSimples(texto: string): { dados: Record<string, any>; confianca: n
   };
 }
 
+
+function parseContratoSocialAlteracao(texto: string): { dados: Record<string, any>; confianca: number } {
+  const linhas = linhasTexto(texto);
+  const norm = textoNormalizado(texto);
+  const compativel = /contrato social|alteracao contratual|alteração contratual|consolidacao contratual|consolidação contratual/.test(norm);
+  const cnpj = formatarCnpj(primeiroCnpj(texto));
+  const razaoSocial = limparValor(valorAposRotulo(linhas, ['nome empresarial', 'razão social', 'razao social']))
+    || limparValor(linhas.find((linha) => /\b(?:ltda|limitada|s\/a|sa|eireli)\b/i.test(linha) && !/sociedade empresaria|sociedade empresária/i.test(linha)) || null);
+
+  const nireExplicito = texto.match(/\bNIRE\s*[:\-]?\s*(\d{10,12})\b/i)?.[1] || null;
+  const nireRegistro = texto.match(/(?:registrad[ao]|arquivad[ao]).{0,120}?(?:sob\s+(?:o\s+)?n[ºo°]?|nire)\s*[:\-]?\s*(\d{10,12})/is)?.[1] || null;
+  const nire = nireExplicito || nireRegistro;
+
+  const numeroArquivamento = texto.match(/CERTIFICO\s+O\s+REGISTRO\s+EM\s+\d{2}\/\d{2}\/\d{4}(?:\s+\d{1,2}:\d{2})?\s+SOB\s+N[ºO°]?\s*(\d{5,15})/i)?.[1]
+    || texto.match(/\bprotocolo\s*[:\-]?\s*(\d{5,15})\b/i)?.[1]
+    || null;
+  const dataRegistro = parseDate(
+    texto.match(/CERTIFICO\s+O\s+REGISTRO\s+EM\s+(\d{2}\/\d{2}\/\d{4})/i)?.[1]
+      || texto.match(/(?:arquivad[ao]|registrad[ao]).{0,100}?(?:sess[aã]o\s+de|em)\s+(\d{2}\/\d{2}\/\d{4})/is)?.[1]
+      || valorAposRotulo(linhas, ['data de registro', 'data do registro', 'data de arquivamento']),
+  );
+  const dataEfeitos = parseDate(texto.match(/COM\s+EFEITOS\s+DO\s+REGISTRO\s+EM\s*[:\-]?\s*(\d{2}\/\d{2}\/\d{4})/i)?.[1] || null);
+  const dataDocumento = parseDate(
+    texto.match(/(?:Goi[aâ]nia|Bras[ií]lia|[A-ZÀ-Ú][\wÀ-ú\s]+)[\s\-\/]*[A-Z]{2}\s*,?\s*(\d{2}\s+de\s+[a-zç]+\s+de\s+\d{4})/i)?.[1]
+      || texto.match(/\b(\d{2}\/\d{2}\/\d{4})\b/)?.[1]
+      || null,
+  );
+
+  const tipoAto = /consolidacao contratual|consolidação contratual/.test(norm)
+    ? 'Consolidação'
+    : /alteracao contratual|alteração contratual/.test(norm)
+      ? 'Alteração Contratual'
+      : /contrato social/.test(norm)
+        ? 'Contrato Social'
+        : null;
+
+  const campos = [nire, dataRegistro, razaoSocial, cnpj, tipoAto];
+  const preenchidos = campos.filter(Boolean).length;
+  const confianca = clamp((compativel ? 0.25 : 0) + (nire ? 0.25 : 0) + (dataRegistro ? 0.25 : 0) + (preenchidos / campos.length) * 0.25);
+  return {
+    dados: {
+      documento_compativel: compativel,
+      cnpj,
+      razao_social: razaoSocial,
+      nire,
+      tipo_ato: tipoAto,
+      data_registro: dataRegistro,
+      data_efeitos_registro: dataEfeitos,
+      data_documento: dataDocumento,
+      numero_arquivamento: numeroArquivamento,
+      confianca,
+      fonte_extracao: 'local_deterministica',
+    },
+    confianca,
+  };
+}
+
 function parseAtosJunta(texto: string): { dados: Record<string, any>; confianca: number } {
   const linhas = linhasTexto(texto);
   const norm = textoNormalizado(texto);
-  const compativel = norm.includes('junta comercial') || norm.includes('lista de arquivamentos') || norm.includes('certidao simplificada') || norm.includes('nire');
+  const compativel = norm.includes('junta comercial') || norm.includes('lista de arquivamentos') || norm.includes('certidao simplificada') || norm.includes('servicos web') || norm.includes('nire');
   const cnpj = formatarCnpj(primeiroCnpj(texto));
-  const razaoSocial = limparValor(valorAposRotulo(linhas, ['nome empresarial', 'razão social', 'razao social']));
-  const nire = limparValor(valorAposRotulo(linhas, ['nire', 'número de identificação do registro de empresas', 'numero de identificacao do registro de empresas']));
-  const capitalSocial = numeroMonetario(valorAposRotulo(linhas, ['capital social atual', 'capital social']));
+  const razaoSocial = limparValor(valorAposRotulo(linhas, ['nome empresarial', 'razão social', 'razao social']))
+    || limparValor(linhas.find((linha) => /\b(?:ltda|limitada|eireli|s\/?a)\b/i.test(linha) && !/qualificacao|socio|administrador/i.test(linha)) || null);
+  let nire = limparValor(valorAposRotulo(linhas, ['nire', 'número de identificação do registro de empresas', 'numero de identificacao do registro de empresas']));
+  if (nire) nire = onlyDigits(nire) || nire;
+  const capitalSocial = numeroMonetario(valorAposRotulo(linhas, ['capital social', 'capital social atual']));
 
   const historico: Array<{ numero: string | null; data: string; tipo_ato: string | null }> = [];
+
+  // Formato tabular comum nas certidões/listas de arquivamentos (ex.: JUCEG):
+  // número do arquivamento | data | tipo do ato. Esta leitura tem prioridade
+  // porque evita associar o cabeçalho ou a linha vizinha ao registro errado.
   for (const linha of linhas) {
+    const row = linha.match(/^\s*(\d{5,15})\s+(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s*$/);
+    if (!row) continue;
+    const tipo = limparValor(row[3]);
+    if (!tipo || !/(alterac|contrato|consolidac|enquadramento|constituic|transformac|extinc|ata|ordem judicial)/.test(textoNormalizado(tipo))) continue;
+    historico.push({ numero: row[1], data: parseDate(row[2]) || row[2], tipo_ato: tipo });
+  }
+
+  for (let i = 0; i < linhas.length; i += 1) {
+    const linha = linhas[i];
+    if (/^\s*\d{5,15}\s+\d{2}\/\d{2}\/\d{4}\s+/.test(linha)) continue;
     const dataMatch = linha.match(/\b(\d{2}\/\d{2}\/\d{4})\b/);
     if (!dataMatch) continue;
-    const linhaNorm = textoNormalizado(linha);
-    if (!/(alterac|contrato|consolidac|enquadramento|arquivamento|constituic|transformac|extinc|ata)/.test(linhaNorm)) continue;
-    const numeroMatch = linha.match(/\b\d{6,15}\b/);
+    const contexto = [linhas[i - 2], linhas[i - 1], linha, linhas[i + 1], linhas[i + 2]]
+      .filter(Boolean)
+      .join(' ');
+    const contextoNorm = textoNormalizado(contexto);
+    if (!/(alterac|contrato|consolidac|enquadramento|arquivamento|constituic|transformac|extinc|ata|ordem judicial)/.test(contextoNorm)) continue;
+    const numeroMatch = linha.match(/(?:numero|número|arquivamento)?\s*[:\-]?\s*(\d{5,15})\b/i)
+      || contexto.match(/(?:numero|número|arquivamento)?\s*[:\-]?\s*(\d{5,15})\b/i);
+    let tipoAto: string | null = null;
+    const aposData = linha.slice((dataMatch.index || 0) + dataMatch[0].length).replace(/^\s*[-–—|:]\s*/, '').trim();
+    if (/(alterac|contrato|consolidac|enquadramento|constituic|ordem judicial|transformac|extinc|ata)/.test(textoNormalizado(aposData))) {
+      tipoAto = limparValor(aposData);
+    }
+    const candidatosTipo = [linhas[i - 1], linhas[i + 1], linhas[i - 2], linhas[i + 2]].filter(Boolean);
+    for (const candidato of candidatosTipo) {
+      if (tipoAto) break;
+      const n = textoNormalizado(candidato);
+      if (/(alterac|contrato|consolidac|enquadramento|constituic|ordem judicial|transformac|extinc|ata)/.test(n)) {
+        tipoAto = limparValor(candidato.replace(/evento\(s\)\s*:/i, '').replace(/data de aprova[cç][aã]o\s*:/i, '').replace(/\s*[+]\s*adicionar\s*$/i, ''));
+      }
+    }
     historico.push({
-      numero: numeroMatch?.[0] || null,
+      numero: numeroMatch?.[1] || numeroMatch?.[0] || null,
       data: parseDate(dataMatch[1]) || dataMatch[1],
-      tipo_ato: limparValor(linha.replace(dataMatch[0], '').replace(numeroMatch?.[0] || '', '')),
+      tipo_ato: tipoAto,
     });
   }
   const historicoUnico = historico.filter((item, index, arr) => arr.findIndex((outro) => `${outro.data}|${outro.numero}|${outro.tipo_ato}` === `${item.data}|${item.numero}|${item.tipo_ato}`) === index)
     .sort((a, b) => String(a.data).localeCompare(String(b.data)));
-  const dataRegistro = historicoUnico.at(-1)?.data || parseDate(valorAposRotulo(linhas, ['data de registro', 'data do registro', 'último arquivamento', 'ultimo arquivamento']));
-  const tipoAto = historicoUnico.at(-1)?.tipo_ato || limparValor(valorAposRotulo(linhas, ['tipo do ato', 'ato/evento', 'ato evento']));
+
+  if (!nire) {
+    const constituicao = historicoUnico.find((item) => /registro|constituic|contrato/.test(textoNormalizado(item.tipo_ato || '')) && onlyDigits(item.numero).length >= 10);
+    nire = constituicao ? onlyDigits(constituicao.numero) : null;
+  }
+  const alteracoes = historicoUnico.filter((item) => /alterac/.test(textoNormalizado(item.tipo_ato || '')));
+  const ultimoAto = alteracoes.at(-1) || historicoUnico.at(-1);
+  const dataRegistro = ultimoAto?.data || parseDate(valorAposRotulo(linhas, ['data de registro', 'data do registro', 'último arquivamento', 'ultimo arquivamento']));
+  const tipoAto = ultimoAto?.tipo_ato || limparValor(valorAposRotulo(linhas, ['tipo do ato', 'ato/evento', 'ato evento']));
 
   const sociosAlterados: Array<{ nome: string; tipo_alteracao: 'entrada' | 'saida' | 'percentual'; data_alteracao: string | null }> = [];
   for (const linha of linhas) {
@@ -550,7 +402,9 @@ function parseAtosJunta(texto: string): { dados: Record<string, any>; confianca:
     sociosAlterados.push({ nome: linha, tipo_alteracao: tipo, data_alteracao: data });
   }
 
-  const confianca = clamp((compativel ? 0.2 : 0) + (cnpj ? 0.25 : 0) + (razaoSocial ? 0.15 : 0) + (nire ? 0.1 : 0) + (historicoUnico.length ? 0.3 : 0));
+  // O CNPJ é informativo: algumas Juntas (como a do DF) não o exibem na
+  // listagem de atos. A confiança principal vem do NIRE e das datas.
+  const confianca = clamp((compativel ? 0.25 : 0) + (nire ? 0.3 : 0) + (historicoUnico.length ? 0.35 : 0) + (razaoSocial || cnpj ? 0.1 : 0));
   return {
     dados: {
       documento_compativel: compativel,
@@ -573,7 +427,8 @@ export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: str
   if (tipo === 'cartao_cnpj') return parseCartaoCnpj(texto);
   if (tipo === 'qsa') return parseQsa(texto);
   if (tipo === 'simples_nacional') return parseSimples(texto);
-  return parseAtosJunta(texto);
+  if (tipo === 'atos_junta_comercial') return parseAtosJunta(texto);
+  return parseContratoSocialAlteracao(texto);
 }
 
 async function executarTesseract(arquivo: string, timeout: number, maxBuffer: number): Promise<string> {

@@ -187,11 +187,6 @@ function compararCampo(label: string, receita: unknown, cartao: unknown, tipo: '
 }
 
 function montarDivergencia(campo: string, item: ComparacaoCampo) {
-  const severidade: Severidade = campo === 'cnpj' || campo === 'situacao_cadastral'
-    ? 'critica'
-    : campo === 'endereco_completo'
-      ? 'media'
-      : 'alta';
   return {
     campo,
     label: item.label,
@@ -203,12 +198,7 @@ function montarDivergencia(campo: string, item: ComparacaoCampo) {
     normalizado_cartao: item.normalizado_cartao ?? null,
     motivo: item.motivo || 'Diferença objetiva identificada pelo backend.',
     evidencia: `${item.label}: Receita/cadastro = "${String(item.receita ?? '')}" | Cartão CNPJ = "${String(item.cartao ?? '')}".`,
-    // Endereço é relevante e continua visível no relatório, porém não deve
-    // bloquear sozinho a identidade da empresa. PDFs oficiais podem variar a
-    // ordem/abreviação do endereço e OCRs podem perder colunas. CNPJ, razão
-    // social, CNAE, natureza, situação e abertura seguem com severidade alta
-    // ou crítica quando realmente divergentes.
-    severidade,
+    severidade: (campo === 'cnpj' || campo === 'situacao_cadastral' ? 'critica' : 'alta') as Severidade,
   };
 }
 

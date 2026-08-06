@@ -52,7 +52,7 @@ export type DocumentosEntidadeProps = {
   permitirUpload?: boolean;
   permitirExcluir?: boolean;
   permitirValidar?: boolean;
-  /** Executa a análise dos quatro documentos iniciais e abre o laudo. */
+  /** Executa a análise dos três documentos iniciais e abre o laudo. */
   onAbrirLaudo?: () => Promise<void> | void;
   secaoInicial?: string | null;
 };
@@ -79,7 +79,7 @@ const tipoDocumentoLabel: Record<string, string> = {
   contrato_assessoria: "1. Contrato de prestação de serviços",
   cartao_cnpj: "2. CNPJ / Cartão CNPJ",
   qsa: "3. QSA",
-  atos_junta_comercial: "4. Atos da Junta Comercial",
+  atos_junta_comercial: "6. Atos da Junta Comercial",
   contrato_social: "5. Contrato social",
   alteracao_contratual: "5. Contrato social e alterações contratuais",
   documento_socio: "6A. Documento de identificação do sócio",
@@ -177,7 +177,7 @@ const slot = (titulo: string, tipoUpload: string, matchTipos?: string[], extra: 
 
 // ─────────────────────────────────────────────────────────────────────────
 // Reorganizado em 3 abas (2026-08): Identidade do CNPJ, Documentação da
-// Empresa e Documentação dos Sócios. Isso é 100% reorganização visual --
+// Empresa e Documentação dos Sócios. A organização respeita as etapas --
 // nenhum "tipoUpload"/tipo_documento foi removido, renomeado na base ou
 // duplicado. Os campos de PGDAS, recibo do PGDAS, DEFIS e recibo da DEFIS já
 // existiam ("pgdas", "recibo_pgdas", "defis", "recibo_defis") e só ganharam
@@ -187,11 +187,10 @@ const slot = (titulo: string, tipoUpload: string, matchTipos?: string[], extra: 
 export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
   {
     titulo: "Identidade do CNPJ",
-    descricao: "Os 4 documentos usados para validar a identidade da empresa. São obrigatórios somente quando a equipe iniciar a análise documental para estratégia e proposta de crédito.",
+    descricao: "Etapa 1: Cartão CNPJ, QSA e Enquadramento Tributário. Os três documentos são cruzados com os dados da Receita Federal.",
     slots: [
-      slot("Cartão CNPJ", "cartao_cnpj", [], { obrigatorio: true, descricao: "A IA/OCR deve identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral." }),
-      slot("QSA (Quadro Societário)", "qsa", [], { obrigatorio: true }),
-      slot("Atos da Junta Comercial", "atos_junta_comercial", [], { obrigatorio: true }),
+      slot("Cartão CNPJ", "cartao_cnpj", [], { obrigatorio: true, descricao: "A IA/OCR identifica CNPJ, razão social, abertura, CNAE, natureza, porte e situação cadastral." }),
+      slot("QSA (Quadro Societário)", "qsa", [], { obrigatorio: true, descricao: "Confere CNPJ, razão social, capital social, sócios, qualificações e administrador." }),
       slot("Enquadramento tributário", "enquadramento_tributario_cnpj", [], { obrigatorio: true, descricao: "Documento que comprova o regime tributário atual da empresa (Simples Nacional, Lucro Presumido, Lucro Real ou MEI)." }),
     ],
   },
@@ -199,7 +198,8 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
     titulo: "Documentação da Empresa",
     descricao: "Todo o restante referente à empresa: contrato social, consultas e certidões do CNPJ, fiscal/tributário, faturamento, eCAC, fotos e outros.",
     slots: [
-      slot("Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Pode receber mais de um arquivo: contrato inicial e alterações." }),
+      slot("Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Etapa 2: será conferido com os Atos da Junta pelo NIRE e pela data de registro da alteração." }),
+      slot("Atos da Junta Comercial", "atos_junta_comercial", [], { obrigatorio: true, descricao: "A certidão/lista de atos será comparada com o contrato ou alteração pelo NIRE e data de registro. O CNPJ é apenas informativo, pois algumas Juntas não o exibem." }),
       slot("Relatório SCR/Registrato (CNPJ)", "rating_bacen_cnpj", ["scr_cnpj"]),
       slot("Consulta CENPROT (CNPJ)", "cenprot_cnpj"),
       slot("CND RFB (CNPJ)", "cnd_rfb_cnpj"),
@@ -424,6 +424,10 @@ export default function DocumentosEntidade({
     const slotsIdentidade = SECOES_DOCUMENTAIS.find((secao) => secao.titulo === "Identidade do CNPJ")?.slots || [];
     return slotsIdentidade.filter((documentoSlot) => docs.some((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento))).length;
   }, [docs]);
+
+
+
+
   function abrirChecklistExportacao() {
     if (!docs.length) { toast.error("Não há documentos anexados para exportar."); return; }
     if (selecionadosIds.length === 0) {
@@ -592,7 +596,7 @@ export default function DocumentosEntidade({
       <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
         <div>
           <h3 className="text-base font-bold text-slate-800 flex items-center gap-2"><Paperclip className="w-4 h-4" /> {titulo}</h3>
-          <p className="text-xs text-slate-500 mt-1 max-w-2xl">O acervo pode ser usado normalmente com qualquer quantidade de arquivos. Os quatro documentos iniciais só são exigidos quando a equipe decidir iniciar a análise documental para estratégia de crédito.</p>
+          <p className="text-xs text-slate-500 mt-1 max-w-2xl">Anexe Cartão CNPJ, QSA e Enquadramento Tributário. A análise cruza os três arquivos com a Receita Federal e libera a Etapa 2.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={abrirChecklistExportacao} disabled={docs.length === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 disabled:opacity-50">
@@ -606,11 +610,11 @@ export default function DocumentosEntidade({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-black text-slate-900">Etapa 1 — Identidade do CNPJ</p>
-              <span className={`rounded-full border bg-white px-2 py-0.5 text-[10px] font-black ${identidadeInicialPreenchida === 4 ? "border-emerald-200 text-emerald-700" : "border-blue-200 text-blue-700"}`}>
-                {identidadeInicialPreenchida}/4 anexados
+              <span className={`rounded-full border bg-white px-2 py-0.5 text-[10px] font-black ${identidadeInicialPreenchida === 3 ? "border-emerald-200 text-emerald-700" : "border-blue-200 text-blue-700"}`}>
+                {identidadeInicialPreenchida}/3 anexados
               </span>
             </div>
-            <p className="mt-1 text-[11px] text-slate-600">Cartão CNPJ, QSA, Atos da Junta e Enquadramento Tributário são obrigatórios somente para iniciar a análise documental. Cadastro, ficha, consulta e visualização permanecem disponíveis sem eles.</p>
+            <p className="mt-1 text-[11px] text-slate-600">Cartão CNPJ, QSA e Enquadramento Tributário formam o primeiro laudo. Contrato/Alteração e Atos da Junta pertencem à Etapa 2.</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 text-[11px]">
             <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-slate-600"><b className="text-slate-900">{docs.length}</b> arquivos</span>
@@ -619,12 +623,11 @@ export default function DocumentosEntidade({
               <button
                 type="button"
                 onClick={abrirLaudo}
-                disabled={gerandoLaudo || identidadeInicialPreenchida !== 4}
+                disabled={gerandoLaudo || identidadeInicialPreenchida !== 3}
                 className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                title={identidadeInicialPreenchida === 4 ? "Iniciar a análise documental" : "Anexe os quatro documentos iniciais para iniciar a análise"}
               >
                 {gerandoLaudo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-                {gerandoLaudo ? "Iniciando análise" : identidadeInicialPreenchida === 4 ? "Iniciar análise documental" : `Disponível com 4/4`}
+                {gerandoLaudo ? "Iniciando análise..." : "Iniciar análise documental"}
               </button>
             )}
           </div>
@@ -682,12 +685,8 @@ export default function DocumentosEntidade({
                   className="mb-3 inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 hover:text-blue-800"
                 >
                   {mostrarComplementares
-                    ? "Mostrar só os documentos da etapa"
-                    : ocultos > 0
-                      ? `Ver documentos complementares (${ocultos})`
-                      : secaoAtivaObj.titulo === "Identidade do CNPJ"
-                        ? "4 documentos exigidos somente para iniciar a análise"
-                        : "Todos os campos desta etapa são necessários"}
+                    ? "Mostrar só os obrigatórios"
+                    : ocultos > 0 ? `Ver documentos complementares (${ocultos})` : "Todos os campos já são obrigatórios"}
                 </button>
               )}
               <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3">
@@ -708,7 +707,7 @@ export default function DocumentosEntidade({
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <p className="text-xs font-bold text-slate-700 leading-tight">{documentoSlot.titulo}</p>
-                              {documentoSlot.obrigatorio && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-800 text-white shrink-0">{secaoAtivaObj.titulo === "Identidade do CNPJ" ? "OBRIGATÓRIO PARA ANÁLISE" : "NECESSÁRIO NA ETAPA"}</span>}
+                              {documentoSlot.obrigatorio && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-800 text-white shrink-0">OBRIGATÓRIO NA ETAPA</span>}
                             </div>
                             <p className="text-[10px] text-slate-400 mt-0.5">{docsTipo.length} arquivo(s) anexado(s)</p>
                           </div>

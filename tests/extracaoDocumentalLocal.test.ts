@@ -59,29 +59,8 @@ describe('extração documental local determinística', () => {
     expect(resultado.dados.socios).toHaveLength(1);
     expect(resultado.dados.socios[0].nome).toContain('JONNATHAS');
     expect(resultado.dados.socios[0].qualificacao).toContain('Administrador');
-    expect(resultado.confianca).toBeGreaterThanOrEqual(0.8);
-  });
-
-  it('extrai o sócio do layout horizontal oficial do QSA sem exigir CPF ou documentos pessoais', () => {
-    const texto = `
-      QUADRO DE SÓCIOS E ADMINISTRADORES - QSA
-      CNPJ
-      52.008.360/0001-33
-      NOME EMPRESARIAL
-      PALUMA BURGER LTDA
-      CAPITAL SOCIAL
-      R$ 65.000,00
-      NOME/NOME EMPRESARIAL                         QUALIFICAÇÃO
-      JONNATHAS RODRIGUES PIRES                     49-Sócio-Administrador
-    `;
-
-    const resultado = analisarTextoDocumentoLocal('qsa', texto);
-
-    expect(resultado.dados.socios).toHaveLength(1);
-    expect(resultado.dados.socios[0].nome).toBe('JONNATHAS RODRIGUES PIRES');
-    expect(resultado.dados.socios[0].qualificacao).toContain('Sócio-Administrador');
-    expect(resultado.dados.socios[0].cpf_cnpj).toBeNull();
-    expect(resultado.dados.extracao_parcial).toBe(false);
+    expect(resultado.dados.socios[0].administrador).toBe(true);
+    expect(resultado.dados.socios[0]).not.toHaveProperty('cpf_cnpj');
     expect(resultado.confianca).toBeGreaterThanOrEqual(0.8);
   });
 
@@ -130,90 +109,37 @@ describe('extração documental local determinística', () => {
     expect(resultado.confianca).toBeGreaterThanOrEqual(0.8);
   });
 
-  it('preserva as colunas do endereço no Cartão CNPJ oficial', () => {
+  it('extrai NIRE e data de registro do contrato/alteração social', () => {
     const texto = `
-      CADASTRO NACIONAL DA PESSOA JURÍDICA
-      COMPROVANTE DE INSCRIÇÃO E DE SITUAÇÃO CADASTRAL
-      NÚMERO DE INSCRIÇÃO
-      52.008.360/0001-33 MATRIZ
-      DATA DE ABERTURA
-      29/08/2023
-      NOME EMPRESARIAL
+      ALTERAÇÃO CONTRATUAL SOCIEDADE EMPRESÁRIA LIMITADA
       PALUMA BURGER LTDA
-      CÓDIGO E DESCRIÇÃO DA ATIVIDADE ECONÔMICA PRINCIPAL
-      56.11-2-03 - Lanchonetes, casas de chá, de sucos e similares
-      CÓDIGO E DESCRIÇÃO DA NATUREZA JURÍDICA
-      206-2 - Sociedade Empresária Limitada
-      PORTE
-      ME
-      LOGRADOURO                         NÚMERO       COMPLEMENTO
-      RUA LATTES 349 QUADRA 10 L         349          QUADRA 10 LOTE 11 SALA 01
-      CEP            BAIRRO/DISTRITO      MUNICÍPIO                  UF
-      74333-060      JARDIM PLANALTO      GOIÂNIA                    GO
-      SITUAÇÃO CADASTRAL
-      ATIVA
-      DATA DA SITUAÇÃO CADASTRAL
-      29/08/2023
+      52.008.360/0001-33
+      devidamente registrada na Junta Comercial sob o nº 52206183723
+      CERTIFICO O REGISTRO EM 06/06/2025 SOB Nº 20251505987
+      NIRE: 52206183723. COM EFEITOS DO REGISTRO EM: 02/06/2025
     `;
-
-    const resultado = analisarTextoDocumentoLocal('cartao_cnpj', texto);
-
-    expect(resultado.dados.endereco_confiavel).toBe(true);
-    expect(resultado.dados.numero).toBe('349');
-    expect(resultado.dados.cep).toBe('74333-060');
-    expect(resultado.dados.municipio).toBe('GOIÂNIA');
-    expect(resultado.dados.uf).toBe('GO');
-    expect(resultado.dados.endereco_completo).not.toContain('COMPROVANTE DE INSCRIÇÃO');
-    expect(resultado.dados.endereco_completo).not.toContain('52.008.360/0001-33');
+    const resultado = analisarTextoDocumentoLocal('contrato_social_alteracao', texto);
+    expect(resultado.dados.nire).toBe('52206183723');
+    expect(resultado.dados.data_registro).toBe('2025-06-06');
+    expect(resultado.dados.numero_arquivamento).toBe('20251505987');
   });
 
-  it('não inventa endereço quando o texto do PDF está achatado e mistura rótulos', () => {
+  it('aceita lista de atos da Junta do DF sem CNPJ e infere o NIRE pela constituição', () => {
     const texto = `
-      CADASTRO NACIONAL DA PESSOA JURÍDICA
-      COMPROVANTE DE INSCRIÇÃO E DE SITUAÇÃO CADASTRAL
-      NÚMERO DE INSCRIÇÃO
-      52.008.360/0001-33 MATRIZ
-      DATA DE ABERTURA
-      29/08/2023
-      NOME EMPRESARIAL
-      PALUMA BURGER LTDA
-      CÓDIGO E DESCRIÇÃO DA ATIVIDADE ECONÔMICA PRINCIPAL
-      56.11-2-03 - Lanchonetes, casas de chá, de sucos e similares
-      CÓDIGO E DESCRIÇÃO DA NATUREZA JURÍDICA
-      206-2 - Sociedade Empresária Limitada
-      PORTE
-      ME
-      LOGRADOURO NÚMERO COMPLEMENTO
-      NÚMERO COMPLEMENTO 52.008.360/0001-33 COMPROVANTE DE INSCRIÇÃO E DE SITUAÇÃO
-      CEP BAIRRO/DISTRITO MUNICÍPIO UF
-      BAIRRO/DISTRITO MUNICÍPIO UF
-      SITUAÇÃO CADASTRAL
-      ATIVA
-      DATA DA SITUAÇÃO CADASTRAL
-      29/08/2023
+      REDE SIM DF - Serviços Web
+      REGISTRO OU CONSTITUIÇÃO
+      Data de Aprovação:22/04/1998 - Número:53200913101
+      Evento(s): REGISTRO/CONSTITUIÇÃO
+      ALTERAÇÃO
+      Data de Aprovação:22/03/2024 - Número:2519165
+      Evento(s): ALTERAÇÃO DE SÓCIO/TITULAR / ADMINISTRADOR
+      CONSOLIDAÇÃO DE CONTRATO/ESTATUTO
     `;
-
-    const resultado = analisarTextoDocumentoLocal('cartao_cnpj', texto);
-
-    expect(resultado.dados.endereco_confiavel).toBe(false);
-    expect(resultado.dados.endereco_completo).toBeNull();
-    expect(resultado.dados.numero).toBeNull();
-  });
-  it('não confunde NÃO optante no SIMEI nem ausência de agendamento', () => {
-    const texto = `
-      CONSULTA OPTANTES
-      CNPJ: 52.008.360/0001-33
-      Situação no Simples Nacional: Optante pelo Simples Nacional desde 29/08/2023
-      Situação no SIMEI: NÃO optante pelo SIMEI
-      Não existe agendamento de exclusão do Simples Nacional.
-    `;
-
-    const resultado = analisarTextoDocumentoLocal('simples_nacional', texto);
-
-    expect(resultado.dados.situacao_simples).toBe('Optante');
-    expect(resultado.dados.regime_tributario).toBe('Simples Nacional');
-    expect(resultado.dados.opcao_mei).toBe(false);
-    expect(resultado.dados.agendamento_exclusao).toBe(false);
+    const resultado = analisarTextoDocumentoLocal('atos_junta_comercial', texto);
+    expect(resultado.dados.cnpj).toBeNull();
+    expect(resultado.dados.nire).toBe('53200913101');
+    expect(resultado.dados.data_registro).toBe('2024-03-22');
+    expect(resultado.confianca).toBeGreaterThanOrEqual(0.8);
   });
 
 });

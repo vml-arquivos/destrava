@@ -49,14 +49,20 @@ export default function AcervoDocumentalEmpresa() {
   async function analisarEAbrirLaudo() {
     if (!empresaId) return;
     try {
-      await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-inicial/iniciar`, {
+      const resultado = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-inicial/iniciar`, {
         method: "POST",
         body: JSON.stringify({ forcar: false }),
       });
-      toast.success("Análise documental iniciada. O relatório acompanhará o processamento dos quatro documentos.");
+      if (resultado?.dossie?.identidade_cnpj?.apto_para_avancar) {
+        toast.success("Relatório inicial concluído. A próxima etapa está liberada.");
+      } else if (resultado?.processando) {
+        toast.info("Leitura iniciada. O relatório mostrará os resultados assim que cada documento for concluído.");
+      }
       setLocation(`/colaborador/empresas?empresa=${empresaId}&aba=dossie_credito`);
-    } catch (error: any) {
-      toast.error(error?.message || "Não foi possível iniciar a análise documental.");
+    } catch (err: any) {
+      const mensagem = err?.message || "Não foi possível abrir o relatório inicial.";
+      toast.error(mensagem);
+      throw err;
     }
   }
 
@@ -75,9 +81,12 @@ export default function AcervoDocumentalEmpresa() {
     setLocation(`/colaborador/empresas?empresa=${empresaId}&aba=visao_geral`);
   }
 
-  const secaoInicial = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("etapa") === "documentacao_empresa"
+  const etapaInicial = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("etapa") : null;
+  const secaoInicial = etapaInicial === "documentacao_empresa"
     ? "Documentação da Empresa"
-    : "Identidade do CNPJ";
+    : etapaInicial === "documentacao_socios"
+      ? "Documentação dos Sócios"
+      : "Identidade do CNPJ";
 
   return (
     <Layout>

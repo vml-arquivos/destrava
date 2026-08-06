@@ -16,9 +16,7 @@ import { resolveDocumentPath } from './documentStorage';
 const { Pool } = pkg;
 
 export type SeveridadeDocumental = 'baixa' | 'media' | 'alta' | 'critica';
-export type TipoAnaliseDocumental = 'qsa' | 'simples_nacional' | 'atos_junta_comercial';
-
-export const QSA_ANALYSIS_VERSION = '4.0.0';
+export type TipoAnaliseDocumental = 'qsa' | 'simples_nacional' | 'atos_junta_comercial' | 'contrato_junta';
 
 export interface AlertaDocumental {
   codigo: string;
@@ -42,7 +40,6 @@ export interface AnaliseDocumentalResult {
   modelo_ia: string | null;
   analisado_em: string;
   revisao_humana_necessaria: boolean;
-  versao_motor: string;
 }
 
 interface Queryable {
@@ -161,292 +158,175 @@ function criarResultado(
     modelo_ia: modelo,
     analisado_em: new Date().toISOString(),
     revisao_humana_necessaria: revisao,
-    versao_motor: tipo === 'qsa' ? QSA_ANALYSIS_VERSION : '1.0.0',
   };
 }
 
-function normalizarQualificacaoSocietaria(value: unknown): string {
-  return normalizarBasico(value)
-    .replace(/^\d{1,3}\s*-?\s*/, '')
-    .replace(/\bsocia\b/g, 'socio')
-    .replace(/\badministradora\b/g, 'administrador')
-    .replace(/\bempresaria\b/g, 'empresario')
-    .replace(/\btitular administradora\b/g, 'titular administrador')
-    .replace(/\s+/g, ' ')
-    .trim();
+function qualificacaoSocietariaNormalizada(value: unknown): string {
+  const texto = normalizarBasico(value);
+  if (!texto) return '';
+  if (/administrador|administradora|diretor|diretora|presidente|titular/.test(texto)) {
+    return texto.includes('socio') || texto.includes('socia') ? 'socio_administrador' : 'administrador';
+  }
+  if (/socio|socia|quotista/.test(texto)) return 'socio';
+  return texto;
 }
 
-function classificarAdministrador(qualificacao: unknown): boolean | null {
-  const texto = normalizarQualificacaoSocietaria(qualificacao);
-  if (!texto) return null;
-  if (/administrador|socio administrador|titular|empresario individual/.test(texto)) return true;
-  if (/^socio$|socio quotista|quotista|acionista/.test(texto)) return false;
-  return null;
+function administradorSocietario(socio: any): boolean | null {
+  const flags = [socio?.administrador, socio?.socio_administrador, socio?.representante_legal]
+    .map(normalizarBooleano)
+    .filter((value) => value !== null) as boolean[];
+  if (flags.length) return flags.some(Boolean);
+  const qualificacao = qualificacaoSocietariaNormalizada(
+    socio?.qualificacao || socio?.qualificacao_socio || socio?.cargo || socio?.funcao,
+  );
+  if (!qualificacao) return null;
+  return qualificacao.includes('administrador');
 }
 
 function socioNormalizado(socio: any): { nome: string; qualificacao: string; administrador: boolean | null; original: any } {
-  const qualificacao = normalizarQualificacaoSocietaria(
-    socio?.qualificacao ||
-    socio?.qualificacao_socio ||
-    socio?.descricao_qualificacao ||
-    socio?.cargo ||
-    socio?.papel,
-  );
-  const administradorExplicito = typeof socio?.administrador === 'boolean'
-    ? socio.administrador
-    : typeof socio?.socio_administrador === 'boolean'
-      ? socio.socio_administrador
-      : null;
   return {
     nome: normalizarBasico(socio?.nome || socio?.nome_socio || socio?.razao_social),
-    qualificacao,
-    administrador: administradorExplicito ?? classificarAdministrador(qualificacao),
+    qualificacao: qualificacaoSocietariaNormalizada(socio?.qualificacao || socio?.qualificacao_socio || socio?.cargo || socio?.funcao),
+    administrador: administradorSocietario(socio),
     original: socio,
   };
 }
 
-function socioEhComparavel(socio: ReturnType<typeof socioNormalizado>): boolean {
-  if (!socio.nome) return false;
-  const genericos = new Set([
-    'nao identificado',
-    'nao informada',
-    'nao informado',
-    'sem identificacao',
-    'socio nao identificado',
-    'socio nao informado',
-    'administrador nao identificado',
-    'representante nao identificado',
-  ]);
-  if (genericos.has(socio.nome)) return false;
-  if (/^(?:socio|administrador|representante|nome|qualificacao)$/.test(socio.nome)) return false;
-  return socio.nome.replace(/[^a-z0-9]/g, '').length >= 4;
-}
-
-function listasSocietarias(value: any, profundidade = 0): any[] {
-  if (!value || profundidade > 3) return [];
-  if (Array.isArray(value)) return value.filter((item) => item && typeof item === 'object');
+function encontrarArraysQsa(value: unknown, profundidade = 0): any[] {
+  if (profundidade > 4 || value === null || value === undefined) return [];
+  if (Array.isArray(value)) return value;
   if (typeof value !== 'object') return [];
-  const chaves = [
-    'qsa', 'socios', 'socios_receita', 'quadro_societario', 'quadroSocietario',
-    'administradores', 'payload_normalizado', 'dados_consolidados', 'dados', 'resultado',
-  ];
-  const encontrados: any[] = [];
-  for (const chave of chaves) encontrados.push(...listasSocietarias(value[chave], profundidade + 1));
-  return encontrados;
+  const objeto = value as Record<string, unknown>;
+  const chavesPrioritarias = ['qsa', 'socios', 'socios_receita', 'quadro_societario', 'quadroSocietario', 'administradores'];
+  for (const chave of chavesPrioritarias) {
+    if (Array.isArray(objeto[chave])) return objeto[chave] as any[];
+  }
+  for (const nested of Object.values(objeto)) {
+    const encontrado = encontrarArraysQsa(nested, profundidade + 1);
+    if (encontrado.length) return encontrado;
+  }
+  return [];
 }
 
-function consolidarSociosReceita(empresa: any, sociosCadastro: any[]): any[] {
-  const candidatos = [
-    ...(Array.isArray(sociosCadastro) ? sociosCadastro : []),
-    ...listasSocietarias(empresa?.socios_receita),
-    ...listasSocietarias(empresa?.qsa),
-    ...listasSocietarias(empresa?.dados_extra_receita),
-    ...listasSocietarias(empresa?.dados_fontes_cnpj),
-    ...listasSocietarias(empresa?.fontes_cnpj),
+function consolidarSociosSincronizados(empresa: any, sociosBanco: any[]): any[] {
+  const fontesReceita = [
+    empresa?.socios_receita,
+    empresa?.dados_extra_receita,
+    empresa?.dados_fontes_cnpj,
+    empresa?.dados_receita,
   ];
-  const unicos = new Map<string, any>();
-  for (const candidato of candidatos) {
-    const normalizado = socioNormalizado(candidato);
-    if (!socioEhComparavel(normalizado)) continue;
-    const chave = normalizado.nome;
-    if (!chave) continue;
-    if (!unicos.has(chave)) unicos.set(chave, candidato);
+  const sociosReceita = fontesReceita.flatMap((fonte) => encontrarArraysQsa(fonte));
+  const todos = [...(Array.isArray(sociosBanco) ? sociosBanco : []), ...sociosReceita];
+  const porNome = new Map<string, any>();
+
+  for (const socio of todos) {
+    const nome = String(socio?.nome || socio?.nome_socio || socio?.nomeSocio || socio?.socio || socio?.razao_social || '').trim();
+    const chave = normalizarBasico(nome);
+    if (!chave || chave === 'nao identificado') continue;
+    const qualificacao = socio?.qualificacao || socio?.qualificacao_socio || socio?.qualificacaoSocio || socio?.cargo || socio?.descricao_qualificacao || null;
+    const atual = porNome.get(chave) || {};
+    porNome.set(chave, {
+      nome: atual.nome || nome,
+      qualificacao: atual.qualificacao || qualificacao,
+      cargo: atual.cargo || socio?.cargo || qualificacao,
+      administrador: atual.administrador ?? socio?.administrador ?? (/administrador|administradora|titular/i.test(String(qualificacao || '')) ? true : null),
+      representante_legal: atual.representante_legal ?? socio?.representante_legal ?? null,
+      fonte_dados: atual.fonte_dados || socio?.fonte_dados || (sociosBanco.includes(socio) ? 'socios_empresa' : 'receita_json'),
+    });
   }
-  return [...unicos.values()];
+  return Array.from(porNome.values());
 }
 
 export function validarQsaExtraida(empresa: any, sociosReceita: any[], dados: any): AlertaDocumental[] {
   const alertas: AlertaDocumental[] = [];
   if (dados?.documento_compativel === false) {
-    alertas.push({ codigo: 'qsa_documento_incompativel', mensagem: 'O arquivo não foi reconhecido como QSA, Contrato Social ou ato societário compatível.', severidade: 'alta', recomendacao: 'Reclassificar o arquivo ou anexar o documento societário correto.' });
+    alertas.push({ codigo: 'qsa_documento_incompativel', mensagem: 'O arquivo não foi reconhecido como QSA ou quadro societário compatível.', severidade: 'alta', recomendacao: 'Reclassificar o arquivo ou anexar o QSA correto.' });
   }
-  const sociosExtraidosEssenciais: Array<ReturnType<typeof socioNormalizado>> = Array.isArray(dados?.socios)
-    ? (dados.socios as any[]).map(socioNormalizado).filter(socioEhComparavel)
-    : [];
-  const temCamposEssenciais = Boolean(
-    onlyDigits(dados?.cnpj)
-    && normalizarNomeEmpresarial(dados?.razao_social || dados?.nome_empresarial)
-    && asNumber(dados?.capital_social) !== null
-    && sociosExtraidosEssenciais.length > 0
-    && sociosExtraidosEssenciais.every((socio) => !!socio.qualificacao)
-    && sociosExtraidosEssenciais.some((socio) => socio.administrador === true),
-  );
   const confiancaExtracao = normalizarConfianca(dados?.confianca);
-  if (!temCamposEssenciais && (dados?.extracao_parcial === true || (confiancaExtracao !== null && confiancaExtracao < 0.6))) {
-    alertas.push({ codigo: 'qsa_extracao_inconclusiva', mensagem: 'A leitura do QSA não confirmou todos os campos essenciais da Etapa 1: CNPJ, razão social, capital social, sócios e qualificação do Sócio-Administrador.', severidade: 'alta', recomendacao: 'Reprocessar o QSA ou anexar uma versão legível antes de liberar o avanço.' });
+  if (dados?.extracao_parcial === true || (confiancaExtracao !== null && confiancaExtracao < 0.6)) {
+    alertas.push({ codigo: 'qsa_extracao_inconclusiva', mensagem: 'A leitura automática do QSA ficou abaixo do nível mínimo de confiança.', severidade: 'alta', recomendacao: 'Revisar o arquivo ou executar OCR externo antes de liberar o avanço.' });
   }
+
   const cnpjDocumento = onlyDigits(dados?.cnpj);
   const cnpjReceita = onlyDigits(empresa?.cnpj);
-  if (cnpjDocumento && cnpjReceita && cnpjDocumento !== cnpjReceita) {
-    alertas.push({
-      codigo: 'qsa_cnpj_divergente',
-      campo: 'cnpj',
-      mensagem: 'O CNPJ extraído do QSA/Contrato Social não corresponde ao CNPJ da empresa.',
-      severidade: 'critica',
-      valor_documento: dados?.cnpj,
-      valor_receita: empresa?.cnpj,
-      recomendacao: 'Interromper o uso do documento e solicitar o QSA/Contrato Social correto.',
-    });
-  }
-
-  const razaoDocumento = normalizarNomeEmpresarial(dados?.razao_social || dados?.nome_empresarial);
-  const razaoReceita = normalizarNomeEmpresarial(empresa?.razao_social || empresa?.nome_empresarial);
-  if (razaoDocumento && razaoReceita && razaoDocumento !== razaoReceita) {
-    alertas.push({
-      codigo: 'qsa_razao_social_divergente',
-      campo: 'razao_social',
-      mensagem: 'A razão social extraída do QSA não corresponde à razão social cadastrada na Receita Federal.',
-      severidade: 'alta',
-      valor_documento: dados?.razao_social || dados?.nome_empresarial,
-      valor_receita: empresa?.razao_social || empresa?.nome_empresarial,
-      recomendacao: 'Confirmar se o documento societário pertence à empresa e se representa a versão vigente.',
-    });
-  } else if (!razaoDocumento) {
-    alertas.push({
-      codigo: 'qsa_razao_social_nao_extraida',
-      campo: 'razao_social',
-      mensagem: 'Não foi possível confirmar a razão social no QSA.',
-      severidade: 'alta',
-      recomendacao: 'Reprocessar o QSA ou anexar uma versão legível antes de concluir a Etapa 1.',
-    });
-  }
-
-  const capital = capitalDivergente(dados?.capital_social, empresa?.capital_social);
-  if (capital.divergente) {
-    alertas.push({
-      codigo: 'qsa_capital_social_divergente',
-      campo: 'capital_social',
-      mensagem: 'O capital social do documento diverge do cadastro obtido na Receita Federal.',
-      severidade: capital.significativo ? 'alta' : 'media',
-      valor_documento: capital.documento,
-      valor_receita: capital.receita,
-      recomendacao: 'Confirmar a alteração societária mais recente e sincronizar os dados cadastrais.',
-    });
-  } else if (capital.documento === null) {
-    alertas.push({
-      codigo: 'qsa_capital_social_nao_extraido',
-      campo: 'capital_social',
-      mensagem: 'Não foi possível confirmar o capital social no QSA.',
-      severidade: 'alta',
-      recomendacao: 'Reprocessar o QSA ou anexar uma versão legível antes de concluir a Etapa 1.',
-    });
-  }
-
-  const sociosDocumento = sociosExtraidosEssenciais;
-  const sociosBase: Array<ReturnType<typeof socioNormalizado>> = Array.isArray(sociosReceita)
-    ? sociosReceita.map(socioNormalizado).filter(socioEhComparavel)
-    : [];
-
-  if (sociosBase.length === 0) {
-    alertas.push({
-      codigo: 'qsa_base_receita_indisponivel',
-      campo: 'socios',
-      mensagem: 'O quadro societário sincronizado da Receita Federal não está disponível para comparação.',
-      severidade: 'alta',
-      recomendacao: 'Atualizar os dados cadastrais da empresa na Receita Federal antes de concluir a Etapa 1.',
-    });
-  }
-
-  // A Etapa 1 confere exclusivamente a identidade societária: nomes e
-  // qualificações, identificando quem é Sócio-Administrador. CPF/RG,
-  // nacionalidade, estado civil, cônjuge, profissão, contato e endereço
-  // pertencem à etapa documental seguinte e não participam desta validação.
-  // Quando a leitura não extrai nenhum sócio, não inventa divergências
-  // individuais para cada cadastro da Receita: registra uma única falha de
-  // leitura e permite reprocessar o documento.
-  if (sociosDocumento.length === 0 && sociosBase.length > 0 && !alertas.some((alerta) => alerta.codigo === 'qsa_extracao_inconclusiva')) {
-    alertas.push({
-      codigo: 'qsa_socios_nao_extraidos',
-      campo: 'socios',
-      mensagem: 'Não foi possível extrair com segurança a relação de sócios do documento QSA.',
-      severidade: 'alta',
-      recomendacao: 'Reprocessar o QSA ou substituir o arquivo por uma versão legível antes de concluir a Etapa 1.',
-    });
-  } else if (sociosDocumento.length > 0 && sociosBase.length > 0) {
-    if (sociosDocumento.some((socio) => !socio.qualificacao)) {
-      alertas.push({
-        codigo: 'qsa_qualificacao_nao_extraida',
-        campo: 'socios.qualificacao',
-        mensagem: 'A qualificação societária de um ou mais sócios não foi identificada no QSA.',
-        severidade: 'alta',
-        recomendacao: 'Reprocessar o QSA para identificar quem é sócio e quem é Sócio-Administrador.',
-      });
-    }
-
-    const administradoresReceita = sociosBase.filter((socio) => socio.administrador === true);
-    const administradoresDocumento = sociosDocumento.filter((socio) => socio.administrador === true);
-    if (
-      administradoresReceita.length > 0
-      && administradoresDocumento.length === 0
-      && sociosDocumento.every((socio) => socio.administrador === null)
-    ) {
-      alertas.push({
-        codigo: 'qsa_administrador_nao_identificado',
-        campo: 'socios.qualificacao',
-        mensagem: 'O QSA não permitiu identificar quem exerce a administração da empresa.',
-        severidade: 'alta',
-        recomendacao: 'Reprocessar o documento e confirmar a qualificação Sócio-Administrador antes de concluir a Etapa 1.',
-      });
-    }
-
-    for (const socioDoc of sociosDocumento) {
-      const socioBase = sociosBase.find((item) => !!socioDoc.nome && socioDoc.nome === item.nome);
-      const encontrado = !!socioBase;
-      if (!encontrado) {
-        alertas.push({
-          codigo: 'qsa_socio_documento_nao_encontrado_receita',
-          campo: 'socios',
-          mensagem: `O sócio "${socioDoc.original?.nome || socioDoc.nome}" consta no QSA, mas não foi localizado no quadro societário sincronizado da Receita.`,
-          severidade: 'alta',
-          valor_documento: socioDoc.original,
-          recomendacao: 'Verificar se houve alteração societária recente ou se o QSA anexado não representa a versão vigente.',
-        });
-      } else if (socioBase) {
-        if (socioDoc.qualificacao && socioBase.qualificacao && socioDoc.qualificacao !== socioBase.qualificacao) {
-          alertas.push({
-            codigo: 'qsa_qualificacao_societaria_divergente',
-            campo: 'socios.qualificacao',
-            mensagem: `A qualificação societária de "${socioDoc.original?.nome || socioDoc.nome}" não corresponde ao quadro sincronizado da Receita Federal.`,
-            severidade: 'alta',
-            valor_documento: socioDoc.original?.qualificacao || socioDoc.original?.qualificacao_socio || null,
-            valor_receita: socioBase.original?.qualificacao || socioBase.original?.qualificacao_socio || null,
-            recomendacao: 'Confirmar se o QSA anexado e o quadro societário da Receita representam a mesma composição vigente.',
-          });
-        }
-        if (socioDoc.administrador !== null && socioBase.administrador !== null && socioDoc.administrador !== socioBase.administrador) {
-          alertas.push({
-            codigo: 'qsa_qualificacao_administrador_divergente',
-            campo: 'socios.qualificacao',
-            mensagem: `A qualificação de "${socioDoc.original?.nome || socioDoc.nome}" diverge quanto à condição de Sócio-Administrador.`,
-            severidade: 'alta',
-            valor_documento: socioDoc.original?.qualificacao || socioDoc.original?.qualificacao_socio || null,
-            valor_receita: socioBase.original?.qualificacao || socioBase.original?.qualificacao_socio || null,
-            recomendacao: 'Confirmar a composição administrativa vigente antes de concluir a Etapa 1.',
-          });
-        }
-      }
-    }
-
-    for (const socioBase of sociosBase) {
-      const encontrado = sociosDocumento.some((socioDoc) => {
-        return !!socioDoc.nome && socioDoc.nome === socioBase.nome;
-      });
-      if (!encontrado) {
-        alertas.push({
-          codigo: 'qsa_socio_receita_ausente_documento',
-          campo: 'socios',
-          mensagem: `O sócio "${socioBase.original?.nome || socioBase.nome}" consta no quadro societário sincronizado da Receita, mas não aparece no QSA analisado.`,
-          severidade: 'alta',
-          valor_receita: socioBase.original,
-          recomendacao: 'Solicitar QSA ou alteração contratual atualizada antes de concluir a Etapa 1.',
-        });
-      }
-    }
-  }
-
   if (!cnpjDocumento) {
-    alertas.push({ codigo: 'qsa_cnpj_nao_extraido', campo: 'cnpj', mensagem: 'Não foi possível confirmar o CNPJ no documento societário.', severidade: 'alta', recomendacao: 'Reprocessar o QSA ou anexar uma versão legível antes de concluir a Etapa 1.' });
+    alertas.push({ codigo: 'qsa_cnpj_nao_extraido', campo: 'cnpj', mensagem: 'Não foi possível confirmar o CNPJ no QSA.', severidade: 'alta', recomendacao: 'Anexar QSA legível que identifique o CNPJ da empresa.' });
+  } else if (cnpjReceita && cnpjDocumento !== cnpjReceita) {
+    alertas.push({
+      codigo: 'qsa_cnpj_divergente', campo: 'cnpj',
+      mensagem: 'O CNPJ extraído do QSA não corresponde ao CNPJ sincronizado da empresa.',
+      severidade: 'critica', valor_documento: dados?.cnpj, valor_receita: empresa?.cnpj,
+      recomendacao: 'Interromper o uso do documento e anexar o QSA correto.',
+    });
   }
+
+  const razaoDocumento = normalizarNomeEmpresarial(dados?.razao_social);
+  const razaoReceita = normalizarNomeEmpresarial(empresa?.razao_social || empresa?.nome_empresarial);
+  if (!razaoDocumento) {
+    alertas.push({ codigo: 'qsa_razao_social_nao_extraida', campo: 'razao_social', mensagem: 'Não foi possível confirmar a razão social no QSA.', severidade: 'alta', recomendacao: 'Anexar QSA legível com a razão social da empresa.' });
+  } else if (razaoReceita && razaoDocumento !== razaoReceita) {
+    alertas.push({ codigo: 'qsa_razao_social_divergente', campo: 'razao_social', mensagem: 'A razão social do QSA diverge da razão social sincronizada.', severidade: 'critica', valor_documento: dados?.razao_social, valor_receita: empresa?.razao_social, recomendacao: 'Confirmar se o documento pertence à empresa ou se existe alteração de nome ainda não sincronizada.' });
+  }
+
+  const capitalDocumento = asNumber(dados?.capital_social);
+  const capitalReceita = asNumber(empresa?.capital_social);
+  if (capitalDocumento === null) {
+    alertas.push({ codigo: 'qsa_capital_social_nao_extraido', campo: 'capital_social', mensagem: 'Não foi possível identificar o capital social no QSA.', severidade: 'alta', recomendacao: 'Anexar QSA legível com o capital social.' });
+  } else {
+    const capital = capitalDivergente(capitalDocumento, capitalReceita);
+    if (capital.divergente) {
+      alertas.push({
+        codigo: 'qsa_capital_social_divergente', campo: 'capital_social',
+        mensagem: 'O capital social do QSA diverge do cadastro sincronizado.',
+        severidade: capital.significativo ? 'alta' : 'media', valor_documento: capital.documento, valor_receita: capital.receita,
+        recomendacao: 'Confirmar a alteração societária mais recente e sincronizar os dados cadastrais.',
+      });
+    }
+  }
+
+  const sociosDocumento = (Array.isArray(dados?.socios) ? dados.socios : [])
+    .map(socioNormalizado)
+    .filter((socio: ReturnType<typeof socioNormalizado>) => socio.nome && socio.nome !== 'nao identificado');
+  const sociosBase = (Array.isArray(sociosReceita) ? sociosReceita : [])
+    .map(socioNormalizado)
+    .filter((socio: ReturnType<typeof socioNormalizado>) => socio.nome && socio.nome !== 'nao identificado');
+
+  if (!sociosDocumento.length) {
+    alertas.push({ codigo: 'qsa_socios_nao_extraidos', campo: 'socios', mensagem: 'Não foi possível identificar os sócios no QSA.', severidade: 'alta', recomendacao: 'Anexar QSA legível que apresente nomes e qualificações dos sócios.' });
+  }
+
+  for (const socioDoc of sociosDocumento) {
+    const socioBase = sociosBase.find((item) => item.nome === socioDoc.nome);
+    if (!socioBase) {
+      alertas.push({
+        codigo: 'qsa_socio_documento_nao_encontrado_receita', campo: 'socios',
+        mensagem: `O sócio "${socioDoc.original?.nome || 'não identificado'}" consta no QSA, mas não foi localizado no quadro societário sincronizado.`,
+        severidade: 'alta', valor_documento: { nome: socioDoc.original?.nome, qualificacao: socioDoc.original?.qualificacao },
+        recomendacao: 'Verificar se houve alteração societária e atualizar o QSA da Receita/cadastro.',
+      });
+      continue;
+    }
+    if (!socioDoc.qualificacao) {
+      alertas.push({ codigo: 'qsa_qualificacao_nao_identificada', campo: 'qualificacao', mensagem: `A qualificação societária de "${socioDoc.original?.nome}" não foi identificada no QSA.`, severidade: 'alta', recomendacao: 'Conferir a qualificação e identificar quem exerce a administração.' });
+    } else if (socioBase.qualificacao && socioDoc.qualificacao !== socioBase.qualificacao) {
+      alertas.push({ codigo: 'qsa_qualificacao_divergente', campo: 'qualificacao', mensagem: `A qualificação societária de "${socioDoc.original?.nome}" diverge do cadastro sincronizado.`, severidade: 'alta', valor_documento: socioDoc.original?.qualificacao, valor_receita: socioBase.original?.qualificacao || socioBase.original?.cargo, recomendacao: 'Confirmar a alteração societária mais recente.' });
+    }
+    if (socioDoc.administrador !== null && socioBase.administrador !== null && socioDoc.administrador !== socioBase.administrador) {
+      alertas.push({ codigo: 'qsa_administrador_divergente', campo: 'administrador', mensagem: `A condição de administrador de "${socioDoc.original?.nome}" diverge entre o QSA e o cadastro sincronizado.`, severidade: 'alta', valor_documento: socioDoc.administrador, valor_receita: socioBase.administrador, recomendacao: 'Conferir quem possui poderes de administração antes de avançar.' });
+    }
+  }
+
+  for (const socioBase of sociosBase) {
+    if (!sociosDocumento.some((socioDoc) => socioDoc.nome === socioBase.nome)) {
+      alertas.push({
+        codigo: 'qsa_socio_receita_ausente_documento', campo: 'socios',
+        mensagem: `O sócio "${socioBase.original?.nome || 'não identificado'}" consta no cadastro sincronizado, mas não aparece no QSA analisado.`,
+        severidade: 'alta', valor_receita: { nome: socioBase.original?.nome, qualificacao: socioBase.original?.qualificacao || socioBase.original?.cargo },
+        recomendacao: 'Solicitar QSA atualizado antes de concluir a Etapa 1.',
+      });
+    }
+  }
+
   return uniqueAlerts(alertas);
 }
 
@@ -522,7 +402,10 @@ export function validarAtosJuntaExtraidos(empresa: any, dados: any): AlertaDocum
     alertas.push({ codigo: 'junta_alteracao_recente_relevante', campo: 'data_registro', mensagem: 'Foi identificado ato societário recente, com alteração de sócios ou de capital social.', severidade: 'alta', valor_documento: dataRegistro, recomendacao: 'Solicitar documentos cadastrais atualizados e validar os efeitos da alteração antes da decisão de crédito.' });
   }
 
-  if (!cnpjDocumento) alertas.push({ codigo: 'junta_cnpj_nao_extraido', campo: 'cnpj', mensagem: 'Não foi possível confirmar o CNPJ no ato da Junta Comercial.', severidade: 'media', recomendacao: 'Realizar conferência humana do documento.' });
+  // O CNPJ não é obrigatório nos Atos da Junta: algumas Juntas, como a do DF,
+  // não o exibem. A identidade societária desta etapa será validada por NIRE e data.
+  if (!onlyDigits(dados?.nire)) alertas.push({ codigo: 'junta_nire_nao_extraido', campo: 'nire', mensagem: 'Não foi possível identificar o NIRE nos Atos da Junta Comercial.', severidade: 'alta', recomendacao: 'Anexar certidão/lista de atos que permita identificar o NIRE ou o registro de constituição.' });
+  if (!parseDate(dados?.data_registro) && !(Array.isArray(dados?.historico_arquivamentos) && dados.historico_arquivamentos.length)) alertas.push({ codigo: 'junta_data_ato_nao_extraida', campo: 'data_registro', mensagem: 'Não foi possível identificar as datas dos atos registrados na Junta Comercial.', severidade: 'alta', recomendacao: 'Anexar certidão/lista de arquivamentos legível.' });
 
   // Histórico completo de arquivamentos (ex: certidão "Lista de Arquivamentos"):
   // documenta quantas alterações já houve e quando foi a mais recente -- info
@@ -545,34 +428,102 @@ export function validarAtosJuntaExtraidos(empresa: any, dados: any): AlertaDocum
   return uniqueAlerts(alertas);
 }
 
-export function normalizarDadosQsaEtapa1(dados: any): Record<string, any> {
-  // A Etapa 1 usa uma lista branca rígida. Mesmo que OCR/IA devolva CPF, RG,
-  // endereço, nacionalidade, estado civil, cônjuge, profissão ou contatos,
-  // esses campos não são persistidos nem apresentados nesta análise.
-  const socios = Array.isArray(dados?.socios)
-    ? dados.socios
-        .map((socio: any) => {
-          const nome = socio?.nome ? String(socio.nome).trim() : null;
-          const qualificacao = socio?.qualificacao ? String(socio.qualificacao).trim() : null;
-          const administrador = typeof socio?.administrador === 'boolean'
-            ? socio.administrador
-            : classificarAdministrador(qualificacao);
-          return { nome, qualificacao, administrador };
-        })
-        .filter((socio: any) => socio.nome && socioEhComparavel(socioNormalizado(socio)))
-    : [];
 
+export function validarContratoComAtosJunta(contrato: any, atos: any): AlertaDocumental[] {
+  const alertas: AlertaDocumental[] = [];
+  if (contrato?.documento_compativel === false) {
+    alertas.push({ codigo: 'contrato_societario_incompativel', mensagem: 'O arquivo não foi reconhecido como Contrato Social, Alteração Contratual ou Consolidação.', severidade: 'alta', recomendacao: 'Anexar o contrato ou a alteração contratual registrada correspondente.' });
+  }
+  if (atos?.documento_compativel === false) {
+    alertas.push({ codigo: 'atos_junta_incompativel', mensagem: 'O arquivo não foi reconhecido como certidão ou lista de atos da Junta Comercial.', severidade: 'alta', recomendacao: 'Anexar a certidão/lista de arquivamentos correta.' });
+  }
+
+  const nireContrato = onlyDigits(contrato?.nire);
+  const nireJunta = onlyDigits(atos?.nire);
+  if (!nireContrato) {
+    alertas.push({ codigo: 'contrato_nire_nao_identificado', campo: 'nire', mensagem: 'Não foi possível identificar o NIRE no contrato/alteração social.', severidade: 'alta', recomendacao: 'Conferir a página de registro/certificação do documento societário.' });
+  }
+  if (!nireJunta) {
+    alertas.push({ codigo: 'junta_nire_nao_identificado', campo: 'nire', mensagem: 'Não foi possível identificar o NIRE na certidão/lista de atos da Junta Comercial.', severidade: 'alta', recomendacao: 'Anexar certidão que apresente o NIRE ou o registro de constituição.' });
+  }
+  if (nireContrato && nireJunta && nireContrato !== nireJunta) {
+    alertas.push({
+      codigo: 'contrato_junta_nire_divergente',
+      campo: 'nire',
+      mensagem: 'O NIRE do contrato/alteração não corresponde ao NIRE identificado nos Atos da Junta Comercial.',
+      severidade: 'critica',
+      valor_documento: contrato?.nire,
+      valor_receita: atos?.nire,
+      recomendacao: 'Interromper a validação e anexar os documentos societários da mesma empresa.',
+    });
+  }
+
+  const dataContrato = parseDate(contrato?.data_registro);
+  const historico = Array.isArray(atos?.historico_arquivamentos) ? atos.historico_arquivamentos : [];
+  const datasJunta = new Set(historico.map((item: any) => parseDate(item?.data)).filter(Boolean));
+  const dataJuntaPrincipal = parseDate(atos?.data_registro);
+  if (dataJuntaPrincipal) datasJunta.add(dataJuntaPrincipal);
+
+  if (!dataContrato) {
+    alertas.push({ codigo: 'contrato_data_registro_nao_identificada', campo: 'data_registro', mensagem: 'Não foi possível identificar a data de registro da alteração/contrato social.', severidade: 'alta', recomendacao: 'Conferir a certificação de registro na última página do documento.' });
+  } else if (!datasJunta.has(dataContrato)) {
+    alertas.push({
+      codigo: 'contrato_junta_data_divergente',
+      campo: 'data_registro',
+      mensagem: 'A data de registro do contrato/alteração não foi localizada no histórico dos Atos da Junta Comercial.',
+      severidade: 'alta',
+      valor_documento: dataContrato,
+      valor_receita: Array.from(datasJunta),
+      recomendacao: 'Confirmar se a certidão da Junta está atualizada e corresponde ao último contrato/alteração anexado.',
+    });
+  }
+
+  // CNPJ é apenas confirmação adicional. A ausência no documento da Junta não
+  // gera pendência porque algumas Juntas, como a do Distrito Federal, omitem o
+  // CNPJ na lista de atos. Divergência só existe quando ambos os documentos o exibem.
+  const cnpjContrato = onlyDigits(contrato?.cnpj);
+  const cnpjJunta = onlyDigits(atos?.cnpj);
+  if (cnpjContrato && cnpjJunta && cnpjContrato !== cnpjJunta) {
+    alertas.push({ codigo: 'contrato_junta_cnpj_divergente', campo: 'cnpj', mensagem: 'Os documentos societários apresentam CNPJs diferentes.', severidade: 'critica', valor_documento: contrato?.cnpj, valor_receita: atos?.cnpj, recomendacao: 'Anexar documentos pertencentes à mesma empresa.' });
+  }
+
+  return uniqueAlerts(alertas);
+}
+
+function normalizarDadosContratoSocial(dados: any): Record<string, any> {
+  return {
+    ...dados,
+    cnpj: dados?.cnpj ? String(dados.cnpj).trim() : null,
+    razao_social: dados?.razao_social ? String(dados.razao_social).trim() : null,
+    nire: dados?.nire ? String(dados.nire).trim() : null,
+    tipo_ato: dados?.tipo_ato ? String(dados.tipo_ato).trim() : null,
+    data_registro: parseDate(dados?.data_registro),
+    data_efeitos_registro: parseDate(dados?.data_efeitos_registro),
+    data_documento: parseDate(dados?.data_documento),
+    numero_arquivamento: dados?.numero_arquivamento ? String(dados.numero_arquivamento).trim() : null,
+    confianca: normalizarConfianca(dados?.confianca),
+  };
+}
+
+function normalizarDadosQsa(dados: any): Record<string, any> {
+  const socios = Array.isArray(dados?.socios) ? dados.socios
+    .map((socio: any) => ({
+      nome: socio?.nome ? String(socio.nome).trim() : null,
+      qualificacao: socio?.qualificacao ? String(socio.qualificacao).trim() : null,
+      administrador: administradorSocietario(socio),
+    }))
+    .filter((socio: any) => socio.nome && normalizarBasico(socio.nome) !== 'nao identificado') : [];
   return {
     documento_compativel: dados?.documento_compativel !== false,
     cnpj: dados?.cnpj ? String(dados.cnpj).trim() : null,
     razao_social: dados?.razao_social ? String(dados.razao_social).trim() : null,
     capital_social: asNumber(dados?.capital_social),
     socios,
-    extracao_parcial: dados?.extracao_parcial === true,
-    campos_etapa_1: ['cnpj', 'razao_social', 'capital_social', 'socios.nome', 'socios.qualificacao', 'socios.administrador'],
-    versao_motor: QSA_ANALYSIS_VERSION,
+    data_registro: parseDate(dados?.data_registro),
     confianca: normalizarConfianca(dados?.confianca),
-    fonte_extracao: dados?.fonte_extracao ? String(dados.fonte_extracao) : null,
+    fonte_extracao: dados?.fonte_extracao || null,
+    mecanismo_extracao: dados?.mecanismo_extracao || null,
+    extracao_parcial: dados?.extracao_parcial === true,
   };
 }
 
@@ -690,17 +641,18 @@ async function resolverCaminhoSeguro(caminhoArquivo: string): Promise<string> {
 }
 
 function promptQsa(): string {
-  return `Você é um auditor documental societário brasileiro. Extraia dados do QSA, Contrato Social, Alteração Contratual ou Consolidação anexada.
-Responda SOMENTE JSON válido, sem markdown e sem comentários:
+  return `Você analisa exclusivamente a identidade societária inicial de uma empresa brasileira.
+Retorne apenas JSON válido, sem markdown, com este formato:
 {
   "documento_compativel": true,
-  "cnpj": "00.000.000/0000-00 ou null",
-  "razao_social": "texto ou null",
-  "capital_social": 0.00,
-  "socios": [{"nome":"texto","qualificacao":"texto ou null","administrador":true}],
-  "confianca": 0.0
+  "cnpj": "00.000.000/0000-00" | null,
+  "razao_social": string | null,
+  "capital_social": number | null,
+  "socios": [{ "nome": string, "qualificacao": string | null, "administrador": boolean | null }],
+  "data_registro": "YYYY-MM-DD" | null,
+  "confianca": number
 }
-Nesta etapa, extraia SOMENTE: CNPJ da empresa, razão social, capital social, nome de cada sócio, qualificação societária e o booleano administrador indicando quem é Sócio-Administrador. Não extraia nem avalie CPF, RG, endereço, nacionalidade, estado civil, cônjuge, profissão, telefone, e-mail ou qualquer outro dado pessoal. Não compare com outras fontes, não invente dados e use null quando não estiver visível. Capital social deve ser numérico. Confianca deve estar entre 0 e 1.`;
+Extraia somente CNPJ, razão social, capital social, nomes, qualificações e quem é sócio-administrador. Não extraia nem devolva CPF, RG, endereço, nacionalidade, estado civil, cônjuge, profissão, telefone, e-mail ou qualquer outro dado pessoal. Não invente dados. Use null quando não houver evidência.`;
 }
 
 function promptSimples(): string {
@@ -735,6 +687,25 @@ Responda SOMENTE JSON válido, sem markdown e sem comentários:
   "confianca": 0.0
 }
 Se o documento for uma lista/certidão de arquivamentos (ex: "Lista de Arquivamentos" da Junta Comercial), preencha "historico_arquivamentos" com TODOS os itens listados, do mais antigo ao mais recente -- é esse histórico completo que interessa, não só o último. Se for um único ato/alteração, preencha também "data_registro" e "socios_alterados" para esse ato específico. Extraia apenas informações expressas no documento. Não deduza alterações que não estejam descritas. Capital social deve ser numérico. Use null quando não estiver visível. Confianca deve estar entre 0 e 1.`;
+}
+
+
+function promptContratoSocial(): string {
+  return `Você é um auditor de registro societário brasileiro. Extraia somente os dados necessários para conferir um Contrato Social, Alteração Contratual ou Consolidação com os Atos da Junta Comercial.
+Responda SOMENTE JSON válido:
+{
+  "documento_compativel": true,
+  "cnpj": "00.000.000/0000-00 ou null",
+  "razao_social": "texto ou null",
+  "nire": "texto ou null",
+  "tipo_ato": "Contrato Social|Alteração Contratual|Consolidação|null",
+  "data_registro": "YYYY-MM-DD ou null",
+  "data_efeitos_registro": "YYYY-MM-DD ou null",
+  "data_documento": "YYYY-MM-DD ou null",
+  "numero_arquivamento": "texto ou null",
+  "confianca": 0.0
+}
+Use em data_registro a data da certificação/registro da Junta (ex.: CERTIFICO O REGISTRO EM), não a mera data de assinatura. Não invente informações.`;
 }
 
 export class AnaliseDocumentalService {
@@ -906,14 +877,15 @@ export class AnaliseDocumentalService {
       }
       documento.caminho_arquivo = caminhoResolvido.absolutePath;
     }
-    return { empresa, socios: consolidarSociosReceita(empresa, sociosResult.rows || []), documento };
+    const sociosSincronizados = consolidarSociosSincronizados(empresa, sociosResult.rows || []);
+    return { empresa, socios: sociosSincronizados, documento };
   }
 
   async analisarQSA(empresaId: string, arquivoId: string): Promise<AnaliseDocumentalResult> {
     this.ultimoModeloUsado = null;
     this.ultimaFonteExtracao = null;
     const { empresa, socios, documento } = await this.carregarContexto(empresaId, arquivoId);
-    const dados = { ...normalizarDadosQsaEtapa1(await this.extrairHibrido(documento.caminho_arquivo!, promptQsa(), documento.mime_type || 'application/pdf', 'qsa')), versao_motor: QSA_ANALYSIS_VERSION };
+    const dados = normalizarDadosQsa(await this.extrairHibrido(documento.caminho_arquivo!, promptQsa(), documento.mime_type || 'application/pdf', 'qsa'));
     const alertas = validarQsaExtraida(empresa, socios, dados);
     return criarResultado('qsa', empresaId, arquivoId, dados, alertas, this.ultimoModeloUsado);
   }
@@ -934,6 +906,36 @@ export class AnaliseDocumentalService {
     const dados = normalizarDadosAtos(await this.extrairHibrido(documento.caminho_arquivo!, promptAtosJunta(), documento.mime_type || 'application/pdf', 'atos_junta_comercial'));
     const alertas = validarAtosJuntaExtraidos(empresa, dados);
     return criarResultado('atos_junta_comercial', empresaId, arquivoId, dados, alertas, this.ultimoModeloUsado);
+  }
+
+
+  async analisarContratoComAtosJunta(empresaId: string, contratoArquivoId: string, atosArquivoId: string): Promise<AnaliseDocumentalResult> {
+    this.ultimoModeloUsado = null;
+    this.ultimaFonteExtracao = null;
+    const [contratoContexto, atosContexto] = await Promise.all([
+      this.carregarContexto(empresaId, contratoArquivoId),
+      this.carregarContexto(empresaId, atosArquivoId),
+    ]);
+    const [contrato, atos] = await Promise.all([
+      this.extrairHibrido(contratoContexto.documento.caminho_arquivo!, promptContratoSocial(), contratoContexto.documento.mime_type || 'application/pdf', 'contrato_social_alteracao'),
+      this.extrairHibrido(atosContexto.documento.caminho_arquivo!, promptAtosJunta(), atosContexto.documento.mime_type || 'application/pdf', 'atos_junta_comercial'),
+    ]);
+    const contratoNormalizado = normalizarDadosContratoSocial(contrato);
+    const atosNormalizados = normalizarDadosAtos(atos);
+    const alertas = validarContratoComAtosJunta(contratoNormalizado, atosNormalizados);
+    const dados = {
+      contrato_arquivo_id: contratoArquivoId,
+      atos_arquivo_id: atosArquivoId,
+      contrato: contratoNormalizado,
+      atos_junta: atosNormalizados,
+      nire_confere: onlyDigits(contratoNormalizado.nire) !== '' && onlyDigits(contratoNormalizado.nire) === onlyDigits(atosNormalizados.nire),
+      data_registro_confere: !!parseDate(contratoNormalizado.data_registro) && [
+        parseDate(atosNormalizados.data_registro),
+        ...(Array.isArray(atosNormalizados.historico_arquivamentos) ? atosNormalizados.historico_arquivamentos.map((item: any) => parseDate(item?.data)) : []),
+      ].filter(Boolean).includes(parseDate(contratoNormalizado.data_registro)),
+      confianca: Math.min(normalizarConfianca(contratoNormalizado.confianca) ?? 0, normalizarConfianca(atosNormalizados.confianca) ?? 0),
+    };
+    return criarResultado('contrato_junta', empresaId, contratoArquivoId, dados, alertas, this.ultimoModeloUsado);
   }
 }
 

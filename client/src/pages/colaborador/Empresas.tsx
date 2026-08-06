@@ -495,6 +495,7 @@ function EmpresaDadosWorkspace({
     .filter(Boolean)
     .join(", ");
   const cnaesSecundarios = Array.isArray(empresa.cnaes_secundarios) ? empresa.cnaes_secundarios.filter(Boolean) : [];
+  const pendenciasSocios = socios.reduce((acc: number, s: any) => acc + pendenciasSocioContrato(s).length, 0);
 
   const paineis = [
     { id: "resumo" as const, label: "Resumo", description: "Visão executiva", icon: <Building2 className="w-4 h-4" />, badge: empresa.status },
@@ -502,7 +503,7 @@ function EmpresaDadosWorkspace({
     { id: "cadastro" as const, label: "Cadastro interno", description: "Controle operacional", icon: <Building className="w-4 h-4" />, badge: fmtDate(empresa.created_at) },
     { id: "contato" as const, label: "Contato", description: "Telefone, e-mail e site", icon: <Phone className="w-4 h-4" />, badge: empresa.telefone || empresa.email ? "OK" : "Pendente" },
     { id: "endereco" as const, label: "Endereço", description: "Localização completa", icon: <MapPin className="w-4 h-4" />, badge: empresa.cidade || "Pendente" },
-    { id: "socios" as const, label: "Sócios / QSA", description: "Conferência societária inicial", icon: <Users className="w-4 h-4" />, badge: socios.length ? `${socios.length}` : "0" },
+    { id: "socios" as const, label: "Sócios / QSA", description: "Administradores e pendências", icon: <Users className="w-4 h-4" />, badge: socios.length ? `${socios.length}` : "0" },
     { id: "documentos" as const, label: "Documentos", description: "Atalho para o acervo", icon: <FileText className="w-4 h-4" />, badge: `${documentosTotal}` },
   ];
 
@@ -640,45 +641,59 @@ function EmpresaDadosWorkspace({
 
     if (painelAtivo === "socios") {
       return (
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
-            <p className="text-sm font-black text-slate-900">Conferência societária inicial</p>
-            <p className="mt-1 text-xs leading-relaxed text-slate-600">Nesta etapa o sistema confere somente CNPJ, razão social, capital social, nome dos sócios, qualificação e quem é Sócio-Administrador. Dados pessoais e documentos dos sócios pertencem à próxima fase e não interferem neste resultado.</p>
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-black text-slate-800">Quadro societário e administradores</p>
+              <p className="text-xs text-slate-500">Visualização compacta para análise cadastral, crédito, contrato e laudo.</p>
+            </div>
+            <DetailChip label="Pendências" value={pendenciasSocios} tone={pendenciasSocios ? "amber" : "emerald"} />
           </div>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <DataCell label="CNPJ" value={empresa.cnpj} icon={<Hash className="w-3.5 h-3.5" />} mono />
-            <DataCell label="Razão social" value={empresa.razao_social} icon={<Building2 className="w-3.5 h-3.5" />} />
-            <DataCell label="Capital social" value={normalizarCapitalSocial(empresa.capital_social)} icon={<Banknote className="w-3.5 h-3.5" />} />
-          </div>
-
           {socios.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm font-semibold text-slate-500">Nenhum sócio identificado na sincronização cadastral.</div>
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm font-semibold text-slate-500">Nenhum sócio retornado para esta empresa.</div>
           ) : (
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-              {socios
-                .filter((s: any) => s?.nome && !/^(?:não|nao) identificado$/i.test(String(s.nome).trim()))
-                .map((s: any) => {
-                  const qualificacao = s.qualificacao_socio || s.qualificacao || s.cargo || "Qualificação não informada";
-                  const administrador = s.administrador === true || s.representante_legal === true || /administrador|titular|empres[aá]rio individual/i.test(String(qualificacao));
-                  return (
-                    <article key={s.id || s.nome} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-sm font-black text-white">{String(s.nome || "?").slice(0, 1).toUpperCase()}</div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-black text-slate-900">{s.nome}</p>
-                            {administrador && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">Sócio-Administrador</span>}
-                            {onEditarSocio && (
-                              <button type="button" onClick={() => onEditarSocio(s)} className="ml-auto rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-50">Editar vínculo</button>
-                            )}
-                          </div>
-                          <p className="mt-2 text-xs font-semibold text-slate-600">Qualificação: <b className="text-slate-800">{qualificacao}</b></p>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+              {socios.map((s: any) => {
+                const pendencias = Array.isArray(s.pendencias_contrato) ? s.pendencias_contrato : pendenciasSocioContrato(s);
+                return (
+                  <div key={s.id || s.nome} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <div className="flex items-start gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-sm font-black shrink-0">{String(s.nome || "?").slice(0, 1).toUpperCase()}</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-black text-slate-900 truncate">{s.nome || "Nome não informado"}</p>
+                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${pendencias.length ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{pendencias.length ? `${pendencias.length} pendência(s)` : "Completo"}</span>
+                          {onEditarSocio && (
+                            <button
+                              type="button"
+                              onClick={() => onEditarSocio(s)}
+                              className="ml-auto rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100"
+                            >
+                              Editar
+                            </button>
+                          )}
                         </div>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {s.qualificacao_socio && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700">{s.qualificacao_socio}</span>}
+                          {s.representante_legal && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">Administrador</span>}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3 text-xs">
+                          <DataCell label="CPF/CNPJ" value={s.cpf_cnpj} mono />
+                          <DataCell label="Contato" value={s.whatsapp || s.telefone || s.email} />
+                          <DataCell label="Estado civil" value={s.estado_civil} />
+                          <DataCell label="Endereço" value={[s.logradouro, s.numero, s.bairro, s.cidade, s.uf].filter(Boolean).join(", ")} />
+                        </div>
+                        {pendencias.length > 0 && (
+                          <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50 p-2">
+                            <p className="text-[11px] font-black text-amber-700 mb-1">Pendências para contrato/análise</p>
+                            <div className="flex flex-wrap gap-1">{pendencias.slice(0, 8).map((p: string) => <span key={p} className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-700">{p}</span>)}</div>
+                          </div>
+                        )}
                       </div>
-                    </article>
-                  );
-                })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -2115,8 +2130,8 @@ export default function Empresas() {
                       <DossieCreditoEmpresa
                         empresaId={selecionada?.id}
                         onAtualizarReceita={selecionada ? () => sincronizarDados(selecionada) : undefined}
-                        onAbrirAcervo={abaPermitida("documentos") && selecionada?.id ? () => setLocation(`/colaborador/empresas/${selecionada.id}/acervo`) : undefined}
                         onAvancar={abaPermitida("documentos") && selecionada?.id ? () => setLocation(`/colaborador/empresas/${selecionada.id}/acervo?etapa=documentacao_empresa`) : undefined}
+                        onAvancarSocietario={abaPermitida("documentos") && selecionada?.id ? () => setLocation(`/colaborador/empresas/${selecionada.id}/acervo?etapa=documentacao_socios`) : undefined}
                       />
                     )
 
@@ -2179,7 +2194,7 @@ export default function Empresas() {
                         </div>
 
                         <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 leading-relaxed">
-                          Na Etapa 1, o QSA confere somente nomes, qualificações e vínculo societário. Dados pessoais e documentos dos sócios serão completados apenas na próxima etapa.
+                          Cadastro atualizado e salvo com dados da Receita/fontes confiáveis. Complete manualmente apenas o que não vier das fontes.
                         </div>
 
                         {sociosExibicao.length === 0 ? (
@@ -2206,8 +2221,8 @@ export default function Empresas() {
                                       <div className="flex flex-wrap gap-1.5 mt-1">
                                         {s.qualificacao_socio && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">{s.qualificacao_socio}</span>}
                                         {s.representante_legal && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Representante legal</span>}
-                                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${completo ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
-                                          {completo ? 'Dados completos' : `${pendencias.length} dado(s) para próxima etapa`}
+                                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${completo ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                          {completo ? 'Completo para contrato' : `${pendencias.length} pendência(s)`}
                                         </span>
                                       </div>
                                     </div>
@@ -2224,15 +2239,15 @@ export default function Empresas() {
                                   {sociosExpandidos[s.id] && (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs border-t border-slate-100 pt-3">
                                       <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Qualificação representante</span><b className="text-slate-700">{s.qualificacao_representante || 'Não informado'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Nascimento</span><b className="text-slate-700">{s.data_nascimento ? new Date(s.data_nascimento).toLocaleDateString('pt-BR') : 'Próxima etapa'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Gênero</span><b className="text-slate-700">{s.genero || 'Próxima etapa'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Estado civil</span><b className="text-slate-700">{s.estado_civil || 'Próxima etapa'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Profissão</span><b className="text-slate-700">{s.profissao || 'Próxima etapa'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">RG</span><b className="text-slate-700">{s.rg || 'Próxima etapa'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Cônjuge</span><b className="text-slate-700">{s.conjuge_nome || 'Próxima etapa'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Endereço</span><b className="text-slate-700">{[s.logradouro, s.numero, s.bairro, s.cidade, s.uf].filter(Boolean).join(', ') || 'Próxima etapa'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">E-mail</span><b className="text-slate-700 truncate block">{s.email || 'Próxima etapa'}</b></div>
-                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Telefone/WhatsApp</span><b className="text-slate-700">{s.whatsapp || s.telefone || 'Próxima etapa'}</b></div>
+                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Nascimento</span><b className="text-slate-700">{s.data_nascimento ? new Date(s.data_nascimento).toLocaleDateString('pt-BR') : 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Gênero</span><b className="text-slate-700">{s.genero || 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Estado civil</span><b className="text-slate-700">{s.estado_civil || 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Profissão</span><b className="text-slate-700">{s.profissao || 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">RG</span><b className="text-slate-700">{s.rg || 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Cônjuge</span><b className="text-slate-700">{s.conjuge_nome || 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Endereço</span><b className="text-slate-700">{[s.logradouro, s.numero, s.bairro, s.cidade, s.uf].filter(Boolean).join(', ') || 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">E-mail</span><b className="text-slate-700 truncate block">{s.email || 'Pendente'}</b></div>
+                                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-2"><span className="block text-slate-400">Telefone/WhatsApp</span><b className="text-slate-700">{s.whatsapp || s.telefone || 'Pendente'}</b></div>
                                     </div>
                                   )}
 
@@ -2268,11 +2283,10 @@ export default function Empresas() {
                                   </div>
 
                                   {pendencias.length > 0 && (
-                                    <div className="rounded-lg bg-blue-50 border border-blue-100 p-2">
-                                      <p className="text-[11px] font-bold text-blue-700 mb-1">Dados pessoais para a próxima etapa</p>
-                                      <p className="mb-1 text-[11px] text-blue-700">Não bloqueiam a conferência inicial do QSA.</p>
+                                    <div className="rounded-lg bg-amber-50 border border-amber-100 p-2">
+                                      <p className="text-[11px] font-bold text-amber-700 mb-1">Pendências para contratos/análises</p>
                                       <div className="flex flex-wrap gap-1">
-                                        {pendencias.slice(0, 8).map((p: string) => <span key={p} className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-blue-200 text-blue-700">{p}</span>)}
+                                        {pendencias.slice(0, 8).map((p: string) => <span key={p} className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-amber-200 text-amber-700">{p}</span>)}
                                       </div>
                                     </div>
                                   )}

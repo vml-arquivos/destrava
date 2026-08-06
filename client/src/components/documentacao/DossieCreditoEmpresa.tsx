@@ -61,7 +61,6 @@ type BlocoDossie = {
   pendencias: Pendencia[];
   documentos: DocumentoBloco[];
   origem?: string;
-  configuracao?: Record<string, any>;
   atualizacao_em?: string;
 };
 
@@ -83,6 +82,7 @@ type IdentidadeCnpj = {
   proxima_etapa: string;
   apto_para_avancar: boolean;
   botao_avancar_disponivel?: boolean;
+  tres_documentos_ok?: boolean;
   quatro_documentos_ok?: boolean;
   documentos_iniciais?: Record<string, DocumentoInicialStatus>;
   idade_meses?: number | null;
@@ -107,21 +107,30 @@ type IdentidadeCnpj = {
   };
 };
 
-
-type AnaliseDocumentalInicialState = {
-  iniciada: boolean;
-  status: "nao_iniciada" | "pronta_para_iniciar" | "processando" | "pendencia_documental" | "falhou" | "apta" | string;
-  documentacao_completa: boolean;
-  documentos_anexados: number;
-  total_documentos: number;
-  documentos_faltantes?: string[];
-  iniciado_em?: string | null;
-  atualizado_em?: string | null;
+type DocumentacaoSocietaria = {
+  etapa: string;
+  titulo: string;
+  habilitada: boolean;
+  iniciada?: boolean;
+  contrato_anexado: boolean;
+  atos_junta_anexados: boolean;
+  analisado: boolean;
+  consistente: boolean;
+  apto_para_avancar: boolean;
+  botao_validar_disponivel: boolean;
+  botao_avancar_disponivel: boolean;
+  nire_contrato?: string | null;
+  nire_junta?: string | null;
+  nire_confere?: boolean;
+  data_registro_contrato?: string | null;
+  data_ato_junta?: string | null;
+  data_confere?: boolean;
+  bloqueios?: string[];
+  avisos?: string[];
+  diagnostico?: string;
 };
 
 type DossieResponse = {
-  processamento_inicial_ativo?: boolean;
-  analise_documental_inicial?: AnaliseDocumentalInicialState;
   empresa: {
     id: string;
     razao_social?: string;
@@ -131,6 +140,7 @@ type DossieResponse = {
     ultima_sincronizacao_receita?: string;
   };
   identidade_cnpj?: IdentidadeCnpj;
+  documentacao_societaria?: DocumentacaoSocietaria;
   resumo: {
     total_blocos: number;
     blocos_completos: number;
@@ -336,48 +346,34 @@ function BlocoCnpj({ bloco }: { bloco: BlocoDossie }) {
 }
 
 function BlocoQsa({ bloco }: { bloco: BlocoDossie }) {
-  const dados = bloco.dados_estruturados || {};
-  const socios = Array.isArray(dados.socios)
-    ? dados.socios.filter((s: any) => s?.nome && !/^(?:não|nao) identificado$/i.test(String(s.nome).trim()))
-    : [];
-
+  const socios = Array.isArray(bloco.dados_estruturados?.socios) ? bloco.dados_estruturados.socios : [];
+  const analise = bloco.dados_estruturados?.analise_documental || {};
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
-        <p className="text-xs font-extrabold text-blue-900">Conferência societária da Etapa 1</p>
-        <p className="mt-1 text-[11px] leading-relaxed text-blue-800">
-          Nesta etapa são conferidos somente CNPJ, razão social, capital social, nome, qualificação e identificação do Sócio-Administrador.
-        </p>
+      <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+        <p className="text-xs font-extrabold text-blue-900">Conferência da Etapa 1</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-blue-800">Somente CNPJ, razão social, capital social, nomes, qualificações e identificação do sócio-administrador. Dados pessoais pertencem às próximas etapas.</p>
       </div>
-
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <MiniCampo label="CNPJ" value={formatCnpj(dados.cnpj)} />
-        <MiniCampo label="Razão social" value={dados.razao_social} />
-        <MiniCampo label="Capital social" value={formatMoney(dados.capital_social)} />
+        <MiniCampo label="CNPJ no QSA" value={analise.cnpj ? formatCnpj(analise.cnpj) : "Aguardando leitura"} />
+        <MiniCampo label="Razão social" value={analise.razao_social || "Aguardando leitura"} />
+        <MiniCampo label="Capital social" value={analise.capital_social !== null && analise.capital_social !== undefined ? formatMoney(analise.capital_social) : "Aguardando leitura"} />
       </div>
-
       {socios.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500">
-          Nenhum sócio foi confirmado na leitura atual do QSA.
-        </div>
+        <div className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500">Nenhum sócio disponível para conferência.</div>
       ) : (
-        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-          {socios.map((s: any, index: number) => (
-            <div key={`${s.nome}-${index}`} className="rounded-lg border border-slate-100 bg-white p-3 text-xs">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p className="font-extrabold text-slate-800">{s.nome}</p>
-                  <p className="mt-1 text-[11px] text-slate-600">Qualificação: <b>{s.qualificacao || "Não identificada"}</b></p>
-                </div>
-                <span className={`rounded-full border px-2 py-1 text-[10px] font-extrabold ${s.administrador ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
-                  {s.administrador ? "Sócio-Administrador" : "Sócio"}
-                </span>
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+          {socios.slice(0, 20).map((s: any) => (
+            <div key={s.id || s.nome} className="rounded-xl border border-slate-100 bg-white p-3">
+              <p className="text-xs font-extrabold text-slate-800">{s.nome || "Sócio sem nome"}</p>
+              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <MiniCampo label="Qualificação" value={s.qualificacao || "Não identificada"} />
+                <MiniCampo label="Sócio-administrador" value={s.administrador ? "Sim" : "Não"} />
               </div>
             </div>
           ))}
         </div>
       )}
-
       <DocumentosDoBloco documentos={bloco.documentos} />
     </div>
   );
@@ -402,7 +398,7 @@ function BlocoCard({ bloco, aberto, onToggle }: { bloco: BlocoDossie; aberto: bo
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-bold text-slate-800 truncate">{String(bloco.ordem || "").padStart(2, "0")}. {bloco.nome_amigavel}</h3>
               {isPrioritario && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white">IMEDIATO</span>}
-              {bloco.obrigatorio && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{bloco.configuracao?.obrigatorio_contexto === "analise_documental" ? "OBRIGATÓRIO NA ANÁLISE" : "NECESSÁRIO NA ETAPA"}</span>}
+              {bloco.obrigatorio && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">OBRIGATÓRIO</span>}
             </div>
             <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{bloco.descricao}</p>
             <div className="flex flex-wrap items-center gap-2 mt-2">
@@ -458,7 +454,7 @@ function AnaliseCnpjCard({ analise }: { analise: AnaliseCnpjEmpresa | null }) {
 
       {!analise ? (
         <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
-          A leitura do Cartão CNPJ faz parte do relatório inicial dos quatro documentos. Quando o processamento terminar, os dados e divergências aparecerão aqui automaticamente.
+          A leitura do Cartão CNPJ faz parte do relatório inicial dos três documentos. Quando o processamento terminar, os dados e divergências aparecerão aqui automaticamente.
         </div>
       ) : (
         <div className="mt-4 space-y-4">
@@ -548,114 +544,50 @@ function AnaliseCnpjCard({ analise }: { analise: AnaliseCnpjEmpresa | null }) {
 
 function ProntidaoIdentidadeCard({
   identidade,
-  fluxo,
   onAvancar,
-  onIniciar,
-  onAbrirAcervo,
   onTentarNovamente,
   processando = false,
 }: {
   identidade?: IdentidadeCnpj;
-  fluxo?: AnaliseDocumentalInicialState;
   onAvancar?: () => void;
-  onIniciar?: () => void;
-  onAbrirAcervo?: () => void;
   onTentarNovamente?: () => void;
   processando?: boolean;
 }) {
   if (!identidade) return null;
   const documentos = Object.values(identidade.documentos_iniciais || {});
-  const anexados = fluxo?.documentos_anexados ?? documentos.filter((item) => item.anexado).length;
-  const documentacaoCompleta = fluxo?.documentacao_completa ?? (documentos.length === 4 && anexados === 4);
-  const analiseIniciada = fluxo?.iniciada === true || processando;
-  const faltantes = fluxo?.documentos_faltantes?.length
-    ? fluxo.documentos_faltantes
-    : documentos.filter((item) => !item.anexado).map((item) => item.nome);
+  const bloqueios = identidade.motivos_pendentes || [];
+  const avisos = identidade.avisos_estrategicos || [];
+  const positivos = identidade.pontos_positivos || [];
   const apto = identidade.apto_para_avancar === true;
-
-  if (!analiseIniciada && !apto) {
-    return (
-      <section className={`rounded-2xl border p-4 ${documentacaoCompleta ? "border-blue-200 bg-blue-50/60" : "border-slate-200 bg-slate-50/70"}`}>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <ShieldCheck className={`h-5 w-5 ${documentacaoCompleta ? "text-blue-700" : "text-slate-500"}`} />
-              <h3 className="text-sm font-extrabold text-slate-900">Análise documental para estratégia de crédito</h3>
-              <span className={`rounded-full border bg-white px-2.5 py-1 text-[11px] font-extrabold ${documentacaoCompleta ? "border-blue-200 text-blue-700" : "border-slate-200 text-slate-600"}`}>
-                {documentacaoCompleta ? "PRONTA PARA INICIAR" : `${anexados}/4 DOCUMENTOS DISPONÍVEIS`}
-              </span>
-            </div>
-            <p className="mt-2 max-w-4xl text-xs leading-relaxed text-slate-700">
-              A empresa pode ser cadastrada, consultada, ter a ficha impressa e usar os demais módulos normalmente. Os quatro documentos iniciais só se tornam obrigatórios quando a equipe iniciar esta análise para montar a estratégia e a proposta de crédito.
-            </p>
-          </div>
-          {documentacaoCompleta ? (
-            onIniciar && (
-              <button type="button" onClick={onIniciar} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-sm hover:bg-blue-700">
-                Iniciar análise documental <ArrowRight className="h-4 w-4" />
-              </button>
-            )
-          ) : (
-            onAbrirAcervo && (
-              <button type="button" onClick={onAbrirAcervo} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-extrabold text-slate-700 shadow-sm hover:bg-slate-50">
-                Anexar documentos para análise <ArrowRight className="h-4 w-4" />
-              </button>
-            )
-          )}
-        </div>
-
-        <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
-          {documentos.map((item) => (
-            <article key={item.codigo || item.nome} className="rounded-xl border border-white bg-white p-3 shadow-sm">
-              <div className="flex items-center gap-2">
-                {item.anexado ? <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" /> : <FileText className="h-4 w-4 shrink-0 text-slate-400" />}
-                <div className="min-w-0">
-                  <p className="text-xs font-extrabold text-slate-800">{item.nome}</p>
-                  <p className={`mt-0.5 text-[11px] font-bold ${item.anexado ? "text-emerald-700" : "text-slate-500"}`}>{item.anexado ? "Anexado" : "Disponível para anexar"}</p>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-
-        {!documentacaoCompleta && faltantes.length > 0 && (
-          <p className="mt-3 text-[11px] leading-relaxed text-slate-600"><b>Para iniciar a análise:</b> {faltantes.join(", ")}.</p>
-        )}
-        <p className="mt-2 text-[11px] font-semibold text-slate-500">O botão “Prosseguir para a próxima etapa” só será liberado após os quatro documentos serem lidos, cruzados com a Receita Federal e aprovados sem pendência impeditiva.</p>
-      </section>
-    );
-  }
-
-  const bloqueios = Array.from(new Set(identidade.motivos_pendentes || []));
-  const avisos = Array.from(new Set(identidade.avisos_estrategicos || []));
+  const totalDocumentos = identidade.relatorio?.total_documentos_iniciais ?? documentos.length;
   const falhasLeitura = documentos.filter((item) => item.status === "falha_leitura");
-  const analisados = documentos.filter((item) => item.analisado).length;
+  const aguardando = documentos.filter((item) => item.anexado && !item.analisado && item.status !== "falha_leitura");
 
   const statusLabel = (item: DocumentoInicialStatus) => {
-    if (item.consistente) return "Conforme";
-    if (!item.anexado) return "Documento ausente";
-    if (item.status === "falha_leitura") return "Leitura não concluída";
-    if (!item.analisado) return processando ? "Lendo documento" : "Processamento pendente";
-    return "Divergência encontrada";
+    if (item.consistente) return "Lido e consistente";
+    if (!item.anexado) return "Não anexado";
+    if (item.status === "falha_leitura") return "Falha na leitura";
+    if (!item.analisado) return processando ? "Processando..." : "Aguardando início da análise";
+    return "Revisão necessária";
   };
 
-  const resumoCampos = (item: DocumentoInicialStatus) => {
-    const campos = item.campos_principais || {};
-    if (item.codigo === "cartao_cnpj") return [campos.cnpj, campos.razao_social, campos.cnae].filter(Boolean).map(String).slice(0, 3);
-    if (item.codigo === "qsa") {
-      const socios = Array.isArray(campos.socios) ? campos.socios : [];
-      const resumoSocios = socios
-        .filter((socio: any) => socio?.nome && !/^(?:não|nao) identificado$/i.test(String(socio.nome).trim()))
-        .map((socio: any) => `${socio.nome} — ${socio.qualificacao || (socio.administrador ? "Sócio-Administrador" : "Sócio")}`);
-      return [
-        campos.cnpj ? `CNPJ ${campos.cnpj}` : null,
-        campos.razao_social ? `Razão social: ${campos.razao_social}` : null,
-        campos.capital_social != null ? `Capital: ${formatMoney(campos.capital_social)}` : null,
-        ...resumoSocios.map((socio: string) => `Sócio: ${socio}`),
-      ].filter(Boolean).map(String);
-    }
-    if (item.codigo === "enquadramento_tributario") return [campos.regime_tributario, campos.situacao_simples].filter(Boolean).map(String);
-    return [campos.tipo_ato, campos.data_registro, campos.capital_social != null ? formatMoney(campos.capital_social) : null].filter(Boolean).map(String);
+  const campoLabel: Record<string, string> = {
+    cnpj: "CNPJ",
+    razao_social: "Razão social",
+    cnae: "CNAE",
+    situacao_cadastral: "Situação",
+    capital_social: "Capital social",
+    socios_identificados: "Sócios",
+    regime_tributario: "Regime",
+    situacao_simples: "Simples",
+    exclusao_agendada: "Exclusão agendada",
+  };
+
+  const formatarCampo = (chave: string, valor: unknown) => {
+    if (valor === null || valor === undefined || valor === "") return null;
+    if (typeof valor === "boolean") return valor ? "Sim" : "Não";
+    if (chave.includes("capital")) return formatMoney(valor);
+    return String(valor);
   };
 
   return (
@@ -663,77 +595,172 @@ function ProntidaoIdentidadeCard({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            {apto ? <ShieldCheck className="h-5 w-5 text-emerald-700" /> : <ShieldAlert className={`h-5 w-5 ${falhasLeitura.length ? "text-red-700" : "text-amber-700"}`} />}
-            <h3 className="text-sm font-extrabold text-slate-900">Resultado da análise documental inicial</h3>
+            {apto ? <ShieldCheck className="h-5 w-5 text-emerald-700" /> : falhasLeitura.length ? <ShieldAlert className="h-5 w-5 text-red-700" /> : <ShieldAlert className="h-5 w-5 text-amber-700" />}
+            <h3 className="text-sm font-extrabold text-slate-900">Relatório inicial — Identidade do CNPJ</h3>
             <span className={`rounded-full border bg-white px-2.5 py-1 text-[11px] font-extrabold ${apto ? "border-emerald-200 text-emerald-700" : falhasLeitura.length ? "border-red-200 text-red-700" : "border-amber-200 text-amber-800"}`}>
-              {apto ? "APTA PARA PROSSEGUIR" : processando ? `ANALISANDO ${analisados}/4` : "PENDÊNCIA DOCUMENTAL"}
+              {apto ? "Tudo OK — pode avançar" : processando ? "Lendo e cruzando documentos" : falhasLeitura.length ? `${falhasLeitura.length} falha(s) de leitura` : "Avanço bloqueado"}
             </span>
           </div>
-          <p className="mt-2 max-w-4xl text-xs leading-relaxed text-slate-700">
-            {apto
-              ? "CNPJ, QSA, enquadramento tributário e Atos da Junta foram lidos e conferidos com os dados sincronizados da Receita Federal."
-              : processando
-                ? "A leitura e o cruzamento estão em andamento. Esta tela será atualizada automaticamente."
-                : identidade.diagnostico}
-          </p>
+          <p className="mt-2 max-w-4xl text-xs leading-relaxed text-slate-700">{identidade.diagnostico}</p>
         </div>
-        {apto && onAvancar && (
-          <button type="button" onClick={onAvancar} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-sm hover:bg-emerald-700">
-            Prosseguir para a próxima etapa <ArrowRight className="h-4 w-4" />
-          </button>
-        )}
-        {!apto && !processando && onTentarNovamente && (
-          <button type="button" onClick={onTentarNovamente} className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-xs font-extrabold shadow-sm ${falhasLeitura.length ? "border-red-200 text-red-700 hover:bg-red-50" : "border-amber-200 text-amber-800 hover:bg-amber-50"}`}>
-            <RefreshCw className="h-4 w-4" />
-            {falhasLeitura.length ? "Reprocessar leitura" : "Atualizar análise documental"}
-          </button>
-        )}
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {(falhasLeitura.length > 0 || (documentos.length === 3 && documentos.every((item) => item.anexado) && aguardando.length > 0)) && onTentarNovamente && (
+            <button
+              type="button"
+              onClick={onTentarNovamente}
+              disabled={processando}
+              className={`inline-flex items-center justify-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-xs font-extrabold shadow-sm disabled:opacity-60 ${falhasLeitura.length ? "border-red-200 text-red-700 hover:bg-red-50" : "border-blue-200 text-blue-700 hover:bg-blue-50"}`}
+            >
+              {processando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {processando ? "Processando..." : falhasLeitura.length ? "Tentar leitura novamente" : "Iniciar análise documental"}
+            </button>
+          )}
+          {apto && onAvancar && (
+            <button
+              type="button"
+              onClick={onAvancar}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-sm hover:bg-emerald-700"
+            >
+              Avançar para próxima etapa <ArrowRight className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
+      {processando && (
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-blue-100 bg-white px-3 py-2 text-xs font-semibold text-blue-700">
+          <Loader2 className="h-4 w-4 animate-spin" /> Análise documental em andamento. O resultado será atualizado nesta tela.
+        </div>
+      )}
+
+      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
         {documentos.map((item) => {
-          const resumos = resumoCampos(item);
+          const campos = Object.entries(item.campos_principais || {})
+            .map(([chave, valor]) => ({ chave, valor: formatarCampo(chave, valor) }))
+            .filter((campo) => campo.valor !== null)
+            .slice(0, 4);
           const cor = item.consistente ? "emerald" : item.status === "falha_leitura" ? "red" : "amber";
           return (
-            <article key={item.codigo || item.nome} className="rounded-xl border border-white bg-white p-3 shadow-sm">
+            <article key={item.codigo || item.nome} className="rounded-xl border border-white/90 bg-white p-3 shadow-sm">
               <div className="flex items-start gap-2">
-                {item.consistente ? <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> : processando && !item.analisado ? <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-blue-600" /> : <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${cor === "red" ? "text-red-600" : "text-amber-600"}`} />}
+                {item.consistente
+                  ? <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                  : <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${cor === "red" ? "text-red-600" : "text-amber-600"}`} />}
                 <div className="min-w-0">
                   <p className="text-xs font-extrabold text-slate-800">{item.nome}</p>
-                  <p className={`mt-0.5 text-[11px] font-bold ${cor === "emerald" ? "text-emerald-700" : cor === "red" ? "text-red-700" : processando && !item.analisado ? "text-blue-700" : "text-amber-700"}`}>{statusLabel(item)}</p>
+                  <p className={`mt-1 text-[11px] font-bold ${cor === "emerald" ? "text-emerald-700" : cor === "red" ? "text-red-700" : "text-amber-700"}`}>{statusLabel(item)}</p>
                 </div>
               </div>
-              {resumos.length > 0 && <p className={`mt-2 text-[10px] font-semibold leading-relaxed text-slate-600 ${item.codigo === "qsa" ? "line-clamp-4" : "line-clamp-2"}`}>{resumos.join(" · ")}</p>}
-              {!item.consistente && item.diagnostico && <p className="mt-2 line-clamp-3 text-[10px] leading-relaxed text-slate-500">{item.diagnostico}</p>}
+              <p className="mt-2 text-[11px] leading-relaxed text-slate-600">{item.diagnostico || "Sem diagnóstico registrado."}</p>
+              {campos.length > 0 && (
+                <dl className="mt-2 space-y-1 border-t border-slate-100 pt-2">
+                  {campos.map(({ chave, valor }) => (
+                    <div key={chave} className="flex items-start justify-between gap-2 text-[10px]">
+                      <dt className="shrink-0 font-semibold text-slate-400">{campoLabel[chave] || chave.replace(/_/g, " ")}</dt>
+                      <dd className="min-w-0 truncate text-right font-bold text-slate-700" title={String(valor)}>{valor}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
             </article>
           );
         })}
       </div>
 
-      <div className={`mt-3 rounded-xl border bg-white p-3 ${apto ? "border-emerald-100" : "border-red-100"}`}>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px]">
-          <span className="font-semibold text-slate-600">Receita: <b className={identidade.situacao_cadastral_ativa ? "text-emerald-700" : "text-red-700"}>{identidade.situacao_cadastral_ativa ? "Ativa" : "Não confirmada"}</b></span>
-          <span className="font-semibold text-slate-600">Abertura: <b className="text-slate-800">{identidade.idade_meses == null ? "Não confirmada" : `${identidade.idade_meses} meses`}</b></span>
-          <span className="font-semibold text-slate-600">Enquadramento: <b className="text-slate-800">{identidade.enquadramento_tributario || "Não identificado"}</b></span>
-        </div>
-        {!apto && bloqueios.length > 0 && !processando && (
-          <div className="mt-2 border-t border-red-100 pt-2">
-            <p className="text-xs font-extrabold text-red-800">O que deve ser resolvido</p>
-            <div className="mt-1 space-y-1">{bloqueios.slice(0, 6).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-red-700">• {item}</p>)}</div>
-          </div>
-        )}
-        {apto && <p className="mt-2 border-t border-emerald-100 pt-2 text-xs font-bold text-emerald-800">Nenhum impedimento documental identificado nesta etapa.</p>}
-        {avisos.length > 0 && !processando && <p className="mt-2 text-[11px] text-amber-800"><b>Atenção:</b> {avisos[0]}</p>}
+      <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-slate-400">Analisados</span><b className="block text-base text-slate-900">{identidade.relatorio?.documentos_analisados ?? documentos.filter((item) => item.analisado).length}/{totalDocumentos}</b></div>
+        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-slate-400">Consistentes</span><b className="block text-base text-slate-900">{identidade.relatorio?.documentos_conferidos ?? 0}/{totalDocumentos}</b></div>
+        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-slate-400">Tempo de abertura</span><b className="block text-base text-slate-900">{identidade.idade_meses == null ? "Não confirmado" : `${identidade.idade_meses} meses`}</b></div>
+        <div className="rounded-xl border border-white/80 bg-white p-3"><span className="text-[10px] font-bold uppercase text-slate-400">Enquadramento</span><b className="block truncate text-sm text-slate-900">{identidade.enquadramento_tributario || "Não identificado"}</b></div>
       </div>
+
+      {(bloqueios.length > 0 || avisos.length > 0 || positivos.length > 0) && (
+        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <div className="rounded-xl border border-emerald-100 bg-white p-3">
+            <p className="text-xs font-extrabold text-emerald-800">Confirmações</p>
+            <div className="mt-2 space-y-1">{positivos.length ? positivos.slice(0, 6).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-emerald-800">• {item}</p>) : <p className="text-[11px] text-slate-500">Aguardando confirmações.</p>}</div>
+          </div>
+          <div className="rounded-xl border border-red-100 bg-white p-3">
+            <p className="text-xs font-extrabold text-red-800">O que precisa ser resolvido</p>
+            <div className="mt-2 space-y-1">{bloqueios.length ? bloqueios.slice(0, 8).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-red-800">• {item}</p>) : <p className="text-[11px] text-emerald-700">Nenhuma pendência impeditiva.</p>}</div>
+          </div>
+          <div className="rounded-xl border border-amber-100 bg-white p-3">
+            <p className="text-xs font-extrabold text-amber-800">Avisos estratégicos</p>
+            <div className="mt-2 space-y-1">{avisos.length ? avisos.slice(0, 6).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-amber-800">• {item}</p>) : <p className="text-[11px] text-slate-500">Sem avisos adicionais.</p>}</div>
+          </div>
+        </div>
+      )}
+
     </section>
   );
 }
 
-export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, onAvancar, onAbrirAcervo }: { empresaId?: string; onAtualizarReceita?: () => void; onAvancar?: () => void; onAbrirAcervo?: () => void }) {
+
+function DocumentacaoSocietariaCard({
+  dados,
+  processando,
+  onValidar,
+  onAbrirDocumentos,
+  onAvancar,
+}: {
+  dados?: DocumentacaoSocietaria;
+  processando: boolean;
+  onValidar: () => void;
+  onAbrirDocumentos?: () => void;
+  onAvancar?: () => void;
+}) {
+  if (!dados?.habilitada) return null;
+  const apto = dados.apto_para_avancar === true;
+  return (
+    <section className={`rounded-2xl border p-4 ${apto ? "border-emerald-200 bg-emerald-50/60" : "border-blue-200 bg-blue-50/50"}`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            {apto ? <ShieldCheck className="h-5 w-5 text-emerald-700" /> : <FileText className="h-5 w-5 text-blue-700" />}
+            <h3 className="text-sm font-extrabold text-slate-900">Etapa 2 — Contrato Social e Junta Comercial</h3>
+            <span className={`rounded-full border bg-white px-2.5 py-1 text-[11px] font-extrabold ${apto ? "border-emerald-200 text-emerald-700" : "border-blue-200 text-blue-700"}`}>
+              {apto ? "NIRE e data conferem" : dados.analisado ? "Revisão necessária" : "Aguardando validação"}
+            </span>
+          </div>
+          <p className="mt-2 max-w-4xl text-xs leading-relaxed text-slate-700">{dados.diagnostico}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(!dados.contrato_anexado || !dados.atos_junta_anexados) && onAbrirDocumentos && (
+            <button type="button" onClick={onAbrirDocumentos} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700">
+              Anexar documentos da Etapa 2 <ArrowRight className="h-4 w-4" />
+            </button>
+          )}
+          {dados.botao_validar_disponivel && !apto && (
+            <button type="button" onClick={onValidar} disabled={processando} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-60">
+              {processando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {processando ? "Conferindo..." : "Validar NIRE e data"}
+            </button>
+          )}
+          {apto && onAvancar && (
+            <button type="button" onClick={onAvancar} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-emerald-700">
+              Prosseguir para próxima análise <ArrowRight className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Contrato/Alteração</p><p className="mt-1 text-xs font-extrabold text-slate-800">{dados.contrato_anexado ? "Anexado" : "Não anexado"}</p></div>
+        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Atos da Junta</p><p className="mt-1 text-xs font-extrabold text-slate-800">{dados.atos_junta_anexados ? "Anexado" : "Não anexado"}</p></div>
+        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">NIRE</p><p className={`mt-1 text-xs font-extrabold ${dados.nire_confere ? "text-emerald-700" : "text-slate-800"}`}>{dados.nire_contrato || dados.nire_junta || "Aguardando leitura"}</p></div>
+        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Data de registro</p><p className={`mt-1 text-xs font-extrabold ${dados.data_confere ? "text-emerald-700" : "text-slate-800"}`}>{dados.data_registro_contrato || dados.data_ato_junta || "Aguardando leitura"}</p></div>
+      </div>
+      {!!dados.bloqueios?.length && <div className="mt-3 rounded-xl border border-red-100 bg-white p-3"><p className="text-xs font-extrabold text-red-800">Pendências</p>{dados.bloqueios.map((item, index) => <p key={index} className="mt-1 text-[11px] text-red-800">• {item}</p>)}</div>}
+      <p className="mt-3 text-[11px] text-slate-600">O CNPJ nos Atos da Junta é informativo. A validação obrigatória usa NIRE e data do registro, porque algumas Juntas não exibem CNPJ.</p>
+    </section>
+  );
+}
+
+export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, onAvancar, onAvancarSocietario }: { empresaId?: string; onAtualizarReceita?: () => void; onAvancar?: () => void; onAvancarSocietario?: () => void }) {
   const [dossie, setDossie] = useState<DossieResponse | null>(null);
   const [analiseCnpj, setAnaliseCnpj] = useState<AnaliseCnpjEmpresa | null>(null);
   const [loading, setLoading] = useState(false);
   const [recalculando, setRecalculando] = useState(false);
+  const [validandoSocietario, setValidandoSocietario] = useState(false);
   const [abertos, setAbertos] = useState<Record<string, boolean>>({ cnpj_receita: false, qsa_quadro_societario: false });
   const [mostrarDetalhesIniciais, setMostrarDetalhesIniciais] = useState(false);
   const [mostrarProximasEtapas, setMostrarProximasEtapas] = useState(false);
@@ -766,64 +793,84 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, on
 
   useEffect(() => { carregarAnaliseCnpj(); }, [carregarAnaliseCnpj]);
 
-  const iniciarAnalise = async (forcar = false) => {
+  const recalcular = async (opcoes: { silencioso?: boolean } = {}) => {
     if (!empresaId) return;
-    const fluxoAtual = dossie?.analise_documental_inicial;
-    if (fluxoAtual?.documentacao_completa !== true) {
-      toast.info("Os quatro documentos são obrigatórios somente para iniciar a análise documental. O cadastro e as demais funções continuam disponíveis.");
-      onAbrirAcervo?.();
-      return;
-    }
-
-    const aplicarResposta = (payload: any, fallback?: DossieResponse | null) => {
-      const base = payload?.dossie || payload || fallback;
-      if (!base?.empresa) return base;
-      const fluxo = payload?.analise_documental_inicial || base?.analise_documental_inicial;
-      const completo = { ...base, analise_documental_inicial: fluxo } as DossieResponse;
-      setDossie(completo);
-      return completo;
-    };
-
     setRecalculando(true);
     try {
       const inicio = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-inicial/iniciar`, {
         method: "POST",
-        body: JSON.stringify({ forcar }),
+        body: JSON.stringify({ forcar: opcoes.silencioso !== true }),
       });
-      let data = aplicarResposta(inicio, dossie);
-      let processando = inicio?.processando === true;
+      let data = inicio?.dossie || inicio;
+      if (data?.empresa) setDossie(data);
 
+      let processando = inicio?.processando === true;
       for (let tentativa = 0; processando && tentativa < 60; tentativa += 1) {
         await new Promise((resolve) => window.setTimeout(resolve, 3000));
         const status = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-inicial/status`);
-        data = aplicarResposta(status, data);
+        data = status?.dossie || data;
+        if (data?.empresa) setDossie(data);
         processando = status?.processando === true;
       }
 
       await carregarAnaliseCnpj();
-      if (processando) {
-        toast.info("A leitura continua em segundo plano. O relatório será atualizado quando a análise terminar.");
-      } else if (data?.identidade_cnpj?.apto_para_avancar) {
-        toast.success("Documentação aprovada. A próxima etapa está liberada.");
-      } else {
+      if (!opcoes.silencioso) {
         const documentos = Object.values(data?.identidade_cnpj?.documentos_iniciais || {}) as Array<any>;
-        const falhas = documentos.filter((item) => item?.status === "falha_leitura").length;
         const analisados = documentos.filter((item) => item?.analisado).length;
-        if (falhas > 0) toast.warning(`A análise terminou com ${falhas} falha(s) de leitura. Reprocesse somente os documentos indicados.`);
-        else if (analisados === 4) toast.info("A análise foi concluída. Corrija somente as divergências indicadas para liberar a próxima etapa.");
-        else toast.warning("A análise não foi concluída. Consulte o status dos documentos no relatório.");
+        const falhas = documentos.filter((item) => item?.status === "falha_leitura").length;
+        if (processando) {
+          toast.info("A leitura continua em segundo plano. O relatório será atualizado automaticamente ao concluir.");
+        } else if (data?.identidade_cnpj?.apto_para_avancar) {
+          toast.success("Relatório concluído. A próxima etapa está liberada.");
+        } else if (falhas > 0) {
+          toast.warning(`Relatório concluído com ${falhas} falha(s) de leitura. O motivo está identificado em cada documento.`);
+        } else if (analisados === 3) {
+          toast.info("Relatório concluído. Revise somente as divergências indicadas antes de avançar.");
+        } else {
+          toast.warning(`Processamento concluído, mas ${3 - analisados} documento(s) ainda precisam de leitura.`);
+        }
       }
-      await carregar();
     } catch (err: any) {
-      toast.error(err?.message || "Erro ao iniciar a análise documental");
+      if (!opcoes.silencioso) toast.error(err?.message || "Erro ao processar os documentos iniciais");
+      else console.warn("[DossieCreditoEmpresa] análise automática pendente:", err?.message || err);
     } finally {
       setRecalculando(false);
     }
   };
 
-  const CODIGOS_IDENTIDADE = ["cnpj_receita", "qsa_quadro_societario", "atos_junta_comercial", "enquadramento_tributario"];
+
+  const validarSocietario = async () => {
+    if (!empresaId) return;
+    setValidandoSocietario(true);
+    try {
+      const inicio = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-societaria/iniciar`, { method: "POST" });
+      let processando = inicio?.processando === true;
+      let data = inicio?.dossie;
+      if (data?.empresa) setDossie(data);
+      for (let tentativa = 0; processando && tentativa < 60; tentativa += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 3000));
+        const status = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-societaria/status`);
+        processando = status?.processando === true;
+        data = status?.dossie || data;
+        if (data?.empresa) setDossie(data);
+      }
+      if (data?.documentacao_societaria?.apto_para_avancar) toast.success("NIRE e data de registro conferem. A próxima análise está liberada.");
+      else toast.info("Validação concluída. Revise somente as pendências indicadas.");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao validar Contrato Social e Atos da Junta");
+    } finally {
+      setValidandoSocietario(false);
+    }
+  };
+
+  const CODIGOS_IDENTIDADE = ["cnpj_receita", "qsa_quadro_societario", "enquadramento_tributario"];
+  const CODIGOS_ETAPAS_GUIADAS = [...CODIGOS_IDENTIDADE, "contrato_social_alteracoes", "atos_junta_comercial"];
   const blocosPrioritarios = useMemo(() => (dossie?.blocos || []).filter((b) => CODIGOS_IDENTIDADE.includes(b.codigo)), [dossie]);
-  const demaisBlocos = useMemo(() => (dossie?.blocos || []).filter((b) => !CODIGOS_IDENTIDADE.includes(b.codigo)), [dossie]);
+  // Contrato/Alteração e Atos da Junta já possuem o cartão único da Etapa 2.
+  // Não repetimos esses mesmos dados novamente na lista genérica do dossiê.
+  const demaisBlocos = useMemo(() => (dossie?.blocos || []).filter((b) => !CODIGOS_ETAPAS_GUIADAS.includes(b.codigo)), [dossie]);
+
+
 
   if (!empresaId) return null;
 
@@ -844,17 +891,21 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, on
     <div className="p-4 fade-in space-y-3">
       <ProntidaoIdentidadeCard
         identidade={identidade}
-        fluxo={dossie?.analise_documental_inicial}
         onAvancar={onAvancar}
-        onIniciar={() => void iniciarAnalise(false)}
-        onAbrirAcervo={onAbrirAcervo}
-        onTentarNovamente={() => void iniciarAnalise(true)}
-        processando={recalculando || dossie?.processamento_inicial_ativo === true || dossie?.analise_documental_inicial?.status === "processando"}
+        onTentarNovamente={() => void recalcular()}
+        processando={recalculando}
+      />
+      <DocumentacaoSocietariaCard
+        dados={dossie?.documentacao_societaria}
+        processando={validandoSocietario}
+        onValidar={() => void validarSocietario()}
+        onAbrirDocumentos={onAvancar}
+        onAvancar={onAvancarSocietario}
       />
 
       {!identidade && !recalculando && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-          A empresa permanece disponível normalmente. A análise documental poderá ser iniciada quando os quatro documentos iniciais estiverem anexados.
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+          O relatório inicial usa Cartão CNPJ, QSA e Enquadramento Tributário.
         </div>
       )}
 

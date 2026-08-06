@@ -1,7 +1,7 @@
 -- 079_prontidao_documental_ia_local.sql
 -- Correção aditiva para o Dossiê de Crédito e prontidão documental.
 -- 1) Compatibiliza a origem das análises de IA.
--- 2) Garante os blocos dos quatro documentos iniciais.
+-- 2) Garante os três documentos iniciais e a etapa societária seguinte.
 -- 3) Não altera nem remove documentos, empresas, sócios, contratos ou análises existentes.
 
 DO $$
@@ -30,10 +30,14 @@ BEGIN
        'Comprovante e validação do enquadramento tributário, opção pelo Simples Nacional e condição MEI.',
        'empresa', true, 3,
        '{"etapa":"identidade_cnpj","documento_inicial":true,"analise":"simples_nacional"}'::jsonb),
-      ('atos_junta_comercial', 'Atos da Junta Comercial',
-       'Atos, alterações, consolidações e registros da Junta Comercial para validação societária e de capital.',
+      ('contrato_social_alteracoes', 'Contrato Social e Alterações',
+       'Contrato social vigente e alterações contratuais para conferência do NIRE e da data de registro.',
        'empresa', true, 4,
-       '{"etapa":"identidade_cnpj","documento_inicial":true,"analise":"atos_junta_comercial"}'::jsonb)
+       '{"etapa":"documentacao_societaria","documento_inicial":false,"analise":"contrato_junta"}'::jsonb),
+      ('atos_junta_comercial', 'Atos da Junta Comercial',
+       'Certidão ou lista de arquivamentos para conferir NIRE e data de registro com o contrato/alteração social. O CNPJ é informativo.',
+       'empresa', true, 5,
+       '{"etapa":"documentacao_societaria","documento_inicial":false,"analise":"atos_junta_comercial"}'::jsonb)
     ON CONFLICT (codigo) DO UPDATE SET
       nome_amigavel = EXCLUDED.nome_amigavel,
       descricao = EXCLUDED.descricao,

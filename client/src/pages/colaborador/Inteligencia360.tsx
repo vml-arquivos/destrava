@@ -59,13 +59,8 @@ interface EtapaIdentidadeDocumental {
   etapa: "identidade_cnpj";
   titulo: string;
   apto_para_avancar: boolean;
-  analise_iniciada: boolean;
-  status_fluxo: "nao_iniciada" | "pronta_para_iniciar" | "processando" | "pendencia_documental" | "falhou" | "apta" | string;
-  documentacao_completa: boolean;
-  documentos_anexados: number;
   documentos_ok: number;
   total_documentos: number;
-  requisitos_para_iniciar: string[];
   documentos: Array<{
     codigo: string;
     nome: string;
@@ -309,6 +304,7 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
 
   useEffect(() => { void carregar(); }, [carregar]);
 
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 gap-3 text-slate-400">
@@ -348,65 +344,94 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
   const etapaInicial = data.etapa_identidade_documental;
 
   if (!mostrarAnaliseCompleta) {
-    const bloqueiosIniciais = Array.from(new Set(safeArr<string>(etapaInicial?.bloqueios)));
+    const documentosIniciais = safeArr<any>(etapaInicial?.documentos);
+    const bloqueiosIniciais = safeArr<string>(etapaInicial?.bloqueios);
     const aptoInicial = etapaInicial?.apto_para_avancar === true;
-    const analiseIniciada = etapaInicial?.analise_iniciada === true;
-    const processando = etapaInicial?.status_fluxo === "processando";
-    const documentosAnexados = Number(etapaInicial?.documentos_anexados || 0);
-    const primeiroBloqueio = bloqueiosIniciais[0];
-    const corEtapa = aptoInicial
-      ? "border-emerald-200 bg-emerald-50/70"
-      : analiseIniciada
-        ? "border-amber-200 bg-amber-50/60"
-        : "border-blue-200 bg-blue-50/60";
-    const rotuloEtapa = aptoInicial
-      ? "APTA PARA PROSSEGUIR"
-      : processando
-        ? "ANÁLISE EM ANDAMENTO"
-        : analiseIniciada
-          ? "PENDÊNCIA DOCUMENTAL"
-          : etapaInicial?.documentacao_completa
-            ? "PRONTA PARA INICIAR"
-            : `${documentosAnexados}/4 PARA ANÁLISE`;
 
     return (
       <div className="max-w-[1400px] space-y-3 p-4">
-        <section className={`rounded-2xl border p-4 ${corEtapa}`}>
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <section className={`rounded-2xl border p-4 ${aptoInicial ? "border-emerald-200 bg-emerald-50/70" : "border-amber-200 bg-amber-50/60"}`}>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                {aptoInicial ? <ShieldCheck className="h-5 w-5 text-emerald-700" /> : analiseIniciada ? <ShieldAlert className="h-5 w-5 text-amber-700" /> : <ShieldCheck className="h-5 w-5 text-blue-700" />}
-                <h2 className="text-base font-black text-slate-900">Análise documental inicial</h2>
-                <span className={`rounded-full border bg-white px-2.5 py-1 text-[11px] font-black ${aptoInicial ? "border-emerald-200 text-emerald-700" : analiseIniciada ? "border-amber-200 text-amber-800" : "border-blue-200 text-blue-700"}`}>
-                  {rotuloEtapa}
+                {aptoInicial ? <ShieldCheck className="h-5 w-5 text-emerald-700" /> : <ShieldAlert className="h-5 w-5 text-amber-700" />}
+                <h2 className="text-base font-black text-slate-900">Etapa 1 — Identidade do CNPJ</h2>
+                <span className={`rounded-full border bg-white px-2.5 py-1 text-[11px] font-black ${aptoInicial ? "border-emerald-200 text-emerald-700" : "border-amber-200 text-amber-800"}`}>
+                  {aptoInicial ? "Tudo OK — pode avançar" : `${etapaInicial?.documentos_ok ?? 0}/3 documentos consistentes`}
                 </span>
               </div>
               <p className="mt-2 max-w-4xl text-xs leading-relaxed text-slate-700">
-                {aptoInicial
-                  ? "Os quatro documentos iniciais foram lidos e conferidos com os dados sincronizados da Receita Federal."
-                  : analiseIniciada
-                    ? primeiroBloqueio || etapaInicial?.diagnostico || "A análise documental inicial está em andamento."
-                    : etapaInicial?.diagnostico || "A documentação só será exigida quando a equipe iniciar a análise para estratégia e proposta de crédito."}
+                {etapaInicial?.diagnostico || "A análise inicial ainda não foi consolidada. Abra o Dossiê / Laudo IA para processar os três documentos."}
               </p>
-              {analiseIniciada && (
-                <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[11px] font-semibold text-slate-600">
-                  <span>Receita: <b className={etapaInicial?.situacao_cadastral_ativa ? "text-emerald-700" : "text-red-700"}>{etapaInicial?.situacao_cadastral_ativa ? "Ativa" : "Não confirmada"}</b></span>
-                  <span>Abertura: <b className="text-slate-800">{etapaInicial?.idade_meses == null ? "Não confirmada" : `${etapaInicial.idade_meses} meses`}</b></span>
-                </div>
-              )}
             </div>
             {onNavegar && (
-              <button type="button" onClick={() => onNavegar("dossie_credito")} className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50">
-                {analiseIniciada ? "Ver resultado documental" : "Preparar análise documental"} <ArrowRight className="h-3.5 w-3.5" />
+              <button
+                type="button"
+                onClick={() => onNavegar("dossie_credito")}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Ver laudo inicial <ArrowRight className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-3">
+            {(documentosIniciais.length ? documentosIniciais : [
+              { codigo: "cartao_cnpj", nome: "Cartão CNPJ" },
+              { codigo: "qsa", nome: "QSA / Quadro Societário" },
+              { codigo: "enquadramento_tributario", nome: "Enquadramento Tributário" },
+            ]).map((doc: any) => (
+              <div key={doc.codigo} className="rounded-xl border border-white bg-white p-3 shadow-sm">
+                <div className="flex items-start gap-2">
+                  {doc.consistente ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" /> : <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600" />}
+                  <div>
+                    <p className="text-xs font-black text-slate-800">{doc.nome}</p>
+                    <p className={`mt-1 text-[11px] font-semibold ${doc.consistente ? "text-emerald-700" : doc.status === "falha_leitura" ? "text-red-700" : "text-amber-700"}`}>
+                      {doc.consistente ? "Lido e consistente" : !doc.anexado ? "Não anexado" : doc.status === "falha_leitura" ? "Falha na leitura" : !doc.analisado ? "Processamento pendente" : "Revisão necessária"}
+                    </p>
+                    {doc.diagnostico && <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-slate-500">{doc.diagnostico}</p>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+            <div className="rounded-xl border border-white bg-white p-3">
+              <p className="text-[10px] font-bold uppercase text-slate-400">Receita Federal</p>
+              <p className={`mt-1 text-xs font-black ${etapaInicial?.situacao_cadastral_ativa ? "text-emerald-700" : "text-red-700"}`}>
+                {etapaInicial?.situacao_cadastral_ativa ? "Situação cadastral ativa" : "Situação cadastral não confirmada"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white bg-white p-3">
+              <p className="text-[10px] font-bold uppercase text-slate-400">Tempo de abertura</p>
+              <p className="mt-1 text-xs font-black text-slate-800">{etapaInicial?.idade_meses == null ? "Não confirmado" : `${etapaInicial.idade_meses} meses`}</p>
+            </div>
+            <div className="rounded-xl border border-white bg-white p-3">
+              <p className="text-[10px] font-bold uppercase text-slate-400">Próxima etapa</p>
+              <p className="mt-1 text-xs font-semibold text-slate-700">{aptoInicial ? "Contrato/Alteração Social e Atos da Junta" : "Bloqueada até concluir a identidade do CNPJ"}</p>
+            </div>
+          </div>
+
+          {bloqueiosIniciais.length > 0 && (
+            <div className="mt-3 rounded-xl border border-red-100 bg-white p-3">
+              <p className="text-xs font-black text-red-800">O que falta para concluir</p>
+              <div className="mt-2 space-y-1">
+                {bloqueiosIniciais.slice(0, 5).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-red-700">• {item}</p>)}
+                {bloqueiosIniciais.length > 5 && <p className="text-[11px] font-semibold text-slate-500">+{bloqueiosIniciais.length - 5} item(ns) no laudo detalhado.</p>}
+              </div>
+            </div>
+          )}
         </section>
 
-        <button type="button" onClick={() => setMostrarAnaliseCompleta(true)} className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white p-3 text-left hover:bg-slate-50">
+        <button
+          type="button"
+          onClick={() => setMostrarAnaliseCompleta(true)}
+          className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white p-3 text-left hover:bg-slate-50"
+        >
           <div>
             <p className="text-sm font-black text-slate-800">Ver Inteligência 360 completa</p>
-            <p className="text-[11px] text-slate-500">Scores, riscos, recomendações, esteira e histórico permanecem disponíveis nesta visualização.</p>
+            <p className="text-[11px] text-slate-500">Scores externos, riscos, proposta, recomendações, esteira e histórico permanecem disponíveis sem poluir a etapa inicial.</p>
           </div>
           <ChevronDown className="h-4 w-4 text-slate-400" />
         </button>
