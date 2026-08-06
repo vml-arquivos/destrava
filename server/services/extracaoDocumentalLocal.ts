@@ -120,6 +120,106 @@ function limparValor(value: string | null): string | null {
   return clean && clean !== '-' ? clean : null;
 }
 
+function valorAposRotuloExato(linhas: string[], aliases: string[], limite = 3): string | null {
+  const aliasesNorm = aliases.map(textoNormalizado);
+  for (let i = 0; i < linhas.length; i += 1) {
+    const linha = linhas[i];
+    const normalizada = textoNormalizado(linha);
+    const alias = aliasesNorm.find((item) => normalizada === item || normalizada.startsWith(`${item}:`));
+    if (!alias) continue;
+
+    const posDoisPontos = linha.indexOf(':');
+    if (posDoisPontos >= 0) {
+      const inline = limparValor(linha.slice(posDoisPontos + 1));
+      if (inline) return inline;
+    }
+
+    for (let offset = 1; offset <= limite && i + offset < linhas.length; offset += 1) {
+      const candidato = linhas[i + offset];
+      if (!candidato || pareceRotulo(candidato)) continue;
+      return candidato;
+    }
+  }
+  return null;
+}
+
+type CampoLayout = { chave: string; aliases: string[] };
+
+function normalizarLinhaLayout(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+/**
+ * O PDF oficial do Cartão CNPJ usa uma grade horizontal. O pdftotext -layout
+ * preserva as colunas, por exemplo:
+ *   LOGRADOURO          NÚMERO       COMPLEMENTO
+ *   RUA EXEMPLO         123          SALA 01
+ * O extrator antigo achatava os espaços e acabava usando "NÚMERO
+ * COMPLEMENTO" como endereço e o próprio CNPJ como número. Esta função lê a
+ * linha mantendo as posições das colunas e só aceita o bloco quando todos os
+ * rótulos esperados estão presentes na ordem correta.
+ */
+function extrairColunasDaLinhaSeguinte(texto: string, campos: CampoLayout[]): Record<string, string | null> {
+  const linhas = String(texto || '').replace(/\u0000/g, '').replace(/\r/g, '').split('\n');
+  for (let i = 0; i < linhas.length; i += 1) {
+    const linhaRotulos = linhas[i];
+    const normalizada = normalizarLinhaLayout(linhaRotulos);
+    const posicoes: number[] = [];
+    let cursor = 0;
+    let encontrouTodos = true;
+
+    for (const campo of campos) {
+      let melhor = -1;
+      for (const alias of campo.aliases) {
+        const idx = normalizada.indexOf(normalizarLinhaLayout(alias), cursor);
+        if (idx >= 0 && (melhor < 0 || idx < melhor)) melhor = idx;
+      }
+      if (melhor < 0) {
+        encontrouTodos = false;
+        break;
+      }
+      posicoes.push(melhor);
+      cursor = melhor + 1;
+    }
+    if (!encontrouTodos) continue;
+
+    let indiceValor = i + 1;
+    while (indiceValor < linhas.length && !linhas[indiceValor].trim()) indiceValor += 1;
+    if (indiceValor >= linhas.length) break;
+    const linhaValor = linhas[indiceValor];
+    const resultado: Record<string, string | null> = {};
+    campos.forEach((campo, indice) => {
+      const inicio = posicoes[indice];
+      const fim = indice + 1 < posicoes.length ? posicoes[indice + 1] : linhaValor.length;
+      resultado[campo.chave] = limparValor(linhaValor.slice(inicio, fim));
+    });
+    return resultado;
+  }
+  return Object.fromEntries(campos.map((campo) => [campo.chave, null]));
+}
+
+function limparCampoEndereco(campo: 'logradouro' | 'numero' | 'complemento' | 'cep' | 'bairro' | 'municipio' | 'uf', value: string | null): string | null {
+  const clean = limparValor(value);
+  if (!clean) return null;
+  const norm = textoNormalizado(clean);
+  const contemRotuloOuCabecalho = /(comprovante de inscricao|cadastro nacional|numero de inscricao|data de abertura|bairro distrito municipio|logradouro numero complemento|situacao cadastral)/.test(norm);
+  if (contemRotuloOuCabecalho) return null;
+  if (campo !== 'cep' && campo !== 'numero' && primeiroCnpj(clean)) return null;
+  if (campo === 'cep') return onlyDigits(clean).length === 8 ? clean : null;
+  if (campo === 'uf') return /^[A-Za-z]{2}$/.test(clean) ? clean.toUpperCase() : null;
+  if (campo === 'numero') {
+    if (clean.length > 24 || /comprovante|inscricao|cadastro|complemento|lemento|numero|número|\//i.test(clean)) return null;
+    return clean;
+  }
+  if ((campo === 'bairro' || campo === 'municipio') && (!/[A-Za-zÀ-ÿ]/.test(clean) || clean.length > 100)) return null;
+  if (campo === 'logradouro' && (!/[A-Za-zÀ-ÿ]/.test(clean) || clean.length > 180)) return null;
+  if (campo === 'complemento' && clean.length > 160) return null;
+  return clean;
+}
+
 function parseCartaoCnpj(texto: string): { dados: Record<string, any>; confianca: number } {
   const linhas = linhasTexto(texto);
   const norm = textoNormalizado(texto);
@@ -136,13 +236,25 @@ function parseCartaoCnpj(texto: string): { dados: Record<string, any>; confianca
   const porte = limparValor(valorAposRotulo(linhas, ['porte']));
   const situacao = limparValor(valorAposRotulo(linhas, ['situação cadastral', 'situacao cadastral']));
   const dataSituacao = parseDate(valorAposRotulo(linhas, ['data da situação cadastral', 'data da situacao cadastral']));
-  const cep = limparValor(valorAposRotulo(linhas, ['cep']));
-  const logradouro = limparValor(valorAposRotulo(linhas, ['logradouro']));
-  const numero = limparValor(valorAposRotulo(linhas, ['número', 'numero']));
-  const complemento = limparValor(valorAposRotulo(linhas, ['complemento']));
-  const bairro = limparValor(valorAposRotulo(linhas, ['bairro/distrito', 'bairro distrito']));
-  const municipio = limparValor(valorAposRotulo(linhas, ['município', 'municipio']));
-  const uf = limparValor(valorAposRotulo(linhas, ['uf']));
+  const primeiraLinhaEndereco = extrairColunasDaLinhaSeguinte(texto, [
+    { chave: 'logradouro', aliases: ['logradouro'] },
+    { chave: 'numero', aliases: ['número', 'numero'] },
+    { chave: 'complemento', aliases: ['complemento'] },
+  ]);
+  const segundaLinhaEndereco = extrairColunasDaLinhaSeguinte(texto, [
+    { chave: 'cep', aliases: ['cep'] },
+    { chave: 'bairro', aliases: ['bairro/distrito', 'bairro distrito'] },
+    { chave: 'municipio', aliases: ['município', 'municipio'] },
+    { chave: 'uf', aliases: ['uf'] },
+  ]);
+  const cep = limparCampoEndereco('cep', segundaLinhaEndereco.cep || valorAposRotuloExato(linhas, ['cep']));
+  const logradouro = limparCampoEndereco('logradouro', primeiraLinhaEndereco.logradouro || valorAposRotuloExato(linhas, ['logradouro']));
+  const numero = limparCampoEndereco('numero', primeiraLinhaEndereco.numero || valorAposRotuloExato(linhas, ['número', 'numero']));
+  const complemento = limparCampoEndereco('complemento', primeiraLinhaEndereco.complemento || valorAposRotuloExato(linhas, ['complemento']));
+  const bairro = limparCampoEndereco('bairro', segundaLinhaEndereco.bairro || valorAposRotuloExato(linhas, ['bairro/distrito', 'bairro distrito']));
+  const municipio = limparCampoEndereco('municipio', segundaLinhaEndereco.municipio || valorAposRotuloExato(linhas, ['município', 'municipio']));
+  const uf = limparCampoEndereco('uf', segundaLinhaEndereco.uf || valorAposRotuloExato(linhas, ['uf']));
+  const enderecoConfiavel = Boolean(logradouro && (cep || (municipio && uf)));
   const emissaoMatch = texto.match(/emitido\s+no\s+dia\s+(\d{2}\/\d{2}\/\d{4})(?:\s+às?\s+([\d:]+))?/i);
   const matrizFilial = /\bfilial\b/i.test(numeroInscricao || '') ? 'filial' : /\bmatriz\b/i.test(numeroInscricao || '') ? 'matriz' : null;
 
@@ -161,7 +273,8 @@ function parseCartaoCnpj(texto: string): { dados: Record<string, any>; confianca
       cnae_principal: cnae,
       natureza_juridica: natureza,
       porte,
-      endereco_completo: [logradouro, numero, complemento, bairro, municipio, uf, cep].filter(Boolean).join(', ') || null,
+      endereco_completo: enderecoConfiavel ? [logradouro, numero, complemento, bairro, municipio, uf, cep].filter(Boolean).join(', ') : null,
+      endereco_confiavel: enderecoConfiavel,
       cep,
       logradouro,
       numero,
@@ -243,8 +356,12 @@ function parseSimples(texto: string): { dados: Record<string, any>; confianca: n
   const naoOptante = /n[aã]o\s+optante\s+pelo\s+simples\s+nacional/i.test(texto) || /situacao\s+no\s+simples\s+nacional\W{0,8}nao\s+optante/i.test(norm);
   const excluido = /exclu[ií]d[oa]\s+do\s+simples/i.test(texto) || norm.includes('exclusao do simples nacional efetivada');
   const optante = !naoOptante && !excluido && (/optante\s+pelo\s+simples\s+nacional/i.test(texto) || /situacao\s+no\s+simples\s+nacional\W{0,8}optante/i.test(norm));
-  const simei = /optante\s+pelo\s+simei/i.test(texto) || norm.includes('situacao no simei optante');
-  const agendamento = norm.includes('agendamento') && norm.includes('exclus');
+  const naoSimei = /n[aã]o\s+optante\s+pelo\s+simei/i.test(texto)
+    || /situa[cç][aã]o\s+no\s+simei\W{0,12}n[aã]o\s+optante/i.test(texto);
+  const simei = !naoSimei && (/optante\s+pelo\s+simei/i.test(texto) || norm.includes('situacao no simei optante'));
+  const semAgendamento = /n[aã]o\s+(?:h[aá]|existe|possui)\s+agendamento/i.test(texto)
+    || /sem\s+agendamento/i.test(texto);
+  const agendamento = !semAgendamento && norm.includes('agendamento') && norm.includes('exclus');
   const dataOpcao = dataProximaDe(texto, /(?:optante\s+pelo\s+simples\s+nacional\s+desde|data\s+de\s+op[cç][aã]o)\D{0,40}(\d{2}\/\d{2}\/\d{4})/i);
   const dataExclusao = dataProximaDe(texto, /(?:data\s+(?:de|da)\s+exclus[aã]o|exclu[ií]d[oa]\s+em)\D{0,40}(\d{2}\/\d{2}\/\d{4})/i);
   const situacao = excluido ? 'Excluído' : naoOptante ? 'Não Optante' : optante ? 'Optante' : null;
@@ -275,7 +392,7 @@ function parseAtosJunta(texto: string): { dados: Record<string, any>; confianca:
   const cnpj = formatarCnpj(primeiroCnpj(texto));
   const razaoSocial = limparValor(valorAposRotulo(linhas, ['nome empresarial', 'razão social', 'razao social']));
   const nire = limparValor(valorAposRotulo(linhas, ['nire', 'número de identificação do registro de empresas', 'numero de identificacao do registro de empresas']));
-  const capitalSocial = numeroMonetario(valorAposRotulo(linhas, ['capital social', 'capital social atual']));
+  const capitalSocial = numeroMonetario(valorAposRotulo(linhas, ['capital social atual', 'capital social']));
 
   const historico: Array<{ numero: string | null; data: string; tipo_ato: string | null }> = [];
   for (const linha of linhas) {

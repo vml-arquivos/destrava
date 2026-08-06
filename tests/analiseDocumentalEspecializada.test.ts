@@ -106,4 +106,25 @@ describe('AnaliseDocumentalService com dependências isoladas', () => {
 
     await expect(service.analisarSimplesNacional('empresa-1', 'doc-1')).rejects.toThrow('não pertence à empresa');
   });
+  it('usa o QSA sincronizado da Receita quando socios_empresa ainda não foi preenchida', async () => {
+    const empresa = {
+      id: 'empresa-1',
+      cnpj: '12.345.678/0001-90',
+      capital_social: 100_000,
+      qsa: [{ nome: 'ANA SOUZA', cpf_cnpj: '111.222.333-44', qualificacao: 'Sócia-Administradora' }],
+    };
+    const db = criarDbMock(empresa, []);
+    const service = new AnaliseDocumentalService(db, async () => ({
+      cnpj: '12.345.678/0001-90',
+      capital_social: 100_000,
+      socios: [{ nome: 'Ana Souza', cpf_cnpj: '111.222.333-44', qualificacao: 'Sócia-Administradora' }],
+      confianca: 0.95,
+    }));
+
+    const resultado = await service.analisarQSA('empresa-1', 'doc-1');
+
+    expect(resultado.alertas.some((a) => a.codigo === 'qsa_socio_documento_nao_encontrado_receita')).toBe(false);
+    expect(resultado.alertas.some((a) => a.codigo === 'qsa_socio_receita_ausente_documento')).toBe(false);
+  });
+
 });

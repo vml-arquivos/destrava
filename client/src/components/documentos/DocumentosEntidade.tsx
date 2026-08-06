@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -187,7 +187,7 @@ const slot = (titulo: string, tipoUpload: string, matchTipos?: string[], extra: 
 export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
   {
     titulo: "Identidade do CNPJ",
-    descricao: "Os 4 documentos que identificam a empresa perante a Receita e a Junta Comercial. Base obrigatória de qualquer dossiê.",
+    descricao: "Os 4 documentos usados para validar a identidade da empresa. São obrigatórios somente quando a equipe iniciar a análise documental para estratégia e proposta de crédito.",
     slots: [
       slot("Cartão CNPJ", "cartao_cnpj", [], { obrigatorio: true, descricao: "A IA/OCR deve identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral." }),
       slot("QSA (Quadro Societário)", "qsa", [], { obrigatorio: true }),
@@ -341,7 +341,6 @@ export default function DocumentosEntidade({
   // antes "+N arquivo(s) neste mesmo campo" era só texto informativo, sem jeito nenhum
   // de realmente ver/abrir esses arquivos extras.
   const [camposExpandidos, setCamposExpandidos] = useState<Record<string, boolean>>({});
-  const analiseAutomaticaRef = useRef<string | null>(null);
 
   const query = useMemo(() => {
     if (!entidadeId) return "";
@@ -425,53 +424,6 @@ export default function DocumentosEntidade({
     const slotsIdentidade = SECOES_DOCUMENTAIS.find((secao) => secao.titulo === "Identidade do CNPJ")?.slots || [];
     return slotsIdentidade.filter((documentoSlot) => docs.some((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento))).length;
   }, [docs]);
-  const identidadeInicialFingerprint = useMemo(() => {
-    const slotsIdentidade = SECOES_DOCUMENTAIS.find((secao) => secao.titulo === "Identidade do CNPJ")?.slots || [];
-    return slotsIdentidade
-      .map((documentoSlot) => {
-        const doc = docs.find((item) => documentoSlot.matchTipos.includes(item.tipo_documento));
-        return `${documentoSlot.tipoUpload}:${doc?.id || "ausente"}:${doc?.atualizado_em || doc?.criado_em || ""}`;
-      })
-      .join("|");
-  }, [docs]);
-
-
-  // Quando o quarto documento é anexado (ou quando uma empresa antiga com 4/4 é
-  // aberta pela primeira vez após a atualização), o sistema verifica o laudo e
-  // executa a análise uma única vez. Não abre outra tela nem cria botões extras.
-  useEffect(() => {
-    if (entidadeTipo !== "empresa" || !empresaId || identidadeInicialPreenchida !== 4) return;
-    const chaveAnalise = `${empresaId}:${identidadeInicialFingerprint}`;
-    if (analiseAutomaticaRef.current === chaveAnalise) return;
-    analiseAutomaticaRef.current = chaveAnalise;
-
-    let ativo = true;
-    void (async () => {
-      try {
-        const atual = await apiFetch(`/api/documentacao/empresa/${empresaId}/dossie`);
-        const itens = Object.values(atual?.identidade_cnpj?.documentos_iniciais || {}) as Array<any>;
-        const precisaAnalisar = itens.length !== 4 || itens.some((item) => item?.anexado && !item?.analisado);
-        if (!precisaAnalisar || !ativo) return;
-
-        setGerandoLaudo(true);
-        const resultado = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-inicial/iniciar`, {
-          method: "POST",
-          body: JSON.stringify({ forcar: false }),
-        });
-        if (!ativo) return;
-        if (resultado?.dossie?.identidade_cnpj?.apto_para_avancar) {
-          toast.success("Relatório inicial concluído. A empresa pode avançar para a próxima etapa.");
-        }
-      } catch (error: any) {
-        if (ativo) console.warn("[DocumentosEntidade] análise automática não concluída:", error?.message || error);
-      } finally {
-        if (ativo) setGerandoLaudo(false);
-      }
-    })();
-
-    return () => { ativo = false; };
-  }, [entidadeTipo, empresaId, identidadeInicialPreenchida, identidadeInicialFingerprint]);
-
   function abrirChecklistExportacao() {
     if (!docs.length) { toast.error("Não há documentos anexados para exportar."); return; }
     if (selecionadosIds.length === 0) {
@@ -640,7 +592,7 @@ export default function DocumentosEntidade({
       <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
         <div>
           <h3 className="text-base font-bold text-slate-800 flex items-center gap-2"><Paperclip className="w-4 h-4" /> {titulo}</h3>
-          <p className="text-xs text-slate-500 mt-1 max-w-2xl">Anexe os quatro documentos da Identidade do CNPJ. Em seguida, execute a análise para cruzar os arquivos com a Receita Federal e liberar a próxima etapa.</p>
+          <p className="text-xs text-slate-500 mt-1 max-w-2xl">O acervo pode ser usado normalmente com qualquer quantidade de arquivos. Os quatro documentos iniciais só são exigidos quando a equipe decidir iniciar a análise documental para estratégia de crédito.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={abrirChecklistExportacao} disabled={docs.length === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 disabled:opacity-50">
@@ -658,7 +610,7 @@ export default function DocumentosEntidade({
                 {identidadeInicialPreenchida}/4 anexados
               </span>
             </div>
-            <p className="mt-1 text-[11px] text-slate-600">Cartão CNPJ, QSA, Atos da Junta e Enquadramento Tributário formam o primeiro laudo. Os demais documentos pertencem às próximas etapas.</p>
+            <p className="mt-1 text-[11px] text-slate-600">Cartão CNPJ, QSA, Atos da Junta e Enquadramento Tributário são obrigatórios somente para iniciar a análise documental. Cadastro, ficha, consulta e visualização permanecem disponíveis sem eles.</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 text-[11px]">
             <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-slate-600"><b className="text-slate-900">{docs.length}</b> arquivos</span>
@@ -669,9 +621,10 @@ export default function DocumentosEntidade({
                 onClick={abrirLaudo}
                 disabled={gerandoLaudo || identidadeInicialPreenchida !== 4}
                 className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                title={identidadeInicialPreenchida === 4 ? "Iniciar a análise documental" : "Anexe os quatro documentos iniciais para iniciar a análise"}
               >
                 {gerandoLaudo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-                {gerandoLaudo ? "Lendo documentos..." : "Ver relatório inicial"}
+                {gerandoLaudo ? "Iniciando análise" : identidadeInicialPreenchida === 4 ? "Iniciar análise documental" : `Disponível com 4/4`}
               </button>
             )}
           </div>
@@ -729,8 +682,12 @@ export default function DocumentosEntidade({
                   className="mb-3 inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 hover:text-blue-800"
                 >
                   {mostrarComplementares
-                    ? "Mostrar só os obrigatórios"
-                    : ocultos > 0 ? `Ver documentos complementares (${ocultos})` : "Todos os campos já são obrigatórios"}
+                    ? "Mostrar só os documentos da etapa"
+                    : ocultos > 0
+                      ? `Ver documentos complementares (${ocultos})`
+                      : secaoAtivaObj.titulo === "Identidade do CNPJ"
+                        ? "4 documentos exigidos somente para iniciar a análise"
+                        : "Todos os campos desta etapa são necessários"}
                 </button>
               )}
               <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3">
@@ -751,7 +708,7 @@ export default function DocumentosEntidade({
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <p className="text-xs font-bold text-slate-700 leading-tight">{documentoSlot.titulo}</p>
-                              {documentoSlot.obrigatorio && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-800 text-white shrink-0">OBRIGATÓRIO</span>}
+                              {documentoSlot.obrigatorio && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-800 text-white shrink-0">{secaoAtivaObj.titulo === "Identidade do CNPJ" ? "OBRIGATÓRIO PARA ANÁLISE" : "NECESSÁRIO NA ETAPA"}</span>}
                             </div>
                             <p className="text-[10px] text-slate-400 mt-0.5">{docsTipo.length} arquivo(s) anexado(s)</p>
                           </div>

@@ -169,6 +169,38 @@ function socioNormalizado(socio: any): { nome: string; documento: string; origin
   };
 }
 
+function listasSocietarias(value: any, profundidade = 0): any[] {
+  if (!value || profundidade > 3) return [];
+  if (Array.isArray(value)) return value.filter((item) => item && typeof item === 'object');
+  if (typeof value !== 'object') return [];
+  const chaves = [
+    'qsa', 'socios', 'socios_receita', 'quadro_societario', 'quadroSocietario',
+    'administradores', 'payload_normalizado', 'dados_consolidados', 'dados', 'resultado',
+  ];
+  const encontrados: any[] = [];
+  for (const chave of chaves) encontrados.push(...listasSocietarias(value[chave], profundidade + 1));
+  return encontrados;
+}
+
+function consolidarSociosReceita(empresa: any, sociosCadastro: any[]): any[] {
+  const candidatos = [
+    ...(Array.isArray(sociosCadastro) ? sociosCadastro : []),
+    ...listasSocietarias(empresa?.socios_receita),
+    ...listasSocietarias(empresa?.qsa),
+    ...listasSocietarias(empresa?.dados_extra_receita),
+    ...listasSocietarias(empresa?.dados_fontes_cnpj),
+    ...listasSocietarias(empresa?.fontes_cnpj),
+  ];
+  const unicos = new Map<string, any>();
+  for (const candidato of candidatos) {
+    const normalizado = socioNormalizado(candidato);
+    const chave = normalizado.documento || normalizado.nome;
+    if (!chave) continue;
+    if (!unicos.has(chave)) unicos.set(chave, candidato);
+  }
+  return [...unicos.values()];
+}
+
 export function validarQsaExtraida(empresa: any, sociosReceita: any[], dados: any): AlertaDocumental[] {
   const alertas: AlertaDocumental[] = [];
   if (dados?.documento_compativel === false) {
@@ -695,7 +727,7 @@ export class AnaliseDocumentalService {
       }
       documento.caminho_arquivo = caminhoResolvido.absolutePath;
     }
-    return { empresa, socios: sociosResult.rows || [], documento };
+    return { empresa, socios: consolidarSociosReceita(empresa, sociosResult.rows || []), documento };
   }
 
   async analisarQSA(empresaId: string, arquivoId: string): Promise<AnaliseDocumentalResult> {

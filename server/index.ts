@@ -5358,6 +5358,25 @@ async function startServer() {
         console.warn("[Inteligência 360] Análise CNPJ indisponível; fluxo preservado:", error?.message || error);
       }
 
+      // A documentação só vira requisito quando a equipe inicia explicitamente
+      // a análise documental. Sem essa execução, cadastro, ficha e demais módulos
+      // continuam disponíveis normalmente.
+      let analiseInicial: any = null;
+      try {
+        const { rows: execucaoRows } = await pool.query(
+          `SELECT id, status, resultado, pendencias, criado_em, atualizado_em
+             FROM public.documentacao_analises_ia
+            WHERE empresa_id = $1
+              AND tipo_analise = 'identidade_cnpj_inicial'
+            ORDER BY criado_em DESC
+            LIMIT 1`,
+          [empresaId],
+        );
+        analiseInicial = execucaoRows[0] || null;
+      } catch (error: any) {
+        console.warn("[Inteligência 360] Estado da análise inicial indisponível; fluxo normal preservado:", error?.message || error);
+      }
+
       // Calcular inteligência 360
       const resultado = calcularInteligencia360({
         empresa,
@@ -5372,6 +5391,7 @@ async function startServer() {
         eventosRotina,
         analisesDocumentais,
         analiseCnpj,
+        analiseInicial,
       });
 
       res.json(resultado);
@@ -5387,8 +5407,13 @@ async function startServer() {
           etapa: "identidade_cnpj",
           titulo: "Etapa 1 — Identidade do CNPJ",
           apto_para_avancar: false,
+          analise_iniciada: false,
+          status_fluxo: "nao_iniciada",
+          documentacao_completa: false,
+          documentos_anexados: 0,
           documentos_ok: 0,
           total_documentos: 4,
+          requisitos_para_iniciar: [],
           documentos: [],
           situacao_cadastral_ativa: false,
           empresa_apta_12_meses: null,

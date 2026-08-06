@@ -168,16 +168,33 @@ async function aplicarSchema(db: Queryable): Promise<void> {
     $$ LANGUAGE plpgsql
   `);
 
-  const triggers: Array<[string, string]> = [
+  await db.query(`
+    CREATE OR REPLACE FUNCTION public.atualizar_atualizado_em_documentacao()
+    RETURNS TRIGGER AS $$
+    BEGIN
+      NEW.atualizado_em = NOW();
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql
+  `);
+
+  const triggersAtualizacao: Array<[string, string]> = [
     ['trg_documentacao_blocos_atualizacao_em', 'documentacao_blocos'],
     ['trg_documentacao_entidade_blocos_atualizacao_em', 'documentacao_entidade_blocos'],
     ['trg_documentacao_bloco_arquivos_atualizacao_em', 'documentacao_bloco_arquivos'],
+  ];
+  for (const [trigger, table] of triggersAtualizacao) {
+    await db.query(`DROP TRIGGER IF EXISTS ${trigger} ON public.${table}`);
+    await db.query(`CREATE TRIGGER ${trigger} BEFORE UPDATE ON public.${table} FOR EACH ROW EXECUTE FUNCTION public.atualizar_atualizacao_em_documentacao()`);
+  }
+
+  const triggersAtualizado: Array<[string, string]> = [
     ['trg_documentos_extracoes_ia_atualizacao_em', 'documentos_extracoes_ia'],
     ['trg_documentacao_analises_ia_atualizacao_em', 'documentacao_analises_ia'],
   ];
-  for (const [trigger, table] of triggers) {
+  for (const [trigger, table] of triggersAtualizado) {
     await db.query(`DROP TRIGGER IF EXISTS ${trigger} ON public.${table}`);
-    await db.query(`CREATE TRIGGER ${trigger} BEFORE UPDATE ON public.${table} FOR EACH ROW EXECUTE FUNCTION public.atualizar_atualizacao_em_documentacao()`);
+    await db.query(`CREATE TRIGGER ${trigger} BEFORE UPDATE ON public.${table} FOR EACH ROW EXECUTE FUNCTION public.atualizar_atualizado_em_documentacao()`);
   }
 }
 

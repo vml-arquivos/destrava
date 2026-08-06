@@ -51,8 +51,13 @@ export interface EtapaIdentidadeDocumental360 {
   etapa: "identidade_cnpj";
   titulo: string;
   apto_para_avancar: boolean;
+  analise_iniciada: boolean;
+  status_fluxo: "nao_iniciada" | "pronta_para_iniciar" | "processando" | "pendencia_documental" | "falhou" | "apta";
+  documentacao_completa: boolean;
+  documentos_anexados: number;
   documentos_ok: number;
   total_documentos: 4;
+  requisitos_para_iniciar: string[];
   documentos: DocumentoIdentidade360[];
   situacao_cadastral_ativa: boolean;
   empresa_apta_12_meses: boolean | null;
@@ -967,6 +972,7 @@ export function consolidarEtapaIdentidadeDocumental(params: {
   documentos: any[];
   analisesDocumentais?: any[];
   analiseCnpj?: any | null;
+  analiseInicial?: any | null;
 }): EtapaIdentidadeDocumental360 {
   const docs = safeArray<any>(params.documentos);
   const analises = safeArray<any>(params.analisesDocumentais);
@@ -1041,33 +1047,63 @@ export function consolidarEtapaIdentidadeDocumental(params: {
   );
   const empresaMei = /(^|\s)mei($|\s)|microempreendedor individual/.test(enquadramentoTexto);
 
-  const bloqueios: string[] = [];
+  const documentosAnexados = documentos.filter((doc) => doc.anexado).length;
+  const documentacaoCompleta = documentosAnexados === 4;
+  const requisitosParaIniciar = documentos.filter((doc) => !doc.anexado).map((doc) => doc.nome);
+  const resultadosCompletosExistentes = documentos.every((doc) => doc.analisado);
+  const analiseIniciada = Boolean(params.analiseInicial) || resultadosCompletosExistentes;
+  const statusExecucaoOriginal = String(params.analiseInicial?.status || "");
+  const execucaoAtualizadaEm = params.analiseInicial?.atualizado_em ? new Date(String(params.analiseInicial.atualizado_em)).getTime() : 0;
+  const execucaoEmAnaliseRecente = statusExecucaoOriginal === "em_analise" && (execucaoAtualizadaEm === 0 || Date.now() - execucaoAtualizadaEm < 15 * 60 * 1000);
+  const statusExecucao = statusExecucaoOriginal === "em_analise" && !execucaoEmAnaliseRecente ? "falhou" : statusExecucaoOriginal;
+
+  const bloqueiosAnalise: string[] = [];
   for (const doc of documentos) {
-    if (!doc.anexado) bloqueios.push(`${doc.nome} ainda não foi anexado.`);
-    else if (doc.status === "falha_leitura") bloqueios.push(doc.diagnostico || `${doc.nome} apresentou falha na leitura automática.`);
-    else if (!doc.analisado) bloqueios.push(`${doc.nome} está anexado, mas o processamento ainda não foi concluído.`);
-    else if (!doc.consistente) bloqueios.push(`${doc.nome} possui divergência que exige revisão.`);
+    if (!doc.anexado) bloqueiosAnalise.push(`${doc.nome} ainda não foi anexado.`);
+    else if (doc.status === "falha_leitura") bloqueiosAnalise.push(doc.diagnostico || `${doc.nome} apresentou falha na leitura automática.`);
+    else if (!doc.analisado) bloqueiosAnalise.push(`${doc.nome} está anexado, mas o processamento ainda não foi concluído.`);
+    else if (!doc.consistente) bloqueiosAnalise.push(`${doc.nome} possui divergência que exige revisão.`);
   }
   for (const alerta of [...cartaoBloqueios, ...qsa.graves, ...atos.graves, ...enquadramento.graves]) {
     const mensagem = String(alerta?.mensagem || alerta?.descricao || "Divergência documental identificada.");
-    if (!bloqueios.includes(mensagem)) bloqueios.push(mensagem);
+    if (!bloqueiosAnalise.includes(mensagem)) bloqueiosAnalise.push(mensagem);
   }
-  if (!situacaoAtiva) bloqueios.push("A situação cadastral da empresa na Receita Federal não está ativa.");
-  if (empresaApta12Meses === false) bloqueios.push("A empresa ainda não possui 12 meses completos de abertura.");
-  if (empresaApta12Meses === null) bloqueios.push("Não foi possível confirmar o tempo de abertura da empresa.");
-  if (empresaMei) bloqueios.push("Empresa enquadrada como MEI: o fluxo empresarial padrão exige estratégia de crédito específica.");
+  if (!situacaoAtiva) bloqueiosAnalise.push("A situação cadastral da empresa na Receita Federal não está ativa.");
+  if (empresaApta12Meses === false) bloqueiosAnalise.push("A empresa ainda não possui 12 meses completos de abertura.");
+  if (empresaApta12Meses === null) bloqueiosAnalise.push("Não foi possível confirmar o tempo de abertura da empresa.");
+  if (empresaMei) bloqueiosAnalise.push("Empresa enquadrada como MEI: o fluxo empresarial padrão exige estratégia de crédito específica.");
 
   const documentosOk = documentos.filter((doc) => doc.consistente).length;
-  const apto = documentosOk === 4 && situacaoAtiva && empresaApta12Meses === true && !empresaMei && bloqueios.length === 0;
+  const bloqueios = analiseIniciada ? bloqueiosAnalise : [];
+  const apto = analiseIniciada && documentosOk === 4 && situacaoAtiva && empresaApta12Meses === true && !empresaMei && bloqueios.length === 0;
   const avisos: string[] = [];
-  if (empresaMei) avisos.push("O MEI não é descartado; deve seguir para uma estratégia de linhas compatíveis com esse enquadramento.");
+  if (empresaMei && analiseIniciada) avisos.push("O MEI não é descartado; deve seguir para uma estratégia de linhas compatíveis com esse enquadramento.");
+
+  let statusFluxo: EtapaIdentidadeDocumental360["status_fluxo"] = "nao_iniciada";
+  if (apto) statusFluxo = "apta";
+  else if (statusExecucao === "em_analise") statusFluxo = "processando";
+  else if (statusExecucao === "falhou") statusFluxo = "falhou";
+  else if (analiseIniciada) statusFluxo = "pendencia_documental";
+  else if (documentacaoCompleta) statusFluxo = "pronta_para_iniciar";
+
+  let diagnostico = "A empresa pode ser cadastrada, consultada e operada normalmente. A documentação inicial só será exigida quando a análise documental for iniciada.";
+  if (statusFluxo === "pronta_para_iniciar") diagnostico = "Os quatro documentos estão anexados. A análise documental pode ser iniciada quando a equipe estiver pronta para montar a estratégia e a proposta de crédito.";
+  else if (statusFluxo === "processando") diagnostico = "A leitura e o cruzamento dos quatro documentos com a Receita Federal estão em andamento.";
+  else if (statusFluxo === "falhou") diagnostico = "A análise documental foi iniciada, mas ocorreu uma falha técnica que precisa ser reprocessada.";
+  else if (statusFluxo === "pendencia_documental") diagnostico = "A análise foi concluída com pendências documentais. Corrija somente os itens indicados antes de avançar.";
+  else if (statusFluxo === "apta") diagnostico = "Os quatro documentos foram lidos, cruzados com a Receita Federal e considerados consistentes. A empresa pode avançar para documentos dos sócios, certidões, faturamento e estratégia de crédito.";
 
   return {
     etapa: "identidade_cnpj",
     titulo: "Etapa 1 — Identidade do CNPJ",
     apto_para_avancar: apto,
+    analise_iniciada: analiseIniciada,
+    status_fluxo: statusFluxo,
+    documentacao_completa: documentacaoCompleta,
+    documentos_anexados: documentosAnexados,
     documentos_ok: documentosOk,
     total_documentos: 4,
+    requisitos_para_iniciar: requisitosParaIniciar,
     documentos,
     situacao_cadastral_ativa: situacaoAtiva,
     empresa_apta_12_meses: empresaApta12Meses,
@@ -1075,9 +1111,7 @@ export function consolidarEtapaIdentidadeDocumental(params: {
     empresa_mei: empresaMei,
     bloqueios,
     avisos,
-    diagnostico: apto
-      ? "Os quatro documentos foram lidos, cruzados com a Receita Federal e considerados consistentes. A empresa pode avançar para documentos dos sócios, certidões, faturamento e estratégia de crédito."
-      : "A etapa inicial ainda não foi concluída. Analise ou corrija somente os itens indicados antes de avançar.",
+    diagnostico,
     proxima_etapa: "Documentos da empresa e dos sócios, certidões, consultas, faturamento e estratégia de crédito.",
   };
 }
@@ -1100,6 +1134,9 @@ export function calcularInteligencia360(params: {
   analisesDocumentais?: any[];
   // Última análise Receita + Cartão CNPJ, usada apenas no portão inicial.
   analiseCnpj?: any | null;
+  // Execução explícita da análise inicial. Ausência significa que a documentação
+  // ainda não foi exigida e não deve bloquear cadastro ou uso normal da empresa.
+  analiseInicial?: any | null;
 }): Inteligencia360Result {
   const { empresa, socios, documentos, simulacoes, contratos, historico, followups } = params;
   const acompanhamentoAtivo = params.acompanhamentoAtivo ?? null;
@@ -1112,6 +1149,7 @@ export function calcularInteligencia360(params: {
     documentos,
     analisesDocumentais,
     analiseCnpj: params.analiseCnpj ?? null,
+    analiseInicial: params.analiseInicial ?? null,
   });
 
   // Garantir arrays seguros
@@ -1218,13 +1256,14 @@ export function calcularInteligencia360(params: {
   let proximas_acoes = gerarProximasAcoes(recomendacoes, prontidao_contrato, simsArr);
   let diagnosticoFinal = diagnostico_geral;
   let caminhoFinal = caminho_sugerido;
-  if (!etapa_identidade_documental.apto_para_avancar) {
+  if (etapa_identidade_documental.analise_iniciada && !etapa_identidade_documental.apto_para_avancar) {
     diagnosticoFinal = etapa_identidade_documental.diagnostico;
-    caminhoFinal = "Concluir primeiro a leitura e a validação dos quatro documentos de Identidade do CNPJ.";
-    proximas_acoes = [
-      "Analisar Cartão CNPJ, QSA, Atos da Junta e Enquadramento Tributário.",
-      ...etapa_identidade_documental.bloqueios.slice(0, 3),
-    ];
+    caminhoFinal = etapa_identidade_documental.status_fluxo === "processando"
+      ? "Aguardar a conclusão da análise documental inicial."
+      : "Resolver as pendências identificadas na análise dos quatro documentos iniciais.";
+    proximas_acoes = etapa_identidade_documental.status_fluxo === "processando"
+      ? ["Acompanhar a conclusão da leitura dos quatro documentos iniciais."]
+      : etapa_identidade_documental.bloqueios.slice(0, 4);
   }
 
   // Proposta preliminar

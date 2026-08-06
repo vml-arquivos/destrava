@@ -2130,6 +2130,7 @@ export default function Empresas() {
                       <DossieCreditoEmpresa
                         empresaId={selecionada?.id}
                         onAtualizarReceita={selecionada ? () => sincronizarDados(selecionada) : undefined}
+                        onAbrirAcervo={abaPermitida("documentos") && selecionada?.id ? () => setLocation(`/colaborador/empresas/${selecionada.id}/acervo`) : undefined}
                         onAvancar={abaPermitida("documentos") && selecionada?.id ? () => setLocation(`/colaborador/empresas/${selecionada.id}/acervo?etapa=documentacao_empresa`) : undefined}
                       />
                     )

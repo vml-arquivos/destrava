@@ -106,4 +106,91 @@ describe('extração documental local determinística', () => {
     expect(resultado.dados.data_registro).toBe('2026-07-20');
     expect(resultado.confianca).toBeGreaterThanOrEqual(0.8);
   });
+
+  it('preserva as colunas do endereço no Cartão CNPJ oficial', () => {
+    const texto = `
+      CADASTRO NACIONAL DA PESSOA JURÍDICA
+      COMPROVANTE DE INSCRIÇÃO E DE SITUAÇÃO CADASTRAL
+      NÚMERO DE INSCRIÇÃO
+      52.008.360/0001-33 MATRIZ
+      DATA DE ABERTURA
+      29/08/2023
+      NOME EMPRESARIAL
+      PALUMA BURGER LTDA
+      CÓDIGO E DESCRIÇÃO DA ATIVIDADE ECONÔMICA PRINCIPAL
+      56.11-2-03 - Lanchonetes, casas de chá, de sucos e similares
+      CÓDIGO E DESCRIÇÃO DA NATUREZA JURÍDICA
+      206-2 - Sociedade Empresária Limitada
+      PORTE
+      ME
+      LOGRADOURO                         NÚMERO       COMPLEMENTO
+      RUA LATTES 349 QUADRA 10 L         349          QUADRA 10 LOTE 11 SALA 01
+      CEP            BAIRRO/DISTRITO      MUNICÍPIO                  UF
+      74333-060      JARDIM PLANALTO      GOIÂNIA                    GO
+      SITUAÇÃO CADASTRAL
+      ATIVA
+      DATA DA SITUAÇÃO CADASTRAL
+      29/08/2023
+    `;
+
+    const resultado = analisarTextoDocumentoLocal('cartao_cnpj', texto);
+
+    expect(resultado.dados.endereco_confiavel).toBe(true);
+    expect(resultado.dados.numero).toBe('349');
+    expect(resultado.dados.cep).toBe('74333-060');
+    expect(resultado.dados.municipio).toBe('GOIÂNIA');
+    expect(resultado.dados.uf).toBe('GO');
+    expect(resultado.dados.endereco_completo).not.toContain('COMPROVANTE DE INSCRIÇÃO');
+    expect(resultado.dados.endereco_completo).not.toContain('52.008.360/0001-33');
+  });
+
+  it('não inventa endereço quando o texto do PDF está achatado e mistura rótulos', () => {
+    const texto = `
+      CADASTRO NACIONAL DA PESSOA JURÍDICA
+      COMPROVANTE DE INSCRIÇÃO E DE SITUAÇÃO CADASTRAL
+      NÚMERO DE INSCRIÇÃO
+      52.008.360/0001-33 MATRIZ
+      DATA DE ABERTURA
+      29/08/2023
+      NOME EMPRESARIAL
+      PALUMA BURGER LTDA
+      CÓDIGO E DESCRIÇÃO DA ATIVIDADE ECONÔMICA PRINCIPAL
+      56.11-2-03 - Lanchonetes, casas de chá, de sucos e similares
+      CÓDIGO E DESCRIÇÃO DA NATUREZA JURÍDICA
+      206-2 - Sociedade Empresária Limitada
+      PORTE
+      ME
+      LOGRADOURO NÚMERO COMPLEMENTO
+      NÚMERO COMPLEMENTO 52.008.360/0001-33 COMPROVANTE DE INSCRIÇÃO E DE SITUAÇÃO
+      CEP BAIRRO/DISTRITO MUNICÍPIO UF
+      BAIRRO/DISTRITO MUNICÍPIO UF
+      SITUAÇÃO CADASTRAL
+      ATIVA
+      DATA DA SITUAÇÃO CADASTRAL
+      29/08/2023
+    `;
+
+    const resultado = analisarTextoDocumentoLocal('cartao_cnpj', texto);
+
+    expect(resultado.dados.endereco_confiavel).toBe(false);
+    expect(resultado.dados.endereco_completo).toBeNull();
+    expect(resultado.dados.numero).toBeNull();
+  });
+  it('não confunde NÃO optante no SIMEI nem ausência de agendamento', () => {
+    const texto = `
+      CONSULTA OPTANTES
+      CNPJ: 52.008.360/0001-33
+      Situação no Simples Nacional: Optante pelo Simples Nacional desde 29/08/2023
+      Situação no SIMEI: NÃO optante pelo SIMEI
+      Não existe agendamento de exclusão do Simples Nacional.
+    `;
+
+    const resultado = analisarTextoDocumentoLocal('simples_nacional', texto);
+
+    expect(resultado.dados.situacao_simples).toBe('Optante');
+    expect(resultado.dados.regime_tributario).toBe('Simples Nacional');
+    expect(resultado.dados.opcao_mei).toBe(false);
+    expect(resultado.dados.agendamento_exclusao).toBe(false);
+  });
+
 });
