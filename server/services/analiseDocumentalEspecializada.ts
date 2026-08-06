@@ -11,6 +11,7 @@ import {
   parseDate,
 } from '../utils/helpers';
 import { extrairDocumentoLocal, type TipoDocumentoLocal } from './extracaoDocumentalLocal';
+import { resolveDocumentPath } from './documentStorage';
 
 const { Pool } = pkg;
 
@@ -51,6 +52,8 @@ interface DocumentoArquivoRow {
   entidade_id?: string | null;
   entidade_tipo?: string | null;
   nome_original?: string | null;
+  nome_arquivo?: string | null;
+  hash_arquivo?: string | null;
   caminho_arquivo?: string | null;
   mime_type?: string | null;
   tipo_documento?: string | null;
@@ -649,7 +652,7 @@ export class AnaliseDocumentalService {
       this.db.query('SELECT * FROM public.empresas WHERE id = $1 LIMIT 1', [empresaId]),
       this.db.query('SELECT * FROM public.socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true ORDER BY nome ASC', [empresaId]),
       this.db.query(
-        `SELECT id, empresa_id, entidade_id, entidade_tipo, nome_original, caminho_arquivo, mime_type, tipo_documento
+        `SELECT id, empresa_id, entidade_id, entidade_tipo, nome_original, nome_arquivo, hash_arquivo, caminho_arquivo, mime_type, tipo_documento
            FROM public.documentos_arquivos
           WHERE id = $1
             AND excluido_em IS NULL
@@ -666,6 +669,18 @@ export class AnaliseDocumentalService {
     const pertenceEmpresa = documento.empresa_id === empresaId || (documento.entidade_tipo === 'empresa' && documento.entidade_id === empresaId);
     if (!pertenceEmpresa) throw new Error('Documento não pertence à empresa informada.');
     if (!documento.caminho_arquivo) throw new Error('Documento não possui arquivo armazenado.');
+
+    // Usa o mesmo resolvedor do Acervo Documental. Assim, o arquivo que pode ser
+    // visualizado/baixado também pode ser lido pela análise, independentemente de
+    // DATA_DIR apontar para /var/data/destrava ou do volume real estar em /app/uploads.
+    // Em testes unitários com extrator injetado não há leitura física do arquivo.
+    if (!this.extratorInjetado) {
+      const caminhoResolvido = resolveDocumentPath(documento);
+      if (!caminhoResolvido.absolutePath) {
+        throw new Error(`Arquivo documental não localizado no armazenamento persistente (${documento.nome_original || documento.id}).`);
+      }
+      documento.caminho_arquivo = caminhoResolvido.absolutePath;
+    }
     return { empresa, socios: sociosResult.rows || [], documento };
   }
 

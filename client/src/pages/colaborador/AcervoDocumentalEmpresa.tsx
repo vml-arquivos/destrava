@@ -49,11 +49,21 @@ export default function AcervoDocumentalEmpresa() {
   async function analisarEAbrirLaudo() {
     if (!empresaId) return;
     try {
-      await apiFetch(`/api/documentacao/empresa/${empresaId}/recalcular`, { method: "POST" });
-      toast.success("Os quatro documentos iniciais foram analisados. Abrindo o laudo.");
+      const atual = await apiFetch(`/api/documentacao/empresa/${empresaId}/dossie`);
+      const itens = Object.values(atual?.identidade_cnpj?.documentos_iniciais || {}) as Array<any>;
+      const precisaAnalisar = itens.length !== 4 || itens.some((item) => item?.anexado && !item?.analisado);
+      const resultado = precisaAnalisar
+        ? await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-inicial`, { method: "POST" })
+        : atual;
+
+      if (resultado?.identidade_cnpj?.apto_para_avancar) {
+        toast.success("Relatório inicial concluído. A próxima etapa está liberada.");
+      } else if (precisaAnalisar) {
+        toast.info("Relatório inicial atualizado. Consulte no laudo somente os pontos que ainda precisam de correção.");
+      }
       setLocation(`/colaborador/empresas?empresa=${empresaId}&aba=dossie_credito`);
     } catch (err: any) {
-      const mensagem = err?.message || "Não foi possível concluir a análise dos documentos iniciais.";
+      const mensagem = err?.message || "Não foi possível gerar o relatório inicial.";
       toast.error(mensagem);
       throw err;
     }

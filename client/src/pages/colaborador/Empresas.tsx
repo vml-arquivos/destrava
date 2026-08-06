@@ -420,19 +420,10 @@ function SectionCard({ title, icon, children, defaultOpen = true }: {
 
 function ScoreBar({ score, risco }: { score: number; risco: string }) {
   const colors = { baixo: "bg-emerald-500", medio: "bg-amber-500", alto: "bg-orange-500", critico: "bg-red-500" };
-  const labels = { baixo: "Baixo Risco", medio: "Risco Médio", alto: "Alto Risco", critico: "Crítico" };
   const barColor = colors[risco as keyof typeof colors] || colors.critico;
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex-1">
-        <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-          <div className={`h-full rounded-full transition-all duration-700 ${barColor}`} style={{ width: `${score}%` }} />
-        </div>
-      </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-lg font-black text-slate-800">{score}</span>
-        <span className="text-xs text-slate-400 font-medium">/100</span>
-      </div>
+    <div className="h-2 overflow-hidden rounded-full bg-slate-100" aria-label={`Score ${score} de 100`}>
+      <div className={`h-full rounded-full transition-all duration-700 ${barColor}`} style={{ width: `${score}%` }} />
     </div>
   );
 }

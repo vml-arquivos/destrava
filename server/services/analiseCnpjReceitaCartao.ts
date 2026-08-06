@@ -1,5 +1,4 @@
 import fs from 'fs/promises';
-import path from 'path';
 import pkg from 'pg';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { isSituacaoAtiva, isSituacaoIrregular } from '../utils/situacaoCadastral';
@@ -20,6 +19,7 @@ import {
   tempoAberturaDescricao,
 } from '../utils/helpers';
 import { extrairDocumentoLocal } from './extracaoDocumentalLocal';
+import { resolveDocumentPath } from './documentStorage';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -41,7 +41,12 @@ type AlertaAnalise = {
 
 type DocCartao = {
   id: string;
+  entidade_tipo?: string | null;
+  entidade_id?: string | null;
+  empresa_id?: string | null;
   nome_original?: string | null;
+  nome_arquivo?: string | null;
+  hash_arquivo?: string | null;
   mime_type?: string | null;
   caminho_arquivo?: string | null;
   data_emissao_documento?: string | null;
@@ -244,36 +249,14 @@ function documentoSuportadoPorGemini(doc: DocCartao): boolean {
   return !!mime && (mime.includes('pdf') || mime.startsWith('image/'));
 }
 
-async function arquivoExiste(filePath: string): Promise<boolean> {
-  try {
-    const st = await fs.stat(filePath);
-    return st.isFile();
-  } catch {
-    return false;
-  }
-}
-
-async function resolverCaminhoDocumento(caminhoArquivo?: string | null): Promise<string | null> {
-  const raw = String(caminhoArquivo || '').trim();
-  if (!raw) return null;
-
-  const cwd = process.cwd();
-  const dataDir = path.resolve(process.env.DATA_DIR || '/data');
-  const uploadDir = path.resolve(process.env.UPLOAD_DIR || path.join(dataDir, 'uploads'));
-  const candidatos = new Set<string>();
-
-  if (path.isAbsolute(raw)) candidatos.add(path.resolve(raw));
-  candidatos.add(path.resolve(cwd, raw));
-  candidatos.add(path.resolve(dataDir, raw));
-  candidatos.add(path.resolve(uploadDir, raw));
-  if (raw.startsWith('/app/')) candidatos.add(path.resolve(raw.replace('/app/', `${cwd}/`)));
-  if (raw.includes('/uploads/')) candidatos.add(path.resolve(dataDir, raw.slice(raw.indexOf('/uploads/') + 1)));
-
-  for (const candidato of candidatos) {
-    if (await arquivoExiste(candidato)) return candidato;
-  }
-
-  console.warn('[analiseCnpjReceitaCartao] Arquivo do Cartão CNPJ não encontrado para IA/OCR:', raw);
+async function resolverCaminhoDocumento(doc?: DocCartao | null): Promise<string | null> {
+  if (!doc) return null;
+  const resolved = resolveDocumentPath(doc);
+  if (resolved.absolutePath) return resolved.absolutePath;
+  console.warn(
+    '[analiseCnpjReceitaCartao] Arquivo do Cartão CNPJ não encontrado no mesmo armazenamento usado pelo Acervo:',
+    doc.nome_original || doc.caminho_arquivo || doc.id,
+  );
   return null;
 }
 
@@ -408,7 +391,7 @@ async function tentarExtrairCartaoComGemini(doc: DocCartao | null): Promise<Extr
   if (!doc?.caminho_arquivo) return null;
   if (!documentoSuportadoPorGemini(doc)) return null;
 
-  const filePath = await resolverCaminhoDocumento(doc.caminho_arquivo);
+  const filePath = await resolverCaminhoDocumento(doc);
   if (!filePath) return null;
 
   try {
@@ -570,9 +553,9 @@ async function buscarUltimoCartaoCnpj(empresaId: string): Promise<DocCartao | nu
   const existsCentral = await tableExists('documentos_arquivos');
   if (existsCentral) {
     const { rows } = await pool.query(
-      `SELECT id, nome_original, mime_type, caminho_arquivo, data_emissao_documento, status_validade, resultado_validacao, criado_em
+      `SELECT id, entidade_tipo, entidade_id, empresa_id, nome_original, nome_arquivo, hash_arquivo, mime_type, caminho_arquivo, data_emissao_documento, status_validade, resultado_validacao, criado_em
          FROM public.documentos_arquivos
-        WHERE empresa_id = $1
+        WHERE (empresa_id = $1 OR (entidade_tipo = 'empresa' AND entidade_id = $1))
           AND (tipo_documento IN ('cartao_cnpj','cnpj_cartao')
                OR lower(COALESCE(nome_original, '')) LIKE '%cartao%cnpj%'
                OR lower(COALESCE(nome_original, '')) LIKE '%comprovante%inscricao%'

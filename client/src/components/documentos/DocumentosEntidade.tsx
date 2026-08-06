@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -57,14 +57,6 @@ export type DocumentosEntidadeProps = {
   secaoInicial?: string | null;
 };
 
-
-const TIPOS_IDENTIDADE_INICIAL = new Set([
-  "cartao_cnpj",
-  "qsa",
-  "atos_junta_comercial",
-  "enquadramento_tributario_cnpj",
-  "simples_nacional",
-]);
 
 const statusCls: Record<string, string> = {
   ativo: "bg-blue-50 text-blue-700 border-blue-100",
@@ -349,6 +341,7 @@ export default function DocumentosEntidade({
   // antes "+N arquivo(s) neste mesmo campo" era só texto informativo, sem jeito nenhum
   // de realmente ver/abrir esses arquivos extras.
   const [camposExpandidos, setCamposExpandidos] = useState<Record<string, boolean>>({});
+  const analiseAutomaticaRef = useRef<string | null>(null);
 
   const query = useMemo(() => {
     if (!entidadeId) return "";
@@ -433,6 +426,42 @@ export default function DocumentosEntidade({
     return slotsIdentidade.filter((documentoSlot) => docs.some((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento))).length;
   }, [docs]);
 
+
+  // Quando o quarto documento é anexado (ou quando uma empresa antiga com 4/4 é
+  // aberta pela primeira vez após a atualização), o sistema verifica o laudo e
+  // executa a análise uma única vez. Não abre outra tela nem cria botões extras.
+  useEffect(() => {
+    if (entidadeTipo !== "empresa" || !empresaId || identidadeInicialPreenchida !== 4) return;
+    if (analiseAutomaticaRef.current === empresaId) return;
+    analiseAutomaticaRef.current = empresaId;
+
+    let ativo = true;
+    void (async () => {
+      try {
+        const atual = await apiFetch(`/api/documentacao/empresa/${empresaId}/dossie`);
+        const itens = Object.values(atual?.identidade_cnpj?.documentos_iniciais || {}) as Array<any>;
+        const precisaAnalisar = itens.length !== 4 || itens.some((item) => item?.anexado && !item?.analisado);
+        if (!precisaAnalisar || !ativo) return;
+
+        setGerandoLaudo(true);
+        const resultado = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-inicial`, { method: "POST" });
+        if (!ativo) return;
+        if (resultado?.identidade_cnpj?.apto_para_avancar) {
+          toast.success("Relatório inicial concluído. A empresa pode avançar para a próxima etapa.");
+        } else {
+          const analisados = resultado?.processamento_inicial?.analisados ?? 0;
+          toast.info(`Relatório inicial atualizado: ${analisados}/4 documento(s) analisado(s).`);
+        }
+      } catch (error: any) {
+        if (ativo) console.warn("[DocumentosEntidade] análise automática não concluída:", error?.message || error);
+      } finally {
+        if (ativo) setGerandoLaudo(false);
+      }
+    })();
+
+    return () => { ativo = false; };
+  }, [entidadeTipo, empresaId, identidadeInicialPreenchida]);
+
   function abrirChecklistExportacao() {
     if (!docs.length) { toast.error("Não há documentos anexados para exportar."); return; }
     if (selecionadosIds.length === 0) {
@@ -470,21 +499,6 @@ export default function DocumentosEntidade({
       setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipoDocumento]: "" }));
       await carregar();
 
-      // A primeira etapa do crédito nasce dos quatro documentos de identidade.
-      // O recálculo em segundo plano deixa o laudo sincronizado assim que um deles
-      // é anexado, sem interromper o upload caso a análise/OCR esteja indisponível.
-      if (empresaId && TIPOS_IDENTIDADE_INICIAL.has(tipoDocumento)) {
-        const tiposDepoisDoUpload = new Set(docs.map((doc) => doc.tipo_documento));
-        tiposDepoisDoUpload.add(tipoDocumento);
-        const identidadeCompleta = tiposDepoisDoUpload.has("cartao_cnpj")
-          && tiposDepoisDoUpload.has("qsa")
-          && tiposDepoisDoUpload.has("atos_junta_comercial")
-          && (tiposDepoisDoUpload.has("enquadramento_tributario_cnpj") || tiposDepoisDoUpload.has("simples_nacional"));
-        if (identidadeCompleta) {
-          void apiFetch(`/api/documentacao/empresa/${empresaId}/recalcular`, { method: "POST" })
-            .catch((error: any) => console.warn("[DocumentosEntidade] análise automática pendente:", error?.message || error));
-        }
-      }
       return resultado;
     } catch (err: any) {
       const msg = err?.message || "Erro ao enviar documento.";
@@ -619,10 +633,6 @@ export default function DocumentosEntidade({
           <p className="text-xs text-slate-500 mt-1 max-w-2xl">Anexe os quatro documentos da Identidade do CNPJ. Em seguida, execute a análise para cruzar os arquivos com a Receita Federal e liberar a próxima etapa.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={abrirLaudo} disabled={gerandoLaudo} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-indigo-200 bg-indigo-600 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">
-            {gerandoLaudo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-            {gerandoLaudo ? "Analisando documentos..." : "Analisar 4 documentos e abrir laudo"}
-          </button>
           <button type="button" onClick={abrirChecklistExportacao} disabled={docs.length === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 disabled:opacity-50">
             <FileArchive className="w-3.5 h-3.5" /> Exportar documentos
           </button>
@@ -640,10 +650,20 @@ export default function DocumentosEntidade({
             </div>
             <p className="mt-1 text-[11px] text-slate-600">Cartão CNPJ, QSA, Atos da Junta e Enquadramento Tributário formam o primeiro laudo. Os demais documentos pertencem às próximas etapas.</p>
           </div>
-          <div className="flex flex-wrap gap-2 text-[11px]">
-            <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-slate-600"><b className="text-slate-900">{docs.length}</b> arquivos no acervo</span>
-            <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-slate-600"><b className="text-slate-900">{slotsPreenchidos}/{totalSlots}</b> campos preenchidos</span>
+          <div className="flex flex-wrap items-center justify-end gap-2 text-[11px]">
+            <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-slate-600"><b className="text-slate-900">{docs.length}</b> arquivos</span>
             <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-slate-600"><b className="text-emerald-700">{documentosValidados}</b> validados</span>
+            {onAbrirLaudo && (
+              <button
+                type="button"
+                onClick={abrirLaudo}
+                disabled={gerandoLaudo || identidadeInicialPreenchida !== 4}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {gerandoLaudo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                {gerandoLaudo ? "Gerando relatório..." : "Abrir relatório inicial"}
+              </button>
+            )}
           </div>
         </div>
       </div>

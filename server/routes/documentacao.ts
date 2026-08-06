@@ -235,7 +235,7 @@ async function listarDocumentosEmpresaPorTipos(empresaId: string, tipos: string[
        FROM public.documentos_arquivos
       WHERE excluido_em IS NULL
         AND status <> 'excluido'
-        AND empresa_id = $1
+        AND (empresa_id = $1 OR (entidade_tipo = 'empresa' AND entidade_id = $1))
         AND tipo_documento = ANY($2::text[])
       ORDER BY criado_em DESC
       LIMIT 100`,
@@ -514,7 +514,7 @@ async function montarQsaDocumentalDados(
     if (!analise) {
       return {
         dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'aguardando_analise' },
-        pendencias: [{ codigo: 'qsa_aguardando_analise', mensagem: 'QSA anexado e aguardando análise documental.', severidade: 'alta', origem: 'qsa', recomendacao: 'Use Recalcular dossiê para executar a conferência do documento.' }],
+        pendencias: [{ codigo: 'qsa_aguardando_analise', mensagem: 'QSA anexado e aguardando análise documental.', severidade: 'alta', origem: 'qsa', recomendacao: 'A análise inicial é executada automaticamente; abra o relatório para acompanhar o resultado.' }],
       };
     }
     return {
@@ -547,7 +547,7 @@ async function montarAtosJuntaDados(
     if (!analise) {
       return {
         dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'aguardando_analise' },
-        pendencias: [{ codigo: 'atos_junta_aguardando_analise', mensagem: 'Atos da Junta anexados e aguardando análise documental.', severidade: 'alta', origem: 'atos_junta_comercial', recomendacao: 'Use Recalcular dossiê para executar a conferência do documento.' }],
+        pendencias: [{ codigo: 'atos_junta_aguardando_analise', mensagem: 'Atos da Junta anexados e aguardando análise documental.', severidade: 'alta', origem: 'atos_junta_comercial', recomendacao: 'A análise inicial é executada automaticamente; abra o relatório para acompanhar o resultado.' }],
       };
     }
     return {
@@ -580,7 +580,7 @@ async function montarEnquadramentoDados(
     if (!analise) {
       return {
         dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'aguardando_analise' },
-        pendencias: [{ codigo: 'enquadramento_aguardando_analise', mensagem: 'Enquadramento Tributário anexado e aguardando análise documental.', severidade: 'alta', origem: 'enquadramento_tributario', recomendacao: 'Use Recalcular dossiê para executar a conferência do documento.' }],
+        pendencias: [{ codigo: 'enquadramento_aguardando_analise', mensagem: 'Enquadramento Tributário anexado e aguardando análise documental.', severidade: 'alta', origem: 'enquadramento_tributario', recomendacao: 'A análise inicial é executada automaticamente; abra o relatório para acompanhar o resultado.' }],
       };
     }
     return {
@@ -1062,17 +1062,39 @@ router.get('/empresa/:empresaId/pendencias', auth, async (req: Request, res: Res
   }
 });
 
-router.post('/empresa/:empresaId/recalcular', auth, async (req: Request, res: Response) => {
+async function analisarDocumentosIniciaisHandler(req: Request, res: Response) {
   try {
     const user = (req as any).colaborador || (req as any).user;
-    const dossie = await montarDossieCreditoEmpresa(req.params.empresaId, { processarDocumentos: true, usuarioId: user?.id || null });
+    const dossie = await montarDossieCreditoEmpresa(req.params.empresaId, {
+      processarDocumentos: true,
+      usuarioId: user?.id || null,
+    });
     if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
-    res.json(dossie);
+
+    const documentos = Object.values(dossie.identidade_cnpj?.documentos_iniciais || {}) as Array<any>;
+    const analisados = documentos.filter((item) => item?.analisado).length;
+    const consistentes = documentos.filter((item) => item?.consistente).length;
+    res.json({
+      ...dossie,
+      processamento_inicial: {
+        executado: true,
+        analisados,
+        consistentes,
+        total: 4,
+        apto_para_avancar: dossie.identidade_cnpj?.apto_para_avancar === true,
+        executado_em: new Date().toISOString(),
+      },
+    });
   } catch (err: any) {
-    console.error('[POST /api/documentacao/empresa/:empresaId/recalcular]', err);
-    res.status(500).json({ error: err?.message || 'Erro ao recalcular dossiê de crédito' });
+    console.error('[Análise inicial dos documentos]', err);
+    res.status(500).json({ error: err?.message || 'Erro ao analisar os quatro documentos iniciais' });
   }
-});
+}
+
+// Nome explícito para a ação principal da Etapa 1. A rota antiga permanece como
+// alias para não quebrar integrações, favoritos ou versões anteriores do frontend.
+router.post('/empresa/:empresaId/analise-inicial', auth, analisarDocumentosIniciaisHandler);
+router.post('/empresa/:empresaId/recalcular', auth, analisarDocumentosIniciaisHandler);
 
 router.patch('/blocos/:blocoEntidadeId', auth, async (req: Request, res: Response) => {
   try {

@@ -539,13 +539,13 @@ function AnaliseCnpjCard({ analise, onGerar, loading }: { analise: AnaliseCnpjEm
 function ProntidaoIdentidadeCard({
   identidade,
   onAvancar,
-  onAnalisar,
-  analisando = false,
+  onGerarRelatorio,
+  gerandoRelatorio = false,
 }: {
   identidade?: IdentidadeCnpj;
   onAvancar?: () => void;
-  onAnalisar?: () => void;
-  analisando?: boolean;
+  onGerarRelatorio?: () => void;
+  gerandoRelatorio?: boolean;
 }) {
   if (!identidade) return null;
   const documentos = Object.values(identidade.documentos_iniciais || {});
@@ -575,15 +575,15 @@ function ProntidaoIdentidadeCard({
           <p className="mt-2 text-xs leading-relaxed text-slate-700 max-w-4xl">{identidade.diagnostico}</p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          {!apto && onAnalisar && (
+          {onGerarRelatorio && (
             <button
               type="button"
-              onClick={onAnalisar}
-              disabled={analisando}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-60"
+              onClick={onGerarRelatorio}
+              disabled={gerandoRelatorio}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-xs font-extrabold text-blue-700 shadow-sm transition-colors hover:bg-blue-50 disabled:opacity-60"
             >
-              {analisando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              {analisando ? "Analisando os 4 documentos..." : "Analisar os 4 documentos"}
+              {gerandoRelatorio ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+              {gerandoRelatorio ? "Gerando relatório..." : apto ? "Atualizar relatório" : "Gerar relatório inicial"}
             </button>
           )}
           {apto && onAvancar && (
@@ -704,10 +704,19 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, on
     if (!empresaId) return;
     setRecalculando(true);
     try {
-      const data = await apiFetch(`/api/documentacao/empresa/${empresaId}/recalcular`, { method: "POST" });
+      const data = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-inicial`, { method: "POST" });
       setDossie(data);
       await carregarAnaliseCnpj();
-      if (!opcoes.silencioso) toast.success("Os quatro documentos iniciais foram analisados e o laudo foi atualizado.");
+      if (!opcoes.silencioso) {
+        const analisados = Number(data?.processamento_inicial?.analisados || 0);
+        if (data?.identidade_cnpj?.apto_para_avancar) {
+          toast.success("Relatório concluído. A próxima etapa está liberada.");
+        } else if (analisados === 4) {
+          toast.info("Relatório concluído. Revise somente as divergências indicadas antes de avançar.");
+        } else {
+          toast.warning(`Análise executada, mas ${4 - analisados} documento(s) ainda não puderam ser lidos. Consulte o motivo no relatório.`);
+        }
+      }
     } catch (err: any) {
       if (!opcoes.silencioso) toast.error(err?.message || "Erro ao analisar os documentos iniciais");
       else console.warn("[DossieCreditoEmpresa] análise automática pendente:", err?.message || err);
@@ -750,41 +759,16 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, on
 
   return (
     <div className="p-4 fade-in space-y-3">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-blue-700" />
-              <h2 className="text-base font-extrabold text-slate-900">Etapa 1 — Análise dos 4 documentos iniciais</h2>
-            </div>
-            <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-600">
-              O sistema lê Cartão CNPJ, QSA, Atos da Junta e Enquadramento Tributário, cruza os dados com a Receita Federal e libera a próxima etapa somente quando tudo estiver consistente.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {onAtualizarReceita && (
-              <button onClick={onAtualizarReceita} className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">
-                <RefreshCw className="h-3.5 w-3.5" /> Atualizar Receita
-              </button>
-            )}
-            <button onClick={() => void recalcular()} disabled={recalculando} className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50">
-              {recalculando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              {recalculando ? "Analisando..." : "Analisar novamente"}
-            </button>
-          </div>
-        </div>
-      </div>
-
       <ProntidaoIdentidadeCard
         identidade={identidade}
         onAvancar={onAvancar}
-        onAnalisar={() => void recalcular()}
-        analisando={recalculando}
+        onGerarRelatorio={() => void recalcular()}
+        gerandoRelatorio={recalculando}
       />
 
       {!identidade && !recalculando && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-          O laudo inicial ainda não foi consolidado. Clique em <b>Analisar novamente</b> para processar os quatro documentos anexados.
+          O laudo inicial ainda não foi consolidado. Clique em <b>Gerar relatório inicial</b> para processar os quatro documentos anexados.
         </div>
       )}
 
@@ -805,6 +789,13 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, on
         </button>
         {mostrarDetalhesIniciais && (
           <div className="space-y-3 border-t border-slate-100 p-3">
+            {onAtualizarReceita && (
+              <div className="flex justify-end">
+                <button onClick={onAtualizarReceita} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100">
+                  <RefreshCw className="h-3.5 w-3.5" /> Atualizar dados da Receita
+                </button>
+              </div>
+            )}
             <AnaliseCnpjCard analise={analiseCnpj} onGerar={gerarAnaliseCnpj} loading={gerandoAnaliseCnpj} />
             {blocosPrioritarios.map((bloco) => (
               <BlocoCard

@@ -378,24 +378,15 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
                 {etapaInicial?.diagnostico || "A análise inicial ainda não foi consolidada. Abra o Dossiê / Laudo IA para processar os quatro documentos."}
               </p>
             </div>
-            <div className="flex shrink-0 flex-wrap gap-2">
+            {onNavegar && (
               <button
                 type="button"
-                onClick={carregar}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                onClick={() => onNavegar("dossie_credito")}
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-black text-white ${aptoInicial ? "bg-emerald-600 hover:bg-emerald-700" : "bg-blue-600 hover:bg-blue-700"}`}
               >
-                <RefreshCw className="h-3.5 w-3.5" /> Sincronizar
+                {aptoInicial ? "Ver relatório e avançar" : "Abrir relatório inicial"} <ArrowRight className="h-3.5 w-3.5" />
               </button>
-              {onNavegar && (
-                <button
-                  type="button"
-                  onClick={() => onNavegar("dossie_credito")}
-                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-black text-white ${aptoInicial ? "bg-emerald-600 hover:bg-emerald-700" : "bg-blue-600 hover:bg-blue-700"}`}
-                >
-                  {aptoInicial ? "Ver laudo e avançar" : "Analisar os 4 documentos"} <ArrowRight className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
+            )}
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
