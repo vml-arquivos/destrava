@@ -52,7 +52,19 @@ export type DocumentosEntidadeProps = {
   permitirUpload?: boolean;
   permitirExcluir?: boolean;
   permitirValidar?: boolean;
+  /** Executa a análise dos quatro documentos iniciais e abre o laudo. */
+  onAbrirLaudo?: () => Promise<void> | void;
+  secaoInicial?: string | null;
 };
+
+
+const TIPOS_IDENTIDADE_INICIAL = new Set([
+  "cartao_cnpj",
+  "qsa",
+  "atos_junta_comercial",
+  "enquadramento_tributario_cnpj",
+  "simples_nacional",
+]);
 
 const statusCls: Record<string, string> = {
   ativo: "bg-blue-50 text-blue-700 border-blue-100",
@@ -314,6 +326,8 @@ export default function DocumentosEntidade({
   permitirUpload = true,
   permitirExcluir = true,
   permitirValidar = false,
+  onAbrirLaudo,
+  secaoInicial = null,
 }: DocumentosEntidadeProps) {
   const [docs, setDocs] = useState<DocumentoArquivo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -322,10 +336,11 @@ export default function DocumentosEntidade({
   const [nomeCustomizadoPorTipo, setNomeCustomizadoPorTipo] = useState<Record<string, string>>({});
   const [selecionados, setSelecionados] = useState<Record<string, boolean>>({});
   const [exportando, setExportando] = useState(false);
+  const [gerandoLaudo, setGerandoLaudo] = useState(false);
   const [modalExportacao, setModalExportacao] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentoArquivo | null>(null);
-  const [secaoAtiva, setSecaoAtiva] = useState<string | null>(null);
+  const [secaoAtiva, setSecaoAtiva] = useState<string | null>(secaoInicial);
   // Mostra só os campos obrigatórios de cada categoria por padrão -- evita os 44 campos
   // de uma vez. "Ver documentos complementares" revela o resto, sem esconder nada
   // permanentemente, só evita abrir tudo de cara.
@@ -368,6 +383,7 @@ export default function DocumentosEntidade({
   }, [entidadeId, query, entidadeTipo]);
 
   useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => { if (secaoInicial) setSecaoAtiva(secaoInicial); }, [secaoInicial]);
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
   const slotsDaTela = useMemo(() => {
@@ -412,6 +428,10 @@ export default function DocumentosEntidade({
   const totalSlots = useMemo(() => slotsDaTela.length, [slotsDaTela]);
   const slotsPreenchidos = useMemo(() => slotsDaTela.filter((documentoSlot) => docs.some((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento))).length, [slotsDaTela, docs]);
   const documentosValidados = useMemo(() => docs.filter((doc) => doc.validado).length, [docs]);
+  const identidadeInicialPreenchida = useMemo(() => {
+    const slotsIdentidade = SECOES_DOCUMENTAIS.find((secao) => secao.titulo === "Identidade do CNPJ")?.slots || [];
+    return slotsIdentidade.filter((documentoSlot) => docs.some((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento))).length;
+  }, [docs]);
 
   function abrirChecklistExportacao() {
     if (!docs.length) { toast.error("Não há documentos anexados para exportar."); return; }
@@ -449,6 +469,22 @@ export default function DocumentosEntidade({
       setObservacoesPorTipo((prev) => ({ ...prev, [tipoDocumento]: "" }));
       setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipoDocumento]: "" }));
       await carregar();
+
+      // A primeira etapa do crédito nasce dos quatro documentos de identidade.
+      // O recálculo em segundo plano deixa o laudo sincronizado assim que um deles
+      // é anexado, sem interromper o upload caso a análise/OCR esteja indisponível.
+      if (empresaId && TIPOS_IDENTIDADE_INICIAL.has(tipoDocumento)) {
+        const tiposDepoisDoUpload = new Set(docs.map((doc) => doc.tipo_documento));
+        tiposDepoisDoUpload.add(tipoDocumento);
+        const identidadeCompleta = tiposDepoisDoUpload.has("cartao_cnpj")
+          && tiposDepoisDoUpload.has("qsa")
+          && tiposDepoisDoUpload.has("atos_junta_comercial")
+          && (tiposDepoisDoUpload.has("enquadramento_tributario_cnpj") || tiposDepoisDoUpload.has("simples_nacional"));
+        if (identidadeCompleta) {
+          void apiFetch(`/api/documentacao/empresa/${empresaId}/recalcular`, { method: "POST" })
+            .catch((error: any) => console.warn("[DocumentosEntidade] análise automática pendente:", error?.message || error));
+        }
+      }
       return resultado;
     } catch (err: any) {
       const msg = err?.message || "Erro ao enviar documento.";
@@ -457,6 +493,21 @@ export default function DocumentosEntidade({
       return null;
     } finally {
       setUploadingTipo(null);
+    }
+  }
+
+  async function abrirLaudo() {
+    if (!onAbrirLaudo) {
+      toast.info("Abra a empresa na aba Dossiê / Laudo IA para executar a análise documental.");
+      return;
+    }
+    setGerandoLaudo(true);
+    try {
+      await onAbrirLaudo();
+    } catch (error: any) {
+      console.error("[DocumentosEntidade] Falha ao gerar laudo inicial:", error);
+    } finally {
+      setGerandoLaudo(false);
     }
   }
 
@@ -565,11 +616,12 @@ export default function DocumentosEntidade({
       <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
         <div>
           <h3 className="text-base font-bold text-slate-800 flex items-center gap-2"><Paperclip className="w-4 h-4" /> {titulo}</h3>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">Cada documento fica no seu local correto. Os arquivos permanecem salvos no repositório documental e alimentam o laudo/dossiê gerado pela IA.</p>
+          <p className="text-xs text-slate-500 mt-1 max-w-2xl">Anexe os quatro documentos da Identidade do CNPJ. Em seguida, execute a análise para cruzar os arquivos com a Receita Federal e liberar a próxima etapa.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => toast.info("O laudo/dossiê será gerado pela etapa de IA/OCR com base no acervo documental, dados extraídos e validações do sistema.")} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">
-            <FileText className="w-3.5 h-3.5" /> Laudo / dossiê IA
+          <button type="button" onClick={abrirLaudo} disabled={gerandoLaudo} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-indigo-200 bg-indigo-600 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">
+            {gerandoLaudo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+            {gerandoLaudo ? "Analisando documentos..." : "Analisar 4 documentos e abrir laudo"}
           </button>
           <button type="button" onClick={abrirChecklistExportacao} disabled={docs.length === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 disabled:opacity-50">
             <FileArchive className="w-3.5 h-3.5" /> Exportar documentos
@@ -577,25 +629,24 @@ export default function DocumentosEntidade({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Arquivos</p>
-          <p className="mt-1 text-xl font-black text-slate-900">{docs.length}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Campos preenchidos</p>
-          <p className="mt-1 text-xl font-black text-slate-900">{slotsPreenchidos}/{totalSlots}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Validados</p>
-          <p className="mt-1 text-xl font-black text-emerald-700">{documentosValidados}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Pendentes</p>
-          <p className="mt-1 text-xl font-black text-amber-700">{Math.max(docs.length - documentosValidados, 0)}</p>
+      <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-black text-slate-900">Etapa 1 — Identidade do CNPJ</p>
+              <span className={`rounded-full border bg-white px-2 py-0.5 text-[10px] font-black ${identidadeInicialPreenchida === 4 ? "border-emerald-200 text-emerald-700" : "border-blue-200 text-blue-700"}`}>
+                {identidadeInicialPreenchida}/4 anexados
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-slate-600">Cartão CNPJ, QSA, Atos da Junta e Enquadramento Tributário formam o primeiro laudo. Os demais documentos pertencem às próximas etapas.</p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[11px]">
+            <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-slate-600"><b className="text-slate-900">{docs.length}</b> arquivos no acervo</span>
+            <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-slate-600"><b className="text-slate-900">{slotsPreenchidos}/{totalSlots}</b> campos preenchidos</span>
+            <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-slate-600"><b className="text-emerald-700">{documentosValidados}</b> validados</span>
+          </div>
         </div>
       </div>
-
 
       {permitirUpload && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">

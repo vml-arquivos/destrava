@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { normalizeText, onlyDigits, parseDate } from '../utils/helpers';
@@ -11,7 +13,7 @@ export interface ExtracaoDocumentalLocalResult {
   tipo: TipoDocumentoLocal;
   disponivel: boolean;
   legivel: boolean;
-  mecanismo: 'pdftotext';
+  mecanismo: 'pdftotext' | 'tesseract';
   texto: string;
   dados: Record<string, any>;
   confianca: number;
@@ -238,9 +240,9 @@ function parseSimples(texto: string): { dados: Record<string, any>; confianca: n
   const norm = textoNormalizado(texto);
   const compativel = norm.includes('simples nacional') || norm.includes('consulta optantes') || norm.includes('simei');
   const cnpj = formatarCnpj(primeiroCnpj(texto));
-  const naoOptante = /n[aã]o\s+optante\s+pelo\s+simples\s+nacional/i.test(texto) || norm.includes('situacao no simples nacional nao optante');
+  const naoOptante = /n[aã]o\s+optante\s+pelo\s+simples\s+nacional/i.test(texto) || /situacao\s+no\s+simples\s+nacional\W{0,8}nao\s+optante/i.test(norm);
   const excluido = /exclu[ií]d[oa]\s+do\s+simples/i.test(texto) || norm.includes('exclusao do simples nacional efetivada');
-  const optante = !naoOptante && !excluido && (/optante\s+pelo\s+simples\s+nacional/i.test(texto) || norm.includes('situacao no simples nacional optante'));
+  const optante = !naoOptante && !excluido && (/optante\s+pelo\s+simples\s+nacional/i.test(texto) || /situacao\s+no\s+simples\s+nacional\W{0,8}optante/i.test(norm));
   const simei = /optante\s+pelo\s+simei/i.test(texto) || norm.includes('situacao no simei optante');
   const agendamento = norm.includes('agendamento') && norm.includes('exclus');
   const dataOpcao = dataProximaDe(texto, /(?:optante\s+pelo\s+simples\s+nacional\s+desde|data\s+de\s+op[cç][aã]o)\D{0,40}(\d{2}\/\d{2}\/\d{4})/i);
@@ -331,46 +333,135 @@ export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: str
   return parseAtosJunta(texto);
 }
 
+async function executarTesseract(arquivo: string, timeout: number, maxBuffer: number): Promise<string> {
+  const idiomas = process.env.LOCAL_OCR_LANGUAGES || 'por+eng';
+  const { stdout } = await execFileAsync(
+    process.env.TESSERACT_BINARY || 'tesseract',
+    [arquivo, 'stdout', '-l', idiomas, '--psm', process.env.LOCAL_OCR_PSM || '6'],
+    { timeout, maxBuffer, encoding: 'utf8' },
+  );
+  return String(stdout || '').replace(/\u0000/g, '').trim();
+}
+
+async function extrairTextoComOcrLocal(
+  arquivoPath: string,
+  isPdf: boolean,
+  timeout: number,
+  maxBuffer: number,
+): Promise<{ texto: string; disponivel: boolean; motivo?: string }> {
+  if (String(process.env.LOCAL_OCR_ENABLED || 'true').toLowerCase() === 'false') {
+    return { texto: '', disponivel: false, motivo: 'OCR local desabilitado por LOCAL_OCR_ENABLED=false.' };
+  }
+
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'destrava-ocr-'));
+  try {
+    if (!isPdf) {
+      const texto = await executarTesseract(arquivoPath, timeout, maxBuffer);
+      return { texto, disponivel: true };
+    }
+
+    const maxPaginas = Math.max(1, Math.min(30, Number(process.env.LOCAL_OCR_MAX_PAGES || 12)));
+    const prefixo = path.join(tempDir, 'pagina');
+    await execFileAsync(
+      process.env.PDFTOPPM_BINARY || 'pdftoppm',
+      ['-png', '-r', process.env.LOCAL_OCR_DPI || '180', '-f', '1', '-l', String(maxPaginas), arquivoPath, prefixo],
+      { timeout, maxBuffer, encoding: 'utf8' },
+    );
+    const paginas = (await readdir(tempDir))
+      .filter((nome) => nome.startsWith('pagina-') && nome.endsWith('.png'))
+      .sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
+    if (!paginas.length) return { texto: '', disponivel: true, motivo: 'Não foi possível renderizar páginas para OCR local.' };
+
+    const textos: string[] = [];
+    for (const pagina of paginas) {
+      const trecho = await executarTesseract(path.join(tempDir, pagina), timeout, maxBuffer);
+      if (trecho) textos.push(trecho);
+    }
+    return { texto: textos.join('\n\n').trim(), disponivel: true };
+  } catch (error: any) {
+    const indisponivel = error?.code === 'ENOENT';
+    return {
+      texto: '',
+      disponivel: !indisponivel,
+      motivo: indisponivel
+        ? 'Tesseract ou pdftoppm não está instalado neste ambiente.'
+        : String(error?.message || 'Falha no OCR local.'),
+    };
+  } finally {
+    await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
 export async function extrairDocumentoLocal(
   arquivoPath: string,
   mimeType: string | null | undefined,
   tipo: TipoDocumentoLocal,
 ): Promise<ExtracaoDocumentalLocalResult> {
   const effectiveMime = String(mimeType || '').toLowerCase().split(';')[0].trim();
-  const isPdf = effectiveMime === 'application/pdf' || path.extname(arquivoPath).toLowerCase() === '.pdf';
-  if (!isPdf) {
-    return { tipo, disponivel: true, legivel: false, mecanismo: 'pdftotext', texto: '', dados: {}, confianca: 0, motivo: 'Extração local disponível apenas para PDF textual.' };
+  const extension = path.extname(arquivoPath).toLowerCase();
+  const isPdf = effectiveMime === 'application/pdf' || extension === '.pdf';
+  const isImage = effectiveMime.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.webp', '.tif', '.tiff', '.bmp'].includes(extension);
+  if (!isPdf && !isImage) {
+    return { tipo, disponivel: true, legivel: false, mecanismo: 'pdftotext', texto: '', dados: {}, confianca: 0, motivo: 'Formato não suportado pelo leitor interno.' };
   }
 
   const timeout = Number(process.env.LOCAL_PDF_TEXT_TIMEOUT_MS || 15000);
-  const maxBuffer = Number(process.env.LOCAL_PDF_TEXT_MAX_BYTES || 8 * 1024 * 1024);
-  try {
-    const { stdout } = await execFileAsync(
-      process.env.PDFTOTEXT_BINARY || 'pdftotext',
-      ['-layout', '-nopgbrk', arquivoPath, '-'],
-      {
-        timeout: Number.isFinite(timeout) && timeout > 0 ? timeout : 15000,
-        maxBuffer: Number.isFinite(maxBuffer) && maxBuffer > 0 ? maxBuffer : 8 * 1024 * 1024,
-        encoding: 'utf8',
-      },
-    );
-    const texto = String(stdout || '').replace(/\u0000/g, '').trim();
-    if (texto.length < 20) {
-      return { tipo, disponivel: true, legivel: false, mecanismo: 'pdftotext', texto, dados: {}, confianca: 0, motivo: 'PDF sem camada textual útil; OCR externo ou revisão humana é necessário.' };
+  const ocrTimeout = Number(process.env.LOCAL_OCR_TIMEOUT_MS || 120000);
+  const maxBuffer = Number(process.env.LOCAL_PDF_TEXT_MAX_BYTES || 16 * 1024 * 1024);
+  const timeoutTexto = Number.isFinite(timeout) && timeout > 0 ? timeout : 15000;
+  const timeoutOcr = Number.isFinite(ocrTimeout) && ocrTimeout > 0 ? ocrTimeout : 120000;
+  const bufferMaximo = Number.isFinite(maxBuffer) && maxBuffer > 0 ? maxBuffer : 16 * 1024 * 1024;
+
+  if (isPdf) {
+    try {
+      const { stdout } = await execFileAsync(
+        process.env.PDFTOTEXT_BINARY || 'pdftotext',
+        ['-layout', '-nopgbrk', arquivoPath, '-'],
+        { timeout: timeoutTexto, maxBuffer: bufferMaximo, encoding: 'utf8' },
+      );
+      const texto = String(stdout || '').replace(/\u0000/g, '').trim();
+      if (texto.length >= 20) {
+        const { dados, confianca } = analisarTextoDocumentoLocal(tipo, texto);
+        if (confianca >= Number(process.env.LOCAL_EXTRACTION_MIN_CONFIDENCE || 0.55)) {
+          return { tipo, disponivel: true, legivel: true, mecanismo: 'pdftotext', texto, dados, confianca };
+        }
+        // Camada textual incompleta: tenta OCR antes de recorrer à API externa.
+      }
+    } catch (error: any) {
+      if (error?.code === 'ENOENT') {
+        console.warn('[extracaoDocumentalLocal] pdftotext indisponível; tentando OCR local.');
+      } else {
+        console.warn('[extracaoDocumentalLocal] camada textual indisponível; tentando OCR local:', error?.message || error);
+      }
     }
-    const { dados, confianca } = analisarTextoDocumentoLocal(tipo, texto);
-    return { tipo, disponivel: true, legivel: true, mecanismo: 'pdftotext', texto, dados, confianca };
-  } catch (error: any) {
-    const indisponivel = error?.code === 'ENOENT';
+  }
+
+  const ocr = await extrairTextoComOcrLocal(arquivoPath, isPdf, timeoutOcr, bufferMaximo);
+  if (ocr.texto.length >= 20) {
+    const { dados, confianca } = analisarTextoDocumentoLocal(tipo, ocr.texto);
     return {
       tipo,
-      disponivel: !indisponivel,
-      legivel: false,
-      mecanismo: 'pdftotext',
-      texto: '',
-      dados: {},
-      confianca: 0,
-      motivo: indisponivel ? 'Binário pdftotext não está instalado neste ambiente.' : String(error?.message || 'Falha na extração textual local.'),
+      disponivel: true,
+      legivel: confianca >= Number(process.env.LOCAL_EXTRACTION_MIN_CONFIDENCE || 0.55),
+      mecanismo: 'tesseract',
+      texto: ocr.texto,
+      dados: { ...dados, fonte_extracao: 'ocr_local_tesseract' },
+      confianca,
+      motivo: confianca < Number(process.env.LOCAL_EXTRACTION_MIN_CONFIDENCE || 0.55)
+        ? 'OCR local executado, mas a confiança ficou abaixo do mínimo seguro.'
+        : undefined,
     };
   }
+
+  return {
+    tipo,
+    disponivel: ocr.disponivel,
+    legivel: false,
+    mecanismo: 'tesseract',
+    texto: ocr.texto,
+    dados: {},
+    confianca: 0,
+    motivo: ocr.motivo || 'Documento sem texto legível pelo motor interno; revisão humana ou IA externa é necessária.',
+  };
+
 }

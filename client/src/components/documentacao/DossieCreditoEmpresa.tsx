@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -539,9 +539,13 @@ function AnaliseCnpjCard({ analise, onGerar, loading }: { analise: AnaliseCnpjEm
 function ProntidaoIdentidadeCard({
   identidade,
   onAvancar,
+  onAnalisar,
+  analisando = false,
 }: {
   identidade?: IdentidadeCnpj;
   onAvancar?: () => void;
+  onAnalisar?: () => void;
+  analisando?: boolean;
 }) {
   if (!identidade) return null;
   const documentos = Object.values(identidade.documentos_iniciais || {});
@@ -563,22 +567,35 @@ function ProntidaoIdentidadeCard({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             {apto ? <ShieldCheck className="w-5 h-5 text-emerald-700" /> : <ShieldAlert className="w-5 h-5 text-amber-700" />}
-            <h3 className="text-sm font-extrabold text-slate-900">Prontidão da Identidade Empresarial</h3>
+            <h3 className="text-sm font-extrabold text-slate-900">Laudo inicial — Identidade do CNPJ</h3>
             <span className={`rounded-full border px-2.5 py-1 text-[11px] font-extrabold ${apto ? "border-emerald-200 bg-white text-emerald-700" : "border-amber-200 bg-white text-amber-800"}`}>
               {apto ? "Tudo OK — pode avançar" : "Avanço ainda bloqueado"}
             </span>
           </div>
           <p className="mt-2 text-xs leading-relaxed text-slate-700 max-w-4xl">{identidade.diagnostico}</p>
         </div>
-        {apto && onAvancar && (
-          <button
-            type="button"
-            onClick={onAvancar}
-            className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-sm transition-colors hover:bg-emerald-700"
-          >
-            Avançar para próxima etapa <ArrowRight className="h-4 w-4" />
-          </button>
-        )}
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {!apto && onAnalisar && (
+            <button
+              type="button"
+              onClick={onAnalisar}
+              disabled={analisando}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-60"
+            >
+              {analisando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {analisando ? "Analisando os 4 documentos..." : "Analisar os 4 documentos"}
+            </button>
+          )}
+          {apto && onAvancar && (
+            <button
+              type="button"
+              onClick={onAvancar}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-sm transition-colors hover:bg-emerald-700"
+            >
+              Avançar para próxima etapa <ArrowRight className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -608,15 +625,15 @@ function ProntidaoIdentidadeCard({
         <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
           <div className="rounded-xl border border-emerald-100 bg-white p-3">
             <p className="text-xs font-extrabold text-emerald-800">Confirmações</p>
-            <div className="mt-2 space-y-1">{positivos.length ? positivos.map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-emerald-800">• {item}</p>) : <p className="text-[11px] text-slate-500">Aguardando confirmações.</p>}</div>
+            <div className="mt-2 space-y-1">{positivos.length ? positivos.slice(0, 5).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-emerald-800">• {item}</p>) : <p className="text-[11px] text-slate-500">Aguardando confirmações.</p>}</div>
           </div>
           <div className="rounded-xl border border-red-100 bg-white p-3">
             <p className="text-xs font-extrabold text-red-800">Bloqueios para avanço</p>
-            <div className="mt-2 space-y-1">{bloqueios.length ? bloqueios.map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-red-800">• {item}</p>) : <p className="text-[11px] text-emerald-700">Nenhum bloqueio.</p>}</div>
+            <div className="mt-2 space-y-1">{bloqueios.length ? bloqueios.slice(0, 5).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-red-800">• {item}</p>) : <p className="text-[11px] text-emerald-700">Nenhum bloqueio.</p>}</div>
           </div>
           <div className="rounded-xl border border-amber-100 bg-white p-3">
             <p className="text-xs font-extrabold text-amber-800">Avisos estratégicos</p>
-            <div className="mt-2 space-y-1">{avisos.length ? avisos.map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-amber-800">• {item}</p>) : <p className="text-[11px] text-slate-500">Sem avisos adicionais.</p>}</div>
+            <div className="mt-2 space-y-1">{avisos.length ? avisos.slice(0, 5).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-amber-800">• {item}</p>) : <p className="text-[11px] text-slate-500">Sem avisos adicionais.</p>}</div>
           </div>
         </div>
       )}
@@ -636,7 +653,10 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, on
   const [loading, setLoading] = useState(false);
   const [recalculando, setRecalculando] = useState(false);
   const [gerandoAnaliseCnpj, setGerandoAnaliseCnpj] = useState(false);
-  const [abertos, setAbertos] = useState<Record<string, boolean>>({ cnpj_receita: true, qsa_quadro_societario: true });
+  const [abertos, setAbertos] = useState<Record<string, boolean>>({ cnpj_receita: false, qsa_quadro_societario: false });
+  const [mostrarDetalhesIniciais, setMostrarDetalhesIniciais] = useState(false);
+  const [mostrarProximasEtapas, setMostrarProximasEtapas] = useState(false);
+  const autoAnaliseExecutada = useRef<string | null>(null);
 
   const carregar = useCallback(async () => {
     if (!empresaId) return;
@@ -680,23 +700,38 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, on
     }
   };
 
-  const recalcular = async () => {
+  const recalcular = async (opcoes: { silencioso?: boolean } = {}) => {
     if (!empresaId) return;
     setRecalculando(true);
     try {
       const data = await apiFetch(`/api/documentacao/empresa/${empresaId}/recalcular`, { method: "POST" });
       setDossie(data);
       await carregarAnaliseCnpj();
-      toast.success("Dossiê recalculado com base nos dados atuais");
+      if (!opcoes.silencioso) toast.success("Os quatro documentos iniciais foram analisados e o laudo foi atualizado.");
     } catch (err: any) {
-      toast.error(err?.message || "Erro ao recalcular dossiê");
+      if (!opcoes.silencioso) toast.error(err?.message || "Erro ao analisar os documentos iniciais");
+      else console.warn("[DossieCreditoEmpresa] análise automática pendente:", err?.message || err);
     } finally {
       setRecalculando(false);
     }
   };
 
-  const blocosPrioritarios = useMemo(() => (dossie?.blocos || []).filter((b) => ["cnpj_receita", "qsa_quadro_societario"].includes(b.codigo)), [dossie]);
-  const demaisBlocos = useMemo(() => (dossie?.blocos || []).filter((b) => !["cnpj_receita", "qsa_quadro_societario"].includes(b.codigo)), [dossie]);
+  const CODIGOS_IDENTIDADE = ["cnpj_receita", "qsa_quadro_societario", "atos_junta_comercial", "enquadramento_tributario"];
+  const blocosPrioritarios = useMemo(() => (dossie?.blocos || []).filter((b) => CODIGOS_IDENTIDADE.includes(b.codigo)), [dossie]);
+  const demaisBlocos = useMemo(() => (dossie?.blocos || []).filter((b) => !CODIGOS_IDENTIDADE.includes(b.codigo)), [dossie]);
+
+  const todosIniciaisAnexados = useMemo(() => {
+    const itens = Object.values(dossie?.identidade_cnpj?.documentos_iniciais || {});
+    return itens.length === 4 && itens.every((item) => item.anexado);
+  }, [dossie]);
+  const algumInicialAguardando = useMemo(() => Object.values(dossie?.identidade_cnpj?.documentos_iniciais || {}).some((item) => item.anexado && !item.analisado), [dossie]);
+
+  useEffect(() => {
+    if (!empresaId || !todosIniciaisAnexados || !algumInicialAguardando || recalculando) return;
+    if (autoAnaliseExecutada.current === empresaId) return;
+    autoAnaliseExecutada.current = empresaId;
+    void recalcular({ silencioso: true });
+  }, [empresaId, todosIniciaisAnexados, algumInicialAguardando, recalculando]);
 
   if (!empresaId) return null;
 
@@ -710,82 +745,112 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, on
   }
 
   const resumo = dossie?.resumo;
+  const identidade = dossie?.identidade_cnpj;
+  const apto = identidade?.apto_para_avancar === true;
 
   return (
-    <div className="p-5 fade-in space-y-4">
-      <div className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white p-4">
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-          <div>
+    <div className="p-4 fade-in space-y-3">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-blue-700" />
-              <h2 className="text-base font-extrabold text-slate-800">Dossiê de Crédito Empresarial</h2>
+              <ShieldCheck className="h-5 w-5 text-blue-700" />
+              <h2 className="text-base font-extrabold text-slate-900">Etapa 1 — Análise dos 4 documentos iniciais</h2>
             </div>
-            <p className="text-xs text-slate-600 mt-1 max-w-3xl">
-              Consulte os dados cadastrais, quadro societário, documentos vinculados e pendências da empresa em um só lugar.
+            <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-600">
+              O sistema lê Cartão CNPJ, QSA, Atos da Junta e Enquadramento Tributário, cruza os dados com a Receita Federal e libera a próxima etapa somente quando tudo estiver consistente.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             {onAtualizarReceita && (
-              <button onClick={onAtualizarReceita} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors">
-                <RefreshCw className="w-3.5 h-3.5" /> Atualizar Receita/QSA
+              <button onClick={onAtualizarReceita} className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100">
+                <RefreshCw className="h-3.5 w-3.5" /> Atualizar Receita
               </button>
             )}
-            <button onClick={recalcular} disabled={recalculando} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors disabled:opacity-50">
-              {recalculando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Recalcular dossiê
+            <button onClick={() => void recalcular()} disabled={recalculando} className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50">
+              {recalculando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              {recalculando ? "Analisando..." : "Analisar novamente"}
             </button>
           </div>
         </div>
+      </div>
 
-        {resumo && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mt-4">
-            <div className="rounded-xl bg-white border border-blue-100 p-3"><span className="text-[11px] text-slate-400 font-semibold">Blocos</span><b className="block text-lg text-slate-800">{resumo.blocos_completos}/{resumo.total_blocos}</b></div>
-            <div className="rounded-xl bg-white border border-blue-100 p-3"><span className="text-[11px] text-slate-400 font-semibold">Pendências</span><b className="block text-lg text-slate-800">{resumo.pendencias_total}</b></div>
-            <div className="rounded-xl bg-white border border-red-100 p-3"><span className="text-[11px] text-red-400 font-semibold">Altas</span><b className="block text-lg text-red-700">{resumo.pendencias_altas}</b></div>
-            <div className="rounded-xl bg-white border border-amber-100 p-3"><span className="text-[11px] text-amber-500 font-semibold">Médias</span><b className="block text-lg text-amber-700">{resumo.pendencias_medias}</b></div>
-            <div className="rounded-xl bg-white border border-blue-100 p-3"><span className="text-[11px] text-blue-500 font-semibold">Baixas</span><b className="block text-lg text-blue-700">{resumo.pendencias_baixas}</b></div>
+      <ProntidaoIdentidadeCard
+        identidade={identidade}
+        onAvancar={onAvancar}
+        onAnalisar={() => void recalcular()}
+        analisando={recalculando}
+      />
+
+      {!identidade && !recalculando && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+          O laudo inicial ainda não foi consolidado. Clique em <b>Analisar novamente</b> para processar os quatro documentos anexados.
+        </div>
+      )}
+
+      <div className="rounded-xl border border-slate-200 bg-white">
+        <button
+          type="button"
+          onClick={() => setMostrarDetalhesIniciais((v) => !v)}
+          className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-slate-50"
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <FileText className="h-4 w-4 shrink-0 text-blue-700" />
+            <div>
+              <p className="text-sm font-extrabold text-slate-800">Detalhes técnicos da análise inicial</p>
+              <p className="text-[11px] text-slate-500">Receita, OCR/leitura local, divergências e documentos vinculados.</p>
+            </div>
+          </div>
+          {mostrarDetalhesIniciais ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+        </button>
+        {mostrarDetalhesIniciais && (
+          <div className="space-y-3 border-t border-slate-100 p-3">
+            <AnaliseCnpjCard analise={analiseCnpj} onGerar={gerarAnaliseCnpj} loading={gerandoAnaliseCnpj} />
+            {blocosPrioritarios.map((bloco) => (
+              <BlocoCard
+                key={bloco.id}
+                bloco={bloco}
+                aberto={!!abertos[bloco.codigo]}
+                onToggle={() => setAbertos((prev) => ({ ...prev, [bloco.codigo]: !prev[bloco.codigo] }))}
+              />
+            ))}
           </div>
         )}
       </div>
 
-      <AnaliseCnpjCard analise={analiseCnpj} onGerar={gerarAnaliseCnpj} loading={gerandoAnaliseCnpj} />
-
-      <ProntidaoIdentidadeCard identidade={dossie?.identidade_cnpj} onAvancar={onAvancar} />
-
-      {dossie?.pendencias?.some((p) => p.severidade === "alta") && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800 flex items-start gap-2">
-          <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0" />
-          <div><b>Pendências obrigatórias:</b> revise os itens de CNPJ, QSA e documentação obrigatória antes de avançar.</div>
-        </div>
-      )}
-
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-blue-700" />
-          <h3 className="text-sm font-extrabold text-slate-800">Prioridade imediata: CNPJ e QSA</h3>
-        </div>
-        {blocosPrioritarios.map((bloco) => (
-          <BlocoCard
-            key={bloco.id}
-            bloco={bloco}
-            aberto={!!abertos[bloco.codigo]}
-            onToggle={() => setAbertos((prev) => ({ ...prev, [bloco.codigo]: !prev[bloco.codigo] }))}
-          />
-        ))}
-      </div>
-
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 pt-2">
-          <ClipboardList className="w-4 h-4 text-slate-600" />
-          <h3 className="text-sm font-extrabold text-slate-800">Outros blocos do dossiê</h3>
-        </div>
-        {demaisBlocos.map((bloco) => (
-          <BlocoCard
-            key={bloco.id}
-            bloco={bloco}
-            aberto={!!abertos[bloco.codigo]}
-            onToggle={() => setAbertos((prev) => ({ ...prev, [bloco.codigo]: !prev[bloco.codigo] }))}
-          />
-        ))}
+      <div className="rounded-xl border border-slate-200 bg-white">
+        <button
+          type="button"
+          onClick={() => setMostrarProximasEtapas((v) => !v)}
+          className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-slate-50"
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <ClipboardList className="h-4 w-4 shrink-0 text-slate-600" />
+            <div>
+              <p className="text-sm font-extrabold text-slate-800">Próximas etapas do dossiê</p>
+              <p className="text-[11px] text-slate-500">
+                Documentos da empresa, documentos dos sócios, certidões, faturamento e demais análises.
+                {resumo ? ` ${resumo.total_blocos - blocosPrioritarios.length} bloco(s) preservado(s).` : ""}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {!apto && <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">Aguardando etapa 1</span>}
+            {mostrarProximasEtapas ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+          </div>
+        </button>
+        {mostrarProximasEtapas && (
+          <div className="space-y-3 border-t border-slate-100 p-3">
+            {demaisBlocos.map((bloco) => (
+              <BlocoCard
+                key={bloco.id}
+                bloco={bloco}
+                aberto={!!abertos[bloco.codigo]}
+                onToggle={() => setAbertos((prev) => ({ ...prev, [bloco.codigo]: !prev[bloco.codigo] }))}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -611,7 +611,7 @@ export class AnaliseDocumentalService {
     try {
       local = await extrairDocumentoLocal(resolvedPath, mimeType, tipo);
       if (local.legivel && local.confianca >= threshold && local.dados?.documento_compativel !== false) {
-        this.ultimoModeloUsado = 'local:pdftotext-v1';
+        this.ultimoModeloUsado = `local:${local.mecanismo}-v1`;
         this.ultimaFonteExtracao = 'local';
         return {
           ...local.dados,
@@ -629,7 +629,7 @@ export class AnaliseDocumentalService {
     } catch (error: any) {
       if (local?.legivel && local.dados && Object.keys(local.dados).length > 0) {
         console.warn('[AnaliseDocumentalService] Gemini indisponível; mantendo extração local parcial para revisão humana:', tipo, error?.message || error);
-        this.ultimoModeloUsado = 'local:pdftotext-v1-parcial';
+        this.ultimoModeloUsado = `local:${local.mecanismo}-v1-parcial`;
         this.ultimaFonteExtracao = 'local';
         return {
           ...local.dados,

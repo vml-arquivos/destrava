@@ -744,19 +744,6 @@ function EmpresaDadosWorkspace({
           <DataCell label="Limite atual" value={fmt(empresa.limite_credito_atual || 0)} icon={<CreditCard className="w-3.5 h-3.5" />} />
           <DataCell label="Abertura" value={fmtDate(empresa.data_abertura || "")} icon={<Calendar className="w-3.5 h-3.5" />} />
         </div>
-        <div className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
-            <div className="flex items-center gap-3 min-w-[220px]">
-              <div className="h-11 w-11 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-500"><ShieldCheck className="w-5 h-5" /></div>
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-slate-400">Score Destrava</p>
-                <div className="flex items-end gap-1"><span className="text-3xl font-black text-slate-900">{score}</span><span className="text-sm font-bold text-slate-400 pb-1">/100</span></div>
-              </div>
-            </div>
-            <div className="flex-1 min-w-[180px]"><ScoreBar score={score} risco={risco} /></div>
-            <div className="flex flex-wrap gap-1.5 xl:max-w-[360px]">{tags.slice(0, 4).map((t, i) => <span key={i} className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${t.ok ? "bg-white text-slate-600 border-slate-200" : "bg-rose-50 text-rose-700 border-rose-200"}`}>{t.text}</span>)}</div>
-          </div>
-        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <DataCell label="CNPJ" value={empresa.cnpj} icon={<Hash className="w-3.5 h-3.5" />} mono />
           <DataCell label="Localização" value={[empresa.cidade, empresa.estado].filter(Boolean).join(" / ")} icon={<MapPin className="w-3.5 h-3.5" />} />
@@ -783,7 +770,6 @@ function EmpresaDadosWorkspace({
               <div className="mt-1.5 flex flex-wrap gap-1">
                 <DetailChip label="Docs" value={documentosTotal} tone="blue" />
                 <DetailChip label="Sócios" value={socios.length} tone="emerald" />
-                <DetailChip label="Score" value={score} tone={risco === "baixo" ? "emerald" : risco === "medio" ? "amber" : "rose"} />
               </div>
             </div>
             <div className="p-2.5">
@@ -2153,7 +2139,7 @@ export default function Empresas() {
                       <DossieCreditoEmpresa
                         empresaId={selecionada?.id}
                         onAtualizarReceita={selecionada ? () => sincronizarDados(selecionada) : undefined}
-                        onAvancar={abaPermitida("documentos") ? () => navegarParaAba("documentos") : undefined}
+                        onAvancar={abaPermitida("documentos") && selecionada?.id ? () => setLocation(`/colaborador/empresas/${selecionada.id}/acervo?etapa=documentacao_empresa`) : undefined}
                       />
                     )
 

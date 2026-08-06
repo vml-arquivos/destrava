@@ -8,7 +8,7 @@
  * Todos os campos têm fallback seguro para undefined/null/[].
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { apiFetch } from "@/lib/api";
 import PropostaBancaria from "./PropostaBancaria";
 import RelatorioTecnico from "./RelatorioTecnico";
@@ -55,10 +55,35 @@ interface PropostaPreliminar {
   apto_para_proposta: boolean;
 }
 
+interface EtapaIdentidadeDocumental {
+  etapa: "identidade_cnpj";
+  titulo: string;
+  apto_para_avancar: boolean;
+  documentos_ok: number;
+  total_documentos: number;
+  documentos: Array<{
+    codigo: string;
+    nome: string;
+    anexado: boolean;
+    analisado: boolean;
+    consistente: boolean;
+    status: string;
+  }>;
+  situacao_cadastral_ativa: boolean;
+  empresa_apta_12_meses: boolean | null;
+  idade_meses: number | null;
+  empresa_mei: boolean;
+  bloqueios: string[];
+  avisos: string[];
+  diagnostico: string;
+  proxima_etapa: string;
+}
+
 interface Inteligencia360Data {
   empresa_id: string;
   razao_social: string;
   cnpj: string | null;
+  etapa_identidade_documental?: EtapaIdentidadeDocumental;
   saude_cadastral: string;
   saude_documental: string;
   risco_documental: string;
@@ -260,6 +285,8 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
   const [data, setData] = useState<Inteligencia360Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [mostrarAnaliseCompleta, setMostrarAnaliseCompleta] = useState(false);
+  const autoAnaliseExecutada = useRef<string | null>(null);
 
   const carregar = useCallback(async () => {
     if (!empresaId) return;
@@ -276,6 +303,21 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
   }, [empresaId]);
 
   useEffect(() => { void carregar(); }, [carregar]);
+
+  // Empresas que já possuíam os quatro arquivos antes desta atualização não
+  // devem ficar presas em "aguardando análise". Ao abrir a Inteligência 360,
+  // processa uma única vez e recarrega os mesmos dados compartilhados pelo laudo.
+  useEffect(() => {
+    const etapa = data?.etapa_identidade_documental;
+    const docs = safeArr<any>(etapa?.documentos);
+    const todosAnexados = docs.length === 4 && docs.every((doc) => doc.anexado);
+    const precisaAnalisar = docs.some((doc) => doc.anexado && !doc.analisado);
+    if (!empresaId || !todosAnexados || !precisaAnalisar || autoAnaliseExecutada.current === empresaId) return;
+    autoAnaliseExecutada.current = empresaId;
+    void apiFetch(`/api/documentacao/empresa/${empresaId}/recalcular`, { method: "POST" })
+      .then(() => carregar())
+      .catch((error: any) => console.warn("[Inteligencia360] análise documental automática pendente:", error?.message || error));
+  }, [data, empresaId, carregar]);
 
   if (loading) {
     return (
@@ -313,9 +355,118 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
   const riscoCredito = RISCO_CFG[data.risco_credito] ?? RISCO_CFG.medio;
   const RiscoDocIcon = riscoDoc.Icon;
   const RiscoCreditoIcon = riscoCredito.Icon;
+  const etapaInicial = data.etapa_identidade_documental;
+
+  if (!mostrarAnaliseCompleta) {
+    const documentosIniciais = safeArr<any>(etapaInicial?.documentos);
+    const bloqueiosIniciais = safeArr<string>(etapaInicial?.bloqueios);
+    const aptoInicial = etapaInicial?.apto_para_avancar === true;
+
+    return (
+      <div className="max-w-[1400px] space-y-3 p-4">
+        <section className={`rounded-2xl border p-4 ${aptoInicial ? "border-emerald-200 bg-emerald-50/70" : "border-amber-200 bg-amber-50/60"}`}>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                {aptoInicial ? <ShieldCheck className="h-5 w-5 text-emerald-700" /> : <ShieldAlert className="h-5 w-5 text-amber-700" />}
+                <h2 className="text-base font-black text-slate-900">Etapa 1 — Identidade do CNPJ</h2>
+                <span className={`rounded-full border bg-white px-2.5 py-1 text-[11px] font-black ${aptoInicial ? "border-emerald-200 text-emerald-700" : "border-amber-200 text-amber-800"}`}>
+                  {aptoInicial ? "Tudo OK — pode avançar" : `${etapaInicial?.documentos_ok ?? 0}/4 documentos consistentes`}
+                </span>
+              </div>
+              <p className="mt-2 max-w-4xl text-xs leading-relaxed text-slate-700">
+                {etapaInicial?.diagnostico || "A análise inicial ainda não foi consolidada. Abra o Dossiê / Laudo IA para processar os quatro documentos."}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={carregar}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> Sincronizar
+              </button>
+              {onNavegar && (
+                <button
+                  type="button"
+                  onClick={() => onNavegar("dossie_credito")}
+                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-black text-white ${aptoInicial ? "bg-emerald-600 hover:bg-emerald-700" : "bg-blue-600 hover:bg-blue-700"}`}
+                >
+                  {aptoInicial ? "Ver laudo e avançar" : "Analisar os 4 documentos"} <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
+            {(documentosIniciais.length ? documentosIniciais : [
+              { codigo: "cartao_cnpj", nome: "Cartão CNPJ" },
+              { codigo: "qsa", nome: "QSA / Quadro Societário" },
+              { codigo: "atos_junta_comercial", nome: "Atos da Junta Comercial" },
+              { codigo: "enquadramento_tributario", nome: "Enquadramento Tributário" },
+            ]).map((doc: any) => (
+              <div key={doc.codigo} className="rounded-xl border border-white bg-white p-3 shadow-sm">
+                <div className="flex items-start gap-2">
+                  {doc.consistente ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" /> : <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600" />}
+                  <div>
+                    <p className="text-xs font-black text-slate-800">{doc.nome}</p>
+                    <p className={`mt-1 text-[11px] font-semibold ${doc.consistente ? "text-emerald-700" : "text-amber-700"}`}>
+                      {doc.consistente ? "Lido e consistente" : !doc.anexado ? "Não anexado" : !doc.analisado ? "Aguardando análise" : "Revisão necessária"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+            <div className="rounded-xl border border-white bg-white p-3">
+              <p className="text-[10px] font-bold uppercase text-slate-400">Receita Federal</p>
+              <p className={`mt-1 text-xs font-black ${etapaInicial?.situacao_cadastral_ativa ? "text-emerald-700" : "text-red-700"}`}>
+                {etapaInicial?.situacao_cadastral_ativa ? "Situação cadastral ativa" : "Situação cadastral não confirmada"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white bg-white p-3">
+              <p className="text-[10px] font-bold uppercase text-slate-400">Tempo de abertura</p>
+              <p className="mt-1 text-xs font-black text-slate-800">{etapaInicial?.idade_meses == null ? "Não confirmado" : `${etapaInicial.idade_meses} meses`}</p>
+            </div>
+            <div className="rounded-xl border border-white bg-white p-3">
+              <p className="text-[10px] font-bold uppercase text-slate-400">Próxima etapa</p>
+              <p className="mt-1 text-xs font-semibold text-slate-700">{aptoInicial ? "Documentos dos sócios, certidões e estratégia de crédito" : "Bloqueada até concluir a identidade do CNPJ"}</p>
+            </div>
+          </div>
+
+          {bloqueiosIniciais.length > 0 && (
+            <div className="mt-3 rounded-xl border border-red-100 bg-white p-3">
+              <p className="text-xs font-black text-red-800">O que falta para concluir</p>
+              <div className="mt-2 space-y-1">
+                {bloqueiosIniciais.slice(0, 5).map((item, index) => <p key={index} className="text-[11px] leading-relaxed text-red-700">• {item}</p>)}
+                {bloqueiosIniciais.length > 5 && <p className="text-[11px] font-semibold text-slate-500">+{bloqueiosIniciais.length - 5} item(ns) no laudo detalhado.</p>}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <button
+          type="button"
+          onClick={() => setMostrarAnaliseCompleta(true)}
+          className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white p-3 text-left hover:bg-slate-50"
+        >
+          <div>
+            <p className="text-sm font-black text-slate-800">Ver Inteligência 360 completa</p>
+            <p className="text-[11px] text-slate-500">Scores externos, riscos, proposta, recomendações, esteira e histórico permanecem disponíveis sem poluir a etapa inicial.</p>
+          </div>
+          <ChevronDown className="h-4 w-4 text-slate-400" />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 space-y-4 max-w-[1400px]">
+      <button type="button" onClick={() => setMostrarAnaliseCompleta(false)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">
+        <ChevronUp className="h-3.5 w-3.5" /> Voltar para a análise inicial
+      </button>
 
       {/* ── Diagnóstico Geral ── */}
       <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4">
@@ -347,9 +498,8 @@ export default function Inteligencia360({ empresaId, onNavegar }: Props) {
       </div>
 
       {/* ── Painel de Scores ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {[
-          { label: "Score Destrava", value: data.score_destrava, max: 100, icon: Star },
           { label: "Score Interno", value: data.score_interno, max: 1000, icon: BarChart3 },
           { label: "Score Serasa", value: data.score_serasa, max: 1000, icon: CreditCard },
           { label: "Score SPC", value: data.score_spc, max: 1000, icon: CreditCard },

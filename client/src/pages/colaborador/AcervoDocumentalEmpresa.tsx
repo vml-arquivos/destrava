@@ -46,6 +46,19 @@ export default function AcervoDocumentalEmpresa() {
     return () => { active = false; };
   }, [empresaId]);
 
+  async function analisarEAbrirLaudo() {
+    if (!empresaId) return;
+    try {
+      await apiFetch(`/api/documentacao/empresa/${empresaId}/recalcular`, { method: "POST" });
+      toast.success("Os quatro documentos iniciais foram analisados. Abrindo o laudo.");
+      setLocation(`/colaborador/empresas?empresa=${empresaId}&aba=dossie_credito`);
+    } catch (err: any) {
+      const mensagem = err?.message || "Não foi possível concluir a análise dos documentos iniciais.";
+      toast.error(mensagem);
+      throw err;
+    }
+  }
+
   function voltarParaEmpresa() {
     if (!empresaId) return setLocation("/colaborador/empresas");
     try {
@@ -60,6 +73,10 @@ export default function AcervoDocumentalEmpresa() {
     } catch {}
     setLocation(`/colaborador/empresas?empresa=${empresaId}&aba=visao_geral`);
   }
+
+  const secaoInicial = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("etapa") === "documentacao_empresa"
+    ? "Documentação da Empresa"
+    : "Identidade do CNPJ";
 
   return (
     <Layout>
@@ -113,6 +130,8 @@ export default function AcervoDocumentalEmpresa() {
               permitirUpload
               permitirExcluir
               permitirValidar
+              onAbrirLaudo={analisarEAbrirLaudo}
+              secaoInicial={secaoInicial}
             />
           )}
         </div>

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:20-slim AS base
+FROM node:22.17.0-slim AS base
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=/pnpm:$PATH
@@ -46,7 +46,7 @@ RUN set -eu; \
 
 RUN mkdir -p dist/assets && cp -r server/assets/. dist/assets/
 
-FROM node:20-slim AS runner
+FROM node:22.17.0-slim AS runner
 
 USER root
 ENV DEBIAN_FRONTEND=noninteractive
@@ -67,6 +67,9 @@ RUN apt-get update \
        libnss3 \
        libpango-1.0-0 \
        poppler-utils \
+       tesseract-ocr \
+       tesseract-ocr-por \
+       tesseract-ocr-eng \
        libx11-6 \
        libx11-xcb1 \
        libxcb1 \

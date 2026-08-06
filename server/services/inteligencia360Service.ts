@@ -37,10 +37,39 @@ export interface PropostaPreliminar {
   apto_para_proposta: boolean;
 }
 
+export interface DocumentoIdentidade360 {
+  codigo: "cartao_cnpj" | "qsa" | "atos_junta_comercial" | "enquadramento_tributario";
+  nome: string;
+  anexado: boolean;
+  analisado: boolean;
+  consistente: boolean;
+  status: "ok" | "nao_anexado" | "aguardando_analise" | "revisao_necessaria";
+}
+
+export interface EtapaIdentidadeDocumental360 {
+  etapa: "identidade_cnpj";
+  titulo: string;
+  apto_para_avancar: boolean;
+  documentos_ok: number;
+  total_documentos: 4;
+  documentos: DocumentoIdentidade360[];
+  situacao_cadastral_ativa: boolean;
+  empresa_apta_12_meses: boolean | null;
+  idade_meses: number | null;
+  empresa_mei: boolean;
+  bloqueios: string[];
+  avisos: string[];
+  diagnostico: string;
+  proxima_etapa: string;
+}
+
 export interface Inteligencia360Result {
   empresa_id: string;
   razao_social: string;
   cnpj: string | null;
+
+  // Portão inicial: os quatro documentos que comprovam a identidade da empresa.
+  etapa_identidade_documental: EtapaIdentidadeDocumental360;
 
   // Saúde geral
   saude_cadastral: "completo" | "basico" | "incompleto" | "critico";
@@ -899,6 +928,148 @@ function gerarRecomendacoesAutomacao(resumo: AutomacaoEngineResumo): string[] {
   return mensagens;
 }
 
+// ─── Portão inicial: Identidade do CNPJ ──────────────────────────────────────
+
+function normalizarTexto360(value: unknown): string {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+}
+
+function mesesDesdeData(value: unknown): number | null {
+  if (!value) return null;
+  const data = new Date(String(value));
+  if (Number.isNaN(data.getTime())) return null;
+  const hoje = new Date();
+  let meses = (hoje.getFullYear() - data.getFullYear()) * 12 + hoje.getMonth() - data.getMonth();
+  if (hoje.getDate() < data.getDate()) meses -= 1;
+  return Math.max(0, meses);
+}
+
+function alertasGravesResultado(resultadoInput: unknown): AlertaDocumental360[] {
+  const resultado = parseJsonSeguro(resultadoInput) || {};
+  const alertas = [
+    ...safeArray<any>(resultado.alertas),
+    ...safeArray<any>(resultado.divergencias),
+  ];
+  return alertas
+    .map((alerta) => ({
+      codigo: String(alerta?.codigo || "alerta_documental"),
+      mensagem: String(alerta?.mensagem || alerta?.descricao || "Divergência documental identificada."),
+      severidade: normalizarSeveridade360(alerta?.severidade),
+      recomendacao: alerta?.recomendacao ? String(alerta.recomendacao) : undefined,
+      tipo_analise: String(resultado?.tipo_analise || ""),
+    }))
+    .filter((alerta) => alerta.severidade === "critica" || alerta.severidade === "alta");
+}
+
+export function consolidarEtapaIdentidadeDocumental(params: {
+  empresa: any;
+  documentos: any[];
+  analisesDocumentais?: any[];
+  analiseCnpj?: any | null;
+}): EtapaIdentidadeDocumental360 {
+  const docs = safeArray<any>(params.documentos);
+  const analises = safeArray<any>(params.analisesDocumentais);
+  const analiseCnpj = params.analiseCnpj || null;
+  const tiposAnexados = new Set(docs.map((doc) => String(doc?.tipo || doc?.tipo_documento || "")));
+  const porPrompt = new Map<string, any>();
+  for (const analise of analises) porPrompt.set(String(analise?.prompt_codigo || ""), analise);
+
+  const cartaoAnexado = tiposAnexados.has("cartao_cnpj");
+  const qsaAnexado = tiposAnexados.has("qsa");
+  const atosAnexado = tiposAnexados.has("atos_junta_comercial");
+  const enquadramentoAnexado = tiposAnexados.has("enquadramento_tributario_cnpj") || tiposAnexados.has("simples_nacional");
+
+  const cartaoAnalisado = Boolean(analiseCnpj && ["concluida", "revisao_humana"].includes(String(analiseCnpj.status || "")));
+  const cartaoBloqueios = [
+    ...safeArray<any>(analiseCnpj?.alertas),
+    ...safeArray<any>(analiseCnpj?.divergencias),
+  ].filter((a) => ["critica", "alta"].includes(normalizarSeveridade360(a?.severidade)));
+  const cartaoConsistente = cartaoAnexado && cartaoAnalisado && cartaoBloqueios.length === 0 && String(analiseCnpj?.status) === "concluida";
+
+  function statusEspecializado(prompt: string, anexado: boolean) {
+    const analise = porPrompt.get(prompt);
+    const analisado = Boolean(analise && ["concluido", "revisao_humana"].includes(String(analise.status || "")));
+    const graves = analise ? alertasGravesResultado(analise.resultado) : [];
+    const consistente = anexado && analisado && graves.length === 0 && String(analise?.status) === "concluido";
+    return { analise, analisado, consistente, graves };
+  }
+
+  const qsa = statusEspecializado("qsa_extract", qsaAnexado);
+  const atos = statusEspecializado("atos_junta_extract", atosAnexado);
+  const enquadramento = statusEspecializado("simples_extract", enquadramentoAnexado);
+
+  const montarDocumento = (
+    codigo: DocumentoIdentidade360["codigo"],
+    nome: string,
+    anexado: boolean,
+    analisado: boolean,
+    consistente: boolean,
+  ): DocumentoIdentidade360 => ({
+    codigo,
+    nome,
+    anexado,
+    analisado,
+    consistente,
+    status: consistente ? "ok" : !anexado ? "nao_anexado" : !analisado ? "aguardando_analise" : "revisao_necessaria",
+  });
+
+  const documentos = [
+    montarDocumento("cartao_cnpj", "Cartão CNPJ", cartaoAnexado, cartaoAnalisado, cartaoConsistente),
+    montarDocumento("qsa", "QSA / Quadro Societário", qsaAnexado, qsa.analisado, qsa.consistente),
+    montarDocumento("atos_junta_comercial", "Atos da Junta Comercial", atosAnexado, atos.analisado, atos.consistente),
+    montarDocumento("enquadramento_tributario", "Enquadramento Tributário", enquadramentoAnexado, enquadramento.analisado, enquadramento.consistente),
+  ];
+
+  const situacao = normalizarTexto360(params.empresa?.situacao_cadastral || analiseCnpj?.situacao_cadastral);
+  const situacaoAtiva = situacao === "ativa" || situacao === "regular" || situacao.includes("ativ");
+  const idadeMeses = safeNumber(analiseCnpj?.idade_meses) ?? mesesDesdeData(params.empresa?.data_abertura || analiseCnpj?.data_abertura);
+  const empresaApta12Meses = idadeMeses == null ? null : idadeMeses >= 12;
+  const enquadramentoTexto = normalizarTexto360(
+    params.empresa?.regime_tributario || params.empresa?.porte || analiseCnpj?.porte ||
+    parseJsonSeguro(enquadramento.analise?.resultado)?.dados_extraidos?.situacao_simples,
+  );
+  const empresaMei = /(^|\s)mei($|\s)|microempreendedor individual/.test(enquadramentoTexto);
+
+  const bloqueios: string[] = [];
+  for (const doc of documentos) {
+    if (!doc.anexado) bloqueios.push(`${doc.nome} ainda não foi anexado.`);
+    else if (!doc.analisado) bloqueios.push(`${doc.nome} está anexado, mas ainda não foi analisado.`);
+    else if (!doc.consistente) bloqueios.push(`${doc.nome} possui divergência que exige revisão.`);
+  }
+  for (const alerta of [...cartaoBloqueios, ...qsa.graves, ...atos.graves, ...enquadramento.graves]) {
+    const mensagem = String(alerta?.mensagem || alerta?.descricao || "Divergência documental identificada.");
+    if (!bloqueios.includes(mensagem)) bloqueios.push(mensagem);
+  }
+  if (!situacaoAtiva) bloqueios.push("A situação cadastral da empresa na Receita Federal não está ativa.");
+  if (empresaApta12Meses === false) bloqueios.push("A empresa ainda não possui 12 meses completos de abertura.");
+  if (empresaApta12Meses === null) bloqueios.push("Não foi possível confirmar o tempo de abertura da empresa.");
+  if (empresaMei) bloqueios.push("Empresa enquadrada como MEI: o fluxo empresarial padrão exige estratégia de crédito específica.");
+
+  const documentosOk = documentos.filter((doc) => doc.consistente).length;
+  const apto = documentosOk === 4 && situacaoAtiva && empresaApta12Meses === true && !empresaMei && bloqueios.length === 0;
+  const avisos: string[] = [];
+  if (empresaMei) avisos.push("O MEI não é descartado; deve seguir para uma estratégia de linhas compatíveis com esse enquadramento.");
+
+  return {
+    etapa: "identidade_cnpj",
+    titulo: "Etapa 1 — Identidade do CNPJ",
+    apto_para_avancar: apto,
+    documentos_ok: documentosOk,
+    total_documentos: 4,
+    documentos,
+    situacao_cadastral_ativa: situacaoAtiva,
+    empresa_apta_12_meses: empresaApta12Meses,
+    idade_meses: idadeMeses,
+    empresa_mei: empresaMei,
+    bloqueios,
+    avisos,
+    diagnostico: apto
+      ? "Os quatro documentos foram lidos, cruzados com a Receita Federal e considerados consistentes. A empresa pode avançar para documentos dos sócios, certidões, faturamento e estratégia de crédito."
+      : "A etapa inicial ainda não foi concluída. Analise ou corrija somente os itens indicados antes de avançar.",
+    proxima_etapa: "Documentos da empresa e dos sócios, certidões, consultas, faturamento e estratégia de crédito.",
+  };
+}
+
 // ─── Função principal ─────────────────────────────────────────────────────────
 
 export function calcularInteligencia360(params: {
@@ -915,6 +1086,8 @@ export function calcularInteligencia360(params: {
   eventosRotina?: any[];
   // Resultados persistidos de QSA, Simples e atos da Junta. Opcional para preservar chamadores existentes.
   analisesDocumentais?: any[];
+  // Última análise Receita + Cartão CNPJ, usada apenas no portão inicial.
+  analiseCnpj?: any | null;
 }): Inteligencia360Result {
   const { empresa, socios, documentos, simulacoes, contratos, historico, followups } = params;
   const acompanhamentoAtivo = params.acompanhamentoAtivo ?? null;
@@ -922,6 +1095,12 @@ export function calcularInteligencia360(params: {
   const eventosRotina = safeArray<any>(params.eventosRotina);
   const analisesDocumentais = safeArray<any>(params.analisesDocumentais);
   const consistencia_documental_avancada = consolidarConsistenciaDocumental(analisesDocumentais);
+  const etapa_identidade_documental = consolidarEtapaIdentidadeDocumental({
+    empresa,
+    documentos,
+    analisesDocumentais,
+    analiseCnpj: params.analiseCnpj ?? null,
+  });
 
   // Garantir arrays seguros
   const socsArr = safeArray<any>(socios);
@@ -1024,7 +1203,17 @@ export function calcularInteligencia360(params: {
     contratos: contsArr,
   });
 
-  const proximas_acoes = gerarProximasAcoes(recomendacoes, prontidao_contrato, simsArr);
+  let proximas_acoes = gerarProximasAcoes(recomendacoes, prontidao_contrato, simsArr);
+  let diagnosticoFinal = diagnostico_geral;
+  let caminhoFinal = caminho_sugerido;
+  if (!etapa_identidade_documental.apto_para_avancar) {
+    diagnosticoFinal = etapa_identidade_documental.diagnostico;
+    caminhoFinal = "Concluir primeiro a leitura e a validação dos quatro documentos de Identidade do CNPJ.";
+    proximas_acoes = [
+      "Analisar Cartão CNPJ, QSA, Atos da Junta e Enquadramento Tributário.",
+      ...etapa_identidade_documental.bloqueios.slice(0, 3),
+    ];
+  }
 
   // Proposta preliminar
   const ultimaSimulacao = simsArr[0] ?? null;
@@ -1058,6 +1247,7 @@ export function calcularInteligencia360(params: {
     empresa_id: String(empresa?.id ?? ""),
     razao_social: safeString(empresa?.razao_social || empresa?.nome_fantasia),
     cnpj: empresa?.cnpj ?? null,
+    etapa_identidade_documental,
 
     saude_cadastral,
     saude_documental,
@@ -1111,8 +1301,8 @@ export function calcularInteligencia360(params: {
     proposta_preliminar,
     recomendacoes,
     proximas_acoes,
-    diagnostico_geral,
-    caminho_sugerido,
+    diagnostico_geral: diagnosticoFinal,
+    caminho_sugerido: caminhoFinal,
 
     gerado_em: new Date().toISOString(),
     fonte: consistencia_documental_avancada.disponivel ? "ia_assistida" : "deterministica",

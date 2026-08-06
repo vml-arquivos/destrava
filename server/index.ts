@@ -5342,6 +5342,22 @@ async function startServer() {
       // Consistência Documental Avançada: falhas/tabela ausente não interrompem o motor determinístico.
       const analisesDocumentais = await buscarAnalisesDocumentaisAvancadas(empresaId, pool);
 
+      // A análise Receita + Cartão CNPJ é a quarta fonte do portão inicial.
+      // Consulta protegida: instalações antigas sem a tabela continuam funcionando.
+      let analiseCnpj: any = null;
+      try {
+        const { rows: analiseRows } = await pool.query(
+          `SELECT * FROM public.analises_cnpj_empresa
+            WHERE empresa_id = $1
+            ORDER BY criado_em DESC NULLS LAST
+            LIMIT 1`,
+          [empresaId],
+        );
+        analiseCnpj = analiseRows[0] || null;
+      } catch (error: any) {
+        console.warn("[Inteligência 360] Análise CNPJ indisponível; fluxo preservado:", error?.message || error);
+      }
+
       // Calcular inteligência 360
       const resultado = calcularInteligencia360({
         empresa,
@@ -5355,6 +5371,7 @@ async function startServer() {
         atualizacoesAcompanhamento,
         eventosRotina,
         analisesDocumentais,
+        analiseCnpj,
       });
 
       res.json(resultado);
@@ -5366,6 +5383,22 @@ async function startServer() {
         empresa_id: req.params.id,
         razao_social: "Não informado",
         cnpj: null,
+        etapa_identidade_documental: {
+          etapa: "identidade_cnpj",
+          titulo: "Etapa 1 — Identidade do CNPJ",
+          apto_para_avancar: false,
+          documentos_ok: 0,
+          total_documentos: 4,
+          documentos: [],
+          situacao_cadastral_ativa: false,
+          empresa_apta_12_meses: null,
+          idade_meses: null,
+          empresa_mei: false,
+          bloqueios: ["Não foi possível carregar a análise inicial."],
+          avisos: [],
+          diagnostico: "Não foi possível carregar a análise inicial.",
+          proxima_etapa: "Documentos da empresa e dos sócios.",
+        },
         saude_cadastral: "critico",
         saude_documental: "critico",
         risco_documental: "critico",

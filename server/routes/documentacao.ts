@@ -462,18 +462,32 @@ async function obterAnaliseEspecializada(params: {
   tipo: TipoAnaliseDocumental;
   promptCodigo: string;
   processar: boolean;
+  reprocessar?: boolean;
 }): Promise<AnaliseDocumentalResult | null> {
   const persistida = await buscarAnaliseEspecializadaPersistida(params.arquivoId, params.promptCodigo);
-  if (persistida) return persistida;
-  if (!params.processar) return null;
+  // GETs continuam reaproveitando o último laudo persistido. Já o comando
+  // explícito de recalcular força nova leitura dos arquivos atuais, evitando
+  // manter resultados antigos/placeholder depois de uma atualização do motor.
+  if (persistida && !params.reprocessar) return persistida;
+  if (!params.processar) return persistida;
 
-  const resultado = params.tipo === 'qsa'
-    ? await analiseDocumentalService.analisarQSA(params.empresaId, params.arquivoId)
-    : params.tipo === 'simples_nacional'
-      ? await analiseDocumentalService.analisarSimplesNacional(params.empresaId, params.arquivoId)
-      : await analiseDocumentalService.analisarAtosJuntaComercial(params.empresaId, params.arquivoId);
-  await persistirAnaliseEspecializada(params.arquivoId, params.promptCodigo, resultado);
-  return resultado;
+  try {
+    const resultado = params.tipo === 'qsa'
+      ? await analiseDocumentalService.analisarQSA(params.empresaId, params.arquivoId)
+      : params.tipo === 'simples_nacional'
+        ? await analiseDocumentalService.analisarSimplesNacional(params.empresaId, params.arquivoId)
+        : await analiseDocumentalService.analisarAtosJuntaComercial(params.empresaId, params.arquivoId);
+    await persistirAnaliseEspecializada(params.arquivoId, params.promptCodigo, resultado);
+    return resultado;
+  } catch (error: any) {
+    // Uma indisponibilidade momentânea do OCR/IA não apaga nem invalida um
+    // laudo anterior já concluído para o mesmo arquivo.
+    if (persistida) {
+      console.warn('[Dossiê] Reprocessamento indisponível; mantendo última análise válida:', params.promptCodigo, error?.message || error);
+      return persistida;
+    }
+    throw error;
+  }
 }
 
 async function montarQsaDocumentalDados(
@@ -495,6 +509,7 @@ async function montarQsaDocumentalDados(
       tipo: 'qsa',
       promptCodigo: 'qsa_extract',
       processar,
+      reprocessar: processar,
     });
     if (!analise) {
       return {
@@ -528,7 +543,7 @@ async function montarAtosJuntaDados(
   }
   const docMaisRecente = docs[0];
   try {
-    const analise = await obterAnaliseEspecializada({ empresaId, arquivoId: docMaisRecente.id, tipo: 'atos_junta_comercial', promptCodigo: 'atos_junta_extract', processar });
+    const analise = await obterAnaliseEspecializada({ empresaId, arquivoId: docMaisRecente.id, tipo: 'atos_junta_comercial', promptCodigo: 'atos_junta_extract', processar, reprocessar: processar });
     if (!analise) {
       return {
         dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'aguardando_analise' },
@@ -561,7 +576,7 @@ async function montarEnquadramentoDados(
   }
   const docMaisRecente = docs[0];
   try {
-    const analise = await obterAnaliseEspecializada({ empresaId, arquivoId: docMaisRecente.id, tipo: 'simples_nacional', promptCodigo: 'simples_extract', processar });
+    const analise = await obterAnaliseEspecializada({ empresaId, arquivoId: docMaisRecente.id, tipo: 'simples_nacional', promptCodigo: 'simples_extract', processar, reprocessar: processar });
     if (!analise) {
       return {
         dados: { anexado: true, analisado: false, documento_id: docMaisRecente.id, status_leitura: 'aguardando_analise' },
@@ -851,7 +866,11 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
   const cnpjPendencias = pendenciasCnpj(empresa, docsCartao);
   const qsaCadastroPendencias = pendenciasQsa(socios, empresa);
   const qsaDocumental = await montarQsaDocumentalDados(empresaId, !!options.processarDocumentos);
-  const qsaPendencias = [...qsaCadastroPendencias, ...qsaDocumental.pendencias];
+  // As pendências cadastrais do sócio (telefone, RG, endereço, profissão etc.)
+  // pertencem à etapa seguinte. Elas continuam visíveis no bloco QSA, porém não
+  // podem bloquear a validação inicial dos quatro documentos da identidade.
+  const qsaPendenciasIdentidade = qsaDocumental.pendencias;
+  const qsaPendencias = [...qsaPendenciasIdentidade, ...qsaCadastroPendencias];
   const qsaDadosCompletos = { ...dadosQsa(empresa, socios), analise_documental: qsaDocumental.dados };
 
   const cnpjBloco = await ensureEmpresaBloco(empresaId, 'cnpj_receita', montarCnpjDados(empresa), cnpjPendencias, 'receita');
@@ -929,7 +948,7 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
     empresa,
     docsCartao,
     cnpjPendencias,
-    qsaPendencias,
+    qsaPendencias: qsaPendenciasIdentidade,
     atosJuntaPendencias: atosJunta.pendencias,
     enquadramentoPendencias: enquadramento.pendencias,
     qsaDados: qsaDocumental.dados,
@@ -1051,7 +1070,7 @@ router.post('/empresa/:empresaId/recalcular', auth, async (req: Request, res: Re
     res.json(dossie);
   } catch (err: any) {
     console.error('[POST /api/documentacao/empresa/:empresaId/recalcular]', err);
-    res.status(500).json({ error: 'Erro ao recalcular dossiê de crédito' });
+    res.status(500).json({ error: err?.message || 'Erro ao recalcular dossiê de crédito' });
   }
 });
 
