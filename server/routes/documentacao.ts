@@ -1,4 +1,5 @@
 import { isSituacaoAtiva } from '../utils/situacaoCadastral';
+import { normalizeText, onlyDigits } from '../utils/helpers';
 import { Router, Request, Response } from 'express';
 import pkg from 'pg';
 import { auth } from '../middleware/auth';
@@ -346,11 +347,11 @@ function dadosQsa(empresa: any, socios: any[]) {
       administrador: !!s.administrador || administradorPorTexto,
       fonte_dados: s.fonte_dados || 'cadastro_manual',
     };
-  }).filter((s) => s.nome && normalizarTexto(s.nome) !== 'nao identificado');
+  }).filter((s) => s.nome && normalizeText(s.nome) !== 'nao identificado');
 
   const sociosReceitaMapeados = sociosReceita
     .map(mapSocioReceita)
-    .filter((s) => s.nome && normalizarTexto(s.nome) !== 'nao identificado')
+    .filter((s) => s.nome && normalizeText(s.nome) !== 'nao identificado')
     .map((s) => ({
       id: s.id,
       nome: s.nome,
