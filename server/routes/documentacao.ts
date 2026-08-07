@@ -4,7 +4,9 @@ import pkg from 'pg';
 import { auth } from '../middleware/auth';
 import { analisarCnpjReceitaCartaoEmpresa, buscarUltimaAnaliseCnpjEmpresa, limparAnalisesCnpjEmpresa } from '../services/analiseCnpjReceitaCartao';
 import { analiseDocumentalService, type AnaliseDocumentalResult, type TipoAnaliseDocumental } from '../services/analiseDocumentalEspecializada';
+import { calcularCadeiaComprovacaoSocietaria } from '../services/cadeiaSocietariaService';
 import { ensureDocumentacaoSchema } from '../services/documentacaoSchema';
+import { gerarMapaDocumentalCredito } from '../services/mapaDocumentalCreditoService';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -626,7 +628,7 @@ async function montarQsaDocumentalDados(
         mensagem: processar ? mensagem : 'QSA anexado e aguardando o início da análise documental.',
         severidade: 'alta',
         origem: 'qsa',
-        recomendacao: processar ? 'Verificar o arquivo anexado e executar novamente a validação societária.' : 'Anexar o contrato/alteração correspondente e iniciar a validação da Etapa 2.',
+        recomendacao: processar ? 'Verificar o arquivo anexado e executar novamente a análise documental inicial.' : 'Iniciar a Etapa 1 quando Cartão CNPJ, QSA e Enquadramento Tributário estiverem anexados.',
       }],
     };
   }
@@ -694,7 +696,7 @@ async function montarAtosJuntaDados(
         mensagem: processar ? mensagem : 'Atos da Junta anexados e aguardando conferência com o contrato/alteração social.',
         severidade: 'alta',
         origem: 'atos_junta_comercial',
-        recomendacao: processar ? 'Verificar o arquivo anexado e executar novamente a validação societária.' : 'Anexar o contrato/alteração correspondente e iniciar a validação da Etapa 2.',
+        recomendacao: processar ? 'Verificar o arquivo anexado e executar novamente a validação societária da Etapa 2.' : 'Concluir a Etapa 1 e iniciar a validação de Contrato/Alteração e Atos da Junta.',
       }],
     };
   }
@@ -762,7 +764,7 @@ async function montarEnquadramentoDados(
         mensagem: processar ? mensagem : 'Enquadramento Tributário anexado e aguardando o início da análise documental.',
         severidade: 'alta',
         origem: 'enquadramento_tributario',
-        recomendacao: processar ? 'Verificar o arquivo anexado e executar novamente a validação societária.' : 'Anexar o contrato/alteração correspondente e iniciar a validação da Etapa 2.',
+        recomendacao: processar ? 'Verificar o arquivo anexado e executar novamente a análise documental inicial.' : 'Iniciar a Etapa 1 quando Cartão CNPJ, QSA e Enquadramento Tributário estiverem anexados.',
       }],
     };
   }
@@ -1017,63 +1019,126 @@ async function montarValidacaoSocietaria(empresaId: string, processar: boolean) 
     listarDocumentosEmpresaPorTipos(empresaId, ['alteracao_contratual', 'contrato_social']),
     listarDocumentosEmpresaPorTipos(empresaId, ['atos_junta_comercial']),
   ]);
-  const contrato = docsContrato[0] || null;
   const atos = docsAtos[0] || null;
   const promptCodigo = 'contrato_junta_crosscheck';
-  let resultado: AnaliseDocumentalResult | null = null;
+  const atosLeitura = await montarAtosJuntaDados(empresaId, processar && !!atos);
+  const atosDados = atosLeitura.dados || {};
+  const resultados: Array<{ documento: any; analise: AnaliseDocumentalResult | null; erro?: string | null }> = [];
 
-  if (contrato && atos) {
-    const persistido = await buscarAnaliseEspecializadaPersistida(contrato.id, promptCodigo);
-    const idsAtuais = persistido?.dados_extraidos?.contrato_arquivo_id === contrato.id && persistido?.dados_extraidos?.atos_arquivo_id === atos.id;
-    resultado = idsAtuais ? persistido : null;
-    if (processar) {
-      try {
-        resultado = await analiseDocumentalService.analisarContratoComAtosJunta(empresaId, contrato.id, atos.id);
-        await persistirAnaliseEspecializada(contrato.id, promptCodigo, resultado);
-      } catch (error) {
-        await persistirFalhaAnaliseEspecializada(contrato.id, promptCodigo, error);
-        throw error;
+  for (const documento of docsContrato) {
+    let analise: AnaliseDocumentalResult | null = null;
+    let erro: string | null = null;
+    if (atos) {
+      const persistido = await buscarAnaliseEspecializadaPersistida(documento.id, promptCodigo);
+      const idsAtuais = persistido?.dados_extraidos?.contrato_arquivo_id === documento.id
+        && persistido?.dados_extraidos?.atos_arquivo_id === atos.id;
+      analise = idsAtuais ? persistido : null;
+      if (processar) {
+        try {
+          analise = await analiseDocumentalService.analisarContratoComAtosJunta(empresaId, documento.id, atos.id);
+          await persistirAnaliseEspecializada(documento.id, promptCodigo, analise);
+        } catch (error) {
+          erro = mensagemSeguraFalhaLeitura('Contrato/Alteração Social', error);
+          await persistirFalhaAnaliseEspecializada(documento.id, promptCodigo, error);
+          console.warn('[Dossie] Falha controlada em documento societário:', documento.id, (error as any)?.message || error);
+        }
       }
     }
+    resultados.push({ documento, analise, erro });
   }
 
-  const alertas = Array.isArray(resultado?.alertas) ? resultado!.alertas : [];
-  const bloqueios = alertas.filter((item) => item.severidade === 'alta' || item.severidade === 'critica').map((item) => item.mensagem);
-  if (!contrato) bloqueios.unshift('Contrato Social ou Alteração Contratual ainda não anexado.');
+  const documentosAnalisados = resultados
+    .filter((item) => item.analise)
+    .map((item) => {
+      const dados = item.analise!.dados_extraidos || {};
+      const contrato = dados.contrato || {};
+      const bloqueios = (item.analise!.alertas || []).filter((alerta) => alerta.severidade === 'alta' || alerta.severidade === 'critica');
+      return {
+        arquivo_id: item.documento.id,
+        nome: item.documento.nome_original || item.documento.nome_arquivo || 'Contrato/Alteração',
+        nire: contrato.nire || null,
+        data_registro: contrato.data_registro || null,
+        tipo_ato: contrato.tipo_ato || null,
+        consistente: item.analise!.status === 'concluido' && bloqueios.length === 0,
+        alertas: item.analise!.alertas || [],
+      };
+    });
+
+  const cadeia = calcularCadeiaComprovacaoSocietaria(
+    Array.isArray(atosDados?.historico_arquivamentos) ? atosDados.historico_arquivamentos : [],
+    documentosAnalisados,
+  );
+  const datasRequeridas = new Set((cadeia.registros_requeridos || []).map((item: any) => item.data));
+  const alertasRelevantes = documentosAnalisados
+    .filter((item) => !item.data_registro || datasRequeridas.has(item.data_registro))
+    .flatMap((item) => item.alertas || []);
+  const bloqueios = alertasRelevantes
+    .filter((item: any) => item.severidade === 'alta' || item.severidade === 'critica')
+    .map((item: any) => item.mensagem);
+
+  if (!docsContrato.length) bloqueios.unshift('Contrato Social ou Alteração Contratual ainda não anexado.');
   if (!atos) bloqueios.unshift('Atos da Junta Comercial ainda não anexados.');
-  const analisado = !!resultado;
-  const consistente = !!contrato && !!atos && resultado?.status === 'concluido' && bloqueios.length === 0;
-  const dados = resultado?.dados_extraidos || {};
+  if (atos && !atosDados?.analisado) bloqueios.push(atosDados?.diagnostico || 'A leitura dos Atos da Junta ainda não foi concluída.');
+  for (const item of cadeia.registros_faltantes || []) {
+    bloqueios.push(`Anexar o contrato/alteração registrado em ${item.data}${item.numero ? ` (arquivamento ${item.numero})` : ''} para completar a comprovação mínima de 12 meses.`);
+  }
+  if (atosDados?.analisado && !cadeia.historico_cobre_12_meses) {
+    bloqueios.push('O histórico apresentado pela Junta não alcança 12 meses. Anexe uma certidão/lista de atos mais completa ou o registro de constituição.');
+  }
+  for (const item of resultados.filter((resultado) => resultado.erro)) bloqueios.push(item.erro!);
+
+  const bloqueiosUnicos = Array.from(new Set(bloqueios.filter(Boolean)));
+  const avisos = [
+    ...(atosLeitura.pendencias || []).filter((item) => item.severidade !== 'alta').map((item) => item.mensagem),
+    ...alertasRelevantes.filter((item: any) => item.severidade === 'media' || item.severidade === 'baixa').map((item: any) => item.mensagem),
+  ];
+  const analisado = atosDados?.analisado === true && documentosAnalisados.length > 0;
+  const consistente = !!atos && docsContrato.length > 0 && analisado
+    && cadeia.continuidade_12_meses_comprovada === true
+    && bloqueiosUnicos.length === 0;
+  const documentoPrincipal = documentosAnalisados.find((item) => item.data_registro === cadeia.ultimo_registro?.data)
+    || documentosAnalisados[0]
+    || null;
+
   return {
     etapa: 'documentacao_societaria',
-    titulo: 'Etapa 2 — Contrato Social e Junta Comercial',
+    titulo: 'Etapa 2 — Continuidade societária e Junta Comercial',
     habilitada: true,
-    iniciada: !!contrato || !!atos || !!resultado,
-    contrato_anexado: !!contrato,
+    iniciada: docsContrato.length > 0 || !!atos || documentosAnalisados.length > 0,
+    contrato_anexado: docsContrato.length > 0,
+    total_contratos_anexados: docsContrato.length,
     atos_junta_anexados: !!atos,
     analisado,
     consistente,
     apto_para_avancar: consistente,
-    botao_validar_disponivel: !!contrato && !!atos,
+    botao_validar_disponivel: docsContrato.length > 0 && !!atos,
     botao_avancar_disponivel: consistente,
-    contrato_arquivo_id: contrato?.id || null,
+    contrato_arquivo_id: documentoPrincipal?.arquivo_id || docsContrato[0]?.id || null,
     atos_arquivo_id: atos?.id || null,
-    nire_contrato: dados?.contrato?.nire || null,
-    nire_junta: dados?.atos_junta?.nire || null,
-    nire_confere: dados?.nire_confere === true,
-    data_registro_contrato: dados?.contrato?.data_registro || null,
-    data_ato_junta: dados?.atos_junta?.data_registro || null,
-    data_confere: dados?.data_registro_confere === true,
-    cnpj_junta_informativo: dados?.atos_junta?.cnpj || null,
-    bloqueios,
-    avisos: alertas.filter((item) => item.severidade === 'media' || item.severidade === 'baixa').map((item) => item.mensagem),
+    nire_contrato: documentoPrincipal?.nire || null,
+    nire_junta: atosDados?.nire || null,
+    nire_confere: !!documentoPrincipal?.nire && onlyDigits(documentoPrincipal.nire) === onlyDigits(atosDados?.nire),
+    data_registro_contrato: documentoPrincipal?.data_registro || null,
+    data_ato_junta: cadeia.ultimo_registro?.data || atosDados?.data_registro || null,
+    data_confere: !!documentoPrincipal?.data_registro && documentoPrincipal.data_registro === cadeia.ultimo_registro?.data,
+    cnpj_junta_informativo: atosDados?.cnpj || null,
+    data_corte_12_meses: cadeia.data_corte_12_meses,
+    ultimo_registro_junta: cadeia.ultimo_registro,
+    registros_requeridos: cadeia.registros_requeridos,
+    registros_faltantes: cadeia.registros_faltantes,
+    continuidade_12_meses_comprovada: cadeia.continuidade_12_meses_comprovada,
+    historico_cobre_12_meses: cadeia.historico_cobre_12_meses,
+    meses_comprovados: cadeia.meses_entre_registros_extremos,
+    documentos_analisados: documentosAnalisados.map(({ alertas, ...item }) => item),
+    bloqueios: bloqueiosUnicos,
+    avisos: Array.from(new Set(avisos.filter(Boolean))),
     diagnostico: consistente
-      ? 'NIRE e data de registro do contrato/alteração conferem com os Atos da Junta Comercial. A documentação societária está apta para avançar.'
-      : !contrato || !atos
-        ? 'Anexe o contrato/alteração social e os Atos da Junta Comercial para validar NIRE e data de registro.'
+      ? 'NIRE, datas de registro e cadeia de contratos/alterações comprovam pelo menos 12 meses de continuidade societária. A próxima análise está liberada.'
+      : !docsContrato.length || !atos
+        ? 'Anexe os Atos da Junta e o contrato/alteração correspondente. Se o último registro tiver menos de 12 meses, o sistema solicitará as alterações anteriores necessárias.'
         : analisado
-          ? 'A conferência societária encontrou pendências. Corrija somente os pontos indicados.'
-          : 'Documentos anexados e prontos para validação por NIRE e data de registro.',
+          ? cadeia.diagnostico
+          : 'Documentos anexados e prontos para validação de NIRE, datas e continuidade mínima de 12 meses.',
   };
 }
 
@@ -1250,6 +1315,18 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
   );
 
   const pendencias = blocos.flatMap((b: any) => Array.isArray(b.pendencias) ? b.pendencias.map((p: any) => ({ ...p, bloco_codigo: b.codigo, bloco_nome: b.nome_amigavel })) : []);
+  const tiposAnexados = new Set<string>(
+    blocos.flatMap((bloco: any) => Array.isArray(bloco.documentos)
+      ? bloco.documentos.map((documento: any) => String(documento?.tipo_documento || '')).filter(Boolean)
+      : []),
+  );
+  const mapaDocumentalCredito = gerarMapaDocumentalCredito({
+    empresa,
+    enquadramento: enquadramento.dados,
+    tiposAnexados,
+    etapa1Aprovada: identidadeCnpj.apto_para_avancar === true,
+    etapa2Aprovada: documentacaoSocietaria.apto_para_avancar === true,
+  });
 
   return {
     empresa: {
@@ -1262,6 +1339,7 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
     },
     identidade_cnpj: identidadeCnpj,
     documentacao_societaria: documentacaoSocietaria,
+    mapa_documental_credito: mapaDocumentalCredito,
     resumo: {
       total_blocos: blocos.length,
       blocos_completos: blocos.filter((b: any) => b.completo).length,
@@ -1333,6 +1411,17 @@ router.get('/empresa/:empresaId/dossie', auth, async (req: Request, res: Respons
   }
 });
 
+router.get('/empresa/:empresaId/mapa-documental', auth, async (req: Request, res: Response) => {
+  try {
+    const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
+    if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+    res.json(dossie.mapa_documental_credito);
+  } catch (err: any) {
+    console.error('[GET /api/documentacao/empresa/:empresaId/mapa-documental]', err);
+    res.status(500).json({ error: 'Erro ao montar mapa documental de crédito' });
+  }
+});
+
 router.get('/empresa/:empresaId/qsa', auth, async (req: Request, res: Response) => {
   try {
     const empresa = await getEmpresa(req.params.empresaId);
@@ -1377,25 +1466,41 @@ function iniciarAnaliseInicialEmSegundoPlano(empresaId: string, usuarioId: strin
 router.post('/empresa/:empresaId/analise-inicial/iniciar', auth, async (req: Request, res: Response) => {
   try {
     const user = (req as any).colaborador || (req as any).user;
-    const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
-    if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+    await ensureBlocosCatalogo();
+    const empresa = await getEmpresa(req.params.empresaId);
+    if (!empresa) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
 
-    const documentos = Object.values(dossie.identidade_cnpj?.documentos_iniciais || {}) as Array<any>;
-    const tresAnexados = documentos.length === 3 && documentos.every((item) => item?.anexado === true);
-    if (!tresAnexados) {
+    // O início da análise não depende da montagem completa do dossiê. Assim,
+    // uma inconsistência de bloco antigo não impede o processamento dos três
+    // documentos que já estão corretamente anexados no Acervo.
+    const [cartao, qsa, enquadramento] = await Promise.all([
+      listarDocumentosEmpresaPorTipos(req.params.empresaId, ['cartao_cnpj', 'cnpj_cartao']),
+      listarDocumentosEmpresaPorTipos(req.params.empresaId, ['qsa']),
+      listarDocumentosEmpresaPorTipos(req.params.empresaId, ['enquadramento_tributario_cnpj', 'simples_nacional']),
+    ]);
+    const ausentes = [
+      !cartao.length ? 'Cartão CNPJ' : null,
+      !qsa.length ? 'QSA' : null,
+      !enquadramento.length ? 'Enquadramento Tributário' : null,
+    ].filter(Boolean);
+    if (ausentes.length) {
       res.status(422).json({
-        error: 'Anexe Cartão CNPJ, QSA e Enquadramento Tributário antes de gerar o relatório inicial.',
+        error: `Anexe ${ausentes.join(', ')} antes de iniciar a análise documental.`,
         processando: false,
-        dossie,
+        documentos_ausentes: ausentes,
       });
       return;
     }
 
-    const forcar = req.body?.forcar === true;
-    const precisaProcessar = forcar || documentos.some((item) => !item?.analisado || item?.status === 'falha_leitura');
-    const iniciado = precisaProcessar
-      ? iniciarAnaliseInicialEmSegundoPlano(req.params.empresaId, user?.id || null)
-      : false;
+    const iniciado = iniciarAnaliseInicialEmSegundoPlano(req.params.empresaId, user?.id || null);
+    let dossie: any = null;
+    try {
+      dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
+    } catch (error: any) {
+      // O job já foi aceito. A resposta não deve voltar 500 somente porque um
+      // bloco auxiliar do dossiê ainda precisa ser reparado/sincronizado.
+      console.warn('[POST análise inicial/iniciar] Dossiê provisório indisponível:', error?.message || error);
+    }
 
     res.status(iniciado || analisesIniciaisEmAndamento.has(req.params.empresaId) ? 202 : 200).json({
       aceito: true,
@@ -1404,8 +1509,9 @@ router.post('/empresa/:empresaId/analise-inicial/iniciar', auth, async (req: Req
       dossie,
     });
   } catch (err: any) {
-    console.error('[POST análise inicial/iniciar]', err);
-    res.status(500).json({ error: 'Não foi possível iniciar o relatório inicial.' });
+    const erroId = `ADI-${Date.now().toString(36).toUpperCase()}`;
+    console.error(`[POST análise inicial/iniciar][${erroId}]`, err);
+    res.status(500).json({ error: `Não foi possível iniciar o relatório inicial. Referência: ${erroId}` });
   }
 });
 

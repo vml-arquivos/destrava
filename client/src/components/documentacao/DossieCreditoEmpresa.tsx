@@ -125,9 +125,40 @@ type DocumentacaoSocietaria = {
   data_registro_contrato?: string | null;
   data_ato_junta?: string | null;
   data_confere?: boolean;
+  data_corte_12_meses?: string | null;
+  ultimo_registro_junta?: { numero?: string | null; data?: string | null; tipo_ato?: string | null } | null;
+  registros_requeridos?: Array<{ numero?: string | null; data?: string | null; tipo_ato?: string | null; comprovado?: boolean; documento_nome?: string | null }>;
+  registros_faltantes?: Array<{ numero?: string | null; data?: string | null; tipo_ato?: string | null }>;
+  continuidade_12_meses_comprovada?: boolean;
+  historico_cobre_12_meses?: boolean;
+  meses_comprovados?: number | null;
+  total_contratos_anexados?: number;
   bloqueios?: string[];
   avisos?: string[];
   diagnostico?: string;
+};
+
+type DocumentoMapaCredito = {
+  codigo: string;
+  nome: string;
+  obrigatorio: boolean;
+  fase: number;
+  finalidade: string;
+  anexado?: boolean;
+  observacao?: string;
+};
+
+type MapaDocumentalCredito = {
+  versao: string;
+  regime_identificado: string;
+  regime_descricao: string;
+  etapa_atual: number;
+  proxima_acao: string;
+  etapas: Array<{ numero: number; codigo: string; titulo: string; objetivo: string; bloqueada: boolean; documentos: DocumentoMapaCredito[] }>;
+  operacoes_disponiveis: Array<{ codigo: string; nome: string; objetivo: string; documentos_adicionais: string[] }>;
+  programas_referencia: Array<{ codigo: string; nome: string; instituicao: string; operacao: string; publico_alvo: string; requisitos_chave: string[]; documentos_adicionais: string[]; observacao: string }>;
+  indicadores: Array<{ codigo: string; nome: string; formula: string; interpretacao: string; fase: number }>;
+  avisos: string[];
 };
 
 type DossieResponse = {
@@ -141,6 +172,7 @@ type DossieResponse = {
   };
   identidade_cnpj?: IdentidadeCnpj;
   documentacao_societaria?: DocumentacaoSocietaria;
+  mapa_documental_credito?: MapaDocumentalCredito;
   resumo: {
     total_blocos: number;
     blocos_completos: number;
@@ -711,15 +743,16 @@ function DocumentacaoSocietariaCard({
 }) {
   if (!dados?.habilitada) return null;
   const apto = dados.apto_para_avancar === true;
+  const registros = Array.isArray(dados.registros_requeridos) ? dados.registros_requeridos : [];
   return (
     <section className={`rounded-2xl border p-4 ${apto ? "border-emerald-200 bg-emerald-50/60" : "border-blue-200 bg-blue-50/50"}`}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             {apto ? <ShieldCheck className="h-5 w-5 text-emerald-700" /> : <FileText className="h-5 w-5 text-blue-700" />}
-            <h3 className="text-sm font-extrabold text-slate-900">Etapa 2 — Contrato Social e Junta Comercial</h3>
+            <h3 className="text-sm font-extrabold text-slate-900">Etapa 2 — Continuidade societária mínima de 12 meses</h3>
             <span className={`rounded-full border bg-white px-2.5 py-1 text-[11px] font-extrabold ${apto ? "border-emerald-200 text-emerald-700" : "border-blue-200 text-blue-700"}`}>
-              {apto ? "NIRE e data conferem" : dados.analisado ? "Revisão necessária" : "Aguardando validação"}
+              {apto ? "Continuidade comprovada" : dados.analisado ? "Documentos complementares necessários" : "Aguardando validação"}
             </span>
           </div>
           <p className="mt-2 max-w-4xl text-xs leading-relaxed text-slate-700">{dados.diagnostico}</p>
@@ -727,31 +760,136 @@ function DocumentacaoSocietariaCard({
         <div className="flex flex-wrap gap-2">
           {(!dados.contrato_anexado || !dados.atos_junta_anexados) && onAbrirDocumentos && (
             <button type="button" onClick={onAbrirDocumentos} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700">
-              Anexar documentos da Etapa 2 <ArrowRight className="h-4 w-4" />
+              Anexar documentos societários <ArrowRight className="h-4 w-4" />
             </button>
           )}
           {dados.botao_validar_disponivel && !apto && (
             <button type="button" onClick={onValidar} disabled={processando} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-60">
               {processando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              {processando ? "Conferindo..." : "Validar NIRE e data"}
+              {processando ? "Conferindo..." : "Validar NIRE, datas e 12 meses"}
             </button>
           )}
           {apto && onAvancar && (
             <button type="button" onClick={onAvancar} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-emerald-700">
-              Prosseguir para próxima análise <ArrowRight className="h-4 w-4" />
+              Montar mapa documental de crédito <ArrowRight className="h-4 w-4" />
             </button>
           )}
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Contrato/Alteração</p><p className="mt-1 text-xs font-extrabold text-slate-800">{dados.contrato_anexado ? "Anexado" : "Não anexado"}</p></div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Atos da Junta</p><p className="mt-1 text-xs font-extrabold text-slate-800">{dados.atos_junta_anexados ? "Anexado" : "Não anexado"}</p></div>
-        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">NIRE</p><p className={`mt-1 text-xs font-extrabold ${dados.nire_confere ? "text-emerald-700" : "text-slate-800"}`}>{dados.nire_contrato || dados.nire_junta || "Aguardando leitura"}</p></div>
-        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Data de registro</p><p className={`mt-1 text-xs font-extrabold ${dados.data_confere ? "text-emerald-700" : "text-slate-800"}`}>{dados.data_registro_contrato || dados.data_ato_junta || "Aguardando leitura"}</p></div>
+        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Contratos/alterações</p><p className="mt-1 text-xs font-extrabold text-slate-800">{dados.total_contratos_anexados || 0} anexado(s)</p></div>
+        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Último registro</p><p className="mt-1 text-xs font-extrabold text-slate-800">{formatDate(dados.ultimo_registro_junta?.data || undefined)}</p></div>
+        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Corte mínimo</p><p className="mt-1 text-xs font-extrabold text-slate-800">{formatDate(dados.data_corte_12_meses || undefined)}</p></div>
       </div>
+
+      {registros.length > 0 && (
+        <div className="mt-3 rounded-xl border border-blue-100 bg-white p-3">
+          <p className="text-xs font-extrabold text-slate-800">Cadeia documental exigida</p>
+          <p className="mt-1 text-[11px] text-slate-500">O sistema parte do último registro e retrocede até alcançar pelo menos 12 meses.</p>
+          <div className="mt-2 grid gap-2 md:grid-cols-2">
+            {registros.map((registro, index) => (
+              <div key={`${registro.data}-${registro.numero}-${index}`} className={`rounded-lg border p-2.5 ${registro.comprovado ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-extrabold text-slate-800">{registro.tipo_ato || "Registro societário"}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-extrabold ${registro.comprovado ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{registro.comprovado ? "Comprovado" : "Anexar documento"}</span>
+                </div>
+                <p className="mt-1 text-[10px] text-slate-600">Data: {formatDate(registro.data || undefined)}{registro.numero ? ` · Registro ${registro.numero}` : ""}</p>
+                {registro.documento_nome && <p className="mt-1 truncate text-[10px] font-semibold text-emerald-700">{registro.documento_nome}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {!!dados.bloqueios?.length && <div className="mt-3 rounded-xl border border-red-100 bg-white p-3"><p className="text-xs font-extrabold text-red-800">Pendências</p>{dados.bloqueios.map((item, index) => <p key={index} className="mt-1 text-[11px] text-red-800">• {item}</p>)}</div>}
-      <p className="mt-3 text-[11px] text-slate-600">O CNPJ nos Atos da Junta é informativo. A validação obrigatória usa NIRE e data do registro, porque algumas Juntas não exibem CNPJ.</p>
+      <p className="mt-3 text-[11px] text-slate-600">O CNPJ na certidão da Junta é complementar. A validação obrigatória usa NIRE, datas dos registros e a cadeia de documentos necessária para comprovar 12 meses.</p>
     </section>
+  );
+}
+
+function MapaDocumentalCreditoCard({ mapa }: { mapa?: MapaDocumentalCredito }) {
+  if (!mapa) return null;
+  return (
+    <details className="rounded-xl border border-slate-200 bg-white">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3 hover:bg-slate-50">
+        <div className="flex min-w-0 items-center gap-2">
+          <ClipboardList className="h-4 w-4 shrink-0 text-indigo-700" />
+          <div>
+            <p className="text-sm font-extrabold text-slate-800">Mapa documental e estratégia de crédito</p>
+            <p className="text-[11px] text-slate-500">{mapa.regime_descricao} · Etapa atual {mapa.etapa_atual} · {mapa.proxima_acao}</p>
+          </div>
+        </div>
+        <ChevronDown className="h-4 w-4 text-slate-400" />
+      </summary>
+      <div className="space-y-4 border-t border-slate-100 p-3">
+        <div className="grid gap-3 lg:grid-cols-2">
+          {mapa.etapas.map((etapa) => (
+            <article key={etapa.codigo} className={`rounded-xl border p-3 ${etapa.bloqueada ? "border-slate-200 bg-slate-50 opacity-70" : "border-indigo-100 bg-indigo-50/40"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-extrabold text-slate-900">{etapa.numero}. {etapa.titulo}</p>
+                {etapa.bloqueada && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600">Bloqueada</span>}
+              </div>
+              <p className="mt-1 text-[10px] leading-relaxed text-slate-600">{etapa.objetivo}</p>
+              {!!etapa.documentos.length && (
+                <div className="mt-2 space-y-1.5">
+                  {etapa.documentos.map((documento) => (
+                    <div key={documento.codigo} className="flex items-start gap-2 rounded-lg border border-white bg-white p-2">
+                      {documento.anexado ? <CheckCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" /> : <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />}
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold text-slate-800">{documento.nome}{!documento.obrigatorio ? " (quando aplicável)" : ""}</p>
+                        <p className="text-[9px] leading-relaxed text-slate-500">{documento.finalidade}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+
+        <div>
+          <p className="text-xs font-extrabold text-slate-800">Trilhas por finalidade da operação</p>
+          <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {mapa.operacoes_disponiveis.map((operacao) => (
+              <article key={operacao.codigo} className="rounded-xl border border-slate-200 p-3">
+                <p className="text-[11px] font-extrabold text-slate-900">{operacao.nome}</p>
+                <p className="mt-1 text-[10px] text-slate-600">{operacao.objetivo}</p>
+                {operacao.documentos_adicionais.slice(0, 5).map((item) => <p key={item} className="mt-1 text-[9px] text-slate-500">• {item}</p>)}
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-extrabold text-slate-800">Programas e rotas de referência</p>
+          <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {mapa.programas_referencia.map((programa) => (
+              <article key={programa.codigo} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-[11px] font-extrabold text-slate-900">{programa.nome}</p>
+                <p className="mt-1 text-[10px] text-slate-600">{programa.publico_alvo}</p>
+                <p className="mt-2 text-[9px] font-bold uppercase text-slate-400">Pontos de preparação</p>
+                {programa.requisitos_chave.slice(0, 4).map((item) => <p key={item} className="mt-1 text-[10px] text-slate-600">• {item}</p>)}
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-extrabold text-slate-800">Indicadores para capacidade de pagamento</p>
+          <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            {mapa.indicadores.map((indicador) => (
+              <article key={indicador.codigo} className="rounded-xl border border-slate-200 p-2.5">
+                <p className="text-[10px] font-extrabold text-slate-800">{indicador.nome}</p>
+                <p className="mt-1 text-[9px] font-semibold text-indigo-700">{indicador.formula}</p>
+                <p className="mt-1 text-[9px] leading-relaxed text-slate-500">{indicador.interpretacao}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </div>
+    </details>
   );
 }
 
@@ -902,6 +1040,7 @@ export default function DossieCreditoEmpresa({ empresaId, onAtualizarReceita, on
         onAbrirDocumentos={onAvancar}
         onAvancar={onAvancarSocietario}
       />
+      <MapaDocumentalCreditoCard mapa={dossie?.mapa_documental_credito} />
 
       {!identidade && !recalculando && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
