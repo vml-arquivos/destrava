@@ -15,7 +15,7 @@ describe("recuperação segura de assets entre deploys", () => {
     expect(server).toContain('app.get("/version"');
     expect(server).toContain('"https://static.cloudflareinsights.com"');
     expect(server).toContain('"https://cloudflareinsights.com"');
-    expect(dockerfile).toContain("DESTRAVA_RELEASE=fix64-recuperacao-assets-20260810");
+    expect(dockerfile).toContain("DESTRAVA_RELEASE=fix65-recuperacao-assets-lockfile-20260810");
   });
 
   it("só recupera um chunk ausente depois de tentar o arquivo real", () => {
@@ -44,5 +44,17 @@ describe("recuperação segura de assets entre deploys", () => {
     const setup = read("nginx-setup.sh");
     expect(nginx).not.toContain('add_header         Cache-Control "public, immutable"');
     expect(setup).not.toContain('add_header       Cache-Control "public, immutable"');
+  });
+
+  it("mantém package.json, workspace e lockfile compatíveis com o pnpm do Docker", () => {
+    const lockfile = read("pnpm-lock.yaml");
+    const workspace = read("pnpm-workspace.yaml");
+    const dockerfile = read("Dockerfile");
+    expect(lockfile).toContain("overrides:\n  tailwindcss>nanoid: 3.3.7");
+    expect(lockfile).toContain("patchedDependencies:\n  wouter@3.7.1:");
+    expect(workspace).toContain("packages:\n  - '.'");
+    expect(workspace).not.toContain("set this to true or false");
+    expect(dockerfile).toContain("pnpm install --frozen-lockfile");
+    expect(dockerfile).not.toMatch(/ARG (?:GEMINI_API_KEY|NEXUS_INTEGRATION_SECRET|DATABASE_URL)/);
   });
 });

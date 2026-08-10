@@ -81,7 +81,7 @@ const { Pool } = pkg;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DESTRAVA_RELEASE = process.env.DESTRAVA_RELEASE || "fix64-recuperacao-assets-20260810";
+const DESTRAVA_RELEASE = process.env.DESTRAVA_RELEASE || "fix65-recuperacao-assets-lockfile-20260810";
 
 // Quando um navegador/CDN mantém um index.html antigo, ele pode pedir um chunk
 // Vite que já não existe no container novo. Este módulo é servido somente para
