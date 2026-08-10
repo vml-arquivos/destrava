@@ -317,7 +317,7 @@ export function validarQsaExtraida(empresa: any, sociosReceita: any[], dados: an
   }
 
   for (const socioBase of sociosBase) {
-    if (!sociosDocumento.some((socioDoc) => socioDoc.nome === socioBase.nome)) {
+    if (!sociosDocumento.some((socioDoc: ReturnType<typeof socioNormalizado>) => socioDoc.nome === socioBase.nome)) {
       alertas.push({
         codigo: 'qsa_socio_receita_ausente_documento', campo: 'socios',
         mensagem: `O sócio "${socioBase.original?.nome || 'não identificado'}" consta no cadastro sincronizado, mas não aparece no QSA analisado.`,

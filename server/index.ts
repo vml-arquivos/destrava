@@ -66,6 +66,7 @@ import {
   verificarConfiguracaoNexus,
   gerarIdempotencyKey,
   validarPayloadNexus,
+  enviarTarefaManualNexus,
   type PayloadNexus,
 } from "./services/integracaoNexusService";
 import {
@@ -5835,6 +5836,99 @@ async function startServer() {
     } catch (err: any) {
       console.error("[GET /api/empresas/:id/pendencias/nexus-status]", err);
       res.status(500).json({ error: "Erro ao verificar configuração Nexus" });
+    }
+  });
+
+  const enviarListaManualDoCadastro = async (
+    req: Request,
+    res: Response,
+    entidade: { tipo: "empresa" | "pessoa_fisica"; id: string; nome: string; documento?: string | null },
+  ) => {
+    const body = req.body || {};
+    if (body.confirmed !== true) {
+      res.status(400).json({ error: "Confirmação explícita obrigatória." });
+      return;
+    }
+    const titulo = String(body.titulo || "").trim();
+    const clientRequestId = String(body.client_request_id || "").trim();
+    const prioridade = ["alta", "media", "baixa"].includes(String(body.prioridade)) ? body.prioridade : "media";
+    const checklistRaw = Array.isArray(body.checklist) ? body.checklist.slice(0, 100) : [];
+    if (titulo.length < 3 || titulo.length > 180) {
+      res.status(400).json({ error: "Informe um título entre 3 e 180 caracteres." });
+      return;
+    }
+    if (!/^[a-zA-Z0-9_-]{8,128}$/.test(clientRequestId)) {
+      res.status(400).json({ error: "Identificador idempotente da criação inválido." });
+      return;
+    }
+    const checklist = checklistRaw.map((item: any, index: number) => ({
+      id: String(item?.id || `${clientRequestId}-${index + 1}`).slice(0, 160),
+      texto: String(item?.texto || "").trim().slice(0, 500),
+      descricao: String(item?.descricao || "").trim().slice(0, 2000) || null,
+      data: /^\d{4}-\d{2}-\d{2}$/.test(String(item?.data || "")) ? String(item.data) : null,
+      responsavelEmail: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(item?.responsavel_email || "").trim())
+        ? String(item.responsavel_email).trim().toLowerCase()
+        : null,
+    })).filter((item: any) => item.texto);
+    if (!checklist.length) {
+      res.status(400).json({ error: "Adicione ao menos uma ação ao checklist." });
+      return;
+    }
+    if (checklist.length !== checklistRaw.length) {
+      res.status(400).json({ error: "Há itens vazios ou mais de 100 ações no checklist." });
+      return;
+    }
+
+    const colaborador = req.user!;
+    const resultado = await enviarTarefaManualNexus({
+      entidadeTipo: entidade.tipo,
+      entidadeId: entidade.id,
+      entidadeNome: entidade.nome,
+      documento: entidade.documento || null,
+      titulo,
+      descricao: String(body.descricao || "").trim().slice(0, 4000) || null,
+      prazo: /^\d{4}-\d{2}-\d{2}$/.test(String(body.prazo || "")) ? String(body.prazo) : null,
+      prioridade,
+      lembreteDiarioAteAprovacao: Boolean(body.lembrete_diario_ate_aprovacao),
+      clientRequestId,
+      criadoPorId: colaborador.id,
+      criadoPorNome: colaborador.nome || null,
+      criadoPorEmail: colaborador.email || null,
+      checklist,
+    });
+    res.status(resultado.sucesso ? (resultado.jaEnviado ? 200 : 201) : 502).json(resultado);
+  };
+
+  app.post("/api/empresas/:id/tarefas-nexus", auth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
+      const { rows } = await pool.query("SELECT id, razao_social, nome_fantasia, cnpj FROM empresas WHERE id = $1", [req.params.id]);
+      if (!rows[0]) { res.status(404).json({ error: "Empresa não encontrada." }); return; }
+      await enviarListaManualDoCadastro(req, res, {
+        tipo: "empresa",
+        id: rows[0].id,
+        nome: String(rows[0].razao_social || rows[0].nome_fantasia || "Empresa"),
+        documento: rows[0].cnpj,
+      });
+    } catch (error) {
+      console.error("[POST /api/empresas/:id/tarefas-nexus]", error);
+      res.status(500).json({ error: "Erro ao preparar tarefa para o Nexus." });
+    }
+  });
+
+  app.post("/api/clientes-pf/:id/tarefas-nexus", auth, async (req: Request, res: Response) => {
+    try {
+      const { rows } = await pool.query("SELECT id, nome, cpf FROM clientes_pf WHERE id = $1 AND COALESCE(ativo, TRUE) = TRUE", [req.params.id]);
+      if (!rows[0]) { res.status(404).json({ error: "Cliente PF não encontrado." }); return; }
+      await enviarListaManualDoCadastro(req, res, {
+        tipo: "pessoa_fisica",
+        id: rows[0].id,
+        nome: String(rows[0].nome || "Cliente PF"),
+        documento: rows[0].cpf,
+      });
+    } catch (error) {
+      console.error("[POST /api/clientes-pf/:id/tarefas-nexus]", error);
+      res.status(500).json({ error: "Erro ao preparar tarefa PF para o Nexus." });
     }
   });
 

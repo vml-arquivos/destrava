@@ -52,6 +52,29 @@ export interface ConfiguracaoNexus {
   mensagemStatus: string;
 }
 
+export interface TarefaManualNexus {
+  entidadeTipo: "empresa" | "pessoa_fisica";
+  entidadeId: string;
+  entidadeNome: string;
+  documento?: string | null;
+  titulo: string;
+  descricao?: string | null;
+  prazo?: string | null;
+  prioridade: "alta" | "media" | "baixa";
+  lembreteDiarioAteAprovacao: boolean;
+  clientRequestId: string;
+  criadoPorId: string;
+  criadoPorNome?: string | null;
+  criadoPorEmail?: string | null;
+  checklist: Array<{
+    id: string;
+    texto: string;
+    descricao?: string | null;
+    data?: string | null;
+    responsavelEmail?: string | null;
+  }>;
+}
+
 // ─── Verificação de configuração ──────────────────────────────────────────────
 
 /**
@@ -93,6 +116,14 @@ export function verificarConfiguracaoNexus(): ConfiguracaoNexus {
 export function gerarIdempotencyKey(empresaId: string, pendenciaId: string): string {
   const data = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   return `destrava_${empresaId}_${pendenciaId}_${data}`;
+}
+
+export function gerarIdempotencyKeyTarefaManual(
+  entidadeTipo: "empresa" | "pessoa_fisica",
+  entidadeId: string,
+  clientRequestId: string,
+): string {
+  return `destrava_manual:${entidadeTipo}:${entidadeId}:${clientRequestId}`;
 }
 
 // ─── Controle de duplicatas em memória ───────────────────────────────────────
@@ -240,6 +271,105 @@ async function enviarParaNexus(
 
   const body = await res.text().catch(() => "");
   return { ok: res.ok, status: res.status, body };
+}
+
+/**
+ * Envia uma lista manual criada dentro do cadastro selecionado. O formato é o
+ * mesmo contrato plano aceito pelo Nexus e a idempotência identifica somente
+ * a tentativa atual — duas listas legítimas da mesma entidade nunca colidem.
+ */
+export async function enviarTarefaManualNexus(input: TarefaManualNexus): Promise<ResultadoEnvioNexus> {
+  const timestamp = new Date().toISOString();
+  const idempotencyKey = gerarIdempotencyKeyTarefaManual(input.entidadeTipo, input.entidadeId, input.clientRequestId);
+  const config = verificarConfiguracaoNexus();
+  if (!config.nexusConfigurado) {
+    return {
+      sucesso: false,
+      destino: null,
+      idempotencyKey,
+      jaEnviado: false,
+      mensagem: "A criação manual exige NEXUS_WEBHOOK_URL configurada.",
+      timestamp,
+    };
+  }
+
+  const payload = {
+    sistema: "destrava_credito",
+    versao: "2.0",
+    evento: "tarefa.manual_criada",
+    timestamp,
+    idempotency_key: idempotencyKey,
+    external_type: input.entidadeTipo,
+    external_id: input.entidadeId,
+    external_name: input.entidadeNome,
+    titulo: input.titulo,
+    descricao: input.descricao || null,
+    prazo: input.prazo || null,
+    prioridade: input.prioridade,
+    contexto_tipo: input.entidadeTipo,
+    lembrete_diario_ate_aprovacao: input.lembreteDiarioAteAprovacao,
+    criado_por_email: input.criadoPorEmail || null,
+    criado_por_nome: input.criadoPorNome || null,
+    destrava_colaborador_id: input.criadoPorId,
+    responsavel_email: input.criadoPorEmail || null,
+    source_url: input.entidadeTipo === "empresa"
+      ? `/colaborador/empresas?empresa=${input.entidadeId}`
+      : `/colaborador/clientes-pf?cliente=${input.entidadeId}`,
+    checklist: input.checklist.map(item => ({
+      id: item.id,
+      texto: item.texto,
+      descricao: item.descricao || null,
+      data: item.data || null,
+      // Sem e-mail explícito, o Nexus usa o responsável principal resolvido
+      // pela integração. E-mail preenchido no item é validado estritamente.
+      responsavel_email: item.responsavelEmail || null,
+      feito: false,
+    })),
+    metadata: {
+      contrato: "destrava.nexus.tarefa.manual.v1",
+      entidade_tipo: input.entidadeTipo,
+      documento: input.documento || null,
+      client_request_id: input.clientRequestId,
+    },
+  };
+
+  try {
+    const response = await enviarParaNexus(payload);
+    if (!response.ok) {
+      return {
+        sucesso: false,
+        destino: "nexus",
+        idempotencyKey,
+        jaEnviado: false,
+        mensagem: `O Nexus recusou a lista (HTTP ${response.status}).`,
+        detalhe: response.body.slice(0, 300),
+        timestamp,
+      };
+    }
+    let parsed: any = null;
+    try { parsed = JSON.parse(response.body); } catch { /* resposta sem JSON */ }
+    return {
+      sucesso: true,
+      destino: "nexus",
+      idempotencyKey,
+      jaEnviado: Boolean(parsed?.duplicado),
+      mensagem: parsed?.duplicado
+        ? "Esta mesma tentativa já havia sido recebida pelo Nexus; nenhuma duplicata foi criada."
+        : "Lista criada no Nexus com checklist, responsáveis e datas preservados.",
+      detalhe: parsed?.tarefa?.id ? `Nexus ID: ${parsed.tarefa.id}` : undefined,
+      timestamp,
+    };
+  } catch (error) {
+    return {
+      sucesso: false,
+      destino: "nexus",
+      idempotencyKey,
+      jaEnviado: false,
+      mensagem: "Não foi possível conectar ao Nexus. A mesma tentativa pode ser reenviada com segurança.",
+      detalhe: error instanceof Error ? error.message : String(error),
+      timestamp,
+    };
+  }
 }
 
 // ─── Envio para n8n ───────────────────────────────────────────────────────────

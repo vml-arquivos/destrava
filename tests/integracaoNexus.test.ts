@@ -24,12 +24,28 @@ global.fetch = mockFetch as any;
 
 import {
   gerarIdempotencyKey,
+  gerarIdempotencyKeyTarefaManual,
   validarPayloadNexus,
   verificarConfiguracaoNexus,
   enviarPendenciaNexus,
   limparCacheIdempotencia,
   type PayloadNexus,
 } from "../server/services/integracaoNexusService";
+
+describe("idempotência de listas manuais Nexus", () => {
+  it("repete a mesma chave somente para a mesma tentativa", () => {
+    const first = gerarIdempotencyKeyTarefaManual("empresa", "empresa-1", "request-12345678");
+    const retry = gerarIdempotencyKeyTarefaManual("empresa", "empresa-1", "request-12345678");
+    const newList = gerarIdempotencyKeyTarefaManual("empresa", "empresa-1", "request-87654321");
+    expect(retry).toBe(first);
+    expect(newList).not.toBe(first);
+  });
+
+  it("não colide Empresa e PF mesmo com IDs e request iguais", () => {
+    expect(gerarIdempotencyKeyTarefaManual("empresa", "1", "request-12345678"))
+      .not.toBe(gerarIdempotencyKeyTarefaManual("pessoa_fisica", "1", "request-12345678"));
+  });
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
