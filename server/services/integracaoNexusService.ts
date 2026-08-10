@@ -71,10 +71,33 @@ export interface TarefaManualNexus {
     descricao?: string | null;
     data?: string | null;
     responsavelEmail?: string | null;
+    responsavelId?: string | null;
+    dificuldade?: "nivel_1" | "nivel_2" | "nivel_3" | "nivel_4" | "nivel_5";
+    pontuacao?: 0 | 1 | 3 | 5 | 20;
     recorrencia?: "unica" | "diaria" | "semanal" | "mensal";
     recorrenciaDiaSemana?: number | null;
     recorrenciaDiaMes?: number | null;
   }>;
+}
+
+export interface CatalogoDestinatariosNexus {
+  membros: Array<{
+    id: string;
+    nome: string;
+    email: string;
+    role: string;
+    cargo?: string | null;
+    equipe_ids: string[];
+  }>;
+  equipes: Array<{
+    id: string;
+    nome: string;
+    descricao?: string | null;
+    membro_ids: string[];
+  }>;
+  total_membros: number;
+  total_equipes: number;
+  responsavel_sugerido_id?: string | null;
 }
 
 // ─── Verificação de configuração ──────────────────────────────────────────────
@@ -84,7 +107,13 @@ export interface TarefaManualNexus {
  * Retorna um objeto descritivo para exibição no frontend.
  */
 export function verificarConfiguracaoNexus(): ConfiguracaoNexus {
-  const nexusUrl = (process.env.NEXUS_WEBHOOK_URL || "").trim();
+  const nexusUrl = (
+    process.env.NEXUS_WEBHOOK_URL
+    || process.env.NEXUS_API_BASE_URL
+    || process.env.NEXUS_PUBLIC_URL
+    || process.env.NEXUS_BASE_URL
+    || ""
+  ).trim();
   const n8nUrl   = (process.env.N8N_WEBHOOK_URL   || "").trim();
 
   const nexusConfigurado = nexusUrl.length > 0;
@@ -107,6 +136,120 @@ export function verificarConfiguracaoNexus(): ConfiguracaoNexus {
   }
 
   return { nexusConfigurado, n8nConfigurado, algumConfigurado, destino, mensagemStatus };
+}
+
+/**
+ * Monta uma URL de backend do Nexus sem expor o token no navegador.
+ * NEXUS_API_BASE_URL/NEXUS_PUBLIC_URL são preferidas. Para instalações já
+ * existentes, também reaproveita NEXUS_WEBHOOK_URL quando ela aponta para
+ * /api/integracoes/... no próprio Nexus.
+ */
+export function resolverUrlIntegracaoNexus(recurso: string): string | null {
+  const cleanResource = recurso.replace(/^\/+/, "");
+  const explicit = String(
+    process.env.NEXUS_API_BASE_URL || process.env.NEXUS_PUBLIC_URL || process.env.NEXUS_BASE_URL || "",
+  ).trim();
+  const webhook = String(process.env.NEXUS_WEBHOOK_URL || "").trim();
+
+  const buildFrom = (raw: string, requireExistingIntegrationPath: boolean): string | null => {
+    if (!raw) return null;
+    try {
+      const parsed = new URL(raw);
+      const marker = "/api/integracoes";
+      const markerIndex = parsed.pathname.indexOf(marker);
+      if (markerIndex >= 0) {
+        parsed.pathname = `${parsed.pathname.slice(0, markerIndex)}${marker}/${cleanResource}`;
+      } else {
+        if (requireExistingIntegrationPath) return null;
+        const basePath = parsed.pathname.replace(/\/+$/, "");
+        parsed.pathname = basePath.endsWith("/api")
+          ? `${basePath}/integracoes/${cleanResource}`
+          : `${basePath}${marker}/${cleanResource}`;
+      }
+      parsed.search = "";
+      parsed.hash = "";
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  };
+
+  return buildFrom(explicit, false) || buildFrom(webhook, true);
+}
+
+function nexusIntegrationHeaders(): Record<string, string> {
+  const token = String(process.env.NEXUS_API_TOKEN || process.env.NEXUS_INTEGRATION_SECRET || "").trim();
+  return {
+    "Content-Type": "application/json",
+    "X-Source": "destrava-credito",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+function integrationError(message: string, status = 502): Error & { status: number } {
+  const error = new Error(message) as Error & { status: number };
+  error.status = status;
+  return error;
+}
+
+function isHtmlResponse(body: string): boolean {
+  return /<!doctype\s+html|<html[\s>]/i.test(body);
+}
+
+export function detalheSeguroRespostaNexus(status: number, body: string): string {
+  if (isHtmlResponse(body)) {
+    return `O proxy do Nexus retornou uma página HTML (HTTP ${status}). Verifique se o Nexus está online e se NEXUS_WEBHOOK_URL aponta para /api/integracoes/destrava/tarefas.`;
+  }
+  return body.trim().slice(0, 300) || `Resposta vazia do Nexus (HTTP ${status}).`;
+}
+
+export async function buscarDestinatariosNexus(input: {
+  criadoPorEmail?: string | null;
+  externalId?: string | null;
+  externalType?: "empresa" | "pessoa_fisica";
+}): Promise<CatalogoDestinatariosNexus> {
+  const url = resolverUrlIntegracaoNexus("destrava/destinatarios");
+  if (!url) {
+    throw integrationError(
+      "Catálogo de equipes e membros não configurado. Defina NEXUS_API_BASE_URL (recomendado) ou use NEXUS_WEBHOOK_URL com a rota oficial do Nexus.",
+      503,
+    );
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: nexusIntegrationHeaders(),
+      body: JSON.stringify({
+        criado_por_email: input.criadoPorEmail || null,
+        external_id: input.externalId || null,
+        external_type: input.externalType || "empresa",
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    throw integrationError("Não foi possível conectar ao Nexus para carregar equipes e membros.", 502);
+  }
+
+  const body = await response.text().catch(() => "");
+  if (!response.ok) {
+    let message = detalheSeguroRespostaNexus(response.status, body);
+    if (!isHtmlResponse(body)) {
+      try { message = JSON.parse(body)?.error || message; } catch { /* resposta textual */ }
+    }
+    throw integrationError(message, response.status >= 400 && response.status < 600 ? response.status : 502);
+  }
+
+  if (isHtmlResponse(body)) {
+    throw integrationError(detalheSeguroRespostaNexus(response.status, body), 502);
+  }
+  let parsed: any;
+  try { parsed = JSON.parse(body); } catch { throw integrationError("O Nexus retornou um catálogo em formato inválido.", 502); }
+  if (!Array.isArray(parsed?.membros) || !Array.isArray(parsed?.equipes)) {
+    throw integrationError("O Nexus retornou um catálogo incompleto de equipes e membros.", 502);
+  }
+  return parsed as CatalogoDestinatariosNexus;
 }
 
 // ─── Geração de idempotencyKey ────────────────────────────────────────────────
@@ -251,18 +394,13 @@ function construirPayloadEnriquecido(payload: PayloadNexus): Record<string, unkn
 async function enviarParaNexus(
   payloadEnriquecido: Record<string, unknown>
 ): Promise<{ ok: boolean; status: number; body: string }> {
-  const nexusUrl   = (process.env.NEXUS_WEBHOOK_URL || "").trim();
-  const nexusToken = (process.env.NEXUS_API_TOKEN   || "").trim();
+  const nexusUrl = resolverUrlIntegracaoNexus("destrava/tarefas")
+    || (process.env.NEXUS_WEBHOOK_URL || "").trim();
 
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "X-Source": "destrava-credito",
+    ...nexusIntegrationHeaders(),
     "X-Idempotency-Key": String(payloadEnriquecido.idempotency_key || ""),
   };
-
-  if (nexusToken) {
-    headers["Authorization"] = `Bearer ${nexusToken}`;
-  }
 
   const res = await fetch(nexusUrl, {
     method: "POST",
@@ -321,9 +459,12 @@ export async function enviarTarefaManualNexus(input: TarefaManualNexus): Promise
       texto: item.texto,
       descricao: item.descricao || null,
       data: item.data || null,
-      // Sem e-mail explícito, o Nexus usa o responsável principal resolvido
-      // pela integração. E-mail preenchido no item é validado estritamente.
+      // O ID selecionado vem do catálogo oficial e ainda é revalidado pelo
+      // Nexus na mesma organização. E-mail permanece como fallback legado.
+      responsavel_id: item.responsavelId || null,
       responsavel_email: item.responsavelEmail || null,
+      dificuldade: item.dificuldade || "nivel_3",
+      pontuacao: item.pontuacao ?? 3,
       recorrencia: item.recorrencia || "unica",
       recorrencia_dia_semana: item.recorrencia === "semanal" ? item.recorrenciaDiaSemana ?? null : null,
       recorrencia_dia_mes: item.recorrencia === "mensal" ? item.recorrenciaDiaMes ?? null : null,
@@ -335,6 +476,10 @@ export async function enviarTarefaManualNexus(input: TarefaManualNexus): Promise
       documento: input.documento || null,
       client_request_id: input.clientRequestId,
     },
+    // Cada ação pontua individualmente, exatamente como na criação nativa do
+    // Nexus. O lançamento no ranking só ocorre após a aprovação no Nexus.
+    pontuacao_escopo: "subtarefas",
+    conta_ranking: true,
   };
 
   try {
@@ -346,7 +491,7 @@ export async function enviarTarefaManualNexus(input: TarefaManualNexus): Promise
         idempotencyKey,
         jaEnviado: false,
         mensagem: `O Nexus recusou a lista (HTTP ${response.status}).`,
-        detalhe: response.body.slice(0, 300),
+        detalhe: detalheSeguroRespostaNexus(response.status, response.body),
         timestamp,
       };
     }

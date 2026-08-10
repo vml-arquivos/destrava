@@ -15,7 +15,7 @@ describe("recuperação segura de assets entre deploys", () => {
     expect(server).toContain('app.get("/version"');
     expect(server).toContain('"https://static.cloudflareinsights.com"');
     expect(server).toContain('"https://cloudflareinsights.com"');
-    expect(dockerfile).toContain("DESTRAVA_RELEASE=fix65-recuperacao-assets-lockfile-20260810");
+    expect(dockerfile).toContain("DESTRAVA_RELEASE=fix66-destinatarios-ranking-nexus-20260810");
   });
 
   it("só recupera um chunk ausente depois de tentar o arquivo real", () => {
@@ -56,5 +56,18 @@ describe("recuperação segura de assets entre deploys", () => {
     expect(workspace).not.toContain("set this to true or false");
     expect(dockerfile).toContain("pnpm install --frozen-lockfile");
     expect(dockerfile).not.toMatch(/ARG (?:GEMINI_API_KEY|NEXUS_INTEGRATION_SECRET|DATABASE_URL)/);
+  });
+
+  it("usa o catálogo do Nexus e a pontuação oficial por item no modal", () => {
+    const modal = read("client/src/pages/colaborador/CriarTarefaNexusModal.tsx");
+    const server = read("server/index.ts");
+    expect(modal).toContain("/api/nexus/destinatarios");
+    expect(modal).toContain("Todas as equipes e pessoas");
+    expect(modal).toContain("inclusive gestores e administradores");
+    expect(modal).toContain("Pontuação oficial do Nexus");
+    expect(modal).toContain("pontuacao:");
+    expect(modal).not.toContain("E-mail do membro no Nexus");
+    expect(server).toContain('app.post("/api/nexus/destinatarios", auth');
+    expect(server).toContain("responsavelId:");
   });
 });

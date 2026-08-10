@@ -29,8 +29,54 @@ import {
   verificarConfiguracaoNexus,
   enviarPendenciaNexus,
   limparCacheIdempotencia,
+  resolverUrlIntegracaoNexus,
+  detalheSeguroRespostaNexus,
+  buscarDestinatariosNexus,
   type PayloadNexus,
 } from "../server/services/integracaoNexusService";
+
+describe("catálogo oficial de equipes e membros do Nexus", () => {
+  const oldEnv = { ...process.env };
+
+  afterEach(() => {
+    for (const key of ["NEXUS_API_BASE_URL", "NEXUS_PUBLIC_URL", "NEXUS_BASE_URL", "NEXUS_WEBHOOK_URL", "NEXUS_API_TOKEN"]) {
+      if ((oldEnv as any)[key] === undefined) delete (process.env as any)[key];
+      else (process.env as any)[key] = (oldEnv as any)[key];
+    }
+    mockFetch.mockReset();
+  });
+
+  it("deriva a rota protegida a partir do webhook já configurado", () => {
+    delete process.env.NEXUS_API_BASE_URL;
+    delete process.env.NEXUS_PUBLIC_URL;
+    delete process.env.NEXUS_BASE_URL;
+    process.env.NEXUS_WEBHOOK_URL = "https://nexus.exemplo.com/api/integracoes/destrava/tarefas";
+    expect(resolverUrlIntegracaoNexus("destrava/destinatarios"))
+      .toBe("https://nexus.exemplo.com/api/integracoes/destrava/destinatarios");
+  });
+
+  it("nunca devolve HTML bruto de proxy ao usuário", () => {
+    const detalhe = detalheSeguroRespostaNexus(502, "<!DOCTYPE html><html><body>bad gateway</body></html>");
+    expect(detalhe).toContain("HTTP 502");
+    expect(detalhe).not.toContain("<!DOCTYPE");
+  });
+
+  it("carrega todos os perfis devolvidos pelo Nexus, inclusive gestor", async () => {
+    process.env.NEXUS_API_BASE_URL = "https://nexus.exemplo.com";
+    process.env.NEXUS_API_TOKEN = "segredo";
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({
+      membros: [{ id: "gestor-1", nome: "Gestor", email: "gestor@example.com", role: "gestor", equipe_ids: [] }],
+      equipes: [], total_membros: 1, total_equipes: 0,
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+
+    const result = await buscarDestinatariosNexus({ externalId: "empresa-1", externalType: "empresa" });
+    expect(result.membros[0].role).toBe("gestor");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://nexus.exemplo.com/api/integracoes/destrava/destinatarios",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+});
 
 describe("idempotência de listas manuais Nexus", () => {
   it("repete a mesma chave somente para a mesma tentativa", () => {

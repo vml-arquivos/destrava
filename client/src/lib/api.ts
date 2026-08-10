@@ -49,11 +49,15 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
   }
 
   if (!res.ok) {
+    const htmlResponse = /<!doctype\s+html|<html[\s>]/i.test(text);
+    const gatewayMessage = [502, 503, 504].includes(res.status)
+      ? `O servidor está temporariamente indisponível (HTTP ${res.status}). Tente novamente em instantes.`
+      : `A solicitação falhou (HTTP ${res.status}).`;
     const message =
       payload?.error ||
       payload?.message ||
       (text.trim() && !contentType.includes("application/json")
-        ? text.slice(0, 180).replace(/\s+/g, " ")
+        ? (htmlResponse ? gatewayMessage : text.slice(0, 180).replace(/\s+/g, " "))
         : res.statusText);
 
     throw new Error(message || `HTTP ${res.status}`);

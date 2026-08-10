@@ -67,6 +67,7 @@ import {
   gerarIdempotencyKey,
   validarPayloadNexus,
   enviarTarefaManualNexus,
+  buscarDestinatariosNexus,
   type PayloadNexus,
 } from "./services/integracaoNexusService";
 import {
@@ -81,7 +82,7 @@ const { Pool } = pkg;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DESTRAVA_RELEASE = process.env.DESTRAVA_RELEASE || "fix65-recuperacao-assets-lockfile-20260810";
+const DESTRAVA_RELEASE = process.env.DESTRAVA_RELEASE || "fix66-destinatarios-ranking-nexus-20260810";
 
 // Quando um navegador/CDN mantém um index.html antigo, ele pode pedir um chunk
 // Vite que já não existe no container novo. Este módulo é servido somente para
@@ -5894,6 +5895,21 @@ async function startServer() {
       res.status(400).json({ error: "Identificador idempotente da criação inválido." });
       return;
     }
+    const responsavelInvalido = checklistRaw.some((item: any) => {
+      const id = String(item?.responsavel_id || "").trim();
+      return id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+    });
+    if (responsavelInvalido) {
+      res.status(400).json({ error: "Há um responsável inválido. Recarregue as equipes e selecione novamente." });
+      return;
+    }
+    const pontosPorDificuldade = {
+      nivel_1: 0,
+      nivel_2: 1,
+      nivel_3: 3,
+      nivel_4: 5,
+      nivel_5: 20,
+    } as const;
     const checklist = checklistRaw.map((item: any, index: number) => ({
       id: String(item?.id || `${clientRequestId}-${index + 1}`).slice(0, 160),
       texto: String(item?.texto || "").trim().slice(0, 500),
@@ -5902,6 +5918,15 @@ async function startServer() {
       responsavelEmail: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(item?.responsavel_email || "").trim())
         ? String(item.responsavel_email).trim().toLowerCase()
         : null,
+      responsavelId: String(item?.responsavel_id || "").trim() || null,
+      dificuldade: Object.prototype.hasOwnProperty.call(pontosPorDificuldade, String(item?.dificuldade))
+        ? String(item.dificuldade) as keyof typeof pontosPorDificuldade
+        : "nivel_3" as const,
+      pontuacao: pontosPorDificuldade[
+        (Object.prototype.hasOwnProperty.call(pontosPorDificuldade, String(item?.dificuldade))
+          ? String(item.dificuldade)
+          : "nivel_3") as keyof typeof pontosPorDificuldade
+      ],
       recorrencia: ["unica", "diaria", "semanal", "mensal"].includes(String(item?.recorrencia))
         ? String(item.recorrencia) as "unica" | "diaria" | "semanal" | "mensal"
         : "unica",
@@ -5937,8 +5962,34 @@ async function startServer() {
       criadoPorEmail: colaborador.email || null,
       checklist,
     });
-    res.status(resultado.sucesso ? (resultado.jaEnviado ? 200 : 201) : 502).json(resultado);
+    res.status(resultado.sucesso ? (resultado.jaEnviado ? 200 : 201) : 502).json(
+      resultado.sucesso ? resultado : { ...resultado, error: resultado.mensagem },
+    );
   };
+
+  // Catálogo consultado diretamente no Nexus, sem cópia local. Qualquer
+  // usuário autenticado do Destrava pode abrir o seletor; o Nexus devolve
+  // somente perfis ativos da organização resolvida pela integração.
+  app.post("/api/nexus/destinatarios", auth, async (req: Request, res: Response) => {
+    try {
+      const colaborador = req.user!;
+      const externalType = String(req.body?.external_type || "empresa") === "pessoa_fisica"
+        ? "pessoa_fisica" as const
+        : "empresa" as const;
+      const catalogo = await buscarDestinatariosNexus({
+        criadoPorEmail: colaborador.email || null,
+        externalId: String(req.body?.external_id || "").trim() || null,
+        externalType,
+      });
+      res.json(catalogo);
+    } catch (error: any) {
+      console.error("[POST /api/nexus/destinatarios]", error?.message || error);
+      const status = Number(error?.status);
+      res.status(status >= 400 && status < 600 ? status : 502).json({
+        error: error?.message || "Não foi possível carregar equipes e membros do Nexus.",
+      });
+    }
+  });
 
   app.post("/api/empresas/:id/tarefas-nexus", auth, async (req: Request, res: Response) => {
     try {
