@@ -5849,14 +5849,12 @@ async function startServer() {
       res.status(400).json({ error: "Confirmação explícita obrigatória." });
       return;
     }
-    const titulo = String(body.titulo || "").trim();
+    const titulo = entidade.tipo === "empresa"
+      ? `Tarefa para empresa — ${entidade.nome}`
+      : `Tarefa para Cliente PF — ${entidade.nome}`;
     const clientRequestId = String(body.client_request_id || "").trim();
     const prioridade = ["alta", "media", "baixa"].includes(String(body.prioridade)) ? body.prioridade : "media";
     const checklistRaw = Array.isArray(body.checklist) ? body.checklist.slice(0, 100) : [];
-    if (titulo.length < 3 || titulo.length > 180) {
-      res.status(400).json({ error: "Informe um título entre 3 e 180 caracteres." });
-      return;
-    }
     if (!/^[a-zA-Z0-9_-]{8,128}$/.test(clientRequestId)) {
       res.status(400).json({ error: "Identificador idempotente da criação inválido." });
       return;
@@ -5868,6 +5866,15 @@ async function startServer() {
       data: /^\d{4}-\d{2}-\d{2}$/.test(String(item?.data || "")) ? String(item.data) : null,
       responsavelEmail: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(item?.responsavel_email || "").trim())
         ? String(item.responsavel_email).trim().toLowerCase()
+        : null,
+      recorrencia: ["unica", "diaria", "semanal", "mensal"].includes(String(item?.recorrencia))
+        ? String(item.recorrencia) as "unica" | "diaria" | "semanal" | "mensal"
+        : "unica",
+      recorrenciaDiaSemana: Number.isInteger(Number(item?.recorrencia_dia_semana)) && Number(item.recorrencia_dia_semana) >= 0 && Number(item.recorrencia_dia_semana) <= 6
+        ? Number(item.recorrencia_dia_semana)
+        : null,
+      recorrenciaDiaMes: Number.isInteger(Number(item?.recorrencia_dia_mes)) && Number(item.recorrencia_dia_mes) >= 1 && Number(item.recorrencia_dia_mes) <= 31
+        ? Number(item.recorrencia_dia_mes)
         : null,
     })).filter((item: any) => item.texto);
     if (!checklist.length) {
@@ -5889,7 +5896,6 @@ async function startServer() {
       descricao: String(body.descricao || "").trim().slice(0, 4000) || null,
       prazo: /^\d{4}-\d{2}-\d{2}$/.test(String(body.prazo || "")) ? String(body.prazo) : null,
       prioridade,
-      lembreteDiarioAteAprovacao: Boolean(body.lembrete_diario_ate_aprovacao),
       clientRequestId,
       criadoPorId: colaborador.id,
       criadoPorNome: colaborador.nome || null,

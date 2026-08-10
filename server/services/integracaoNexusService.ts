@@ -61,7 +61,6 @@ export interface TarefaManualNexus {
   descricao?: string | null;
   prazo?: string | null;
   prioridade: "alta" | "media" | "baixa";
-  lembreteDiarioAteAprovacao: boolean;
   clientRequestId: string;
   criadoPorId: string;
   criadoPorNome?: string | null;
@@ -72,6 +71,9 @@ export interface TarefaManualNexus {
     descricao?: string | null;
     data?: string | null;
     responsavelEmail?: string | null;
+    recorrencia?: "unica" | "diaria" | "semanal" | "mensal";
+    recorrenciaDiaSemana?: number | null;
+    recorrenciaDiaMes?: number | null;
   }>;
 }
 
@@ -307,7 +309,6 @@ export async function enviarTarefaManualNexus(input: TarefaManualNexus): Promise
     prazo: input.prazo || null,
     prioridade: input.prioridade,
     contexto_tipo: input.entidadeTipo,
-    lembrete_diario_ate_aprovacao: input.lembreteDiarioAteAprovacao,
     criado_por_email: input.criadoPorEmail || null,
     criado_por_nome: input.criadoPorNome || null,
     destrava_colaborador_id: input.criadoPorId,
@@ -323,6 +324,9 @@ export async function enviarTarefaManualNexus(input: TarefaManualNexus): Promise
       // Sem e-mail explícito, o Nexus usa o responsável principal resolvido
       // pela integração. E-mail preenchido no item é validado estritamente.
       responsavel_email: item.responsavelEmail || null,
+      recorrencia: item.recorrencia || "unica",
+      recorrencia_dia_semana: item.recorrencia === "semanal" ? item.recorrenciaDiaSemana ?? null : null,
+      recorrencia_dia_mes: item.recorrencia === "mensal" ? item.recorrenciaDiaMes ?? null : null,
       feito: false,
     })),
     metadata: {

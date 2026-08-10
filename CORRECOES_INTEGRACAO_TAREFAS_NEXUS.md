@@ -1,30 +1,38 @@
 # Correções da integração de tarefas — Destrava → Nexus
 
-## Resultado funcional
+## Modal e fonte única
 
-- Ações rápidas `Criar tarefa no Nexus` foram adicionadas no cadastro de Empresa e no painel do Cliente PF.
-- O servidor recarrega a entidade pelo ID; nome, documento e autor não são confiados ao frontend.
-- O modal envia título, descrição, prazo, prioridade, lembrete diário e checklist.
-- Cada item possui ID, descrição, data e e-mail de responsável próprios.
-- E-mail de membro preenchido é validado pelo Nexus dentro da organização. Um e-mail inválido recusa toda a lista para evitar atribuição silenciosa à pessoa errada.
-- Sem e-mail por item, o Nexus usa o responsável principal resolvido pela integração.
-- A chave `destrava_manual:{tipo}:{entidade}:{client_request_id}` torna retry/duplo clique idempotente, sem colidir duas listas legítimas da mesma entidade.
+- O modal segue a identidade visual institucional da Destrava e o mesmo contrato funcional usado pelo Nexus.
+- O título é gerado a partir da entidade carregada novamente pelo servidor: `Tarefa para empresa — Nome` ou `Tarefa para Cliente PF — Nome`.
+- Título, nome, documento e contexto não dependem de valores livres enviados pelo navegador.
+- A tarefa é armazenada somente no Nexus. O Destrava é um criador remoto autenticado e não mantém uma lista paralela.
+- A chave `destrava_manual:{tipo}:{entidade}:{client_request_id}` protege retry e duplo clique sem colidir duas criações legítimas.
 
-## Configuração
+## Checklist canônico
 
-- `NEXUS_WEBHOOK_URL` deve apontar para o endpoint de criação integrado do Nexus.
-- `NEXUS_API_TOKEN` deve corresponder ao segredo configurado no Nexus.
-- Para criação manual direta, fallback n8n não é utilizado: a lista precisa ser confirmada pelo próprio Nexus.
+Cada item envia e preserva:
 
-## Ordem de publicação
+- ID próprio;
+- texto e descrição;
+- data;
+- e-mail do responsável Nexus;
+- frequência `unica`, `diaria`, `semanal` ou `mensal`;
+- dia da semana ou do mês quando aplicável.
 
-Publicar este repositório somente depois do Nexus corrigido. O contrato continua compatível com os envios antigos de pendências.
+A frequência é individual. A mesma lista pode ter, por exemplo, uma conferência diária, reunião semanal, fechamento mensal e envio único. O Nexus lembra o mesmo item e nunca duplica a lista.
 
-## Gate de regressão executado
+## Compatibilidade e segurança
 
-- `npm run check`
-- `npm run build`, incluindo prerender e orçamento de bundle
-- Testes Nexus/integração direcionados
-- Testes adicionais de idempotência: mesma tentativa repete a chave; uma nova lista gera outra; Empresa e PF não colidem
+- E-mail informado é validado pelo Nexus dentro da organização; falha recusa a lista inteira.
+- Sem e-mail por item, permanece o responsável principal resolvido pela integração.
+- O backend Nexus continua aceitando o contrato legado e converte o antigo lembrete geral em recorrência dos itens durante implantação desencontrada.
+- Nenhuma tabela local de tarefas foi criada no Destrava.
 
-Antes da produção, validar em homologação uma Empresa e um Cliente PF reais, inclusive um item sem e-mail e outro com e-mail de membro Nexus válido.
+## Gate executado
+
+- `npm run build`, incluindo TypeScript, Vite, prerender, orçamento de bundle e bundle do servidor.
+- 37 testes de integração Nexus aprovados.
+- 38 testes de hardening Nexus aprovados.
+- A suíte ampla confirmou os blocos já executados, mas mantém um open handle pré-existente do Vitest após os testes; isso não é falha das asserções desta alteração.
+
+Publicar o Nexus primeiro e depois o Destrava. Em homologação, validar uma Empresa e um Cliente PF com itens de frequências e responsáveis diferentes.

@@ -4,27 +4,41 @@ import { toast } from 'sonner';
 import { apiFetch } from '../../lib/api';
 
 type EntidadeNexus = { tipo: 'empresa' | 'pessoa_fisica'; id: string; nome: string };
-type ChecklistDraft = { id: string; texto: string; descricao: string; data: string; responsavel_email: string };
+type ChecklistRecurrence = 'unica' | 'diaria' | 'semanal' | 'mensal';
+type ChecklistDraft = {
+  id: string;
+  texto: string;
+  descricao: string;
+  data: string;
+  responsavel_email: string;
+  recorrencia: ChecklistRecurrence;
+  recorrencia_dia_semana: string;
+  recorrencia_dia_mes: string;
+};
 
 const inputClass = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
 const newId = () => (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+const newChecklistItem = (): ChecklistDraft => ({
+  id: newId(), texto: '', descricao: '', data: '', responsavel_email: '', recorrencia: 'unica',
+  recorrencia_dia_semana: String(new Date().getDay()), recorrencia_dia_mes: String(new Date().getDate()),
+});
 
 export default function CriarTarefaNexusModal({ entidade, onClose }: { entidade: EntidadeNexus; onClose: () => void }) {
   const [requestId] = useState(newId);
-  const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [prazo, setPrazo] = useState('');
   const [prioridade, setPrioridade] = useState<'baixa' | 'media' | 'alta'>('media');
-  const [diaria, setDiaria] = useState(false);
-  const [items, setItems] = useState<ChecklistDraft[]>([{ id: newId(), texto: '', descricao: '', data: '', responsavel_email: '' }]);
+  const [items, setItems] = useState<ChecklistDraft[]>([newChecklistItem()]);
   const [saving, setSaving] = useState(false);
+  const tituloAutomatico = entidade.tipo === 'empresa'
+    ? `Tarefa para empresa — ${entidade.nome}`
+    : `Tarefa para Cliente PF — ${entidade.nome}`;
 
-  const updateItem = (id: string, field: keyof ChecklistDraft, value: string) => {
+  const updateItem = <K extends keyof ChecklistDraft>(id: string, field: K, value: ChecklistDraft[K]) => {
     setItems(current => current.map(item => item.id === id ? { ...item, [field]: value } : item));
   };
 
   async function submit() {
-    if (!titulo.trim()) { toast.error('Informe o título da lista.'); return; }
     if (!items.length || items.some(item => !item.texto.trim())) { toast.error('Preencha todas as ações do checklist.'); return; }
     setSaving(true);
     try {
@@ -33,17 +47,19 @@ export default function CriarTarefaNexusModal({ entidade, onClose }: { entidade:
         body: JSON.stringify({
           confirmed: true,
           client_request_id: requestId,
-          titulo: titulo.trim(),
+          titulo: tituloAutomatico,
           descricao: descricao.trim() || null,
           prazo: prazo || null,
           prioridade,
-          lembrete_diario_ate_aprovacao: diaria,
           checklist: items.map(item => ({
             id: item.id,
             texto: item.texto.trim(),
             descricao: item.descricao.trim() || null,
             data: item.data || null,
             responsavel_email: item.responsavel_email.trim().toLowerCase() || null,
+            recorrencia: item.recorrencia,
+            recorrencia_dia_semana: item.recorrencia === 'semanal' ? Number(item.recorrencia_dia_semana) : null,
+            recorrencia_dia_mes: item.recorrencia === 'mensal' ? Number(item.recorrencia_dia_mes) : null,
           })),
         }),
       });
@@ -61,7 +77,7 @@ export default function CriarTarefaNexusModal({ entidade, onClose }: { entidade:
       <div className="w-full max-w-3xl max-h-[94vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
         <header className="px-5 py-4 border-b flex items-start justify-between gap-4 bg-gradient-to-r from-blue-950 to-blue-700 text-white">
           <div>
-            <h2 className="font-black text-lg">Criar lista no Nexus</h2>
+            <h2 className="font-black text-lg">Nova lista de tarefas</h2>
             <p className="text-xs text-blue-100 mt-1">{entidade.tipo === 'empresa' ? 'Empresa' : 'Cliente PF'} · {entidade.nome}</p>
           </div>
           <button type="button" onClick={onClose} className="text-blue-100 hover:text-white"><X className="w-5 h-5" /></button>
@@ -69,9 +85,9 @@ export default function CriarTarefaNexusModal({ entidade, onClose }: { entidade:
 
         <div className="p-5 overflow-y-auto space-y-4">
           <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1">Título da lista *</label>
-            <input className={inputClass} value={titulo} onChange={event => setTitulo(event.target.value)} maxLength={180} placeholder="Ex.: Conferência documental de agosto" autoFocus />
-            <p className="text-[11px] text-slate-500 mt-1">Cada envio cria uma lista independente dentro do mesmo cadastro no Nexus.</p>
+            <label className="block text-xs font-bold text-slate-600 mb-1">Título automático da lista</label>
+            <input className={`${inputClass} bg-blue-50 text-blue-950 font-semibold`} value={tituloAutomatico} readOnly />
+            <p className="text-[11px] text-slate-500 mt-1">Mesmo padrão do Nexus. Cada envio recebe ID próprio e nunca é misturado com outra lista.</p>
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-600 mb-1">Descrição</label>
@@ -81,15 +97,15 @@ export default function CriarTarefaNexusModal({ entidade, onClose }: { entidade:
             <div><label className="block text-xs font-bold text-slate-600 mb-1">Prazo da lista</label><input type="date" className={inputClass} value={prazo} onChange={event => setPrazo(event.target.value)} /></div>
             <div><label className="block text-xs font-bold text-slate-600 mb-1">Prioridade</label><select className={inputClass} value={prioridade} onChange={event => setPrioridade(event.target.value as typeof prioridade)}><option value="baixa">Baixa</option><option value="media">Média</option><option value="alta">Alta</option></select></div>
           </div>
-          <label className="flex items-start gap-3 p-3 rounded-xl border border-blue-200 bg-blue-50 cursor-pointer">
-            <input type="checkbox" checked={diaria} onChange={event => setDiaria(event.target.checked)} className="mt-1" />
-            <span><strong className="text-sm text-blue-950">Lembrar diariamente até finalizar e aprovar</strong><br /><small className="text-blue-700">O Nexus manterá a mesma lista e o mesmo ID. Não cria uma cópia por dia.</small></span>
-          </label>
+          <div className="flex items-start gap-3 p-3 rounded-xl border border-blue-200 bg-blue-50">
+            <CheckSquare className="w-5 h-5 text-blue-700 mt-0.5" />
+            <span><strong className="text-sm text-blue-950">Fonte única no Nexus</strong><br /><small className="text-blue-700">Este modal usa o mesmo contrato de criação. Tarefas, checklist, responsáveis, recorrência e histórico são armazenados somente no Nexus.</small></span>
+          </div>
 
           <section>
             <div className="flex items-center justify-between gap-3 mb-2">
               <div><h3 className="font-black text-sm text-slate-800 flex items-center gap-2"><CheckSquare className="w-4 h-4" /> Checklist</h3><p className="text-[11px] text-slate-500">Responsável e data pertencem ao item; valores diferentes nunca são misturados.</p></div>
-              <button type="button" onClick={() => setItems(current => [...current, { id: newId(), texto: '', descricao: '', data: '', responsavel_email: '' }])} className="flex items-center gap-1 text-xs font-bold px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200"><Plus className="w-3.5 h-3.5" /> Ação</button>
+              <button type="button" onClick={() => setItems(current => [...current, newChecklistItem()])} className="flex items-center gap-1 text-xs font-bold px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200"><Plus className="w-3.5 h-3.5" /> Ação</button>
             </div>
             <div className="space-y-3">
               {items.map((item, index) => (
@@ -102,6 +118,28 @@ export default function CriarTarefaNexusModal({ entidade, onClose }: { entidade:
                       <div className="grid sm:grid-cols-2 gap-2">
                         <label className="relative"><Calendar className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" /><input type="date" className={`${inputClass} pl-9`} value={item.data} onChange={event => updateItem(item.id, 'data', event.target.value)} /></label>
                         <input type="email" className={inputClass} value={item.responsavel_email} onChange={event => updateItem(item.id, 'responsavel_email', event.target.value)} placeholder="E-mail do membro no Nexus (opcional)" />
+                      </div>
+                      <div className="rounded-lg border border-blue-200 bg-blue-50 p-2.5">
+                        <label className="block text-xs font-bold text-blue-950 mb-1">Frequência desta tarefa</label>
+                        <div className="grid sm:grid-cols-2 gap-2">
+                          <select className={inputClass} value={item.recorrencia} onChange={event => updateItem(item.id, 'recorrencia', event.target.value as ChecklistRecurrence)}>
+                            <option value="unica">Uma vez</option>
+                            <option value="diaria">Todos os dias</option>
+                            <option value="semanal">Toda semana</option>
+                            <option value="mensal">Todo mês</option>
+                          </select>
+                          {item.recorrencia === 'semanal' && (
+                            <select className={inputClass} value={item.recorrencia_dia_semana} onChange={event => updateItem(item.id, 'recorrencia_dia_semana', event.target.value)}>
+                              {['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'].map((day, dayIndex) => <option key={day} value={dayIndex}>{day}</option>)}
+                            </select>
+                          )}
+                          {item.recorrencia === 'mensal' && (
+                            <select className={inputClass} value={item.recorrencia_dia_mes} onChange={event => updateItem(item.id, 'recorrencia_dia_mes', event.target.value)}>
+                              {Array.from({ length: 31 }, (_, dayIndex) => dayIndex + 1).map(day => <option key={day} value={day}>Dia {day}</option>)}
+                            </select>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-blue-700 mt-1">Lembra o mesmo item até concluir e aprovar. Não cria outra lista.</p>
                       </div>
                     </div>
                     <button type="button" onClick={() => setItems(current => current.filter(value => value.id !== item.id))} disabled={items.length === 1} className="p-2 text-rose-600 disabled:opacity-30" title="Remover item"><Trash2 className="w-4 h-4" /></button>
