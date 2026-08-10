@@ -83,6 +83,32 @@
 
   <body>
     <div id="root"></div>
+    <script>
+      (() => {
+        const recover = (resource) => {
+          if (!resource || !/\/assets\/.*\.(?:js|css)(?:\?|$)/.test(resource)) return;
+          const key = "destrava_html_asset_recovery_at";
+          const now = Date.now();
+          let last = 0;
+          try { last = Number(sessionStorage.getItem(key) || "0"); } catch (_) {}
+          if (last && now - last < 15000) return;
+          try { sessionStorage.setItem(key, String(now)); } catch (_) {}
+          const url = new URL(location.href);
+          url.searchParams.set("__destrava_reload", String(now));
+          location.replace(url.toString());
+        };
+        window.addEventListener("error", (event) => {
+          const target = event.target;
+          recover(target && (target.src || target.href));
+        }, true);
+        window.addEventListener("unhandledrejection", (event) => {
+          const message = String(event.reason && (event.reason.message || event.reason) || "");
+          if (/dynamically imported module|failed to fetch|importing a module/i.test(message)) {
+            recover("/assets/chunk.js");
+          }
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
