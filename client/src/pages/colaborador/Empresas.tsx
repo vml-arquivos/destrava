@@ -27,6 +27,7 @@ import DossieCreditoEmpresa from "@/components/documentacao/DossieCreditoEmpresa
 import Inteligencia360 from "./Inteligencia360";
 import EsteiraCredito from "./EsteiraCredito";
 import Historico360 from "./Historico360";
+import CriarTarefaNexusModal from "./CriarTarefaNexusModal";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -1026,6 +1027,7 @@ export default function Empresas() {
   const [editando, setEditando] = useState<Empresa | null>(null);
   const [form, setForm] = useState<FormEmpresa>({ ...FORM_VAZIO });
   const [salvando, setSalvando] = useState(false);
+  const [tarefaNexusOpen, setTarefaNexusOpen] = useState(false);
   const [erros, setErros] = useState<Record<string, string>>({});
   const [tagInput, setTagInput] = useState("");
   const [secaoAberta, setSecaoAberta] = useState("basico");
@@ -2008,6 +2010,14 @@ export default function Empresas() {
                         <span>Iniciar conversa</span>
                       </button>
                       )}
+                      <button
+                        onClick={() => setTarefaNexusOpen(true)}
+                        className="flex items-center gap-1 text-[10px] font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2 py-1 rounded-lg hover:bg-blue-100 transition-colors"
+                        title="Criar uma lista independente desta empresa no Nexus"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>Criar tarefa no Nexus</span>
+                      </button>
                     </div>
                   </div>
 
@@ -3026,6 +3036,12 @@ export default function Empresas() {
             </div>
           </div>
         </div>
+      )}
+      {tarefaNexusOpen && selecionada && (
+        <CriarTarefaNexusModal
+          entidade={{ tipo: 'empresa', id: selecionada.id, nome: selecionada.razao_social || selecionada.nome_fantasia || 'Empresa' }}
+          onClose={() => setTarefaNexusOpen(false)}
+        />
       )}
     </Layout>
   );

@@ -8,6 +8,7 @@ import {
 import { toast } from 'sonner';
 import { apiFetch } from '../../lib/api';
 import Layout from './Layout';
+import CriarTarefaNexusModal from './CriarTarefaNexusModal';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface ClientePF {
@@ -67,6 +68,7 @@ export default function ClientesPF() {
   const [mostraForm, setMostraForm]       = useState(false);
   const [selecionado, setSelecionado]     = useState<ClientePF | null>(null);
   const [form, setForm]                   = useState<typeof EMPTY_FORM>({ ...EMPTY_FORM });
+  const [tarefaNexusOpen, setTarefaNexusOpen] = useState(false);
 
   // ── Carregar ──────────────────────────────────────────────────────────────
   const carregarClientes = async () => {
@@ -462,6 +464,12 @@ export default function ClientesPF() {
                         <Pencil className="w-3 h-3" /> Editar
                       </button>
                       <button
+                        onClick={() => setTarefaNexusOpen(true)}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-xs font-medium hover:bg-blue-100 transition-colors"
+                      >
+                        <CheckCircle className="w-3 h-3" /> Criar tarefa no Nexus
+                      </button>
+                      <button
                         onClick={() => handleExcluir(selecionado.id, selecionado.nome)}
                         className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors"
                       >
@@ -580,6 +588,12 @@ export default function ClientesPF() {
           </div>
         )}
       </div>
+      {tarefaNexusOpen && selecionado && (
+        <CriarTarefaNexusModal
+          entidade={{ tipo: 'pessoa_fisica', id: selecionado.id, nome: selecionado.nome }}
+          onClose={() => setTarefaNexusOpen(false)}
+        />
+      )}
     </Layout>
   );
 }
