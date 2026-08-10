@@ -81,6 +81,29 @@ const { Pool } = pkg;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const DESTRAVA_RELEASE = process.env.DESTRAVA_RELEASE || "fix64-recuperacao-assets-20260810";
+
+// Quando um navegador/CDN mantém um index.html antigo, ele pode pedir um chunk
+// Vite que já não existe no container novo. Este módulo é servido somente para
+// esse JS ausente: tenta uma atualização sem cache e, se o deploy estiver
+// realmente inconsistente, mostra uma tela recuperável em vez de branco total.
+const FRONTEND_ASSET_RECOVERY_MODULE = `(() => {
+  const key = "destrava_asset_recovery_at";
+  const now = Date.now();
+  let last = 0;
+  try { last = Number(sessionStorage.getItem(key) || "0"); } catch (_) {}
+  if (last && now - last < 15000) {
+    const wait = Math.max(1000, 15100 - (now - last));
+    document.body.innerHTML = '<main style="min-height:100vh;display:grid;place-items:center;background:#f8fafc;padding:24px;font-family:Arial,sans-serif;color:#0f172a"><section style="max-width:560px;text-align:center;background:white;border:1px solid #bfdbfe;border-radius:18px;padding:28px;box-shadow:0 20px 60px rgba(15,23,42,.12)"><h1 style="color:#1e3a8a;margin:0 0 12px">Atualizando o Destrava</h1><p style="line-height:1.55;margin:0 0 18px">Os arquivos da nova versão ainda estão sendo sincronizados. A página tentará novamente sem perder seus dados.</p><button id="destrava-retry" style="border:0;border-radius:10px;background:#1d4ed8;color:white;padding:11px 18px;font-weight:700;cursor:pointer">Tentar novamente agora</button></section></main>';
+    document.getElementById("destrava-retry")?.addEventListener("click", () => location.reload());
+    setTimeout(() => location.reload(), wait);
+    return;
+  }
+  try { sessionStorage.setItem(key, String(now)); } catch (_) {}
+  const url = new URL(location.href);
+  url.searchParams.set("__destrava_reload", String(now));
+  location.replace(url.toString());
+})();`;
 
 // ─── PostgreSQL Pool ─────────────────────────────────────────────────────────
 const pool = new Pool({
@@ -1032,6 +1055,11 @@ async function startServer() {
         : false,
   );
 
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader("X-Destrava-Release", DESTRAVA_RELEASE);
+    next();
+  });
+
   // ─── Middlewares globais (DEVEM vir antes de qualquer app.use de router) ───
   // Correção 2026-07: body parser e CORS estavam registrados depois dos
   // routers /api/cnpj, /api/empresas e /api/documentacao (e depois de
@@ -1047,7 +1075,7 @@ async function startServer() {
         formAction: ["'self'"],
         frameAncestors: ["'self'"],
         objectSrc: ["'none'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "https://www.googletagmanager.com"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://www.googletagmanager.com", "https://static.cloudflareinsights.com"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "blob:", "https:"],
         fontSrc: ["'self'", "data:"],
@@ -1057,6 +1085,7 @@ async function startServer() {
           "https://region1.google-analytics.com",
           "https://analytics.google.com",
           "https://www.googletagmanager.com",
+          "https://cloudflareinsights.com",
           "https://viacep.com.br",
           "https://brasilapi.com.br",
           "https://chatwoot.permupay.com.br",
@@ -2277,9 +2306,15 @@ async function startServer() {
       status: "ok",
       timestamp: new Date().toISOString(),
       version: "4.0.0",
+      release: DESTRAVA_RELEASE,
       db: dbOk ? "connected" : "error",
       n8n_configured: !!process.env.N8N_WEBHOOK_URL,
     });
+  });
+
+  app.get("/version", (_req: Request, res: Response) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ app: "destrava", release: DESTRAVA_RELEASE });
   });
 
   // ─── Rate limiting para rotas públicas sensíveis (força bruta / spam) ──────
@@ -17648,6 +17683,13 @@ Responda em JSON com:
     },
   }));
 
+  // Deve vir depois do express.static: chunks existentes continuam imutáveis;
+  // somente um .js ausente recebe o módulo de autorrecuperação.
+  app.get(/^\/assets\/.*\.js$/, (_req: Request, res: Response) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.status(200).type("application/javascript").send(FRONTEND_ASSET_RECOVERY_MODULE);
+  });
+
   const indexPath = path.join(staticPath, "index.html");
   const productionIndexTemplate = process.env.NODE_ENV === "production" && fs.existsSync(indexPath)
     ? fs.readFileSync(indexPath, "utf8")
@@ -17655,6 +17697,11 @@ Responda em JSON com:
 
   app.get("*", (req: Request, res: Response) => {
     if (fs.existsSync(indexPath)) {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader("CDN-Cache-Control", "no-store");
+      res.setHeader("Surrogate-Control", "no-store");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
       const pathname = normalizePathname(req.path);
       const blogMatch = pathname.match(/^\/blog\/([^/]+)$/);
       const blogPost = blogMatch

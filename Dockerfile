@@ -48,6 +48,9 @@ RUN mkdir -p dist/assets && cp -r server/assets/. dist/assets/
 
 FROM node:22.17.0-slim AS runner
 
+LABEL org.opencontainers.image.title="Destrava Crédito" \
+      org.opencontainers.image.version="fix64-recuperacao-assets-20260810"
+
 USER root
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -95,6 +98,7 @@ COPY --from=builder --chown=node:node /app/scripts ./scripts
 
 ENV NODE_ENV=production
 ENV PORT=4000
+ENV DESTRAVA_RELEASE=fix64-recuperacao-assets-20260810
 ENV DATA_DIR=/var/data/destrava
 ENV REQUIRE_PERSISTENT_STORAGE=true
 ENV PERSISTENT_STORAGE_CONFIGURED=false

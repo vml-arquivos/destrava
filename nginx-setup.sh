@@ -98,8 +98,8 @@ server {
         proxy_set_header Host             \$host;
         proxy_set_header X-Forwarded-For  \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        expires          1y;
-        add_header       Cache-Control "public, immutable";
+        # O Node define cache imutável apenas para arquivos que existem e
+        # no-store para o módulo que recupera chunks de deploy antigos.
         access_log       off;
     }
 
