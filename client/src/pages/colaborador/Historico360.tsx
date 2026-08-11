@@ -19,11 +19,11 @@ import { apiFetch } from "@/lib/api";
 type TipoEvento =
   | "cadastro" | "atualizacao_cadastral" | "documento" | "simulacao"
   | "contrato" | "orcamento" | "followup" | "nota"
-  | "acompanhamento_bancario" | "analise" | "sistema";
+  | "acompanhamento_bancario" | "analise" | "tarefa_nexus" | "sistema";
 
 type ModuloEvento =
   | "cadastro_empresa" | "acervo_documental" | "simulacoes" | "contratos"
-  | "orcamentos" | "followup" | "inteligencia_360" | "acompanhamento_bancario" | "sistema";
+  | "orcamentos" | "followup" | "inteligencia_360" | "acompanhamento_bancario" | "tarefas_nexus" | "sistema";
 
 interface EventoHistorico {
   id: string;
@@ -78,6 +78,7 @@ const CONFIG_TIPO: Record<TipoEvento, {
   nota:                 { cor: "text-slate-700",  bg: "bg-slate-100",  borda: "border-slate-300", icone: MessageSquare, label: "Nota" },
   acompanhamento_bancario:{ cor: "text-teal-700", bg: "bg-teal-100",  borda: "border-teal-300",  icone: Banknote,      label: "Bancário" },
   analise:              { cor: "text-violet-700", bg: "bg-violet-100", borda: "border-violet-300",icone: Info,          label: "Análise" },
+  tarefa_nexus:         { cor: "text-blue-700",   bg: "bg-blue-100",   borda: "border-blue-300",  icone: ClipboardList, label: "Tarefa Nexus" },
   sistema:              { cor: "text-slate-500",  bg: "bg-slate-50",   borda: "border-slate-200", icone: RefreshCw,     label: "Sistema" },
 };
 
@@ -90,6 +91,7 @@ const MODULO_LABEL: Record<ModuloEvento, string> = {
   followup:                "Follow-up",
   inteligencia_360:        "Inteligência 360",
   acompanhamento_bancario: "Acompanhamento Bancário",
+  tarefas_nexus:           "Tarefas Nexus",
   sistema:                 "Sistema",
 };
 

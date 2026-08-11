@@ -60,6 +60,7 @@ import { gerarRelatorioTecnico } from "./services/relatorioTecnicoEmpresaService
 import { calcularPendencias } from "./services/pendenciasEmpresaService";
 import { calcularEsteiraCredito } from "./services/esteiraCreditoService";
 import { consolidarHistorico360 } from "./services/historicoClienteService";
+import { normalizeNexusTaskEvent } from "./services/nexusTaskHistoryService";
 import { calcularInteligenciaAcompanhamentoBancario } from "./services/inteligenciaAcompanhamentoBancarioService";
 import {
   enviarPendenciaNexus,
@@ -5853,6 +5854,85 @@ async function startServer() {
         ultimo_evento: null,
         fonte: "consolidado_360",
       });
+    }
+  });
+
+  // Visão operacional das tarefas vinculadas à empresa. É separada do
+  // Histórico 360 porque representa o estado atual + execução detalhada; o
+  // histórico consolidado continua intacto para auditoria geral do cliente.
+  app.get("/api/empresas/:id/tarefas-nexus", auth, async (req: Request, res: Response) => {
+    try {
+      if (!(await requireEmpresaAccess(req, res, req.params.id))) return;
+      const tarefas = await pool.query(
+        `SELECT t.*,
+                COALESCE((
+                  SELECT jsonb_agg(to_jsonb(e) ORDER BY e.ocorrido_em DESC)
+                  FROM (SELECT id, evento, descricao, observacao, executor_nome,
+                               progresso_feitos, progresso_total, arquivo, checklist, ocorrido_em
+                          FROM nexus_tarefa_eventos_empresa
+                         WHERE empresa_id = t.empresa_id AND nexus_tarefa_id = t.nexus_tarefa_id
+                         ORDER BY ocorrido_em DESC LIMIT 100) e
+                ), '[]'::jsonb) AS eventos
+           FROM nexus_tarefas_empresa t
+          WHERE t.empresa_id = $1
+          ORDER BY CASE WHEN t.status IN ('aprovada','cancelada') THEN 1 ELSE 0 END,
+                   t.atualizada_em DESC`,
+        [req.params.id],
+      );
+      if ((tarefas.rowCount || 0) > 0) {
+        res.json({ empresa_id: req.params.id, tarefas: tarefas.rows, total: tarefas.rowCount || 0 });
+        return;
+      }
+
+      // Backfill somente de leitura: eventos antigos eram gravados como uma
+      // frase em empresa_historico e não possuem tarefa_id. Eles aparecem
+      // imediatamente no novo painel, agrupados pelo título reconhecível,
+      // sem alterar nem duplicar os registros históricos existentes.
+      const legado = await pool.query(
+        `SELECT id, descricao, autor, created_at
+           FROM empresa_historico
+          WHERE empresa_id = $1 AND lower(tipo) LIKE '%nexus%'
+          ORDER BY created_at DESC LIMIT 100`,
+        [req.params.id],
+      );
+      const grupos = new Map<string, any>();
+      for (const row of legado.rows) {
+        const descricao = String(row.descricao || '');
+        const titulo = descricao.match(/(?:^|\|)\s*Tarefa:\s*([^|]+)/i)?.[1]?.trim() || 'Histórico legado do Nexus';
+        const progressoMatch = descricao.match(/Progresso:\s*(\d+)\s*\/\s*(\d+)/i);
+        const key = titulo.toLocaleLowerCase('pt-BR');
+        const atual = grupos.get(key) || {
+          id: `legado-${crypto.createHash('sha256').update(`${req.params.id}:${key}`).digest('hex').slice(0, 20)}`,
+          nexus_tarefa_id: `legado:${key}`,
+          titulo,
+          descricao: 'Registro preservado do histórico anterior à sincronização detalhada de tarefas.',
+          status: descricao.includes('objetivos_completos') ? 'concluida' : 'pendente',
+          progresso_feitos: 0,
+          progresso_total: 0,
+          checklist: [],
+          atualizada_em: row.created_at,
+          eventos: [],
+          legado: true,
+        };
+        if (progressoMatch) {
+          atual.progresso_feitos = Math.max(atual.progresso_feitos, Number(progressoMatch[1]));
+          atual.progresso_total = Math.max(atual.progresso_total, Number(progressoMatch[2]));
+        }
+        if (descricao.includes('objetivos_completos')) atual.status = 'concluida';
+        atual.eventos.push({ id: `legado-evento-${row.id}`, evento: 'nexus.legado', descricao, executor_nome: row.autor, ocorrido_em: row.created_at });
+        grupos.set(key, atual);
+      }
+      const tarefasLegadas = Array.from(grupos.values());
+      res.json({ empresa_id: req.params.id, tarefas: tarefasLegadas, total: tarefasLegadas.length, origem: 'historico_legado' });
+    } catch (err: any) {
+      // Compatibilidade de implantação: se a migration ainda não tiver sido
+      // aplicada, a página continua funcionando e informa lista vazia.
+      if (err?.code === "42P01") {
+        res.json({ empresa_id: req.params.id, tarefas: [], total: 0, migration_pending: true });
+        return;
+      }
+      console.error("[GET /api/empresas/:id/tarefas-nexus]", err);
+      res.status(500).json({ error: "Erro ao carregar tarefas do Nexus." });
     }
   });
 
@@ -17693,6 +17773,55 @@ Responda em JSON com:
         const empresa = await pool.query('SELECT id FROM empresas WHERE id = $1 LIMIT 1', [externalId]);
         if (empresa.rows.length === 0) { res.status(404).json({ error: 'Empresa não encontrada.' }); return; }
         const tarefa = body.tarefa || {};
+        const taskEvent = normalizeNexusTaskEvent(body);
+        try {
+          await pool.query(
+            `INSERT INTO nexus_tarefas_empresa
+              (empresa_id, nexus_tarefa_id, titulo, descricao, status, prioridade, responsavel_nome,
+               prazo, progresso_feitos, progresso_total, checklist, ultima_observacao,
+               ultima_evidencia, origem_url, criada_em, atualizada_em, payload)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13::jsonb,$14,$15,COALESCE($16::timestamptz,NOW()),$17::jsonb)
+             ON CONFLICT (empresa_id, nexus_tarefa_id) DO UPDATE SET
+               titulo = COALESCE(NULLIF(EXCLUDED.titulo,'Tarefa do Nexus'), nexus_tarefas_empresa.titulo),
+               descricao = COALESCE(EXCLUDED.descricao, nexus_tarefas_empresa.descricao),
+               status = CASE
+                 WHEN EXCLUDED.payload #>> '{tarefa,status}' IS NOT NULL OR EXCLUDED.payload->>'status' IS NOT NULL
+                   THEN EXCLUDED.status
+                 ELSE nexus_tarefas_empresa.status
+               END,
+               prioridade = COALESCE(EXCLUDED.prioridade, nexus_tarefas_empresa.prioridade),
+               responsavel_nome = COALESCE(EXCLUDED.responsavel_nome, nexus_tarefas_empresa.responsavel_nome),
+               prazo = COALESCE(EXCLUDED.prazo, nexus_tarefas_empresa.prazo),
+               progresso_feitos = GREATEST(EXCLUDED.progresso_feitos, nexus_tarefas_empresa.progresso_feitos),
+               progresso_total = GREATEST(EXCLUDED.progresso_total, nexus_tarefas_empresa.progresso_total),
+               checklist = CASE WHEN jsonb_array_length(EXCLUDED.checklist) > 0 THEN EXCLUDED.checklist ELSE nexus_tarefas_empresa.checklist END,
+               ultima_observacao = COALESCE(EXCLUDED.ultima_observacao, nexus_tarefas_empresa.ultima_observacao),
+               ultima_evidencia = COALESCE(EXCLUDED.ultima_evidencia, nexus_tarefas_empresa.ultima_evidencia),
+               origem_url = COALESCE(EXCLUDED.origem_url, nexus_tarefas_empresa.origem_url),
+               atualizada_em = GREATEST(EXCLUDED.atualizada_em, nexus_tarefas_empresa.atualizada_em),
+               payload = nexus_tarefas_empresa.payload || EXCLUDED.payload`,
+            [externalId, taskEvent.tarefaId, taskEvent.titulo, taskEvent.descricao, taskEvent.status,
+             taskEvent.prioridade, taskEvent.responsavelNome, taskEvent.prazo, taskEvent.progressoFeitos,
+             taskEvent.progressoTotal, JSON.stringify(taskEvent.checklist), taskEvent.observacao,
+             JSON.stringify(taskEvent.arquivo), taskEvent.origemUrl, taskEvent.criadaEm,
+             taskEvent.ocorridoEm, JSON.stringify(taskEvent.payload)],
+          );
+          await pool.query(
+            `INSERT INTO nexus_tarefa_eventos_empresa
+              (empresa_id, nexus_tarefa_id, evento_key, evento, descricao, observacao, executor_nome,
+               progresso_feitos, progresso_total, arquivo, checklist, ocorrido_em, payload)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,COALESCE($12::timestamptz,NOW()),$13::jsonb)
+             ON CONFLICT (empresa_id, evento_key) DO NOTHING`,
+            [externalId, taskEvent.tarefaId, taskEvent.eventoKey, taskEvent.evento,
+             taskEvent.descricaoEvento, taskEvent.observacao, taskEvent.executorNome,
+             taskEvent.progressoFeitos, taskEvent.progressoTotal, JSON.stringify(taskEvent.arquivo),
+             JSON.stringify(taskEvent.checklist), taskEvent.ocorridoEm, JSON.stringify(taskEvent.payload)],
+          );
+        } catch (structuredErr: any) {
+          // O registro simples abaixo continua sendo a garantia de compatibilidade
+          // durante deploys em que aplicação e migration sobem em instantes distintos.
+          if (structuredErr?.code !== '42P01') console.error('[NEXUS] Falha no histórico estruturado:', structuredErr);
+        }
         const descricao = [
           `Nexus: ${evento}`,
           tarefa?.titulo ? `Tarefa: ${tarefa.titulo}` : null,

@@ -27,6 +27,7 @@ import DossieCreditoEmpresa from "@/components/documentacao/DossieCreditoEmpresa
 import Inteligencia360 from "./Inteligencia360";
 import EsteiraCredito from "./EsteiraCredito";
 import Historico360 from "./Historico360";
+import NexusTarefasEmpresa from "./NexusTarefasEmpresa";
 import CriarTarefaNexusModal from "./CriarTarefaNexusModal";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -2410,7 +2411,8 @@ export default function Empresas() {
 
                         {/* Histórico 360 consolidado */}
                         {selecionada?.id && (
-                          <div className="mt-4">
+                          <div className="mt-4 space-y-4">
+                            <NexusTarefasEmpresa empresaId={selecionada.id} />
                             <Historico360
                               empresaId={selecionada.id}
                               onNavegar={(aba) => {

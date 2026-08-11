@@ -64,6 +64,7 @@ export type TipoEvento =
   | "nota"
   | "acompanhamento_bancario"
   | "analise"
+  | "tarefa_nexus"
   | "sistema";
 
 export type ModuloEvento =
@@ -75,6 +76,7 @@ export type ModuloEvento =
   | "followup"
   | "inteligencia_360"
   | "acompanhamento_bancario"
+  | "tarefas_nexus"
   | "sistema";
 
 export interface EventoHistorico {
@@ -125,6 +127,7 @@ function mapearHistoricoEmpresa(rows: any[]): EventoHistorico[] {
       tipo.includes("simulac") ? "simulacao" :
       tipo.includes("contrat") ? "contrato" :
       tipo.includes("document") ? "documento" :
+      tipo.includes("nexus") ? "tarefa_nexus" :
       tipo.includes("analise") || tipo.includes("análise") ? "analise" :
       tipo.includes("nota") || tipo.includes("observ") ? "nota" :
       tipo.includes("atualiz") ? "atualizacao_cadastral" :
@@ -137,13 +140,14 @@ function mapearHistoricoEmpresa(rows: any[]): EventoHistorico[] {
       tipo: tipoMapeado,
       titulo: tipoMapeado === "simulacao" ? "Simulação registrada" :
               tipoMapeado === "contrato" ? "Contrato registrado" :
+              tipoMapeado === "tarefa_nexus" ? "Atualização de tarefa no Nexus" :
               tipoMapeado === "analise" ? "Análise registrada" :
               tipoMapeado === "atualizacao_cadastral" ? "Atualização cadastral" :
               tipoMapeado === "sistema" ? "Evento do sistema" : "Nota registrada",
       descricao: safeStr(h?.descricao, "Registro sem descrição"),
       origem: "empresa_historico",
       usuario: safeStr(h?.autor) || null,
-      modulo: "cadastro_empresa",
+      modulo: tipoMapeado === "tarefa_nexus" ? "tarefas_nexus" : "cadastro_empresa",
       link_acao: null,
       metadados: { tipo_original: safeStr(h?.tipo, "nota") },
     };
