@@ -5,6 +5,7 @@ import Layout from "./Layout";
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import DocumentosEntidade from "@/components/documentos/DocumentosEntidade";
+import DossieCreditoEmpresa from "@/components/documentacao/DossieCreditoEmpresa";
 import { formatCNPJ } from "@/utils/cnpj";
 
 type EmpresaResumo = {
@@ -30,7 +31,7 @@ const TIPOS_EMPRESA = [
 
 export default function AcervoDocumentalEmpresa() {
   const [, params] = useRoute("/colaborador/empresas/:id/acervo");
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const empresaId = params?.id || "";
   const [empresa, setEmpresa] = useState<EmpresaResumo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,7 +59,14 @@ export default function AcervoDocumentalEmpresa() {
       } else if (resultado?.processando) {
         toast.info("Leitura iniciada. O relatório mostrará os resultados assim que cada documento for concluído.");
       }
-      setLocation(`/colaborador/empresas?empresa=${empresaId}&aba=dossie_credito`);
+      // O processamento e o resultado permanecem sob a rota que contém o ID da
+      // empresa. A rota antiga dependia de query string + recarga assíncrona da
+      // lista e podia desmontar o detalhe, exibindo novamente “Selecionar empresa”.
+      sessionStorage.setItem(
+        "destrava_acervo_empresa_ativa",
+        JSON.stringify({ empresaId, view: "analise", ts: Date.now() }),
+      );
+      setLocation(`/colaborador/empresas/${empresaId}/acervo?view=analise`);
     } catch (err: any) {
       const mensagem = err?.message || "Não foi possível abrir o relatório inicial.";
       toast.error(mensagem);
@@ -82,6 +90,7 @@ export default function AcervoDocumentalEmpresa() {
   }
 
   const etapaInicial = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("etapa") : null;
+  const view = new URLSearchParams(location.split("?")[1] || "").get("view");
   const secaoInicial = etapaInicial === "documentacao_empresa"
     ? "Documentação da Empresa"
     : etapaInicial === "documentacao_socios"
@@ -130,7 +139,17 @@ export default function AcervoDocumentalEmpresa() {
             </div>
           </div>
 
-          {empresaId && (
+          {empresaId && view === "analise" && (
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <DossieCreditoEmpresa
+                empresaId={empresaId}
+                onAvancar={() => setLocation(`/colaborador/empresas/${empresaId}/acervo?etapa=documentacao_empresa`)}
+                onAvancarSocietario={() => setLocation(`/colaborador/empresas/${empresaId}/acervo?etapa=documentacao_socios`)}
+              />
+            </div>
+          )}
+
+          {empresaId && view !== "analise" && (
             <DocumentosEntidade
               entidadeTipo="empresa"
               entidadeId={empresaId}

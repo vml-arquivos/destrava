@@ -6,6 +6,7 @@ import { auth } from '../middleware/auth';
 import { analisarCnpjReceitaCartaoEmpresa, buscarUltimaAnaliseCnpjEmpresa, limparAnalisesCnpjEmpresa } from '../services/analiseCnpjReceitaCartao';
 import { analiseDocumentalService, type AnaliseDocumentalResult, type TipoAnaliseDocumental } from '../services/analiseDocumentalEspecializada';
 import { calcularCadeiaComprovacaoSocietaria } from '../services/cadeiaSocietariaService';
+import { InsufficientHistoricalPeriodException, validateTwelveMonthContractHistory } from '../services/documentPipelineService';
 import { ensureDocumentacaoSchema } from '../services/documentacaoSchema';
 import { gerarMapaDocumentalCredito } from '../services/mapaDocumentalCreditoService';
 
@@ -914,8 +915,7 @@ async function vincularDocumentosAutomaticos(empresaId: string) {
 // QSA e Enquadramento Tributário). Atos da Junta passam para a Etapa 2.
 // só considera "tudo ok, pode avançar" quando:
 //   1) situação cadastral ativa;
-//   2) empresa com 12+ meses de abertura para o fluxo padrão;
-//   3) nenhuma pendência de severidade alta/crítica nos 3 blocos (CNPJ
+//   2) nenhuma pendência de severidade alta/crítica nos 3 blocos (CNPJ
 //      divergente, sócio não localizado na Receita, capital social
 //      incompatível, alteração recente não refletida etc.);
 //   4) enquadramento tributário identificado. MEI pode prosseguir na inclusão
@@ -952,8 +952,8 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
 
   const empresaApta12Meses = idadeMeses === null ? null : idadeMeses >= 12;
   if (empresaApta12Meses === true) pontosPositivos.push(`Empresa com ${idadeMeses} meses de abertura, acima do mínimo operacional de 12 meses.`);
-  else if (empresaApta12Meses === false) addBloqueio(`Empresa com ${idadeMeses} meses de abertura, abaixo dos 12 meses definidos para o fluxo padrão.`);
-  else addBloqueio('Tempo de abertura ainda não confirmado pela análise do CNPJ.');
+  else if (empresaApta12Meses === false) addAviso(`Empresa com ${idadeMeses} meses de abertura. A comprovação temporal será bloqueada e auditada na Fase 3.`);
+  else addAviso('Tempo de abertura ainda não confirmado; a trava temporal será auditada na Fase 3.');
 
   const alertasCnpj = [
     ...(Array.isArray(analiseCnpj?.alertas) ? analiseCnpj.alertas : []),
@@ -1039,7 +1039,7 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
     },
   };
   const tresDocumentosOk = Object.values(documentosIniciais).every((item) => item.consistente);
-  const apto = situacaoAtiva && empresaApta12Meses === true && tresDocumentosOk && bloqueios.length === 0;
+  const apto = situacaoAtiva && tresDocumentosOk && bloqueios.length === 0;
 
   return {
     etapa: 'identidade_cnpj', proxima_etapa: 'documentacao_societaria', apto_para_avancar: apto, botao_avancar_disponivel: apto,
@@ -1080,6 +1080,10 @@ async function montarValidacaoSocietaria(
       }
     : await montarAtosJuntaDados(empresaId, processar && !!atos);
   const atosDados = atosLeitura.dados || {};
+  const atosBloqueios = (atosLeitura.pendencias || []).filter((item) => item.severidade === 'alta');
+  const atosAprovados = empresaMei
+    ? atosDados?.analisado === true && atosDados?.atos_dispensados_por_mei === true
+    : !!atos && atosDados?.analisado === true && atosBloqueios.length === 0;
   const resultados: Array<{ documento: any; analise: AnaliseDocumentalResult | null; erro?: string | null }> = [];
 
   for (const documento of docsContrato) {
@@ -1135,6 +1139,20 @@ async function montarValidacaoSocietaria(
     .filter((item: any) => item.severidade === 'alta' || item.severidade === 'critica')
     .map((item: any) => item.mensagem);
 
+  if (documentosAnalisados.length > 0 && !empresaMei) {
+    try {
+      validateTwelveMonthContractHistory(documentosAnalisados.map((item) => ({
+        id: item.arquivo_id,
+        type: /alterac/i.test(String(item.tipo_ato || item.nome || '')) ? 'alteracao_contratual' : 'contrato_social',
+        registrationDate: item.data_registro,
+        approved: item.consistente === true,
+      })));
+    } catch (error) {
+      if (error instanceof InsufficientHistoricalPeriodException) bloqueios.push(error.message);
+      else throw error;
+    }
+  }
+
   if (!docsContrato.length && !empresaMei) bloqueios.unshift('Contrato Social ou Alteração Contratual ainda não anexado.');
   if (!atos && !empresaMei) bloqueios.unshift('Nenhum Ato da Junta foi localizado. A empresa pode ter registro em outro órgão; a inclusão de documentos permanece liberada, mas a validação exige revisão humana.');
   if (cadeia.possivel_registro_em_outro_orgao && !empresaMei) bloqueios.push('Nenhum ato registrado foi identificado. A empresa pode estar registrada em outro tipo de órgão; mantenha a inclusão documental liberada e encaminhe para revisão humana.');
@@ -1170,10 +1188,11 @@ async function montarValidacaoSocietaria(
     contrato_anexado: docsContrato.length > 0,
     total_contratos_anexados: docsContrato.length,
     atos_junta_anexados: !!atos,
+    atos_junta_aprovados: atosAprovados,
     analisado,
     consistente,
     apto_para_avancar: consistente,
-    botao_validar_disponivel: empresaMei ? false : docsContrato.length > 0 && !!atos,
+    botao_validar_disponivel: empresaMei ? false : !!atos && (!atosAprovados || docsContrato.length > 0),
     botao_avancar_disponivel: consistente,
     contrato_arquivo_id: documentoPrincipal?.arquivo_id || docsContrato[0]?.id || null,
     atos_arquivo_id: atos?.id || null,
@@ -1672,8 +1691,8 @@ router.post('/empresa/:empresaId/analise-societaria/iniciar', auth, async (req: 
       return;
     }
     const societaria = dossie.documentacao_societaria;
-    if (societaria?.atos_dispensados_por_mei !== true && (!societaria?.contrato_anexado || !societaria?.atos_junta_anexados)) {
-      res.status(422).json({ error: 'Anexe o Contrato Social/Alteração e os Atos da Junta Comercial antes da validação societária.', processando: false, dossie });
+    if (societaria?.atos_dispensados_por_mei !== true && !societaria?.atos_junta_anexados) {
+      res.status(422).json({ error: 'Anexe e valide primeiro os Atos da Junta Comercial.', processando: false, dossie });
       return;
     }
     const iniciado = iniciarAnaliseSocietariaEmSegundoPlano(req.params.empresaId, user?.id || null);
@@ -1697,6 +1716,35 @@ router.get('/empresa/:empresaId/analise-societaria/status', auth, async (req: Re
   } catch (err: any) {
     console.error('[GET análise societária/status]', err);
     res.status(500).json({ error: 'Não foi possível consultar a validação societária.' });
+  }
+});
+
+router.get('/empresa/:empresaId/pipeline/status', auth, async (req: Request, res: Response) => {
+  try {
+    const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
+    if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+    const fase1Aprovada = dossie.identidade_cnpj?.apto_para_avancar === true;
+    const atosAprovados = dossie.documentacao_societaria?.atos_junta_aprovados === true
+      || dossie.documentacao_societaria?.atos_dispensados_por_mei === true;
+    const fase3Aprovada = dossie.documentacao_societaria?.apto_para_avancar === true;
+    res.json({
+      empresa_id: req.params.empresaId,
+      fase_1: { aprovada: fase1Aprovada, bloqueada: false },
+      fase_2: {
+        aprovada: atosAprovados,
+        bloqueada: !fase1Aprovada,
+        anexado: dossie.documentacao_societaria?.atos_junta_anexados === true,
+      },
+      fase_3: {
+        aprovada: fase3Aprovada,
+        bloqueada: !atosAprovados,
+        meses_comprovados: dossie.documentacao_societaria?.meses_comprovados ?? 0,
+        registros_faltantes: dossie.documentacao_societaria?.registros_faltantes || [],
+      },
+    });
+  } catch (err: any) {
+    console.error('[GET pipeline/status]', err);
+    res.status(500).json({ error: 'Não foi possível consultar o pipeline documental.' });
   }
 });
 

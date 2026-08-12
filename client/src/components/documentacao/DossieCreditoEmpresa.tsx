@@ -114,6 +114,7 @@ type DocumentacaoSocietaria = {
   iniciada?: boolean;
   contrato_anexado: boolean;
   atos_junta_anexados: boolean;
+  atos_junta_aprovados?: boolean;
   analisado: boolean;
   consistente: boolean;
   apto_para_avancar: boolean;
@@ -750,7 +751,7 @@ function DocumentacaoSocietariaCard({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             {apto ? <ShieldCheck className="h-5 w-5 text-emerald-700" /> : <FileText className="h-5 w-5 text-blue-700" />}
-            <h3 className="text-sm font-extrabold text-slate-900">Etapa 2 — Continuidade societária mínima de 12 meses</h3>
+            <h3 className="text-sm font-extrabold text-slate-900">{dados.atos_junta_aprovados ? "Etapa 3 — Contrato e histórico mínimo de 12 meses" : "Etapa 2 — Atos da Junta Comercial"}</h3>
             <span className={`rounded-full border bg-white px-2.5 py-1 text-[11px] font-extrabold ${apto ? "border-emerald-200 text-emerald-700" : "border-blue-200 text-blue-700"}`}>
               {apto ? "Continuidade comprovada" : dados.analisado ? "Documentos complementares necessários" : "Aguardando validação"}
             </span>
@@ -766,7 +767,7 @@ function DocumentacaoSocietariaCard({
           {dados.botao_validar_disponivel && !apto && (
             <button type="button" onClick={onValidar} disabled={processando} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-blue-700 disabled:opacity-60">
               {processando ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              {processando ? "Conferindo..." : "Validar NIRE, datas e 12 meses"}
+              {processando ? "Conferindo..." : dados.atos_junta_aprovados ? "Validar contratos, datas e 12 meses" : "Analisar Atos da Junta"}
             </button>
           )}
           {apto && onAvancar && (
@@ -778,7 +779,7 @@ function DocumentacaoSocietariaCard({
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Atos da Junta</p><p className="mt-1 text-xs font-extrabold text-slate-800">{dados.atos_junta_anexados ? "Anexado" : "Não anexado"}</p></div>
+        <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Atos da Junta</p><p className="mt-1 text-xs font-extrabold text-slate-800">{dados.atos_junta_aprovados ? "Analisado e aprovado" : dados.atos_junta_anexados ? "Aguardando análise" : "Não anexado"}</p></div>
         <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Contratos/alterações</p><p className="mt-1 text-xs font-extrabold text-slate-800">{dados.total_contratos_anexados || 0} anexado(s)</p></div>
         <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Último registro</p><p className="mt-1 text-xs font-extrabold text-slate-800">{formatDate(dados.ultimo_registro_junta?.data || undefined)}</p></div>
         <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Corte mínimo</p><p className="mt-1 text-xs font-extrabold text-slate-800">{formatDate(dados.data_corte_12_meses || undefined)}</p></div>

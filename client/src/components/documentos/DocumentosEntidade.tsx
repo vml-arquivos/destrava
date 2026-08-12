@@ -356,6 +356,7 @@ export default function DocumentosEntidade({
   // antes "+N arquivo(s) neste mesmo campo" era só texto informativo, sem jeito nenhum
   // de realmente ver/abrir esses arquivos extras.
   const [camposExpandidos, setCamposExpandidos] = useState<Record<string, boolean>>({});
+  const [pipeline, setPipeline] = useState<any>(null);
 
   const query = useMemo(() => {
     if (!entidadeId) return "";
@@ -372,13 +373,17 @@ export default function DocumentosEntidade({
     if (!entidadeId) return;
     setLoading(true);
     try {
-      const [data, observacoes, sociosEmpresa] = await Promise.all([
+      const [data, observacoes, sociosEmpresa, pipelineAtual] = await Promise.all([
         apiFetch(`/api/documentos?${query}`),
         apiFetch(`/api/documentos/observacoes-slots?${new URLSearchParams({ entidade_tipo: entidadeTipo, entidade_id: entidadeId }).toString()}`).catch(() => []),
         entidadeTipo === "empresa" && empresaId
           ? apiFetch(`/api/empresas/${empresaId}/socios`).catch(() => [])
           : Promise.resolve([]),
+        entidadeTipo === "empresa" && empresaId
+          ? apiFetch(`/api/documentacao/empresa/${empresaId}/pipeline/status`).catch(() => null)
+          : Promise.resolve(null),
       ]);
+      setPipeline(pipelineAtual);
       const lista = Array.isArray(data) ? data : [];
       // O contrato de prestação de serviços (Destrava <-> empresa) não é documento
       // de análise de crédito -- vive só na aba "Contratos Firmados". Filtrado
@@ -798,6 +803,11 @@ export default function DocumentosEntidade({
                       ? socios.filter((socio) => docsTipoTodos.some((doc) => doc.socio_id === socio.id)).length
                       : 0;
                     const uploading = uploadingTipo === chaveSlot;
+                    const motivoBloqueio = tipo === "atos_junta_comercial" && pipeline?.fase_2?.bloqueada
+                      ? "Conclua e aprove a Fase 1 antes de anexar os Atos da Junta."
+                      : ["contrato_social", "alteracao_contratual"].includes(tipo) && pipeline?.fase_3?.bloqueada
+                        ? "Analise e aprove primeiro os Atos da Junta Comercial."
+                        : null;
                     const exigeNome = Boolean(documentoSlot.exigeNome);
                     // Regra de anulação (ex: CND RFB cobre CADIN e PGFN) -- se algum tipo
                     // que satisfaz este campo já foi anexado em outro lugar, não precisa
@@ -820,12 +830,13 @@ export default function DocumentosEntidade({
                           {/* Já coberto por outro documento (ex: CND cobre CADIN/PGFN) -- não faz
                               sentido oferecer anexar algo que não é mais necessário. */}
                           {!satisfeitoPorOutro && (
-                            <label className={`h-8 inline-flex items-center justify-center gap-1 text-[11px] font-semibold px-3 rounded-lg transition-colors shrink-0 ${exigeVinculoSocio && !socioVinculado ? "bg-slate-300 text-white cursor-not-allowed" : "bg-blue-600 text-white cursor-pointer hover:bg-blue-700"}`}>
+                            <label title={motivoBloqueio || undefined} className={`h-8 inline-flex items-center justify-center gap-1 text-[11px] font-semibold px-3 rounded-lg transition-colors shrink-0 ${motivoBloqueio || (exigeVinculoSocio && !socioVinculado) ? "bg-slate-300 text-white cursor-not-allowed" : "bg-blue-600 text-white cursor-pointer hover:bg-blue-700"}`}>
                               {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Anexar
-                              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading || (exigeVinculoSocio && !socioVinculado)} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file, socioVinculado); e.currentTarget.value = ""; }} />
+                              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading || !!motivoBloqueio || (exigeVinculoSocio && !socioVinculado)} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file, socioVinculado); e.currentTarget.value = ""; }} />
                             </label>
                           )}
                         </div>
+                        {motivoBloqueio && <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[10px] font-semibold text-amber-800">🔒 {motivoBloqueio}</p>}
                         {satisfeitoPorOutro && (
                           <p className="text-[11px] text-emerald-700 flex items-center gap-1.5">
                             <CheckCircle className="w-3 h-3 shrink-0" /> Não é necessário anexar -- já coberto por outro documento (ex: CND).

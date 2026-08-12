@@ -11,6 +11,7 @@ import {
   resolveDocumentPath,
   saveDocumentBuffer,
 } from '../services/documentStorage';
+import { DocumentPipelineStatus, assertUploadAllowed } from '../services/documentPipelineService';
 import { analiseDocumentalService } from '../services/analiseDocumentalEspecializada';
 
 const { Pool } = pkg;
@@ -94,6 +95,36 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 },
 });
+
+async function getPipelineStatusForUpload(empresaId: string): Promise<DocumentPipelineStatus> {
+  const phase1 = await pool.query(
+    `SELECT COUNT(DISTINCT b.codigo)::int AS total
+       FROM public.documentacao_entidade_blocos eb
+       JOIN public.documentacao_blocos b ON b.id = eb.bloco_id
+      WHERE eb.empresa_id = $1
+        AND b.codigo = ANY($2::text[])
+        AND eb.status = 'validado'
+        AND eb.completo = true
+        AND eb.validado = true`,
+    [empresaId, ['cnpj_receita', 'qsa_quadro_societario', 'enquadramento_tributario']],
+  ).catch(() => ({ rows: [{ total: 0 }] } as any));
+  if (Number(phase1.rows[0]?.total || 0) !== 3) return DocumentPipelineStatus.PHASE_1_PENDING;
+
+  const junta = await pool.query(
+    `SELECT 1
+       FROM public.documentos_arquivos d
+       JOIN public.documentos_extracoes_ia x ON x.arquivo_id = d.id
+      WHERE d.empresa_id = $1
+        AND d.tipo_documento = 'atos_junta_comercial'
+        AND d.status NOT IN ('excluido', 'recusado')
+        AND x.prompt_codigo = 'atos_junta_extract'
+        AND x.status = 'concluido'
+      LIMIT 1`,
+    [empresaId],
+  ).catch(() => ({ rows: [] } as any));
+  if (!junta.rows.length) return DocumentPipelineStatus.PHASE_2_JUNTA_PENDING;
+  return DocumentPipelineStatus.PHASE_3_CONTRACT_PENDING;
+}
 
 function isUuid(value: unknown): value is string {
   return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -659,6 +690,15 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
     if (!TIPOS_DOCUMENTO.includes(tipoDocumento)) { res.status(400).json({ error: 'tipo_documento inválido' }); return; }
     assertAllowedRelation(entidadeTipo, tipoDocumento, req.body);
     const refs = await validarEntidade(entidadeTipo, entidadeId, req.body);
+    const empresaIdPipeline = String((refs as any).empresa_id || req.body.empresa_id || '').trim();
+    if (
+      entidadeTipo === 'empresa'
+      && empresaIdPipeline
+      && ['atos_junta_comercial', 'contrato_social', 'alteracao_contratual'].includes(tipoDocumento)
+    ) {
+      const pipelineStatus = await getPipelineStatusForUpload(empresaIdPipeline);
+      assertUploadAllowed(pipelineStatus, tipoDocumento);
+    }
     if (req.body.socio_id) {
       const socioId = String(req.body.socio_id).trim();
       if (!isUuid(socioId)) throw new Error('socio_id inválido.');
@@ -751,7 +791,7 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
     res.status(201).json(rows[0]);
   } catch (err: any) {
     console.error('[POST /api/documentos/upload]', err);
-    const status = err instanceof PersistentStorageError ? err.statusCode : 400;
+    const status = err instanceof PersistentStorageError ? err.statusCode : Number(err?.statusCode || 400);
     res.status(status).json({
       error: err.message || 'Erro ao enviar documento',
       code: err?.code || undefined,
