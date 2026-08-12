@@ -649,7 +649,7 @@ function EmpresaDadosWorkspace({
               <p className="text-sm font-black text-slate-800">Quadro societário e administradores</p>
               <p className="text-xs text-slate-500">Visualização compacta para análise cadastral, crédito, contrato e laudo.</p>
             </div>
-            <DetailChip label="Pendências" value={pendenciasSocios} tone={pendenciasSocios ? "amber" : "emerald"} />
+            <DetailChip label="Dados para contratos futuros" value={pendenciasSocios} tone={pendenciasSocios ? "amber" : "emerald"} />
           </div>
           {socios.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm font-semibold text-slate-500">Nenhum sócio retornado para esta empresa.</div>
@@ -687,7 +687,7 @@ function EmpresaDadosWorkspace({
                         </div>
                         {pendencias.length > 0 && (
                           <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50 p-2">
-                            <p className="text-[11px] font-black text-amber-700 mb-1">Pendências para contrato/análise</p>
+                            <p className="text-[11px] font-black text-amber-700 mb-1">Dados para contratos e etapas futuras — não bloqueiam a Fase 1</p>
                             <div className="flex flex-wrap gap-1">{pendencias.slice(0, 8).map((p: string) => <span key={p} className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-700">{p}</span>)}</div>
                           </div>
                         )}
@@ -2295,7 +2295,7 @@ export default function Empresas() {
 
                                   {pendencias.length > 0 && (
                                     <div className="rounded-lg bg-amber-50 border border-amber-100 p-2">
-                                      <p className="text-[11px] font-bold text-amber-700 mb-1">Pendências para contratos/análises</p>
+                                      <p className="text-[11px] font-bold text-amber-700 mb-1">Dados para contratos e etapas futuras — não bloqueiam a Fase 1</p>
                                       <div className="flex flex-wrap gap-1">
                                         {pendencias.slice(0, 8).map((p: string) => <span key={p} className="text-[11px] px-2 py-0.5 rounded-full bg-white border border-amber-200 text-amber-700">{p}</span>)}
                                       </div>

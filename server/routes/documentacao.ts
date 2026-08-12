@@ -7,6 +7,7 @@ import { analisarCnpjReceitaCartaoEmpresa, buscarUltimaAnaliseCnpjEmpresa, limpa
 import { analiseDocumentalService, type AnaliseDocumentalResult, type TipoAnaliseDocumental } from '../services/analiseDocumentalEspecializada';
 import { calcularCadeiaComprovacaoSocietaria } from '../services/cadeiaSocietariaService';
 import { InsufficientHistoricalPeriodException, validateTwelveMonthContractHistory } from '../services/documentPipelineService';
+import { buildCadastralValidationDTO, phase1Approved } from '../services/phase1AnalysisService';
 import { ensureDocumentacaoSchema } from '../services/documentacaoSchema';
 import { gerarMapaDocumentalCredito } from '../services/mapaDocumentalCreditoService';
 
@@ -1270,7 +1271,6 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
     ? null
     : (erroProcessamentoCartao || docsCartao[0]?.resultado_validacao?.analise_inicial_erro?.mensagem || null);
   const cnpjPendencias = pendenciasCnpj(empresa, docsCartao);
-  const qsaCadastroPendencias = pendenciasQsa(socios, empresa);
   // A Etapa 1 processa somente QSA e Enquadramento; o Cartão CNPJ é tratado
   // pelo serviço Receita + Cartão. Atos da Junta pertencem à Etapa 2.
   const [qsaDocumental, enquadramento] = await Promise.all([
@@ -1284,10 +1284,13 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
   // A Etapa 1 considera somente nome, qualificação e identificação do administrador.
   // CPF, RG, endereço, estado civil e demais dados pessoais pertencem às próximas etapas.
   const qsaPendenciasIdentidade = qsaDocumental.pendencias;
-  const qsaPendencias = [...qsaPendenciasIdentidade, ...qsaCadastroPendencias];
+  // Pendências pessoais/contratuais dos sócios não pertencem à Fase 1.
+  // O bloco QSA desta fase usa exclusivamente nome, qualificação, administrador,
+  // razão social, CNPJ e capital social conferidos com as fontes oficiais.
+  const qsaPendencias = qsaPendenciasIdentidade;
   const qsaDadosCompletos = { ...dadosQsa(empresa, socios), analise_documental: qsaDocumental.dados };
 
-  const identidadeCnpj = await avaliarProntidaoIdentidadeCnpj({
+  const identidadeCnpjBase = await avaliarProntidaoIdentidadeCnpj({
     empresaId,
     empresa,
     docsCartao,
@@ -1298,6 +1301,17 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
     qsaDados: qsaDocumental.dados,
     enquadramentoDados: enquadramento.dados,
   });
+  const fase1Dto = buildCadastralValidationDTO({
+    empresa,
+    identidade: identidadeCnpjBase,
+    enquadramento: enquadramento.dados,
+  });
+  const fase1Aprovada = identidadeCnpjBase.apto_para_avancar === true && phase1Approved(fase1Dto);
+  const identidadeCnpj = {
+    ...identidadeCnpjBase,
+    status: fase1Aprovada ? 'PHASE_1_APPROVED' as const : 'PHASE_1_PENDING' as const,
+    validation: fase1Dto,
+  };
   documentacaoSocietaria.habilitada = identidadeCnpj.apto_para_avancar === true;
   documentacaoSocietaria.botao_validar_disponivel = documentacaoSocietaria.habilitada
     && documentacaoSocietaria.atos_dispensados_por_mei !== true
@@ -1602,6 +1616,8 @@ router.post('/empresa/:empresaId/analise-inicial/iniciar', auth, async (req: Req
       iniciado,
       processando: analisesIniciaisEmAndamento.has(req.params.empresaId),
       dossie,
+      status: dossie?.identidade_cnpj?.status || 'PHASE_1_PROCESSING',
+      phase1: dossie?.identidade_cnpj?.validation || null,
     });
   } catch (err: any) {
     const erroId = `ADI-${Date.now().toString(36).toUpperCase()}`;
@@ -1621,6 +1637,8 @@ router.get('/empresa/:empresaId/analise-inicial/status', auth, async (req: Reque
       consistentes: documentos.filter((item) => item?.consistente).length,
       falhas: documentos.filter((item) => item?.status === 'falha_leitura').map((item) => ({ codigo: item?.codigo, documento: item?.nome, mensagem: item?.diagnostico })),
       dossie,
+      status: dossie.identidade_cnpj?.status || 'PHASE_1_PENDING',
+      phase1: dossie.identidade_cnpj?.validation || null,
     });
   } catch (err: any) {
     console.error('[GET análise inicial/status]', err);
@@ -1645,6 +1663,8 @@ async function analisarDocumentosIniciaisHandler(req: Request, res: Response) {
       .map((item) => ({ codigo: item?.codigo, documento: item?.nome, mensagem: item?.diagnostico || 'Falha de leitura não detalhada.' }));
     res.json({
       ...dossie,
+      status: dossie.identidade_cnpj?.status || 'PHASE_1_PENDING',
+      phase1: dossie.identidade_cnpj?.validation || null,
       processamento_inicial: {
         executado: true,
         analisados,

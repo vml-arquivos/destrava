@@ -454,6 +454,8 @@ function enrichSocioRow(s: any) {
   return {
     ...s,
     pendencias_contrato: pendencias,
+    bloqueia_fase_1: false,
+    escopo_pendencias: 'contratos_e_etapas_futuras',
     cadastro_completo_contrato: pendencias.length === 0,
     origem_dados: s?.fonte_dados || 'manual/api_publica',
   };
