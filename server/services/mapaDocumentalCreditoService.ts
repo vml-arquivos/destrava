@@ -96,11 +96,34 @@ const DOCUMENTOS_UNIVERSAIS_EMPRESA: DocumentoMapa[] = [
   doc('atos_junta', 'Certidão ou lista de atos da Junta Comercial', ['atos_junta_comercial'], 2, 'Conferir o histórico registral e determinar a cadeia de alterações necessária.'),
   doc('cnd_federal', 'CND/CPEND Federal e Dívida Ativa da União', ['cnd_rfb_cnpj', 'pgfn_cnpj'], 3, 'Comprovar regularidade fiscal federal.', { validade_dias: 180 }),
   doc('regularidade_fgts', 'Certificado de Regularidade do FGTS', ['crf_fgts', 'fgts'], 3, 'Comprovar regularidade perante o FGTS.'),
+  // CNDT (trabalhista) é certidão distinta da CND Federal e do FGTS -- verifica
+  // pendências na Justiça do Trabalho, não regularidade fiscal ou do FGTS. É
+  // comumente exigida junto das outras duas em operações de crédito bancário
+  // (confirmado: bancos/financeiras pedem CNDT em conjunto com CND federal, sem que
+  // uma substitua a outra).
+  doc('cndt', 'Certidão Negativa de Débitos Trabalhistas (CNDT)', ['cndt', 'certidao_trabalhista'], 3, 'Comprovar regularidade perante a Justiça do Trabalho -- certidão distinta da CND Federal e do FGTS, comumente exigida em conjunto por bancos e financeiras.'),
   doc('certidao_estadual', 'Certidão estadual', ['cnd_estadual', 'certidao_estadual'], 3, 'Comprovar regularidade fiscal estadual.'),
   doc('certidao_municipal', 'Certidão municipal', ['cnd_municipal', 'certidao_municipal'], 3, 'Comprovar regularidade fiscal municipal.'),
   doc('extratos_bancarios', 'Extratos bancários empresariais', ['extrato_bancario'], 4, 'Comprovar movimentação, sazonalidade e capacidade de pagamento.', { observacao: 'Preferencialmente 6 a 12 meses, conforme produto e instituição.' }),
   doc('faturamento_12m', 'Faturamento mensal dos últimos 12 meses', ['faturamento_12_meses', 'comprovante_faturamento', 'declaracao_faturamento'], 4, 'Medir receita recorrente, sazonalidade e limite operacional.'),
-  doc('scr_pj', 'Relatório SCR/Registrato da empresa', ['scr_cnpj', 'rating_bacen_cnpj', 'relatorio_scr'], 4, 'Mapear endividamento, limites e histórico de crédito.'),
+  // Bancos (ex.: Banco do Nordeste, para Simples Nacional, Lucro Presumido e Lucro
+  // Real) exigem um demonstrativo de receitas projetadas no lugar do faturamento
+  // histórico quando a empresa tem menos de 12 meses de constituição ou menos de
+  // 11 meses de faturamento documentado -- situação que o próprio sistema já
+  // identifica na Etapa 2/3 (cadeia societária/12 meses). Não substitui o
+  // faturamento_12m no catálogo -- fica como item adicional, obrigatório apenas
+  // quando aplicável.
+  doc('projecao_receitas', 'Demonstrativo ou projeção de receitas', ['projecao_receitas', 'demonstrativo_receitas_projetadas'], 4, 'Substitui o faturamento histórico de 12 meses quando a empresa ainda não tem esse período de constituição ou de faturamento documentado.', { obrigatorio: false, observacao: 'Torna-se obrigatório no lugar do Faturamento bruto dos últimos 12 meses para empresas com menos de 12 meses de constituição ou com histórico de faturamento incompleto.' }),
+  doc('scr_pj', 'Relatório SCR/Registrato da empresa', ['scr_cnpj', 'rating_bacen_cnpj', 'relatorio_scr'], 4, 'Mapear endividamento, limites e histórico de crédito perante o Banco Central (SCR).'),
+  // Bureau privado (ex.: Serasa) é complementar ao SCR/Bacen -- mede inadimplência
+  // e histórico de crédito fora do sistema financeiro regulado. O checklist já
+  // tinha o campo "Rating (CNPJ)" (consulta_serasa_cnpj) sem nenhum item
+  // correspondente aqui; esta entrada fecha essa lacuna.
+  doc('rating_bureau_privado', 'Consulta de rating em bureau privado (ex.: Serasa)', ['consulta_serasa_cnpj'], 4, 'Avaliar histórico de crédito e inadimplência em bureau privado, complementar ao SCR/Bacen.', { obrigatorio: false }),
+  // CENPROT (protesto de títulos) já era um campo do checklist (cenprot_cnpj) sem
+  // item correspondente aqui -- protesto é indicador direto de inadimplência,
+  // avaliado por bancos e financeiras na análise de risco.
+  doc('consulta_protestos', 'Consulta de protestos (CENPROT)', ['cenprot_cnpj'], 4, 'Verificar protestos de títulos em nome da empresa -- indicador direto de inadimplência avaliado na análise de crédito.', { obrigatorio: false }),
   doc('socios_identidade', 'Documentos de identificação dos sócios/administradores', ['documento_socio', 'rg', 'cnh', 'cpf'], 3, 'Validar representantes e garantidores somente após a etapa societária.'),
   doc('socios_endereco', 'Comprovante de residência dos sócios/administradores', ['comprovante_residencia'], 3, 'Completar cadastro bancário dos garantidores.'),
 ];
@@ -339,7 +362,7 @@ export function gerarMapaDocumentalCredito(params: {
   };
 
   return {
-    versao: '1.1.0',
+    versao: '1.2.0',
     regime_identificado: regime,
     regime_descricao: descricaoRegime[regime],
     etapa_atual: etapaAtual,

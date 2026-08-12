@@ -223,6 +223,16 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
       slot("Relatório de Situação Fiscal (CNPJ)", "situacao_fiscal_cnpj", [], { descricao: "Exigido junto com CADIN e PGFN quando a CND RFB CNPJ não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cnpj"] }),
       slot("Nada consta CADIN (CNPJ)", "cadin_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cnpj"] }),
       slot("Nada consta PGFN (CNPJ)", "pgfn_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cnpj"] }),
+      // Os 3 campos abaixo (FGTS, CNDT, estadual/municipal) já eram considerados na
+      // documentação exigida pelo mapa de crédito por regime (mapaDocumentalCreditoService),
+      // mas até então não tinham campo de upload nesta tela -- pesquisa confirmou que
+      // são certidões distintas entre si (fiscal federal, FGTS, trabalhista, estadual,
+      // municipal), comumente exigidas em conjunto por bancos e financeiras, nenhuma
+      // substituindo a outra.
+      slot("Certificado de Regularidade do FGTS (CRF)", "crf_fgts", ["fgts"], { descricao: "Comprova regularidade perante o FGTS -- certidão distinta da CND Federal." }),
+      slot("Certidão Negativa de Débitos Trabalhistas (CNDT)", "cndt", ["certidao_trabalhista"], { descricao: "Comprova regularidade perante a Justiça do Trabalho -- certidão distinta da CND Federal e do FGTS, comumente exigida em conjunto por bancos e financeiras." }),
+      slot("Certidão estadual de regularidade fiscal", "cnd_estadual", ["certidao_estadual"], { descricao: "Comprova regularidade fiscal estadual." }),
+      slot("Certidão municipal de regularidade fiscal", "cnd_municipal", ["certidao_municipal"], { descricao: "Comprova regularidade fiscal municipal." }),
       slot("Rating (CNPJ)", "consulta_serasa_cnpj"),
       slot("Consulta de optante pelo Simples Nacional", "simples_nacional"),
       slot("PGDAS", "pgdas", ["pgmei", "ecf"], { descricao: "Declaração de faturamento do Simples Nacional. Se a empresa não for optante do Simples, anexe aqui o PGMEI (MEI) ou a ECF (Lucro Presumido/Real), conforme o regime tributário." }),
@@ -230,6 +240,10 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
       slot("DEFIS", "defis", ["dasn_simei"], { descricao: "Declaração anual da empresa. DEFIS para optantes do Simples Nacional (não MEI); DASN-SIMEI para MEI." }),
       slot("Recibo de entrega da DEFIS", "recibo_defis", ["recibo_dasn_simei"], { descricao: "Recibo de entrega correspondente à DEFIS ou DASN-SIMEI anexada acima." }),
       slot("Faturamento bruto dos últimos 12 meses", "faturamento_12_meses", ["comprovante_faturamento", "declaracao_faturamento"], { descricao: "Documento opcional. Quando anexado, a IA confere meses, último mês fechado, data e modalidade das assinaturas, CNPJ, sócio-administrador e contador." }),
+      // Exigido por bancos (ex.: Banco do Nordeste) no lugar do faturamento histórico
+      // quando a empresa tem menos de 12 meses de constituição ou de faturamento
+      // documentado -- situação que o próprio pipeline já identifica na Etapa 2/3.
+      slot("Demonstrativo ou projeção de receitas", "projecao_receitas", ["demonstrativo_receitas_projetadas"], { descricao: "Obrigatório apenas quando a empresa tem menos de 12 meses de constituição ou de faturamento comprovado -- substitui o Faturamento bruto dos últimos 12 meses nesse caso." }),
       slot("Compartilhamento eCAC por banco", "compartilhamento_ecac", [], { exigeNome: true, placeholderNome: "Banco/destinatário eCAC" }),
       slot("Fotos da empresa", "foto_fachada", ["foto_interna_1", "foto_interna_2", "foto_interna_3"], { descricao: "Anexe fachada e fotos internas no mesmo local." }),
       slot("Campo outros / Documento nomeado", "outros", [
@@ -325,6 +339,70 @@ export function formatDate(value?: string | null) {
   return new Date(value).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+// Laudo completo da leitura automática de IA (Faturamento e Comprovante de
+// Endereço, os dois tipos que já rodam análise no upload -- ver
+// agendarAnaliseRegraDocumental em server/routes/documentos.ts). O resultado
+// (dados extraídos + alertas com severidade e recomendação) já existia no banco
+// e já chegava em doc.resultado_validacao.analise_regra_documental, mas antes só
+// virava um resuminho de uma linha ("Análise automática concluída"). Aqui mostra
+// o que de fato foi consultado e o resultado completo -- sem inventar campos que
+// o backend não calcula.
+function ResumoLaudoDocumento({ analise }: { analise: any }) {
+  if (!analise) return null;
+  if (analise.mensagem && !analise.alertas) {
+    // Formato de erro (analise_regra_documental_erro): leitura falhou, sem dados extraídos.
+    return (
+      <div className="mt-1.5 rounded-lg border border-red-200 bg-red-50 p-2">
+        <p className="text-[9px] font-black text-red-800">Falha na leitura automática</p>
+        <p className="mt-0.5 text-[9px] text-red-700">{analise.mensagem}</p>
+      </div>
+    );
+  }
+  const dados = analise.dados_extraidos || {};
+  const alertas = Array.isArray(analise.alertas) ? analise.alertas : [];
+  const badges: Array<{ label: string; value: string }> = [];
+  if (Array.isArray(dados.meses_referencia)) {
+    badges.push({ label: "Meses cobertos", value: `${dados.meses_referencia.length} (${dados.primeiro_mes_identificado || "?"} a ${dados.ultimo_mes_identificado || "?"})` });
+    badges.push({ label: "Assinatura após fechamento", value: dados.assinatura_valida_apos_fechamento ? "Sim" : "Não confirmado" });
+    badges.push({ label: "Assinaturas na mesma modalidade", value: dados.assinaturas_mesma_modalidade ? "Sim" : "Não confirmado" });
+  } else if (dados.mes_referencia !== undefined) {
+    badges.push({ label: "Mês de referência", value: dados.mes_referencia || "Não identificado" });
+    badges.push({ label: "Dentro da validade (2 meses)", value: dados.comprovante_dentro_validade ? "Sim" : "Não" });
+    badges.push({ label: "Titular confere com o sócio", value: dados.titular_confere_com_socio ? "Sim" : "Não" });
+  }
+  return (
+    <div className="mt-1.5 rounded-lg border border-slate-200 bg-slate-50 p-2 space-y-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${analise.status === "concluido" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+          {analise.status === "concluido" ? "Leitura concluída" : "Aguardando revisão humana"}
+        </span>
+        {analise.analisado_em && <span className="text-[9px] text-slate-400">Consultado em {formatDate(analise.analisado_em)}</span>}
+      </div>
+      {!!badges.length && (
+        <div className="grid grid-cols-2 gap-1">
+          {badges.map((item) => (
+            <div key={item.label} className="rounded border border-white bg-white px-1.5 py-1">
+              <p className="text-[8px] font-bold uppercase text-slate-400">{item.label}</p>
+              <p className="text-[9px] font-semibold text-slate-700">{item.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      {!!alertas.length ? (
+        <div className="space-y-1">
+          {alertas.map((alerta: any, index: number) => (
+            <p key={index} className={`text-[9px] leading-relaxed ${alerta.severidade === "alta" || alerta.severidade === "critica" ? "text-red-700" : alerta.severidade === "media" ? "text-amber-700" : "text-slate-600"}`}>
+              • {alerta.mensagem}{alerta.recomendacao ? ` — ${alerta.recomendacao}` : ""}
+            </p>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[9px] text-emerald-700">Nenhuma pendência identificada pela leitura automática.</p>
+      )}
+    </div>
+  );
+}
+
 function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -380,6 +458,12 @@ export default function DocumentosEntidade({
   // antes "+N arquivo(s) neste mesmo campo" era só texto informativo, sem jeito nenhum
   // de realmente ver/abrir esses arquivos extras.
   const [camposExpandidos, setCamposExpandidos] = useState<Record<string, boolean>>({});
+  // Faturamento e Comprovante de Endereço já rodam leitura automática de IA no
+  // upload (agendarAnaliseRegraDocumental, server/routes/documentos.ts) e o
+  // resultado (doc.resultado_validacao.analise_regra_documental) já chegava no
+  // frontend, mas nunca era mostrado por completo -- só um resuminho de uma linha.
+  // Isso controla qual laudo está expandido, por documento.
+  const [laudosExpandidos, setLaudosExpandidos] = useState<Record<string, boolean>>({});
   const [pipeline, setPipeline] = useState<any>(null);
   // Diagnóstico da Etapa 2/3 (Atos da Junta + Contrato Social/Alteração), mostrado
   // direto nesta tela -- antes só existia numa aba separada ("Dossiê / Laudo IA"),
@@ -1185,20 +1269,33 @@ export default function DocumentosEntidade({
                                 dedo no touch). O botão "Mostrar menos"/"ver todos" fica sempre
                                 fora da área de rolagem, nunca some ao rolar a lista. */}
                             <div className={camposExpandidos[chaveSlot] && docsTipo.length > 3 ? "space-y-1 sm:max-h-44 sm:overflow-y-auto sm:pr-1" : "space-y-1"}>
-                              {(camposExpandidos[chaveSlot] ? docsTipo : docsTipo.slice(0, 3)).map((doc) => (
-                                <div key={doc.id} className="flex items-center justify-between gap-2 rounded-md bg-white border border-slate-100 px-2 py-1">
+                              {(camposExpandidos[chaveSlot] ? docsTipo : docsTipo.slice(0, 3)).map((doc) => {
+                                const laudo = doc.resultado_validacao?.analise_regra_documental || null;
+                                const laudoErro = doc.resultado_validacao?.analise_regra_documental_erro || null;
+                                const temLaudo = !!laudo || !!laudoErro;
+                                return (
+                                <div key={doc.id} className="rounded-md bg-white border border-slate-100 px-2 py-1">
+                                  <div className="flex items-center justify-between gap-2">
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-1 flex-wrap">
                                       <p className="text-[10px] font-semibold text-slate-700 truncate">{doc.nome_customizado || doc.nome_original}</p>
                                       {doc.validado && <span title="Validado" className="text-emerald-600 shrink-0"><CheckCircle className="w-2.5 h-2.5" /></span>}
                                     </div>
                                     <p className="text-[9px] text-slate-400 truncate">{formatDate(doc.criado_em)}</p>
-                                    {doc.resultado_validacao?.analise_regra_documental && (
-                                      <p className={`mt-0.5 max-w-[260px] truncate text-[9px] font-semibold ${doc.exige_revisao_humana ? "text-amber-700" : "text-emerald-700"}`} title={doc.resultado_validacao.analise_regra_documental?.alertas?.[0]?.mensagem || "Análise automática concluída"}>
-                                        {doc.exige_revisao_humana
-                                          ? `Revisar: ${doc.resultado_validacao.analise_regra_documental?.alertas?.[0]?.mensagem || "há pendências na leitura"}`
-                                          : "Análise automática concluída"}
-                                      </p>
+                                    {temLaudo && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setLaudosExpandidos((prev) => ({ ...prev, [doc.id]: !prev[doc.id] }))}
+                                        className={`mt-0.5 text-[9px] font-bold underline decoration-dotted ${laudoErro ? "text-red-700" : doc.exige_revisao_humana ? "text-amber-700" : "text-emerald-700"}`}
+                                      >
+                                        {laudosExpandidos[doc.id]
+                                          ? "Ocultar laudo da análise"
+                                          : laudoErro
+                                            ? "Ver laudo -- falha na leitura automática"
+                                            : doc.exige_revisao_humana
+                                              ? "Ver laudo -- pendências identificadas"
+                                              : "Ver laudo -- análise concluída"}
+                                      </button>
                                     )}
                                   </div>
                                   <div className="flex items-center gap-0.5 shrink-0">
@@ -1211,8 +1308,11 @@ export default function DocumentosEntidade({
                                     )}
                                     {permitirExcluir && <button type="button" title="Excluir" onClick={() => excluir(doc.id)} className="p-1 rounded-md hover:bg-red-50 text-red-500"><Trash2 className="w-3 h-3" /></button>}
                                   </div>
+                                  </div>
+                                  {laudosExpandidos[doc.id] && <ResumoLaudoDocumento analise={laudo || laudoErro} />}
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                             {docsTipo.length > 3 && (
                               <button

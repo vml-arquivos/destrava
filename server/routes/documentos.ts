@@ -33,7 +33,7 @@ const ENTIDADES = [
 const STATUS = ['ativo', 'arquivado', 'substituido', 'excluido', 'pendente_validacao', 'validado', 'recusado'];
 const ORIGENS = ['upload_manual', 'gerado_sistema', 'importado_api', 'sincronizacao', 'migracao'];
 
-const TIPOS_DOCUMENTO = [
+export const TIPOS_DOCUMENTO = [
   // Contratos
   'contrato_prestacao_servicos', 'contrato_assessoria', 'contrato_social', 'alteracao_contratual',
   'contrato_gerado', 'contrato_assinado',
@@ -46,6 +46,16 @@ const TIPOS_DOCUMENTO = [
   'rating_bacen_cnpj', 'cenprot_cnpj', 'cnd_rfb_cnpj', 'cadin_cnpj', 'pgfn_cnpj',
   'enquadramento_tributario_cnpj', 'situacao_fiscal_cnpj',
   'scr_cnpj', 'ccs_cnpj', 'ccf_cnpj', 'consulta_serasa_cnpj',
+  // Certidões adicionais (fiscal/trabalhista) -- adicionadas para fechar a
+  // documentação exigida por regime no mapa documental de crédito (pesquisa de
+  // mercado 2026-08-12): FGTS, CNDT e certidões estadual/municipal são certidões
+  // distintas entre si, comumente exigidas em conjunto por bancos e financeiras.
+  'crf_fgts', 'fgts', 'cndt', 'certidao_trabalhista', 'cnd_estadual', 'certidao_estadual',
+  'cnd_municipal', 'certidao_municipal',
+  // Demonstrativo/projeção de receitas -- exigido por bancos no lugar do
+  // faturamento histórico de 12 meses quando a empresa tem menos de 12 meses de
+  // constituição ou de faturamento documentado.
+  'projecao_receitas', 'demonstrativo_receitas_projetadas',
   // Certidões CPF
   'rating_bacen_cpf', 'cenprot_cpf', 'cnd_rfb_cpf', 'cadin_cpf', 'pgfn_cpf',
   'enquadramento_tributario_cpf', 'situacao_fiscal_cpf',
@@ -78,6 +88,8 @@ const DOCUMENTOS_EMPRESA = new Set([
   'recibo_ecf', 'recibo_pgdas', 'recibo_pgmei', 'defis', 'dasn_simei', 'recibo_defis', 'recibo_dasn_simei',
   'scr_cnpj', 'ccs_cnpj', 'ccf_cnpj', 'consulta_serasa_cnpj', 'compartilhamento_ecac', 'foto_fachada',
   'foto_interna_1', 'foto_interna_2', 'foto_interna_3', 'faturamento_12_meses', 'nire', 'estatuto',
+  'crf_fgts', 'fgts', 'cndt', 'certidao_trabalhista', 'cnd_estadual', 'certidao_estadual',
+  'cnd_municipal', 'certidao_municipal', 'projecao_receitas', 'demonstrativo_receitas_projetadas',
 ]);
 
 const MIME_EXT: Record<string, string[]> = {

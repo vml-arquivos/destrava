@@ -38,6 +38,32 @@ describe('mapa documental de crédito', () => {
     expect(mapa.etapa_atual).toBe(3);
   });
 
+  it('inclui CNDT, projeção de receitas, rating de bureau privado e CENPROT no núcleo universal (pesquisa de mercado 2026-08-12)', () => {
+    // CNDT (trabalhista), rating de bureau privado (Serasa) e CENPROT (protestos)
+    // já eram campos do checklist do Acervo Documental sem nenhum documento
+    // correspondente no mapa; e o demonstrativo/projeção de receitas é exigido por
+    // bancos no lugar do faturamento de 12 meses para empresas com menos de 12
+    // meses de constituição -- nenhum dos quatro existia antes desta correção.
+    const mapa = gerarMapaDocumentalCredito({
+      empresa: { regime_tributario: 'Simples Nacional', opcao_simples: true },
+      etapa1Aprovada: true,
+      etapa2Aprovada: true,
+      tiposAnexados: [],
+    });
+    const codigosFase3 = mapa.etapas.find((e) => e.numero === 3)?.documentos.map((d) => d.codigo) || [];
+    const codigosFase4 = mapa.etapas.find((e) => e.numero === 4)?.documentos.map((d) => d.codigo) || [];
+    expect(codigosFase3).toContain('cndt');
+    expect(codigosFase4).toContain('projecao_receitas');
+    expect(codigosFase4).toContain('rating_bureau_privado');
+    expect(codigosFase4).toContain('consulta_protestos');
+    // CNDT é obrigatória (mesma categoria de certidão que CND Federal e FGTS);
+    // os outros três são complementares/condicionais, não travam o avanço.
+    const cndt = mapa.etapas.find((e) => e.numero === 3)?.documentos.find((d) => d.codigo === 'cndt');
+    expect(cndt?.obrigatorio).toBe(true);
+    const projecao = mapa.etapas.find((e) => e.numero === 4)?.documentos.find((d) => d.codigo === 'projecao_receitas');
+    expect(projecao?.obrigatorio).toBe(false);
+  });
+
   it('mantém programas bancários como sobreposição configurável', () => {
     const mapa = gerarMapaDocumentalCredito({ empresa: {}, etapa1Aprovada: false, etapa2Aprovada: false });
     expect(mapa.programas_referencia.some((p) => p.codigo === 'pronampe_bb')).toBe(true);
