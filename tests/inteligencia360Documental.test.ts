@@ -155,7 +155,12 @@ describe('Etapa 1 — Identidade do CNPJ', () => {
     { prompt_codigo: 'qsa_extract', status: 'concluido', resultado: { tipo_analise: 'qsa', alertas: [] } },
     { prompt_codigo: 'simples_extract', status: 'concluido', resultado: { tipo_analise: 'simples_nacional', alertas: [] } },
   ];
-  const analiseCnpjOk = { status: 'concluida', idade_meses: 35, alertas: [], divergencias: [], situacao_cadastral: 'Ativa', porte: 'Micro Empresa' };
+  // cartao_anexado/cartao_pendente_ocr existem na tabela analises_cnpj_empresa
+  // (migration 062) e são preenchidos pelo serviço real (analiseCnpjReceitaCartao.ts)
+  // sempre que o Cartão CNPJ foi processado. consolidarEtapaIdentidadeDocumental exige
+  // esses campos para considerar o Cartão CNPJ consistente -- sem eles, a fixture não
+  // representava um resultado real "concluída" e o teste ficava preso em documentos_ok=2.
+  const analiseCnpjOk = { status: 'concluida', idade_meses: 35, alertas: [], divergencias: [], situacao_cadastral: 'Ativa', porte: 'Micro Empresa', cartao_anexado: true, cartao_pendente_ocr: false };
 
   it('libera a Etapa 2 somente com os três documentos iniciais analisados e consistentes', () => {
     const resultado = consolidarEtapaIdentidadeDocumental({
@@ -193,7 +198,12 @@ describe('Etapa 1 — Identidade do CNPJ', () => {
     });
 
     expect(resultado.apto_para_avancar).toBe(false);
-    expect(resultado.bloqueios.some((item) => item.includes('QSA') && item.includes('ainda não foi analisado'))).toBe(true);
+    // A mensagem real emitida por consolidarEtapaIdentidadeDocumental para "anexado, sem
+    // análise concluída ainda" é "...está anexado, mas o processamento ainda não foi
+    // concluído." (ver montarDocumento/bloqueios em inteligencia360Service.ts). O texto
+    // "ainda não foi analisado" nunca existiu nessa função; ajustando a asserção para a
+    // mensagem real em vez de mudar a mensagem de produção sem necessidade.
+    expect(resultado.bloqueios.some((item) => item.includes('QSA') && item.includes('processamento ainda não foi concluído'))).toBe(true);
   });
 
   it('bloqueia o avanço em divergência alta e mantém a mensagem concreta no relatório', () => {

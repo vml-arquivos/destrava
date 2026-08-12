@@ -1063,11 +1063,25 @@ export default function Empresas() {
     }
     try {
       setSalvandoSocio(true);
-      const atualizado = await apiFetch(`/api/empresas/${selecionada.id}/socios/${socioEditando.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ ...socioForm, fonte_dados: 'manual_validado' }),
-      });
-      setSociosEmpresa(prev => prev.map((s: any) => s.id === atualizado.id ? atualizado : s));
+      // O card de "sócio-administrador padrão" (id sintético "socio-admin-<empresaId>",
+      // ver montarSocioAdministradorPadrao) é só uma inferência visual enquanto a empresa
+      // não tem nenhum sócio real salvo em socios_empresa. Ele nunca existe no banco, então
+      // um PUT para esse id sempre falhava (Postgres rejeita o id inválido como UUID e a
+      // tela mostrava "Erro ao atualizar sócio"). Quando o usuário completa e salva esses
+      // dados, o registro precisa ser CRIADO (POST), não atualizado.
+      const ehSocioInferido = !!socioEditando?.inferido_empresa;
+      const atualizado = ehSocioInferido
+        ? await apiFetch(`/api/empresas/${selecionada.id}/socios`, {
+            method: 'POST',
+            body: JSON.stringify({ ...socioForm, fonte_dados: 'manual_validado' }),
+          })
+        : await apiFetch(`/api/empresas/${selecionada.id}/socios/${socioEditando.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ ...socioForm, fonte_dados: 'manual_validado' }),
+          });
+      setSociosEmpresa(prev => prev.some((s: any) => s.id === atualizado.id)
+        ? prev.map((s: any) => s.id === atualizado.id ? atualizado : s)
+        : [...prev, atualizado]);
       setSocioEditando(null);
       toast.success('Dados do sócio/representante salvos');
     } catch (err: any) {

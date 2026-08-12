@@ -19,6 +19,16 @@ const pool = new Pool({
 
 const router = Router();
 
+// O frontend mostra um "sócio-administrador padrão" inferido do cadastro da empresa
+// (id sintético "socio-admin-<empresaId>") enquanto nenhum sócio real foi salvo ainda.
+// Esse id nunca existe em socios_empresa. Se ele chegar aqui via PUT (nunca deveria,
+// mas guardamos mesmo assim), evita o erro cru do Postgres (22P02 invalid input
+// syntax for type uuid) e devolve uma mensagem que a tela sabe tratar.
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && UUID_REGEX.test(value);
+}
+
 const uploadContratoSocial = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
@@ -996,6 +1006,10 @@ router.post('/:id/socios/bulk', auth, async (req: Request, res: Response) => {
 router.put('/:id/socios/:sid', auth, async (req: Request, res: Response) => {
   try {
     if (!(await requireEmpresaAccess(req, res))) return;
+    if (!isUuid(req.params.sid)) {
+      res.status(404).json({ error: 'Sócio ainda não foi cadastrado nesta empresa. Salve os dados para criar o registro.', code: 'SOCIO_NAO_CADASTRADO' });
+      return;
+    }
     await ensureSociosEmpresaSchema();
     const payload = buildSocioPayload(req.params.id, req.body as SocioInput);
     if (!payload?.nome) { res.status(400).json({ error: 'Nome do sócio é obrigatório' }); return; }

@@ -367,7 +367,7 @@ export function validarQsaExtraida(empresa: any, sociosReceita: any[], dados: an
   // artificial por si só.
   const confiancaExtracao = normalizarConfianca(dados?.confianca);
   const baseExigeAdministrador = sociosBase.some((socio) => socio.administrador === true);
-  const documentoTemAdministrador = sociosDocumento.some((socio) => socio.administrador === true);
+  const documentoTemAdministrador = sociosDocumento.some((socio: ReturnType<typeof socioNormalizado>) => socio.administrador === true);
   const faltouCampoInstitucional = !cnpjDocumento || !razaoDocumento || capitalDocumento === null || !sociosDocumento.length || (baseExigeAdministrador && !documentoTemAdministrador);
   if ((dados?.extracao_parcial === true || (confiancaExtracao !== null && confiancaExtracao < 0.6)) && faltouCampoInstitucional) {
     alertas.push({

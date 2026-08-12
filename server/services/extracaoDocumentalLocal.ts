@@ -52,7 +52,7 @@ function pareceRotulo(linha: string): boolean {
     'titulo do estabelecimento', 'codigo e descricao', 'atividade economica principal',
     'natureza juridica', 'logradouro', 'numero', 'complemento', 'cep', 'bairro',
     'municipio', 'uf', 'situacao cadastral', 'data da situacao cadastral', 'porte',
-    'capital social', 'nome nome empresarial', 'qualificacao', 'cnpj', 'nire',
+    'capital social', 'nome nome empresarial', 'qualificacao', 'qualificacao do socio', 'cnpj', 'nire',
     'data do registro', 'data de registro', 'situacao no simples nacional',
   ];
   return rotulos.some((rotulo) => n === rotulo || n.startsWith(`${rotulo}:`) || n.startsWith(`${rotulo} (`));

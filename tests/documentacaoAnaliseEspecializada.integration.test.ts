@@ -146,7 +146,13 @@ describe('POST /api/documentacao/ia/documentos/:documentoId/extrair', () => {
     });
     mocks.clientQuery.mockImplementation(async (text: string) => {
       if (text.includes('FROM public.documentos_extracoes_ia')) {
-        return { rows: [{ id: 'extracao-1', arquivo_id: 'doc-1', prompt_codigo: 'qsa_extract', status: 'pendente', atualizado_em: new Date().toISOString() }] };
+        // prompt_versao precisa bater com a versão atual do prompt QSA (ver
+        // versaoPromptDocumental/qsa_extract em documentacao.ts) -- do contrário
+        // a extração é tratada como de uma versão anterior e reprocessada, o que
+        // é o comportamento correto pós-deploy de uma correção do parser, não
+        // uma duplicidade indevida. Este teste cobre o caso de dedup dentro da
+        // MESMA versão do prompt.
+        return { rows: [{ id: 'extracao-1', arquivo_id: 'doc-1', prompt_codigo: 'qsa_extract', prompt_versao: '5.1.0', status: 'pendente', atualizado_em: new Date().toISOString() }] };
       }
       if (text.includes('UPDATE public.documentos_extracoes_ia')) {
         return { rows: [{ id: 'extracao-1', arquivo_id: 'doc-1', prompt_codigo: 'qsa_extract', status: 'pendente' }] };
