@@ -153,6 +153,34 @@ export function compararEndereco(receita: unknown, cartao: unknown) {
   const normR = normalizarBasico(rOriginal);
   const normC = normalizarBasico(cOriginal);
 
+  // OCR de Cartão CNPJ pode embaralhar cabeçalhos da grade e devolver algo como
+  // "NÚMERO COMPLEMENTO, <CNPJ> COMPROVANTE DE INSCRIÇÃO..., BAIRRO/DISTRITO
+  // MUNICÍPIO UF" no lugar do endereço. Isso é falha de extração, não divergência
+  // cadastral. Nunca bloqueamos a Etapa 1 com esse falso positivo.
+  const marcadoresDocumento = [
+    'comprovante de inscricao',
+    'cadastro nacional da pessoa juridica',
+    'nome empresarial',
+    'situacao cadastral',
+    'data de abertura',
+    'bairro distrito municipio uf',
+    'numero complemento',
+  ];
+  const marcadoresEncontrados = marcadoresDocumento.filter((marcador) => normC.includes(marcador)).length;
+  const contemCnpjNoEndereco = /\b\d{2}[.\s]?\d{3}[.\s]?\d{3}\/?\d{4}[-\s]?\d{2}\b/.test(cOriginal);
+  if (contemCnpjNoEndereco || marcadoresEncontrados >= 2) {
+    return {
+      label: 'Endereço completo',
+      status: 'nao_extraido',
+      receita,
+      cartao,
+      divergente: false,
+      normalizado_receita: normR,
+      normalizado_cartao: normC,
+      motivo: 'O texto extraído para endereço contém cabeçalhos/metadados do Cartão CNPJ e não é evidência segura de divergência.',
+    };
+  }
+
   if (cepR && cepC && cepR === cepC) {
     return {
       label: 'Endereço completo',

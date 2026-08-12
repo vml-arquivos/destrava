@@ -580,6 +580,38 @@ function normalizarDadosContratoSocial(dados: any): Record<string, any> {
   };
 }
 
+function inferirSociosQsaPorTextoSincronizado(texto: unknown, sociosBase: any[]): Array<{ nome: string; qualificacao: string | null; administrador: boolean | null }> {
+  const textoDocumento = normalizarBasico(texto);
+  if (!textoDocumento || !Array.isArray(sociosBase) || !sociosBase.length) return [];
+
+  const encontrados: Array<{ nome: string; qualificacao: string | null; administrador: boolean | null }> = [];
+  for (const socio of sociosBase) {
+    const nomeOriginal = String(socio?.nome || socio?.nome_socio || socio?.razao_social || '').trim();
+    const nome = normalizarBasico(nomeOriginal);
+    if (!nome || nome === 'nao identificado') continue;
+    const pos = textoDocumento.indexOf(nome);
+    if (pos < 0) continue;
+
+    // Não inventa o vínculo de administrador a partir da base sincronizada. O nome
+    // só é confirmado se aparece literalmente no documento; a administração exige
+    // evidência textual próxima ao nome no próprio QSA.
+    const inicio = pos + nome.length;
+    const fim = Math.min(textoDocumento.length, inicio + 280);
+    const contexto = textoDocumento.slice(inicio, fim);
+    const administrador = /(?:\b49\b\s*)?socio administrador|administrador|administradora|titular/.test(contexto)
+      ? true
+      : /\bsocio\b|\bsocia\b|quotista/.test(contexto)
+        ? false
+        : null;
+    encontrados.push({
+      nome: nomeOriginal,
+      qualificacao: administrador === true ? 'Sócio-Administrador' : administrador === false ? 'Sócio' : null,
+      administrador,
+    });
+  }
+  return encontrados;
+}
+
 function normalizarDadosQsa(dados: any): Record<string, any> {
   const socios = Array.isArray(dados?.socios) ? dados.socios
     .map((socio: any) => ({
@@ -906,6 +938,7 @@ export class AnaliseDocumentalService {
           confianca: local.confianca,
           fonte_extracao: 'local_deterministica',
           mecanismo_extracao: local.mecanismo,
+          ...(tipo === 'qsa' ? { __texto_local: local.texto } : {}),
         };
       }
     } catch (error: any) {
@@ -913,7 +946,10 @@ export class AnaliseDocumentalService {
     }
 
     try {
-      return await this.extrairComIA(arquivoPath, prompt, mimeType);
+      const resultadoIa = await this.extrairComIA(arquivoPath, prompt, mimeType);
+      return tipo === 'qsa' && local?.texto
+        ? { ...resultadoIa, __texto_local: local.texto }
+        : resultadoIa;
     } catch (error: any) {
       // A ausência de Gemini não transforma uma leitura local executada em
       // "aguardando análise". Quando o OCR/pdftotext conseguiu extrair algum
@@ -935,6 +971,7 @@ export class AnaliseDocumentalService {
           confianca: local!.confianca,
           fonte_extracao: 'local_deterministica',
           mecanismo_extracao: local!.mecanismo,
+          ...(tipo === 'qsa' ? { __texto_local: local!.texto } : {}),
           extracao_parcial: true,
           motivo_extracao_parcial: local!.motivo || error?.message || 'Extração local abaixo do limiar de confiança.',
         };
@@ -987,7 +1024,33 @@ export class AnaliseDocumentalService {
     this.ultimoModeloUsado = null;
     this.ultimaFonteExtracao = null;
     const { empresa, socios, documento } = await this.carregarContexto(empresaId, arquivoId);
-    const dados = normalizarDadosQsa(await this.extrairHibrido(documento.caminho_arquivo!, promptQsa(), documento.mime_type || 'application/pdf', 'qsa'));
+    const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, promptQsa(), documento.mime_type || 'application/pdf', 'qsa');
+    const dados = normalizarDadosQsa(extraidos);
+
+    // Última proteção contra falsos "Sócios 0": se a estrutura do PDF/OCR foi
+    // perdida, mas o nome sincronizado aparece literalmente no texto do QSA, o
+    // backend confirma esse nome a partir da evidência documental. Dados pessoais
+    // não são consultados nem inferidos. A condição de administrador só é marcada
+    // quando também há evidência textual próxima no próprio documento.
+    const sociosPorTexto = inferirSociosQsaPorTextoSincronizado(extraidos?.__texto_local, socios);
+    if (sociosPorTexto.length) {
+      const porNome = new Map<string, any>();
+      for (const socio of [...dados.socios, ...sociosPorTexto]) {
+        const chave = normalizarBasico(socio?.nome);
+        if (!chave) continue;
+        const atual = porNome.get(chave);
+        porNome.set(chave, atual
+          ? {
+              ...atual,
+              qualificacao: atual.qualificacao || socio.qualificacao || null,
+              administrador: atual.administrador ?? socio.administrador ?? null,
+            }
+          : socio);
+      }
+      dados.socios = Array.from(porNome.values());
+      if (dados.socios.length) dados.extracao_parcial = false;
+    }
+
     const alertas = validarQsaExtraida(empresa, socios, dados);
     return criarResultado('qsa', empresaId, arquivoId, dados, alertas, this.ultimoModeloUsado);
   }

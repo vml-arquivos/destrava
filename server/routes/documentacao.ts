@@ -33,7 +33,7 @@ const analisesSocietariasEmAndamento = new Map<string, Promise<void>>();
 // resultados persistidos do QSA que foram produzidos por regras antigas, sem
 // apagar arquivo, cadastro, bloco ou qualquer outra análise documental.
 const VERSAO_ANALISE_DOCUMENTAL: Record<string, string> = {
-  qsa_extract: '5.0.0',
+  qsa_extract: '5.1.0',
   simples_extract: '1.0.0',
   atos_junta_extract: '1.0.0',
   faturamento_12m_extract: '1.0.0',

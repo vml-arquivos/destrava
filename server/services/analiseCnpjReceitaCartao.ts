@@ -654,11 +654,55 @@ function calcularScore(input: { camposReceita: any; cartao: DocCartao | null; ex
   return { score, risco };
 }
 
+function sanitizarAnaliseCnpjPersistida(row: any) {
+  if (!row || typeof row !== 'object') return row;
+  const camposReceita = row.campos_receita && typeof row.campos_receita === 'object' ? row.campos_receita : {};
+  const camposCartao = row.campos_cartao && typeof row.campos_cartao === 'object' ? row.campos_cartao : {};
+  const comparacaoEndereco = compararCampo(
+    'Endereço completo',
+    camposReceita.endereco_completo,
+    camposCartao.endereco_completo,
+    'endereco',
+  );
+
+  // Corrige também laudos já persistidos antes deste fix. Se o registro antigo
+  // marcou endereço como divergente apenas porque o OCR misturou cabeçalhos/CNPJ,
+  // a leitura da análise deixa de reutilizar esse falso positivo imediatamente,
+  // sem apagar histórico ou exigir migration.
+  if (comparacaoEndereco.divergente) return row;
+
+  const removerEndereco = (items: any[]) => (Array.isArray(items) ? items : []).filter((item: any) => {
+    const codigo = String(item?.codigo || '').toLowerCase();
+    const campo = String(item?.campo || '').toLowerCase();
+    return codigo !== 'divergencia_endereco_completo' && campo !== 'endereco_completo';
+  });
+  const resultadoAtual = row.resultado && typeof row.resultado === 'object' ? row.resultado : {};
+  const comparacaoAtual = row.comparacao && typeof row.comparacao === 'object' ? row.comparacao : {};
+  const comparacaoResultado = resultadoAtual.comparacao && typeof resultadoAtual.comparacao === 'object'
+    ? resultadoAtual.comparacao
+    : comparacaoAtual;
+
+  const divergencias = removerEndereco(row.divergencias);
+  const alertas = removerEndereco(row.alertas);
+  return {
+    ...row,
+    comparacao: { ...comparacaoAtual, endereco_completo: comparacaoEndereco },
+    divergencias,
+    alertas,
+    resultado: {
+      ...resultadoAtual,
+      comparacao: { ...comparacaoResultado, endereco_completo: comparacaoEndereco },
+      divergencias: removerEndereco(resultadoAtual.divergencias),
+      alertas: removerEndereco(resultadoAtual.alertas),
+    },
+  };
+}
+
 export async function buscarUltimaAnaliseCnpjEmpresa(empresaId: string) {
   const exists = await tableExists('analises_cnpj_empresa');
   if (!exists) return null;
   const { rows } = await pool.query('SELECT * FROM public.analises_cnpj_empresa WHERE empresa_id = $1 ORDER BY criado_em DESC LIMIT 1', [empresaId]);
-  return rows[0] || null;
+  return sanitizarAnaliseCnpjPersistida(rows[0] || null);
 }
 
 export async function analisarCnpjReceitaCartaoEmpresa(empresaId: string, criadoPor?: string | null) {

@@ -191,6 +191,15 @@ function parseCartaoCnpj(texto: string): { dados: Record<string, any>; confianca
 
 function parseQsa(texto: string): { dados: Record<string, any>; confianca: number } {
   const linhas = linhasTexto(texto);
+  // Para o QSA preservamos também o espaçamento original. O pdftotext -layout
+  // usa colunas por espaços; linhasTexto() compacta esses espaços e não pode ser
+  // a única fonte para reconhecer a tabela NOME/NOME EMPRESARIAL | QUALIFICAÇÃO.
+  const linhasLayout = String(texto || '')
+    .replace(/\u0000/g, '')
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((linha) => linha.trimEnd())
+    .filter((linha) => linha.trim().length > 0);
   const norm = textoNormalizado(texto);
   const compativel = norm.includes('quadro de socios e administradores')
     || norm.includes('quadro societario')
@@ -204,75 +213,146 @@ function parseQsa(texto: string): { dados: Record<string, any>; confianca: numbe
   const dataRegistro = parseDate(valorAposRotulo(linhas, ['data de registro', 'data do registro', 'data de arquivamento']));
 
   const socios: Array<{ nome: string; qualificacao: string | null; administrador: boolean | null }> = [];
-  const adicionarSocio = (nomeRaw: string | null | undefined, qualificacaoRaw: string | null | undefined) => {
-    const nome = limparValor(nomeRaw || null);
-    const qualificacao = limparValor(qualificacaoRaw || null);
-    if (!nome || pareceRotulo(nome)) return;
-    const nomeNorm = textoNormalizado(nome);
-    if (!nomeNorm || /^(?:nome|qualificacao|socio|administrador|quadro societario)$/.test(nomeNorm)) return;
-    if (/^\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}$/.test(nome.replace(/\s/g, ''))) return;
-    if (!socios.some((socio) => textoNormalizado(socio.nome) === nomeNorm)) {
-      socios.push({
-        nome,
-        qualificacao,
-        administrador: qualificacao ? /administrador|administradora|titular|empres[aá]rio individual/i.test(qualificacao) : null,
-      });
-    }
+
+  const limparRotuloNome = (value: string | null | undefined): string | null => limparValor(
+    String(value || '')
+      .replace(/^\s*nome\s*\/\s*nome\s+empresarial\s*[:\-]?\s*/i, '')
+      .replace(/^\s*nome\s+(?:do\s+)?s[oó]cio\s*[:\-]?\s*/i, ''),
+  );
+  const limparRotuloQualificacao = (value: string | null | undefined): string | null => limparValor(
+    String(value || '')
+      .replace(/^\s*qualifica[cç][aã]o(?:\s+do\s+s[oó]cio)?\s*[:\-]?\s*/i, ''),
+  );
+  const ehQualificacaoSocietaria = (value: string | null | undefined): boolean => {
+    const q = limparRotuloQualificacao(value);
+    if (!q) return false;
+    return /^(?:\d{1,3}\s*[-–—]\s*)?(?:s[oó]ci[oa](?:\s*[-–—]\s*administrador[ae]?)?|administrador[ae]?|titular|empres[aá]rio\s+individual)\b/i.test(q)
+      || /\b(?:s[oó]ci[oa]\s*[-–—]\s*administrador[ae]?|s[oó]ci[oa]\s+administrador[ae]?|administrador[ae]?|titular)\b/i.test(q);
+  };
+  const pareceNomeSocio = (value: string | null | undefined): boolean => {
+    const nome = limparRotuloNome(value);
+    if (!nome || pareceRotulo(nome) || ehQualificacaoSocietaria(nome)) return false;
+    const n = textoNormalizado(nome);
+    if (!n || n.length < 4 || n.length > 160) return false;
+    if (/^(?:nome|qualificacao|socio|administrador|quadro societario|capital social)$/.test(n)) return false;
+    if (/\b(?:cpf|cnpj|capital social|receita federal|comprovante|consulta qsa|quadro de socios)\b/.test(n)) return false;
+    if (/^\s*r\$\s*/i.test(nome) || /\b(?:reais?|capital)\b/i.test(nome)) return false;
+    if (/^\d{2}[/.]\d{2}[/.]\d{4}$/.test(nome.trim())) return false;
+    if (/^\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}$/.test(nome.replace(/\s/g, ''))) return false;
+    if (/^\d{1,3}\s*[-–—]/.test(nome.trim())) return false;
+    const letras = (nome.match(/[A-Za-zÀ-Úà-ú]/g) || []).length;
+    const digitos = (nome.match(/\d/g) || []).length;
+    if (letras < 4 || digitos > letras) return false;
+    const palavras = n.split(' ').filter(Boolean);
+    return palavras.length >= 2 && /[a-zà-ú]/i.test(nome);
   };
 
-  // Layout vertical oficial: rótulo em uma linha e valor na linha seguinte.
+  const adicionarSocio = (nomeRaw: string | null | undefined, qualificacaoRaw: string | null | undefined) => {
+    const nome = limparRotuloNome(nomeRaw);
+    const qualificacao = limparRotuloQualificacao(qualificacaoRaw);
+    if (!nome || !pareceNomeSocio(nome)) return;
+    const nomeNorm = textoNormalizado(nome);
+    const administrador = qualificacao
+      ? /administrador|administradora|titular|empres[aá]rio individual/i.test(qualificacao)
+      : null;
+    const existente = socios.find((socio) => textoNormalizado(socio.nome) === nomeNorm);
+    if (existente) {
+      if (!existente.qualificacao && qualificacao) existente.qualificacao = qualificacao;
+      if (existente.administrador === null && administrador !== null) existente.administrador = administrador;
+      return;
+    }
+    socios.push({ nome, qualificacao, administrador });
+  };
+
+  // Layout vertical oficial: NOME/NOME EMPRESARIAL, valor, QUALIFICAÇÃO, valor.
   const nomesRotulo = new Set(['nome nome empresarial', 'nome do socio', 'nome socio', 'socio']);
   for (let i = 0; i < linhas.length; i += 1) {
     const linhaNorm = textoNormalizado(linhas[i]).replace(/[\/]/g, ' ');
     if (!Array.from(nomesRotulo).some((rotulo) => linhaNorm === rotulo || linhaNorm.startsWith(`${rotulo}:`))) continue;
-    const nome = limparValor(linhas[i].includes(':') ? linhas[i].split(':').slice(1).join(':') : linhas[i + 1] || null);
-    if (!nome || pareceRotulo(nome)) continue;
+    const nome = limparRotuloNome(linhas[i].includes(':') ? linhas[i].split(':').slice(1).join(':') : linhas[i + 1] || null);
+    if (!nome || !pareceNomeSocio(nome)) continue;
     let qualificacao: string | null = null;
     for (let j = i + 1; j <= Math.min(i + 8, linhas.length - 1); j += 1) {
       const atualNorm = textoNormalizado(linhas[j]);
       if (atualNorm.startsWith('qualificacao')) {
-        qualificacao = limparValor(linhas[j].includes(':') ? linhas[j].split(':').slice(1).join(':') : linhas[j + 1] || null);
+        const inline = linhas[j].includes(':') ? linhas[j].split(':').slice(1).join(':') : linhas[j + 1] || null;
+        qualificacao = limparRotuloQualificacao(inline);
         break;
       }
     }
     adicionarSocio(nome, qualificacao);
   }
 
-  // Layout horizontal oficial da Receita: cabeçalho "NOME/NOME EMPRESARIAL  QUALIFICAÇÃO"
-  // e linha seguinte "FULANO DE TAL  49-Sócio-Administrador". Essa variação era a
-  // causa da regressão observada: o OCR lia o documento, mas o parser não reconhecia
-  // o sócio e gerava uma falsa divergência contra o QSA sincronizado.
-  for (let i = 0; i < linhas.length; i += 1) {
-    const cabecalhoNorm = textoNormalizado(linhas[i]).replace(/[\/]/g, ' ');
+  // Layout horizontal oficial preservado pelo pdftotext -layout:
+  // NOME/NOME EMPRESARIAL                     QUALIFICAÇÃO
+  // JONNATHAS RODRIGUES PIRES                  49-Sócio-Administrador
+  // Também cobre a variação em que o PDF devolve nome e qualificação em linhas
+  // separadas (nome em uma linha e "49-Sócio-Administrador" na seguinte).
+  for (let i = 0; i < linhasLayout.length; i += 1) {
+    const cabecalhoNorm = textoNormalizado(linhasLayout[i]).replace(/[\/]/g, ' ');
     if (!(cabecalhoNorm.includes('nome nome empresarial') && cabecalhoNorm.includes('qualificacao'))) continue;
 
-    for (let j = i + 1; j <= Math.min(i + 6, linhas.length - 1); j += 1) {
-      const linha = linhas[j].trim();
+    for (let j = i + 1; j <= Math.min(i + 10, linhasLayout.length - 1); j += 1) {
+      const linhaRaw = linhasLayout[j];
+      const linha = linhaRaw.trim();
       const linhaNorm = textoNormalizado(linha);
-      if (!linha || /^cpf\b|^cnpj\b|^capital social\b|^nome empresarial\b|^quadro\b/.test(linhaNorm)) break;
-      if (/^qualificacao\b/.test(linhaNorm)) continue;
+      if (!linha) continue;
+      if (/^(?:cpf|cnpj|capital social|quadro societario|quadro de socios|nome empresarial)\b/.test(linhaNorm)) break;
+      if (/^qualificacao(?: do socio)?$/.test(linhaNorm)) continue;
 
-      // Primeiro tenta colunas preservadas por pdftotext/Tesseract (2+ espaços ou tab).
-      const colunas = linha.split(/\t+|\s{2,}/).map((item) => item.trim()).filter(Boolean);
+      // Com layout preservado, duas ou mais lacunas separam as colunas.
+      const colunas = linhaRaw.trim().split(/\t+|\s{2,}/).map((item) => item.trim()).filter(Boolean);
       if (colunas.length >= 2) {
-        const qualificacao = colunas.slice(1).join(' ');
-        if (/s[oó]ci[oa]|administrador|administradora|titular|empres[aá]rio individual/i.test(qualificacao)) {
-          adicionarSocio(colunas[0], qualificacao);
+        const nomeColuna = colunas[0];
+        const qualificacaoColuna = colunas.slice(1).join(' ');
+        if (pareceNomeSocio(nomeColuna) && ehQualificacaoSocietaria(qualificacaoColuna)) {
+          adicionarSocio(nomeColuna, qualificacaoColuna);
           continue;
         }
       }
 
-      // Fallback quando o extrator colapsa os espaços entre as colunas.
-      const match = linha.match(/^(.+?)\s+(\d{1,3}\s*[-–—]\s*.+(?:s[oó]ci[oa]|administrador|administradora|titular|empres[aá]rio individual).*)$/i)
-        || linha.match(/^(.+?)\s+((?:s[oó]ci[oa](?:\s*[-–—]\s*administrador[ae]?)?|administrador[ae]?|titular|empres[aá]rio individual).*)$/i);
-      if (match) adicionarSocio(match[1], match[2]);
+      // Quando o extrator colapsa a tabela em uma única linha.
+      const matchMesmaLinha = linha.match(/^(.+?)\s+((?:\d{1,3}\s*[-–—]\s*)?(?:s[oó]ci[oa](?:\s*[-–—]\s*administrador[ae]?)?|administrador[ae]?|titular|empres[aá]rio\s+individual).*)$/i);
+      if (matchMesmaLinha && pareceNomeSocio(matchMesmaLinha[1])) {
+        adicionarSocio(matchMesmaLinha[1], matchMesmaLinha[2]);
+        continue;
+      }
+
+      // Variação efetivamente vista em PDFs oficiais: o nome e a qualificação
+      // chegam em linhas diferentes depois do cabeçalho da tabela.
+      if (pareceNomeSocio(linha)) {
+        for (let k = j + 1; k <= Math.min(j + 3, linhasLayout.length - 1); k += 1) {
+          const qualificacaoSeguinte = limparRotuloQualificacao(linhasLayout[k]);
+          if (ehQualificacaoSocietaria(qualificacaoSeguinte)) {
+            adicionarSocio(linha, qualificacaoSeguinte);
+            j = k;
+            break;
+          }
+          const proximaNorm = textoNormalizado(linhasLayout[k]);
+          if (/^(?:cpf|cnpj|capital social|nome empresarial|quadro)\b/.test(proximaNorm)) break;
+        }
+      }
     }
   }
 
-  // Também aceita a forma compacta "Nome/Nome Empresarial: X  Qualificação: Y".
-  for (const linha of linhas) {
+  // Formato compacto: "Nome/Nome Empresarial: X  Qualificação: Y".
+  for (const linha of linhasLayout) {
     const match = linha.match(/nome\s*\/\s*nome\s+empresarial\s*[:\-]\s*(.+?)\s+qualifica[cç][aã]o(?:\s+do\s+s[oó]cio)?\s*[:\-]\s*(.+)$/i);
     if (match) adicionarSocio(match[1], match[2]);
+  }
+
+  // Fallback estrutural: sempre que uma qualificação societária aparece isolada,
+  // procura nas três linhas anteriores o nome correspondente. Isso cobre OCR que
+  // preserva o conteúdo, mas perde completamente a estrutura de colunas.
+  for (let i = 0; i < linhas.length; i += 1) {
+    const qualificacao = limparRotuloQualificacao(linhas[i]);
+    if (!qualificacao || !/^(?:\d{1,3}\s*[-–—]\s*)?(?:s[oó]ci[oa](?:\s*[-–—]\s*administrador[ae]?)?|administrador[ae]?|titular|empres[aá]rio\s+individual)\b/i.test(qualificacao)) continue;
+    for (let offset = 1; offset <= 3 && i - offset >= 0; offset += 1) {
+      const candidato = limparRotuloNome(linhas[i - offset]);
+      if (!pareceNomeSocio(candidato)) continue;
+      adicionarSocio(candidato, qualificacao);
+      break;
+    }
   }
 
   const pontuacao = (compativel ? 0.15 : 0)

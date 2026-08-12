@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analisarTextoDocumentoLocal } from '../server/services/extracaoDocumentalLocal';
+import { compararEndereco } from '../server/utils/helpers';
 
 describe('extração documental local determinística', () => {
   it('extrai os campos essenciais do Cartão CNPJ sem IA externa', () => {
@@ -86,6 +87,38 @@ describe('extração documental local determinística', () => {
     expect(resultado.dados.socios[0]).not.toHaveProperty('cpf_cnpj');
     expect(resultado.dados.extracao_parcial).toBe(false);
     expect(resultado.confianca).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it('extrai o QSA quando o nome e a qualificação chegam em linhas separadas após o cabeçalho horizontal', () => {
+    const texto = `
+      QUADRO DE SÓCIOS E ADMINISTRADORES - QSA
+      CNPJ
+      52.008.360/0001-33
+      NOME EMPRESARIAL
+      PALUMA BURGER LTDA
+      CAPITAL SOCIAL
+      R$ 65.000,00
+      NOME/NOME EMPRESARIAL                         QUALIFICAÇÃO
+      JONNATHAS RODRIGUES PIRES
+      49-Sócio-Administrador
+    `;
+
+    const resultado = analisarTextoDocumentoLocal('qsa', texto);
+
+    expect(resultado.dados.socios).toHaveLength(1);
+    expect(resultado.dados.socios[0].nome).toBe('JONNATHAS RODRIGUES PIRES');
+    expect(resultado.dados.socios[0].administrador).toBe(true);
+    expect(resultado.dados.extracao_parcial).toBe(false);
+  });
+
+  it('não transforma cabeçalhos embaralhados pelo OCR em divergência falsa de endereço do Cartão CNPJ', () => {
+    const comparacao = compararEndereco(
+      'Rua Lattes 349, Quadra 10 Lote 11 Sala 01, Jardim Planalto, Goiânia, GO, 74333-060',
+      'NÚMERO COMPLEMENTO, 52.008.360/0001-33 COMPROVANTE DE INSCRIÇÃO E DE SITUAÇÃO CADASTRAL, BAIRRO/DISTRITO MUNICÍPIO UF',
+    );
+
+    expect(comparacao.divergente).toBe(false);
+    expect(comparacao.status).toBe('nao_extraido');
   });
 
   it('identifica Simples Nacional, SIMEI e agendamento de exclusão', () => {
