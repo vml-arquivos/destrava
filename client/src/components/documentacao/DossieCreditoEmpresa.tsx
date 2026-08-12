@@ -808,6 +808,17 @@ function DocumentacaoSocietariaCard({
         </div>
       )}
 
+      {!!dados.avisos?.length && <div className="mt-3 rounded-xl border border-blue-100 bg-white p-3"><p className="text-xs font-extrabold text-blue-800">Avisos da análise</p>{dados.avisos.map((item, index) => <p key={index} className="mt-1 text-[11px] text-blue-800">• {item}</p>)}</div>}
+      {!!dados.registros_faltantes?.length && (
+        <div className="mt-3 rounded-xl border border-amber-100 bg-white p-3">
+          <p className="text-xs font-extrabold text-amber-800">Documentos ainda faltando para completar os 12 meses</p>
+          {dados.registros_faltantes.map((item, index) => (
+            <p key={index} className="mt-1 text-[11px] text-amber-800">
+              • {item.tipo_ato || "Registro societário"}{item.data ? ` — ${formatDate(item.data)}` : ""}{item.numero ? ` (Registro ${item.numero})` : ""}
+            </p>
+          ))}
+        </div>
+      )}
       {!!dados.bloqueios?.length && <div className="mt-3 rounded-xl border border-red-100 bg-white p-3"><p className="text-xs font-extrabold text-red-800">Pendências</p>{dados.bloqueios.map((item, index) => <p key={index} className="mt-1 text-[11px] text-red-800">• {item}</p>)}</div>}
       <p className="mt-3 text-[11px] text-slate-600">O CNPJ na certidão da Junta é complementar. A validação obrigatória usa NIRE, datas dos registros e a cadeia de documentos necessária para comprovar 12 meses.</p>
     </section>

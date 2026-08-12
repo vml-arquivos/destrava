@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { toast } from "sonner";
 import {
+  ArrowRight,
   CheckCircle,
   Download,
   Eye,
@@ -10,6 +11,8 @@ import {
   Loader2,
   Paperclip,
   Printer,
+  RefreshCw,
+  ShieldCheck,
   Trash2,
   Upload,
   X,
@@ -291,6 +294,12 @@ TODOS_SLOTS.forEach((documentoSlot) => documentoSlot.matchTipos.forEach((tipo) =
 // 100% acessível pela aba Contratos Firmados, só não é exibido nesta tela.
 const TIPOS_FORA_DO_CHECKLIST_CREDITO = new Set(["contrato_prestacao_servicos", "contrato_assessoria", "enquadramento_tributario_cpf"]);
 
+// Documentos que, ao serem anexados, disparam automaticamente a análise da Etapa 2/3
+// (montarValidacaoSocietaria no backend) -- Atos da Junta é sempre o primeiro exigido
+// dessa leva; Contrato Social/alteração é o próximo, pedido pelo próprio sistema assim
+// que os Atos são aprovados, sem o usuário precisar clicar em nada em outra tela.
+const TIPOS_GATILHO_ANALISE_SOCIETARIA = new Set(["atos_junta_comercial", "contrato_social", "alteracao_contratual"]);
+
 function chaveContextoSlot(tipo: string, socioId?: string | null) {
   return `${tipo}::${socioId || "geral"}`;
 }
@@ -372,6 +381,12 @@ export default function DocumentosEntidade({
   // de realmente ver/abrir esses arquivos extras.
   const [camposExpandidos, setCamposExpandidos] = useState<Record<string, boolean>>({});
   const [pipeline, setPipeline] = useState<any>(null);
+  // Diagnóstico da Etapa 2/3 (Atos da Junta + Contrato Social/Alteração), mostrado
+  // direto nesta tela -- antes só existia numa aba separada ("Dossiê / Laudo IA"),
+  // então quem estava anexando documento aqui nunca via o que a IA concluiu nem
+  // qual era o próximo documento a anexar, só um toast passageiro de "anexado".
+  const [societaria, setSocietaria] = useState<any>(null);
+  const [analisandoSocietario, setAnalisandoSocietario] = useState(false);
 
   const query = useMemo(() => {
     if (!entidadeId) return "";
@@ -388,7 +403,7 @@ export default function DocumentosEntidade({
     if (!entidadeId) return;
     setLoading(true);
     try {
-      const [data, observacoes, sociosEmpresa, pipelineAtual] = await Promise.all([
+      const [data, observacoes, sociosEmpresa, pipelineAtual, dossieAtual] = await Promise.all([
         apiFetch(`/api/documentos?${query}`),
         apiFetch(`/api/documentos/observacoes-slots?${new URLSearchParams({ entidade_tipo: entidadeTipo, entidade_id: entidadeId }).toString()}`).catch(() => []),
         entidadeTipo === "empresa" && empresaId
@@ -397,8 +412,15 @@ export default function DocumentosEntidade({
         entidadeTipo === "empresa" && empresaId
           ? apiFetch(`/api/documentacao/empresa/${empresaId}/pipeline/status`).catch(() => null)
           : Promise.resolve(null),
+        // Diagnóstico da Etapa 2/3 (Atos da Junta + Contrato Social/Alteração) --
+        // somente leitura aqui (sem processarSocietario), só pra exibir o que já
+        // foi analisado antes; a análise em si é disparada por iniciarAnaliseSocietaria().
+        entidadeTipo === "empresa" && empresaId
+          ? apiFetch(`/api/documentacao/empresa/${empresaId}/dossie`).catch(() => null)
+          : Promise.resolve(null),
       ]);
       setPipeline(pipelineAtual);
+      setSocietaria(dossieAtual?.documentacao_societaria || null);
       const lista = Array.isArray(data) ? data : [];
       // O contrato de prestação de serviços (Destrava <-> empresa) não é documento
       // de análise de crédito -- vive só na aba "Contratos Firmados". Filtrado
@@ -453,6 +475,38 @@ export default function DocumentosEntidade({
       setLoading(false);
     }
   }, [entidadeId, query, entidadeTipo, empresaId]);
+
+  // Dispara a análise da Etapa 2/3 (Atos da Junta / Contrato Social e alterações) e
+  // faz o mesmo polling já usado em DossieCreditoEmpresa.tsx (validarSocietario) --
+  // só que agora direto nesta tela, pra quem anexa aqui ver o resultado sem precisar
+  // navegar pra aba "Dossiê / Laudo IA". silencioso=true evita toast redundante
+  // quando é disparado automaticamente logo após um upload.
+  const iniciarAnaliseSocietaria = useCallback(async (opcoes: { silencioso?: boolean } = {}) => {
+    if (!empresaId || entidadeTipo !== "empresa") return;
+    setAnalisandoSocietario(true);
+    try {
+      const inicio = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-societaria/iniciar`, { method: "POST" });
+      let processando = inicio?.processando === true;
+      let data = inicio?.dossie;
+      if (data?.documentacao_societaria) setSocietaria(data.documentacao_societaria);
+      for (let tentativa = 0; processando && tentativa < 60; tentativa += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 3000));
+        const status = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-societaria/status`);
+        processando = status?.processando === true;
+        data = status?.dossie || data;
+        if (data?.documentacao_societaria) setSocietaria(data.documentacao_societaria);
+      }
+      if (!opcoes.silencioso) {
+        if (data?.documentacao_societaria?.apto_para_avancar) toast.success("Documentação societária conferida. Próxima etapa liberada.");
+        else toast.info("Análise concluída. Veja o próximo documento indicado no painel abaixo.");
+      }
+    } catch (err: any) {
+      if (!opcoes.silencioso) toast.error(err?.message || "Erro ao analisar Atos da Junta / Contrato Social.");
+      else console.warn("[DocumentosEntidade] análise societária automática pendente:", err?.message || err);
+    } finally {
+      setAnalisandoSocietario(false);
+    }
+  }, [empresaId, entidadeTipo]);
 
   const salvarObservacao = useCallback(async (tipoDocumento: string, socioVinculado: string | null, observacao: string) => {
     if (!entidadeId) return;
@@ -594,6 +648,14 @@ export default function DocumentosEntidade({
       toast.success(`${labelTipoDocumento(tipoDocumento)} anexado com sucesso.`);
       setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipoDocumento]: "" }));
       await carregar();
+
+      // Atos da Junta / Contrato Social / alteração contratual: dispara a análise
+      // da Etapa 2/3 automaticamente, sem exigir que o usuário navegue até outra
+      // aba e clique em "Analisar" -- o painel abaixo (societaria) já mostra
+      // "Analisando..." e, ao concluir, o próximo documento exigido.
+      if (entidadeTipo === "empresa" && empresaId && TIPOS_GATILHO_ANALISE_SOCIETARIA.has(tipoDocumento)) {
+        void iniciarAnaliseSocietaria({ silencioso: true });
+      }
 
       return resultado;
     } catch (err: any) {
@@ -773,6 +835,95 @@ export default function DocumentosEntidade({
           </div>
         </div>
       </div>
+
+      {entidadeTipo === "empresa" && societaria?.habilitada && (() => {
+        const apto = societaria.apto_para_avancar === true;
+        const registros = Array.isArray(societaria.registros_requeridos) ? societaria.registros_requeridos : [];
+        const faltantes = Array.isArray(societaria.registros_faltantes) ? societaria.registros_faltantes : registros.filter((registro: any) => !registro.comprovado);
+        const proximoDocumento = !societaria.atos_junta_anexados
+          ? "Atos da Junta Comercial"
+          : !societaria.atos_junta_aprovados
+            ? "Aguardando a análise dos Atos da Junta anexados"
+            : faltantes.length
+              ? "Contrato Social ou alteração contratual anterior (para completar 12 meses de histórico)"
+              : !societaria.contrato_anexado
+                ? "Contrato Social ou alteração contratual"
+                : null;
+        return (
+          <div className={`rounded-2xl border p-3 ${apto ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/60"}`}>
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  {apto ? <ShieldCheck className="h-4 w-4 text-emerald-700" /> : <FileText className="h-4 w-4 text-amber-700" />}
+                  <p className="text-sm font-black text-slate-900">
+                    {societaria.atos_junta_aprovados ? "Etapa 3 — Contrato e histórico mínimo de 12 meses" : "Etapa 2 — Atos da Junta Comercial"}
+                  </p>
+                  <span className={`rounded-full border bg-white px-2 py-0.5 text-[10px] font-black ${apto ? "border-emerald-200 text-emerald-700" : "border-amber-200 text-amber-700"}`}>
+                    {apto ? "Continuidade comprovada" : analisandoSocietario ? "Analisando..." : societaria.analisado ? "Documento(s) pendente(s)" : "Aguardando análise"}
+                  </span>
+                </div>
+                {/* Relatório: texto explicativo que a IA produziu para este lote de documentos --
+                    fica sempre visível aqui, não só num toast que desaparece. */}
+                {societaria.diagnostico && <p className="mt-1.5 text-[11px] leading-relaxed text-slate-700">{societaria.diagnostico}</p>}
+                {proximoDocumento && (
+                  <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-blue-700">
+                    <ArrowRight className="h-3.5 w-3.5 shrink-0" /> Próximo documento a anexar: {proximoDocumento}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => void iniciarAnaliseSocietaria()}
+                disabled={analisandoSocietario}
+                className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {analisandoSocietario ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                {analisandoSocietario ? "Conferindo..." : societaria.atos_junta_aprovados ? "Validar contratos, datas e 12 meses" : "Analisar Atos da Junta"}
+              </button>
+            </div>
+
+            {/* Histórico: cadeia de registros já exigida pela análise, cada um com seu
+                próprio status -- comprovado (documento já lido e conferido) ou pendente
+                (ainda precisa ser anexado), com data e origem de cada ato. */}
+            {registros.length > 0 && (
+              <div className="mt-3 rounded-xl border border-white bg-white p-2.5">
+                <p className="text-[11px] font-black text-slate-800">Histórico da cadeia societária (mínimo 12 meses)</p>
+                <div className="mt-2 grid gap-1.5 md:grid-cols-2">
+                  {registros.map((registro: any, index: number) => (
+                    <div key={`${registro.data}-${registro.numero}-${index}`} className={`rounded-lg border p-2 ${registro.comprovado ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[10px] font-black text-slate-800">{registro.tipo_ato || "Registro societário"}</p>
+                        <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${registro.comprovado ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                          {registro.comprovado ? "Comprovado" : "Anexar documento"}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[9px] text-slate-600">Data: {formatDate(registro.data)}{registro.numero ? ` · Registro ${registro.numero}` : ""}</p>
+                      {registro.documento_nome && <p className="mt-0.5 truncate text-[9px] font-semibold text-emerald-700">{registro.documento_nome}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Interação/avisos: alertas não-bloqueantes (ex: dispensa MEI, "outro órgão",
+                divergências de NIRE/data) -- antes calculados no backend mas nunca exibidos
+                em nenhuma tela. */}
+            {!!societaria.avisos?.length && (
+              <div className="mt-3 rounded-xl border border-blue-100 bg-white p-2.5">
+                <p className="text-[11px] font-black text-blue-800">Avisos da análise</p>
+                {societaria.avisos.map((item: string, index: number) => <p key={index} className="mt-1 text-[10px] text-blue-800">• {item}</p>)}
+              </div>
+            )}
+
+            {!!societaria.bloqueios?.length && (
+              <div className="mt-3 rounded-xl border border-red-100 bg-white p-2.5">
+                <p className="text-[11px] font-black text-red-800">Pendências que bloqueiam o avanço</p>
+                {societaria.bloqueios.map((item: string, index: number) => <p key={index} className="mt-1 text-[10px] text-red-800">• {item}</p>)}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {permitirUpload && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
