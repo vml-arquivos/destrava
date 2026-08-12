@@ -385,7 +385,7 @@ function BlocoQsa({ bloco }: { bloco: BlocoDossie }) {
     <div className="space-y-4">
       <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
         <p className="text-xs font-extrabold text-blue-900">Conferência da Etapa 1</p>
-        <p className="mt-1 text-[11px] leading-relaxed text-blue-800">Somente CNPJ, razão social, capital social, nomes, qualificações e identificação do sócio-administrador. Dados pessoais pertencem às próximas etapas.</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-blue-800">Somente CNPJ, razão social, capital social, nomes dos sócios e identificação do Sócio-Administrador. Dados pessoais pertencem às próximas etapas e não bloqueiam esta análise.</p>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <MiniCampo label="CNPJ no QSA" value={analise.cnpj ? formatCnpj(analise.cnpj) : "Aguardando leitura"} />
@@ -399,9 +399,8 @@ function BlocoQsa({ bloco }: { bloco: BlocoDossie }) {
           {socios.slice(0, 20).map((s: any) => (
             <div key={s.id || s.nome} className="rounded-xl border border-slate-100 bg-white p-3">
               <p className="text-xs font-extrabold text-slate-800">{s.nome || "Sócio sem nome"}</p>
-              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <MiniCampo label="Qualificação" value={s.qualificacao || "Não identificada"} />
-                <MiniCampo label="Sócio-administrador" value={s.administrador ? "Sim" : "Não"} />
+              <div className="mt-2">
+                <MiniCampo label="Sócio-Administrador" value={s.administrador === true ? "Sim" : s.administrador === false ? "Não" : "Não identificado"} />
               </div>
             </div>
           ))}
@@ -611,6 +610,7 @@ function ProntidaoIdentidadeCard({
     situacao_cadastral: "Situação",
     capital_social: "Capital social",
     socios_identificados: "Sócios",
+    administradores: "Sócio-Administrador",
     regime_tributario: "Regime",
     situacao_simples: "Simples",
     exclusao_agendada: "Exclusão agendada",
@@ -619,6 +619,7 @@ function ProntidaoIdentidadeCard({
   const formatarCampo = (chave: string, valor: unknown) => {
     if (valor === null || valor === undefined || valor === "") return null;
     if (typeof valor === "boolean") return valor ? "Sim" : "Não";
+    if (Array.isArray(valor)) return valor.filter(Boolean).join(", ") || null;
     if (chave.includes("capital")) return formatMoney(valor);
     return String(valor);
   };
@@ -635,6 +636,7 @@ function ProntidaoIdentidadeCard({
             </span>
           </div>
           <p className="mt-2 max-w-4xl text-xs leading-relaxed text-slate-700">{identidade.diagnostico}</p>
+          <p className="mt-1 max-w-4xl text-[11px] font-semibold text-slate-500">Nesta etapa, o QSA confere somente CNPJ, razão social, capital social, nomes dos sócios e Sócio-Administrador. Dados pessoais dos sócios pertencem às próximas etapas e não bloqueiam este resultado.</p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           {(falhasLeitura.length > 0 || (documentos.length === 3 && documentos.every((item) => item.anexado) && aguardando.length > 0)) && onTentarNovamente && (

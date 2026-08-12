@@ -29,6 +29,18 @@ const router = Router();
 const analisesIniciaisEmAndamento = new Map<string, Promise<void>>();
 const analisesSocietariasEmAndamento = new Map<string, Promise<void>>();
 
+// Versão específica do motor QSA da Fase 1. A troca de versão invalida somente
+// resultados persistidos do QSA que foram produzidos por regras antigas, sem
+// apagar arquivo, cadastro, bloco ou qualquer outra análise documental.
+const VERSAO_ANALISE_DOCUMENTAL: Record<string, string> = {
+  qsa_extract: '5.0.0',
+  simples_extract: '1.0.0',
+  atos_junta_extract: '1.0.0',
+  faturamento_12m_extract: '1.0.0',
+  comprovante_residencia_extract: '1.0.0',
+};
+const versaoPromptDocumental = (promptCodigo: string) => VERSAO_ANALISE_DOCUMENTAL[promptCodigo] || '1.0.0';
+
 const BLOCO_CODIGOS = [
   'cnpj_receita',
   'qsa_quadro_societario',
@@ -397,6 +409,32 @@ function severidadeParaPendencia(sev: string): 'alta' | 'media' | 'baixa' {
   return sev === 'critica' ? 'alta' : (sev === 'media' || sev === 'baixa') ? sev : 'alta';
 }
 
+// Contrato fechado da Fase 1. Somente divergências institucionais do QSA podem
+// participar da decisão de avanço. Pendências pessoais/contratuais de sócios
+// ficam fora desta lista por definição e, portanto, não podem regressar para o gate.
+const QSA_FASE1_CODIGOS_PERMITIDOS = new Set([
+  'qsa_documento_nao_anexado',
+  'qsa_falha_leitura',
+  'qsa_aguardando_analise',
+  'qsa_documento_incompativel',
+  'qsa_extracao_inconclusiva',
+  'qsa_cnpj_nao_extraido',
+  'qsa_cnpj_divergente',
+  'qsa_razao_social_nao_extraida',
+  'qsa_razao_social_divergente',
+  'qsa_capital_social_nao_extraido',
+  'qsa_capital_social_divergente',
+  'qsa_socios_nao_extraidos',
+  'qsa_socio_documento_nao_encontrado_receita',
+  'qsa_socio_receita_ausente_documento',
+  'qsa_administrador_nao_identificado',
+  'qsa_administrador_divergente',
+]);
+
+function filtrarPendenciasQsaFase1(pendencias: Pendencia[]): Pendencia[] {
+  return (Array.isArray(pendencias) ? pendencias : []).filter((pendencia) => QSA_FASE1_CODIGOS_PERMITIDOS.has(String(pendencia?.codigo || '')));
+}
+
 function mensagemSeguraFalhaLeitura(tipo: string, error: unknown): string {
   const original = String((error as any)?.message || error || '').trim();
   const normalizada = original.toLowerCase();
@@ -431,7 +469,7 @@ async function buscarAnaliseEspecializadaPersistida(
 ): Promise<AnaliseDocumentalResult | null> {
   if (!(await tableExists('documentos_extracoes_ia'))) return null;
   const { rows } = await pool.query(
-    `SELECT resultado, status
+    `SELECT resultado, status, prompt_versao
        FROM public.documentos_extracoes_ia
       WHERE arquivo_id = $1
         AND prompt_codigo = $2
@@ -440,8 +478,15 @@ async function buscarAnaliseEspecializadaPersistida(
       LIMIT 1`,
     [arquivoId, promptCodigo],
   );
-  const resultado = rows[0]?.resultado;
-  return resultado && typeof resultado === 'object' && resultado.tipo_analise ? resultado as AnaliseDocumentalResult : null;
+  const row = rows[0];
+  const resultado = row?.resultado;
+  if (!resultado || typeof resultado !== 'object' || !resultado.tipo_analise) return null;
+
+  // Não reaproveita um laudo QSA produzido pela regra antiga. Isso evita que a
+  // tela continue mostrando, depois do deploy, os alertas falsos que já estavam
+  // gravados no JSON do processamento anterior.
+  if (promptCodigo === 'qsa_extract' && String(row?.prompt_versao || '') !== versaoPromptDocumental(promptCodigo)) return null;
+  return resultado as AnaliseDocumentalResult;
 }
 
 async function buscarFalhaAnaliseEspecializada(
@@ -1027,9 +1072,20 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
     qsa: {
       codigo: 'qsa', nome: 'QSA / Quadro Societário', anexado: qsaAnexado, analisado: qsaAnalisado, consistente: qsaConsistente,
       status: statusDocumento(qsaAnexado, qsaAnalisado, qsaConsistente, params.qsaDados?.status_leitura === 'falha_leitura'),
-      diagnostico: qsaConsistente ? 'CNPJ, razão social, capital social, nomes e qualificações dos sócios foram conferidos.' : params.qsaDados?.diagnostico || qsaPendencia?.mensagem || (qsaAnexado ? 'Documento anexado; a análise societária ainda precisa ser concluída.' : 'Documento não anexado.'),
+      diagnostico: qsaConsistente ? 'CNPJ, razão social, capital social, nomes dos sócios e identificação do Sócio-Administrador foram conferidos.' : params.qsaDados?.diagnostico || qsaPendencia?.mensagem || (qsaAnexado ? 'Documento anexado; a análise societária ainda precisa ser concluída.' : 'Documento não anexado.'),
       fonte: params.qsaDados?.fonte_extracao || params.qsaDados?.modelo || null, confianca: params.qsaDados?.nivel_confianca ?? params.qsaDados?.confianca ?? null,
-      campos_principais: { cnpj: params.qsaDados?.cnpj || null, razao_social: params.qsaDados?.razao_social || null, capital_social: params.qsaDados?.capital_social ?? null, socios_identificados: Array.isArray(params.qsaDados?.socios) ? params.qsaDados.socios.length : null },
+      campos_principais: {
+        cnpj: params.qsaDados?.cnpj || null,
+        razao_social: params.qsaDados?.razao_social || null,
+        capital_social: params.qsaDados?.capital_social ?? null,
+        socios_identificados: Array.isArray(params.qsaDados?.socios) ? params.qsaDados.socios.length : null,
+        administradores: Array.isArray(params.qsaDados?.socios)
+          ? params.qsaDados.socios
+              .filter((socio: any) => socio?.administrador === true || /administrador|titular|empres[aá]rio individual/i.test(String(socio?.qualificacao || '')))
+              .map((socio: any) => socio?.nome)
+              .filter(Boolean)
+          : [],
+      },
     },
     enquadramento_tributario: {
       codigo: 'enquadramento_tributario', nome: 'Enquadramento Tributário', anexado: enquadramentoAnexado, analisado: enquadramentoAnalisado, consistente: enquadramentoConsistente,
@@ -1281,14 +1337,25 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
     empresa,
     enquadramentoDados: enquadramento.dados,
   });
-  // A Etapa 1 considera somente nome, qualificação e identificação do administrador.
-  // CPF, RG, endereço, estado civil e demais dados pessoais pertencem às próximas etapas.
-  const qsaPendenciasIdentidade = qsaDocumental.pendencias;
+  // A Etapa 1 considera somente CNPJ, razão social, capital social, nomes dos sócios
+  // e identificação do Sócio-Administrador. A qualificação textual pode ser usada
+  // internamente apenas como evidência para reconhecer o administrador; não é
+  // requisito independente nem gera pendência própria nesta fase. CPF, RG, endereço,
+  // estado civil e demais dados pessoais pertencem às próximas etapas.
+  const qsaPendenciasIdentidade = filtrarPendenciasQsaFase1(qsaDocumental.pendencias);
   // Pendências pessoais/contratuais dos sócios não pertencem à Fase 1.
-  // O bloco QSA desta fase usa exclusivamente nome, qualificação, administrador,
-  // razão social, CNPJ e capital social conferidos com as fontes oficiais.
+  // O bloco QSA desta fase usa exclusivamente CNPJ, razão social, capital social,
+  // nomes dos sócios e identificação do Sócio-Administrador.
   const qsaPendencias = qsaPendenciasIdentidade;
-  const qsaDadosCompletos = { ...dadosQsa(empresa, socios), analise_documental: qsaDocumental.dados };
+  const qsaDadosCompletos = {
+    ...dadosQsa(empresa, socios),
+    analise_documental: qsaDocumental.dados,
+    regra_fase_1: {
+      campos_conferidos: ['cnpj', 'razao_social', 'capital_social', 'nomes_socios', 'socio_administrador'],
+      dados_pessoais_obrigatorios: false,
+      descricao: 'CPF, RG, endereço, estado civil, cônjuge, profissão, contato e documentos pessoais pertencem às etapas posteriores e não bloqueiam a Fase 1.',
+    },
+  };
 
   const identidadeCnpjBase = await avaliarProntidaoIdentidadeCnpj({
     empresaId,
@@ -1935,6 +2002,7 @@ async function registrarExtracaoEspecializada(params: {
   arquivoId: string;
   blocoEntidadeId: string | null;
   promptCodigo: string;
+  promptVersao?: string;
 }) {
   const client = await pool.connect();
   try {
@@ -1954,10 +2022,13 @@ async function registrarExtracaoEspecializada(params: {
     if (existente.rows[0]) {
       const statusAtual = String(existente.rows[0].status || '');
       const atualizadoEm = new Date(existente.rows[0].atualizado_em || existente.rows[0].criado_em || 0).getTime();
+      const versaoEsperada = params.promptVersao || versaoPromptDocumental(params.promptCodigo);
+      const versaoAtual = String(existente.rows[0].prompt_versao || '');
+      const mesmaVersao = versaoAtual === versaoEsperada;
       const pendenteRecente = statusAtual === 'pendente'
         && Number.isFinite(atualizadoEm)
         && Date.now() - atualizadoEm < 5 * 60 * 1000;
-      const emAndamento = statusAtual === 'processando' || pendenteRecente;
+      const emAndamento = mesmaVersao && (statusAtual === 'processando' || pendenteRecente);
       deveProcessar = !emAndamento;
 
       if (emAndamento) {
@@ -1968,7 +2039,7 @@ async function registrarExtracaoEspecializada(params: {
           `UPDATE public.documentos_extracoes_ia
               SET entidade_bloco_id = COALESCE($2, entidade_bloco_id),
                   status = 'pendente',
-                  prompt_versao = '1.0.0',
+                  prompt_versao = $3,
                   resultado = '{}'::jsonb,
                   campos_extraidos = '{}'::jsonb,
                   pendencias = '[]'::jsonb,
@@ -1976,7 +2047,7 @@ async function registrarExtracaoEspecializada(params: {
                   processado_em = NULL
             WHERE id = $1
             RETURNING *`,
-          [existente.rows[0].id, params.blocoEntidadeId],
+          [existente.rows[0].id, params.blocoEntidadeId, params.promptVersao || versaoPromptDocumental(params.promptCodigo)],
         );
         extracao = atualizada.rows[0];
       }
@@ -1984,9 +2055,9 @@ async function registrarExtracaoEspecializada(params: {
       const inserida = await client.query(
         `INSERT INTO public.documentos_extracoes_ia
           (arquivo_id, entidade_bloco_id, status, prompt_codigo, prompt_versao, resultado, campos_extraidos, pendencias, erros)
-         VALUES ($1,$2,'pendente',$3,'1.0.0','{}'::jsonb,'{}'::jsonb,'[]'::jsonb,'[]'::jsonb)
+         VALUES ($1,$2,'pendente',$3,$4,'{}'::jsonb,'{}'::jsonb,'[]'::jsonb,'[]'::jsonb)
          RETURNING *`,
-        [params.arquivoId, params.blocoEntidadeId, params.promptCodigo],
+        [params.arquivoId, params.blocoEntidadeId, params.promptCodigo, params.promptVersao || versaoPromptDocumental(params.promptCodigo)],
       );
       extracao = inserida.rows[0];
     }

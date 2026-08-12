@@ -198,7 +198,7 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
     descricao: "Etapa 1: Cartão CNPJ, QSA e Enquadramento Tributário. Os três documentos são cruzados com os dados da Receita Federal.",
     slots: [
       slot("Cartão CNPJ", "cartao_cnpj", [], { obrigatorio: true, descricao: "A IA/OCR identifica CNPJ, razão social, abertura, CNAE, natureza, porte e situação cadastral." }),
-      slot("QSA (Quadro Societário)", "qsa", [], { obrigatorio: true, descricao: "Confere CNPJ, razão social, capital social, sócios, qualificações e administrador." }),
+      slot("QSA (Quadro Societário)", "qsa", [], { obrigatorio: true, descricao: "Confere CNPJ, razão social, capital social, nomes dos sócios e identifica o Sócio-Administrador. Dados pessoais não são exigidos nesta etapa." }),
       slot("Enquadramento tributário", "enquadramento_tributario_cnpj", [], { obrigatorio: true, descricao: "Documento que comprova o regime tributário atual da empresa (Simples Nacional, Lucro Presumido, Lucro Real ou MEI)." }),
     ],
   },

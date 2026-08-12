@@ -277,7 +277,7 @@ export function gerarMapaDocumentalCredito(params: {
       bloqueada: false,
       documentos: marcarAnexados([
         doc('cartao_cnpj', 'Cartão CNPJ', ['cartao_cnpj', 'cnpj_cartao'], 1, 'Confirmar CNPJ, razão social, situação, CNAE, natureza e porte.'),
-        doc('qsa', 'QSA', ['qsa'], 1, 'Confirmar capital social, nomes, qualificações e administrador.'),
+        doc('qsa', 'QSA', ['qsa'], 1, 'Confirmar CNPJ, razão social, capital social, nomes dos sócios e Sócio-Administrador. Dados pessoais não participam da Etapa 1.'),
         doc('enquadramento', 'Enquadramento tributário', ['enquadramento_tributario_cnpj', 'simples_nacional'], 1, 'Confirmar regime tributário e condição no Simples/MEI.'),
       ], tipos),
     },

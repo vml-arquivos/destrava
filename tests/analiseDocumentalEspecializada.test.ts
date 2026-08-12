@@ -52,6 +52,58 @@ describe('validação documental especializada', () => {
     expect(alertas.some((a) => a.codigo === 'qsa_capital_social_divergente')).toBe(true);
   });
 
+  it('não exige dados pessoais do sócio na Etapa 1 quando os dados institucionais conferem', () => {
+    const alertas = validarQsaExtraida(
+      { cnpj: '52.008.360/0001-33', razao_social: 'PALUMA BURGER LTDA', capital_social: 65_000 },
+      [{ nome: 'Jonnathas Rodrigues Pires', qualificacao: 'Sócio-Administrador', administrador: true }],
+      {
+        cnpj: '52.008.360/0001-33',
+        razao_social: 'PALUMA BURGER LTDA',
+        capital_social: 65_000,
+        socios: [{ nome: 'JONNATHAS RODRIGUES PIRES', qualificacao: '49-Sócio-Administrador', administrador: true }],
+        confianca: 0.95,
+      },
+    );
+
+    expect(alertas).toEqual([]);
+  });
+
+  it('não cria divergência individual falsa quando a leitura não extrai nenhum sócio', () => {
+    const alertas = validarQsaExtraida(
+      { cnpj: '52.008.360/0001-33', razao_social: 'PALUMA BURGER LTDA', capital_social: 65_000 },
+      [{ nome: 'Jonnathas Rodrigues Pires', qualificacao: 'Sócio-Administrador', administrador: true }],
+      {
+        cnpj: '52.008.360/0001-33',
+        razao_social: 'PALUMA BURGER LTDA',
+        capital_social: 65_000,
+        socios: [],
+        confianca: 0.5,
+        extracao_parcial: true,
+      },
+    );
+
+    expect(alertas.some((a) => a.codigo === 'qsa_socios_nao_extraidos')).toBe(true);
+    expect(alertas.some((a) => a.codigo === 'qsa_extracao_inconclusiva')).toBe(true);
+    expect(alertas.filter((a) => a.codigo === 'qsa_socio_receita_ausente_documento')).toHaveLength(0);
+  });
+
+  it('não bloqueia por qualificação genérica quando nome e condição de administrador conferem', () => {
+    const alertas = validarQsaExtraida(
+      { cnpj: '52.008.360/0001-33', razao_social: 'PALUMA BURGER LTDA', capital_social: 65_000 },
+      [{ nome: 'Jonnathas Rodrigues Pires', qualificacao: 'Sócio-Administrador', administrador: true }],
+      {
+        cnpj: '52.008.360/0001-33',
+        razao_social: 'PALUMA BURGER LTDA',
+        capital_social: 65_000,
+        socios: [{ nome: 'JONNATHAS RODRIGUES PIRES', qualificacao: 'Administrador', administrador: true }],
+        confianca: 0.95,
+      },
+    );
+
+    expect(alertas.some((a) => a.codigo.includes('qualificacao'))).toBe(false);
+    expect(alertas).toEqual([]);
+  });
+
   it('classifica agendamento de exclusão do Simples como crítico', () => {
     const alertas = validarSimplesExtraido(
       { cnpj: '12.345.678/0001-90', opcao_pelo_simples: true },

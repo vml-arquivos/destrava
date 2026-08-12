@@ -253,10 +253,6 @@ export function validarQsaExtraida(empresa: any, sociosReceita: any[], dados: an
   if (dados?.documento_compativel === false) {
     alertas.push({ codigo: 'qsa_documento_incompativel', mensagem: 'O arquivo não foi reconhecido como QSA ou quadro societário compatível.', severidade: 'alta', recomendacao: 'Reclassificar o arquivo ou anexar o QSA correto.' });
   }
-  const confiancaExtracao = normalizarConfianca(dados?.confianca);
-  if (dados?.extracao_parcial === true || (confiancaExtracao !== null && confiancaExtracao < 0.6)) {
-    alertas.push({ codigo: 'qsa_extracao_inconclusiva', mensagem: 'A leitura automática do QSA ficou abaixo do nível mínimo de confiança.', severidade: 'alta', recomendacao: 'Revisar o arquivo ou executar OCR externo antes de liberar o avanço.' });
-  }
 
   const cnpjDocumento = onlyDigits(dados?.cnpj);
   const cnpjReceita = onlyDigits(empresa?.cnpj);
@@ -302,40 +298,84 @@ export function validarQsaExtraida(empresa: any, sociosReceita: any[], dados: an
     .map(socioNormalizado)
     .filter((socio: ReturnType<typeof socioNormalizado>) => socio.nome && socio.nome !== 'nao identificado');
 
+  // REGRA FECHADA DA ETAPA 1:
+  // conferir somente CNPJ, razão social, capital social, nomes dos sócios e
+  // identificação de quem é Sócio-Administrador. CPF, RG, endereço, estado civil,
+  // cônjuge, profissão, contato e qualquer outro dado pessoal não participam desta
+  // validação e jamais podem bloquear o avanço.
   if (!sociosDocumento.length) {
-    alertas.push({ codigo: 'qsa_socios_nao_extraidos', campo: 'socios', mensagem: 'Não foi possível identificar os sócios no QSA.', severidade: 'alta', recomendacao: 'Anexar QSA legível que apresente nomes e qualificações dos sócios.' });
+    alertas.push({
+      codigo: 'qsa_socios_nao_extraidos',
+      campo: 'socios',
+      mensagem: 'Não foi possível identificar os nomes dos sócios no QSA.',
+      severidade: 'alta',
+      recomendacao: 'Reprocessar o QSA ou anexar uma versão legível que permita conferir os nomes e o Sócio-Administrador.',
+    });
+  } else {
+    for (const socioDoc of sociosDocumento) {
+      const socioBase = sociosBase.find((item) => item.nome === socioDoc.nome);
+      if (!socioBase) {
+        alertas.push({
+          codigo: 'qsa_socio_documento_nao_encontrado_receita', campo: 'socios',
+          mensagem: `O sócio "${socioDoc.original?.nome || 'não identificado'}" consta no QSA, mas não foi localizado no quadro societário sincronizado.`,
+          severidade: 'alta', valor_documento: { nome: socioDoc.original?.nome },
+          recomendacao: 'Verificar se houve alteração societária e atualizar os dados oficiais antes de concluir a Etapa 1.',
+        });
+        continue;
+      }
+
+      // A qualificação genérica não é requisito isolado. Ela só é usada para
+      // identificar a condição de administrador, que é o único vínculo funcional
+      // exigido nesta etapa.
+      if (socioBase.administrador === true && socioDoc.administrador === null) {
+        alertas.push({
+          codigo: 'qsa_administrador_nao_identificado',
+          campo: 'administrador',
+          mensagem: `Não foi possível confirmar no QSA que "${socioDoc.original?.nome || 'o sócio'}" é Sócio-Administrador.`,
+          severidade: 'alta',
+          recomendacao: 'Reprocessar o QSA e confirmar quem possui poderes de administração.',
+        });
+      } else if (socioDoc.administrador !== null && socioBase.administrador !== null && socioDoc.administrador !== socioBase.administrador) {
+        alertas.push({
+          codigo: 'qsa_administrador_divergente', campo: 'administrador',
+          mensagem: `A condição de Sócio-Administrador de "${socioDoc.original?.nome}" diverge entre o QSA e o cadastro sincronizado.`,
+          severidade: 'alta', valor_documento: socioDoc.administrador, valor_receita: socioBase.administrador,
+          recomendacao: 'Conferir quem possui poderes de administração antes de avançar.',
+        });
+      }
+    }
+
+    // Só faz a comparação individual de ausências quando o documento realmente
+    // forneceu uma lista de sócios. Se a extração falhou por completo, gerar uma
+    // divergência por cada nome da Receita é falso positivo e foi a regressão vista
+    // no relatório (ex.: "consta no cadastro, mas não aparece no QSA analisado").
+    for (const socioBase of sociosBase) {
+      if (!sociosDocumento.some((socioDoc: ReturnType<typeof socioNormalizado>) => socioDoc.nome === socioBase.nome)) {
+        alertas.push({
+          codigo: 'qsa_socio_receita_ausente_documento', campo: 'socios',
+          mensagem: `O sócio "${socioBase.original?.nome || 'não identificado'}" consta no cadastro sincronizado, mas não aparece no QSA analisado.`,
+          severidade: 'alta', valor_receita: { nome: socioBase.original?.nome },
+          recomendacao: 'Solicitar QSA atualizado antes de concluir a Etapa 1.',
+        });
+      }
+    }
   }
 
-  for (const socioDoc of sociosDocumento) {
-    const socioBase = sociosBase.find((item) => item.nome === socioDoc.nome);
-    if (!socioBase) {
-      alertas.push({
-        codigo: 'qsa_socio_documento_nao_encontrado_receita', campo: 'socios',
-        mensagem: `O sócio "${socioDoc.original?.nome || 'não identificado'}" consta no QSA, mas não foi localizado no quadro societário sincronizado.`,
-        severidade: 'alta', valor_documento: { nome: socioDoc.original?.nome, qualificacao: socioDoc.original?.qualificacao },
-        recomendacao: 'Verificar se houve alteração societária e atualizar o QSA da Receita/cadastro.',
-      });
-      continue;
-    }
-    if (!socioDoc.qualificacao) {
-      alertas.push({ codigo: 'qsa_qualificacao_nao_identificada', campo: 'qualificacao', mensagem: `A qualificação societária de "${socioDoc.original?.nome}" não foi identificada no QSA.`, severidade: 'alta', recomendacao: 'Conferir a qualificação e identificar quem exerce a administração.' });
-    } else if (socioBase.qualificacao && socioDoc.qualificacao !== socioBase.qualificacao) {
-      alertas.push({ codigo: 'qsa_qualificacao_divergente', campo: 'qualificacao', mensagem: `A qualificação societária de "${socioDoc.original?.nome}" diverge do cadastro sincronizado.`, severidade: 'alta', valor_documento: socioDoc.original?.qualificacao, valor_receita: socioBase.original?.qualificacao || socioBase.original?.cargo, recomendacao: 'Confirmar a alteração societária mais recente.' });
-    }
-    if (socioDoc.administrador !== null && socioBase.administrador !== null && socioDoc.administrador !== socioBase.administrador) {
-      alertas.push({ codigo: 'qsa_administrador_divergente', campo: 'administrador', mensagem: `A condição de administrador de "${socioDoc.original?.nome}" diverge entre o QSA e o cadastro sincronizado.`, severidade: 'alta', valor_documento: socioDoc.administrador, valor_receita: socioBase.administrador, recomendacao: 'Conferir quem possui poderes de administração antes de avançar.' });
-    }
-  }
-
-  for (const socioBase of sociosBase) {
-    if (!sociosDocumento.some((socioDoc: ReturnType<typeof socioNormalizado>) => socioDoc.nome === socioBase.nome)) {
-      alertas.push({
-        codigo: 'qsa_socio_receita_ausente_documento', campo: 'socios',
-        mensagem: `O sócio "${socioBase.original?.nome || 'não identificado'}" consta no cadastro sincronizado, mas não aparece no QSA analisado.`,
-        severidade: 'alta', valor_receita: { nome: socioBase.original?.nome, qualificacao: socioBase.original?.qualificacao || socioBase.original?.cargo },
-        recomendacao: 'Solicitar QSA atualizado antes de concluir a Etapa 1.',
-      });
-    }
+  // Confiança baixa só é impeditiva quando falta algum campo institucional
+  // obrigatório. Se CNPJ, razão social, capital, sócios e administrador foram
+  // extraídos e convergem, o valor estatístico de confiança não cria uma trava
+  // artificial por si só.
+  const confiancaExtracao = normalizarConfianca(dados?.confianca);
+  const baseExigeAdministrador = sociosBase.some((socio) => socio.administrador === true);
+  const documentoTemAdministrador = sociosDocumento.some((socio) => socio.administrador === true);
+  const faltouCampoInstitucional = !cnpjDocumento || !razaoDocumento || capitalDocumento === null || !sociosDocumento.length || (baseExigeAdministrador && !documentoTemAdministrador);
+  if ((dados?.extracao_parcial === true || (confiancaExtracao !== null && confiancaExtracao < 0.6)) && faltouCampoInstitucional) {
+    alertas.push({
+      codigo: 'qsa_extracao_inconclusiva',
+      mensagem: 'A leitura automática do QSA ficou inconclusiva para um ou mais campos institucionais obrigatórios.',
+      severidade: 'alta',
+      recomendacao: 'Reprocessar o documento ou anexar uma versão legível. Dados pessoais dos sócios não são exigidos nesta etapa.',
+    });
   }
 
   return uniqueAlerts(alertas);
@@ -554,7 +594,6 @@ function normalizarDadosQsa(dados: any): Record<string, any> {
     razao_social: dados?.razao_social ? String(dados.razao_social).trim() : null,
     capital_social: asNumber(dados?.capital_social),
     socios,
-    data_registro: parseDate(dados?.data_registro),
     confianca: normalizarConfianca(dados?.confianca),
     fonte_extracao: dados?.fonte_extracao || null,
     mecanismo_extracao: dados?.mecanismo_extracao || null,
@@ -684,10 +723,9 @@ Retorne apenas JSON válido, sem markdown, com este formato:
   "razao_social": string | null,
   "capital_social": number | null,
   "socios": [{ "nome": string, "qualificacao": string | null, "administrador": boolean | null }],
-  "data_registro": "YYYY-MM-DD" | null,
   "confianca": number
 }
-Extraia somente CNPJ, razão social, capital social, nomes, qualificações e quem é sócio-administrador. Não extraia nem devolva CPF, RG, endereço, nacionalidade, estado civil, cônjuge, profissão, telefone, e-mail ou qualquer outro dado pessoal. Não invente dados. Use null quando não houver evidência.`;
+A decisão da Etapa 1 usa SOMENTE: CNPJ, razão social, capital social, nomes dos sócios e identificação de quem é Sócio-Administrador. O campo "qualificacao" é apenas evidência interna para inferir "administrador" e não deve criar requisito ou divergência independente. Não extraia nem devolva CPF, RG, endereço, nacionalidade, estado civil, cônjuge, profissão, telefone, e-mail ou qualquer outro dado pessoal. Não extraia data de registro neste QSA; essa validação pertence à etapa societária seguinte. Não invente dados. Use null quando não houver evidência.`;
 }
 
 function promptSimples(): string {

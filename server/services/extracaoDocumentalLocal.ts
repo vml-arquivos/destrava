@@ -204,6 +204,23 @@ function parseQsa(texto: string): { dados: Record<string, any>; confianca: numbe
   const dataRegistro = parseDate(valorAposRotulo(linhas, ['data de registro', 'data do registro', 'data de arquivamento']));
 
   const socios: Array<{ nome: string; qualificacao: string | null; administrador: boolean | null }> = [];
+  const adicionarSocio = (nomeRaw: string | null | undefined, qualificacaoRaw: string | null | undefined) => {
+    const nome = limparValor(nomeRaw || null);
+    const qualificacao = limparValor(qualificacaoRaw || null);
+    if (!nome || pareceRotulo(nome)) return;
+    const nomeNorm = textoNormalizado(nome);
+    if (!nomeNorm || /^(?:nome|qualificacao|socio|administrador|quadro societario)$/.test(nomeNorm)) return;
+    if (/^\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}$/.test(nome.replace(/\s/g, ''))) return;
+    if (!socios.some((socio) => textoNormalizado(socio.nome) === nomeNorm)) {
+      socios.push({
+        nome,
+        qualificacao,
+        administrador: qualificacao ? /administrador|administradora|titular|empres[aá]rio individual/i.test(qualificacao) : null,
+      });
+    }
+  };
+
+  // Layout vertical oficial: rótulo em uma linha e valor na linha seguinte.
   const nomesRotulo = new Set(['nome nome empresarial', 'nome do socio', 'nome socio', 'socio']);
   for (let i = 0; i < linhas.length; i += 1) {
     const linhaNorm = textoNormalizado(linhas[i]).replace(/[\/]/g, ' ');
@@ -215,11 +232,47 @@ function parseQsa(texto: string): { dados: Record<string, any>; confianca: numbe
       const atualNorm = textoNormalizado(linhas[j]);
       if (atualNorm.startsWith('qualificacao')) {
         qualificacao = limparValor(linhas[j].includes(':') ? linhas[j].split(':').slice(1).join(':') : linhas[j + 1] || null);
+        break;
       }
     }
-    if (!socios.some((socio) => textoNormalizado(socio.nome) === textoNormalizado(nome))) {
-      socios.push({ nome, qualificacao, administrador: qualificacao ? /administrador|administradora|titular/i.test(qualificacao) : null });
+    adicionarSocio(nome, qualificacao);
+  }
+
+  // Layout horizontal oficial da Receita: cabeçalho "NOME/NOME EMPRESARIAL  QUALIFICAÇÃO"
+  // e linha seguinte "FULANO DE TAL  49-Sócio-Administrador". Essa variação era a
+  // causa da regressão observada: o OCR lia o documento, mas o parser não reconhecia
+  // o sócio e gerava uma falsa divergência contra o QSA sincronizado.
+  for (let i = 0; i < linhas.length; i += 1) {
+    const cabecalhoNorm = textoNormalizado(linhas[i]).replace(/[\/]/g, ' ');
+    if (!(cabecalhoNorm.includes('nome nome empresarial') && cabecalhoNorm.includes('qualificacao'))) continue;
+
+    for (let j = i + 1; j <= Math.min(i + 6, linhas.length - 1); j += 1) {
+      const linha = linhas[j].trim();
+      const linhaNorm = textoNormalizado(linha);
+      if (!linha || /^cpf\b|^cnpj\b|^capital social\b|^nome empresarial\b|^quadro\b/.test(linhaNorm)) break;
+      if (/^qualificacao\b/.test(linhaNorm)) continue;
+
+      // Primeiro tenta colunas preservadas por pdftotext/Tesseract (2+ espaços ou tab).
+      const colunas = linha.split(/\t+|\s{2,}/).map((item) => item.trim()).filter(Boolean);
+      if (colunas.length >= 2) {
+        const qualificacao = colunas.slice(1).join(' ');
+        if (/s[oó]ci[oa]|administrador|administradora|titular|empres[aá]rio individual/i.test(qualificacao)) {
+          adicionarSocio(colunas[0], qualificacao);
+          continue;
+        }
+      }
+
+      // Fallback quando o extrator colapsa os espaços entre as colunas.
+      const match = linha.match(/^(.+?)\s+(\d{1,3}\s*[-–—]\s*.+(?:s[oó]ci[oa]|administrador|administradora|titular|empres[aá]rio individual).*)$/i)
+        || linha.match(/^(.+?)\s+((?:s[oó]ci[oa](?:\s*[-–—]\s*administrador[ae]?)?|administrador[ae]?|titular|empres[aá]rio individual).*)$/i);
+      if (match) adicionarSocio(match[1], match[2]);
     }
+  }
+
+  // Também aceita a forma compacta "Nome/Nome Empresarial: X  Qualificação: Y".
+  for (const linha of linhas) {
+    const match = linha.match(/nome\s*\/\s*nome\s+empresarial\s*[:\-]\s*(.+?)\s+qualifica[cç][aã]o(?:\s+do\s+s[oó]cio)?\s*[:\-]\s*(.+)$/i);
+    if (match) adicionarSocio(match[1], match[2]);
   }
 
   const pontuacao = (compativel ? 0.15 : 0)
@@ -236,6 +289,7 @@ function parseQsa(texto: string): { dados: Record<string, any>; confianca: numbe
       capital_social: capitalSocial,
       socios,
       data_registro: dataRegistro,
+      extracao_parcial: socios.length === 0,
       confianca,
       fonte_extracao: 'local_deterministica',
     },
