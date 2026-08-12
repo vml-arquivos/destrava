@@ -10,6 +10,7 @@ import { InsufficientHistoricalPeriodException, validateTwelveMonthContractHisto
 import { buildCadastralValidationDTO, phase1Approved } from '../services/phase1AnalysisService';
 import { ensureDocumentacaoSchema } from '../services/documentacaoSchema';
 import { gerarMapaDocumentalCredito } from '../services/mapaDocumentalCreditoService';
+import { upsertSocioEmpresa } from './socios_documentos';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -204,7 +205,7 @@ async function ensureBlocosCatalogo() {
     VALUES
       ('cnpj_receita', 'CNPJ / Receita Federal', 'Dados oficiais de CNPJ e situação cadastral.', 'empresa', true, 1, '{"prioridade":"imediata"}'::jsonb),
       ('qsa_quadro_societario', 'QSA / Quadro Societário', 'Quadro de Sócios e Administradores da empresa.', 'empresa', true, 2, '{"prioridade":"imediata"}'::jsonb),
-      ('enquadramento_tributario', 'Enquadramento Tributário', 'Regime tributário atual da empresa (Simples Nacional, MEI, Lucro Presumido ou Lucro Real).', 'empresa', true, 3, '{"prioridade":"imediata","etapa":"identidade_cnpj"}'::jsonb),
+      ('enquadramento_tributario', 'Enquadramento Tributário', 'Regime tributário atual da empresa (Simples Nacional, MEI, Lucro Presumido ou Lucro Real) -- obtido pela consulta de CNPJ; um comprovante pode ser anexado como reforço opcional, mas não é exigido.', 'empresa', false, 3, '{"prioridade":"imediata","etapa":"identidade_cnpj","documento_obrigatorio":false}'::jsonb),
       ('atos_junta_comercial', 'Atos da Junta Comercial', 'Histórico de arquivamentos lido antes do contrato para definir quais atos devem ser anexados.', 'empresa', true, 4, '{"etapa":"documentacao_societaria","sequencia_analise":1}'::jsonb),
       ('contrato_social_alteracoes', 'Contrato Social e Alterações', 'Contrato social vigente e alterações, validados depois dos Atos da Junta por número do ato, data, NIRE, CNPJ e QSA.', 'empresa', true, 5, '{"etapa":"documentacao_societaria","sequencia_analise":2}'::jsonb),
       ('socios_representantes', 'Sócios, Administradores e Representantes', 'Dados e documentos dos sócios/representantes.', 'socio', true, 6, '{}'::jsonb),
@@ -607,6 +608,39 @@ async function obterAnaliseEspecializada(params: {
   }
 }
 
+// Antes desta correção, o QSA extraído do documento (PDF/OCR) só era COMPARADO
+// contra os sócios já existentes em `socios_empresa` (gerando alertas de
+// divergência) -- nunca gravava um sócio novo. Se a sincronização com a Receita
+// (fonte usual de `socios_empresa`) estivesse incompleta ou desatualizada e o QSA
+// físico mostrasse um sócio adicional, esse sócio nunca aparecia na aba
+// "Documentação dos Sócios" (que lê exclusivamente de `socios_empresa`) -- ou
+// seja, nenhum campo de documento pessoal era exibido para ele. Esta função
+// resolve isso: sempre que uma leitura NOVA do QSA acontece (processar=true),
+// cada sócio identificado no documento é conciliado com `socios_empresa` via
+// `upsertSocioEmpresa` (que já faz o casamento por nome/CPF e nunca sobrescreve
+// dado confirmado manualmente -- ver SOCIOS_MANUAL_PROTECTED_COLUMNS). Só nome,
+// qualificação e se é administrador são gravados aqui -- nenhum dado pessoal
+// (CPF, RG, endereço, estado civil...) é lido do QSA nem inferido, mantendo a
+// regra de "Fase 1 = zero dados pessoais" intacta. Falhas aqui são só logadas:
+// nunca devem quebrar a leitura/exibição do QSA em si.
+export async function sincronizarSociosExtraidosDoQsa(empresaId: string, sociosExtraidos: unknown): Promise<void> {
+  const lista = Array.isArray(sociosExtraidos) ? sociosExtraidos : [];
+  for (const socio of lista) {
+    const nome = String((socio as any)?.nome || '').trim();
+    if (!nome) continue;
+    try {
+      await upsertSocioEmpresa(empresaId, {
+        nome,
+        qualificacao_socio: (socio as any)?.qualificacao ? String((socio as any).qualificacao).trim() : null,
+        representante_legal: (socio as any)?.administrador === true,
+        fonte_dados: 'qsa_documento',
+      } as any);
+    } catch (error: any) {
+      console.warn('[Dossie] Falha ao conciliar sócio extraído do QSA com socios_empresa:', nome, error?.message || error);
+    }
+  }
+}
+
 async function montarQsaDocumentalDados(
   empresaId: string,
   processar: boolean,
@@ -642,6 +676,7 @@ async function montarQsaDocumentalDados(
         pendencias: [{ codigo: 'qsa_aguardando_analise', mensagem: 'QSA anexado e aguardando o início da análise documental.', severidade: 'alta', origem: 'qsa', recomendacao: 'Iniciar a Etapa 1 quando Cartão CNPJ, QSA e Enquadramento Tributário estiverem anexados.' }],
       };
     }
+    if (processar) await sincronizarSociosExtraidosDoQsa(empresaId, analise.dados_extraidos?.socios);
     return {
       dados: {
         anexado: true,
@@ -750,15 +785,40 @@ async function montarAtosJuntaDados(
   }
 }
 
-async function montarEnquadramentoDados(
+export async function montarEnquadramentoDados(
   empresaId: string,
   processar: boolean,
+  empresa: any = null,
 ): Promise<{ dados: Record<string, any>; pendencias: Pendencia[] }> {
   const docs = await listarDocumentosEmpresaPorTipos(empresaId, ['enquadramento_tributario_cnpj', 'simples_nacional']);
   if (!docs.length) {
+    // O Enquadramento Tributário não é um documento físico -- a informação vem da
+    // consulta pública de CNPJ (Receita Federal), já sincronizada em
+    // `empresas.regime_tributario`/`opcao_simples`/`opcao_mei`. Sem nenhum
+    // documento anexado, mas com o regime já identificado pela Receita, isto NÃO
+    // é mais tratado como pendência bloqueante -- um upload continua opcional
+    // (reforço documental), nunca obrigatório.
+    const regimeReceita = String(empresa?.regime_tributario || '').trim();
+    const opcaoSimples = empresa?.opcao_simples ?? null;
+    const opcaoMei = empresa?.opcao_mei ?? null;
+    const identificadoPelaReceita = !!regimeReceita || opcaoSimples != null || opcaoMei != null;
+    if (identificadoPelaReceita) {
+      return {
+        dados: {
+          anexado: false,
+          analisado: true,
+          fonte_extracao: 'consulta_cnpj_receita',
+          regime_tributario: regimeReceita || null,
+          opcao_simples: opcaoSimples,
+          opcao_mei: opcaoMei,
+          diagnostico: `Regime tributário identificado via consulta de CNPJ: ${regimeReceita || (opcaoMei ? 'MEI' : opcaoSimples ? 'Simples Nacional' : 'regime informado pela Receita')}.`,
+        },
+        pendencias: [],
+      };
+    }
     return {
       dados: { anexado: false, analisado: false },
-      pendencias: [{ codigo: 'enquadramento_nao_anexado', mensagem: 'Enquadramento Tributário ainda não anexado.', severidade: 'alta', origem: 'documentos_arquivos', recomendacao: 'Anexar o comprovante de enquadramento tributário no Acervo Documental.' }],
+      pendencias: [{ codigo: 'enquadramento_nao_identificado', mensagem: 'Regime tributário ainda não identificado pela consulta de CNPJ.', severidade: 'alta', origem: 'empresas.regime_tributario', recomendacao: 'Sincronizar os dados de CNPJ (Receita Federal) da empresa. Um comprovante de enquadramento pode ser anexado como reforço opcional.' }],
     };
   }
   const docMaisRecente = docs[0];
@@ -1027,18 +1087,27 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
   else if (qsaTemGrave) addBloqueio('QSA possui divergências societárias relevantes.');
   else pontosPositivos.push('QSA analisado: CNPJ, razão social, capital social, sócios e administrador conferidos.');
 
+  // O Enquadramento Tributário NÃO é um documento físico a ser anexado -- essa
+  // informação vem estritamente da consulta pública de CNPJ (Receita Federal),
+  // já sincronizada em `empresas.regime_tributario`/`opcao_simples`/`opcao_mei`
+  // (ver `montarCnpjDados`). Um documento comprobatório (ex: consulta do Simples
+  // Nacional) continua podendo ser anexado como reforço opcional -- e, se for
+  // anexado, ainda precisa ser lido e não pode contradizer os dados da Receita --
+  // mas a ausência dele nunca bloqueia a Fase 1.
   const enquadramentoAnexado = params.enquadramentoDados?.anexado === true;
   const enquadramentoAnalisado = params.enquadramentoDados?.analisado === true;
   const enquadramentoTemGrave = params.enquadramentoPendencias.some((p) => p.severidade === 'alta');
   const regime = String(params.enquadramentoDados?.regime_tributario || params.empresa?.regime_tributario || '').trim();
   const situacaoSimples = String(params.enquadramentoDados?.situacao_simples || '').trim();
-  const enquadramentoIdentificado = !!regime || !!situacaoSimples;
-  const enquadramentoConsistente = enquadramentoAnexado && enquadramentoAnalisado && enquadramentoIdentificado && !enquadramentoTemGrave;
-  if (!enquadramentoAnexado) addBloqueio('Comprovante de enquadramento tributário não anexado.');
-  else if (!enquadramentoAnalisado) addBloqueio(params.enquadramentoDados?.erro_processamento || 'Enquadramento tributário anexado, mas a análise ainda não foi concluída.');
-  else if (!enquadramentoIdentificado) addBloqueio('Regime tributário não identificado no documento analisado.');
+  const enquadramentoIdentificado = !!regime || !!situacaoSimples
+    || params.empresa?.opcao_simples != null || params.empresa?.opcao_mei != null;
+  const enquadramentoConsistente = enquadramentoIdentificado
+    && !enquadramentoTemGrave
+    && (!enquadramentoAnexado || enquadramentoAnalisado);
+  if (!enquadramentoIdentificado) addBloqueio('Regime tributário não identificado. Sincronize os dados de CNPJ (Receita Federal) da empresa.');
+  else if (enquadramentoAnexado && !enquadramentoAnalisado) addBloqueio(params.enquadramentoDados?.erro_processamento || 'Documento de enquadramento anexado, mas a análise ainda não foi concluída.');
   else if (enquadramentoTemGrave) addBloqueio('Enquadramento tributário possui divergência relevante.');
-  else pontosPositivos.push(`Enquadramento tributário identificado e conferido: ${regime || situacaoSimples}.`);
+  else pontosPositivos.push(`Enquadramento tributário identificado via consulta de CNPJ: ${regime || situacaoSimples}.`);
 
   const textoEnquadramento = [regime, situacaoSimples, params.empresa?.porte, params.empresa?.natureza_juridica].filter(Boolean).join(' ');
   const ehMei = params.enquadramentoDados?.opcao_mei === true || params.empresa?.opcao_mei === true || /\bmei\b|microempreendedor individual|simei/i.test(textoEnquadramento);
@@ -1331,7 +1400,7 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
   // pelo serviço Receita + Cartão. Atos da Junta pertencem à Etapa 2.
   const [qsaDocumental, enquadramento] = await Promise.all([
     montarQsaDocumentalDados(empresaId, !!options.processarDocumentos),
-    montarEnquadramentoDados(empresaId, !!options.processarDocumentos),
+    montarEnquadramentoDados(empresaId, !!options.processarDocumentos, empresa),
   ]);
   const documentacaoSocietaria = await montarValidacaoSocietaria(empresaId, !!options.processarSocietario, {
     empresa,

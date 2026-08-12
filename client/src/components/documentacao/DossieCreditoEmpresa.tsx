@@ -639,7 +639,9 @@ function ProntidaoIdentidadeCard({
           <p className="mt-1 max-w-4xl text-[11px] font-semibold text-slate-500">Nesta etapa, o QSA confere somente CNPJ, razão social, capital social, nomes dos sócios e Sócio-Administrador. Dados pessoais dos sócios pertencem às próximas etapas e não bloqueiam este resultado.</p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          {(falhasLeitura.length > 0 || (documentos.length === 3 && documentos.every((item) => item.anexado) && aguardando.length > 0)) && onTentarNovamente && (
+          {/* O Enquadramento Tributário não exige upload (vem da consulta de CNPJ) --
+              `item.consistente` cobre o caso "resolvido via Receita, sem anexo". */}
+          {(falhasLeitura.length > 0 || (documentos.length === 3 && documentos.every((item) => item.anexado || item.consistente) && aguardando.length > 0)) && onTentarNovamente && (
             <button
               type="button"
               onClick={onTentarNovamente}

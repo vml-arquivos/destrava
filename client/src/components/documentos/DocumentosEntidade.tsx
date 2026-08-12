@@ -195,11 +195,15 @@ const slot = (titulo: string, tipoUpload: string, matchTipos?: string[], extra: 
 export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
   {
     titulo: "Identidade do CNPJ",
-    descricao: "Etapa 1: Cartão CNPJ, QSA e Enquadramento Tributário. Os três documentos são cruzados com os dados da Receita Federal.",
+    descricao: "Etapa 1: Cartão CNPJ e QSA são obrigatórios e cruzados com os dados da Receita Federal. O regime tributário (Enquadramento) vem da própria consulta de CNPJ -- não precisa de upload.",
     slots: [
       slot("Cartão CNPJ", "cartao_cnpj", [], { obrigatorio: true, descricao: "A IA/OCR identifica CNPJ, razão social, abertura, CNAE, natureza, porte e situação cadastral." }),
       slot("QSA (Quadro Societário)", "qsa", [], { obrigatorio: true, descricao: "Confere CNPJ, razão social, capital social, nomes dos sócios e identifica o Sócio-Administrador. Dados pessoais não são exigidos nesta etapa." }),
-      slot("Enquadramento tributário", "enquadramento_tributario_cnpj", [], { obrigatorio: true, descricao: "Documento que comprova o regime tributário atual da empresa (Simples Nacional, Lucro Presumido, Lucro Real ou MEI)." }),
+      // Não é obrigatório: o regime tributário já vem da consulta pública de CNPJ
+      // (Receita Federal), sincronizada automaticamente no cadastro da empresa.
+      // O upload aqui é só um reforço documental opcional (ex: print do Simples
+      // Nacional), nunca um pré-requisito para avançar da Fase 1.
+      slot("Enquadramento tributário (opcional)", "enquadramento_tributario_cnpj", [], { descricao: "Regime tributário (Simples Nacional, Lucro Presumido, Lucro Real ou MEI) identificado pela consulta de CNPJ. Anexar um comprovante aqui é opcional -- reforça a análise, mas não é exigido." }),
     ],
   },
   {
@@ -260,6 +264,17 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
     ],
   },
 ];
+
+// Espelha server/routes/documentos.ts (ORDEM_CONSULTA_CADASTRAL) -- ordem obrigatória
+// de leitura das consultas cadastrais: 1º SCR/Registrato, 2º CCS, 3º CCF, tanto para
+// CNPJ quanto para CPF (por sócio). O backend é a fonte de verdade e barra o upload de
+// qualquer forma; isto aqui só evita deixar o usuário anexar e só depois ver o erro.
+const ORDEM_CONSULTA_CADASTRAL: Record<string, { exige: string[]; rotulo: string }> = {
+  ccs_cnpj: { exige: ["rating_bacen_cnpj", "scr_cnpj"], rotulo: "SCR/Registrato (CNPJ)" },
+  ccf_cnpj: { exige: ["ccs_cnpj"], rotulo: "CCS (CNPJ)" },
+  ccs_cpf: { exige: ["rating_bacen_cpf", "scr_cpf"], rotulo: "SCR/Registrato (CPF)" },
+  ccf_cpf: { exige: ["ccs_cpf"], rotulo: "CCS (CPF)" },
+};
 
 const TODOS_SLOTS = SECOES_DOCUMENTAIS.flatMap((secao) => secao.slots);
 const TIPO_PARA_SLOT = new Map<string, DocumentoSlot>();
@@ -411,7 +426,23 @@ export default function DocumentosEntidade({
         setSocioSelecionadoPorTipo((prev) => {
           const copy = { ...prev };
           SECOES_DOCUMENTAIS.flatMap((secao) => secao.slots).filter((item) => item.porSocio).forEach((item) => {
-            if (!copy[item.tipoUpload] || !sociosLista.some((socio: SocioResumo) => socio.id === copy[item.tipoUpload])) copy[item.tipoUpload] = sociosLista[0].id;
+            const atual = copy[item.tipoUpload];
+            const atualValido = !!atual && sociosLista.some((socio: SocioResumo) => socio.id === atual);
+            if (atualValido) return;
+            // BUGFIX (2026-08-12): antes, ao remontar a tela (ex: sair e voltar ao
+            // perfil da empresa), o seletor sempre reiniciava no primeiro sócio em
+            // ordem alfabética -- se a Observação (ou qualquer documento) tivesse
+            // sido salva para outro sócio, ela parecia ter "sumido" (o dado
+            // continuava intacto no banco, só não era exibido, porque a chave
+            // exibida na tela dependia do sócio selecionado no momento). Agora
+            // preferimos, como seleção inicial, um sócio que já tenha documento
+            // ou observação registrada para este campo específico -- só cai no
+            // primeiro da lista quando nenhum sócio tem nada salvo ainda.
+            const socioComDados = sociosLista.find((socio: SocioResumo) => (
+              filtrada.some((doc: DocumentoArquivo) => doc.socio_id === socio.id && item.matchTipos.includes(doc.tipo_documento))
+              || !!observacoesMap[chaveContextoSlot(item.tipoUpload, socio.id)]
+            ));
+            copy[item.tipoUpload] = (socioComDados || sociosLista[0]).id;
           });
           return copy;
         });
@@ -511,6 +542,13 @@ export default function DocumentosEntidade({
     return docs.some((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento));
   }).length, [slotsDaTela, docs, entidadeTipo, socios]);
   const documentosValidados = useMemo(() => docs.filter((doc) => doc.validado).length, [docs]);
+  // O Enquadramento Tributário não exige upload (vem da consulta de CNPJ) -- só
+  // Cartão CNPJ e QSA são obrigatórios de fato para liberar a análise da Etapa 1.
+  const identidadeObrigatorios = useMemo(() => {
+    const slotsIdentidade = SECOES_DOCUMENTAIS.find((secao) => secao.titulo === "Identidade do CNPJ")?.slots || [];
+    const obrigatorios = slotsIdentidade.filter((documentoSlot) => documentoSlot.obrigatorio);
+    return { total: obrigatorios.length, preenchidos: obrigatorios.filter((documentoSlot) => docs.some((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento))).length };
+  }, [docs]);
   const identidadeInicialPreenchida = useMemo(() => {
     const slotsIdentidade = SECOES_DOCUMENTAIS.find((secao) => secao.titulo === "Identidade do CNPJ")?.slots || [];
     return slotsIdentidade.filter((documentoSlot) => docs.some((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento))).length;
@@ -693,7 +731,7 @@ export default function DocumentosEntidade({
       <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
         <div>
           <h3 className="text-base font-bold text-slate-800 flex items-center gap-2"><Paperclip className="w-4 h-4" /> {titulo}</h3>
-          <p className="text-xs text-slate-500 mt-1 max-w-2xl">Anexe Cartão CNPJ, QSA e Enquadramento Tributário. A análise cruza os três arquivos com a Receita Federal e libera a Etapa 2.</p>
+          <p className="text-xs text-slate-500 mt-1 max-w-2xl">Anexe Cartão CNPJ e QSA. O Enquadramento Tributário vem da consulta de CNPJ e não exige upload. A análise cruza os documentos com a Receita Federal e libera a Etapa 2.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={abrirChecklistExportacao} disabled={docs.length === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 disabled:opacity-50">
@@ -707,11 +745,16 @@ export default function DocumentosEntidade({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-black text-slate-900">Etapa 1 — Identidade do CNPJ</p>
-              <span className={`rounded-full border bg-white px-2 py-0.5 text-[10px] font-black ${identidadeInicialPreenchida === 3 ? "border-emerald-200 text-emerald-700" : "border-blue-200 text-blue-700"}`}>
-                {identidadeInicialPreenchida}/3 anexados
+              <span className={`rounded-full border bg-white px-2 py-0.5 text-[10px] font-black ${identidadeObrigatorios.preenchidos === identidadeObrigatorios.total ? "border-emerald-200 text-emerald-700" : "border-blue-200 text-blue-700"}`}>
+                {identidadeObrigatorios.preenchidos}/{identidadeObrigatorios.total} obrigatórios anexados
               </span>
+              {identidadeInicialPreenchida > identidadeObrigatorios.preenchidos && (
+                <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-black text-slate-500">
+                  +{identidadeInicialPreenchida - identidadeObrigatorios.preenchidos} opcional
+                </span>
+              )}
             </div>
-            <p className="mt-1 text-[11px] text-slate-600">Cartão CNPJ, QSA e Enquadramento Tributário formam o primeiro laudo. Contrato/Alteração e Atos da Junta pertencem à Etapa 2.</p>
+            <p className="mt-1 text-[11px] text-slate-600">Cartão CNPJ e QSA formam o primeiro laudo. O Enquadramento Tributário vem da consulta de CNPJ (upload opcional). Contrato/Alteração e Atos da Junta pertencem à Etapa 2.</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 text-[11px]">
             <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-slate-600"><b className="text-slate-900">{docs.length}</b> arquivos</span>
@@ -720,7 +763,7 @@ export default function DocumentosEntidade({
               <button
                 type="button"
                 onClick={abrirLaudo}
-                disabled={gerandoLaudo || identidadeInicialPreenchida !== 3}
+                disabled={gerandoLaudo || identidadeObrigatorios.preenchidos !== identidadeObrigatorios.total}
                 className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {gerandoLaudo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
@@ -803,11 +846,18 @@ export default function DocumentosEntidade({
                       ? socios.filter((socio) => docsTipoTodos.some((doc) => doc.socio_id === socio.id)).length
                       : 0;
                     const uploading = uploadingTipo === chaveSlot;
+                    const regraOrdemConsulta = ORDEM_CONSULTA_CADASTRAL[tipo];
+                    const ordemConsultaPendente = regraOrdemConsulta && !docs.some((doc) => (
+                      regraOrdemConsulta.exige.includes(doc.tipo_documento)
+                      && (!documentoSlot.porSocio || !socioVinculado || doc.socio_id === socioVinculado)
+                    ));
                     const motivoBloqueio = tipo === "atos_junta_comercial" && pipeline?.fase_2?.bloqueada
                       ? "Conclua e aprove a Fase 1 antes de anexar os Atos da Junta."
                       : ["contrato_social", "alteracao_contratual"].includes(tipo) && pipeline?.fase_3?.bloqueada
                         ? "Analise e aprove primeiro os Atos da Junta Comercial."
-                        : null;
+                        : ordemConsultaPendente
+                          ? `Anexe primeiro o Relatório ${regraOrdemConsulta.rotulo}. Ordem obrigatória: SCR → CCS → CCF.`
+                          : null;
                     const exigeNome = Boolean(documentoSlot.exigeNome);
                     // Regra de anulação (ex: CND RFB cobre CADIN e PGFN) -- se algum tipo
                     // que satisfaz este campo já foi anexado em outro lugar, não precisa

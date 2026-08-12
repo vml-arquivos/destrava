@@ -126,6 +126,50 @@ async function getPipelineStatusForUpload(empresaId: string): Promise<DocumentPi
   return DocumentPipelineStatus.PHASE_3_CONTRACT_PENDING;
 }
 
+// Ordem obrigatória de leitura das consultas cadastrais: 1º SCR/Registrato, 2º CCS,
+// 3º CCF -- tanto para CNPJ quanto para CPF (por sócio). Antes disso os três campos
+// eram totalmente independentes: nada impedia anexar CCF sem nunca ter anexado SCR
+// ou CCS. `rating_bacen_*` e `scr_*` contam como o mesmo documento (já eram tratados
+// como sinônimos no restante do sistema -- ver `equivalentes` em documentacao.ts).
+const ORDEM_CONSULTA_CADASTRAL: Record<string, { exige: string[]; rotuloExigido: string }> = {
+  ccs_cnpj: { exige: ['rating_bacen_cnpj', 'scr_cnpj'], rotuloExigido: 'SCR/Registrato (CNPJ)' },
+  ccf_cnpj: { exige: ['ccs_cnpj'], rotuloExigido: 'CCS (CNPJ)' },
+  ccs_cpf: { exige: ['rating_bacen_cpf', 'scr_cpf'], rotuloExigido: 'SCR/Registrato (CPF)' },
+  ccf_cpf: { exige: ['ccs_cpf'], rotuloExigido: 'CCS (CPF)' },
+};
+
+export async function assertOrdemConsultaCadastralPermitida(
+  tipoDocumento: string,
+  empresaId: string | null,
+  socioId: string | null,
+): Promise<void> {
+  const regra = ORDEM_CONSULTA_CADASTRAL[tipoDocumento];
+  if (!regra) return;
+  const porSocio = tipoDocumento.endsWith('_cpf');
+  // Sem empresa/sócio para escopar a busca não há como verificar a sequência com
+  // segurança -- deixa passar (as validações de contexto obrigatório já rodaram
+  // antes desta checagem na rota de upload) em vez de bloquear por engano.
+  if (porSocio && !socioId) return;
+  if (!porSocio && !empresaId) return;
+  const params: any[] = [regra.exige];
+  const filtroContexto = porSocio ? 'socio_id = $2' : 'empresa_id = $2';
+  params.push(porSocio ? socioId : empresaId);
+  const { rows } = await pool.query(
+    `SELECT 1 FROM public.documentos_arquivos
+      WHERE status NOT IN ('excluido', 'recusado')
+        AND tipo_documento = ANY($1::text[])
+        AND ${filtroContexto}
+      LIMIT 1`,
+    params,
+  );
+  if (!rows.length) {
+    throw Object.assign(
+      new Error(`Anexe primeiro o Relatório ${regra.rotuloExigido} antes deste documento. Ordem obrigatória de leitura: SCR -> CCS -> CCF.`),
+      { code: 'ORDEM_CONSULTA_CADASTRAL_REQUERIDA', statusCode: 423 },
+    );
+  }
+}
+
 function isUuid(value: unknown): value is string {
   return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -699,6 +743,7 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
       const pipelineStatus = await getPipelineStatusForUpload(empresaIdPipeline);
       assertUploadAllowed(pipelineStatus, tipoDocumento);
     }
+    let socioIdValidado: string | null = null;
     if (req.body.socio_id) {
       const socioId = String(req.body.socio_id).trim();
       if (!isUuid(socioId)) throw new Error('socio_id inválido.');
@@ -707,7 +752,9 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
       if (!socioEmpresaId || (empresaEsperada && socioEmpresaId !== empresaEsperada)) {
         throw new Error('O sócio informado não pertence à empresa do documento.');
       }
+      socioIdValidado = socioId;
     }
+    await assertOrdemConsultaCadastralPermitida(tipoDocumento, empresaIdPipeline || null, socioIdValidado);
     validarArquivo(file, tipoDocumento);
 
     const hash = crypto.createHash('sha256').update(file.buffer).digest('hex');
