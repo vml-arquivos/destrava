@@ -387,6 +387,13 @@ export default function DocumentosEntidade({
   // qual era o próximo documento a anexar, só um toast passageiro de "anexado".
   const [societaria, setSocietaria] = useState<any>(null);
   const [analisandoSocietario, setAnalisandoSocietario] = useState(false);
+  // Mapa documental de crédito (regime-aware: Simples Nacional, MEI, Lucro Presumido...)
+  // -- já existia no backend (gerarMapaDocumentalCredito), já calcula por etapa quais
+  // documentos faltam e quais já foram anexados, mas antes só aparecia num acordeão
+  // recolhido na aba separada. Usado aqui só para apontar "qual o próximo documento",
+  // depois que a Etapa 2/3 (Atos da Junta + Contrato, 12 meses) já está comprovada --
+  // sem isso, a tela só dizia "liberado" e parava de orientar o usuário.
+  const [mapaCredito, setMapaCredito] = useState<any>(null);
 
   const query = useMemo(() => {
     if (!entidadeId) return "";
@@ -421,6 +428,7 @@ export default function DocumentosEntidade({
       ]);
       setPipeline(pipelineAtual);
       setSocietaria(dossieAtual?.documentacao_societaria || null);
+      setMapaCredito(dossieAtual?.mapa_documental_credito || null);
       const lista = Array.isArray(data) ? data : [];
       // O contrato de prestação de serviços (Destrava <-> empresa) não é documento
       // de análise de crédito -- vive só na aba "Contratos Firmados". Filtrado
@@ -608,6 +616,26 @@ export default function DocumentosEntidade({
     return slotsIdentidade.filter((documentoSlot) => docs.some((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento))).length;
   }, [docs]);
 
+  // Depois que a Etapa 2/3 (Atos da Junta + Contrato, 12 meses) está comprovada, o
+  // mapa documental de crédito já sabe -- pelo regime tributário identificado -- qual
+  // é a próxima leva de documentos (cadastro/regularidade + fiscal do regime, ex:
+  // PGDAS/DEFIS para Simples Nacional). Antes esse cálculo ficava só num acordeão
+  // recolhido em outra tela; aqui vira a mensagem explícita "próximo documento".
+  const proximaLevaCredito = useMemo(() => {
+    if (!mapaCredito || societaria?.apto_para_avancar !== true) return null;
+    const etapas = Array.isArray(mapaCredito.etapas) ? mapaCredito.etapas : [];
+    const pendentes = etapas
+      .filter((etapa: any) => (etapa.numero === 3 || etapa.numero === 4) && !etapa.bloqueada)
+      .flatMap((etapa: any) => (Array.isArray(etapa.documentos) ? etapa.documentos : []).map((documento: any) => ({ ...documento, etapaTitulo: etapa.titulo })))
+      // Só entra na mensagem "próximo documento" quem tem campo de fato pra anexar
+      // nesta tela (algum tipo_arquivo do mapa bate com um slot real do checklist) --
+      // sem isso, a orientação apontaria pra um documento sem lugar concreto de
+      // anexar, o que travaria a experiência guiada em vez de ajudar.
+      .filter((documento: any) => documento.obrigatorio && !documento.anexado
+        && (Array.isArray(documento.tipos_arquivo) ? documento.tipos_arquivo : []).some((tipo: string) => TIPO_PARA_SLOT.has(tipo)));
+    if (!pendentes.length) return null;
+    return { proximo: pendentes[0], restantes: pendentes.slice(1, 5), total: pendentes.length };
+  }, [mapaCredito, societaria]);
 
 
 
@@ -840,6 +868,10 @@ export default function DocumentosEntidade({
         const apto = societaria.apto_para_avancar === true;
         const registros = Array.isArray(societaria.registros_requeridos) ? societaria.registros_requeridos : [];
         const faltantes = Array.isArray(societaria.registros_faltantes) ? societaria.registros_faltantes : registros.filter((registro: any) => !registro.comprovado);
+        // Depois que a Etapa 2/3 já está comprovada (apto), o "próximo documento" deixa
+        // de ser sobre Atos da Junta/Contrato e passa a vir do mapa documental de
+        // crédito (cadastro/regularidade + fiscal do regime, ex: Simples Nacional) --
+        // sem isso, a mensagem parava em "Continuidade comprovada" e não dizia mais nada.
         const proximoDocumento = !societaria.atos_junta_anexados
           ? "Atos da Junta Comercial"
           : !societaria.atos_junta_aprovados
@@ -848,7 +880,9 @@ export default function DocumentosEntidade({
               ? "Contrato Social ou alteração contratual anterior (para completar 12 meses de histórico)"
               : !societaria.contrato_anexado
                 ? "Contrato Social ou alteração contratual"
-                : null;
+                : apto && proximaLevaCredito
+                  ? `${proximaLevaCredito.proximo.nome} (${proximaLevaCredito.proximo.etapaTitulo})`
+                  : null;
         return (
           <div className={`rounded-2xl border p-3 ${apto ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/60"}`}>
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -919,6 +953,43 @@ export default function DocumentosEntidade({
               <div className="mt-3 rounded-xl border border-red-100 bg-white p-2.5">
                 <p className="text-[11px] font-black text-red-800">Pendências que bloqueiam o avanço</p>
                 {societaria.bloqueios.map((item: string, index: number) => <p key={index} className="mt-1 text-[10px] text-red-800">• {item}</p>)}
+              </div>
+            )}
+
+            {/* Análise: depois que a continuidade societária está comprovada, o sistema
+                continua indicando a sequência -- não para em "liberado". A ordem e os
+                documentos vêm do mapa documental de crédito, que já é sensível ao
+                regime tributário identificado (Simples Nacional, MEI, Lucro Presumido...). */}
+            {apto && proximaLevaCredito && (
+              <div className="mt-3 rounded-xl border border-blue-100 bg-white p-2.5">
+                <p className="text-[11px] font-black text-slate-800">
+                  Próxima leva de documentos{mapaCredito?.regime_descricao ? ` — regime: ${mapaCredito.regime_descricao}` : ""}
+                </p>
+                <p className="mt-1 text-[10px] text-slate-500">
+                  {proximaLevaCredito.total} documento(s) obrigatório(s) ainda faltando para montar o dossiê completo de crédito.
+                </p>
+                <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2">
+                  <p className="text-[9px] font-black uppercase text-blue-500">Próximo documento</p>
+                  <p className="text-[11px] font-black text-blue-900">{proximaLevaCredito.proximo.nome}</p>
+                  <p className="mt-0.5 text-[10px] text-blue-800">{proximaLevaCredito.proximo.finalidade}</p>
+                </div>
+                {!!proximaLevaCredito.restantes.length && (
+                  <div className="mt-2">
+                    <p className="text-[9px] font-black uppercase text-slate-400">Depois desse, o sistema também vai pedir</p>
+                    {proximaLevaCredito.restantes.map((documento: any) => (
+                      <p key={documento.codigo} className="mt-1 text-[10px] text-slate-600">• {documento.nome}</p>
+                    ))}
+                    {proximaLevaCredito.total - 1 > proximaLevaCredito.restantes.length && (
+                      <p className="mt-1 text-[10px] text-slate-400">e mais {proximaLevaCredito.total - 1 - proximaLevaCredito.restantes.length} documento(s)...</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {apto && !proximaLevaCredito && mapaCredito && (
+              <div className="mt-3 rounded-xl border border-emerald-100 bg-white p-2.5">
+                <p className="text-[11px] font-black text-emerald-800">Dossiê documental completo</p>
+                <p className="mt-1 text-[10px] text-emerald-800">Toda a documentação obrigatória de cadastro, regularidade e fiscal já foi anexada. {mapaCredito.proxima_acao}</p>
               </div>
             )}
           </div>
