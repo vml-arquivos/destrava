@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -37,7 +37,13 @@ export type DocumentoArquivo = {
   arquivo_disponivel?: boolean;
   arquivo_relativo?: string | null;
   armazenamento_mensagem?: string | null;
+  socio_id?: string | null;
+  exige_revisao_humana?: boolean;
+  resultado_validacao?: Record<string, any> | null;
 };
+
+type SocioResumo = { id: string; nome?: string | null; cpf_cnpj?: string | null; qualificacao?: string | null; administrador?: boolean | null };
+type ObservacaoSlot = { tipo_documento: string; socio_id?: string | null; observacao?: string | null };
 
 export type DocumentosEntidadeProps = {
   entidadeTipo: string;
@@ -164,6 +170,8 @@ export type DocumentoSlot = {
    *  como texto na descrição ("Exigido quando a CND RFB não for disponibilizada"),
    *  agora aplicada de verdade, não só escrita. */
   satisfeitoPor?: string[];
+  /** O campo deve ser identificado e acompanhado separadamente para cada sócio do QSA. */
+  porSocio?: boolean;
 };
 
 export type SecaoDocumento = { titulo: string; descricao?: string; slots: DocumentoSlot[] };
@@ -198,23 +206,23 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
     titulo: "Documentação da Empresa",
     descricao: "Todo o restante referente à empresa: contrato social, consultas e certidões do CNPJ, fiscal/tributário, faturamento, eCAC, fotos e outros.",
     slots: [
-      slot("Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Etapa 2: será conferido com os Atos da Junta pelo NIRE e pela data de registro da alteração." }),
-      slot("Atos da Junta Comercial", "atos_junta_comercial", [], { obrigatorio: true, descricao: "A certidão/lista de atos será comparada com o contrato ou alteração pelo NIRE e data de registro. O CNPJ é apenas informativo, pois algumas Juntas não o exibem." }),
-      slot("Relatório SCR/Registrato (CNPJ)", "rating_bacen_cnpj", ["scr_cnpj"]),
+      slot("Atos da Junta Comercial", "atos_junta_comercial", [], { obrigatorio: true, descricao: "Primeiro documento da Etapa 2. A IA identifica todos os atos e define quais contratos/alterações devem ser anexados até comprovar 12 meses. Para MEI, a dispensa é registrada automaticamente." }),
+      slot("Contrato social e alterações contratuais", "contrato_social", ["alteracao_contratual"], { obrigatorio: true, descricao: "Lido depois dos Atos da Junta e conferido por número do ato, data de registro, NIRE, CNPJ e sócios do QSA." }),
+      slot("Relatório SCR/Registrato (CNPJ)", "rating_bacen_cnpj", ["scr_cnpj"], { descricao: "Sequência de análise: SCR, CCS e CCF." }),
+      slot("Relatório CCS do CNPJ", "ccs_cnpj"),
+      slot("Relatório CCF do CNPJ", "ccf_cnpj"),
       slot("Consulta CENPROT (CNPJ)", "cenprot_cnpj"),
       slot("CND RFB (CNPJ)", "cnd_rfb_cnpj"),
       slot("Relatório de Situação Fiscal (CNPJ)", "situacao_fiscal_cnpj", [], { descricao: "Exigido junto com CADIN e PGFN quando a CND RFB CNPJ não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cnpj"] }),
       slot("Nada consta CADIN (CNPJ)", "cadin_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cnpj"] }),
       slot("Nada consta PGFN (CNPJ)", "pgfn_cnpj", [], { descricao: "Exigido quando a CND RFB CNPJ não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cnpj"] }),
-      slot("Relatório CCS do CNPJ", "ccs_cnpj"),
-      slot("Relatório CCF do CNPJ", "ccf_cnpj"),
       slot("Rating (CNPJ)", "consulta_serasa_cnpj"),
       slot("Consulta de optante pelo Simples Nacional", "simples_nacional"),
       slot("PGDAS", "pgdas", ["pgmei", "ecf"], { descricao: "Declaração de faturamento do Simples Nacional. Se a empresa não for optante do Simples, anexe aqui o PGMEI (MEI) ou a ECF (Lucro Presumido/Real), conforme o regime tributário." }),
       slot("Recibo de entrega do PGDAS", "recibo_pgdas", ["recibo_pgmei", "recibo_ecf"], { descricao: "Recibo de entrega correspondente ao PGDAS, PGMEI ou ECF anexado acima." }),
       slot("DEFIS", "defis", ["dasn_simei"], { descricao: "Declaração anual da empresa. DEFIS para optantes do Simples Nacional (não MEI); DASN-SIMEI para MEI." }),
       slot("Recibo de entrega da DEFIS", "recibo_defis", ["recibo_dasn_simei"], { descricao: "Recibo de entrega correspondente à DEFIS ou DASN-SIMEI anexada acima." }),
-      slot("Faturamento bruto dos últimos 12 meses", "faturamento_12_meses", ["comprovante_faturamento", "declaracao_faturamento"], { obrigatorio: true, descricao: "Pode conter planilha, declaração ou relatório solicitado pelo banco." }),
+      slot("Faturamento bruto dos últimos 12 meses", "faturamento_12_meses", ["comprovante_faturamento", "declaracao_faturamento"], { descricao: "Documento opcional. Quando anexado, a IA confere meses, último mês fechado, data e modalidade das assinaturas, CNPJ, sócio-administrador e contador." }),
       slot("Compartilhamento eCAC por banco", "compartilhamento_ecac", [], { exigeNome: true, placeholderNome: "Banco/destinatário eCAC" }),
       slot("Fotos da empresa", "foto_fachada", ["foto_interna_1", "foto_interna_2", "foto_interna_3"], { descricao: "Anexe fachada e fotos internas no mesmo local." }),
       slot("Campo outros / Documento nomeado", "outros", [
@@ -235,21 +243,20 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
     titulo: "Documentação dos Sócios",
     descricao: "Identificação dos sócios e toda a documentação/consultas de CPF vinculadas a eles. Use um único local para documentos que cumprem a mesma função -- não duplicamos RG, CNH e CPF em campos separados.",
     slots: [
-      slot("Documento de identificação do sócio", "documento_socio", ["rg", "cnh", "cpf"], { obrigatorio: true, descricao: "Anexe RG, CNH ou documento equivalente com CPF, conforme disponível." }),
-      slot("Comprovante de endereço do sócio", "comprovante_residencia", [], { obrigatorio: true }),
-      slot("Declaração de Imposto de Renda (IRPF) do sócio", "irpf", ["imposto_renda"], { descricao: "Declaração completa de imposto de renda da pessoa física do sócio." }),
-      slot("Recibo de entrega da Declaração de Imposto de Renda (IRPF)", "recibo_irpf", [], { descricao: "Recibo de entrega correspondente à declaração de IRPF anexada acima." }),
-      slot("Estado civil / cônjuge / averbações", "certidao_casamento", ["averbacao_divorcio", "certidao_obito"], { descricao: "Use somente quando necessário: certidão de casamento, averbação de divórcio, óbito ou documento equivalente." }),
-      slot("Relatório SCR/Registrato (CPF)", "rating_bacen_cpf", ["scr_cpf"]),
-      slot("Enquadramento tributário (CPF)", "enquadramento_tributario_cpf", [], { descricao: "Documento que comprova o enquadramento tributário do sócio como pessoa física, quando aplicável." }),
-      slot("Consulta CENPROT (CPF)", "cenprot_cpf"),
-      slot("CND RFB (CPF)", "cnd_rfb_cpf"),
-      slot("Relatório de Situação Fiscal (CPF)", "situacao_fiscal_cpf", [], { descricao: "Exigido junto com CADIN e PGFN quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
-      slot("Nada consta CADIN (CPF)", "cadin_cpf", [], { descricao: "Exigido quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
-      slot("Nada consta PGFN (CPF)", "pgfn_cpf", [], { descricao: "Exigido quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
-      slot("Relatório CCS do CPF", "ccs_cpf"),
-      slot("Relatório CCF do CPF", "ccf_cpf"),
-      slot("Rating (CPF)", "consulta_serasa_cpf"),
+      slot("Documento de identificação do sócio", "documento_socio", ["rg", "cnh", "cpf"], { obrigatorio: true, porSocio: true, descricao: "Anexe RG, CNH ou documento equivalente com CPF para cada sócio identificado no QSA." }),
+      slot("Comprovante de endereço do sócio", "comprovante_residencia", [], { obrigatorio: true, porSocio: true, descricao: "Obrigatório por sócio. A IA confere titular e validade máxima de dois meses; titular diferente exige justificativa." }),
+      slot("Declaração de Imposto de Renda (IRPF) do sócio", "irpf", ["imposto_renda"], { porSocio: true, descricao: "Declaração completa de imposto de renda da pessoa física, identificada por sócio." }),
+      slot("Recibo de entrega da Declaração de Imposto de Renda (IRPF)", "recibo_irpf", [], { porSocio: true, descricao: "Recibo de entrega correspondente à declaração de IRPF do mesmo sócio." }),
+      slot("Estado civil / cônjuge / averbações", "certidao_casamento", ["averbacao_divorcio", "certidao_obito"], { porSocio: true, descricao: "Use somente quando necessário: certidão de casamento, averbação de divórcio, óbito ou documento equivalente." }),
+      slot("Relatório SCR/Registrato (CPF)", "rating_bacen_cpf", ["scr_cpf"], { porSocio: true, descricao: "Sequência de análise: SCR, CCS e CCF, separadamente para cada sócio." }),
+      slot("Relatório CCS do CPF", "ccs_cpf", [], { porSocio: true }),
+      slot("Relatório CCF do CPF", "ccf_cpf", [], { porSocio: true }),
+      slot("Consulta CENPROT (CPF)", "cenprot_cpf", [], { porSocio: true }),
+      slot("CND RFB (CPF)", "cnd_rfb_cpf", [], { porSocio: true }),
+      slot("Relatório de Situação Fiscal (CPF)", "situacao_fiscal_cpf", [], { porSocio: true, descricao: "Exigido junto com CADIN e PGFN quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
+      slot("Nada consta CADIN (CPF)", "cadin_cpf", [], { porSocio: true, descricao: "Exigido quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
+      slot("Nada consta PGFN (CPF)", "pgfn_cpf", [], { porSocio: true, descricao: "Exigido quando a CND RFB CPF não for disponibilizada.", satisfeitoPor: ["cnd_rfb_cpf"] }),
+      slot("Rating (CPF)", "consulta_serasa_cpf", [], { porSocio: true }),
     ],
   },
 ];
@@ -267,7 +274,11 @@ TODOS_SLOTS.forEach((documentoSlot) => documentoSlot.matchTipos.forEach((tipo) =
 // em slotsDaTela) faria ele reaparecer sozinho na seção "Outros documentos do
 // sistema" assim que um contrato assinado fosse anexado -- o arquivo continua
 // 100% acessível pela aba Contratos Firmados, só não é exibido nesta tela.
-const TIPOS_FORA_DO_CHECKLIST_CREDITO = new Set(["contrato_prestacao_servicos", "contrato_assessoria"]);
+const TIPOS_FORA_DO_CHECKLIST_CREDITO = new Set(["contrato_prestacao_servicos", "contrato_assessoria", "enquadramento_tributario_cpf"]);
+
+function chaveContextoSlot(tipo: string, socioId?: string | null) {
+  return `${tipo}::${socioId || "geral"}`;
+}
 
 export function labelTipoDocumento(tipo: string) {
   const documentoSlot = TIPO_PARA_SLOT.get(tipo);
@@ -322,9 +333,13 @@ export default function DocumentosEntidade({
   secaoInicial = null,
 }: DocumentosEntidadeProps) {
   const [docs, setDocs] = useState<DocumentoArquivo[]>([]);
+  const [socios, setSocios] = useState<SocioResumo[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploadingTipo, setUploadingTipo] = useState<string | null>(null);
   const [observacoesPorTipo, setObservacoesPorTipo] = useState<Record<string, string>>({});
+  const [statusObservacoes, setStatusObservacoes] = useState<Record<string, "salvando" | "salvo" | "erro">>({});
+  const [socioSelecionadoPorTipo, setSocioSelecionadoPorTipo] = useState<Record<string, string>>({});
+  const timersObservacoes = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [nomeCustomizadoPorTipo, setNomeCustomizadoPorTipo] = useState<Record<string, string>>({});
   const [selecionados, setSelecionados] = useState<Record<string, boolean>>({});
   const [exportando, setExportando] = useState(false);
@@ -357,7 +372,13 @@ export default function DocumentosEntidade({
     if (!entidadeId) return;
     setLoading(true);
     try {
-      const data = await apiFetch(`/api/documentos?${query}`);
+      const [data, observacoes, sociosEmpresa] = await Promise.all([
+        apiFetch(`/api/documentos?${query}`),
+        apiFetch(`/api/documentos/observacoes-slots?${new URLSearchParams({ entidade_tipo: entidadeTipo, entidade_id: entidadeId }).toString()}`).catch(() => []),
+        entidadeTipo === "empresa" && empresaId
+          ? apiFetch(`/api/empresas/${empresaId}/socios`).catch(() => [])
+          : Promise.resolve([]),
+      ]);
       const lista = Array.isArray(data) ? data : [];
       // O contrato de prestação de serviços (Destrava <-> empresa) não é documento
       // de análise de crédito -- vive só na aba "Contratos Firmados". Filtrado
@@ -367,12 +388,72 @@ export default function DocumentosEntidade({
         ? lista.filter((doc: DocumentoArquivo) => !TIPOS_FORA_DO_CHECKLIST_CREDITO.has(doc.tipo_documento))
         : lista;
       setDocs(filtrada);
+      const observacoesMap: Record<string, string> = {};
+      (Array.isArray(observacoes) ? observacoes : []).forEach((item: ObservacaoSlot) => {
+        observacoesMap[chaveContextoSlot(item.tipo_documento, item.socio_id)] = item.observacao || "";
+      });
+      // Compatibilidade com observações antigas gravadas junto ao arquivo: usa a
+      // mais recente como valor inicial, sem alterar ou excluir o registro legado.
+      filtrada.forEach((doc: DocumentoArquivo) => {
+        const documentoSlot = slotDoTipo(doc.tipo_documento);
+        const chave = chaveContextoSlot(documentoSlot.tipoUpload, doc.socio_id);
+        if (!observacoesMap[chave] && doc.observacoes) observacoesMap[chave] = doc.observacoes;
+      });
+      setObservacoesPorTipo(observacoesMap);
+      const sociosLista = Array.isArray(sociosEmpresa) ? sociosEmpresa.filter((item: any) => item?.id) : [];
+      setSocios(sociosLista);
+      if (sociosLista.length) {
+        setSocioSelecionadoPorTipo((prev) => {
+          const copy = { ...prev };
+          SECOES_DOCUMENTAIS.flatMap((secao) => secao.slots).filter((item) => item.porSocio).forEach((item) => {
+            if (!copy[item.tipoUpload] || !sociosLista.some((socio: SocioResumo) => socio.id === copy[item.tipoUpload])) copy[item.tipoUpload] = sociosLista[0].id;
+          });
+          return copy;
+        });
+      }
     } catch (err: any) {
       toast.error(err?.message || "Erro ao carregar documentos.");
     } finally {
       setLoading(false);
     }
-  }, [entidadeId, query, entidadeTipo]);
+  }, [entidadeId, query, entidadeTipo, empresaId]);
+
+  const salvarObservacao = useCallback(async (tipoDocumento: string, socioVinculado: string | null, observacao: string) => {
+    if (!entidadeId) return;
+    const chave = chaveContextoSlot(tipoDocumento, socioVinculado);
+    setStatusObservacoes((prev) => ({ ...prev, [chave]: "salvando" }));
+    try {
+      await apiFetch("/api/documentos/observacoes-slots", {
+        method: "PUT",
+        body: JSON.stringify({
+          entidade_tipo: entidadeTipo,
+          entidade_id: entidadeId,
+          empresa_id: empresaId || undefined,
+          socio_id: socioVinculado || undefined,
+          tipo_documento: tipoDocumento,
+          observacao,
+        }),
+      });
+      setStatusObservacoes((prev) => ({ ...prev, [chave]: "salvo" }));
+    } catch (err: any) {
+      setStatusObservacoes((prev) => ({ ...prev, [chave]: "erro" }));
+      toast.error(err?.message || "Não foi possível salvar a observação.");
+    }
+  }, [entidadeId, entidadeTipo, empresaId]);
+
+  function alterarObservacao(tipoDocumento: string, socioVinculado: string | null, valor: string) {
+    const chave = chaveContextoSlot(tipoDocumento, socioVinculado);
+    setObservacoesPorTipo((prev) => ({ ...prev, [chave]: valor }));
+    setStatusObservacoes((prev) => { const copy = { ...prev }; delete copy[chave]; return copy; });
+    if (timersObservacoes.current[chave]) clearTimeout(timersObservacoes.current[chave]);
+    timersObservacoes.current[chave] = setTimeout(() => salvarObservacao(tipoDocumento, socioVinculado, valor), 700);
+  }
+
+  function salvarObservacaoAgora(tipoDocumento: string, socioVinculado: string | null) {
+    const chave = chaveContextoSlot(tipoDocumento, socioVinculado);
+    if (timersObservacoes.current[chave]) clearTimeout(timersObservacoes.current[chave]);
+    void salvarObservacao(tipoDocumento, socioVinculado, observacoesPorTipo[chave] || "");
+  }
 
   useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => { if (secaoInicial) setSecaoAtiva(secaoInicial); }, [secaoInicial]);
@@ -418,7 +499,12 @@ export default function DocumentosEntidade({
 
   const selecionadosIds = useMemo(() => docs.filter((doc) => selecionados[doc.id]).map((doc) => doc.id), [docs, selecionados]);
   const totalSlots = useMemo(() => slotsDaTela.length, [slotsDaTela]);
-  const slotsPreenchidos = useMemo(() => slotsDaTela.filter((documentoSlot) => docs.some((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento))).length, [slotsDaTela, docs]);
+  const slotsPreenchidos = useMemo(() => slotsDaTela.filter((documentoSlot) => {
+    if (entidadeTipo === "empresa" && documentoSlot.porSocio && socios.length) {
+      return socios.every((socio) => docs.some((doc) => doc.socio_id === socio.id && documentoSlot.matchTipos.includes(doc.tipo_documento)));
+    }
+    return docs.some((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento));
+  }).length, [slotsDaTela, docs, entidadeTipo, socios]);
   const documentosValidados = useMemo(() => docs.filter((doc) => doc.validado).length, [docs]);
   const identidadeInicialPreenchida = useMemo(() => {
     const slotsIdentidade = SECOES_DOCUMENTAIS.find((secao) => secao.titulo === "Identidade do CNPJ")?.slots || [];
@@ -440,7 +526,7 @@ export default function DocumentosEntidade({
     setModalExportacao(true);
   }
 
-  async function enviar(tipoDocumento: string, file: File) {
+  async function enviar(tipoDocumento: string, file: File, socioVinculado: string | null = null) {
     if (!entidadeId) return;
     const fd = new FormData();
     fd.append("file", file);
@@ -449,19 +535,20 @@ export default function DocumentosEntidade({
     fd.append("tipo_documento", tipoDocumento);
     if (empresaId) fd.append("empresa_id", empresaId);
     if (clientePfId) fd.append("cliente_pf_id", clientePfId);
-    if (socioId) fd.append("socio_id", socioId);
+    if (socioVinculado || socioId) fd.append("socio_id", socioVinculado || socioId || "");
     if (contratoId) fd.append("contrato_id", contratoId);
     if (simulacaoId) fd.append("simulacao_id", simulacaoId);
-    const obs = observacoesPorTipo[tipoDocumento]?.trim();
+    const chave = chaveContextoSlot(tipoDocumento, socioVinculado || socioId);
+    const obs = observacoesPorTipo[chave]?.trim();
     const nomeCustomizado = nomeCustomizadoPorTipo[tipoDocumento]?.trim();
     if (obs) fd.append("observacoes", obs);
     if (nomeCustomizado) fd.append("nome_customizado", nomeCustomizado);
 
-    setUploadingTipo(tipoDocumento);
+    setUploadingTipo(chave);
     try {
       const resultado = await apiFetch("/api/documentos/upload", { method: "POST", body: fd });
+      if (obs) await salvarObservacao(tipoDocumento, socioVinculado || socioId || null, obs);
       toast.success(`${labelTipoDocumento(tipoDocumento)} anexado com sucesso.`);
-      setObservacoesPorTipo((prev) => ({ ...prev, [tipoDocumento]: "" }));
       setNomeCustomizadoPorTipo((prev) => ({ ...prev, [tipoDocumento]: "" }));
       await carregar();
 
@@ -584,7 +671,12 @@ export default function DocumentosEntidade({
   const secaoAtivaObj = secoesDaTela.find((secao) => secao.titulo === secaoAtivaTitulo);
 
   function contarPreenchidos(secao: SecaoDocumento) {
-    return secao.slots.filter((documentoSlot) => docs.some((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento))).length;
+    return secao.slots.filter((documentoSlot) => {
+      if (entidadeTipo === "empresa" && documentoSlot.porSocio && socios.length) {
+        return socios.every((socio) => docs.some((doc) => doc.socio_id === socio.id && documentoSlot.matchTipos.includes(doc.tipo_documento)));
+      }
+      return docs.some((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento));
+    }).length;
   }
 
   if (!entidadeId) {
@@ -692,14 +784,26 @@ export default function DocumentosEntidade({
               <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3">
                 {slotsVisiveis.map((documentoSlot) => {
                     const tipo = documentoSlot.tipoUpload;
-                    const docsTipo = docs.filter((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento));
-                    const uploading = uploadingTipo === tipo;
+                    const exigeVinculoSocio = entidadeTipo === "empresa" && documentoSlot.porSocio === true;
+                    const socioVinculado = documentoSlot.porSocio
+                      ? (exigeVinculoSocio ? socioSelecionadoPorTipo[tipo] || socios[0]?.id || null : socioId || null)
+                      : null;
+                    const chaveSlot = chaveContextoSlot(tipo, socioVinculado);
+                    const docsTipoTodos = docs.filter((doc) => documentoSlot.matchTipos.includes(doc.tipo_documento));
+                    const docsTipo = documentoSlot.porSocio && socioVinculado
+                      ? docsTipoTodos.filter((doc) => doc.socio_id === socioVinculado || (entidadeTipo === "socio" && doc.entidade_id === socioVinculado))
+                      : docsTipoTodos;
+                    const docsSemSocio = exigeVinculoSocio ? docsTipoTodos.filter((doc) => !doc.socio_id) : [];
+                    const sociosComDocumento = exigeVinculoSocio
+                      ? socios.filter((socio) => docsTipoTodos.some((doc) => doc.socio_id === socio.id)).length
+                      : 0;
+                    const uploading = uploadingTipo === chaveSlot;
                     const exigeNome = Boolean(documentoSlot.exigeNome);
                     // Regra de anulação (ex: CND RFB cobre CADIN e PGFN) -- se algum tipo
                     // que satisfaz este campo já foi anexado em outro lugar, não precisa
                     // repetir aqui, mas a opção de anexar mesmo assim continua disponível.
                     const satisfeitoPorOutro = docsTipo.length === 0 && documentoSlot.satisfeitoPor?.some(
-                      (tipoSatisfaz) => docs.some((d) => d.tipo_documento === tipoSatisfaz)
+                      (tipoSatisfaz) => docs.some((d) => d.tipo_documento === tipoSatisfaz && (!documentoSlot.porSocio || !socioVinculado || d.socio_id === socioVinculado))
                     );
                     return (
                       <div key={tipo} className={`rounded-lg border p-3 space-y-2.5 self-start ${satisfeitoPorOutro ? "border-emerald-100 bg-emerald-50/40" : "border-slate-100 bg-white shadow-sm shadow-slate-100/30"}`}>
@@ -709,14 +813,16 @@ export default function DocumentosEntidade({
                               <p className="text-xs font-bold text-slate-700 leading-tight">{documentoSlot.titulo}</p>
                               {documentoSlot.obrigatorio && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-800 text-white shrink-0">OBRIGATÓRIO NA ETAPA</span>}
                             </div>
-                            <p className="text-[10px] text-slate-400 mt-0.5">{docsTipo.length} arquivo(s) anexado(s)</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              {exigeVinculoSocio ? `${sociosComDocumento}/${socios.length} sócio(s) com documento · ` : ""}{docsTipo.length} arquivo(s) no contexto atual
+                            </p>
                           </div>
                           {/* Já coberto por outro documento (ex: CND cobre CADIN/PGFN) -- não faz
                               sentido oferecer anexar algo que não é mais necessário. */}
                           {!satisfeitoPorOutro && (
-                            <label className="h-8 inline-flex items-center justify-center gap-1 text-[11px] font-semibold bg-blue-600 text-white px-3 rounded-lg cursor-pointer hover:bg-blue-700 transition-colors shrink-0">
+                            <label className={`h-8 inline-flex items-center justify-center gap-1 text-[11px] font-semibold px-3 rounded-lg transition-colors shrink-0 ${exigeVinculoSocio && !socioVinculado ? "bg-slate-300 text-white cursor-not-allowed" : "bg-blue-600 text-white cursor-pointer hover:bg-blue-700"}`}>
                               {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />} Anexar
-                              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file); e.currentTarget.value = ""; }} />
+                              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.csv,.docx" className="hidden" disabled={uploading || (exigeVinculoSocio && !socioVinculado)} onChange={(e) => { const file = e.target.files?.[0]; if (file) enviar(tipo, file, socioVinculado); e.currentTarget.value = ""; }} />
                             </label>
                           )}
                         </div>
@@ -727,6 +833,29 @@ export default function DocumentosEntidade({
                         )}
                         {!satisfeitoPorOutro && (
                         <>
+                        {exigeVinculoSocio && (
+                          <div className="rounded-lg border border-blue-100 bg-blue-50/70 p-2">
+                            <label className="mb-1 block text-[9px] font-black uppercase tracking-wide text-blue-700">Documento de quem?</label>
+                            {socios.length ? (
+                              <select
+                                value={socioVinculado || ""}
+                                onChange={(e) => setSocioSelecionadoPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))}
+                                className="h-8 w-full rounded-md border border-blue-200 bg-white px-2.5 text-[11px] font-semibold text-slate-700"
+                              >
+                                {socios.map((socio) => (
+                                  <option key={socio.id} value={socio.id}>{socio.nome || "Sócio sem nome"}{socio.administrador ? " · Administrador" : ""}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <p className="text-[11px] text-amber-700">Sincronize o QSA para identificar o sócio antes de anexar.</p>
+                            )}
+                          </div>
+                        )}
+                        {docsSemSocio.length > 0 && (
+                          <p className="rounded-md border border-amber-100 bg-amber-50 px-2.5 py-1.5 text-[10px] text-amber-700">
+                            {docsSemSocio.length} arquivo(s) legado(s) ainda sem identificação de sócio. Eles foram preservados e podem ser reenviados no nome correto.
+                          </p>
+                        )}
                         <div className={exigeNome ? "grid grid-cols-1 sm:grid-cols-2 gap-2" : ""}>
                           {exigeNome && (
                             <>
@@ -744,7 +873,20 @@ export default function DocumentosEntidade({
                               ) : null}
                             </>
                           )}
-                          <input value={observacoesPorTipo[tipo] || ""} onChange={(e) => setObservacoesPorTipo((prev) => ({ ...prev, [tipo]: e.target.value }))} placeholder="Observação opcional" className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-[11px] text-slate-700" />
+                          <div className="relative">
+                            <input
+                              value={observacoesPorTipo[chaveSlot] || ""}
+                              onChange={(e) => alterarObservacao(tipo, socioVinculado, e.target.value)}
+                              onBlur={() => salvarObservacaoAgora(tipo, socioVinculado)}
+                              placeholder={exigeVinculoSocio ? "Observação deste sócio" : "Observação opcional"}
+                              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 pr-16 text-[11px] text-slate-700"
+                            />
+                            {statusObservacoes[chaveSlot] && (
+                              <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-semibold ${statusObservacoes[chaveSlot] === "erro" ? "text-red-600" : statusObservacoes[chaveSlot] === "salvo" ? "text-emerald-600" : "text-slate-400"}`}>
+                                {statusObservacoes[chaveSlot] === "salvando" ? "Salvando..." : statusObservacoes[chaveSlot] === "salvo" ? "Salvo" : "Erro"}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         {documentoSlot.descricao && <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded-md px-2.5 py-1.5">{documentoSlot.descricao}</p>}
                         {tipo === "cartao_cnpj" && <p className="text-[11px] text-blue-700 bg-blue-50 border border-blue-100 rounded-md px-2.5 py-1.5">O usuário só anexa. O sistema/IA deverá identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral para o relatório.</p>}
@@ -759,8 +901,8 @@ export default function DocumentosEntidade({
                                 dentro de uma caixinha, dentro da tela que já rola, atrapalha o
                                 dedo no touch). O botão "Mostrar menos"/"ver todos" fica sempre
                                 fora da área de rolagem, nunca some ao rolar a lista. */}
-                            <div className={camposExpandidos[tipo] && docsTipo.length > 3 ? "space-y-1 sm:max-h-44 sm:overflow-y-auto sm:pr-1" : "space-y-1"}>
-                              {(camposExpandidos[tipo] ? docsTipo : docsTipo.slice(0, 3)).map((doc) => (
+                            <div className={camposExpandidos[chaveSlot] && docsTipo.length > 3 ? "space-y-1 sm:max-h-44 sm:overflow-y-auto sm:pr-1" : "space-y-1"}>
+                              {(camposExpandidos[chaveSlot] ? docsTipo : docsTipo.slice(0, 3)).map((doc) => (
                                 <div key={doc.id} className="flex items-center justify-between gap-2 rounded-md bg-white border border-slate-100 px-2 py-1">
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-1 flex-wrap">
@@ -768,6 +910,13 @@ export default function DocumentosEntidade({
                                       {doc.validado && <span title="Validado" className="text-emerald-600 shrink-0"><CheckCircle className="w-2.5 h-2.5" /></span>}
                                     </div>
                                     <p className="text-[9px] text-slate-400 truncate">{formatDate(doc.criado_em)}</p>
+                                    {doc.resultado_validacao?.analise_regra_documental && (
+                                      <p className={`mt-0.5 max-w-[260px] truncate text-[9px] font-semibold ${doc.exige_revisao_humana ? "text-amber-700" : "text-emerald-700"}`} title={doc.resultado_validacao.analise_regra_documental?.alertas?.[0]?.mensagem || "Análise automática concluída"}>
+                                        {doc.exige_revisao_humana
+                                          ? `Revisar: ${doc.resultado_validacao.analise_regra_documental?.alertas?.[0]?.mensagem || "há pendências na leitura"}`
+                                          : "Análise automática concluída"}
+                                      </p>
+                                    )}
                                   </div>
                                   <div className="flex items-center gap-0.5 shrink-0">
                                     <button type="button" title="Visualizar" onClick={() => visualizar(doc)} className="p-1 rounded-md hover:bg-blue-50 text-blue-600"><Eye className="w-3 h-3" /></button>
@@ -785,10 +934,10 @@ export default function DocumentosEntidade({
                             {docsTipo.length > 3 && (
                               <button
                                 type="button"
-                                onClick={() => setCamposExpandidos((prev) => ({ ...prev, [tipo]: !prev[tipo] }))}
+                                onClick={() => setCamposExpandidos((prev) => ({ ...prev, [chaveSlot]: !prev[chaveSlot] }))}
                                 className="mt-1.5 text-[9px] font-semibold text-blue-600 hover:text-blue-700"
                               >
-                                {camposExpandidos[tipo] ? "Mostrar menos" : `+ ${docsTipo.length - 3} arquivo(s) neste mesmo campo -- ver todos`}
+                                {camposExpandidos[chaveSlot] ? "Mostrar menos" : `+ ${docsTipo.length - 3} arquivo(s) neste mesmo campo -- ver todos`}
                               </button>
                             )}
                           </div>

@@ -142,4 +142,33 @@ describe('extração documental local determinística', () => {
     expect(resultado.confianca).toBeGreaterThanOrEqual(0.8);
   });
 
+  it('extrai competências e assinaturas de uma relação de faturamento', () => {
+    const texto = `
+      RELAÇÃO DE FATURAMENTO BRUTO
+      CNPJ 52.008.360/0001-33
+      06/2026 R$ 10.000,00
+      07/2026 R$ 12.000,00
+      Assinado digitalmente em 05/08/2026
+      Sócio-administrador: FERNANDO ELI
+      Contador: CONTADOR TESTE CRC 123
+    `;
+    const resultado = analisarTextoDocumentoLocal('faturamento_12_meses', texto);
+    expect(resultado.dados.meses_referencia).toEqual(['2026-06', '2026-07']);
+    expect(resultado.dados.data_assinatura).toBe('2026-08-05');
+    expect(resultado.dados.assinatura_socio_administrador.tipo).toBe('eletronica');
+  });
+
+  it('extrai titular e referência do comprovante de endereço', () => {
+    const texto = `
+      CONTA DE ENERGIA ELÉTRICA
+      Titular: MARIA DA SILVA
+      Referência: 06/2026
+      CEP 70000-000
+    `;
+    const resultado = analisarTextoDocumentoLocal('comprovante_residencia', texto);
+    expect(resultado.dados.nome_titular).toBe('MARIA DA SILVA');
+    expect(resultado.dados.mes_referencia).toBe('06/2026');
+    expect(resultado.confianca).toBeGreaterThanOrEqual(0.8);
+  });
+
 });

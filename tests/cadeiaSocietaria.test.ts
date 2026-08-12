@@ -47,4 +47,32 @@ describe('cadeia societária mínima de 12 meses', () => {
     expect(resultado.historico_cobre_12_meses).toBe(true);
     expect(resultado.continuidade_12_meses_comprovada).toBe(true);
   });
+
+  it('dispensa atos quando a empresa é MEI e não há registros', () => {
+    const resultado = calcularCadeiaComprovacaoSocietaria([], [], referencia, { empresaMei: true });
+    expect(resultado.atos_dispensados_por_mei).toBe(true);
+    expect(resultado.continuidade_12_meses_comprovada).toBe(true);
+    expect(resultado.permite_seguir_com_inclusao_documental).toBe(true);
+  });
+
+  it('aceita inclusão com alerta quando não há atos e a empresa não é MEI', () => {
+    const resultado = calcularCadeiaComprovacaoSocietaria([], [], referencia);
+    expect(resultado.possivel_registro_em_outro_orgao).toBe(true);
+    expect(resultado.permite_seguir_com_inclusao_documental).toBe(true);
+    expect(resultado.continuidade_12_meses_comprovada).toBe(false);
+  });
+
+  it('solicita todos os atos e alerta tempo mínimo quando nenhum alcança 12 meses', () => {
+    const resultado = calcularCadeiaComprovacaoSocietaria(
+      [
+        { numero: 'A2', data: '2026-07-01', tipo_ato: 'ALTERAÇÃO' },
+        { numero: 'A1', data: '2026-01-01', tipo_ato: 'CONTRATO' },
+      ],
+      [],
+      referencia,
+    );
+    expect(resultado.todos_atos_devem_ser_anexados).toBe(true);
+    expect(resultado.empresa_sem_tempo_minimo_constituicao).toBe(true);
+    expect(resultado.registros_requeridos).toHaveLength(2);
+  });
 });

@@ -1,0 +1,26 @@
+Base: destrava-main (1).zip
+SHA-256 da base: 7bbb8fcb8c2b9b6ab88d6123e24811904fe51e7df971fda3f813010dad9dd36e
+
+ARQUIVOS ALTERADOS
+client/src/components/documentos/DocumentosEntidade.tsx
+client/src/pages/colaborador/AcervoDocumentalEmpresa.tsx
+client/src/pages/colaborador/EmpresaDocumentos.tsx
+db/migrate.sql
+server/routes/documentacao.ts
+server/routes/documentos.ts
+server/services/analiseDocumentalEspecializada.ts
+server/services/cadeiaSocietariaService.ts
+server/services/extracaoDocumentalLocal.ts
+tests/analiseDocumentalEspecializada.test.ts
+tests/cadeiaSocietaria.test.ts
+tests/extracaoDocumentalLocal.test.ts
+
+ARQUIVOS NOVOS
+db/migrations/082_regras_documentais_agosto_2026.sql
+server/services/regrasDocumentaisCredito.ts
+tests/regrasDocumentaisCredito.test.ts
+
+DOCUMENTAÇÃO DA ENTREGA
+RELATORIO_INTEGRACAO_PRODUCAO_REGRAS_DOCUMENTAIS_2026-08-12.md
+MANIFESTO_INTEGRACAO_PRODUCAO_2026-08-12.txt
+

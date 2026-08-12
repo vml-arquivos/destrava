@@ -11,6 +11,7 @@ import {
   resolveDocumentPath,
   saveDocumentBuffer,
 } from '../services/documentStorage';
+import { analiseDocumentalService } from '../services/analiseDocumentalEspecializada';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -292,6 +293,66 @@ async function getSocioEmpresaId(socioId: string): Promise<string | null> {
   return rows[0]?.empresa_id || null;
 }
 
+async function ensureObservacoesSlotsSchema() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS public.documentos_observacoes_slots (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      entidade_tipo TEXT NOT NULL,
+      entidade_id UUID NOT NULL,
+      empresa_id UUID NULL,
+      socio_id UUID NULL,
+      tipo_documento TEXT NOT NULL,
+      observacao TEXT NOT NULL DEFAULT '',
+      criado_por TEXT NULL,
+      atualizado_por TEXT NULL,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_documentos_observacoes_slots_contexto
+      ON public.documentos_observacoes_slots (
+        entidade_tipo,
+        entidade_id,
+        tipo_documento,
+        COALESCE(socio_id, '00000000-0000-0000-0000-000000000000'::uuid)
+      )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_documentos_observacoes_slots_empresa ON public.documentos_observacoes_slots(empresa_id, tipo_documento)');
+  // Compatibilidade de deploy: alguns ambientes iniciam a aplicação sem executar
+  // scripts de migração separados. Estes ajustes são idempotentes e garantem que
+  // o catálogo ativo não volte a marcar faturamento como obrigatório.
+  if (await tableExists('documentacao_blocos')) {
+    await pool.query(`
+      UPDATE public.documentacao_blocos
+         SET ordem = CASE codigo WHEN 'atos_junta_comercial' THEN 4 ELSE 5 END,
+             configuracao = COALESCE(configuracao, '{}'::jsonb) || CASE codigo
+               WHEN 'atos_junta_comercial' THEN '{"sequencia_analise":1,"dispensa_mei_sem_ato":true}'::jsonb
+               ELSE '{"sequencia_analise":2}'::jsonb END,
+             atualizacao_em = NOW()
+       WHERE codigo IN ('atos_junta_comercial','contrato_social_alteracoes');
+      UPDATE public.documentacao_blocos
+         SET obrigatorio=false,
+             configuracao=COALESCE(configuracao,'{}'::jsonb)||'{"documento_obrigatorio":false}'::jsonb,
+             atualizacao_em=NOW()
+       WHERE codigo='faturamento_historico';
+    `);
+  }
+  if (await tableExists('documentos_regras_credito')) {
+    await pool.query(`
+      UPDATE public.documentos_regras_credito
+         SET obrigatorio=false,
+             condicao=COALESCE(condicao,'{}'::jsonb)||'{"quando_anexado":true,"ultimo_mes_fechado":true,"assinaturas_mesma_modalidade":true}'::jsonb,
+             atualizado_em=NOW()
+       WHERE codigo='empresa_faturamento_12m';
+      UPDATE public.documentos_regras_credito
+         SET condicao=COALESCE(condicao,'{}'::jsonb)||'{"aplicar_todos_socios":true,"identificacao_socio_obrigatoria":true}'::jsonb,
+             atualizado_em=NOW()
+       WHERE entidade_tipo='socio';
+    `);
+  }
+}
+
 async function getContratoRefs(contratoId: string): Promise<{ empresa_id?: string | null; cliente_pf_id?: string | null; lead_id?: string | null } | null> {
   const tables = ['contratos_gerados', 'contratos'];
   for (const table of tables) {
@@ -378,6 +439,36 @@ async function auditar(documentoId: string, acao: string, antes: any, depois: an
      VALUES ($1,$2,$3::jsonb,$4::jsonb,$5)`,
     [documentoId, acao, JSON.stringify(antes || null), JSON.stringify(depois || null), usuarioId]
   ).catch((err) => console.warn('[auditoria_documentos]', err.message));
+}
+
+function agendarAnaliseRegraDocumental(documento: any) {
+  const empresaId = documento?.empresa_id || (documento?.entidade_tipo === 'empresa' ? documento?.entidade_id : null);
+  const tipo = String(documento?.tipo_documento || '');
+  if (!empresaId || !documento?.id || !['faturamento_12_meses', 'comprovante_faturamento', 'declaracao_faturamento', 'comprovante_residencia'].includes(tipo)) return;
+  setTimeout(async () => {
+    try {
+      const resultado = tipo === 'comprovante_residencia'
+        ? await analiseDocumentalService.analisarComprovanteResidencia(empresaId, documento.id)
+        : await analiseDocumentalService.analisarFaturamento(empresaId, documento.id);
+      await pool.query(
+        `UPDATE public.documentos_arquivos
+            SET resultado_validacao=COALESCE(resultado_validacao,'{}'::jsonb)||$2::jsonb,
+                exige_revisao_humana=$3,
+                atualizado_em=NOW()
+          WHERE id=$1`,
+        [documento.id, JSON.stringify({ analise_regra_documental: resultado }), resultado.revisao_humana_necessaria],
+      );
+    } catch (error: any) {
+      console.warn('[documentos] Análise documental assíncrona não interrompeu o upload:', documento.id, error?.message || error);
+      await pool.query(
+        `UPDATE public.documentos_arquivos
+            SET resultado_validacao=COALESCE(resultado_validacao,'{}'::jsonb)||$2::jsonb,
+                atualizado_em=NOW()
+          WHERE id=$1`,
+        [documento.id, JSON.stringify({ analise_regra_documental_erro: { mensagem: String(error?.message || error || 'Falha de leitura').slice(0, 1000), ocorrido_em: new Date().toISOString() } })],
+      ).catch(() => undefined);
+    }
+  }, 0);
 }
 
 router.get('/', auth, async (req: Request, res: Response) => {
@@ -471,6 +562,90 @@ router.get('/storage-health', auth, async (_req: Request, res: Response) => {
   }
 });
 
+router.get('/observacoes-slots', auth, async (req: Request, res: Response) => {
+  try {
+    const entidadeTipo = String(req.query.entidade_tipo || '').trim();
+    const entidadeId = String(req.query.entidade_id || '').trim();
+    if (!ENTIDADES.includes(entidadeTipo as any) || !isUuid(entidadeId)) {
+      res.status(400).json({ error: 'Entidade inválida para carregar observações.' });
+      return;
+    }
+    await ensureObservacoesSlotsSchema();
+    const { rows } = await pool.query(
+      `SELECT id, entidade_tipo, entidade_id, empresa_id, socio_id, tipo_documento, observacao, criado_em, atualizado_em
+         FROM public.documentos_observacoes_slots
+        WHERE entidade_tipo = $1 AND entidade_id = $2
+        ORDER BY atualizado_em DESC`,
+      [entidadeTipo, entidadeId],
+    );
+    res.json(rows);
+  } catch (err: any) {
+    console.error('[GET /api/documentos/observacoes-slots]', err);
+    res.status(500).json({ error: 'Erro ao carregar observações documentais.' });
+  }
+});
+
+router.put('/observacoes-slots', auth, async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const user = (req as any).colaborador || (req as any).user;
+    const entidadeTipo = String(req.body?.entidade_tipo || '').trim();
+    const entidadeId = String(req.body?.entidade_id || '').trim();
+    const tipoDocumento = String(req.body?.tipo_documento || '').trim();
+    const socioId = String(req.body?.socio_id || '').trim() || null;
+    const empresaId = String(req.body?.empresa_id || '').trim() || (entidadeTipo === 'empresa' ? entidadeId : null);
+    const observacao = String(req.body?.observacao || '').trim().slice(0, 4000);
+    if (!ENTIDADES.includes(entidadeTipo as any) || !isUuid(entidadeId) || !TIPOS_DOCUMENTO.includes(tipoDocumento)) {
+      res.status(400).json({ error: 'Contexto documental inválido.' });
+      return;
+    }
+    await validarEntidade(entidadeTipo, entidadeId, req.body || {});
+    if (socioId) {
+      if (!isUuid(socioId)) { res.status(400).json({ error: 'socio_id inválido.' }); return; }
+      const socioEmpresaId = await getSocioEmpresaId(socioId);
+      if (!socioEmpresaId || (empresaId && socioEmpresaId !== empresaId)) {
+        res.status(400).json({ error: 'O sócio informado não pertence à empresa.' });
+        return;
+      }
+    }
+    await ensureObservacoesSlotsSchema();
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`obs-slot:${entidadeTipo}:${entidadeId}:${tipoDocumento}:${socioId || 'geral'}`]);
+    if (!observacao) {
+      await client.query(
+        `DELETE FROM public.documentos_observacoes_slots
+          WHERE entidade_tipo=$1 AND entidade_id=$2 AND tipo_documento=$3 AND socio_id IS NOT DISTINCT FROM $4::uuid`,
+        [entidadeTipo, entidadeId, tipoDocumento, socioId],
+      );
+      await client.query('COMMIT');
+      res.json({ removida: true, tipo_documento: tipoDocumento, socio_id: socioId });
+      return;
+    }
+    const existente = await client.query(
+      `UPDATE public.documentos_observacoes_slots
+          SET observacao=$5, empresa_id=$6, atualizado_por=$7, atualizado_em=NOW()
+        WHERE entidade_tipo=$1 AND entidade_id=$2 AND tipo_documento=$3 AND socio_id IS NOT DISTINCT FROM $4::uuid
+        RETURNING *`,
+      [entidadeTipo, entidadeId, tipoDocumento, socioId, observacao, empresaId, String(user?.id || '') || null],
+    );
+    const salvo = existente.rows[0] || (await client.query(
+      `INSERT INTO public.documentos_observacoes_slots
+        (entidade_tipo, entidade_id, empresa_id, socio_id, tipo_documento, observacao, criado_por, atualizado_por)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$7)
+       RETURNING *`,
+      [entidadeTipo, entidadeId, empresaId, socioId, tipoDocumento, observacao, String(user?.id || '') || null],
+    )).rows[0];
+    await client.query('COMMIT');
+    res.json(salvo);
+  } catch (err: any) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    console.error('[PUT /api/documentos/observacoes-slots]', err);
+    res.status(500).json({ error: 'Erro ao salvar observação documental.' });
+  } finally {
+    client.release();
+  }
+});
+
 router.post('/upload', auth, upload.single('file'), async (req: Request, res: Response) => {
   try {
     const user = (req as any).colaborador || (req as any).user;
@@ -484,6 +659,15 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
     if (!TIPOS_DOCUMENTO.includes(tipoDocumento)) { res.status(400).json({ error: 'tipo_documento inválido' }); return; }
     assertAllowedRelation(entidadeTipo, tipoDocumento, req.body);
     const refs = await validarEntidade(entidadeTipo, entidadeId, req.body);
+    if (req.body.socio_id) {
+      const socioId = String(req.body.socio_id).trim();
+      if (!isUuid(socioId)) throw new Error('socio_id inválido.');
+      const socioEmpresaId = await getSocioEmpresaId(socioId);
+      const empresaEsperada = (refs as any).empresa_id || req.body.empresa_id || (entidadeTipo === 'empresa' ? entidadeId : null);
+      if (!socioEmpresaId || (empresaEsperada && socioEmpresaId !== empresaEsperada)) {
+        throw new Error('O sócio informado não pertence à empresa do documento.');
+      }
+    }
     validarArquivo(file, tipoDocumento);
 
     const hash = crypto.createHash('sha256').update(file.buffer).digest('hex');
@@ -563,6 +747,7 @@ router.post('/upload', auth, upload.single('file'), async (req: Request, res: Re
       throw err;
     });
     await auditar(rows[0].id, 'upload', null, rows[0], user.id);
+    agendarAnaliseRegraDocumental(rows[0]);
     res.status(201).json(rows[0]);
   } catch (err: any) {
     console.error('[POST /api/documentos/upload]', err);

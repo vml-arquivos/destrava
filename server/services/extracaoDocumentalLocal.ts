@@ -7,7 +7,14 @@ import { normalizeText, onlyDigits, parseDate } from '../utils/helpers';
 
 const execFileAsync = promisify(execFile);
 
-export type TipoDocumentoLocal = 'cartao_cnpj' | 'qsa' | 'simples_nacional' | 'atos_junta_comercial' | 'contrato_social_alteracao';
+export type TipoDocumentoLocal =
+  | 'cartao_cnpj'
+  | 'qsa'
+  | 'simples_nacional'
+  | 'atos_junta_comercial'
+  | 'contrato_social_alteracao'
+  | 'faturamento_12_meses'
+  | 'comprovante_residencia';
 
 export interface ExtracaoDocumentalLocalResult {
   tipo: TipoDocumentoLocal;
@@ -52,7 +59,9 @@ function pareceRotulo(linha: string): boolean {
 }
 
 function valorAposRotulo(linhas: string[], aliases: string[], limite = 3): string | null {
-  const aliasesNorm = aliases.map(textoNormalizado);
+  // O rótulo mais específico deve vencer (ex.: "capital social atual" antes
+  // de "capital social"), evitando interpretar a palavra "atual" como valor.
+  const aliasesNorm = aliases.map(textoNormalizado).sort((a, b) => b.length - a.length);
   for (let i = 0; i < linhas.length; i += 1) {
     const linha = linhas[i];
     const normalizada = textoNormalizado(linha);
@@ -302,9 +311,20 @@ function parseContratoSocialAlteracao(texto: string): { dados: Record<string, an
         ? 'Contrato Social'
         : null;
 
+  const socios = linhas
+    .filter((linha) => /s[oó]ci[oa]|administrador|titular/i.test(linha))
+    .map((linha) => {
+      const depoisRotulo = linha.match(/(?:s[oó]ci[oa](?:\s*-?administrador[ae]?)?|administrador[ae]?|titular)\s*[:\-]\s*([A-ZÀ-Ú][A-ZÀ-Ú\s]{4,100})/i)?.[1];
+      const antesVirgula = linha.match(/^\s*([A-ZÀ-Ú][A-ZÀ-Ú\s]{4,100})\s*,/)?.[1];
+      const nome = limparValor(depoisRotulo || antesVirgula || null);
+      return nome ? { nome, qualificacao: /administrador|titular/i.test(linha) ? 'Administrador' : 'Sócio', administrador: /administrador|titular/i.test(linha) } : null;
+    })
+    .filter(Boolean)
+    .filter((item: any, index, array: any[]) => array.findIndex((outro: any) => textoNormalizado(outro.nome) === textoNormalizado(item.nome)) === index);
+
   const campos = [nire, dataRegistro, razaoSocial, cnpj, tipoAto];
   const preenchidos = campos.filter(Boolean).length;
-  const confianca = clamp((compativel ? 0.25 : 0) + (nire ? 0.25 : 0) + (dataRegistro ? 0.25 : 0) + (preenchidos / campos.length) * 0.25);
+  const confianca = clamp((compativel ? 0.15 : 0) + (nire ? 0.2 : 0) + (dataRegistro ? 0.2 : 0) + (preenchidos / campos.length) * 0.15 + (socios.length ? 0.3 : 0));
   return {
     dados: {
       documento_compativel: compativel,
@@ -316,6 +336,79 @@ function parseContratoSocialAlteracao(texto: string): { dados: Record<string, an
       data_efeitos_registro: dataEfeitos,
       data_documento: dataDocumento,
       numero_arquivamento: numeroArquivamento,
+      socios,
+      confianca,
+      fonte_extracao: 'local_deterministica',
+    },
+    confianca,
+  };
+}
+
+function parseFaturamento12Meses(texto: string): { dados: Record<string, any>; confianca: number } {
+  const norm = textoNormalizado(texto);
+  const compativel = /faturamento|receita bruta|relacao de receitas|relação de receitas/.test(norm);
+  const cnpj = formatarCnpj(primeiroCnpj(texto));
+  const meses = linhasTexto(texto)
+    .filter((linha) => !/\bcnpj\b/i.test(linha))
+    .filter((linha) => !/\b\d{2}\/\d{2}\/20\d{2}\b/.test(linha) || /r\$|faturamento|compet[eê]ncia|refer[eê]ncia/i.test(linha))
+    .flatMap((linha) => Array.from(linha.matchAll(/\b(0?[1-9]|1[0-2])\s*[\/.\-]\s*(20\d{2}|\d{2})\b/g)))
+    .map((match) => `${match[2].length === 2 ? `20${match[2]}` : match[2]}-${match[1].padStart(2, '0')}`);
+  const mesesReferencia = Array.from(new Set(meses)).sort();
+  const datas = Array.from(String(texto || '').matchAll(/\b(\d{2}\/\d{2}\/20\d{2})\b/g))
+    .map((match) => parseDate(match[1]))
+    .filter(Boolean) as string[];
+  const dataAssinatura = parseDate(
+    texto.match(/(?:assinado|assinatura|firmado|declaramos).{0,80}?(\d{2}\/\d{2}\/20\d{2})/is)?.[1]
+      || datas.at(-1)
+      || null,
+  );
+  const eletronica = /assinado\s+(?:de\s+forma\s+)?(?:digital|eletronic)|assinatura\s+(?:digital|eletronic)|icp[\s-]*brasil|gov\.br/i.test(texto);
+  const manual = /assinatura\s+manual|assinado\s+manualmente|assinatura\s+manuscrita/i.test(texto);
+  const tipoAssinatura = eletronica ? 'eletronica' : manual ? 'manual' : null;
+  const nomeSocio = limparValor(texto.match(/(?:s[oó]cio(?:\s*-?administrador)?|administrador)\s*[:\-]\s*([^\n\r]{4,100})/i)?.[1] || null);
+  const nomeContador = limparValor(texto.match(/(?:contador(?:a)?|respons[aá]vel\s+cont[aá]bil)\s*[:\-]\s*([^\n\r]{4,100})/i)?.[1] || null);
+  const temSocio = /s[oó]cio(?:\s*-?administrador)?|administrador/i.test(texto) && /assinatura|assinado|firmado/i.test(texto);
+  const temContador = /contador|crc|respons[aá]vel\s+cont[aá]bil/i.test(texto) && /assinatura|assinado|firmado/i.test(texto);
+  const confianca = clamp((compativel ? 0.25 : 0) + (cnpj ? 0.2 : 0) + (mesesReferencia.length ? 0.25 : 0) + (dataAssinatura ? 0.1 : 0) + (temSocio ? 0.1 : 0) + (temContador ? 0.1 : 0));
+  return {
+    dados: {
+      documento_compativel: compativel,
+      cnpj,
+      meses_referencia: mesesReferencia,
+      data_assinatura: dataAssinatura,
+      assinatura_socio_administrador: { presente: temSocio, nome: nomeSocio, tipo: tipoAssinatura },
+      assinatura_contador: { presente: temContador, nome: nomeContador, tipo: tipoAssinatura },
+      confianca,
+      fonte_extracao: 'local_deterministica',
+    },
+    confianca,
+  };
+}
+
+function parseComprovanteResidencia(texto: string): { dados: Record<string, any>; confianca: number } {
+  const linhas = linhasTexto(texto);
+  const norm = textoNormalizado(texto);
+  const compativel = /comprovante|conta de (?:agua|energia|telefone|internet)|fatura|endereco|endereço|cep/.test(norm);
+  const dataEmissao = parseDate(
+    texto.match(/(?:data\s+de\s+emiss[aã]o|emiss[aã]o)\s*[:\-]?\s*(\d{2}\/\d{2}\/20\d{2})/i)?.[1]
+      || texto.match(/(?:vencimento|data\s+de\s+vencimento)\s*[:\-]?\s*(\d{2}\/\d{2}\/20\d{2})/i)?.[1]
+      || texto.match(/\b(\d{2}\/\d{2}\/20\d{2})\b/)?.[1]
+      || null,
+  );
+  const mesReferencia = texto.match(/(?:m[eê]s|compet[eê]ncia|refer[eê]ncia)\s*[:\-]?\s*((?:0?[1-9]|1[0-2])\s*[\/.\-]\s*(?:20\d{2}|\d{2}))/i)?.[1]
+    || (dataEmissao ? dataEmissao.slice(0, 7) : null);
+  const nomeTitular = limparValor(
+    valorAposRotulo(linhas, ['nome do titular', 'titular', 'cliente', 'nome do cliente', 'consumidor'])
+      || texto.match(/(?:titular|cliente|consumidor)\s*[:\-]\s*([^\n\r]{4,100})/i)?.[1]
+      || null,
+  );
+  const confianca = clamp((compativel ? 0.35 : 0) + (mesReferencia ? 0.3 : 0) + (nomeTitular ? 0.25 : 0) + (/\b\d{5}-?\d{3}\b/.test(texto) ? 0.1 : 0));
+  return {
+    dados: {
+      documento_compativel: compativel,
+      nome_titular: nomeTitular,
+      mes_referencia: mesReferencia,
+      data_emissao: dataEmissao,
       confianca,
       fonte_extracao: 'local_deterministica',
     },
@@ -428,6 +521,8 @@ export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: str
   if (tipo === 'qsa') return parseQsa(texto);
   if (tipo === 'simples_nacional') return parseSimples(texto);
   if (tipo === 'atos_junta_comercial') return parseAtosJunta(texto);
+  if (tipo === 'faturamento_12_meses') return parseFaturamento12Meses(texto);
+  if (tipo === 'comprovante_residencia') return parseComprovanteResidencia(texto);
   return parseContratoSocialAlteracao(texto);
 }
 

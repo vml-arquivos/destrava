@@ -191,11 +191,11 @@ async function ensureBlocosCatalogo() {
       ('cnpj_receita', 'CNPJ / Receita Federal', 'Dados oficiais de CNPJ e situação cadastral.', 'empresa', true, 1, '{"prioridade":"imediata"}'::jsonb),
       ('qsa_quadro_societario', 'QSA / Quadro Societário', 'Quadro de Sócios e Administradores da empresa.', 'empresa', true, 2, '{"prioridade":"imediata"}'::jsonb),
       ('enquadramento_tributario', 'Enquadramento Tributário', 'Regime tributário atual da empresa (Simples Nacional, MEI, Lucro Presumido ou Lucro Real).', 'empresa', true, 3, '{"prioridade":"imediata","etapa":"identidade_cnpj"}'::jsonb),
-      ('contrato_social_alteracoes', 'Contrato Social e Alterações', 'Contrato social vigente e alterações, validado pela data de registro e NIRE.', 'empresa', true, 4, '{"etapa":"documentacao_societaria"}'::jsonb),
-      ('atos_junta_comercial', 'Atos da Junta Comercial', 'Histórico de arquivamentos para conferência do NIRE e da data do contrato/alteração social.', 'empresa', true, 5, '{"etapa":"documentacao_societaria"}'::jsonb),
+      ('atos_junta_comercial', 'Atos da Junta Comercial', 'Histórico de arquivamentos lido antes do contrato para definir quais atos devem ser anexados.', 'empresa', true, 4, '{"etapa":"documentacao_societaria","sequencia_analise":1}'::jsonb),
+      ('contrato_social_alteracoes', 'Contrato Social e Alterações', 'Contrato social vigente e alterações, validados depois dos Atos da Junta por número do ato, data, NIRE, CNPJ e QSA.', 'empresa', true, 5, '{"etapa":"documentacao_societaria","sequencia_analise":2}'::jsonb),
       ('socios_representantes', 'Sócios, Administradores e Representantes', 'Dados e documentos dos sócios/representantes.', 'socio', true, 6, '{}'::jsonb),
       ('endereco_contatos', 'Endereço, Contatos e Dados Operacionais', 'Endereço, contatos e dados operacionais.', 'empresa', false, 7, '{}'::jsonb),
-      ('faturamento_historico', 'Faturamento Histórico', 'Histórico mensal de faturamento.', 'empresa', true, 8, '{}'::jsonb),
+      ('faturamento_historico', 'Faturamento Histórico', 'Histórico mensal de faturamento, analisado quando anexado, sem obrigatoriedade.', 'empresa', false, 8, '{"documento_obrigatorio":false}'::jsonb),
       ('previsao_faturamento', 'Previsão de Faturamento', 'Projeção de faturamento.', 'empresa', false, 9, '{}'::jsonb),
       ('demonstracoes_contabeis_fiscais', 'Demonstrações Contábeis e Fiscais', 'Balanço, DRE, ECD, ECF e declarações.', 'empresa', false, 10, '{}'::jsonb),
       ('extratos_movimentacao_bancaria', 'Extratos Bancários e Movimentação', 'Extratos e movimentação bancária.', 'empresa', false, 11, '{}'::jsonb),
@@ -817,11 +817,48 @@ async function ensureSocioBlocos(empresaId: string, socios: any[]) {
   const blocoSocios = await pool.query(`SELECT id FROM public.documentacao_blocos WHERE codigo = 'socios_representantes' LIMIT 1`);
   const blocoId = blocoSocios.rows[0]?.id;
   if (!blocoId) return;
+  const regrasObrigatorias = (await tableExists('documentos_regras_credito'))
+    ? (await pool.query(
+        `SELECT codigo, tipo_documento, nome_amigavel
+           FROM public.documentos_regras_credito
+          WHERE entidade_tipo='socio' AND ativo=true AND obrigatorio=true
+          ORDER BY ordem`,
+      )).rows
+    : [
+        { codigo: 'socio_documento_id', tipo_documento: 'documento_socio', nome_amigavel: 'Documento de identificação do sócio' },
+        { codigo: 'socio_comprovante_residencia', tipo_documento: 'comprovante_residencia', nome_amigavel: 'Comprovante de endereço do sócio' },
+      ];
+  const equivalentes: Record<string, string[]> = {
+    documento_socio: ['documento_socio', 'cpf', 'rg', 'cnh'],
+    imposto_renda: ['imposto_renda', 'irpf'],
+    rating_bacen_cpf: ['rating_bacen_cpf', 'scr_cpf'],
+    scr_cpf: ['scr_cpf', 'rating_bacen_cpf'],
+  };
   for (const s of socios) {
     const pendencias = pendenciasQsa([s]).filter((p) => p.codigo !== 'sem_assinante_identificado');
-    const docs = await contarDocumentos(`entidade_tipo = 'socio' AND entidade_id = $1`, [s.id]);
-    if (docs === 0) pendencias.push({ codigo: 'socio_sem_documentos', mensagem: `Sócio ${s.nome || s.id}: nenhum documento pessoal anexado.`, severidade: 'media', origem: 'documentos_arquivos' });
+    const docsResult = await pool.query(
+      `SELECT tipo_documento, id, status, validado
+         FROM public.documentos_arquivos
+        WHERE excluido_em IS NULL AND status <> 'excluido'
+          AND (socio_id=$1 OR (entidade_tipo='socio' AND entidade_id=$1))`,
+      [s.id],
+    );
+    const docs = docsResult.rows;
+    if (docs.length === 0) pendencias.push({ codigo: 'socio_sem_documentos', mensagem: `Sócio ${s.nome || s.id}: nenhum documento pessoal anexado.`, severidade: 'media', origem: 'documentos_arquivos' });
+    for (const regra of regrasObrigatorias) {
+      const aceitos = equivalentes[regra.tipo_documento] || [regra.tipo_documento];
+      if (!docs.some((doc: any) => aceitos.includes(String(doc.tipo_documento)))) {
+        pendencias.push({
+          codigo: `${regra.codigo}_ausente`,
+          mensagem: `${s.nome || 'Sócio'}: ${regra.nome_amigavel || regra.tipo_documento} não anexado.`,
+          severidade: 'media',
+          origem: 'documentos_regras_credito',
+          recomendacao: 'Anexar no campo deste sócio; documentos de outra pessoa não satisfazem esta pendência.',
+        });
+      }
+    }
     const completo = pendencias.filter((p) => p.severidade === 'alta' || p.severidade === 'media').length === 0;
+    const dadosSocio = dadosQsa({ socios_receita: [] }, [s]).socios[0];
     await pool.query(
       `INSERT INTO public.documentacao_entidade_blocos
           (bloco_id, entidade_tipo, entidade_id, empresa_id, socio_id, status, completo, validado, dados_estruturados, pendencias, origem)
@@ -833,7 +870,7 @@ async function ensureSocioBlocos(empresaId: string, socios: any[]) {
           completo = EXCLUDED.completo,
           dados_estruturados = EXCLUDED.dados_estruturados,
           pendencias = EXCLUDED.pendencias`,
-      [blocoId, s.id, empresaId, completo ? 'validado' : 'pendente', completo, JSON.stringify(dadosQsa({ socios_receita: [] }, [s]).socios[0]), JSON.stringify(pendencias)]
+      [blocoId, s.id, empresaId, completo ? 'validado' : 'pendente', completo, JSON.stringify({ ...dadosSocio, cobertura_documental: { total_regras: regrasObrigatorias.length, total_presentes: regrasObrigatorias.length - pendencias.filter((item) => item.origem === 'documentos_regras_credito').length, documentos: docs.map((doc: any) => ({ id: doc.id, tipo_documento: doc.tipo_documento, status: doc.status, validado: doc.validado })) } }), JSON.stringify(pendencias)]
     );
   }
 }
@@ -846,7 +883,7 @@ async function vincularDocumentosAutomaticos(empresaId: string) {
     { codigo: 'enquadramento_tributario', tipos: ['enquadramento_tributario_cnpj', 'simples_nacional'] },
     { codigo: 'socios_representantes', tipos: ['documento_socio', 'cpf', 'rg', 'cnh', 'comprovante_residencia', 'procuracao'] },
     { codigo: 'contrato_social_alteracoes', tipos: ['contrato_social', 'alteracao_contratual', 'estatuto', 'procuracao'] },
-    { codigo: 'faturamento_historico', tipos: ['comprovante_faturamento', 'declaracao_faturamento', 'dre', 'balanco', 'nota_fiscal'] },
+    { codigo: 'faturamento_historico', tipos: ['faturamento_12_meses', 'comprovante_faturamento', 'declaracao_faturamento', 'dre', 'balanco', 'nota_fiscal'] },
     { codigo: 'demonstracoes_contabeis_fiscais', tipos: ['dre', 'balanco', 'balancete', 'imposto_renda', 'ecd', 'ecf'] },
     { codigo: 'extratos_movimentacao_bancaria', tipos: ['extrato_bancario'] },
     { codigo: 'certidoes_regularidade', tipos: ['certidao', 'serasa', 'spc', 'boa_vista', 'cemprot'] },
@@ -863,6 +900,7 @@ async function vincularDocumentosAutomaticos(empresaId: string) {
          JOIN public.documentos_arquivos da ON da.empresa_id = $1 AND da.tipo_documento = ANY($3::text[])
         WHERE deb.entidade_tipo = 'empresa'
           AND deb.entidade_id = $1
+          AND (b.codigo <> 'socios_representantes' OR deb.socio_id IS NULL OR da.socio_id = deb.socio_id OR (da.entidade_tipo='socio' AND da.entidade_id=deb.socio_id))
           AND da.excluido_em IS NULL
           AND da.status <> 'excluido'
        ON CONFLICT (entidade_bloco_id, arquivo_id) DO NOTHING`,
@@ -880,8 +918,8 @@ async function vincularDocumentosAutomaticos(empresaId: string) {
 //   3) nenhuma pendência de severidade alta/crítica nos 3 blocos (CNPJ
 //      divergente, sócio não localizado na Receita, capital social
 //      incompatível, alteração recente não refletida etc.);
-//   4) enquadramento tributário identificado e empresa fora do MEI.
-//      Empresas MEI recebem estratégia alternativa, sem liberar o fluxo padrão.
+//   4) enquadramento tributário identificado. MEI pode prosseguir na inclusão
+//      documental; a ausência de Atos da Junta é tratada na Etapa 2.
 // Isso alimenta o botão/CTA "Avançar para a próxima etapa" no relatório.
 // ─────────────────────────────────────────────────────────────────────────
 async function avaliarProntidaoIdentidadeCnpj(params: {
@@ -959,8 +997,7 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
   const textoEnquadramento = [regime, situacaoSimples, params.empresa?.porte, params.empresa?.natureza_juridica].filter(Boolean).join(' ');
   const ehMei = params.enquadramentoDados?.opcao_mei === true || params.empresa?.opcao_mei === true || /\bmei\b|microempreendedor individual|simei/i.test(textoEnquadramento);
   if (ehMei) {
-    addBloqueio('Empresa enquadrada como MEI. O fluxo padrão de crédito empresarial exige estratégia específica.');
-    addAviso('MEI pode seguir em estratégia alternativa para linhas compatíveis.');
+    addAviso('Empresa identificada como MEI: a ausência de Atos da Junta será dispensada na etapa societária, sem impedir a inclusão dos demais documentos.');
   }
 
   const todasPendencias = [...params.cnpjPendencias, ...params.qsaPendencias, ...params.enquadramentoPendencias];
@@ -1002,7 +1039,7 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
     },
   };
   const tresDocumentosOk = Object.values(documentosIniciais).every((item) => item.consistente);
-  const apto = situacaoAtiva && empresaApta12Meses === true && tresDocumentosOk && !ehMei && bloqueios.length === 0;
+  const apto = situacaoAtiva && empresaApta12Meses === true && tresDocumentosOk && bloqueios.length === 0;
 
   return {
     etapa: 'identidade_cnpj', proxima_etapa: 'documentacao_societaria', apto_para_avancar: apto, botao_avancar_disponivel: apto,
@@ -1015,14 +1052,33 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
   };
 }
 
-async function montarValidacaoSocietaria(empresaId: string, processar: boolean) {
+async function montarValidacaoSocietaria(
+  empresaId: string,
+  processar: boolean,
+  contexto: { empresa?: any; enquadramentoDados?: Record<string, any> } = {},
+) {
   const [docsContrato, docsAtos] = await Promise.all([
     listarDocumentosEmpresaPorTipos(empresaId, ['alteracao_contratual', 'contrato_social']),
     listarDocumentosEmpresaPorTipos(empresaId, ['atos_junta_comercial']),
   ]);
   const atos = docsAtos[0] || null;
+  const textoEnquadramento = [
+    contexto.enquadramentoDados?.regime_tributario,
+    contexto.enquadramentoDados?.situacao_simples,
+    contexto.empresa?.regime_tributario,
+    contexto.empresa?.porte,
+    contexto.empresa?.natureza_juridica,
+  ].filter(Boolean).join(' ');
+  const empresaMei = contexto.enquadramentoDados?.opcao_mei === true
+    || contexto.empresa?.opcao_mei === true
+    || /\bmei\b|microempreendedor individual|simei/i.test(textoEnquadramento);
   const promptCodigo = 'contrato_junta_crosscheck';
-  const atosLeitura = await montarAtosJuntaDados(empresaId, processar && !!atos);
+  const atosLeitura = !atos && empresaMei
+    ? {
+        dados: { anexado: false, analisado: true, dispensado: true, atos_dispensados_por_mei: true, diagnostico: 'Atos da Junta dispensados porque o enquadramento anterior identificou a empresa como MEI.' },
+        pendencias: [] as Pendencia[],
+      }
+    : await montarAtosJuntaDados(empresaId, processar && !!atos);
   const atosDados = atosLeitura.dados || {};
   const resultados: Array<{ documento: any; analise: AnaliseDocumentalResult | null; erro?: string | null }> = [];
 
@@ -1068,6 +1124,8 @@ async function montarValidacaoSocietaria(empresaId: string, processar: boolean) 
   const cadeia = calcularCadeiaComprovacaoSocietaria(
     Array.isArray(atosDados?.historico_arquivamentos) ? atosDados.historico_arquivamentos : [],
     documentosAnalisados,
+    new Date(),
+    { empresaMei },
   );
   const datasRequeridas = new Set((cadeia.registros_requeridos || []).map((item: any) => item.data));
   const alertasRelevantes = documentosAnalisados
@@ -1077,14 +1135,15 @@ async function montarValidacaoSocietaria(empresaId: string, processar: boolean) 
     .filter((item: any) => item.severidade === 'alta' || item.severidade === 'critica')
     .map((item: any) => item.mensagem);
 
-  if (!docsContrato.length) bloqueios.unshift('Contrato Social ou Alteração Contratual ainda não anexado.');
-  if (!atos) bloqueios.unshift('Atos da Junta Comercial ainda não anexados.');
+  if (!docsContrato.length && !empresaMei) bloqueios.unshift('Contrato Social ou Alteração Contratual ainda não anexado.');
+  if (!atos && !empresaMei) bloqueios.unshift('Nenhum Ato da Junta foi localizado. A empresa pode ter registro em outro órgão; a inclusão de documentos permanece liberada, mas a validação exige revisão humana.');
+  if (cadeia.possivel_registro_em_outro_orgao && !empresaMei) bloqueios.push('Nenhum ato registrado foi identificado. A empresa pode estar registrada em outro tipo de órgão; mantenha a inclusão documental liberada e encaminhe para revisão humana.');
   if (atos && !atosDados?.analisado) bloqueios.push(atosDados?.diagnostico || 'A leitura dos Atos da Junta ainda não foi concluída.');
   for (const item of cadeia.registros_faltantes || []) {
     bloqueios.push(`Anexar o contrato/alteração registrado em ${item.data}${item.numero ? ` (arquivamento ${item.numero})` : ''} para completar a comprovação mínima de 12 meses.`);
   }
-  if (atosDados?.analisado && !cadeia.historico_cobre_12_meses) {
-    bloqueios.push('O histórico apresentado pela Junta não alcança 12 meses. Anexe uma certidão/lista de atos mais completa ou o registro de constituição.');
+  if (atosDados?.analisado && cadeia.todos_atos_devem_ser_anexados) {
+    bloqueios.push('Todos os atos identificados devem ser anexados. A empresa não possui 12 meses de constituição comprovada para operar com crédito.');
   }
   for (const item of resultados.filter((resultado) => resultado.erro)) bloqueios.push(item.erro!);
 
@@ -1093,10 +1152,12 @@ async function montarValidacaoSocietaria(empresaId: string, processar: boolean) 
     ...(atosLeitura.pendencias || []).filter((item) => item.severidade !== 'alta').map((item) => item.mensagem),
     ...alertasRelevantes.filter((item: any) => item.severidade === 'media' || item.severidade === 'baixa').map((item: any) => item.mensagem),
   ];
-  const analisado = atosDados?.analisado === true && documentosAnalisados.length > 0;
-  const consistente = !!atos && docsContrato.length > 0 && analisado
-    && cadeia.continuidade_12_meses_comprovada === true
-    && bloqueiosUnicos.length === 0;
+  const analisado = empresaMei ? atosDados?.analisado === true : atosDados?.analisado === true && documentosAnalisados.length > 0;
+  const consistente = empresaMei
+    ? analisado && cadeia.atos_dispensados_por_mei === true && bloqueiosUnicos.length === 0
+    : !!atos && docsContrato.length > 0 && analisado
+      && cadeia.continuidade_12_meses_comprovada === true
+      && bloqueiosUnicos.length === 0;
   const documentoPrincipal = documentosAnalisados.find((item) => item.data_registro === cadeia.ultimo_registro?.data)
     || documentosAnalisados[0]
     || null;
@@ -1105,14 +1166,14 @@ async function montarValidacaoSocietaria(empresaId: string, processar: boolean) 
     etapa: 'documentacao_societaria',
     titulo: 'Etapa 2 — Continuidade societária e Junta Comercial',
     habilitada: true,
-    iniciada: docsContrato.length > 0 || !!atos || documentosAnalisados.length > 0,
+    iniciada: empresaMei || docsContrato.length > 0 || !!atos || documentosAnalisados.length > 0,
     contrato_anexado: docsContrato.length > 0,
     total_contratos_anexados: docsContrato.length,
     atos_junta_anexados: !!atos,
     analisado,
     consistente,
     apto_para_avancar: consistente,
-    botao_validar_disponivel: docsContrato.length > 0 && !!atos,
+    botao_validar_disponivel: empresaMei ? false : docsContrato.length > 0 && !!atos,
     botao_avancar_disponivel: consistente,
     contrato_arquivo_id: documentoPrincipal?.arquivo_id || docsContrato[0]?.id || null,
     atos_arquivo_id: atos?.id || null,
@@ -1129,12 +1190,20 @@ async function montarValidacaoSocietaria(empresaId: string, processar: boolean) 
     registros_faltantes: cadeia.registros_faltantes,
     continuidade_12_meses_comprovada: cadeia.continuidade_12_meses_comprovada,
     historico_cobre_12_meses: cadeia.historico_cobre_12_meses,
+    sem_ato_registrado: cadeia.sem_ato_registrado,
+    atos_dispensados_por_mei: cadeia.atos_dispensados_por_mei,
+    possivel_registro_em_outro_orgao: cadeia.possivel_registro_em_outro_orgao,
+    permite_seguir_com_inclusao_documental: cadeia.permite_seguir_com_inclusao_documental,
+    todos_atos_devem_ser_anexados: cadeia.todos_atos_devem_ser_anexados,
+    empresa_sem_tempo_minimo_constituicao: cadeia.empresa_sem_tempo_minimo_constituicao,
     meses_comprovados: cadeia.meses_entre_registros_extremos,
     documentos_analisados: documentosAnalisados.map(({ alertas, ...item }) => item),
     bloqueios: bloqueiosUnicos,
     avisos: Array.from(new Set(avisos.filter(Boolean))),
     diagnostico: consistente
       ? 'NIRE, datas de registro e cadeia de contratos/alterações comprovam pelo menos 12 meses de continuidade societária. A próxima análise está liberada.'
+      : cadeia.atos_dispensados_por_mei
+        ? 'Atos da Junta dispensados para MEI. A inclusão documental pode prosseguir normalmente.'
       : !docsContrato.length || !atos
         ? 'Anexe os Atos da Junta e o contrato/alteração correspondente. Se o último registro tiver menos de 12 meses, o sistema solicitará as alterações anteriores necessárias.'
         : analisado
@@ -1185,11 +1254,14 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
   const qsaCadastroPendencias = pendenciasQsa(socios, empresa);
   // A Etapa 1 processa somente QSA e Enquadramento; o Cartão CNPJ é tratado
   // pelo serviço Receita + Cartão. Atos da Junta pertencem à Etapa 2.
-  const [qsaDocumental, enquadramento, documentacaoSocietaria] = await Promise.all([
+  const [qsaDocumental, enquadramento] = await Promise.all([
     montarQsaDocumentalDados(empresaId, !!options.processarDocumentos),
     montarEnquadramentoDados(empresaId, !!options.processarDocumentos),
-    montarValidacaoSocietaria(empresaId, !!options.processarSocietario),
   ]);
+  const documentacaoSocietaria = await montarValidacaoSocietaria(empresaId, !!options.processarSocietario, {
+    empresa,
+    enquadramentoDados: enquadramento.dados,
+  });
   // A Etapa 1 considera somente nome, qualificação e identificação do administrador.
   // CPF, RG, endereço, estado civil e demais dados pessoais pertencem às próximas etapas.
   const qsaPendenciasIdentidade = qsaDocumental.pendencias;
@@ -1208,7 +1280,10 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
     enquadramentoDados: enquadramento.dados,
   });
   documentacaoSocietaria.habilitada = identidadeCnpj.apto_para_avancar === true;
-  documentacaoSocietaria.botao_validar_disponivel = documentacaoSocietaria.habilitada && documentacaoSocietaria.contrato_anexado && documentacaoSocietaria.atos_junta_anexados;
+  documentacaoSocietaria.botao_validar_disponivel = documentacaoSocietaria.habilitada
+    && documentacaoSocietaria.atos_dispensados_por_mei !== true
+    && documentacaoSocietaria.contrato_anexado
+    && documentacaoSocietaria.atos_junta_anexados;
 
   // A Etapa 2 fica visível/habilitada depois da aprovação da Etapa 1, mas só
   // passa a gerar pendências globais quando o usuário realmente a inicia
@@ -1597,7 +1672,7 @@ router.post('/empresa/:empresaId/analise-societaria/iniciar', auth, async (req: 
       return;
     }
     const societaria = dossie.documentacao_societaria;
-    if (!societaria?.contrato_anexado || !societaria?.atos_junta_anexados) {
+    if (societaria?.atos_dispensados_por_mei !== true && (!societaria?.contrato_anexado || !societaria?.atos_junta_anexados)) {
       res.status(422).json({ error: 'Anexe o Contrato Social/Alteração e os Atos da Junta Comercial antes da validação societária.', processando: false, dossie });
       return;
     }
@@ -1716,6 +1791,10 @@ const ANALISE_ESPECIALIZADA_POR_TIPO: Partial<Record<string, { tipo: TipoAnalise
   simples_nacional: { tipo: 'simples_nacional', promptCodigo: 'simples_extract' },
   enquadramento_tributario_cnpj: { tipo: 'simples_nacional', promptCodigo: 'simples_extract' },
   atos_junta_comercial: { tipo: 'atos_junta_comercial', promptCodigo: 'atos_junta_extract' },
+  faturamento_12_meses: { tipo: 'faturamento_12_meses', promptCodigo: 'faturamento_12m_extract' },
+  comprovante_faturamento: { tipo: 'faturamento_12_meses', promptCodigo: 'faturamento_12m_extract' },
+  declaracao_faturamento: { tipo: 'faturamento_12_meses', promptCodigo: 'faturamento_12m_extract' },
+  comprovante_residencia: { tipo: 'comprovante_residencia', promptCodigo: 'comprovante_residencia_extract' },
 };
 
 async function executarAnaliseDocumentalEspecializada(params: {
@@ -1737,7 +1816,11 @@ async function executarAnaliseDocumentalEspecializada(params: {
       ? await analiseDocumentalService.analisarQSA(empresaId, arquivoId)
       : tipo === 'simples_nacional'
         ? await analiseDocumentalService.analisarSimplesNacional(empresaId, arquivoId)
-        : await analiseDocumentalService.analisarAtosJuntaComercial(empresaId, arquivoId);
+        : tipo === 'atos_junta_comercial'
+          ? await analiseDocumentalService.analisarAtosJuntaComercial(empresaId, arquivoId)
+          : tipo === 'faturamento_12_meses'
+            ? await analiseDocumentalService.analisarFaturamento(empresaId, arquivoId)
+            : await analiseDocumentalService.analisarComprovanteResidencia(empresaId, arquivoId);
 
     await pool.query(
       `UPDATE public.documentos_extracoes_ia

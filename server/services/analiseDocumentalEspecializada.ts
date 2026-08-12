@@ -12,11 +12,21 @@ import {
 } from '../utils/helpers';
 import { extrairDocumentoLocal, type TipoDocumentoLocal } from './extracaoDocumentalLocal';
 import { resolveDocumentPath } from './documentStorage';
+import {
+  validarComprovanteEnderecoExtraido,
+  validarFaturamentoExtraido,
+} from './regrasDocumentaisCredito';
 
 const { Pool } = pkg;
 
 export type SeveridadeDocumental = 'baixa' | 'media' | 'alta' | 'critica';
-export type TipoAnaliseDocumental = 'qsa' | 'simples_nacional' | 'atos_junta_comercial' | 'contrato_junta';
+export type TipoAnaliseDocumental =
+  | 'qsa'
+  | 'simples_nacional'
+  | 'atos_junta_comercial'
+  | 'contrato_junta'
+  | 'faturamento_12_meses'
+  | 'comprovante_residencia';
 
 export interface AlertaDocumental {
   codigo: string;
@@ -58,6 +68,7 @@ interface DocumentoArquivoRow {
   url_arquivo?: string | null;
   mime_type?: string | null;
   tipo_documento?: string | null;
+  socio_id?: string | null;
 }
 
 type ExtratorInjetado = (arquivoPath: string, prompt: string, mimeType: string) => Promise<any>;
@@ -429,7 +440,7 @@ export function validarAtosJuntaExtraidos(empresa: any, dados: any): AlertaDocum
 }
 
 
-export function validarContratoComAtosJunta(contrato: any, atos: any): AlertaDocumental[] {
+export function validarContratoComAtosJunta(contrato: any, atos: any, empresa?: any, sociosQsa: any[] = []): AlertaDocumental[] {
   const alertas: AlertaDocumental[] = [];
   if (contrato?.documento_compativel === false) {
     alertas.push({ codigo: 'contrato_societario_incompativel', mensagem: 'O arquivo não foi reconhecido como Contrato Social, Alteração Contratual ou Consolidação.', severidade: 'alta', recomendacao: 'Anexar o contrato ou a alteração contratual registrada correspondente.' });
@@ -487,6 +498,25 @@ export function validarContratoComAtosJunta(contrato: any, atos: any): AlertaDoc
     alertas.push({ codigo: 'contrato_junta_cnpj_divergente', campo: 'cnpj', mensagem: 'Os documentos societários apresentam CNPJs diferentes.', severidade: 'critica', valor_documento: contrato?.cnpj, valor_receita: atos?.cnpj, recomendacao: 'Anexar documentos pertencentes à mesma empresa.' });
   }
 
+  const cnpjEmpresa = onlyDigits(empresa?.cnpj);
+  if (cnpjContrato && cnpjEmpresa && cnpjContrato !== cnpjEmpresa) {
+    alertas.push({ codigo: 'contrato_cnpj_empresa_divergente', campo: 'cnpj', mensagem: 'O CNPJ do contrato/alteração não corresponde à empresa analisada.', severidade: 'critica', valor_documento: contrato?.cnpj, valor_receita: empresa?.cnpj, recomendacao: 'Anexar o documento societário pertencente ao CNPJ da empresa.' });
+  }
+
+  const numeroContrato = onlyDigits(contrato?.numero_arquivamento);
+  const numerosJunta = new Set(historico.map((item: any) => onlyDigits(item?.numero)).filter(Boolean));
+  if (numeroContrato && numerosJunta.size > 0 && !numerosJunta.has(numeroContrato)) {
+    alertas.push({ codigo: 'contrato_numero_ato_nao_localizado', campo: 'numero_arquivamento', mensagem: 'O número do ato/arquivamento do contrato não foi localizado nos Atos da Junta Comercial.', severidade: 'alta', valor_documento: contrato?.numero_arquivamento, valor_receita: Array.from(numerosJunta), recomendacao: 'Conferir se o contrato/alteração corresponde a um ato listado na certidão da Junta.' });
+  }
+
+  const sociosContrato = Array.isArray(contrato?.socios) ? contrato.socios : [];
+  const nomesQsa = (Array.isArray(sociosQsa) ? sociosQsa : []).map((socio) => normalizarBasico(socio?.nome)).filter(Boolean);
+  const nomesContrato = sociosContrato.map((socio: any) => normalizarBasico(socio?.nome || socio)).filter(Boolean);
+  if (nomesContrato.length && nomesQsa.length) {
+    const divergentes = nomesContrato.filter((nome: string) => !nomesQsa.some((qsa: string) => qsa === nome || qsa.includes(nome) || nome.includes(qsa)));
+    if (divergentes.length) alertas.push({ codigo: 'contrato_socios_divergentes_qsa', campo: 'socios', mensagem: 'Há sócio(s) no contrato/alteração que não foram localizados no QSA da empresa.', severidade: 'alta', valor_documento: divergentes, valor_receita: nomesQsa, recomendacao: 'Atualizar o QSA ou anexar o ato societário correto.' });
+  }
+
   return uniqueAlerts(alertas);
 }
 
@@ -501,6 +531,11 @@ function normalizarDadosContratoSocial(dados: any): Record<string, any> {
     data_efeitos_registro: parseDate(dados?.data_efeitos_registro),
     data_documento: parseDate(dados?.data_documento),
     numero_arquivamento: dados?.numero_arquivamento ? String(dados.numero_arquivamento).trim() : null,
+    socios: Array.isArray(dados?.socios) ? dados.socios.map((socio: any) => ({
+      nome: socio?.nome ? String(socio.nome).trim() : null,
+      qualificacao: socio?.qualificacao ? String(socio.qualificacao).trim() : null,
+      administrador: administradorSocietario(socio),
+    })).filter((socio: any) => socio.nome) : [],
     confianca: normalizarConfianca(dados?.confianca),
   };
 }
@@ -703,9 +738,38 @@ Responda SOMENTE JSON válido:
   "data_efeitos_registro": "YYYY-MM-DD ou null",
   "data_documento": "YYYY-MM-DD ou null",
   "numero_arquivamento": "texto ou null",
+  "socios": [{"nome":"texto","qualificacao":"texto ou null","administrador":true}],
   "confianca": 0.0
 }
 Use em data_registro a data da certificação/registro da Junta (ex.: CERTIFICO O REGISTRO EM), não a mera data de assinatura. Não invente informações.`;
+}
+
+function promptFaturamento12Meses(): string {
+  return `Você é auditor documental de crédito empresarial. Extraia uma relação de faturamento sem inventar dados. Responda SOMENTE JSON válido:
+{
+  "documento_compativel": true,
+  "cnpj": "00.000.000/0000-00 ou null",
+  "meses_referencia": ["YYYY-MM"],
+  "data_assinatura": "YYYY-MM-DD ou null",
+  "assinatura_socio_administrador": {"presente":true,"nome":"texto ou null","tipo":"manual|eletronica|null"},
+  "assinatura_contador": {"presente":true,"nome":"texto ou null","tipo":"manual|eletronica|null","crc":"texto ou null"},
+  "confianca": 0.0
+}
+Liste todos os meses expressos. Não considere mês ainda aberto como fechado. Identifique separadamente as duas assinaturas e a modalidade de cada uma.`;
+}
+
+function promptComprovanteResidencia(): string {
+  return `Você é auditor documental. Extraia um comprovante de endereço sem inventar dados. Responda SOMENTE JSON válido:
+{
+  "documento_compativel": true,
+  "nome_titular": "texto ou null",
+  "mes_referencia": "YYYY-MM ou null",
+  "data_emissao": "YYYY-MM-DD ou null",
+  "data_vencimento": "YYYY-MM-DD ou null",
+  "endereco": "texto ou null",
+  "confianca": 0.0
+}
+O mês de referência pode vir da competência, emissão ou vencimento. Preserve o nome completo do titular.`;
 }
 
 export class AnaliseDocumentalService {
@@ -846,7 +910,7 @@ export class AnaliseDocumentalService {
       this.db.query('SELECT * FROM public.empresas WHERE id = $1 LIMIT 1', [empresaId]),
       this.db.query('SELECT * FROM public.socios_empresa WHERE empresa_id = $1 AND COALESCE(ativo, true) = true ORDER BY nome ASC', [empresaId]),
       this.db.query(
-        `SELECT id, empresa_id, entidade_id, entidade_tipo, nome_original, nome_arquivo, hash_arquivo, caminho_arquivo, url_arquivo, mime_type, tipo_documento
+        `SELECT id, empresa_id, entidade_id, entidade_tipo, socio_id, nome_original, nome_arquivo, hash_arquivo, caminho_arquivo, url_arquivo, mime_type, tipo_documento
            FROM public.documentos_arquivos
           WHERE id = $1
             AND excluido_em IS NULL
@@ -908,6 +972,24 @@ export class AnaliseDocumentalService {
     return criarResultado('atos_junta_comercial', empresaId, arquivoId, dados, alertas, this.ultimoModeloUsado);
   }
 
+  async analisarFaturamento(empresaId: string, arquivoId: string): Promise<AnaliseDocumentalResult> {
+    this.ultimoModeloUsado = null;
+    this.ultimaFonteExtracao = null;
+    const { empresa, socios, documento } = await this.carregarContexto(empresaId, arquivoId);
+    const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, promptFaturamento12Meses(), documento.mime_type || 'application/pdf', 'faturamento_12_meses');
+    const validacao = validarFaturamentoExtraido(empresa, socios, extraidos);
+    return criarResultado('faturamento_12_meses', empresaId, arquivoId, validacao.dados, validacao.alertas, this.ultimoModeloUsado);
+  }
+
+  async analisarComprovanteResidencia(empresaId: string, arquivoId: string): Promise<AnaliseDocumentalResult> {
+    this.ultimoModeloUsado = null;
+    this.ultimaFonteExtracao = null;
+    const { socios, documento } = await this.carregarContexto(empresaId, arquivoId);
+    const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, promptComprovanteResidencia(), documento.mime_type || 'application/pdf', 'comprovante_residencia');
+    const validacao = validarComprovanteEnderecoExtraido(socios, extraidos, documento.socio_id || null);
+    return criarResultado('comprovante_residencia', empresaId, arquivoId, validacao.dados, validacao.alertas, this.ultimoModeloUsado);
+  }
+
 
   async analisarContratoComAtosJunta(empresaId: string, contratoArquivoId: string, atosArquivoId: string): Promise<AnaliseDocumentalResult> {
     this.ultimoModeloUsado = null;
@@ -922,7 +1004,7 @@ export class AnaliseDocumentalService {
     ]);
     const contratoNormalizado = normalizarDadosContratoSocial(contrato);
     const atosNormalizados = normalizarDadosAtos(atos);
-    const alertas = validarContratoComAtosJunta(contratoNormalizado, atosNormalizados);
+    const alertas = validarContratoComAtosJunta(contratoNormalizado, atosNormalizados, contratoContexto.empresa, contratoContexto.socios);
     const dados = {
       contrato_arquivo_id: contratoArquivoId,
       atos_arquivo_id: atosArquivoId,
@@ -933,6 +1015,10 @@ export class AnaliseDocumentalService {
         parseDate(atosNormalizados.data_registro),
         ...(Array.isArray(atosNormalizados.historico_arquivamentos) ? atosNormalizados.historico_arquivamentos.map((item: any) => parseDate(item?.data)) : []),
       ].filter(Boolean).includes(parseDate(contratoNormalizado.data_registro)),
+      numero_ato_confere: !!onlyDigits(contratoNormalizado.numero_arquivamento) && (Array.isArray(atosNormalizados.historico_arquivamentos)
+        ? atosNormalizados.historico_arquivamentos.some((item: any) => onlyDigits(item?.numero) === onlyDigits(contratoNormalizado.numero_arquivamento))
+        : false),
+      cnpj_empresa_confere: !!onlyDigits(contratoNormalizado.cnpj) && onlyDigits(contratoNormalizado.cnpj) === onlyDigits(contratoContexto.empresa?.cnpj),
       confianca: Math.min(normalizarConfianca(contratoNormalizado.confianca) ?? 0, normalizarConfianca(atosNormalizados.confianca) ?? 0),
     };
     return criarResultado('contrato_junta', empresaId, contratoArquivoId, dados, alertas, this.ultimoModeloUsado);

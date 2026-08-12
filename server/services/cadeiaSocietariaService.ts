@@ -15,10 +15,16 @@ export type DocumentoSocietarioAnalisado = {
   consistente?: boolean;
 };
 
+export type OpcoesCadeiaSocietaria = {
+  /** MEI não possui atos registrados na Junta no mesmo formato das sociedades. */
+  empresaMei?: boolean;
+};
+
 export function calcularCadeiaComprovacaoSocietaria(
   historicoEntrada: RegistroSocietario[],
   documentosEntrada: DocumentoSocietarioAnalisado[],
   referencia: Date = new Date(),
+  opcoes: OpcoesCadeiaSocietaria = {},
 ) {
   const relevante = (tipo: unknown) => /alterac|contrato|consolidac|constituic|registro/i.test(normalizeText(tipo));
   const historico = (Array.isArray(historicoEntrada) ? historicoEntrada : [])
@@ -60,7 +66,9 @@ export function calcularCadeiaComprovacaoSocietaria(
   const faltantes = comprovados.filter((item) => !item.comprovado);
   const registroBase = registrosRequeridos.at(-1) || null;
   const historicoCobreCorte = !!ultimo && (String(ultimo.data) <= corte || (!!registroBase && String(registroBase.data) <= corte));
-  const continuidade = historicoCobreCorte && faltantes.length === 0;
+  const atosDispensadosPorMei = historico.length === 0 && opcoes.empresaMei === true;
+  const todosAtosMaisRecentesQueCorte = historico.length > 0 && !historicoCobreCorte;
+  const continuidade = (historicoCobreCorte && faltantes.length === 0) || atosDispensadosPorMei;
 
   const mesesEntre = (maisNova?: string | null, maisAntiga?: string | null): number | null => {
     if (!maisNova || !maisAntiga) return null;
@@ -79,14 +87,21 @@ export function calcularCadeiaComprovacaoSocietaria(
     total_documentos_analisados: documentos.length,
     historico_cobre_12_meses: historicoCobreCorte,
     continuidade_12_meses_comprovada: continuidade,
+    sem_ato_registrado: historico.length === 0,
+    atos_dispensados_por_mei: atosDispensadosPorMei,
+    possivel_registro_em_outro_orgao: historico.length === 0 && !atosDispensadosPorMei,
+    permite_seguir_com_inclusao_documental: true,
+    todos_atos_devem_ser_anexados: todosAtosMaisRecentesQueCorte,
+    empresa_sem_tempo_minimo_constituicao: todosAtosMaisRecentesQueCorte,
     meses_entre_registros_extremos: mesesEntre(ultimo?.data || null, registroBase?.data || null),
-    diagnostico: !ultimo
-      ? 'Não foi possível identificar registros societários na certidão da Junta.'
+    diagnostico: atosDispensadosPorMei
+      ? 'Atos da Junta dispensados: empresa identificada como MEI, sem registro de atos societários.'
+      : !ultimo
+      ? 'Nenhum ato foi identificado. A empresa pode possuir registro em outro órgão; a inclusão documental permanece permitida e exige revisão humana.'
       : continuidade
         ? 'A cadeia de contratos/alterações exigida comprova pelo menos 12 meses de continuidade societária.'
         : faltantes.length
           ? `Faltam ${faltantes.length} contrato(s) ou alteração(ões) correspondente(s) aos registros indicados.`
-          : 'O histórico da Junta ainda não alcança a data mínima de 12 meses para a comprovação solicitada.',
+          : 'Todos os atos identificados devem ser anexados. A empresa ainda não possui 12 meses de constituição comprovada para operar com crédito.',
   };
 }
-

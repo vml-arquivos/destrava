@@ -96,6 +96,25 @@ describe('validação documental especializada', () => {
     expect(alertas.some((a) => a.codigo === 'contrato_junta_data_divergente')).toBe(true);
   });
 
+  it('cruza número do ato, CNPJ e sócios do contrato com Junta, empresa e QSA', () => {
+    const alertas = validarContratoComAtosJunta(
+      {
+        documento_compativel: true,
+        nire: '52206183723',
+        data_registro: '2025-06-06',
+        numero_arquivamento: '999999',
+        cnpj: '98.765.432/0001-10',
+        socios: [{ nome: 'Pessoa Estranha' }],
+      },
+      { documento_compativel: true, nire: '52206183723', historico_arquivamentos: [{ numero: '20251505987', data: '2025-06-06', tipo_ato: 'ALTERAÇÃO' }] },
+      { cnpj: '52.008.360/0001-33' },
+      [{ nome: 'Fernando Eli', administrador: true }],
+    );
+    expect(alertas.map((a) => a.codigo)).toContain('contrato_numero_ato_nao_localizado');
+    expect(alertas.map((a) => a.codigo)).toContain('contrato_cnpj_empresa_divergente');
+    expect(alertas.map((a) => a.codigo)).toContain('contrato_socios_divergentes_qsa');
+  });
+
 });
 
 describe('AnaliseDocumentalService com dependências isoladas', () => {
