@@ -1025,6 +1025,10 @@ export default function Empresas() {
   const [etapaModal, setEtapaModal] = useState<"cnpj" | "form">("cnpj");
   const [cnpjInput, setCnpjInput] = useState("");
   const { lookup: cnpjLookup, status: cnpjStatus, error: cnpjError, reset: cnpjReset } = useCNPJLookup();
+  const cnpjErroInvalido = /cnpj\s+inv[aá]lido/i.test(String(cnpjError || ""));
+  const podeCadastrarManualmente = cnpjStatus === "error"
+    && cleanDigits(cnpjInput).length === 14
+    && !cnpjErroInvalido;
   const searchRef = useRef<HTMLInputElement>(null);
   const comboRef = useRef<HTMLDivElement>(null);
 
@@ -1540,6 +1544,21 @@ export default function Empresas() {
     setEtapaModal("cnpj"); setCnpjInput(""); cnpjReset(); setSocios([]);
   }
 
+  function continuarCadastroManual() {
+    if (!podeCadastrarManualmente) return;
+    // Preserva somente o CNPJ informado e abre os campos já existentes para edição.
+    // Nenhum dado parcial da Receita é reaproveitado como se fosse sincronizado.
+    setForm(prev => ({
+      ...prev,
+      cnpj: cnpjInput,
+      ultima_sincronizacao_receita: undefined,
+      dados_extra_receita: undefined,
+    }));
+    setSocios([]);
+    setErros({});
+    setEtapaModal("form");
+  }
+
   function set(k: keyof FormEmpresa, v: any) {
     setForm(prev => ({ ...prev, [k]: v }));
     setErros(prev => ({ ...prev, [k]: "" }));
@@ -1561,6 +1580,7 @@ export default function Empresas() {
         ...form,
         faturamento_anual: form.faturamento_anual || null,
         capital_social: form.capital_social || null,
+        ultima_sincronizacao_receita: form.ultima_sincronizacao_receita || null,
         cnaes_secundarios: Array.isArray(form.cnaes_secundarios) ? form.cnaes_secundarios : [],
         numero_funcionarios: form.numero_funcionarios || null,
         limite_credito_atual: form.limite_credito_atual || null,
@@ -2760,10 +2780,24 @@ export default function Empresas() {
                   </div>
                   {cnpjStatus === "loading" && <p className="text-xs text-slate-400 mt-2 text-center">🔎 Buscando dados para atualizar o cadastro...</p>}
                   {cnpjError && <p className="text-xs text-red-500 font-medium mt-2 text-center">{cnpjError}</p>}
+                  {podeCadastrarManualmente && (
+                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-center">
+                      <p className="text-xs text-amber-800">
+                        Não foi possível localizar os dados deste CNPJ agora. Você pode continuar e informar os dados manualmente.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={continuarCadastroManual}
+                        className="mt-2 inline-flex items-center justify-center rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-amber-700"
+                      >
+                        Continuar cadastro manualmente
+                      </button>
+                    </div>
+                  )}
                   {cnpjStatus === "found" && <p className="text-xs text-emerald-600 font-medium mt-2 text-center">✓ Dados carregados para preenchimento. Ao salvar, o cadastro será atualizado no banco.</p>}
                 </div>
                 <p className="text-xs text-amber-600 text-center max-w-xs">
-                  O CNPJ é obrigatório. Empresas sem CNPJ válido ficam bloqueadas em Dados Incompletos e não entram nas telas operacionais.
+                  CNPJ inválido continua bloqueado. Se a consulta falhar para um CNPJ válido, o cadastro manual ficará disponível.
                 </p>
               </div>
             )}
