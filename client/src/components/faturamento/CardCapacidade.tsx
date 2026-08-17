@@ -8,7 +8,12 @@ interface Props {
 }
 
 const formatBRL = (v: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+  new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(Number(v) || 0));
 
 export function CardCapacidade({ min, max, modelo }: Props) {
   const cor = max > 50000 ? 'green' : max > 20000 ? 'yellow' : 'red';

@@ -25,6 +25,14 @@ import {
 const fmtBRL = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
+const fmtBRLInteiro = (v: number) =>
+  new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(Number(v) || 0));
+
 const fmtMesAno = (ds: string) => {
   const d = new Date(ds + 'T00:00:00');
   return d
@@ -56,6 +64,7 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
   };
   const cidade = dados.cidade ?? 'Brasília - DF';
   const isDeclaracao = dados.tipo === 'declaracao';
+  const isPrevisaoManual = !isDeclaracao && dados.modo === 'manual';
 
   // ── Dados da tabela ────────────────────────────────────────────────────────
   const linhasTabela = isDeclaracao
@@ -69,8 +78,8 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
         .slice(0, dados.horizonte)
         .map(p => ({
           mes: fmtMesAno(p.ds),
-          valor: fmtBRL(p.yhat),
-          valorNum: p.yhat,
+          valor: fmtBRLInteiro(p.yhat),
+          valorNum: Math.round(Number(p.yhat) || 0),
         }));
 
   const total = linhasTabela.reduce((acc, l) => acc + l.valorNum, 0);
@@ -93,7 +102,7 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
     ? (qtdMesesDeclaracao === 12
         ? 'DECLARAÇÃO DE FATURAMENTO DOS ÚLTIMOS 12 MESES'
         : `DECLARAÇÃO DE FATURAMENTO — ÚLTIMOS ${qtdMesesDeclaracao} MESES`)
-    : 'DEMONSTRATIVO DE PREVISÃO DE FATURAMENTO';
+    : `DEMONSTRATIVO DE PREVISÃO DE FATURAMENTO${isPrevisaoManual ? ' — INFORMADA MANUALMENTE' : ''}`;
 
   return (
     /* ── Overlay ─────────────────────────────────────────────────────────── */
@@ -215,15 +224,16 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
                     ? `Total do Período (${qtdMesesDeclaracao} ${qtdMesesDeclaracao === 1 ? 'Mês' : 'Meses'})`
                     : 'Total Previsto'}
                 </span>
-                <span className="text-white text-sm font-bold text-right">{fmtBRL(total)}</span>
+                <span className="text-white text-sm font-bold text-right">{isDeclaracao ? fmtBRL(total) : fmtBRLInteiro(total)}</span>
               </div>
             </div>
 
             {/* Nota metodológica (previsão) */}
             {!isDeclaracao && (
               <p className="text-gray-400 text-[10px] italic">
-                * Valores estimados com base em histórico de crescimento, contratos vigentes e modelo
-                preditivo IA (Prophet/Linear). Não constituem garantia de receita futura.
+                {isPrevisaoManual
+                  ? '* Previsão informada manualmente pelo usuário, com total inteiro e parcelas mensais uniformes.'
+                  : '* Valores estimados com base em histórico de crescimento, contratos vigentes e modelo preditivo IA (Prophet/Linear). Não constituem garantia de receita futura.'}
               </p>
             )}
 

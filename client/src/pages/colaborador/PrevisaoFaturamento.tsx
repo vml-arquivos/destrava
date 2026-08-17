@@ -84,6 +84,7 @@ interface ResultadoPrevisao {
   previsao_id: string;
   gerada_em: string;
   aviso?: string;
+  modo_previsao?: 'ia' | 'manual';
 }
 
 // ─── Opções de período regressivo ─────────────────────────────────────────────
@@ -156,6 +157,26 @@ function recortarHistorico(
  * exatamente iguais: total projetado dividido pelo horizonte solicitado.
  * O histórico e o rateio do faturamento bruto não passam por esta regra.
  */
+function normalizarTotalPrevisaoInteiro(total: number, horizonteMeses: number) {
+  const horizonte = Math.max(1, Math.trunc(Number(horizonteMeses) || 1));
+  const totalInteiro = Math.max(0, Math.round(Number(total) || 0));
+  const valorMensal = Math.max(0, Math.round(totalInteiro / horizonte));
+  return {
+    total: valorMensal * horizonte,
+    mensal: valorMensal,
+    horizonte,
+  };
+}
+
+function formatarPrevisaoInteira(valor: number): string {
+  return Math.round(Number(valor) || 0).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+}
+
 function normalizarPrevisaoUniforme(resultado: ResultadoPrevisao): ResultadoPrevisao {
   const horizonteMeses = Number(resultado.horizonte_meses);
   const futuros = resultado.pontos
@@ -167,19 +188,24 @@ function normalizarPrevisaoUniforme(resultado: ResultadoPrevisao): ResultadoPrev
   }
 
   const totalBruto = futuros.reduce((soma, ponto) => soma + Number(ponto.yhat || 0), 0);
-  const totalBase = Math.round(totalBruto * 100) / 100;
-  const valorMensal = Math.round((totalBase / horizonteMeses) * 100) / 100;
-  const totalRateado = Math.round(valorMensal * horizonteMeses * 100) / 100;
+  const rateio = normalizarTotalPrevisaoInteiro(totalBruto, horizonteMeses);
   let indiceFuturo = 0;
 
   return {
     ...resultado,
-    total_previsto: totalRateado,
-    valor_mensal_previsto: valorMensal,
+    total_previsto: rateio.total,
+    valor_mensal_previsto: rateio.mensal,
     pontos: resultado.pontos.map(ponto => {
-      if (ponto.is_historico || indiceFuturo >= horizonteMeses) return ponto;
+      if (ponto.is_historico || indiceFuturo >= horizonteMeses) {
+        return ponto;
+      }
       indiceFuturo += 1;
-      return { ...ponto, yhat: valorMensal };
+      return {
+        ...ponto,
+        yhat: rateio.mensal,
+        yhat_lower: Math.round(Number(ponto.yhat_lower || rateio.mensal)),
+        yhat_upper: Math.round(Number(ponto.yhat_upper || rateio.mensal)),
+      };
     }),
   };
 }
@@ -260,6 +286,9 @@ export default function PrevisaoFaturamento() {
   const [registros, setRegistros] = useState<RegistroHistorico[]>(gerarMesesVazios(12));
   const [horizonte, setHorizonte] = useState<12 | 24 | 36>(12);
   const [previsao, setPrevisao] = useState<ResultadoPrevisao | null>(null);
+  const [modoPrevisao, setModoPrevisao] = useState<'ia' | 'manual'>('ia');
+  const [previsaoManualDisplay, setPrevisaoManualDisplay] = useState('');
+  const [previsaoManualNum, setPrevisaoManualNum] = useState(0);
   const [loadingEmpresas, setLoadingEmpresas] = useState(true);
   const [loadingContadores, setLoadingContadores] = useState(true);
   const [loadingHistorico, setLoadingHistorico] = useState(false);
@@ -345,7 +374,9 @@ export default function PrevisaoFaturamento() {
         const prev: ResultadoPrevisao = await apiFetch(
           `/api/faturamento/previsao/${id}/ultima`,
         );
-        setPrevisao(normalizarPrevisaoUniforme(prev));
+        const normalizada = normalizarPrevisaoUniforme(prev);
+        setPrevisao(normalizada);
+        setModoPrevisao(normalizada.modo_previsao === 'manual' || normalizada.modelo_usado === 'manual' ? 'manual' : 'ia');
       } catch {
         setPrevisao(null);
       }
@@ -360,6 +391,9 @@ export default function PrevisaoFaturamento() {
   const handleEmpresaChange = (id: string) => {
     setEmpresaId(id);
     setPrevisao(null);
+    setModoPrevisao('ia');
+    setPrevisaoManualDisplay('');
+    setPrevisaoManualNum(0);
     setHistoricoBanco([]);
     if (id) carregarHistorico(id);
     else setRegistros(gerarMesesVazios(periodoEfetivo));
@@ -439,7 +473,9 @@ export default function PrevisaoFaturamento() {
         body: JSON.stringify({ empresa_id: empresaId, horizonte_meses: horizonte }),
       });
       toast.dismiss('previsao-progress');
-      setPrevisao(normalizarPrevisaoUniforme(result));
+      const normalizada = normalizarPrevisaoUniforme({ ...result, modo_previsao: 'ia' });
+      setPrevisao(normalizada);
+      setModoPrevisao('ia');
       setSecaoAtiva('previsao');
       toast.success(`Previsão gerada com modelo ${result.modelo_usado.toUpperCase()}!`);
     } catch (err: any) {
@@ -448,6 +484,63 @@ export default function PrevisaoFaturamento() {
     } finally {
       setLoadingPrevisao(false);
     }
+  };
+
+  const handleMontarPrevisaoManual = () => {
+    if (!empresaId) { toast.error('Selecione uma empresa'); return; }
+    const horizonteMeses = Number(horizonte);
+    const totalInformado = Number(previsaoManualNum);
+    if (!Number.isFinite(totalInformado) || totalInformado <= 0) {
+      toast.error('Informe o faturamento total exato da previsão');
+      return;
+    }
+    if (!Number.isInteger(totalInformado)) {
+      toast.error('A previsão deve ser um número inteiro, sem centavos');
+      return;
+    }
+    if (totalInformado % horizonteMeses !== 0) {
+      toast.error(`Informe um total inteiro divisível por ${horizonteMeses}, para gerar parcelas mensais exatas`);
+      return;
+    }
+
+    const rateio = normalizarTotalPrevisaoInteiro(totalInformado, horizonteMeses);
+    const historicos = historicoBanco
+      .filter(r => r.valor !== '' && r.valor !== null && !isNaN(Number(r.valor)))
+      .map(r => {
+        const valor = Math.round(Number(r.valor) || 0);
+        return { ds: r.competencia, yhat: valor, yhat_lower: valor, yhat_upper: valor, is_historico: true };
+      });
+    const ultimaCompetencia = historicos[historicos.length - 1]?.ds;
+    const ultimaData = ultimaCompetencia ? new Date(`${ultimaCompetencia.slice(0, 10)}T12:00:00`) : new Date();
+    const pontosPrevisao = Array.from({ length: horizonteMeses }, (_, indice) => {
+      const data = new Date(ultimaData);
+      data.setMonth(data.getMonth() + indice + 1);
+      const ds = data.toISOString().slice(0, 10);
+      return {
+        ds,
+        yhat: rateio.mensal,
+        yhat_lower: rateio.mensal,
+        yhat_upper: rateio.mensal,
+        is_historico: false,
+      };
+    });
+
+    setPrevisao({
+      modelo_usado: 'manual',
+      modo_previsao: 'manual',
+      horizonte_meses: horizonteMeses,
+      capacidade_pgto_min: Math.round(rateio.mensal * 0.15),
+      capacidade_pgto_max: Math.round(rateio.mensal * 0.25),
+      pontos: [...historicos, ...pontosPrevisao],
+      total_previsto: rateio.total,
+      valor_mensal_previsto: rateio.mensal,
+      previsao_id: `manual-${Date.now()}`,
+      gerada_em: new Date().toISOString(),
+      aviso: 'Previsão informada manualmente pelo usuário, com parcelas mensais uniformes.',
+    });
+    setModoPrevisao('manual');
+    setSecaoAtiva('previsao');
+    toast.success(`Previsão manual montada: ${formatarPrevisaoInteira(rateio.mensal)} por mês`);
   };
 
   // ── Valida apenas os dados obrigatórios do contador antes do preview ───────
@@ -506,7 +599,7 @@ export default function PrevisaoFaturamento() {
 
   // ── Abre preview de PREVISÃO (futura) ─────────────────────────────────────
   const handleVerPrevisao = () => {
-    if (!previsao) { toast.error('Gere a previsão IA primeiro'); return; }
+    if (!previsao) { toast.error('Gere a previsão IA ou monte a previsão manual primeiro'); return; }
     if (!validarContabilidade()) return;
 
     const empresa = empresas.find(e => e.id === empresaId);
@@ -524,6 +617,7 @@ export default function PrevisaoFaturamento() {
       pontos: previsao.pontos,
       horizonte: previsao.horizonte_meses as 12 | 24 | 36,
       cidade: 'Brasília - DF',
+      modo: previsao.modo_previsao ?? (previsao.modelo_usado === 'manual' ? 'manual' : 'ia'),
     });
   };
 
@@ -575,7 +669,7 @@ export default function PrevisaoFaturamento() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900">Faturamento</h1>
-            <p className="text-sm text-gray-500">Histórico regressivo e previsão futura por IA</p>
+            <p className="text-sm text-gray-500">Histórico regressivo e previsão futura por IA ou manual</p>
           </div>
         </div>
 
@@ -939,13 +1033,13 @@ export default function PrevisaoFaturamento() {
             {/* Painel de geração */}
             <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
               <div>
-                <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-                  <BarChart2 className="w-4 h-4 text-emerald-600" />
-                  Previsão de Faturamento — Projeção Futura
-                </h2>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Baseada no histórico salvo. A IA projeta os próximos meses a partir dos dados reais registrados.
-                </p>
+                        <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+                          <BarChart2 className="w-4 h-4 text-emerald-600" />
+                          Previsão de Faturamento — Projeção Futura
+                        </h2>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Escolha entre uma projeção gerada pela IA ou informe manualmente o total exato dos próximos meses.
+                        </p>
               </div>
 
               {!empresaId && (
@@ -961,16 +1055,30 @@ export default function PrevisaoFaturamento() {
                     <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700 flex items-start gap-2">
                       <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                       <div>
-                        <p className="font-semibold">Histórico insuficiente para previsão</p>
+                        <p className="font-semibold">Histórico insuficiente para previsão IA</p>
                         <p className="text-xs mt-0.5">
-                          São necessários pelo menos 12 meses salvos no banco.
-                          Vá para a aba <strong>Faturamento Bruto</strong>, preencha os dados e clique em <strong>Salvar Histórico</strong>.
+                          A opção IA precisa de pelo menos 12 meses salvos no banco. Para uma previsão apenas para impressão, selecione <strong>Informar previsão manual</strong>.
                         </p>
                       </div>
                     </div>
                   )}
 
                   {/* Controles de geração */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => { setModoPrevisao('ia'); setPrevisao(null); }}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold border ${modoPrevisao === 'ia' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-300'}`}
+                    >
+                      Previsão por IA
+                    </button>
+                    <button
+                      onClick={() => { setModoPrevisao('manual'); setPrevisao(null); }}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold border ${modoPrevisao === 'manual' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300'}`}
+                    >
+                      Informar previsão manual
+                    </button>
+                  </div>
+
                   <div className="flex items-center gap-4 flex-wrap">
                     <div className="flex items-center gap-2">
                       <label className="text-sm text-gray-600 font-medium">Horizonte da previsão:</label>
@@ -985,17 +1093,50 @@ export default function PrevisaoFaturamento() {
                       </select>
                     </div>
 
-                    <button
-                      onClick={handleGerarPrevisao}
-                      disabled={loadingPrevisao}
-                      className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors font-semibold"
-                    >
-                      {loadingPrevisao ? (
-                        <><Loader2 className="w-4 h-4 animate-spin" /> Gerando previsão...</>
-                      ) : (
-                        <><RefreshCw className="w-4 h-4" /> Gerar Previsão IA</>
-                      )}
-                    </button>
+                    {modoPrevisao === 'ia' ? (
+                      <button
+                        onClick={handleGerarPrevisao}
+                        disabled={loadingPrevisao}
+                        className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors font-semibold"
+                      >
+                        {loadingPrevisao ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" /> Gerando previsão...</>
+                        ) : (
+                          <><RefreshCw className="w-4 h-4" /> Gerar Previsão IA</>
+                        )}
+                      </button>
+                    ) : (
+                      <div className="flex flex-wrap items-end gap-3 w-full">
+                        <div className="flex-1 min-w-[240px]">
+                          <label className="block text-xs font-medium text-blue-700 mb-1">
+                            Total exato dos próximos {horizonte} meses (R$)
+                          </label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={previsaoManualDisplay}
+                            onChange={e => {
+                              const digitos = e.target.value.replace(/\D/g, '');
+                              const valor = digitos ? Number(digitos) : 0;
+                              setPrevisaoManualDisplay(digitos ? valor.toLocaleString('pt-BR') : '');
+                              setPrevisaoManualNum(valor);
+                            }}
+                            placeholder="Ex.: 8.400.000"
+                            className="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm text-right font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <button
+                          onClick={handleMontarPrevisaoManual}
+                          className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+                        >
+                          <Divide className="w-4 h-4" />
+                          Montar previsão e ratear
+                        </button>
+                        <p className="w-full text-xs text-blue-600">
+                          Use somente números inteiros, sem centavos. O total precisa ser divisível por {horizonte} para que todas as parcelas sejam exatamente iguais.
+                        </p>
+                      </div>
+                    )}
 
                     {loadingPrevisao && (
                       <span className="text-xs text-gray-400 flex items-center gap-1">
@@ -1018,21 +1159,26 @@ export default function PrevisaoFaturamento() {
                   aviso={previsao.aviso}
                 />
                 {resumoPrevisao && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <>
+                    <p className="text-xs text-gray-500">
+                      Modalidade: <strong>{modoPrevisao === 'manual' ? 'previsão informada manualmente' : 'previsão gerada por IA'}</strong>.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
                       <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Total previsto no período</p>
                       <p className="text-xl font-bold text-emerald-900 mt-1">
-                        {resumoPrevisao.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        {formatarPrevisaoInteira(resumoPrevisao.total)}
                       </p>
                     </div>
                     <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                       <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Valor mensal exato</p>
                       <p className="text-xl font-bold text-blue-900 mt-1">
-                        {resumoPrevisao.mensal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        {formatarPrevisaoInteira(resumoPrevisao.mensal)}
                       </p>
                       <p className="text-xs text-blue-600 mt-1">Total dividido igualmente por {previsao.horizonte_meses} meses.</p>
                     </div>
-                  </div>
+                    </div>
+                  </>
                 )}
                 <div className="bg-white rounded-xl border border-gray-200 p-5">
                   <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -1041,7 +1187,7 @@ export default function PrevisaoFaturamento() {
                         Gráfico de Previsão — Próximos {previsao.horizonte_meses} meses
                       </h2>
                       <p className="text-xs text-gray-400 mt-0.5">
-                        Linha azul = histórico real · Linha laranja tracejada = projeção futura
+                        Linha azul = histórico real · Linha laranja tracejada = projeção futura · valores inteiros
                       </p>
                     </div>
                     <div className="flex items-center gap-3 flex-wrap">
@@ -1073,7 +1219,7 @@ export default function PrevisaoFaturamento() {
               <div className="bg-white rounded-xl border border-dashed border-gray-300 p-10 text-center">
                 <BarChart2 className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                 <p className="text-gray-500 text-sm">
-                  Nenhuma previsão gerada ainda. Clique em <strong>Gerar Previsão IA</strong> acima.
+                  Nenhuma previsão gerada ainda. Escolha IA ou informe uma previsão manual acima.
                 </p>
               </div>
             )}

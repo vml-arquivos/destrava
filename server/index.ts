@@ -10504,23 +10504,30 @@ ${(temTest1 || temTest2) ? `
       return resultado;
     }
 
-    const totalBase = Math.round(
-      futuros.reduce((soma: number, ponto: any) => soma + Number(ponto.yhat || 0), 0) * 100,
-    ) / 100;
-    const valorMensal = Math.round((totalBase / horizonteMeses) * 100) / 100;
-    const totalRateado = Math.round(valorMensal * horizonteMeses * 100) / 100;
+    // A previsão é um total inteiro rateado em parcelas mensais inteiras.
+    // O faturamento histórico não passa por esta regra.
+    const totalBase = Math.max(0, Math.round(
+      futuros.reduce((soma: number, ponto: any) => soma + Number(ponto.yhat || 0), 0),
+    ));
+    const valorMensal = Math.max(0, Math.round(totalBase / horizonteMeses));
+    const totalRateado = valorMensal * horizonteMeses;
     let indiceFuturo = 0;
 
     return {
       ...resultado,
       total_previsto: totalRateado,
       valor_mensal_previsto: valorMensal,
-      capacidade_pgto_min: Math.round(valorMensal * 0.15 * 100) / 100,
-      capacidade_pgto_max: Math.round(valorMensal * 0.25 * 100) / 100,
+      capacidade_pgto_min: Math.round(valorMensal * 0.15),
+      capacidade_pgto_max: Math.round(valorMensal * 0.25),
       pontos: pontos.map((ponto: any) => {
         if (ponto.is_historico || indiceFuturo >= horizonteMeses) return ponto;
         indiceFuturo += 1;
-        return { ...ponto, yhat: valorMensal };
+        return {
+          ...ponto,
+          yhat: valorMensal,
+          yhat_lower: Math.round(Number(ponto.yhat_lower || valorMensal)),
+          yhat_upper: Math.round(Number(ponto.yhat_upper || valorMensal)),
+        };
       }),
     };
   };
@@ -10625,8 +10632,8 @@ ${(temTest1 || temTest2) ? `
         predicaoResult = {
           modelo_usado: 'linear_fallback',
           horizonte_meses,
-          capacidade_pgto_min: Math.round(mediaPrevisao * 0.15 * 100) / 100,
-          capacidade_pgto_max: Math.round(mediaPrevisao * 0.25 * 100) / 100,
+          capacidade_pgto_min: Math.round(mediaPrevisao * 0.15),
+          capacidade_pgto_max: Math.round(mediaPrevisao * 0.25),
           pontos: [...pontosHistorico, ...pontosPrevisao],
           aviso: 'Previsão gerada com modelo linear (serviço IA indisponível). Para maior precisão, ative o microsserviço Prophet.',
         };
@@ -10654,6 +10661,7 @@ ${(temTest1 || temTest2) ? `
 
       const resposta: any = {
         ...predicaoResult,
+        modo_previsao: 'ia',
         previsao_id: saved[0].id,
         gerada_em: saved[0].gerada_em,
       };

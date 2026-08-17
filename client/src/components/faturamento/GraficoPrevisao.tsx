@@ -18,7 +18,13 @@ interface Props {
 }
 
 const formatBRL = (v: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact' }).format(v);
+  new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    notation: 'compact',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(Number(v) || 0));
 
 const formatMesAno = (ds: string) => {
   const d = new Date(ds + 'T00:00:00');
