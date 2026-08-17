@@ -168,12 +168,24 @@ function normalizarTotalPrevisaoInteiro(total: number, horizonteMeses: number) {
   };
 }
 
+function ratearTotalManual(total: number, horizonteMeses: number) {
+  const horizonte = Math.max(1, Math.trunc(Number(horizonteMeses) || 1));
+  const totalInteiro = Math.max(0, Math.round(Number(total) || 0));
+  return {
+    total: totalInteiro,
+    mensal: totalInteiro / horizonte,
+    horizonte,
+  };
+}
+
 function formatarPrevisaoInteira(valor: number): string {
-  return Math.round(Number(valor) || 0).toLocaleString('pt-BR', {
+  const numero = Number(valor) || 0;
+  const temCentavos = Math.abs(numero - Math.round(numero)) > 0.000001;
+  return numero.toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: temCentavos ? 2 : 0,
+    maximumFractionDigits: temCentavos ? 2 : 0,
   });
 }
 
@@ -184,6 +196,12 @@ function normalizarPrevisaoUniforme(resultado: ResultadoPrevisao): ResultadoPrev
     .slice(0, horizonteMeses);
 
   if (!Number.isFinite(horizonteMeses) || horizonteMeses <= 0 || futuros.length !== horizonteMeses) {
+    return resultado;
+  }
+
+  // Previsões manuais já carregam o total informado pelo usuário; não
+  // arredondar nem substituir esse valor pela soma dos pontos aqui.
+  if (resultado.modo_previsao === 'manual' || resultado.modelo_usado === 'manual') {
     return resultado;
   }
 
@@ -498,12 +516,7 @@ export default function PrevisaoFaturamento() {
       toast.error('A previsão deve ser um número inteiro, sem centavos');
       return;
     }
-    if (totalInformado % horizonteMeses !== 0) {
-      toast.error(`Informe um total inteiro divisível por ${horizonteMeses}, para gerar parcelas mensais exatas`);
-      return;
-    }
-
-    const rateio = normalizarTotalPrevisaoInteiro(totalInformado, horizonteMeses);
+    const rateio = ratearTotalManual(totalInformado, horizonteMeses);
     const historicos = historicoBanco
       .filter(r => r.valor !== '' && r.valor !== null && !isNaN(Number(r.valor)))
       .map(r => {
@@ -617,6 +630,8 @@ export default function PrevisaoFaturamento() {
       pontos: previsao.pontos,
       horizonte: previsao.horizonte_meses as 12 | 24 | 36,
       cidade: 'Brasília - DF',
+      totalPrevisto: previsao.total_previsto,
+      valorMensalPrevisto: previsao.valor_mensal_previsto,
       modo: previsao.modo_previsao ?? (previsao.modelo_usado === 'manual' ? 'manual' : 'ia'),
     });
   };
@@ -1066,13 +1081,13 @@ export default function PrevisaoFaturamento() {
                   {/* Controles de geração */}
                   <div className="flex flex-wrap items-center gap-2">
                     <button
-                      onClick={() => { setModoPrevisao('ia'); setPrevisao(null); }}
+                      onClick={() => { setModoPrevisao('ia'); setPrevisao(null); setPreviewDados(null); }}
                       className={`px-3 py-2 rounded-lg text-sm font-semibold border ${modoPrevisao === 'ia' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-300'}`}
                     >
                       Previsão por IA
                     </button>
                     <button
-                      onClick={() => { setModoPrevisao('manual'); setPrevisao(null); }}
+                      onClick={() => { setModoPrevisao('manual'); setPrevisao(null); setPreviewDados(null); }}
                       className={`px-3 py-2 rounded-lg text-sm font-semibold border ${modoPrevisao === 'manual' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300'}`}
                     >
                       Informar previsão manual
@@ -1084,7 +1099,11 @@ export default function PrevisaoFaturamento() {
                       <label className="text-sm text-gray-600 font-medium">Horizonte da previsão:</label>
                       <select
                         value={horizonte}
-                        onChange={e => setHorizonte(Number(e.target.value) as 12 | 24 | 36)}
+                        onChange={e => {
+                          setHorizonte(Number(e.target.value) as 12 | 24 | 36);
+                          setPrevisao(null);
+                          setPreviewDados(null);
+                        }}
                         className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       >
                         <option value={12}>Próximos 12 meses</option>
@@ -1120,6 +1139,9 @@ export default function PrevisaoFaturamento() {
                               const valor = digitos ? Number(digitos) : 0;
                               setPrevisaoManualDisplay(digitos ? valor.toLocaleString('pt-BR') : '');
                               setPrevisaoManualNum(valor);
+                              // Nunca manter o resumo/PDF anterior após alterar o total.
+                              setPrevisao(null);
+                              setPreviewDados(null);
                             }}
                             placeholder="Ex.: 8.400.000"
                             className="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm text-right font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1133,7 +1155,7 @@ export default function PrevisaoFaturamento() {
                           Montar previsão e ratear
                         </button>
                         <p className="w-full text-xs text-blue-600">
-                          Use somente números inteiros, sem centavos. O total precisa ser divisível por {horizonte} para que todas as parcelas sejam exatamente iguais.
+                          Informe qualquer valor inteiro, sem centavos. O total será dividido igualmente por {horizonte} meses; quando necessário, a parcela mensal será exibida com centavos para preservar o total exato.
                         </p>
                       </div>
                     )}

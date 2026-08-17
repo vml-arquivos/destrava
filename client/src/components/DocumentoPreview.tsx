@@ -33,6 +33,17 @@ const fmtBRLInteiro = (v: number) =>
     maximumFractionDigits: 0,
   }).format(Math.round(Number(v) || 0));
 
+const fmtBRLRateio = (v: number) => {
+  const numero = Number(v) || 0;
+  const temCentavos = Math.abs(numero - Math.round(numero)) > 0.000001;
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: temCentavos ? 2 : 0,
+    maximumFractionDigits: temCentavos ? 2 : 0,
+  }).format(numero);
+};
+
 const fmtMesAno = (ds: string) => {
   const d = new Date(ds + 'T00:00:00');
   return d
@@ -76,13 +87,18 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
     : dados.pontos
         .filter(p => !p.is_historico)
         .slice(0, dados.horizonte)
-        .map(p => ({
-          mes: fmtMesAno(p.ds),
-          valor: fmtBRLInteiro(p.yhat),
-          valorNum: Math.round(Number(p.yhat) || 0),
-        }));
+        .map(p => {
+          const valorMensal = dados.valorMensalPrevisto ?? (Number(p.yhat) || 0);
+          return {
+            mes: fmtMesAno(p.ds),
+            valor: fmtBRLRateio(valorMensal),
+            valorNum: valorMensal,
+          };
+        });
 
-  const total = linhasTabela.reduce((acc, l) => acc + l.valorNum, 0);
+  const total = !isDeclaracao && dados.totalPrevisto !== undefined
+    ? dados.totalPrevisto
+    : linhasTabela.reduce((acc, l) => acc + l.valorNum, 0);
 
   // ── Período ───────────────────────────────────────────────────────────────
   const inicio = isDeclaracao

@@ -41,6 +41,17 @@ const fmtBRLInteiro = (v: number) =>
     maximumFractionDigits: 0,
   }).format(Math.round(Number(v) || 0));
 
+const fmtBRLRateio = (v: number) => {
+  const numero = Number(v) || 0;
+  const temCentavos = Math.abs(numero - Math.round(numero)) > 0.000001;
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: temCentavos ? 2 : 0,
+    maximumFractionDigits: temCentavos ? 2 : 0,
+  }).format(numero);
+};
+
 const fmtMesAno = (ds: string) => {
   const d = new Date(ds + 'T00:00:00');
   return d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
@@ -98,6 +109,8 @@ export interface DadosPdfPrevisao {
   pontos: PontoPrevisao[];           // Apenas os pontos futuros (is_historico=false)
   horizonte: number;                 // 12 | 24 | 36
   modo?: 'ia' | 'manual';             // Origem da projeção exibida
+  totalPrevisto?: number;              // Total manual informado pelo usuário
+  valorMensalPrevisto?: number;        // Parcela uniforme calculada
   cidade?: string;
 }
 
@@ -330,6 +343,8 @@ function desenharTabelaPrevisao(
   doc: jsPDF,
   y: number,
   pontos: PontoPrevisao[],
+  totalEsperado?: number,
+  valorMensalEsperado?: number,
 ): number {
   const ROW_H = 5.45;
   const HEAD_H = 7.1;
@@ -388,13 +403,13 @@ function desenharTabelaPrevisao(
     doc.setFontSize(7.2);
     doc.text(fmtMesAno(p.ds), ML + 4, y + 3.8);
 
-    const valorPrevisao = Math.round(Number(p.yhat) || 0);
+    const valorPrevisao = valorMensalEsperado ?? (Number(p.yhat) || 0);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...PRETO);
-    doc.text(fmtBRLInteiro(valorPrevisao), ML + c1 + c2 - 4, y + 3.8, { align: 'right' });
+    doc.text(fmtBRLRateio(valorPrevisao), ML + c1 + c2 - 4, y + 3.8, { align: 'right' });
 
     doc.setTextColor(...VERDE);
-    doc.text(fmtBRLInteiro(valorPrevisao), ML + CW - 4, y + 3.8, { align: 'right' });
+    doc.text(fmtBRLRateio(valorPrevisao), ML + CW - 4, y + 3.8, { align: 'right' });
 
     totalPrev += valorPrevisao;
     y += ROW_H;
@@ -408,7 +423,8 @@ function desenharTabelaPrevisao(
   doc.setFontSize(8.1);
   doc.setFont('helvetica', 'bold');
   doc.text('TOTAL PREVISTO', ML + 4, y + 5.7);
-  doc.text(fmtBRLInteiro(totalPrev), ML + CW - 4, y + 5.7, { align: 'right' });
+  const totalParaExibir = totalEsperado ?? totalPrev;
+  doc.text(fmtBRLInteiro(totalParaExibir), ML + CW - 4, y + 5.7, { align: 'right' });
   y += 11;
 
   return y;
@@ -569,14 +585,20 @@ export function gerarPdfFaturamento(dados: DadosPdfFaturamento): void {
     doc.setFont('helvetica', 'italic');
     doc.text(
       dados.modo === 'manual'
-        ? 'Previsão informada manualmente pelo usuário, com total inteiro e parcelas mensais uniformes.'
+        ? 'Previsão informada manualmente pelo usuário; o total informado é rateado igualmente pelo horizonte selecionado.'
         : 'Valores estimados com base em histórico de crescimento, contratos vigentes e modelo preditivo IA (Prophet/Linear).',
       ML,
       y,
     );
     y += 6;
 
-    y = desenharTabelaPrevisao(doc, y, pontosFuturos);
+    y = desenharTabelaPrevisao(
+      doc,
+      y,
+      pontosFuturos,
+      dados.totalPrevisto,
+      dados.valorMensalPrevisto,
+    );
 
     if (y > 226) {
       doc.addPage();
