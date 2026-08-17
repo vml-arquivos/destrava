@@ -58,6 +58,28 @@ function onlyDigits(value?: string) {
   return String(value || "").replace(/\D/g, "");
 }
 
+function consultaReceitaFalhouSemInvalidarCnpj(err: unknown): boolean {
+  const mensagem = String((err as any)?.message || err || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  // CNPJ inválido continua bloqueado. O fallback vale somente para CNPJ com
+  // formato aceito cuja consulta não encontrou dados ou ficou indisponível.
+  if (
+    mensagem.includes("cnpj invalido") ||
+    mensagem.includes("cnpj deve ter 14") ||
+    mensagem.includes("cnpj e obrigatorio")
+  ) return false;
+
+  return (
+    mensagem.includes("nao encontrado na receita") ||
+    mensagem.includes("erro ao consultar cnpj") ||
+    mensagem.includes("fontes configuradas") ||
+    mensagem.includes("temporariamente indisponivel")
+  );
+}
+
 function formatDate(value?: string) {
   if (!value) return "—";
   return new Date(value).toLocaleString("pt-BR");
@@ -284,7 +306,20 @@ export default function DadosIncompletos() {
       }
       await carregar();
     } catch (err: any) {
-      toast.error(err?.message || "Erro ao atualizar cadastro", { id: key });
+      if (item.tipo === "empresa" && consultaReceitaFalhouSemInvalidarCnpj(err)) {
+        try {
+          // A Receita pode levar alguns dias para publicar uma empresa recém-aberta.
+          // Reprocessar localmente remove apenas a trava indevida; não grava dados
+          // inventados nem altera a data de sincronização da Receita.
+          await apiFetch(`/api/cadastros-incompletos/empresa/${item.id}/reprocessar`, { method: "PATCH" });
+          toast.success("A Receita ainda não disponibilizou os dados. O cadastro manual foi mantido sem bloqueio.", { id: key });
+          await carregar();
+        } catch (reprocessErr: any) {
+          toast.error(reprocessErr?.message || "Não foi possível liberar o cadastro manual.", { id: key });
+        }
+      } else {
+        toast.error(err?.message || "Erro ao atualizar cadastro", { id: key });
+      }
     } finally {
       setProcessando(null);
     }

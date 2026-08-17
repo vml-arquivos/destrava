@@ -360,6 +360,17 @@ function pendenciasEmpresa(dados: Record<string, any>): string[] {
   const pendencias: string[] = [];
   if (!validarCnpjObrigatorio(dados.cnpj)) pendencias.push("CNPJ obrigatório/ inválido");
   if (!String(dados.razao_social || "").trim()) pendencias.push("Razão social obrigatória");
+
+  // Empresas cadastradas manualmente podem ser abertas recentemente e ainda não
+  // aparecer nas fontes públicas da Receita. Nessa situação, não transformar a
+  // ausência temporária de CNAE/natureza/capital/situação em bloqueio operacional.
+  // Quando a sincronização ocorrer, ultima_sincronizacao_receita será preenchida e
+  // as validações cadastrais completas voltam a ser aplicadas normalmente.
+  const origem = String(dados.origem || "").trim().toLowerCase();
+  const cadastroManualSemReceita = ["manual", "cadastro_manual"].includes(origem)
+    && !dados.ultima_sincronizacao_receita;
+  if (cadastroManualSemReceita) return pendencias;
+
   if (!String(dados.cnae_principal || "").trim()) pendencias.push("CNAE principal não sincronizado");
   if (!String(dados.natureza_juridica || "").trim()) pendencias.push("Natureza jurídica não sincronizada");
   if (dados.capital_social === null || dados.capital_social === undefined || Number(dados.capital_social) <= 0) pendencias.push("Capital social não sincronizado");
