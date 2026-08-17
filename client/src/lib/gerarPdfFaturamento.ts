@@ -424,51 +424,52 @@ function desenharAssinaturas(
 ): void {
   const ASSIN_Y = yForce ?? 232;
   const HALF = (CW - 12) / 2;
+  const xLeft = ML;
+  const xRight = ML + HALF + 12;
+  const centroEsquerdo = xLeft + HALF / 2;
+  const centroDireito = xRight + HALF / 2;
 
-  doc.setTextColor(...CINZA_ESCURO);
-  doc.setFontSize(8.2);
-  doc.setFont('helvetica', 'normal');
+  // Padrão documental: local/data isolado acima das duas assinaturas.
   const dataHoje = new Date().toLocaleDateString('pt-BR', {
-    day: '2-digit', month: 'long', year: 'numeric',
+    day: 'numeric', month: 'long', year: 'numeric',
   });
-  doc.text(`${cidade}, ${dataHoje}.`, ML, ASSIN_Y);
+  doc.setTextColor(...CINZA_ESCURO);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.2);
+  doc.text(`${cidade.trim() || 'Brasília - DF'}, ${dataHoje}.`, xLeft, ASSIN_Y, { align: 'left' });
 
   const lineY = ASSIN_Y + 18;
+  const nomeY = lineY + 4.5;
+  const contadorLinhas = doc
+    .splitTextToSize(contabilidade.nomeContador.trim() || 'Contador Responsável', HALF - 4)
+    .slice(0, 2);
+  const empresaLinhas = doc
+    .splitTextToSize(empresa.razaoSocial.trim() || 'Empresa', HALF - 4)
+    .slice(0, 2);
+  const maxLinhasNome = Math.max(contadorLinhas.length, empresaLinhas.length);
+  const labelY = nomeY + (maxLinhasNome * 3.7);
 
+  // Linhas de assinatura simétricas e com a mesma largura.
   doc.setDrawColor(...CINZA_ESCURO);
   doc.setLineWidth(0.35);
-  doc.line(ML, lineY, ML + HALF, lineY);
-
-  doc.setTextColor(...PRETO);
-  doc.setFontSize(8.1);
-  doc.setFont('helvetica', 'bold');
-  const contadorLinhas = doc.splitTextToSize(contabilidade.nomeContador, HALF - 4).slice(0, 2);
-  doc.text(contadorLinhas, ML + HALF / 2, lineY + 4.5, { align: 'center' });
-
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...CINZA_ESCURO);
-  doc.setFontSize(7.2);
-  const contadorLabelY = lineY + 4.5 + (contadorLinhas.length * 3.7);
-  doc.text('Contador Responsável', ML + HALF / 2, contadorLabelY + 3.5, { align: 'center' });
-  doc.text(`CRC: ${contabilidade.crc}`, ML + HALF / 2, contadorLabelY + 7.3, { align: 'center' });
-
-  const xRight = ML + HALF + 12;
-  doc.setDrawColor(...CINZA_ESCURO);
+  doc.line(xLeft, lineY, xLeft + HALF, lineY);
   doc.line(xRight, lineY, xRight + HALF, lineY);
 
   doc.setTextColor(...PRETO);
-  doc.setFontSize(8.1);
   doc.setFont('helvetica', 'bold');
-  const empresaLinhas = doc.splitTextToSize(empresa.razaoSocial, HALF - 4).slice(0, 2);
-  doc.text(empresaLinhas, xRight + HALF / 2, lineY + 4.5, { align: 'center' });
+  doc.setFontSize(8.1);
+  doc.text(contadorLinhas, centroEsquerdo, nomeY, { align: 'center' });
+  doc.text(empresaLinhas, centroDireito, nomeY, { align: 'center' });
 
-  const labelY = lineY + 4.5 + (empresaLinhas.length * 3.7);
+  // Funções e identificadores ficam alinhados mesmo quando um nome ocupa duas linhas.
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...CINZA_ESCURO);
   doc.setFontSize(7.2);
-  doc.text('Representante Legal', xRight + HALF / 2, labelY + 3.5, { align: 'center' });
+  doc.text('Contador Responsável', centroEsquerdo, labelY + 3.5, { align: 'center' });
+  doc.text(`CRC: ${contabilidade.crc.trim() || 'Não informado'}`, centroEsquerdo, labelY + 7.3, { align: 'center' });
+  doc.text('Representante Legal', centroDireito, labelY + 3.5, { align: 'center' });
   if (empresa.cnpj) {
-    doc.text(`CNPJ: ${empresa.cnpj}`, xRight + HALF / 2, labelY + 7.3, { align: 'center' });
+    doc.text(`CNPJ: ${empresa.cnpj}`, centroDireito, labelY + 7.3, { align: 'center' });
   }
 }
 
