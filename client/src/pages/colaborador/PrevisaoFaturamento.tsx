@@ -55,6 +55,7 @@ interface Contador {
   id: string;
   nome: string;
   crc: string;
+  nome_escritorio?: string;
   ativo: boolean;
 }
 
@@ -78,6 +79,8 @@ interface ResultadoPrevisao {
   capacidade_pgto_min: number;
   capacidade_pgto_max: number;
   pontos: PontoPrevisao[];
+  total_previsto?: number;
+  valor_mensal_previsto?: number;
   previsao_id: string;
   gerada_em: string;
   aviso?: string;
@@ -146,6 +149,39 @@ function recortarHistorico(
     );
     return encontrado ?? slot;
   });
+}
+
+/**
+ * Garante que a previsão gerada pela IA seja apresentada em parcelas mensais
+ * exatamente iguais: total projetado dividido pelo horizonte solicitado.
+ * O histórico e o rateio do faturamento bruto não passam por esta regra.
+ */
+function normalizarPrevisaoUniforme(resultado: ResultadoPrevisao): ResultadoPrevisao {
+  const horizonteMeses = Number(resultado.horizonte_meses);
+  const futuros = resultado.pontos
+    .filter(p => !p.is_historico)
+    .slice(0, horizonteMeses);
+
+  if (!Number.isFinite(horizonteMeses) || horizonteMeses <= 0 || futuros.length !== horizonteMeses) {
+    return resultado;
+  }
+
+  const totalBruto = futuros.reduce((soma, ponto) => soma + Number(ponto.yhat || 0), 0);
+  const totalBase = Math.round(totalBruto * 100) / 100;
+  const valorMensal = Math.round((totalBase / horizonteMeses) * 100) / 100;
+  const totalRateado = Math.round(valorMensal * horizonteMeses * 100) / 100;
+  let indiceFuturo = 0;
+
+  return {
+    ...resultado,
+    total_previsto: totalRateado,
+    valor_mensal_previsto: valorMensal,
+    pontos: resultado.pontos.map(ponto => {
+      if (ponto.is_historico || indiceFuturo >= horizonteMeses) return ponto;
+      indiceFuturo += 1;
+      return { ...ponto, yhat: valorMensal };
+    }),
+  };
 }
 
 /**
@@ -281,6 +317,9 @@ export default function PrevisaoFaturamento() {
       if (c) {
         setNomeContadorLivre(c.nome);
         setCrcLivre(c.crc);
+        // O escritório é preenchido somente quando existe no cadastro do contador.
+        // Caso contrário, permanece vazio sem bloquear o documento.
+        setEscritorio(c.nome_escritorio?.trim() || '');
       }
     }
   };
@@ -306,7 +345,7 @@ export default function PrevisaoFaturamento() {
         const prev: ResultadoPrevisao = await apiFetch(
           `/api/faturamento/previsao/${id}/ultima`,
         );
-        setPrevisao(prev);
+        setPrevisao(normalizarPrevisaoUniforme(prev));
       } catch {
         setPrevisao(null);
       }
@@ -400,7 +439,7 @@ export default function PrevisaoFaturamento() {
         body: JSON.stringify({ empresa_id: empresaId, horizonte_meses: horizonte }),
       });
       toast.dismiss('previsao-progress');
-      setPrevisao(result);
+      setPrevisao(normalizarPrevisaoUniforme(result));
       setSecaoAtiva('previsao');
       toast.success(`Previsão gerada com modelo ${result.modelo_usado.toUpperCase()}!`);
     } catch (err: any) {
@@ -411,12 +450,8 @@ export default function PrevisaoFaturamento() {
     }
   };
 
-  // ── Valida campos obrigatórios do escritório antes do preview ─────────────
+  // ── Valida apenas os dados obrigatórios do contador antes do preview ───────
   const validarContabilidade = (): boolean => {
-    if (!escritorio.trim()) {
-      toast.error('Informe o nome do escritório de contabilidade');
-      return false;
-    }
     if (!nomeContadorLivre.trim()) {
       toast.error('Informe o nome do contador responsável');
       return false;
@@ -520,6 +555,14 @@ export default function PrevisaoFaturamento() {
   const empresasFiltradas = termoEmpresa
     ? empresas.filter((e) => `${e.razao_social || ''} ${e.cnpj || ''}`.toLowerCase().includes(termoEmpresa))
     : empresas;
+  const resumoPrevisao = previsao
+    ? (() => {
+        const futuros = previsao.pontos.filter(p => !p.is_historico).slice(0, previsao.horizonte_meses);
+        const total = previsao.total_previsto ?? futuros.reduce((soma, ponto) => soma + Number(ponto.yhat || 0), 0);
+        const mensal = previsao.valor_mensal_previsto ?? (previsao.horizonte_meses > 0 ? total / previsao.horizonte_meses : 0);
+        return { total, mensal };
+      })()
+    : null;
 
   return (
     <Layout title="Faturamento">
@@ -641,7 +684,8 @@ export default function PrevisaoFaturamento() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1">
                   <Building2 className="w-3 h-3" />
-                  Escritório de Contabilidade *
+                  Escritório de Contabilidade{' '}
+                  <span className="text-gray-400 font-normal">(opcional)</span>
                 </label>
                 <input
                   type="text"
@@ -679,7 +723,7 @@ export default function PrevisaoFaturamento() {
               </div>
             </div>
             <p className="text-xs text-gray-400 mt-2">
-              * Campos obrigatórios para gerar o PDF. O número do documento é gerado automaticamente.
+              * Nome do contador e CRC são obrigatórios para gerar o PDF. O escritório é opcional e, quando cadastrado no contador, é preenchido automaticamente.
             </p>
           </div>
         </div>
@@ -973,6 +1017,23 @@ export default function PrevisaoFaturamento() {
                   modelo={previsao.modelo_usado}
                   aviso={previsao.aviso}
                 />
+                {resumoPrevisao && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                      <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Total previsto no período</p>
+                      <p className="text-xl font-bold text-emerald-900 mt-1">
+                        {resumoPrevisao.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </p>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Valor mensal exato</p>
+                      <p className="text-xl font-bold text-blue-900 mt-1">
+                        {resumoPrevisao.mensal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </p>
+                      <p className="text-xs text-blue-600 mt-1">Total dividido igualmente por {previsao.horizonte_meses} meses.</p>
+                    </div>
+                  </div>
+                )}
                 <div className="bg-white rounded-xl border border-gray-200 p-5">
                   <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                     <div>

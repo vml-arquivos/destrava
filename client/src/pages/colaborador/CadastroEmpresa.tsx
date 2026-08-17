@@ -215,6 +215,7 @@ export default function CadastroEmpresa() {
   const [cepLoading, setCepLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [manualMode, setManualMode] = useState(false);
   const [empresaId, setEmpresaId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<TipoUploadInicial | null>(null);
   const _dropRef = useRef<HTMLDivElement>(null);
@@ -225,9 +226,12 @@ export default function CadastroEmpresa() {
     setForm(f => ({ ...f, [field]: value }));
 
   // ── CNPJ ──────────────────────────────────────────────────────────────────
+  const isManualFallbackAvailable = cnpjStatus === 'error' && cnpjError !== 'CNPJ inválido';
+
   const handleCNPJ = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatCNPJ(e.target.value);
     set('cnpj', formatted);
+    setManualMode(false);
     if (cleanDigits(formatted).length < 14) {
       resetCNPJ();
       return;
@@ -274,6 +278,15 @@ export default function CadastroEmpresa() {
       setSocios(data.qsa ?? []);
       setSociosSelecionados(new Set((data.qsa ?? []).map((_, i) => i)));
     });
+  };
+
+  const handleEnableManualMode = () => {
+    if (!isManualFallbackAvailable) return;
+    // Evita reaproveitar dados de uma consulta anterior ou de outra empresa.
+    setForm({ ...INITIAL_FORM, cnpj: form.cnpj });
+    setSocios([]);
+    setSociosSelecionados(new Set());
+    setManualMode(true);
   };
 
   // ── CEP ───────────────────────────────────────────────────────────────────
@@ -326,7 +339,10 @@ export default function CadastroEmpresa() {
 
   // ── Avançar passos ────────────────────────────────────────────────────────
   const goToStep2 = () => {
-    if (!cleanDigits(form.cnpj) || cnpjStatus !== 'found') return;
+    const hasValidCnpjLength = cleanDigits(form.cnpj).length === 14;
+    const hasCompanyName = form.razao_social.trim().length > 0;
+    const canContinue = cnpjStatus === 'found' || manualMode;
+    if (!hasValidCnpjLength || !hasCompanyName || !canContinue) return;
     setStep(2);
   };
 
@@ -364,14 +380,14 @@ export default function CadastroEmpresa() {
           motivo_situacao_cadastral: form.motivo_situacao_cadastral || null,
           regime_tributario: form.regime_tributario || null,
           dados_extra_receita: form.dados_extra_receita || null,
-          ultima_sincronizacao_receita: new Date().toISOString(),
+          ultima_sincronizacao_receita: manualMode ? null : new Date().toISOString(),
           responsavel_nome: form.responsavel_nome || null,
           responsavel_cpf: form.responsavel_cpf || null,
           responsavel_email: form.responsavel_email || null,
           responsavel_telefone: form.responsavel_telefone || null,
           responsavel_cargo: form.responsavel_cargo || null,
           status: 'ativo',
-          origem: 'smart_onboarding',
+          origem: manualMode ? 'cadastro_manual' : 'smart_onboarding',
         }),
       });
       setEmpresaId(empresa.id);
@@ -441,6 +457,7 @@ export default function CadastroEmpresa() {
     setUploads([]);
     setStep(1);
     setSaved(false);
+    setManualMode(false);
     setEmpresaId(null);
     resetCNPJ();
   };
@@ -549,11 +566,30 @@ export default function CadastroEmpresa() {
                   <CheckCircle className="w-3 h-3" /> Dados preenchidos automaticamente
                 </p>
               )}
+              {isManualFallbackAvailable && !manualMode && (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs text-amber-800">
+                    Não foi possível obter os dados automaticamente agora. Você pode continuar com o cadastro manual, sem alterar a consulta automática.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleEnableManualMode}
+                    className="mt-2 text-xs font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-700"
+                  >
+                    Continuar cadastro manualmente
+                  </button>
+                </div>
+              )}
+              {manualMode && (
+                <p className="text-xs text-amber-700 mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> Modo manual ativado. Preencha os dados disponíveis.
+                </p>
+              )}
             </Field>
           </div>
 
           {/* Dados preenchidos automaticamente */}
-          {cnpjStatus === 'found' && (
+          {(cnpjStatus === 'found' || manualMode) && (
             <>
               {form.situacao && (
                 <div className="flex items-center gap-2">
@@ -584,20 +620,61 @@ export default function CadastroEmpresa() {
                       onChange={e => set('nome_fantasia', e.target.value)} placeholder="Nome Fantasia" />
                   </Field>
                   <Field label="Natureza Jurídica">
-                    <input className={`${inputClass} opacity-75 cursor-not-allowed`} value={form.natureza_juridica} readOnly />
+                    <input
+                      className={manualMode ? inputClass : `${inputClass} opacity-75 cursor-not-allowed`}
+                      value={form.natureza_juridica}
+                      onChange={manualMode ? e => set('natureza_juridica', e.target.value) : undefined}
+                      readOnly={!manualMode}
+                    />
                   </Field>
                   <Field label="Inscrição Estadual">
-                    <input className={`${inputClass} opacity-75 cursor-not-allowed`} value={form.inscricao_estadual} readOnly placeholder="Não informada" />
+                    <input
+                      className={manualMode ? inputClass : `${inputClass} opacity-75 cursor-not-allowed`}
+                      value={form.inscricao_estadual}
+                      onChange={manualMode ? e => set('inscricao_estadual', e.target.value) : undefined}
+                      readOnly={!manualMode}
+                      placeholder="Não informada"
+                    />
                   </Field>
                   <Field label="Data de Abertura">
-                    <input className={`${inputClass} opacity-75 cursor-not-allowed`} value={form.data_abertura} readOnly />
+                    <input
+                      className={manualMode ? inputClass : `${inputClass} opacity-75 cursor-not-allowed`}
+                      value={form.data_abertura}
+                      onChange={manualMode ? e => set('data_abertura', e.target.value) : undefined}
+                      readOnly={!manualMode}
+                      placeholder="AAAA-MM-DD"
+                    />
                   </Field>
                   <Field label="Capital Social">
-                    <input className={`${inputClass} opacity-75 cursor-not-allowed`} value={form.capital_social} readOnly />
+                    <input
+                      className={manualMode ? inputClass : `${inputClass} opacity-75 cursor-not-allowed`}
+                      value={form.capital_social}
+                      onChange={manualMode ? e => set('capital_social', e.target.value) : undefined}
+                      readOnly={!manualMode}
+                      placeholder="R$ 0,00"
+                    />
                   </Field>
                   <Field label="CNAE Principal">
-                    <input className={`${inputClass} opacity-75 cursor-not-allowed`} value={form.cnae} readOnly />
+                    <input
+                      className={manualMode ? inputClass : `${inputClass} opacity-75 cursor-not-allowed`}
+                      value={form.cnae}
+                      onChange={manualMode ? e => set('cnae', e.target.value) : undefined}
+                      readOnly={!manualMode}
+                      placeholder="CNAE e descrição"
+                    />
                   </Field>
+                  {manualMode && (
+                    <Field label="Porte">
+                      <input className={inputClass} value={form.porte}
+                        onChange={e => set('porte', e.target.value)} placeholder="Ex.: ME, EPP, Demais" />
+                    </Field>
+                  )}
+                  {manualMode && (
+                    <Field label="Regime Tributário">
+                      <input className={inputClass} value={form.regime_tributario}
+                        onChange={e => set('regime_tributario', e.target.value)} placeholder="Ex.: Simples Nacional" />
+                    </Field>
+                  )}
                 </div>
               </div>
 
@@ -702,7 +779,7 @@ export default function CadastroEmpresa() {
           <div className="flex justify-end pt-2">
             <button
               onClick={goToStep2}
-              disabled={cnpjStatus !== 'found'}
+              disabled={cnpjStatus !== 'found' && !manualMode}
               className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
             >
               Próximo: Sócios

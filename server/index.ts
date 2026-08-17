@@ -6786,7 +6786,9 @@ async function startServer() {
         data_abertura: normalizeDate(body.data_abertura),
         situacao_cadastral: emptyToNull(body.situacao_cadastral),
         matriz_filial: emptyToNull(body.matriz_filial),
-        ultima_sincronizacao_receita: normalizeTimestamp(body.ultima_sincronizacao_receita) || new Date().toISOString(),
+        ultima_sincronizacao_receita: body.ultima_sincronizacao_receita === null
+          ? null
+          : normalizeTimestamp(body.ultima_sincronizacao_receita) || new Date().toISOString(),
         data_situacao_cadastral: normalizeDate(body.data_situacao_cadastral),
         motivo_situacao_cadastral: emptyToNull(body.motivo_situacao_cadastral),
         regime_tributario: emptyToNull(body.regime_tributario),
@@ -10484,6 +10486,34 @@ ${(temTest1 || temTest2) ? `
     }
   });
 
+  const normalizarPrevisaoUniforme = (resultado: any, horizonteMeses: number) => {
+    const pontos = Array.isArray(resultado?.pontos) ? resultado.pontos : [];
+    const futuros = pontos.filter((ponto: any) => !ponto.is_historico).slice(0, horizonteMeses);
+    if (!Number.isInteger(horizonteMeses) || horizonteMeses <= 0 || futuros.length !== horizonteMeses) {
+      return resultado;
+    }
+
+    const totalBase = Math.round(
+      futuros.reduce((soma: number, ponto: any) => soma + Number(ponto.yhat || 0), 0) * 100,
+    ) / 100;
+    const valorMensal = Math.round((totalBase / horizonteMeses) * 100) / 100;
+    const totalRateado = Math.round(valorMensal * horizonteMeses * 100) / 100;
+    let indiceFuturo = 0;
+
+    return {
+      ...resultado,
+      total_previsto: totalRateado,
+      valor_mensal_previsto: valorMensal,
+      capacidade_pgto_min: Math.round(valorMensal * 0.15 * 100) / 100,
+      capacidade_pgto_max: Math.round(valorMensal * 0.25 * 100) / 100,
+      pontos: pontos.map((ponto: any) => {
+        if (ponto.is_historico || indiceFuturo >= horizonteMeses) return ponto;
+        indiceFuturo += 1;
+        return { ...ponto, yhat: valorMensal };
+      }),
+    };
+  };
+
   app.post('/api/faturamento/prever', auth, async (req: Request, res: Response) => {
     try {
       const { empresa_id, horizonte_meses = 12 } = req.body;
@@ -10592,6 +10622,10 @@ ${(temTest1 || temTest2) ? `
         // ─────────────────────────────────────────────────────────────────────────
       }
 
+      // A IA pode retornar valores diferentes por mês. Para o demonstrativo,
+      // a previsão total é dividida igualmente pelo horizonte solicitado.
+      predicaoResult = normalizarPrevisaoUniforme(predicaoResult, Number(horizonte_meses));
+
       const { rows: saved } = await pool.query(
         `INSERT INTO previsao_faturamento
            (empresa_id, modelo_usado, horizonte_meses, capacidade_pgto_min, capacidade_pgto_max, payload_completo)
@@ -10638,9 +10672,14 @@ ${(temTest1 || temTest2) ? `
         return;
       }
       const previsao = rows[0];
+      const normalizada = normalizarPrevisaoUniforme(
+        { ...previsao, pontos: Array.isArray(previsao.payload_completo) ? previsao.payload_completo : [] },
+        Number(previsao.horizonte_meses),
+      );
       res.json({
         ...previsao,
-        pontos: previsao.payload_completo,
+        ...normalizada,
+        pontos: normalizada.pontos,
       });
     } catch (err) {
       console.error('[GET /api/faturamento/previsao/:empresaId/ultima]', err);
