@@ -552,13 +552,14 @@ export function gerarPdfFaturamento(dados: DadosPdfFaturamento): void {
 
     y = desenharTabelaFaturamento(doc, y, meses, ['Mês/Ano', 'Faturamento Total (R$)'], 'FATURAMENTO MENSAL', tituloPdf, periodo);
 
-    // Assinaturas e rodapé ficam apenas na última página. Se a tabela terminar
-    // muito próxima do fim, abrimos uma página final exclusiva para assinaturas.
-    if (y > 226) {
+    // Local/data deve ficar logo abaixo do total da tabela. Só abrimos uma
+    // nova página quando o bloco completo de assinaturas não couber no espaço restante.
+    const assinaturaY = y + 7;
+    if (assinaturaY + 42 > H - 18) {
       doc.addPage();
       y = 34;
     }
-    desenharAssinaturas(doc, dados.empresa, dados.contabilidade, cidade, Math.max(y + 7, 226));
+    desenharAssinaturas(doc, dados.empresa, dados.contabilidade, cidade, y + 7);
     desenharRodape(doc);
 
     const nome = `declaracao-faturamento-${dados.empresa.razaoSocial.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`;
@@ -600,11 +601,14 @@ export function gerarPdfFaturamento(dados: DadosPdfFaturamento): void {
       dados.valorMensalPrevisto,
     );
 
-    if (y > 226) {
+    // Mantém local/data imediatamente abaixo do total previsto, sem o
+    // espaçamento artificial que deslocava esse texto para o fim da página.
+    const assinaturaY = y + 7;
+    if (assinaturaY + 42 > H - 18) {
       doc.addPage();
       y = 34;
     }
-    desenharAssinaturas(doc, dados.empresa, dados.contabilidade, cidade, Math.max(y + 7, 226));
+    desenharAssinaturas(doc, dados.empresa, dados.contabilidade, cidade, y + 7);
     desenharRodape(doc);
 
     const nome = `previsao-faturamento-${dados.empresa.razaoSocial.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`;
