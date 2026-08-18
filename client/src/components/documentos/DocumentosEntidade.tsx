@@ -83,6 +83,25 @@ const statusValidadeCls: Record<string, string> = {
   nao_verificado: "bg-slate-50 text-slate-600 border-slate-100",
 };
 
+function itensTextoRelatorio(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      if (typeof item === "string") return item;
+      if (item && typeof item === "object") {
+        const registro = item as Record<string, unknown>;
+        return String(registro.mensagem || registro.recomendacao || registro.nome || registro.label || "");
+      }
+      return "";
+    }).map((item) => item.trim()).filter(Boolean);
+  }
+  if (typeof value === "string" && value.trim()) return [value.trim()];
+  return [];
+}
+
+function nomeCampoRelatorio(label: string): string {
+  return label.replace(/\b\w/g, (letra) => letra.toUpperCase());
+}
+
 const tipoDocumentoLabel: Record<string, string> = {
   contrato_prestacao_servicos: "1. Contrato de prestação de serviços",
   contrato_assessoria: "1. Contrato de prestação de serviços",
@@ -1165,68 +1184,98 @@ export default function DocumentosEntidade({
       })()}
 
       {entidadeTipo === "empresa" && empresaId && relatorioDocumental && (
-        <div className="rounded-2xl border border-violet-200 bg-violet-50/40 p-4 space-y-3">
+        <div className="rounded-2xl border border-violet-200 bg-violet-50/40 p-4 space-y-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="flex items-center gap-2 text-sm font-black text-violet-950"><FileText className="h-4 w-4" /> Relatório consolidado da análise documental</p>
-              <p className="mt-1 text-[11px] text-violet-900/70">Estado atualizado em {new Date(relatorioDocumental.gerado_em || Date.now()).toLocaleString("pt-BR")} — {relatorioDocumental.regime?.descricao || "regime ainda não identificado"}.</p>
+              <p className="mt-1 text-[11px] text-violet-900/70">Visualização completa do estado atual antes da geração do PDF. Atualizado em {new Date(relatorioDocumental.gerado_em || Date.now()).toLocaleString("pt-BR")} — {relatorioDocumental.regime?.descricao || "regime ainda não identificado"}.</p>
             </div>
             <button type="button" onClick={baixarRelatorioDocumentalPdf} disabled={baixandoRelatorioPdf} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white px-3 py-2 text-[11px] font-black text-violet-800 shadow-sm ring-1 ring-violet-200 hover:bg-violet-50 disabled:opacity-50">
               {baixandoRelatorioPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
               {baixandoRelatorioPdf ? "Gerando..." : "Gerar PDF deste estado"}
             </button>
           </div>
+
           <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Status</p><p className="mt-1 text-[11px] font-black text-slate-800">{relatorioDocumental.status_geral}</p></div>
-            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Analisados</p><p className="mt-1 text-lg font-black text-violet-800">{relatorioDocumental.resumo?.documentos_analisados ?? 0}</p></div>
-            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Aguardando análise</p><p className="mt-1 text-lg font-black text-orange-700">{relatorioDocumental.resumo?.documentos_pendentes_analise ?? 0}</p></div>
-            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Faltantes</p><p className="mt-1 text-lg font-black text-amber-700">{relatorioDocumental.resumo?.documentos_faltantes ?? 0}</p></div>
-            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Blocos analisados</p><p className="mt-1 text-lg font-black text-slate-800">{relatorioDocumental.resumo?.blocos_analisados ?? 0}</p></div>
+            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Status geral</p><p className="mt-1 text-[11px] font-black text-slate-800">{relatorioDocumental.status_geral}</p></div>
+            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Anexados e analisados</p><p className="mt-1 text-lg font-black text-emerald-700">{relatorioDocumental.resumo?.documentos_analisados ?? 0}</p></div>
+            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Anexados aguardando análise</p><p className="mt-1 text-lg font-black text-orange-700">{relatorioDocumental.resumo?.documentos_pendentes_analise ?? 0}</p></div>
+            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Ainda faltam anexar</p><p className="mt-1 text-lg font-black text-amber-700">{relatorioDocumental.resumo?.documentos_faltantes ?? 0}</p></div>
+            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Blocos com registro</p><p className="mt-1 text-lg font-black text-slate-800">{relatorioDocumental.resumo?.blocos_analisados ?? 0}</p></div>
           </div>
-          {!!relatorioDocumental.documentos_pendentes_analise?.length && (
-            <div className="rounded-xl border border-orange-200 bg-orange-50/70 p-3">
-              <p className="text-[11px] font-black text-orange-900">Anexos recebidos, ainda não analisados</p>
-              <p className="mt-1 text-[10px] text-orange-800">Esses arquivos permanecem pendentes e não são considerados válidos até a leitura documental ser concluída.</p>
-              <div className="mt-2 grid gap-1.5 md:grid-cols-2">
-                {relatorioDocumental.documentos_pendentes_analise.map((documento: any, index: number) => (
-                  <div key={`${documento.codigo}-${index}`} className="rounded-lg border border-orange-200 bg-white p-2">
-                    <p className="text-[10px] font-black text-slate-800">{documento.nome}</p>
-                    <p className="mt-0.5 text-[9px] text-orange-800">{documento.bloco} — {documento.observacao}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="grid gap-3 lg:grid-cols-2">
-            <div className="rounded-xl border border-emerald-100 bg-white p-3">
-              <p className="text-[11px] font-black text-emerald-900">O que foi analisado</p>
-              <div className="mt-2 max-h-72 space-y-1.5 overflow-y-auto pr-1">
-                {(Array.isArray(relatorioDocumental.documentos_analisados) ? relatorioDocumental.documentos_analisados : []).map((documento: any, index: number) => (
-                  <div key={`${documento.codigo}-${index}`} className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-2">
-                    <div className="flex items-start justify-between gap-2"><p className="text-[10px] font-black text-slate-800">{documento.nome}</p><span className="shrink-0 text-[9px] font-bold text-emerald-700">{documento.status}</span></div>
-                    <p className="mt-0.5 text-[9px] text-slate-500">{documento.bloco}{documento.consistente ? " — consistente" : ""}</p>
-                  </div>
-                ))}
-                {!relatorioDocumental.documentos_analisados?.length && <p className="text-[10px] text-slate-500">Nenhum documento analisado até o momento.</p>}
-              </div>
-            </div>
-            <div className="rounded-xl border border-amber-100 bg-white p-3">
-              <p className="text-[11px] font-black text-amber-900">O que ainda falta anexar</p>
-              <div className="mt-2 max-h-72 space-y-1.5 overflow-y-auto pr-1">
-                {(Array.isArray(relatorioDocumental.documentos_faltantes) ? relatorioDocumental.documentos_faltantes : []).map((documento: any, index: number) => (
-                  <div key={`${documento.codigo}-${index}`} className="rounded-lg border border-amber-100 bg-amber-50/60 p-2">
-                    <p className="text-[10px] font-black text-slate-800">{documento.nome}</p>
-                    <p className="mt-0.5 text-[9px] text-slate-600">{documento.etapa} — {documento.finalidade}</p>
-                  </div>
-                ))}
-                {!relatorioDocumental.documentos_faltantes?.length && <p className="text-[10px] text-emerald-700">Nenhum documento obrigatório pendente foi identificado.</p>}
-              </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <p className="text-[11px] font-black text-slate-900">Como ler este relatório</p>
+            <div className="mt-2 grid gap-2 text-[10px] text-slate-600 md:grid-cols-3">
+              <p><span className="font-black text-emerald-700">Anexados e analisados:</span> o arquivo foi localizado e existe resultado de leitura ou validação.</p>
+              <p><span className="font-black text-orange-700">Aguardando análise:</span> o arquivo foi recebido, mas ainda não deve ser considerado validado.</p>
+              <p><span className="font-black text-amber-700">Faltantes:</span> o documento ainda precisa ser anexado conforme o regime e a etapa do dossiê.</p>
             </div>
           </div>
+
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+            <div className="flex items-center justify-between gap-2"><p className="text-xs font-black text-emerald-950">1. Documentos anexados e analisados</p><span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black text-emerald-800">{relatorioDocumental.documentos_analisados?.length || 0} documento(s)</span></div>
+            <p className="mt-1 text-[10px] text-emerald-900/80">Arquivos que já possuem leitura, validação ou resultado especializado persistido.</p>
+            <div className="mt-3 space-y-2">
+              {(Array.isArray(relatorioDocumental.documentos_analisados) ? relatorioDocumental.documentos_analisados : []).map((documento: any, index: number) => {
+                const resultado = documento.resultado_analise || {};
+                const campos = Array.isArray(resultado.campos) ? resultado.campos : [];
+                const alertas = Array.isArray(resultado.alertas) ? resultado.alertas : [];
+                return (
+                  <div key={`${documento.codigo}-${index}`} className="rounded-xl border border-emerald-200 bg-white p-3">
+                    <div className="flex flex-col gap-1.5 md:flex-row md:items-start md:justify-between">
+                      <div><p className="text-[11px] font-black text-slate-900">{documento.nome}</p><p className="text-[9px] text-slate-500">{documento.bloco} {documento.criado_em ? `• ${new Date(documento.criado_em).toLocaleDateString("pt-BR")}` : ""}</p></div>
+                      <span className="w-fit rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black text-emerald-800">{documento.status || (documento.consistente ? "Validado" : "Analisado")}</span>
+                    </div>
+                    <div className="mt-2 rounded-lg border border-emerald-100 bg-emerald-50/60 p-2"><p className="text-[9px] font-black uppercase text-emerald-700">Resultado da análise</p><p className="mt-0.5 text-[10px] font-semibold text-slate-800">{resultado.conclusao || documento.observacao || "Leitura concluída."}</p>{resultado.diagnostico && resultado.diagnostico !== resultado.conclusao && <p className="mt-1 whitespace-pre-line text-[10px] text-slate-700">{resultado.diagnostico}</p>}</div>
+                    {!!campos.length && <div className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">{campos.map((campo: any, campoIndex: number) => <div key={`${campo.label}-${campoIndex}`} className="rounded-lg border border-slate-100 bg-slate-50 px-2 py-1.5"><p className="text-[8px] font-black uppercase text-slate-400">{nomeCampoRelatorio(String(campo.label || "Campo"))}</p><p className="mt-0.5 break-words text-[10px] font-semibold text-slate-700">{campo.valor}</p></div>)}</div>}
+                    {!!resultado.observacoes?.length && <div className="mt-2 space-y-1"><p className="text-[9px] font-black uppercase text-slate-500">Observações e anotações</p>{itensTextoRelatorio(resultado.observacoes).map((item, itemIndex) => <p key={itemIndex} className="text-[10px] text-slate-700">• {item}</p>)}</div>}
+                    {!!alertas.length && <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2"><p className="text-[9px] font-black uppercase text-amber-800">Alertas identificados</p>{alertas.map((alerta: any, alertaIndex: number) => <p key={alertaIndex} className="mt-1 text-[10px] text-amber-900">• <strong>{String(alerta.severidade || "atenção").toUpperCase()}:</strong> {alerta.mensagem || alerta.recomendacao}</p>)}</div>}
+                  </div>
+                );
+              })}
+              {!relatorioDocumental.documentos_analisados?.length && <p className="rounded-lg border border-dashed border-emerald-300 bg-white p-3 text-[10px] text-slate-500">Nenhum documento analisado até o momento.</p>}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-orange-200 bg-orange-50/70 p-3">
+            <div className="flex items-center justify-between gap-2"><p className="text-xs font-black text-orange-950">2. Documentos anexados e aguardando análise</p><span className="rounded-full bg-orange-100 px-2 py-0.5 text-[9px] font-black text-orange-800">{relatorioDocumental.documentos_pendentes_analise?.length || 0} documento(s)</span></div>
+            <p className="mt-1 text-[10px] text-orange-900/80">Esses arquivos foram recebidos, mas não entram como documentos válidos até a análise ser concluída.</p>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {(Array.isArray(relatorioDocumental.documentos_pendentes_analise) ? relatorioDocumental.documentos_pendentes_analise : []).map((documento: any, index: number) => {
+                const resultado = documento.resultado_analise || {};
+                return <div key={`${documento.codigo}-${index}`} className="rounded-xl border border-orange-200 bg-white p-3"><div className="flex items-start justify-between gap-2"><div><p className="text-[10px] font-black text-slate-900">{documento.nome}</p><p className="text-[9px] text-slate-500">{documento.bloco}</p></div><span className="rounded-full bg-orange-100 px-2 py-0.5 text-[9px] font-black text-orange-800">Aguardando análise</span></div><p className="mt-2 text-[10px] text-orange-900">{resultado.diagnostico || documento.observacao || "Executar a leitura documental antes de considerar o arquivo válido."}</p></div>;
+              })}
+              {!relatorioDocumental.documentos_pendentes_analise?.length && <p className="rounded-lg border border-dashed border-orange-300 bg-white p-3 text-[10px] text-emerald-700">Não há anexos aguardando análise.</p>}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+            <div className="flex items-center justify-between gap-2"><p className="text-xs font-black text-amber-950">3. Documentos ainda faltantes para anexar</p><span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black text-amber-800">{relatorioDocumental.documentos_faltantes?.length || 0} documento(s)</span></div>
+            <p className="mt-1 text-[10px] text-amber-900/80">Itens calculados pelo mapa documental do regime tributário identificado e pelas pendências do dossiê.</p>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {(Array.isArray(relatorioDocumental.documentos_faltantes) ? relatorioDocumental.documentos_faltantes : []).map((documento: any, index: number) => <div key={`${documento.codigo}-${index}`} className="rounded-xl border border-amber-200 bg-white p-3"><div className="flex items-start justify-between gap-2"><p className="text-[10px] font-black text-slate-900">{documento.nome}</p><span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black text-amber-800">{documento.obrigatorio ? "Obrigatório" : "Recomendado"}</span></div><p className="mt-1 text-[9px] font-semibold text-amber-900">{documento.etapa}</p><p className="mt-1 text-[10px] text-slate-700">{documento.finalidade}</p>{documento.origem && <p className="mt-1 text-[9px] text-slate-400">Origem: {documento.origem}</p>}</div>)}
+              {!relatorioDocumental.documentos_faltantes?.length && <p className="rounded-lg border border-dashed border-amber-300 bg-white p-3 text-[10px] text-emerald-700">Nenhum documento obrigatório pendente foi identificado.</p>}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-violet-200 bg-white p-3">
+            <p className="text-xs font-black text-violet-950">4. Resultados consolidados por etapa</p>
+            <div className="mt-3 grid gap-2 lg:grid-cols-2">
+              {(Array.isArray(relatorioDocumental.resultados_analises) ? relatorioDocumental.resultados_analises : []).map((analise: any, index: number) => <div key={`${analise.codigo}-${index}`} className="rounded-xl border border-violet-100 bg-violet-50/50 p-3"><div className="flex items-start justify-between gap-2"><p className="text-[11px] font-black text-violet-950">{analise.titulo}</p><span className="rounded-full bg-violet-100 px-2 py-0.5 text-[9px] font-black text-violet-800">{analise.status}</span></div><p className="mt-2 whitespace-pre-line text-[10px] font-semibold text-slate-800">{analise.conclusao}</p>{itensTextoRelatorio(analise.pontos_positivos).length > 0 && <div className="mt-2"><p className="text-[9px] font-black uppercase text-emerald-700">O que foi confirmado</p>{itensTextoRelatorio(analise.pontos_positivos).map((item, itemIndex) => <p key={itemIndex} className="mt-1 text-[10px] text-slate-700">• {item}</p>)}</div>}{itensTextoRelatorio(analise.observacoes).length > 0 && <div className="mt-2"><p className="text-[9px] font-black uppercase text-blue-700">Observações</p>{itensTextoRelatorio(analise.observacoes).map((item, itemIndex) => <p key={itemIndex} className="mt-1 text-[10px] text-slate-700">• {item}</p>)}</div>}{itensTextoRelatorio(analise.bloqueios).length > 0 && <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2"><p className="text-[9px] font-black uppercase text-red-700">Pendências e bloqueios</p>{itensTextoRelatorio(analise.bloqueios).map((item, itemIndex) => <p key={itemIndex} className="mt-1 text-[10px] text-red-800">• {item}</p>)}</div>}</div>)}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <p className="text-xs font-black text-slate-900">5. Observações e anotações gerais</p>
+            <div className="mt-2 grid gap-1.5 md:grid-cols-2">{itensTextoRelatorio(relatorioDocumental.anotacoes).map((item, index) => <p key={index} className="rounded-lg bg-slate-50 px-2.5 py-2 text-[10px] text-slate-700">• {item}</p>)}</div>
+            {!relatorioDocumental.anotacoes?.length && <p className="mt-2 text-[10px] text-slate-500">Nenhuma observação adicional registrada.</p>}
+          </div>
+
           <div className="rounded-xl border border-violet-100 bg-white p-3">
-            <p className="text-[11px] font-black text-violet-950">Próxima ação recomendada</p>
-            <p className="mt-1 text-[10px] text-slate-700">{relatorioDocumental.proxima_acao}</p>
-            {!!relatorioDocumental.pendencias?.length && <div className="mt-2 space-y-1">{relatorioDocumental.pendencias.map((pendencia: any, index: number) => <p key={`${pendencia.codigo}-${index}`} className="text-[10px] text-red-700">• {pendencia.mensagem || pendencia.recomendacao || pendencia.codigo}</p>)}</div>}
+            <p className="text-xs font-black text-violet-950">6. Próxima ação recomendada</p>
+            <p className="mt-1 text-[10px] font-semibold text-slate-800">{relatorioDocumental.proxima_acao}</p>
+            {!!relatorioDocumental.pendencias?.length && <div className="mt-2 space-y-1">{relatorioDocumental.pendencias.map((pendencia: any, index: number) => <p key={`${pendencia.codigo}-${index}`} className="text-[10px] text-red-700">• <strong>{String(pendencia.severidade || "atenção").toUpperCase()}:</strong> {pendencia.mensagem || pendencia.recomendacao || pendencia.codigo}</p>)}</div>}
           </div>
         </div>
       )}
