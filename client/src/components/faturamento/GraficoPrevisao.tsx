@@ -2,6 +2,7 @@ import {
   ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
+import { formatBRLWithSymbol } from '../../lib/currency';
 
 interface PontoGrafico {
   ds: string;
@@ -17,14 +18,7 @@ interface Props {
   capacidadeMax: number;
 }
 
-const formatBRL = (v: number) =>
-  new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    notation: 'compact',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(Math.round(Number(v) || 0));
+const formatBRL = (v: number) => formatBRLWithSymbol(v);
 
 const formatMesAno = (ds: string) => {
   const d = new Date(ds + 'T00:00:00');
@@ -69,7 +63,7 @@ export function GraficoPrevisao({ pontos }: Props) {
         <YAxis
           tickFormatter={formatBRL}
           tick={{ fontSize: 11 }}
-          width={80}
+          width={105}
         />
         <Tooltip content={<CustomTooltip />} />
         <Legend />
