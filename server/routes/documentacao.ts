@@ -110,12 +110,22 @@ function statusRelatorio(value: unknown): string {
   return value ? String(value) : 'Anexado';
 }
 
+const TIPOS_COM_ANALISE_AUTOMATICA = new Set([
+  'faturamento_12_meses',
+  'comprovante_faturamento',
+  'declaracao_faturamento',
+  'comprovante_residencia',
+]);
+
 function documentoTemAnalise(documento: any, inicial = false): boolean {
   if (inicial) return documento?.analisado === true || documento?.consistente === true;
   if (!arquivoDocumentoTemConteudo(documento)) return false;
   const laudo = documento?.resultado_validacao?.analise_regra_documental;
   const laudoErro = documento?.resultado_validacao?.analise_regra_documental_erro;
+  const tipo = String(documento?.tipo_documento || '');
+  if (TIPOS_COM_ANALISE_AUTOMATICA.has(tipo)) return Boolean(laudo) || Boolean(laudoErro);
   return documento?.analisado === true
+    || documento?.validado === true
     || Boolean(laudo)
     || Boolean(laudoErro);
 }
@@ -124,10 +134,11 @@ function chaveDocumentoRelatorio(documento: any): string {
   const codigoOriginal = normalizeText(String(documento?.codigo || documento?.tipo_documento || 'documento'));
   const nome = normalizeText(String(documento?.nome || documento?.nome_original || documento?.nome_arquivo || 'documento'));
   const tipo = normalizeText(String(documento?.tipo_documento || ''));
-  const inicial = /cartao|cnpj|qsa|quadro societ|enquadramento|simples nacional/.test(`${codigoOriginal} ${tipo} ${nome}`);
-  if (/atos junta|junta comercial/.test(`${codigoOriginal} ${tipo} ${nome}`)) return 'atos_junta_comercial';
-  if (inicial && /qsa|quadro societ/.test(`${codigoOriginal} ${tipo} ${nome}`)) return 'qsa';
-  if (inicial && /enquadramento|simples nacional/.test(`${codigoOriginal} ${tipo} ${nome}`)) return 'enquadramento_tributario';
+  const texto = `${codigoOriginal} ${tipo} ${nome}`;
+  const inicial = /cartao|cnpj|qsa|quadro societ|enquadramento|simples nacional|optante/.test(texto);
+  if (/atos junta|junta comercial/.test(texto)) return 'atos_junta_comercial';
+  if (inicial && /qsa|quadro societ/.test(texto)) return 'qsa';
+  if (inicial && /enquadramento|simples nacional|optante/.test(texto)) return 'enquadramento_tributario';
   if (inicial && /cartao|cnpj/.test(`${codigoOriginal} ${tipo} ${nome}`)) return 'cartao_cnpj';
   return `${codigoOriginal}:${nome}`;
 }
@@ -160,7 +171,7 @@ function montarRelatorioDocumental(dossie: any) {
     bloco_nome: bloco.nome_amigavel,
     bloco_status: bloco.status,
   })));
-  const documentosRelatorio = [
+  const documentosRelatorio = deduplicarDocumentosRelatorio([
     ...documentosIniciais
       .filter((documento) => documentoTemAnalise(documento, true))
       .map((documento: any) => ({ documento, inicial: true })),
@@ -187,9 +198,9 @@ function montarRelatorioDocumental(dossie: any) {
         ? documento.diagnostico || documento.mensagem || documento.bloco_status || (consistente ? 'Documento lido e considerado consistente.' : 'Leitura concluída com pendências.')
         : 'Anexo recebido, mas ainda não possui laudo de análise. Não foi considerado validado.',
     };
-  });
-  const analisadosUnicos = deduplicarDocumentosRelatorio(documentosRelatorio.filter((documento) => documento.analisado));
-  const pendentesAnaliseUnicos = deduplicarDocumentosRelatorio(documentosRelatorio.filter((documento) => !documento.analisado));
+  }));
+  const analisadosUnicos = documentosRelatorio.filter((documento) => documento.analisado);
+  const pendentesAnaliseUnicos = documentosRelatorio.filter((documento) => !documento.analisado);
 
   const faltantesMapa = etapas.flatMap((etapa: any) => (Array.isArray(etapa.documentos) ? etapa.documentos : [])
     .filter((documento: any) => documento.obrigatorio && !documento.anexado)
@@ -703,10 +714,10 @@ async function buscarAnaliseEspecializadaPersistida(
   const resultado = row?.resultado;
   if (!resultado || typeof resultado !== 'object' || !resultado.tipo_analise) return null;
 
-  // Não reaproveita um laudo QSA produzido pela regra antiga. Isso evita que a
-  // tela continue mostrando, depois do deploy, os alertas falsos que já estavam
-  // gravados no JSON do processamento anterior.
-  if (promptCodigo === 'qsa_extract' && String(row?.prompt_versao || '') !== versaoPromptDocumental(promptCodigo)) return null;
+  // Laudos concluídos de versões anteriores continuam sendo evidência histórica
+  // válida para o relatório. A versão do prompt é usada no fluxo de reprocessamento
+  // para decidir quando uma nova análise deve ser criada, não para esconder análises
+  // já persistidas do usuário.
   return resultado as AnaliseDocumentalResult;
 }
 
@@ -1778,6 +1789,8 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
                 'tamanho_bytes', da.tamanho_bytes,
                 'status', da.status,
                 'validado', da.validado,
+                'exige_revisao_humana', da.exige_revisao_humana,
+                'resultado_validacao', da.resultado_validacao,
                 'criado_em', da.criado_em,
                 'view_url', '/api/documentos/' || da.id::text || '/view',
                 'download_url', '/api/documentos/' || da.id::text || '/download',

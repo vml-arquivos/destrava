@@ -308,6 +308,7 @@ TODOS_SLOTS.forEach((documentoSlot) => documentoSlot.matchTipos.forEach((tipo) =
 // sistema" assim que um contrato assinado fosse anexado -- o arquivo continua
 // 100% acessível pela aba Contratos Firmados, só não é exibido nesta tela.
 const TIPOS_FORA_DO_CHECKLIST_CREDITO = new Set(["contrato_prestacao_servicos", "contrato_assessoria", "enquadramento_tributario_cpf"]);
+const TIPOS_COM_ANALISE_AUTOMATICA = new Set(["faturamento_12_meses", "comprovante_faturamento", "declaracao_faturamento", "comprovante_residencia"]);
 const TIPOS_FISCAIS_SIMPLIFICADOS = new Set(["pgdas", "pgmei", "recibo_pgdas", "recibo_pgmei", "defis", "dasn_simei", "recibo_defis", "recibo_dasn_simei"]);
 const TIPOS_FISCAIS_ECF = new Set(["ecf", "recibo_ecf"]);
 
@@ -1430,8 +1431,10 @@ export default function DocumentosEntidade({
                                 const laudo = doc.resultado_validacao?.analise_regra_documental || null;
                                 const laudoErro = doc.resultado_validacao?.analise_regra_documental_erro || null;
                                 const temLaudo = !!laudo || !!laudoErro;
+                                const tipoTemAnaliseAutomatica = TIPOS_COM_ANALISE_AUTOMATICA.has(String(doc.tipo_documento || ""));
                                 const validacaoDocumentalConcluida = !!laudo && !laudoErro && doc.exige_revisao_humana !== true;
-                                const validadoComEvidencia = doc.validado === true && validacaoDocumentalConcluida;
+                                const validadoComEvidencia = doc.validado === true
+                                  && (!tipoTemAnaliseAutomatica || validacaoDocumentalConcluida);
                                 return (
                                 <div key={doc.id} className="rounded-md bg-white border border-slate-100 px-2 py-1">
                                   <div className="flex items-center justify-between gap-2">
@@ -1439,7 +1442,7 @@ export default function DocumentosEntidade({
                                     <div className="flex items-center gap-1 flex-wrap">
                                       <p className="text-[10px] font-semibold text-slate-700 truncate">{doc.nome_customizado || doc.nome_original}</p>
                                       {validadoComEvidencia && <span title="Validado após leitura documental" className="text-emerald-600 shrink-0"><CheckCircle className="w-2.5 h-2.5" /></span>}
-                                      {doc.validado && !validadoComEvidencia && <span title="Ainda sem leitura documental conclusiva" className="text-orange-600 shrink-0 text-[9px]">análise pendente</span>}
+                                      {doc.validado && !validadoComEvidencia && tipoTemAnaliseAutomatica && <span title="Ainda sem leitura documental conclusiva" className="text-orange-600 shrink-0 text-[9px]">análise pendente</span>}
                                     </div>
                                     <p className="text-[9px] text-slate-400 truncate">{formatDate(doc.criado_em)}</p>
                                     {temLaudo && (
