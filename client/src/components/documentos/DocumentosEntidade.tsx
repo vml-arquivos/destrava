@@ -234,11 +234,12 @@ export const SECOES_DOCUMENTAIS: SecaoDocumento[] = [
       slot("Certidão estadual de regularidade fiscal", "cnd_estadual", ["certidao_estadual"], { descricao: "Comprova regularidade fiscal estadual." }),
       slot("Certidão municipal de regularidade fiscal", "cnd_municipal", ["certidao_municipal"], { descricao: "Comprova regularidade fiscal municipal." }),
       slot("Rating (CNPJ)", "consulta_serasa_cnpj"),
-      slot("Consulta de optante pelo Simples Nacional", "simples_nacional"),
-      slot("PGDAS", "pgdas", ["pgmei", "ecf"], { descricao: "Declaração de faturamento do Simples Nacional. Se a empresa não for optante do Simples, anexe aqui o PGMEI (MEI) ou a ECF (Lucro Presumido/Real), conforme o regime tributário." }),
-      slot("Recibo de entrega do PGDAS", "recibo_pgdas", ["recibo_pgmei", "recibo_ecf"], { descricao: "Recibo de entrega correspondente ao PGDAS, PGMEI ou ECF anexado acima." }),
-      slot("DEFIS", "defis", ["dasn_simei"], { descricao: "Declaração anual da empresa. DEFIS para optantes do Simples Nacional (não MEI); DASN-SIMEI para MEI." }),
-      slot("Recibo de entrega da DEFIS", "recibo_defis", ["recibo_dasn_simei"], { descricao: "Recibo de entrega correspondente à DEFIS ou DASN-SIMEI anexada acima." }),
+      slot("PGDAS / PGMEI", "pgdas", ["pgmei"], { descricao: "Declaração mensal de faturamento para empresa optante do Simples Nacional ou MEI. Não se aplica a empresas não optantes." }),
+      slot("Recibo de entrega do PGDAS / PGMEI", "recibo_pgdas", ["recibo_pgmei"], { descricao: "Recibo correspondente ao PGDAS ou PGMEI anexado." }),
+      slot("ECF", "ecf", [], { descricao: "Escrituração Contábil Fiscal para empresas não optantes do Simples Nacional, inclusive Lucro Presumido e Lucro Real." }),
+      slot("Recibo de entrega da ECF", "recibo_ecf", [], { descricao: "Recibo de entrega correspondente à ECF." }),
+      slot("DEFIS / DASN-SIMEI", "defis", ["dasn_simei"], { descricao: "Declaração anual: DEFIS para optantes do Simples Nacional e DASN-SIMEI para MEI. Não se aplica a empresas não optantes." }),
+      slot("Recibo de entrega da DEFIS / DASN-SIMEI", "recibo_defis", ["recibo_dasn_simei"], { descricao: "Recibo correspondente à DEFIS ou DASN-SIMEI anexada." }),
       slot("Faturamento bruto dos últimos 12 meses", "faturamento_12_meses", ["comprovante_faturamento", "declaracao_faturamento"], { descricao: "Documento opcional. Quando anexado, a IA confere meses, último mês fechado, data e modalidade das assinaturas, CNPJ, sócio-administrador e contador." }),
       // Exigido por bancos (ex.: Banco do Nordeste) no lugar do faturamento histórico
       // quando a empresa tem menos de 12 meses de constituição ou de faturamento
@@ -307,6 +308,8 @@ TODOS_SLOTS.forEach((documentoSlot) => documentoSlot.matchTipos.forEach((tipo) =
 // sistema" assim que um contrato assinado fosse anexado -- o arquivo continua
 // 100% acessível pela aba Contratos Firmados, só não é exibido nesta tela.
 const TIPOS_FORA_DO_CHECKLIST_CREDITO = new Set(["contrato_prestacao_servicos", "contrato_assessoria", "enquadramento_tributario_cpf"]);
+const TIPOS_FISCAIS_SIMPLIFICADOS = new Set(["pgdas", "pgmei", "recibo_pgdas", "recibo_pgmei", "defis", "dasn_simei", "recibo_defis", "recibo_dasn_simei"]);
+const TIPOS_FISCAIS_ECF = new Set(["ecf", "recibo_ecf"]);
 
 // Documentos que, ao serem anexados, disparam automaticamente a análise da Etapa 2/3
 // (montarValidacaoSocietaria no backend) -- Atos da Junta é sempre o primeiro exigido
@@ -478,6 +481,9 @@ export default function DocumentosEntidade({
   // depois que a Etapa 2/3 (Atos da Junta + Contrato, 12 meses) já está comprovada --
   // sem isso, a tela só dizia "liberado" e parava de orientar o usuário.
   const [mapaCredito, setMapaCredito] = useState<any>(null);
+  const [relatorioDocumental, setRelatorioDocumental] = useState<any>(null);
+  const [carregandoRelatorio, setCarregandoRelatorio] = useState(false);
+  const [baixandoRelatorioPdf, setBaixandoRelatorioPdf] = useState(false);
 
   const query = useMemo(() => {
     if (!entidadeId) return "";
@@ -492,6 +498,7 @@ export default function DocumentosEntidade({
 
   const carregar = useCallback(async () => {
     if (!entidadeId) return;
+    setRelatorioDocumental(null);
     setLoading(true);
     try {
       const [data, observacoes, sociosEmpresa, pipelineAtual, dossieAtual] = await Promise.all([
@@ -654,14 +661,27 @@ export default function DocumentosEntidade({
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
   const slotsDaTela = useMemo(() => {
-    const set = new Set<string>(tiposPermitidos || []);
-    docs.forEach((doc) => set.add(doc.tipo_documento));
+    const set = new Set<string>((tiposPermitidos || []).filter((tipo) => tipo !== "simples_nacional"));
+    docs.forEach((doc) => {
+      if (doc.tipo_documento !== "simples_nacional") set.add(doc.tipo_documento);
+    });
+    const regime = String(mapaCredito?.regime_identificado || "");
+    const regimeSimples = regime === "simples_nacional" || regime === "mei";
+    const regimeEcf = regime === "nao_optante_simples" || regime === "lucro_presumido" || regime === "lucro_real" || regime === "imune_isenta";
+    const slotCompativelComRegime = (documentoSlot: DocumentoSlot) => {
+      if (!regime || regime === "nao_identificado") return true;
+      const tipos = new Set(documentoSlot.matchTipos);
+      if (Array.from(tipos).some((tipo) => TIPOS_FISCAIS_SIMPLIFICADOS.has(tipo))) return regimeSimples;
+      if (Array.from(tipos).some((tipo) => TIPOS_FISCAIS_ECF.has(tipo))) return regimeEcf;
+      return true;
+    };
 
     const ordenados: DocumentoSlot[] = [];
     const vistos = new Set<string>();
     SECOES_DOCUMENTAIS.forEach((secao) => {
       secao.slots.forEach((documentoSlot) => {
-        const visivel = documentoSlot.matchTipos.some((tipo) => set.has(tipo)) || set.has(documentoSlot.tipoUpload);
+        const visivel = slotCompativelComRegime(documentoSlot)
+          && (documentoSlot.matchTipos.some((tipo) => set.has(tipo)) || set.has(documentoSlot.tipoUpload));
         if (visivel && !vistos.has(documentoSlot.tipoUpload)) {
           ordenados.push(documentoSlot);
           vistos.add(documentoSlot.tipoUpload);
@@ -671,13 +691,16 @@ export default function DocumentosEntidade({
 
     Array.from(set).forEach((tipo) => {
       if (!TIPO_PARA_SLOT.has(tipo) && !vistos.has(tipo)) {
-        ordenados.push(slotDoTipo(tipo));
-        vistos.add(tipo);
+        const documentoSlot = slotDoTipo(tipo);
+        if (slotCompativelComRegime(documentoSlot)) {
+          ordenados.push(documentoSlot);
+          vistos.add(tipo);
+        }
       }
     });
 
     return ordenados;
-  }, [tiposPermitidos, docs]);
+  }, [tiposPermitidos, docs, mapaCredito?.regime_identificado]);
 
   const secoesDaTela = useMemo(() => {
     const uploadsVisiveis = new Set(slotsDaTela.map((documentoSlot) => documentoSlot.tipoUpload));
@@ -734,6 +757,40 @@ export default function DocumentosEntidade({
   }, [mapaCredito, societaria]);
 
 
+
+  async function carregarRelatorioDocumental() {
+    if (entidadeTipo !== "empresa" || !empresaId) {
+      toast.error("O relatório consolidado está disponível somente para empresas.");
+      return;
+    }
+    setCarregandoRelatorio(true);
+    try {
+      const relatorio = await apiFetch(`/api/documentacao/empresa/${empresaId}/relatorio`);
+      setRelatorioDocumental(relatorio);
+      toast.success("Relatório da análise documental atualizado.");
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível montar o relatório documental.");
+    } finally {
+      setCarregandoRelatorio(false);
+    }
+  }
+
+  async function baixarRelatorioDocumentalPdf() {
+    if (entidadeTipo !== "empresa" || !empresaId) {
+      toast.error("O relatório em PDF está disponível somente para empresas.");
+      return;
+    }
+    setBaixandoRelatorioPdf(true);
+    try {
+      const { blob, filename } = await apiFetchBlob(`/api/documentacao/empresa/${empresaId}/relatorio/pdf`);
+      saveBlob(blob, filename || "relatorio-documental.pdf");
+      toast.success("Relatório documental em PDF gerado.");
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível gerar o relatório em PDF.");
+    } finally {
+      setBaixandoRelatorioPdf(false);
+    }
+  }
 
   function abrirChecklistExportacao() {
     if (!docs.length) { toast.error("Não há documentos anexados para exportar."); return; }
@@ -920,6 +977,18 @@ export default function DocumentosEntidade({
           <p className="text-xs text-slate-500 mt-1 max-w-2xl">Anexe Cartão CNPJ e QSA. O Enquadramento Tributário vem da consulta de CNPJ e não exige upload. A análise cruza os documentos com a Receita Federal e libera a Etapa 2.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {entidadeTipo === "empresa" && empresaId && (
+            <>
+              <button type="button" onClick={carregarRelatorioDocumental} disabled={carregandoRelatorio} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-violet-200 bg-violet-50 text-violet-800 text-xs font-semibold hover:bg-violet-100 disabled:opacity-50">
+                {carregandoRelatorio ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                {carregandoRelatorio ? "Analisando..." : "Relatório da análise"}
+              </button>
+              <button type="button" onClick={baixarRelatorioDocumentalPdf} disabled={baixandoRelatorioPdf} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg bg-violet-700 text-white text-xs font-semibold hover:bg-violet-800 disabled:opacity-50">
+                {baixandoRelatorioPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                {baixandoRelatorioPdf ? "Gerando PDF..." : "Baixar relatório PDF"}
+              </button>
+            </>
+          )}
           <button type="button" onClick={abrirChecklistExportacao} disabled={docs.length === 0} className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg bg-slate-800 text-white text-xs font-semibold hover:bg-slate-900 disabled:opacity-50">
             <FileArchive className="w-3.5 h-3.5" /> Exportar documentos
           </button>
@@ -1093,6 +1162,58 @@ export default function DocumentosEntidade({
           </div>
         );
       })()}
+
+      {entidadeTipo === "empresa" && empresaId && relatorioDocumental && (
+        <div className="rounded-2xl border border-violet-200 bg-violet-50/40 p-4 space-y-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="flex items-center gap-2 text-sm font-black text-violet-950"><FileText className="h-4 w-4" /> Relatório consolidado da análise documental</p>
+              <p className="mt-1 text-[11px] text-violet-900/70">Estado atualizado em {new Date(relatorioDocumental.gerado_em || Date.now()).toLocaleString("pt-BR")} — {relatorioDocumental.regime?.descricao || "regime ainda não identificado"}.</p>
+            </div>
+            <button type="button" onClick={baixarRelatorioDocumentalPdf} disabled={baixandoRelatorioPdf} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white px-3 py-2 text-[11px] font-black text-violet-800 shadow-sm ring-1 ring-violet-200 hover:bg-violet-50 disabled:opacity-50">
+              {baixandoRelatorioPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              {baixandoRelatorioPdf ? "Gerando..." : "Gerar PDF deste estado"}
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Status</p><p className="mt-1 text-[11px] font-black text-slate-800">{relatorioDocumental.status_geral}</p></div>
+            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Analisados</p><p className="mt-1 text-lg font-black text-violet-800">{relatorioDocumental.resumo?.documentos_analisados ?? 0}</p></div>
+            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Faltantes</p><p className="mt-1 text-lg font-black text-amber-700">{relatorioDocumental.resumo?.documentos_faltantes ?? 0}</p></div>
+            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Blocos analisados</p><p className="mt-1 text-lg font-black text-slate-800">{relatorioDocumental.resumo?.blocos_analisados ?? 0}</p></div>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="rounded-xl border border-emerald-100 bg-white p-3">
+              <p className="text-[11px] font-black text-emerald-900">O que foi analisado</p>
+              <div className="mt-2 max-h-72 space-y-1.5 overflow-y-auto pr-1">
+                {(Array.isArray(relatorioDocumental.documentos_analisados) ? relatorioDocumental.documentos_analisados : []).map((documento: any, index: number) => (
+                  <div key={`${documento.codigo}-${index}`} className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-2">
+                    <div className="flex items-start justify-between gap-2"><p className="text-[10px] font-black text-slate-800">{documento.nome}</p><span className="shrink-0 text-[9px] font-bold text-emerald-700">{documento.status}</span></div>
+                    <p className="mt-0.5 text-[9px] text-slate-500">{documento.bloco}{documento.consistente ? " — consistente" : ""}</p>
+                  </div>
+                ))}
+                {!relatorioDocumental.documentos_analisados?.length && <p className="text-[10px] text-slate-500">Nenhum documento analisado até o momento.</p>}
+              </div>
+            </div>
+            <div className="rounded-xl border border-amber-100 bg-white p-3">
+              <p className="text-[11px] font-black text-amber-900">O que ainda falta anexar</p>
+              <div className="mt-2 max-h-72 space-y-1.5 overflow-y-auto pr-1">
+                {(Array.isArray(relatorioDocumental.documentos_faltantes) ? relatorioDocumental.documentos_faltantes : []).map((documento: any, index: number) => (
+                  <div key={`${documento.codigo}-${index}`} className="rounded-lg border border-amber-100 bg-amber-50/60 p-2">
+                    <p className="text-[10px] font-black text-slate-800">{documento.nome}</p>
+                    <p className="mt-0.5 text-[9px] text-slate-600">{documento.etapa} — {documento.finalidade}</p>
+                  </div>
+                ))}
+                {!relatorioDocumental.documentos_faltantes?.length && <p className="text-[10px] text-emerald-700">Nenhum documento obrigatório pendente foi identificado.</p>}
+              </div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-violet-100 bg-white p-3">
+            <p className="text-[11px] font-black text-violet-950">Próxima ação recomendada</p>
+            <p className="mt-1 text-[10px] text-slate-700">{relatorioDocumental.proxima_acao}</p>
+            {!!relatorioDocumental.pendencias?.length && <div className="mt-2 space-y-1">{relatorioDocumental.pendencias.map((pendencia: any, index: number) => <p key={`${pendencia.codigo}-${index}`} className="text-[10px] text-red-700">• {pendencia.mensagem || pendencia.recomendacao || pendencia.codigo}</p>)}</div>}
+          </div>
+        </div>
+      )}
 
       {permitirUpload && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">

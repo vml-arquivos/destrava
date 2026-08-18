@@ -24,6 +24,17 @@ describe('mapa documental de crédito', () => {
     expect(regime).toBe('simples_nacional');
   });
 
+  it('direciona empresa não optante para ECF e não solicita PGDAS/DEFIS', () => {
+    const empresa = { regime_tributario: 'Não optante pelo Simples Nacional', opcao_simples: false };
+    expect(identificarRegimeCredito(empresa)).toBe('nao_optante_simples');
+    const mapa = gerarMapaDocumentalCredito({ empresa, etapa1Aprovada: true, etapa2Aprovada: true, tiposAnexados: [] });
+    const documentos = mapa.etapas.find((e) => e.numero === 4)?.documentos || [];
+    const codigos = documentos.map((documento) => documento.codigo);
+    expect(codigos).toContain('ecf_nao_optante');
+    expect(codigos).not.toContain('pgdas_12m');
+    expect(codigos).not.toContain('defis');
+  });
+
   it('monta ECF/ECD e demonstrações para Lucro Real', () => {
     const mapa = gerarMapaDocumentalCredito({
       empresa: { regime_tributario: 'Lucro Real' },

@@ -1,4 +1,4 @@
-export type RegimeCredito = 'mei' | 'simples_nacional' | 'lucro_presumido' | 'lucro_real' | 'imune_isenta' | 'nao_identificado';
+export type RegimeCredito = 'mei' | 'simples_nacional' | 'nao_optante_simples' | 'lucro_presumido' | 'lucro_real' | 'imune_isenta' | 'nao_identificado';
 export type TipoOperacaoCredito = 'capital_giro' | 'investimento' | 'maquinas_equipamentos' | 'inovacao' | 'fundos_regionais' | 'pronampe' | 'antecipacao_recebiveis' | 'comercio_exterior' | 'credito_rural' | 'sustentabilidade';
 
 export type DocumentoMapa = {
@@ -68,6 +68,7 @@ export function identificarRegimeCredito(empresa: any, enquadramento?: any): Reg
   const texto = normalizar([
     enquadramento?.regime_tributario,
     enquadramento?.situacao_simples,
+    enquadramento?.observacao,
     empresa?.regime_tributario,
     empresa?.porte,
     empresa?.natureza_juridica,
@@ -80,9 +81,23 @@ export function identificarRegimeCredito(empresa: any, enquadramento?: any): Reg
   const negativaSimei = /nao optante(?: pelo)? simei|nao enquadrad[oa](?: no)? simei|nao e mei/.test(texto);
   const indicioMeiNoTexto = /\bmei\b|\bsimei\b|microempreendedor individual/.test(texto);
   if (opcaoMeiExplicita === true || (opcaoMeiExplicita !== false && indicioMeiNoTexto && !negativaSimei)) return 'mei';
-  if (/simples nacional|optante/.test(texto) || empresa?.opcao_simples === true || empresa?.opcao_pelo_simples === true) return 'simples_nacional';
+
+  const opcaoSimplesExplicita = enquadramento?.opcao_simples === true
+    || enquadramento?.opcao_pelo_simples === true
+    || empresa?.opcao_simples === true
+    || empresa?.opcao_pelo_simples === true;
+  const textoRegimeTributario = normalizar([
+    enquadramento?.regime_tributario,
+    enquadramento?.situacao_simples,
+    empresa?.regime_tributario,
+    empresa?.situacao_simples,
+  ].filter(Boolean).join(' '));
+  const naoOptanteSimples = /nao optante(?: pelo)? simples(?: nacional)?|nao e optante(?: pelo)? simples(?: nacional)?|excluid[oa] do simples/.test(textoRegimeTributario)
+    || (/\bnao optante\b/.test(textoRegimeTributario) && !/\bsimei\b|\bmei\b/.test(textoRegimeTributario));
   if (/lucro presumido|presumido/.test(texto)) return 'lucro_presumido';
   if (/lucro real/.test(texto)) return 'lucro_real';
+  if (naoOptanteSimples) return 'nao_optante_simples';
+  if (opcaoSimplesExplicita || /simples nacional|optante(?: pelo)? simples/.test(texto)) return 'simples_nacional';
   if (/imune|isenta|sem fins lucrativos/.test(texto)) return 'imune_isenta';
   return 'nao_identificado';
 }
@@ -135,10 +150,12 @@ const DOCUMENTOS_REGIME: Record<RegimeCredito, DocumentoMapa[]> = {
     doc('relatorio_receitas_mei', 'Relatório mensal de receitas brutas', ['relatorio_receitas_mei', 'faturamento_12_meses'], 4, 'Comprovar meses ainda não abrangidos pela DASN-SIMEI.', { alternativas: ['Notas fiscais e extratos bancários conciliados'] }),
   ],
   simples_nacional: [
-    doc('comprovante_simples', 'Comprovante de opção pelo Simples Nacional', ['simples_nacional', 'enquadramento_tributario_cnpj'], 3, 'Comprovar o regime tributário vigente.'),
-    doc('pgdas_12m', 'PGDAS-D dos últimos 12 meses e recibos', ['pgdas', 'recibo_pgdas'], 4, 'Comprovar faturamento declarado mês a mês.'),
+    doc('pgdas_12m', 'PGDAS-D dos últimos 12 meses e recibos', ['pgdas', 'recibo_pgdas'], 4, 'Comprovar faturamento declarado mês a mês no Simples Nacional.'),
     doc('defis', 'DEFIS do último exercício e recibo', ['defis', 'recibo_defis'], 4, 'Comprovar informações socioeconômicas e fiscais anuais.'),
     doc('bp_dre_simples', 'Balanço Patrimonial e DRE', ['balanco', 'dre'], 4, 'Demonstrar resultado e patrimônio quando exigido pela operação ou pelo porte.', { obrigatorio: false, observacao: 'Torna-se prioritário em operações estruturadas, investimentos e empresas de maior faturamento.' }),
+  ],
+  nao_optante_simples: [
+    doc('ecf_nao_optante', 'ECF e recibo de entrega', ['ecf', 'recibo_ecf'], 4, 'Comprovar a apuração fiscal e o faturamento da empresa não optante pelo Simples Nacional.'),
   ],
   lucro_presumido: [
     doc('ecf_presumido', 'ECF e recibo de entrega', ['ecf', 'recibo_ecf'], 4, 'Comprovar regime e faturamento fiscal.'),
@@ -354,7 +371,8 @@ export function gerarMapaDocumentalCredito(params: {
 
   const descricaoRegime: Record<RegimeCredito, string> = {
     mei: 'Microempreendedor Individual / SIMEI',
-    simples_nacional: 'Simples Nacional',
+    simples_nacional: 'Simples Nacional — optante',
+    nao_optante_simples: 'Não optante do Simples Nacional',
     lucro_presumido: 'Lucro Presumido',
     lucro_real: 'Lucro Real',
     imune_isenta: 'Imune ou isenta',
@@ -362,7 +380,7 @@ export function gerarMapaDocumentalCredito(params: {
   };
 
   return {
-    versao: '1.2.0',
+    versao: '1.3.0',
     regime_identificado: regime,
     regime_descricao: descricaoRegime[regime],
     etapa_atual: etapaAtual,

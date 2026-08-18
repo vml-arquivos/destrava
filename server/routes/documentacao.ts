@@ -11,6 +11,7 @@ import { buildCadastralValidationDTO, phase1Approved } from '../services/phase1A
 import { ensureDocumentacaoSchema } from '../services/documentacaoSchema';
 import { gerarMapaDocumentalCredito } from '../services/mapaDocumentalCreditoService';
 import { upsertSocioEmpresa } from './socios_documentos';
+import { generateBrandedPdfBuffer } from '../services/brandedPdfLayout';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -76,6 +77,158 @@ type Pendencia = {
 
 function somenteDigitos(value?: string | null) {
   return String(value || '').replace(/\D/g, '');
+}
+
+function escapeHtmlRelatorio(value: unknown): string {
+  return String(value ?? '—')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function dataRelatorio(value: unknown): string {
+  if (!value) return '—';
+  const data = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(data.getTime())) return String(value);
+  return data.toLocaleDateString('pt-BR');
+}
+
+function statusRelatorio(value: unknown): string {
+  const status = String(value || '').toLowerCase();
+  if (status.includes('valid') || status.includes('complet') || status === 'aprovado') return 'Validado';
+  if (status.includes('falha') || status.includes('recus') || status.includes('bloque')) return 'Com pendência';
+  if (status.includes('process') || status.includes('analis')) return 'Em análise';
+  return value ? String(value) : 'Anexado';
+}
+
+function montarRelatorioDocumental(dossie: any) {
+  const blocos = Array.isArray(dossie?.blocos) ? dossie.blocos : [];
+  const mapa = dossie?.mapa_documental_credito || {};
+  const etapas = Array.isArray(mapa.etapas) ? mapa.etapas : [];
+  const documentosIniciais = Object.values(dossie?.identidade_cnpj?.documentos_iniciais || {}) as any[];
+  const documentosAnexados = blocos.flatMap((bloco: any) => (Array.isArray(bloco.documentos) ? bloco.documentos : []).map((documento: any) => ({
+    ...documento,
+    bloco_codigo: bloco.codigo,
+    bloco_nome: bloco.nome_amigavel,
+    bloco_status: bloco.status,
+  })));
+  const documentosAnalisados = [
+    ...documentosIniciais.filter((documento) => documento?.analisado || documento?.consistente || documento?.status),
+    ...documentosAnexados,
+  ].map((documento: any) => ({
+    codigo: documento.codigo || documento.tipo_documento || documento.bloco_codigo || 'documento',
+    nome: documento.nome || documento.nome_original || documento.bloco_nome || documento.tipo_documento || 'Documento',
+    bloco: documento.bloco_nome || documento.etapa || 'Análise documental',
+    status: statusRelatorio(documento.status || (documento.consistente ? 'validado' : documento.analisado ? 'analisado' : 'anexado')),
+    analisado: documento.analisado === true || documento.consistente === true || documento.validado === true || Boolean(documento.resultado_validacao),
+    consistente: documento.consistente === true || documento.validado === true,
+    criado_em: documento.criado_em || documento.analisado_em || null,
+    observacao: documento.diagnostico || documento.mensagem || documento.bloco_status || null,
+  }));
+  const analisadosUnicos = Array.from(new Map(documentosAnalisados.map((documento) => [
+    `${documento.codigo}:${documento.nome}:${documento.criado_em || ''}`,
+    documento,
+  ])).values());
+
+  const faltantesMapa = etapas.flatMap((etapa: any) => (Array.isArray(etapa.documentos) ? etapa.documentos : [])
+    .filter((documento: any) => documento.obrigatorio && !documento.anexado)
+    .map((documento: any) => ({
+      codigo: documento.codigo,
+      nome: documento.nome,
+      etapa: etapa.titulo || `Etapa ${etapa.numero || ''}`.trim(),
+      finalidade: documento.finalidade || 'Documento obrigatório para concluir a etapa.',
+      origem: 'Mapa documental de crédito',
+      obrigatorio: true,
+    })));
+  const faltantesPendencias = (Array.isArray(dossie?.pendencias) ? dossie.pendencias : []).map((pendencia: any) => ({
+    codigo: pendencia.codigo || 'pendencia_documental',
+    nome: pendencia.bloco_nome || pendencia.codigo || 'Pendência documental',
+    etapa: pendencia.bloco_nome || 'Análise documental',
+    finalidade: pendencia.mensagem || pendencia.recomendacao || 'Regularizar a pendência indicada.',
+    origem: pendencia.origem || 'Análise documental',
+    obrigatorio: true,
+    severidade: pendencia.severidade || 'media',
+  }));
+  const faltantes = Array.from(new Map([...faltantesMapa, ...faltantesPendencias].map((item) => [`${item.codigo}:${item.nome}`, item])).values());
+  const blocosAnalisados = blocos.filter((bloco: any) => bloco.status || bloco.completo || bloco.validado || (Array.isArray(bloco.documentos) && bloco.documentos.length > 0)).map((bloco: any) => ({
+    codigo: bloco.codigo,
+    nome: bloco.nome_amigavel || bloco.codigo,
+    status: statusRelatorio(bloco.status || (bloco.completo ? 'completo' : bloco.validado ? 'validado' : 'analisado')),
+    completo: bloco.completo === true,
+    validado: bloco.validado === true,
+    documentos: Array.isArray(bloco.documentos) ? bloco.documentos.length : 0,
+    pendencias: Array.isArray(bloco.pendencias) ? bloco.pendencias : [],
+  }));
+  const pendenciasAltas = faltantes.filter((item: any) => item.severidade === 'alta').length;
+  const statusGeral = faltantes.length === 0
+    ? 'Documentação obrigatória identificada como completa'
+    : pendenciasAltas > 0
+      ? 'Pendente de documentos e/ou correções'
+      : 'Em complementação documental';
+
+  return {
+    gerado_em: new Date().toISOString(),
+    empresa: dossie?.empresa || {},
+    regime: {
+      codigo: mapa.regime_identificado || 'nao_identificado',
+      descricao: mapa.regime_descricao || 'Regime ainda não identificado',
+      etapa_atual: mapa.etapa_atual || null,
+    },
+    status_geral: statusGeral,
+    resumo: {
+      ...(dossie?.resumo || {}),
+      documentos_analisados: analisadosUnicos.length,
+      blocos_analisados: blocosAnalisados.length,
+      documentos_faltantes: faltantes.length,
+      pendencias_altas: pendenciasAltas,
+    },
+    identidade_cnpj: {
+      status: dossie?.identidade_cnpj?.status || 'PHASE_1_PENDING',
+      apto_para_avancar: dossie?.identidade_cnpj?.apto_para_avancar === true,
+      documentos_iniciais: documentosIniciais,
+      validacao: dossie?.identidade_cnpj?.validation || null,
+    },
+    documentacao_societaria: dossie?.documentacao_societaria || null,
+    blocos_analisados: blocosAnalisados,
+    documentos_analisados: analisadosUnicos,
+    documentos_faltantes: faltantes,
+    pendencias: Array.isArray(dossie?.pendencias) ? dossie.pendencias : [],
+    proxima_acao: mapa.proxima_acao || 'Revisar o acervo documental e anexar os itens pendentes.',
+    proximas_etapas: etapas.map((etapa: any) => ({
+      numero: etapa.numero,
+      titulo: etapa.titulo,
+      bloqueada: etapa.bloqueada === true,
+      documentos_faltantes: (Array.isArray(etapa.documentos) ? etapa.documentos : []).filter((documento: any) => documento.obrigatorio && !documento.anexado).length,
+    })),
+  };
+}
+
+function gerarHtmlRelatorioDocumental(relatorio: any): string {
+  const empresa = relatorio.empresa || {};
+  const cards = [
+    ['Status geral', relatorio.status_geral],
+    ['Regime tributário', relatorio.regime?.descricao],
+    ['Documentos analisados', String(relatorio.resumo?.documentos_analisados ?? 0)],
+    ['Documentos faltantes', String(relatorio.resumo?.documentos_faltantes ?? 0)],
+  ];
+  const blocos = Array.isArray(relatorio.blocos_analisados) ? relatorio.blocos_analisados : [];
+  const analisados = Array.isArray(relatorio.documentos_analisados) ? relatorio.documentos_analisados : [];
+  const faltantes = Array.isArray(relatorio.documentos_faltantes) ? relatorio.documentos_faltantes : [];
+  const pendencias = Array.isArray(relatorio.pendencias) ? relatorio.pendencias : [];
+  const etapas = Array.isArray(relatorio.proximas_etapas) ? relatorio.proximas_etapas : [];
+  const tabelaVazia = (texto: string) => `<p class="empty">${escapeHtmlRelatorio(texto)}</p>`;
+  const cardsHtml = cards.map(([label, value]) => `<div class="card"><span>${escapeHtmlRelatorio(label)}</span><strong>${escapeHtmlRelatorio(value)}</strong></div>`).join('');
+  const blocosHtml = blocos.length ? `<table><thead><tr><th>Bloco analisado</th><th>Status</th><th>Arquivos</th><th>Observações</th></tr></thead><tbody>${blocos.map((bloco: any) => `<tr><td>${escapeHtmlRelatorio(bloco.nome)}</td><td>${escapeHtmlRelatorio(bloco.status)}</td><td>${escapeHtmlRelatorio(bloco.documentos)}</td><td>${escapeHtmlRelatorio(bloco.pendencias?.length ? bloco.pendencias.join('; ') : 'Nenhuma pendência registrada')}</td></tr>`).join('')}</tbody></table>` : tabelaVazia('Nenhum bloco foi analisado até o momento.');
+  const analisadosHtml = analisados.length ? `<table><thead><tr><th>Documento</th><th>Bloco</th><th>Status</th><th>Data</th><th>Resultado</th></tr></thead><tbody>${analisados.map((documento: any) => `<tr><td>${escapeHtmlRelatorio(documento.nome)}</td><td>${escapeHtmlRelatorio(documento.bloco)}</td><td>${escapeHtmlRelatorio(documento.status)}</td><td>${escapeHtmlRelatorio(dataRelatorio(documento.criado_em))}</td><td>${escapeHtmlRelatorio(documento.observacao || (documento.consistente ? 'Consistente' : 'Documento recebido para conferência'))}</td></tr>`).join('')}</tbody></table>` : tabelaVazia('Nenhum documento analisado foi encontrado no acervo.');
+  const faltantesHtml = faltantes.length ? `<table><thead><tr><th>Documento pendente</th><th>Etapa</th><th>Obrigatório</th><th>Finalidade/orientação</th></tr></thead><tbody>${faltantes.map((documento: any) => `<tr><td><strong>${escapeHtmlRelatorio(documento.nome)}</strong><br/><small>${escapeHtmlRelatorio(documento.codigo)}</small></td><td>${escapeHtmlRelatorio(documento.etapa)}</td><td>${documento.obrigatorio ? 'Sim' : 'Não'}</td><td>${escapeHtmlRelatorio(documento.finalidade)}</td></tr>`).join('')}</tbody></table>` : `<div class="success">Nenhum documento obrigatório pendente foi identificado pelo mapa documental atual.</div>`;
+  const pendenciasHtml = pendencias.length ? `<ul>${pendencias.map((pendencia: any) => `<li><strong>${escapeHtmlRelatorio(pendencia.severidade || 'atenção').toUpperCase()}:</strong> ${escapeHtmlRelatorio(pendencia.mensagem || pendencia.recomendacao || pendencia.codigo)}</li>`).join('')}</ul>` : tabelaVazia('Nenhuma pendência adicional registrada.');
+  const etapasHtml = etapas.length ? `<table><thead><tr><th>Etapa</th><th>Situação</th><th>Documentos faltantes</th></tr></thead><tbody>${etapas.map((etapa: any) => `<tr><td>${escapeHtmlRelatorio(`${etapa.numero || ''} — ${etapa.titulo || 'Etapa documental'}`)}</td><td>${etapa.bloqueada ? 'Aguardando etapa anterior' : 'Disponível para análise'}</td><td>${escapeHtmlRelatorio(etapa.documentos_faltantes)}</td></tr>`).join('')}</tbody></table>` : tabelaVazia('As próximas etapas ainda não foram calculadas.');
+
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/><title>Relatório documental — ${escapeHtmlRelatorio(empresa.razao_social || empresa.nome_fantasia || 'Empresa')}</title><style>
+  @page { size: A4; } * { box-sizing: border-box; } body { margin: 0; font-family: Arial, sans-serif; color: #172033; font-size: 9pt; line-height: 1.35; } h1 { color: #123b78; font-size: 20pt; margin: 0 0 4px; } h2 { color: #123b78; font-size: 13pt; margin: 22px 0 8px; border-bottom: 1px solid #d9e2ef; padding-bottom: 5px; } p { margin: 5px 0; } .subtitle { color: #64748b; font-size: 9pt; } .identity { background: #f1f7ff; border: 1px solid #cbdcf4; border-radius: 8px; padding: 12px; margin: 15px 0; } .meta { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 10px; margin-top: 8px; } .meta span, .card span { display: block; color: #64748b; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; } .meta strong { display: block; margin-top: 2px; } .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0 15px; } .card { border: 1px solid #d9e2ef; border-radius: 7px; padding: 9px; min-height: 53px; } .card strong { display: block; margin-top: 4px; font-size: 9.5pt; color: #123b78; } table { width: 100%; border-collapse: collapse; margin: 5px 0 12px; } th { background: #123b78; color: #fff; text-align: left; font-size: 7.8pt; padding: 6px; } td { border-bottom: 1px solid #e5eaf1; vertical-align: top; padding: 6px; font-size: 8pt; } tr:nth-child(even) td { background: #f8fafc; } small { color: #64748b; font-size: 7pt; } .success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857; padding: 10px; border-radius: 7px; } .empty { color: #64748b; font-style: italic; padding: 4px 0; } ul { margin: 5px 0 12px; padding-left: 18px; } li { margin: 4px 0; } .footer-note { margin-top: 18px; color: #64748b; font-size: 7.5pt; border-top: 1px solid #e5eaf1; padding-top: 8px; }
+</style></head><body><h1>Relatório de análise documental</h1><p class="subtitle">Estado consolidado do acervo, das análises realizadas e dos documentos necessários para a próxima etapa.</p><div class="identity"><strong>${escapeHtmlRelatorio(empresa.razao_social || empresa.nome_fantasia || 'Empresa não identificada')}</strong><div class="meta"><div><span>CNPJ</span><strong>${escapeHtmlRelatorio(empresa.cnpj)}</strong></div><div><span>Regime tributário</span><strong>${escapeHtmlRelatorio(relatorio.regime?.descricao)}</strong></div><div><span>Relatório gerado em</span><strong>${escapeHtmlRelatorio(dataRelatorio(relatorio.gerado_em))}</strong></div></div></div><div class="cards">${cardsHtml}</div><h2>Resumo executivo</h2><p>${escapeHtmlRelatorio(relatorio.proxima_acao)}</p><h2>Blocos analisados</h2>${blocosHtml}<h2>Documentos analisados e encontrados</h2>${analisadosHtml}<h2>Documentos ainda faltantes</h2>${faltantesHtml}<h2>Pendências e recomendações</h2>${pendenciasHtml}<h2>Próximas etapas</h2>${etapasHtml}<p class="footer-note">Este relatório é uma fotografia do dossiê no momento da geração. Após anexar novos documentos, gere novamente o relatório para atualizar o estado da empresa.</p></body></html>`;
 }
 
 function asNumber(value: unknown): number | null {
@@ -1652,6 +1805,34 @@ router.get('/empresa/:empresaId/dossie', auth, async (req: Request, res: Respons
   } catch (err: any) {
     console.error('[GET /api/documentacao/empresa/:empresaId/dossie]', err);
     res.status(500).json({ error: 'Erro ao montar dossiê de crédito' });
+  }
+});
+
+router.get('/empresa/:empresaId/relatorio', auth, async (req: Request, res: Response) => {
+  try {
+    const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
+    if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+    res.json(montarRelatorioDocumental(dossie));
+  } catch (err: any) {
+    console.error('[GET /api/documentacao/empresa/:empresaId/relatorio]', err);
+    res.status(500).json({ error: 'Erro ao montar relatório documental' });
+  }
+});
+
+router.get('/empresa/:empresaId/relatorio/pdf', auth, async (req: Request, res: Response) => {
+  try {
+    const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
+    if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
+    const relatorio = montarRelatorioDocumental(dossie);
+    const pdf = await generateBrandedPdfBuffer(gerarHtmlRelatorioDocumental(relatorio), { brand: 'destrava' });
+    const nomeEmpresa = String(relatorio.empresa?.razao_social || relatorio.empresa?.nome_fantasia || 'empresa')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'empresa';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="relatorio-documental-${nomeEmpresa}.pdf"`);
+    res.send(pdf);
+  } catch (err: any) {
+    console.error('[GET /api/documentacao/empresa/:empresaId/relatorio/pdf]', err);
+    res.status(500).json({ error: 'Erro ao gerar relatório documental em PDF' });
   }
 });
 
