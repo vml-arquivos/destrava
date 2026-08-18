@@ -512,10 +512,6 @@ export default function PrevisaoFaturamento() {
       toast.error('Informe o faturamento total exato da previsão');
       return;
     }
-    if (!Number.isInteger(totalInformado)) {
-      toast.error('A previsão deve ser um número inteiro, sem centavos');
-      return;
-    }
     const rateio = ratearTotalManual(totalInformado, horizonteMeses);
     const historicos = historicoBanco
       .filter(r => r.valor !== '' && r.valor !== null && !isNaN(Number(r.valor)))
@@ -1135,15 +1131,14 @@ export default function PrevisaoFaturamento() {
                             inputMode="numeric"
                             value={previsaoManualDisplay}
                             onChange={e => {
-                              const digitos = e.target.value.replace(/\D/g, '');
-                              const valor = digitos ? Number(digitos) : 0;
-                              setPrevisaoManualDisplay(digitos ? valor.toLocaleString('pt-BR') : '');
-                              setPrevisaoManualNum(valor);
+                              const formatted = maskCurrencyInput(e.target.value);
+                              setPrevisaoManualDisplay(formatted);
+                              setPrevisaoManualNum(unmaskCurrencyInput(formatted));
                               // Nunca manter o resumo/PDF anterior após alterar o total.
                               setPrevisao(null);
                               setPreviewDados(null);
                             }}
-                            placeholder="Ex.: 8.400.000"
+                            placeholder="Ex.: 8.400.000,00"
                             className="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm text-right font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
                         </div>
