@@ -1175,12 +1175,27 @@ export default function DocumentosEntidade({
               {baixandoRelatorioPdf ? "Gerando..." : "Gerar PDF deste estado"}
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
             <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Status</p><p className="mt-1 text-[11px] font-black text-slate-800">{relatorioDocumental.status_geral}</p></div>
             <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Analisados</p><p className="mt-1 text-lg font-black text-violet-800">{relatorioDocumental.resumo?.documentos_analisados ?? 0}</p></div>
+            <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Aguardando análise</p><p className="mt-1 text-lg font-black text-orange-700">{relatorioDocumental.resumo?.documentos_pendentes_analise ?? 0}</p></div>
             <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Faltantes</p><p className="mt-1 text-lg font-black text-amber-700">{relatorioDocumental.resumo?.documentos_faltantes ?? 0}</p></div>
             <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Blocos analisados</p><p className="mt-1 text-lg font-black text-slate-800">{relatorioDocumental.resumo?.blocos_analisados ?? 0}</p></div>
           </div>
+          {!!relatorioDocumental.documentos_pendentes_analise?.length && (
+            <div className="rounded-xl border border-orange-200 bg-orange-50/70 p-3">
+              <p className="text-[11px] font-black text-orange-900">Anexos recebidos, ainda não analisados</p>
+              <p className="mt-1 text-[10px] text-orange-800">Esses arquivos permanecem pendentes e não são considerados válidos até a leitura documental ser concluída.</p>
+              <div className="mt-2 grid gap-1.5 md:grid-cols-2">
+                {relatorioDocumental.documentos_pendentes_analise.map((documento: any, index: number) => (
+                  <div key={`${documento.codigo}-${index}`} className="rounded-lg border border-orange-200 bg-white p-2">
+                    <p className="text-[10px] font-black text-slate-800">{documento.nome}</p>
+                    <p className="mt-0.5 text-[9px] text-orange-800">{documento.bloco} — {documento.observacao}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="grid gap-3 lg:grid-cols-2">
             <div className="rounded-xl border border-emerald-100 bg-white p-3">
               <p className="text-[11px] font-black text-emerald-900">O que foi analisado</p>
@@ -1415,13 +1430,16 @@ export default function DocumentosEntidade({
                                 const laudo = doc.resultado_validacao?.analise_regra_documental || null;
                                 const laudoErro = doc.resultado_validacao?.analise_regra_documental_erro || null;
                                 const temLaudo = !!laudo || !!laudoErro;
+                                const validacaoDocumentalConcluida = !!laudo && !laudoErro && doc.exige_revisao_humana !== true;
+                                const validadoComEvidencia = doc.validado === true && validacaoDocumentalConcluida;
                                 return (
                                 <div key={doc.id} className="rounded-md bg-white border border-slate-100 px-2 py-1">
                                   <div className="flex items-center justify-between gap-2">
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-1 flex-wrap">
                                       <p className="text-[10px] font-semibold text-slate-700 truncate">{doc.nome_customizado || doc.nome_original}</p>
-                                      {doc.validado && <span title="Validado" className="text-emerald-600 shrink-0"><CheckCircle className="w-2.5 h-2.5" /></span>}
+                                      {validadoComEvidencia && <span title="Validado após leitura documental" className="text-emerald-600 shrink-0"><CheckCircle className="w-2.5 h-2.5" /></span>}
+                                      {doc.validado && !validadoComEvidencia && <span title="Ainda sem leitura documental conclusiva" className="text-orange-600 shrink-0 text-[9px]">análise pendente</span>}
                                     </div>
                                     <p className="text-[9px] text-slate-400 truncate">{formatDate(doc.criado_em)}</p>
                                     {temLaudo && (

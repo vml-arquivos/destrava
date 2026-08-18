@@ -95,12 +95,58 @@ function dataRelatorio(value: unknown): string {
   return data.toLocaleDateString('pt-BR');
 }
 
+function arquivoDocumentoTemConteudo(documento: any): boolean {
+  if (!documento || documento.vazio === true || documento.arquivo_vazio === true) return false;
+  const tamanho = documento.tamanho_bytes ?? documento.tamanho ?? documento.size;
+  if (tamanho !== undefined && tamanho !== null && Number(tamanho) <= 0) return false;
+  return true;
+}
+
 function statusRelatorio(value: unknown): string {
   const status = String(value || '').toLowerCase();
   if (status.includes('valid') || status.includes('complet') || status === 'aprovado') return 'Validado';
-  if (status.includes('falha') || status.includes('recus') || status.includes('bloque')) return 'Com pendência';
-  if (status.includes('process') || status.includes('analis')) return 'Em análise';
+  if (status.includes('falha') || status.includes('recus') || status.includes('bloque') || status.includes('pend')) return 'Com pendência';
+  if (status.includes('process') || status.includes('analis') || status.includes('aguard')) return 'Em análise';
   return value ? String(value) : 'Anexado';
+}
+
+function documentoTemAnalise(documento: any, inicial = false): boolean {
+  if (inicial) return documento?.analisado === true || documento?.consistente === true;
+  if (!arquivoDocumentoTemConteudo(documento)) return false;
+  const laudo = documento?.resultado_validacao?.analise_regra_documental;
+  const laudoErro = documento?.resultado_validacao?.analise_regra_documental_erro;
+  return documento?.analisado === true
+    || Boolean(laudo)
+    || Boolean(laudoErro);
+}
+
+function chaveDocumentoRelatorio(documento: any): string {
+  const codigoOriginal = normalizeText(String(documento?.codigo || documento?.tipo_documento || 'documento'));
+  const nome = normalizeText(String(documento?.nome || documento?.nome_original || documento?.nome_arquivo || 'documento'));
+  const tipo = normalizeText(String(documento?.tipo_documento || ''));
+  const inicial = /cartao|cnpj|qsa|quadro societ|enquadramento|simples nacional/.test(`${codigoOriginal} ${tipo} ${nome}`);
+  if (/atos junta|junta comercial/.test(`${codigoOriginal} ${tipo} ${nome}`)) return 'atos_junta_comercial';
+  if (inicial && /qsa|quadro societ/.test(`${codigoOriginal} ${tipo} ${nome}`)) return 'qsa';
+  if (inicial && /enquadramento|simples nacional/.test(`${codigoOriginal} ${tipo} ${nome}`)) return 'enquadramento_tributario';
+  if (inicial && /cartao|cnpj/.test(`${codigoOriginal} ${tipo} ${nome}`)) return 'cartao_cnpj';
+  return `${codigoOriginal}:${nome}`;
+}
+
+function pontuacaoDocumentoRelatorio(documento: any): number {
+  return (documento?.analisado ? 4 : 0)
+    + (documento?.consistente ? 3 : 0)
+    + (documento?.observacao ? 1 : 0)
+    + (documento?.criado_em ? 1 : 0);
+}
+
+function deduplicarDocumentosRelatorio<T extends Record<string, any>>(documentos: T[]): T[] {
+  const unicos = new Map<string, T>();
+  for (const documento of documentos) {
+    const chave = chaveDocumentoRelatorio(documento);
+    const anterior = unicos.get(chave);
+    if (!anterior || pontuacaoDocumentoRelatorio(documento) > pontuacaoDocumentoRelatorio(anterior)) unicos.set(chave, documento);
+  }
+  return Array.from(unicos.values());
 }
 
 function montarRelatorioDocumental(dossie: any) {
@@ -114,23 +160,36 @@ function montarRelatorioDocumental(dossie: any) {
     bloco_nome: bloco.nome_amigavel,
     bloco_status: bloco.status,
   })));
-  const documentosAnalisados = [
-    ...documentosIniciais.filter((documento) => documento?.analisado || documento?.consistente || documento?.status),
-    ...documentosAnexados,
-  ].map((documento: any) => ({
-    codigo: documento.codigo || documento.tipo_documento || documento.bloco_codigo || 'documento',
-    nome: documento.nome || documento.nome_original || documento.bloco_nome || documento.tipo_documento || 'Documento',
-    bloco: documento.bloco_nome || documento.etapa || 'Análise documental',
-    status: statusRelatorio(documento.status || (documento.consistente ? 'validado' : documento.analisado ? 'analisado' : 'anexado')),
-    analisado: documento.analisado === true || documento.consistente === true || documento.validado === true || Boolean(documento.resultado_validacao),
-    consistente: documento.consistente === true || documento.validado === true,
-    criado_em: documento.criado_em || documento.analisado_em || null,
-    observacao: documento.diagnostico || documento.mensagem || documento.bloco_status || null,
-  }));
-  const analisadosUnicos = Array.from(new Map(documentosAnalisados.map((documento) => [
-    `${documento.codigo}:${documento.nome}:${documento.criado_em || ''}`,
-    documento,
-  ])).values());
+  const documentosRelatorio = [
+    ...documentosIniciais
+      .filter((documento) => documentoTemAnalise(documento, true))
+      .map((documento: any) => ({ documento, inicial: true })),
+    ...documentosAnexados.map((documento: any) => ({ documento, inicial: false })),
+  ].map(({ documento, inicial }) => {
+    const laudo = documento?.resultado_validacao?.analise_regra_documental;
+    const laudoErro = documento?.resultado_validacao?.analise_regra_documental_erro;
+    const analisado = documentoTemAnalise(documento, inicial);
+    const consistente = inicial
+      ? documento.consistente === true
+      : documento.consistente === true
+        || (documento.validado === true && Boolean(laudo) && !laudoErro && documento.exige_revisao_humana !== true);
+    const statusOrigem = laudoErro ? 'falha_leitura' : documento.status || laudo?.status || (consistente ? 'validado' : analisado ? 'analisado' : 'aguardando_analise');
+    return {
+      codigo: documento.codigo || documento.tipo_documento || documento.bloco_codigo || 'documento',
+      tipo_documento: documento.tipo_documento || null,
+      nome: documento.nome || documento.nome_original || documento.bloco_nome || documento.tipo_documento || 'Documento',
+      bloco: documento.bloco_nome || documento.etapa || 'Análise documental',
+      status: analisado ? statusRelatorio(statusOrigem) : 'Aguardando análise',
+      analisado,
+      consistente,
+      criado_em: documento.criado_em || documento.analisado_em || null,
+      observacao: analisado
+        ? documento.diagnostico || documento.mensagem || documento.bloco_status || (consistente ? 'Documento lido e considerado consistente.' : 'Leitura concluída com pendências.')
+        : 'Anexo recebido, mas ainda não possui laudo de análise. Não foi considerado validado.',
+    };
+  });
+  const analisadosUnicos = deduplicarDocumentosRelatorio(documentosRelatorio.filter((documento) => documento.analisado));
+  const pendentesAnaliseUnicos = deduplicarDocumentosRelatorio(documentosRelatorio.filter((documento) => !documento.analisado));
 
   const faltantesMapa = etapas.flatMap((etapa: any) => (Array.isArray(etapa.documentos) ? etapa.documentos : [])
     .filter((documento: any) => documento.obrigatorio && !documento.anexado)
@@ -151,7 +210,10 @@ function montarRelatorioDocumental(dossie: any) {
     obrigatorio: true,
     severidade: pendencia.severidade || 'media',
   }));
-  const faltantes = Array.from(new Map([...faltantesMapa, ...faltantesPendencias].map((item) => [`${item.codigo}:${item.nome}`, item])).values());
+  const faltantes = Array.from(new Map([...faltantesMapa, ...faltantesPendencias].map((item) => [
+    `${normalizeText(String(item.codigo || 'pendencia'))}:${normalizeText(String(item.nome || 'documento'))}`,
+    item,
+  ])).values());
   const blocosAnalisados = blocos.filter((bloco: any) => bloco.status || bloco.completo || bloco.validado || (Array.isArray(bloco.documentos) && bloco.documentos.length > 0)).map((bloco: any) => ({
     codigo: bloco.codigo,
     nome: bloco.nome_amigavel || bloco.codigo,
@@ -162,9 +224,9 @@ function montarRelatorioDocumental(dossie: any) {
     pendencias: Array.isArray(bloco.pendencias) ? bloco.pendencias : [],
   }));
   const pendenciasAltas = faltantes.filter((item: any) => item.severidade === 'alta').length;
-  const statusGeral = faltantes.length === 0
+  const statusGeral = faltantes.length === 0 && pendentesAnaliseUnicos.length === 0
     ? 'Documentação obrigatória identificada como completa'
-    : pendenciasAltas > 0
+    : pendenciasAltas > 0 || pendentesAnaliseUnicos.length > 0
       ? 'Pendente de documentos e/ou correções'
       : 'Em complementação documental';
 
@@ -180,6 +242,7 @@ function montarRelatorioDocumental(dossie: any) {
     resumo: {
       ...(dossie?.resumo || {}),
       documentos_analisados: analisadosUnicos.length,
+      documentos_pendentes_analise: pendentesAnaliseUnicos.length,
       blocos_analisados: blocosAnalisados.length,
       documentos_faltantes: faltantes.length,
       pendencias_altas: pendenciasAltas,
@@ -193,6 +256,7 @@ function montarRelatorioDocumental(dossie: any) {
     documentacao_societaria: dossie?.documentacao_societaria || null,
     blocos_analisados: blocosAnalisados,
     documentos_analisados: analisadosUnicos,
+    documentos_pendentes_analise: pendentesAnaliseUnicos,
     documentos_faltantes: faltantes,
     pendencias: Array.isArray(dossie?.pendencias) ? dossie.pendencias : [],
     proxima_acao: mapa.proxima_acao || 'Revisar o acervo documental e anexar os itens pendentes.',
@@ -211,10 +275,12 @@ function gerarHtmlRelatorioDocumental(relatorio: any): string {
     ['Status geral', relatorio.status_geral],
     ['Regime tributário', relatorio.regime?.descricao],
     ['Documentos analisados', String(relatorio.resumo?.documentos_analisados ?? 0)],
+    ['Aguardando análise', String(relatorio.resumo?.documentos_pendentes_analise ?? 0)],
     ['Documentos faltantes', String(relatorio.resumo?.documentos_faltantes ?? 0)],
   ];
   const blocos = Array.isArray(relatorio.blocos_analisados) ? relatorio.blocos_analisados : [];
   const analisados = Array.isArray(relatorio.documentos_analisados) ? relatorio.documentos_analisados : [];
+  const pendentesAnalise = Array.isArray(relatorio.documentos_pendentes_analise) ? relatorio.documentos_pendentes_analise : [];
   const faltantes = Array.isArray(relatorio.documentos_faltantes) ? relatorio.documentos_faltantes : [];
   const pendencias = Array.isArray(relatorio.pendencias) ? relatorio.pendencias : [];
   const etapas = Array.isArray(relatorio.proximas_etapas) ? relatorio.proximas_etapas : [];
@@ -222,13 +288,14 @@ function gerarHtmlRelatorioDocumental(relatorio: any): string {
   const cardsHtml = cards.map(([label, value]) => `<div class="card"><span>${escapeHtmlRelatorio(label)}</span><strong>${escapeHtmlRelatorio(value)}</strong></div>`).join('');
   const blocosHtml = blocos.length ? `<table><thead><tr><th>Bloco analisado</th><th>Status</th><th>Arquivos</th><th>Observações</th></tr></thead><tbody>${blocos.map((bloco: any) => `<tr><td>${escapeHtmlRelatorio(bloco.nome)}</td><td>${escapeHtmlRelatorio(bloco.status)}</td><td>${escapeHtmlRelatorio(bloco.documentos)}</td><td>${escapeHtmlRelatorio(bloco.pendencias?.length ? bloco.pendencias.join('; ') : 'Nenhuma pendência registrada')}</td></tr>`).join('')}</tbody></table>` : tabelaVazia('Nenhum bloco foi analisado até o momento.');
   const analisadosHtml = analisados.length ? `<table><thead><tr><th>Documento</th><th>Bloco</th><th>Status</th><th>Data</th><th>Resultado</th></tr></thead><tbody>${analisados.map((documento: any) => `<tr><td>${escapeHtmlRelatorio(documento.nome)}</td><td>${escapeHtmlRelatorio(documento.bloco)}</td><td>${escapeHtmlRelatorio(documento.status)}</td><td>${escapeHtmlRelatorio(dataRelatorio(documento.criado_em))}</td><td>${escapeHtmlRelatorio(documento.observacao || (documento.consistente ? 'Consistente' : 'Documento recebido para conferência'))}</td></tr>`).join('')}</tbody></table>` : tabelaVazia('Nenhum documento analisado foi encontrado no acervo.');
+  const pendentesAnaliseHtml = pendentesAnalise.length ? `<table><thead><tr><th>Anexo recebido</th><th>Bloco</th><th>Status</th><th>Data</th><th>Orientação</th></tr></thead><tbody>${pendentesAnalise.map((documento: any) => `<tr><td>${escapeHtmlRelatorio(documento.nome)}</td><td>${escapeHtmlRelatorio(documento.bloco)}</td><td>Aguardando análise</td><td>${escapeHtmlRelatorio(dataRelatorio(documento.criado_em))}</td><td>${escapeHtmlRelatorio(documento.observacao || 'Executar a leitura documental antes de considerar o arquivo válido.')}</td></tr>`).join('')}</tbody></table>` : tabelaVazia('Nenhum anexo aguardando análise.');
   const faltantesHtml = faltantes.length ? `<table><thead><tr><th>Documento pendente</th><th>Etapa</th><th>Obrigatório</th><th>Finalidade/orientação</th></tr></thead><tbody>${faltantes.map((documento: any) => `<tr><td><strong>${escapeHtmlRelatorio(documento.nome)}</strong><br/><small>${escapeHtmlRelatorio(documento.codigo)}</small></td><td>${escapeHtmlRelatorio(documento.etapa)}</td><td>${documento.obrigatorio ? 'Sim' : 'Não'}</td><td>${escapeHtmlRelatorio(documento.finalidade)}</td></tr>`).join('')}</tbody></table>` : `<div class="success">Nenhum documento obrigatório pendente foi identificado pelo mapa documental atual.</div>`;
   const pendenciasHtml = pendencias.length ? `<ul>${pendencias.map((pendencia: any) => `<li><strong>${escapeHtmlRelatorio(pendencia.severidade || 'atenção').toUpperCase()}:</strong> ${escapeHtmlRelatorio(pendencia.mensagem || pendencia.recomendacao || pendencia.codigo)}</li>`).join('')}</ul>` : tabelaVazia('Nenhuma pendência adicional registrada.');
   const etapasHtml = etapas.length ? `<table><thead><tr><th>Etapa</th><th>Situação</th><th>Documentos faltantes</th></tr></thead><tbody>${etapas.map((etapa: any) => `<tr><td>${escapeHtmlRelatorio(`${etapa.numero || ''} — ${etapa.titulo || 'Etapa documental'}`)}</td><td>${etapa.bloqueada ? 'Aguardando etapa anterior' : 'Disponível para análise'}</td><td>${escapeHtmlRelatorio(etapa.documentos_faltantes)}</td></tr>`).join('')}</tbody></table>` : tabelaVazia('As próximas etapas ainda não foram calculadas.');
 
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/><title>Relatório documental — ${escapeHtmlRelatorio(empresa.razao_social || empresa.nome_fantasia || 'Empresa')}</title><style>
   @page { size: A4; } * { box-sizing: border-box; } body { margin: 0; font-family: Arial, sans-serif; color: #172033; font-size: 9pt; line-height: 1.35; } h1 { color: #123b78; font-size: 20pt; margin: 0 0 4px; } h2 { color: #123b78; font-size: 13pt; margin: 22px 0 8px; border-bottom: 1px solid #d9e2ef; padding-bottom: 5px; } p { margin: 5px 0; } .subtitle { color: #64748b; font-size: 9pt; } .identity { background: #f1f7ff; border: 1px solid #cbdcf4; border-radius: 8px; padding: 12px; margin: 15px 0; } .meta { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 10px; margin-top: 8px; } .meta span, .card span { display: block; color: #64748b; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; } .meta strong { display: block; margin-top: 2px; } .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0 15px; } .card { border: 1px solid #d9e2ef; border-radius: 7px; padding: 9px; min-height: 53px; } .card strong { display: block; margin-top: 4px; font-size: 9.5pt; color: #123b78; } table { width: 100%; border-collapse: collapse; margin: 5px 0 12px; } th { background: #123b78; color: #fff; text-align: left; font-size: 7.8pt; padding: 6px; } td { border-bottom: 1px solid #e5eaf1; vertical-align: top; padding: 6px; font-size: 8pt; } tr:nth-child(even) td { background: #f8fafc; } small { color: #64748b; font-size: 7pt; } .success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857; padding: 10px; border-radius: 7px; } .empty { color: #64748b; font-style: italic; padding: 4px 0; } ul { margin: 5px 0 12px; padding-left: 18px; } li { margin: 4px 0; } .footer-note { margin-top: 18px; color: #64748b; font-size: 7.5pt; border-top: 1px solid #e5eaf1; padding-top: 8px; }
-</style></head><body><h1>Relatório de análise documental</h1><p class="subtitle">Estado consolidado do acervo, das análises realizadas e dos documentos necessários para a próxima etapa.</p><div class="identity"><strong>${escapeHtmlRelatorio(empresa.razao_social || empresa.nome_fantasia || 'Empresa não identificada')}</strong><div class="meta"><div><span>CNPJ</span><strong>${escapeHtmlRelatorio(empresa.cnpj)}</strong></div><div><span>Regime tributário</span><strong>${escapeHtmlRelatorio(relatorio.regime?.descricao)}</strong></div><div><span>Relatório gerado em</span><strong>${escapeHtmlRelatorio(dataRelatorio(relatorio.gerado_em))}</strong></div></div></div><div class="cards">${cardsHtml}</div><h2>Resumo executivo</h2><p>${escapeHtmlRelatorio(relatorio.proxima_acao)}</p><h2>Blocos analisados</h2>${blocosHtml}<h2>Documentos analisados e encontrados</h2>${analisadosHtml}<h2>Documentos ainda faltantes</h2>${faltantesHtml}<h2>Pendências e recomendações</h2>${pendenciasHtml}<h2>Próximas etapas</h2>${etapasHtml}<p class="footer-note">Este relatório é uma fotografia do dossiê no momento da geração. Após anexar novos documentos, gere novamente o relatório para atualizar o estado da empresa.</p></body></html>`;
+</style></head><body><h1>Relatório de análise documental</h1><p class="subtitle">Estado consolidado do acervo, das análises realizadas e dos documentos necessários para a próxima etapa.</p><div class="identity"><strong>${escapeHtmlRelatorio(empresa.razao_social || empresa.nome_fantasia || 'Empresa não identificada')}</strong><div class="meta"><div><span>CNPJ</span><strong>${escapeHtmlRelatorio(empresa.cnpj)}</strong></div><div><span>Regime tributário</span><strong>${escapeHtmlRelatorio(relatorio.regime?.descricao)}</strong></div><div><span>Relatório gerado em</span><strong>${escapeHtmlRelatorio(dataRelatorio(relatorio.gerado_em))}</strong></div></div></div><div class="cards">${cardsHtml}</div><h2>Resumo executivo</h2><p>${escapeHtmlRelatorio(relatorio.proxima_acao)}</p><h2>Blocos analisados</h2>${blocosHtml}<h2>Documentos analisados e encontrados</h2>${analisadosHtml}<h2>Anexos recebidos aguardando análise</h2>${pendentesAnaliseHtml}<h2>Documentos ainda faltantes</h2>${faltantesHtml}<h2>Pendências e recomendações</h2>${pendenciasHtml}<h2>Próximas etapas</h2>${etapasHtml}<p class="footer-note">Este relatório é uma fotografia do dossiê no momento da geração. Após anexar novos documentos, gere novamente o relatório para atualizar o estado da empresa.</p></body></html>`;
 }
 
 function asNumber(value: unknown): number | null {
@@ -881,7 +948,14 @@ async function montarAtosJuntaDados(
       pendencias: [{ codigo: 'atos_junta_nao_anexado', mensagem: 'Atos da Junta Comercial ainda não anexados.', severidade: 'alta', origem: 'documentos_arquivos', recomendacao: 'Anexar os Atos da Junta Comercial no Acervo Documental.' }],
     };
   }
-  const docMaisRecente = docs[0];
+  const documentosComConteudo = docs.filter(arquivoDocumentoTemConteudo);
+  if (!documentosComConteudo.length) {
+    return {
+      dados: { anexado: true, analisado: false, tentativa_realizada: false, status_leitura: 'arquivo_vazio', documento_invalido: true, diagnostico: 'Os Atos da Junta anexados estão vazios ou sem conteúdo legível. Nenhum foi considerado analisado.' },
+      pendencias: [{ codigo: 'atos_junta_arquivo_vazio', mensagem: 'Os Atos da Junta Comercial estão vazios ou sem conteúdo legível.', severidade: 'alta', origem: 'atos_junta_comercial', recomendacao: 'Anexar um PDF legível e completo dos Atos da Junta Comercial.' }],
+    };
+  }
+  const docMaisRecente = documentosComConteudo[0];
   try {
     const analise = await obterAnaliseEspecializada({ empresaId, arquivoId: docMaisRecente.id, tipo: 'atos_junta_comercial', promptCodigo: 'atos_junta_extract', processar, reprocessar: processar });
     if (!analise) {
@@ -898,6 +972,16 @@ async function montarAtosJuntaDados(
         pendencias: [{ codigo: 'atos_junta_aguardando_analise', mensagem: 'Atos da Junta anexados e aguardando conferência com o contrato/alteração social.', severidade: 'alta', origem: 'atos_junta_comercial', recomendacao: 'Iniciar a análise documental quando Cartão CNPJ, QSA e Enquadramento Tributário estiverem anexados.' }],
       };
     }
+    const dadosExtraidos = analise.dados_extraidos || {};
+    const historico = Array.isArray(dadosExtraidos.historico_arquivamentos) ? dadosExtraidos.historico_arquivamentos : [];
+    const temEvidenciaDocumental = Boolean(onlyDigits(dadosExtraidos.nire).length || dadosExtraidos.data_registro || historico.length || dadosExtraidos.documento_compativel === false);
+    if (!temEvidenciaDocumental) {
+      const mensagem = 'A leitura dos Atos da Junta não produziu NIRE, data de registro, histórico ou outra evidência documental. O arquivo não foi considerado validado.';
+      return {
+        dados: { anexado: true, analisado: false, tentativa_realizada: true, documento_id: docMaisRecente.id, status_leitura: 'analise_inconclusiva', documento_invalido: true, lido_em: analise.analisado_em, diagnostico: mensagem },
+        pendencias: [{ codigo: 'atos_junta_leitura_inconclusiva', mensagem, severidade: 'alta', origem: 'atos_junta_comercial', recomendacao: 'Anexar um documento legível e executar novamente a análise dos Atos da Junta.' }],
+      };
+    }
     return {
       dados: {
         anexado: true,
@@ -908,9 +992,9 @@ async function montarAtosJuntaDados(
         lido_em: analise.analisado_em,
         modelo: analise.modelo_ia,
         nivel_confianca: analise.nivel_confianca,
-        fonte_extracao: analise.dados_extraidos?.fonte_extracao || analise.modelo_ia || null,
+        fonte_extracao: dadosExtraidos.fonte_extracao || analise.modelo_ia || null,
         diagnostico: resumoAnaliseEspecializada(analise, 'Atos da Junta Comercial'),
-        ...analise.dados_extraidos,
+        ...dadosExtraidos,
       },
       pendencias: analise.alertas.map((a) => ({ codigo: a.codigo, mensagem: a.mensagem, severidade: severidadeParaPendencia(a.severidade), origem: 'atos_junta_comercial', recomendacao: a.recomendacao })),
     };
@@ -1340,7 +1424,8 @@ async function montarValidacaoSocietaria(
     listarDocumentosEmpresaPorTipos(empresaId, ['alteracao_contratual', 'contrato_social']),
     listarDocumentosEmpresaPorTipos(empresaId, ['atos_junta_comercial']),
   ]);
-  const atos = docsAtos[0] || null;
+  const atosAnexado = docsAtos.length > 0;
+  const atos = docsAtos.find(arquivoDocumentoTemConteudo) || null;
   const textoEnquadramento = [
     contexto.enquadramentoDados?.regime_tributario,
     contexto.enquadramentoDados?.situacao_simples,
@@ -1433,7 +1518,8 @@ async function montarValidacaoSocietaria(
   }
 
   if (!docsContrato.length && !empresaMei) bloqueios.unshift('Contrato Social ou Alteração Contratual ainda não anexado.');
-  if (!atos && !empresaMei) bloqueios.unshift('Nenhum Ato da Junta foi localizado. A empresa pode ter registro em outro órgão; a inclusão de documentos permanece liberada, mas a validação exige revisão humana.');
+  if (!atosAnexado && !empresaMei) bloqueios.unshift('Nenhum Ato da Junta foi localizado. A empresa pode ter registro em outro órgão; a inclusão de documentos permanece liberada, mas a validação exige revisão humana.');
+  if (atosAnexado && !atos && !empresaMei) bloqueios.unshift('Os Atos da Junta anexados estão vazios ou sem conteúdo legível; nenhum foi considerado analisado.');
   if (cadeia.possivel_registro_em_outro_orgao && !empresaMei) bloqueios.push('Nenhum ato registrado foi identificado. A empresa pode estar registrada em outro tipo de órgão; mantenha a inclusão documental liberada e encaminhe para revisão humana.');
   if (atos && !atosDados?.analisado) bloqueios.push(atosDados?.diagnostico || 'A leitura dos Atos da Junta ainda não foi concluída.');
   for (const item of cadeia.registros_faltantes || []) {
@@ -1463,18 +1549,18 @@ async function montarValidacaoSocietaria(
     etapa: 'documentacao_societaria',
     titulo: 'Etapa 2 — Continuidade societária e Junta Comercial',
     habilitada: true,
-    iniciada: empresaMei || docsContrato.length > 0 || !!atos || documentosAnalisados.length > 0,
+    iniciada: empresaMei || docsContrato.length > 0 || atosAnexado || documentosAnalisados.length > 0,
     contrato_anexado: docsContrato.length > 0,
     total_contratos_anexados: docsContrato.length,
-    atos_junta_anexados: !!atos,
+    atos_junta_anexados: atosAnexado,
     atos_junta_aprovados: atosAprovados,
     analisado,
     consistente,
     apto_para_avancar: consistente,
-    botao_validar_disponivel: empresaMei ? false : !!atos && (!atosAprovados || docsContrato.length > 0),
+    botao_validar_disponivel: empresaMei ? false : atosAnexado && (!atosAprovados || docsContrato.length > 0),
     botao_avancar_disponivel: consistente,
     contrato_arquivo_id: documentoPrincipal?.arquivo_id || docsContrato[0]?.id || null,
-    atos_arquivo_id: atos?.id || null,
+    atos_arquivo_id: atos?.id || docsAtos[0]?.id || null,
     nire_contrato: documentoPrincipal?.nire || null,
     nire_junta: atosDados?.nire || null,
     nire_confere: !!documentoPrincipal?.nire && onlyDigits(documentoPrincipal.nire) === onlyDigits(atosDados?.nire),
