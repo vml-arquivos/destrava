@@ -16,6 +16,7 @@
  */
 
 import jsPDF from 'jspdf';
+import { formatBRLWithSymbol } from './currency';
 
 // ─── Paleta de cores (consistente com a marca Destrava) ───────────────────────
 const AZUL_ESCURO: [number, number, number] = [27, 58, 107];   // #1B3A6B
@@ -30,27 +31,7 @@ const VERDE: [number, number, number] = [21, 128, 61];
 const PRETO: [number, number, number] = [15, 15, 20];
 
 // ─── Tipografia / helpers ─────────────────────────────────────────────────────
-const fmtBRL = (v: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
-
-const fmtBRLInteiro = (v: number) =>
-  new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(Math.round(Number(v) || 0));
-
-const fmtBRLRateio = (v: number) => {
-  const numero = Number(v) || 0;
-  const temCentavos = Math.abs(numero - Math.round(numero)) > 0.000001;
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: temCentavos ? 2 : 0,
-    maximumFractionDigits: temCentavos ? 2 : 0,
-  }).format(numero);
-};
+const fmtBRL = (v: number) => formatBRLWithSymbol(v);
 
 const fmtMesAno = (ds: string) => {
   const d = new Date(ds + 'T00:00:00');
@@ -406,10 +387,10 @@ function desenharTabelaPrevisao(
     const valorPrevisao = valorMensalEsperado ?? (Number(p.yhat) || 0);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...PRETO);
-    doc.text(fmtBRLRateio(valorPrevisao), ML + c1 + c2 - 4, y + 3.8, { align: 'right' });
+    doc.text(fmtBRL(valorPrevisao), ML + c1 + c2 - 4, y + 3.8, { align: 'right' });
 
     doc.setTextColor(...VERDE);
-    doc.text(fmtBRLRateio(valorPrevisao), ML + CW - 4, y + 3.8, { align: 'right' });
+    doc.text(fmtBRL(valorPrevisao), ML + CW - 4, y + 3.8, { align: 'right' });
 
     totalPrev += valorPrevisao;
     y += ROW_H;
@@ -424,7 +405,7 @@ function desenharTabelaPrevisao(
   doc.setFont('helvetica', 'bold');
   doc.text('TOTAL PREVISTO', ML + 4, y + 5.7);
   const totalParaExibir = totalEsperado ?? totalPrev;
-  doc.text(fmtBRLInteiro(totalParaExibir), ML + CW - 4, y + 5.7, { align: 'right' });
+  doc.text(fmtBRL(totalParaExibir), ML + CW - 4, y + 5.7, { align: 'right' });
   y += 11;
 
   return y;

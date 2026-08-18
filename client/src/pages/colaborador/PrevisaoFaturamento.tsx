@@ -33,7 +33,7 @@ import {
   Divide,
   Sparkles,
 } from 'lucide-react';
-import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency } from '../../lib/currency';
+import { maskCurrencyInput, unmaskCurrencyInput, formatBRLCurrency, formatBRLWithSymbol } from '../../lib/currency';
 import { toast } from 'sonner';
 import { apiFetch } from '../../lib/api';
 import Layout from './Layout';
@@ -179,14 +179,7 @@ function ratearTotalManual(total: number, horizonteMeses: number) {
 }
 
 function formatarPrevisaoInteira(valor: number): string {
-  const numero = Number(valor) || 0;
-  const temCentavos = Math.abs(numero - Math.round(numero)) > 0.000001;
-  return numero.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: temCentavos ? 2 : 0,
-    maximumFractionDigits: temCentavos ? 2 : 0,
-  });
+  return formatBRLWithSymbol(valor);
 }
 
 function normalizarPrevisaoUniforme(resultado: ResultadoPrevisao): ResultadoPrevisao {

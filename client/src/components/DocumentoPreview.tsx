@@ -20,29 +20,10 @@ import {
   gerarNumeroDocumento,
   type DadosPdfFaturamento,
 } from '../lib/gerarPdfFaturamento';
+import { formatBRLWithSymbol } from '../lib/currency';
 
-// ─── Helpers de formatação ────────────────────────────────────────────────────
-const fmtBRL = (v: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
-
-const fmtBRLInteiro = (v: number) =>
-  new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(Math.round(Number(v) || 0));
-
-const fmtBRLRateio = (v: number) => {
-  const numero = Number(v) || 0;
-  const temCentavos = Math.abs(numero - Math.round(numero)) > 0.000001;
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: temCentavos ? 2 : 0,
-    maximumFractionDigits: temCentavos ? 2 : 0,
-  }).format(numero);
-};
+// ─── Helper de formatação compartilhado com o PDF ─────────────────────────────
+const fmtBRL = (v: number) => formatBRLWithSymbol(v);
 
 const fmtMesAno = (ds: string) => {
   const d = new Date(ds + 'T00:00:00');
@@ -91,7 +72,7 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
           const valorMensal = dados.valorMensalPrevisto ?? (Number(p.yhat) || 0);
           return {
             mes: fmtMesAno(p.ds),
-            valor: fmtBRLRateio(valorMensal),
+            valor: fmtBRL(valorMensal),
             valorNum: valorMensal,
           };
         });
@@ -240,7 +221,7 @@ export function DocumentoPreview({ dados, onFechar }: Props) {
                     ? `Total do Período (${qtdMesesDeclaracao} ${qtdMesesDeclaracao === 1 ? 'Mês' : 'Meses'})`
                     : 'Total Previsto'}
                 </span>
-                <span className="text-white text-sm font-bold text-right">{isDeclaracao ? fmtBRL(total) : fmtBRLInteiro(total)}</span>
+                <span className="text-white text-sm font-bold text-right">{fmtBRL(total)}</span>
               </div>
             </div>
 
