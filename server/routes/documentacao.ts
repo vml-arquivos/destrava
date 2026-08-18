@@ -1451,7 +1451,6 @@ async function montarDossieCreditoEmpresa(empresaId: string, options: { processa
   documentacaoSocietaria.habilitada = identidadeCnpj.apto_para_avancar === true;
   documentacaoSocietaria.botao_validar_disponivel = documentacaoSocietaria.habilitada
     && documentacaoSocietaria.atos_dispensados_por_mei !== true
-    && documentacaoSocietaria.contrato_anexado
     && documentacaoSocietaria.atos_junta_anexados;
 
   // A Etapa 2 fica visível/habilitada depois da aprovação da Etapa 1, mas só

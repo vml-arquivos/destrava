@@ -511,7 +511,16 @@ export default function DocumentosEntidade({
           : Promise.resolve(null),
       ]);
       setPipeline(pipelineAtual);
-      setSocietaria(dossieAtual?.documentacao_societaria || null);
+      const societariaAtual = dossieAtual?.documentacao_societaria || null;
+      setSocietaria(societariaAtual);
+      // Depois que os Atos da Junta forem aprovados, o acervo deixa de esconder
+      // os documentos complementares: eles ficam disponíveis para anexação conforme
+      // o mapa do regime tributário, sem exigir outra navegação ou criar nova trava.
+      if (societariaAtual?.atos_junta_aprovados === true || societariaAtual?.atos_dispensados_por_mei === true) {
+        setMostrarComplementares(true);
+      } else {
+        setMostrarComplementares(false);
+      }
       setMapaCredito(dossieAtual?.mapa_documental_credito || null);
       const lista = Array.isArray(data) ? data : [];
       // O contrato de prestação de serviços (Destrava <-> empresa) não é documento
@@ -588,6 +597,9 @@ export default function DocumentosEntidade({
         data = status?.dossie || data;
         if (data?.documentacao_societaria) setSocietaria(data.documentacao_societaria);
       }
+      // Recarrega o dossiê completo depois da análise para atualizar, na mesma tela,
+      // o parecer, a fase do pipeline e o próximo documento solicitado.
+      await carregar();
       if (!opcoes.silencioso) {
         if (data?.documentacao_societaria?.apto_para_avancar) toast.success("Documentação societária conferida. Próxima etapa liberada.");
         else toast.info("Análise concluída. Veja o próximo documento indicado no painel abaixo.");
@@ -598,7 +610,7 @@ export default function DocumentosEntidade({
     } finally {
       setAnalisandoSocietario(false);
     }
-  }, [empresaId, entidadeTipo]);
+  }, [empresaId, entidadeTipo, carregar]);
 
   const salvarObservacao = useCallback(async (tipoDocumento: string, socioVinculado: string | null, observacao: string) => {
     if (!entidadeId) return;
@@ -766,7 +778,7 @@ export default function DocumentosEntidade({
       // aba e clique em "Analisar" -- o painel abaixo (societaria) já mostra
       // "Analisando..." e, ao concluir, o próximo documento exigido.
       if (entidadeTipo === "empresa" && empresaId && TIPOS_GATILHO_ANALISE_SOCIETARIA.has(tipoDocumento)) {
-        void iniciarAnaliseSocietaria({ silencioso: true });
+        await iniciarAnaliseSocietaria({ silencioso: true });
       }
 
       return resultado;
@@ -964,9 +976,11 @@ export default function DocumentosEntidade({
               ? "Contrato Social ou alteração contratual anterior (para completar 12 meses de histórico)"
               : !societaria.contrato_anexado
                 ? "Contrato Social ou alteração contratual"
-                : apto && proximaLevaCredito
-                  ? `${proximaLevaCredito.proximo.nome} (${proximaLevaCredito.proximo.etapaTitulo})`
-                  : null;
+                  : apto && proximaLevaCredito
+                    ? `${proximaLevaCredito.proximo.nome} (${proximaLevaCredito.proximo.etapaTitulo})`
+                    : societaria.contrato_anexado
+                      ? "Demais documentos do dossiê conforme o enquadramento tributário"
+                      : null;
         return (
           <div className={`rounded-2xl border p-3 ${apto ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/60"}`}>
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -1111,7 +1125,9 @@ export default function DocumentosEntidade({
           </div>
           {secaoAtivaObj && (() => {
             const temObrigatorios = secaoAtivaObj.slots.some((s) => s.obrigatorio);
-            const slotsVisiveis = temObrigatorios && !mostrarComplementares
+            const liberarComplementares = societaria?.atos_junta_aprovados === true
+              || societaria?.atos_dispensados_por_mei === true;
+            const slotsVisiveis = temObrigatorios && !mostrarComplementares && !liberarComplementares
               ? secaoAtivaObj.slots.filter((s) => s.obrigatorio)
               : secaoAtivaObj.slots;
             const ocultos = secaoAtivaObj.slots.length - slotsVisiveis.length;
@@ -1124,7 +1140,7 @@ export default function DocumentosEntidade({
                 </div>
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-500 shrink-0 whitespace-nowrap">{secaoAtivaObj.slots.length} campo(s)</span>
               </div>
-              {temObrigatorios && (
+              {temObrigatorios && !liberarComplementares && (
                 <button
                   type="button"
                   onClick={() => setMostrarComplementares((v) => !v)}
@@ -1134,6 +1150,11 @@ export default function DocumentosEntidade({
                     ? "Mostrar só os obrigatórios"
                     : ocultos > 0 ? `Ver documentos complementares (${ocultos})` : "Todos os campos já são obrigatórios"}
                 </button>
+              )}
+              {liberarComplementares && (
+                <p className="mb-3 rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-2 text-[10px] font-semibold text-emerald-800">
+                  Atos analisados. Contrato/Alteração solicitado; os demais documentos estão disponíveis para anexação conforme o enquadramento tributário, sem bloquear o avanço.
+                </p>
               )}
               <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3">
                 {slotsVisiveis.map((documentoSlot) => {
