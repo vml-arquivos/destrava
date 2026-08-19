@@ -481,6 +481,101 @@ function montarRelatorioDocumental(dossie: any) {
   };
 }
 
+function compactarTextoPdf(value: unknown, maxLength = 320): string {
+  const texto = String(value ?? '').replace(/\s+/g, ' ').trim();
+  if (texto.length <= maxLength) return texto;
+  return `${texto.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function nomePessoaSocietariaPdf(value: any): string | null {
+  if (!value || typeof value !== 'object') return null;
+  const nome = value.nome || value.nome_socio || value.nomeSocio || value.socio || null;
+  return nome ? compactarTextoPdf(nome, 180) : null;
+}
+
+function gerarHtmlResumoSocietarioPdf(relatorio: any): string {
+  const empresa = relatorio.empresa || {};
+  const societaria = relatorio.documentacao_societaria || {};
+  const documentos = Array.isArray(societaria.documentos_analisados) ? societaria.documentos_analisados : [];
+  const candidatosVigentes = documentos.filter((documento: any) =>
+    documento?.estado_atual_societario?.fonte === 'contrato'
+    || documento?.analise_societaria_auditavel?.status_documento === 'atual'
+  );
+  const ordenarPorData = (a: any, b: any) => String(b?.data_registro || '').localeCompare(String(a?.data_registro || ''));
+  const documentoVigente = [...(candidatosVigentes.length ? candidatosVigentes : documentos)].sort(ordenarPorData)[0] || null;
+  const analise = documentoVigente?.analise_societaria_auditavel || {};
+  const alteracoes = Array.isArray(documentoVigente?.alteracoes_societarias)
+    ? documentoVigente.alteracoes_societarias
+    : [];
+  const transacoes = alteracoes.map((alteracao: any) => {
+    const cedente = nomePessoaSocietariaPdf(alteracao?.cedente || alteracao?.socio_retirante);
+    const cessionario = nomePessoaSocietariaPdf(alteracao?.cessionario || alteracao?.socio_admitido);
+    const quotas = alteracao?.quotas_transferidas?.quantidade
+      ?? alteracao?.quotas_transferidas?.quotas
+      ?? alteracao?.quotas_transferidas
+      ?? null;
+    if (cedente && cessionario) {
+      return `Transferência de ${cedente} para ${cessionario}${quotas ? ` — ${compactarTextoPdf(quotas, 120)} quotas` : ''}.`;
+    }
+    if (cedente) return `Retirada de ${cedente}; o cessionário não foi identificado expressamente.`;
+    if (cessionario) return `Entrada de ${cessionario}; o cedente não foi identificado expressamente.`;
+    return null;
+  }).filter(Boolean) as string[];
+  const atoPraticado = analise.ato_praticado || documentoVigente?.resultado_analise?.ato_praticado || null;
+  const transacoesFinais = transacoes.length ? transacoes : atoPraticado ? [compactarTextoPdf(atoPraticado, 360)] : ['A alteração societária não foi identificada expressamente no laudo.'];
+  const dataAlteracao = documentoVigente?.data_registro || analise.ato_mais_recente?.data || societaria.data_ato_junta || null;
+  const sociosAtuais = Array.isArray(analise.estado_atual?.socios) && analise.estado_atual.socios.length
+    ? analise.estado_atual.socios
+    : Array.isArray(documentoVigente?.quadro_societario_final) ? documentoVigente.quadro_societario_final : [];
+  const titularAtual = sociosAtuais.map((socio: any) => nomePessoaSocietariaPdf(socio)).filter(Boolean) as string[];
+  const evidencias = [
+    ...(Array.isArray(analise.evidencias) ? analise.evidencias : []),
+    ...(Array.isArray(documentoVigente?.resultado_analise?.evidencias) ? documentoVigente.resultado_analise.evidencias : []),
+  ].map((evidencia: any) => compactarTextoPdf(evidencia?.texto || evidencia, 420)).filter(Boolean);
+  const documentosComData = documentos.filter((documento: any) => documento?.data_registro).sort(ordenarPorData);
+  const dataMaisRecente = documentosComData[0]?.data_registro || societaria.data_ato_junta || null;
+  const dataMaisAntiga = documentosComData[documentosComData.length - 1]?.data_registro || null;
+  const mesesComprovados = societaria.meses_comprovados || (societaria.continuidade_12_meses_comprovada ? 12 : null);
+  const continuidade = societaria.continuidade_12_meses_comprovada === true
+    ? `Comprovação de continuidade superior a 12 meses${mesesComprovados ? `: ${mesesComprovados} meses` : ''}${dataMaisAntiga && dataMaisRecente ? `, entre ${dataRelatorio(dataMaisAntiga)} e ${dataRelatorio(dataMaisRecente)}` : ''}.`
+    : 'A comprovação de continuidade superior a 12 meses não foi confirmada no laudo atual.';
+  const nomeEmpresa = empresa.razao_social || empresa.nome_fantasia || 'Empresa não identificada';
+  const nomeDocumento = documentoVigente?.nome || 'Alteração contratual vigente';
+  const titularTexto = titularAtual.length ? titularAtual.join('; ') : 'Titular atual não identificado expressamente.';
+  const evidenciaHtml = evidencias.length
+    ? evidencias.slice(0, 3).map((evidencia) => `<li>${escapeHtmlRelatorio(evidencia)}</li>`).join('')
+    : '<li>Não foi localizada evidência textual suficiente no laudo persistido.</li>';
+
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/><title>Resultado da alteração societária — ${escapeHtmlRelatorio(nomeEmpresa)}</title><style>
+  @page { size: A4; margin: 36mm 22mm 28mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2mm 0 0; font-family: Arial, sans-serif; color: #172033; font-size: 10pt; line-height: 1.45; }
+  h1 { color: #123b78; font-size: 17pt; margin: 0 0 4px; }
+  h2 { color: #123b78; font-size: 11pt; margin: 16px 0 6px; border-bottom: 1px solid #d9e2ef; padding-bottom: 4px; }
+  p { margin: 4px 0; }
+  .subtitle { color: #64748b; margin-bottom: 13px; }
+  .identity, .summary, .evidence, .continuity { border: 1px solid #d9e2ef; border-radius: 8px; padding: 10px; margin: 8px 0; page-break-inside: avoid; }
+  .identity { background: #f1f7ff; border-left: 4px solid #1b3a8c; }
+  .summary { background: #ecfdf5; border-color: #bbf7d0; }
+  .continuity { background: #f5f3ff; border-color: #ddd6fe; }
+  .evidence { background: #fff; border-left: 4px solid #64748b; }
+  .label { color: #64748b; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; }
+  .value { display: block; margin-top: 2px; font-weight: 700; }
+  ul { margin: 5px 0 0; padding-left: 18px; }
+  li { margin: 4px 0; }
+  .footer-note { margin-top: 16px; color: #64748b; font-size: 7.5pt; border-top: 1px solid #e5eaf1; padding-top: 7px; }
+  </style></head><body>
+  <h1>Resultado da alteração societária</h1>
+  <p class="subtitle">Resumo objetivo da transação identificada no documento vigente.</p>
+  <div class="identity"><span class="label">Empresa</span><strong class="value">${escapeHtmlRelatorio(nomeEmpresa)}</strong><small>${escapeHtmlRelatorio(nomeDocumento)}</small></div>
+  <div class="summary"><h2>Transação realizada</h2>${transacoesFinais.map((item) => `<p>${escapeHtmlRelatorio(item)}</p>`).join('')}<p><span class="label">Data da alteração</span><strong class="value">${escapeHtmlRelatorio(dataAlteracao ? dataRelatorio(dataAlteracao) : 'Não identificada expressamente')}</strong></p></div>
+  <div class="summary"><h2>Titular atual do contrato social</h2><p><strong>${escapeHtmlRelatorio(titularTexto)}</strong></p></div>
+  <div class="continuity"><h2>Comprovação de continuidade</h2><p>${escapeHtmlRelatorio(continuidade)}</p></div>
+  <div class="evidence"><h2>Evidências da leitura</h2><ul>${evidenciaHtml}</ul></div>
+  <p class="footer-note">Este resumo reproduz somente os fatos identificados no documento analisado e nas evidências persistidas. Para atualizar o conteúdo, reprocessar o documento vigente e gerar o PDF novamente.</p>
+  </body></html>`;
+}
+
 function gerarHtmlRelatorioDocumental(relatorio: any): string {
   const empresa = relatorio.empresa || {};
   const cards = [
@@ -2187,7 +2282,7 @@ router.get('/empresa/:empresaId/relatorio/pdf', auth, async (req: Request, res: 
     const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
     if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
     const relatorio = montarRelatorioDocumental(dossie);
-    const pdf = await generateBrandedPdfBuffer(gerarHtmlRelatorioDocumental(relatorio), { brand: 'destrava' });
+    const pdf = await generateBrandedPdfBuffer(gerarHtmlResumoSocietarioPdf(relatorio), { brand: 'destrava', topMargin: '38mm' });
     const nomeEmpresa = String(relatorio.empresa?.razao_social || relatorio.empresa?.nome_fantasia || 'empresa')
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'empresa';
     res.setHeader('Content-Type', 'application/pdf');
