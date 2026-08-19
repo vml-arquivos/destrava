@@ -31,15 +31,24 @@ function itens(value: unknown): string[] {
 }
 
 function formatarAlteracao(alteracao: any): string {
-  const cedente = texto(alteracao?.cedente?.nome || alteracao?.socio_retirante?.nome) || "cedente não identificado";
-  const cessionario = texto(alteracao?.cessionario?.nome || alteracao?.socio_admitido?.nome) || "cessionário não identificado";
-  const quotas = alteracao?.quotas_transferidas ?? alteracao?.cedente?.quotas;
-  const percentual = alteracao?.percentual_transferido != null ? ` (${texto(alteracao.percentual_transferido)}%)` : "";
-  const partes = [`Retirada/cedente: ${cedente}`, `entrada/cessionário: ${cessionario}`, `quotas transferidas: ${texto(quotas) || "não identificadas"}${percentual}`];
-  if (alteracao?.clausula) partes.push(`cláusula: ${texto(alteracao.clausula)}`);
-  if (alteracao?.pagina) partes.push(`página: ${texto(alteracao.pagina)}`);
-  if (alteracao?.evidencia) partes.push(`evidência: “${texto(alteracao.evidencia)}”`);
-  return partes.join("; ");
+  const cedente = texto(alteracao?.cedente?.nome || alteracao?.socio_retirante?.nome) || "não identificado";
+  const cessionario = texto(alteracao?.cessionario?.nome || alteracao?.socio_admitido?.nome) || "não identificado";
+  const quotas = alteracao?.quotas_transferidas ?? alteracao?.cedente?.quotas ?? alteracao?.cessionario?.quotas;
+  const percentual = alteracao?.percentual_transferido ?? alteracao?.cessionario?.percentual;
+  const tipo = texto(alteracao?.tipo_alteracao || alteracao?.operacao || alteracao?.tipo);
+  const operacao = /saida_transferencia|transfer/i.test(tipo) || (cedente !== "não identificado" && cessionario !== "não identificado")
+    ? "Transferência de quotas"
+    : tipo || "Alteração societária";
+  const partes = [
+    `Operação identificada: ${operacao}`,
+    `Sócio cedente/retirante: ${cedente}`,
+    `Novo sócio/cessionário: ${cessionario}`,
+    `Quotas transferidas: ${texto(quotas) || "não identificadas"}${percentual != null ? ` (${texto(percentual)}%)` : ""}`,
+  ];
+  if (alteracao?.clausula) partes.push(`Cláusula: ${texto(alteracao.clausula)}`);
+  if (alteracao?.pagina) partes.push(`Página: ${texto(alteracao.pagina)}`);
+  if (alteracao?.evidencia) partes.push(`Evidência documental: “${texto(alteracao.evidencia)}”`);
+  return partes.join("\n");
 }
 
 function formatarQuadroFinal(socio: any): string {
@@ -47,7 +56,8 @@ function formatarQuadroFinal(socio: any): string {
   const quotas = socio?.quotas != null ? ` — ${texto(socio.quotas)} quotas` : "";
   const percentual = socio?.percentual != null ? ` (${texto(socio.percentual)}%)` : "";
   const qualificacao = socio?.qualificacao ? ` — ${texto(socio.qualificacao)}` : "";
-  return `${nome}${quotas}${percentual}${qualificacao}`;
+  const administrador = socio?.administrador === true ? " — administrador" : "";
+  return `${nome}${quotas}${percentual}${qualificacao}${administrador}`;
 }
 
 function formatarEvento(evento: any): string {

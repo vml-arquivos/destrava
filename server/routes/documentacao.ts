@@ -173,37 +173,48 @@ function valorResultadoRelatorio(value: unknown): string | null {
 function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada: any = null) {
   const laudo = documento?.resultado_validacao?.analise_regra_documental;
   const laudoErro = documento?.resultado_validacao?.analise_regra_documental_erro;
-  const analise = laudo || analiseEspecializada || null;
+  const analiseNormalizada = analiseEspecializada?.resultado_analise || analiseEspecializada || null;
+  const analise = analiseNormalizada || laudo || null;
   const dados = analise?.dados_extraidos || {};
   const contratoDados = dados?.contrato || {};
-  const analiseSocietariaAuditavel = documento?.analise_societaria_auditavel
+  const analiseSocietariaAuditavel = analise?.analise_societaria_auditavel
+    || documento?.analise_societaria_auditavel
     || contratoDados?.analise_societaria_auditavel
     || dados?.analise_societaria_auditavel
     || null;
-  const diagnosticoFactual = analiseSocietariaAuditavel?.diagnostico_objetivo
+  const diagnosticoFactual = analise?.diagnostico_factual
+    || analiseSocietariaAuditavel?.diagnostico_objetivo
     || documento?.diagnostico_factual
     || contratoDados?.diagnostico_factual
     || dados?.diagnostico_factual
     || null;
-  const alteracoesSocietarias = Array.isArray(documento?.alteracoes_societarias)
-    ? documento.alteracoes_societarias
-    : Array.isArray(contratoDados?.alteracoes_societarias)
-      ? contratoDados.alteracoes_societarias
-      : Array.isArray(analiseSocietariaAuditavel?.alteracoes_documento)
-        ? analiseSocietariaAuditavel.alteracoes_documento
-        : [];
-  const quadroSocietarioFinal = Array.isArray(documento?.quadro_societario_final)
-    ? documento.quadro_societario_final
-    : Array.isArray(contratoDados?.quadro_societario_final)
-      ? contratoDados.quadro_societario_final
-      : Array.isArray(analiseSocietariaAuditavel?.quadro_final_documento)
-        ? analiseSocietariaAuditavel.quadro_final_documento
-        : [];
+  const alteracoesSocietarias = Array.isArray(analise?.alteracoes_societarias)
+    ? analise.alteracoes_societarias
+    : Array.isArray(documento?.alteracoes_societarias)
+      ? documento.alteracoes_societarias
+      : Array.isArray(contratoDados?.alteracoes_societarias)
+        ? contratoDados.alteracoes_societarias
+        : Array.isArray(analiseSocietariaAuditavel?.alteracoes_documento)
+          ? analiseSocietariaAuditavel.alteracoes_documento
+          : [];
+  const quadroSocietarioFinal = Array.isArray(analise?.quadro_societario_final)
+    ? analise.quadro_societario_final
+    : Array.isArray(documento?.quadro_societario_final)
+      ? documento.quadro_societario_final
+      : Array.isArray(contratoDados?.quadro_societario_final)
+        ? contratoDados.quadro_societario_final
+        : Array.isArray(analiseSocietariaAuditavel?.quadro_final_documento)
+          ? analiseSocietariaAuditavel.quadro_final_documento
+          : [];
   const evidencias = Array.from(new Set([
+    ...(Array.isArray(analise?.evidencias) ? analise.evidencias.map((item: any) => item?.texto || item).filter(Boolean).map(String) : []),
     ...alteracoesSocietarias.map((alteracao: any) => alteracao?.evidencia).filter(Boolean).map(String),
     ...(Array.isArray(analiseSocietariaAuditavel?.evidencias) ? analiseSocietariaAuditavel.evidencias.map((item: any) => item?.texto || item).filter(Boolean).map(String) : []),
   ]));
-  const campos = documento?.campos_principais || {};
+  const campos = {
+    ...(analise?.campos_principais || {}),
+    ...(documento?.campos_principais || {}),
+  };
   const camposResultado: Array<{ label: string; valor: string }> = [];
   const adicionarCampo = (label: string, value: unknown) => {
     const valor = valorResultadoRelatorio(value);
@@ -235,6 +246,7 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
     ...(Array.isArray(analise?.alertas) ? analise.alertas : []),
   ].filter((item: any) => item && (item.mensagem || item.codigo));
   const observacoes = [
+    ...(Array.isArray(analise?.observacoes) ? analise.observacoes : []),
     documento?.diagnostico,
     documento?.mensagem,
     documento?.observacao,

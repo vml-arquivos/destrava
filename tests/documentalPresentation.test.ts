@@ -41,6 +41,8 @@ describe("construirSecoesAnaliseDocumento", () => {
       "observacoes",
     ]);
     expect(secoes.find((secao) => secao.id === "diagnostico_factual")?.texto).toContain("Jonnathas Rodrigues Pires");
+    expect(secoes.find((secao) => secao.id === "alteracoes_societarias")?.itens?.[0]).toContain("Novo sócio/cessionário: Jonnathas Rodrigues Pires");
+    expect(secoes.find((secao) => secao.id === "alteracoes_societarias")?.itens?.[0]).toContain("Quotas transferidas: 100 (100%)");
     expect(secoes.find((secao) => secao.id === "leitura_societaria")?.itens).toEqual(expect.arrayContaining([
       "Status do documento: atual",
       "Confronto documentado com QSA: confirmado — QSA compatível",
