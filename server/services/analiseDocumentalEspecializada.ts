@@ -402,7 +402,16 @@ export function executarAgenteAnaliseSocietaria(
   if (statusDocumento === 'atual' && !quadroFinalExplicito) motivosRevisao.push('O documento mais recente não apresentou quadro societário final expresso.');
   if (statusDocumento === 'atual' && nomesQsa.length === 0) motivosRevisao.push('Não há QSA vigente disponível para o confronto do estado atual.');
   if (confrontoStatus === 'divergente') motivosRevisao.push('O quadro final do ato mais recente diverge do QSA vigente.');
-  if (!alteracoes.length && /alterac|consolid/i.test(String(contrato?.tipo_ato || ''))) motivosRevisao.push('O documento foi classificado como alteração/consolidação, mas não houve alteração societária expressamente extraída.');
+  if (
+    !alteracoes.length
+    && statusDocumento !== 'historico'
+    && /alterac|consolid/i.test(normalizeText(contrato?.tipo_ato || ''))
+  ) {
+    motivosRevisao.push('O documento foi classificado como alteração/consolidação, mas não houve alteração societária expressamente extraída.');
+  }
+  if (statusDocumento === 'indeterminado' && dataContrato) {
+    motivosRevisao.push('Não foi possível confirmar se este documento corresponde ao ato mais recente da Junta Comercial; conferir manualmente antes de considerar outro documento como o vigente.');
+  }
   for (const conflito of conflitosInternos) motivosRevisao.push(`Conflito interno informado na leitura: ${conflito}`);
 
   return {
