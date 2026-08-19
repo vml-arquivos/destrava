@@ -14,7 +14,8 @@ export type TipoDocumentoLocal =
   | 'atos_junta_comercial'
   | 'contrato_social_alteracao'
   | 'faturamento_12_meses'
-  | 'comprovante_residencia';
+  | 'comprovante_residencia'
+  | 'extrato_bancario';
 
 export interface ExtracaoDocumentalLocalResult {
   tipo: TipoDocumentoLocal;
@@ -625,6 +626,75 @@ function parseComprovanteResidencia(texto: string): { dados: Record<string, any>
   };
 }
 
+function parseExtratoBancario(texto: string): { dados: Record<string, any>; confianca: number } {
+  const linhas = linhasTexto(texto);
+  const norm = textoNormalizado(texto);
+  const compativel = /extrato|movimenta[cç][aã]o financeira|lan[cç]amentos|conta corrente|conta poupan[cç]a|saldo anterior|saldo atual|ag[eê]ncia/.test(norm);
+  const banco = limparValor(valorAposRotulo(linhas, ['banco', 'instituição financeira', 'instituicao financeira', 'nome do banco']))
+    || limparValor(linhas.find((linha) => /\b(?:banco|bank)\b/i.test(linha) && linha.length <= 100) || null);
+  const periodoDatas = Array.from(texto.matchAll(/\b(\d{2}\/\d{2}\/20\d{2}|20\d{2}-\d{2}-\d{2})\b/g))
+    .map((match) => parseDate(match[1]))
+    .filter((value): value is string => Boolean(value));
+  const datasUnicas = Array.from(new Set(periodoDatas)).sort();
+  const dataInicio = datasUnicas[0] || null;
+  const dataFim = datasUnicas.at(-1) || null;
+  const lancamentos: Array<{ data: string; tipo: 'entrada' | 'saida'; descricao: string; valor: number; evidencia: string }> = [];
+  const valorRegex = /[-+]?\s*(?:R\$\s*)?(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2}|\.\d{2})/g;
+
+  for (const linha of linhas) {
+    const dataMatch = linha.match(/^\s*(\d{2}\/\d{2}\/(?:20\d{2}|\d{2})|20\d{2}-\d{2}-\d{2})\b/);
+    if (!dataMatch) continue;
+    const data = parseDate(dataMatch[1]);
+    if (!data) continue;
+    const restante = linha.slice((dataMatch.index || 0) + dataMatch[0].length).trim();
+    const valores = Array.from(restante.matchAll(valorRegex)).map((match) => ({
+      token: match[0],
+      index: match.index || 0,
+    }));
+    if (!valores.length) continue;
+    const valorToken = valores[0].token;
+    const valor = numeroMonetario(valorToken);
+    if (!valor || valor <= 0) continue;
+    const antesDoValor = restante.slice(0, valores[0].index).trim();
+    const depoisDoValor = restante.slice(valores[0].index + valorToken.length).trim();
+    const contexto = textoNormalizado(`${antesDoValor} ${depoisDoValor}`);
+    if (/^(saldo|total|limite|per[ií]odo|data|descri[cç][aã]o|hist[oó]rico)/.test(contexto)) continue;
+    const saida = /(^|\s)(?:d|deb|d[eé]bito|d[eé]bitos|sa[ií]da|pagamento|compra|tarifa|taxa|boleto|pix enviado|ted enviado|transfer[eê]ncia enviada|transferencia enviada|resgate)(?:\s|$)/i.test(contexto)
+      || /^-/.test(valorToken);
+    const entrada = /(^|\s)(?:c|cred|cr[eé]dito|cr[eé]ditos|entrada|recebimento|dep[oó]sito|pix recebido|ted recebido|transfer[eê]ncia recebida|estorno)(?:\s|$)/i.test(contexto)
+      || /^\+/.test(valorToken);
+    if (!entrada && !saida) continue;
+    const descricao = limparValor(antesDoValor.replace(/\b(?:[CD]|deb|cred)\b/gi, '').replace(/[|;:]+/g, ' ')) || 'Lançamento identificado no extrato';
+    if (descricao.length < 3 || /saldo (anterior|final|atual)/i.test(descricao)) continue;
+    lancamentos.push({
+      data,
+      tipo: saida ? 'saida' : 'entrada',
+      descricao: descricao.slice(0, 500),
+      valor: Math.round(Math.abs(valor) * 100) / 100,
+      evidencia: linha.slice(0, 1000),
+    });
+  }
+
+  const unicos = lancamentos.filter((item, index, array) => array.findIndex((outro) => `${outro.data}|${outro.tipo}|${outro.valor}|${textoNormalizado(outro.descricao)}` === `${item.data}|${item.tipo}|${item.valor}|${textoNormalizado(item.descricao)}`) === index);
+  const totalEntradas = Math.round(unicos.filter((item) => item.tipo === 'entrada').reduce((total, item) => total + item.valor, 0) * 100) / 100;
+  const totalSaidas = Math.round(unicos.filter((item) => item.tipo === 'saida').reduce((total, item) => total + item.valor, 0) * 100) / 100;
+  const confianca = clamp((compativel ? 0.3 : 0) + (banco ? 0.1 : 0) + (dataInicio && dataFim ? 0.15 : 0) + Math.min(0.4, unicos.length * 0.06));
+  return {
+    dados: {
+      documento_compativel: compativel,
+      banco: banco || null,
+      periodo_inicio: dataInicio,
+      periodo_fim: dataFim,
+      lancamentos: unicos,
+      total_entradas: totalEntradas,
+      total_saidas: totalSaidas,
+      confianca,
+      fonte_extracao: 'local_deterministica',
+    },
+    confianca,
+  };
+}
+
 function parseAtosJunta(texto: string): { dados: Record<string, any>; confianca: number } {
   const linhas = linhasTexto(texto);
   const norm = textoNormalizado(texto);
@@ -732,6 +802,7 @@ export function analisarTextoDocumentoLocal(tipo: TipoDocumentoLocal, texto: str
   if (tipo === 'atos_junta_comercial') return parseAtosJunta(texto);
   if (tipo === 'faturamento_12_meses') return parseFaturamento12Meses(texto);
   if (tipo === 'comprovante_residencia') return parseComprovanteResidencia(texto);
+  if (tipo === 'extrato_bancario') return parseExtratoBancario(texto);
   return parseContratoSocialAlteracao(texto);
 }
 

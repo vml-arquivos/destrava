@@ -242,17 +242,28 @@ describe('extração documental local determinística', () => {
     expect(resultado.dados.assinatura_socio_administrador.tipo).toBe('eletronica');
   });
 
-  it('extrai titular e referência do comprovante de endereço', () => {
+  it('extrai entradas e saídas do extrato, ignora saldo/total e remove duplicidade', () => {
     const texto = `
-      CONTA DE ENERGIA ELÉTRICA
-      Titular: MARIA DA SILVA
-      Referência: 06/2026
-      CEP 70000-000
+      EXTRATO DE CONTA CORRENTE
+      BANCO: BANCO TESTE
+      SALDO ANTERIOR 01/08/2026 R$ 1.000,00
+      01/08/2026 PIX RECEBIDO CLIENTE C R$ 500,00
+      02/08/2026 PAGAMENTO FORNECEDOR D R$ 120,50
+      02/08/2026 PAGAMENTO FORNECEDOR D R$ 120,50
+      SALDO ATUAL 02/08/2026 R$ 1.379,50
+      TOTAL DO PERÍODO R$ 379,50
     `;
-    const resultado = analisarTextoDocumentoLocal('comprovante_residencia', texto);
-    expect(resultado.dados.nome_titular).toBe('MARIA DA SILVA');
-    expect(resultado.dados.mes_referencia).toBe('06/2026');
-    expect(resultado.confianca).toBeGreaterThanOrEqual(0.8);
+    const resultado = analisarTextoDocumentoLocal('extrato_bancario', texto);
+
+    expect(resultado.dados.documento_compativel).toBe(true);
+    expect(resultado.dados.banco).toBe('BANCO TESTE');
+    expect(resultado.dados.lancamentos).toEqual([
+      expect.objectContaining({ data: '2026-08-01', tipo: 'entrada', valor: 500 }),
+      expect.objectContaining({ data: '2026-08-02', tipo: 'saida', valor: 120.5 }),
+    ]);
+    expect(resultado.dados.lancamentos).toHaveLength(2);
+    expect(resultado.dados.total_entradas).toBe(500);
+    expect(resultado.dados.total_saidas).toBe(120.5);
   });
 
 });

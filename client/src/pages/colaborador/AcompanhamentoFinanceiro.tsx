@@ -75,6 +75,22 @@ type SaldoDiario = {
   saldo_dia: number;
 };
 
+type LancamentoImportado = {
+  id: string;
+  acompanhamento_id: string;
+  arquivo_id?: string | null;
+  arquivo_nome?: string | null;
+  data_movimento: string;
+  tipo: "entrada" | "saida";
+  categoria?: string | null;
+  descricao?: string | null;
+  valor: number;
+  evidencia?: string | null;
+  confianca?: number | null;
+  status: "pendente" | "aprovado" | "descartado";
+  aplicado_em?: string | null;
+};
+
 type SemanaFinanceira = {
   id: string;
   empresa_id: string;
@@ -924,16 +940,230 @@ function SaldoDiarioItem({
 
 // ─── Detalhe da semana ────────────────────────────────────────────────────────
 
+function ImportacaoExtratoSemana({
+  semana,
+  onSemanaAtualizada,
+}: {
+  semana: SemanaFinanceira;
+  onSemanaAtualizada: (semana: SemanaFinanceira) => void;
+}) {
+  const [linhas, setLinhas] = useState<LancamentoImportado[]>([]);
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [carregandoLinhas, setCarregandoLinhas] = useState(false);
+  const [analisando, setAnalisando] = useState(false);
+  const [aplicando, setAplicando] = useState(false);
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+
+  const carregarLinhas = useCallback(async () => {
+    setCarregandoLinhas(true);
+    try {
+      const data = await apiFetch(`/api/acompanhamento-financeiro/semana/${semana.id}/lancamentos-importados`);
+      setLinhas(Array.isArray(data) ? data : []);
+      setSelecionados(new Set());
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível carregar os lançamentos importados.");
+    } finally {
+      setCarregandoLinhas(false);
+    }
+  }, [semana.id]);
+
+  useEffect(() => { carregarLinhas(); }, [carregarLinhas]);
+
+  const analisarArquivo = async () => {
+    if (!arquivo) { toast.error("Selecione um extrato ou comprovante em PDF ou imagem."); return; }
+    if (arquivo.size > 25 * 1024 * 1024) { toast.error("O arquivo deve ter no máximo 25 MB."); return; }
+    setAnalisando(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", arquivo);
+      fd.append("entidade_tipo", "acompanhamento_financeiro");
+      fd.append("entidade_id", semana.id);
+      fd.append("empresa_id", semana.empresa_id);
+      fd.append("tipo_documento", "extrato_bancario");
+      fd.append("nome_customizado", `Extrato/comprovante — ${arquivo.name}`);
+      const documento = await apiFetch("/api/documentos/upload", { method: "POST", body: fd });
+      await apiFetch(`/api/acompanhamento-financeiro/semana/${semana.id}/analisar-extrato`, {
+        method: "POST",
+        body: JSON.stringify({ arquivo_id: documento.id }),
+      });
+      setArquivo(null);
+      toast.success("Documento analisado. Revise os lançamentos antes de aplicar.");
+      await carregarLinhas();
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível analisar o extrato ou comprovante.");
+    } finally {
+      setAnalisando(false);
+    }
+  };
+
+  const atualizarLinhaLocal = (id: string, campo: keyof LancamentoImportado, valor: unknown) => {
+    setLinhas((atuais) => atuais.map((linha) => linha.id === id ? { ...linha, [campo]: valor } as LancamentoImportado : linha));
+  };
+
+  const revisarLinha = async (linha: LancamentoImportado, status: LancamentoImportado["status"] = linha.status) => {
+    const valor = Number(linha.valor);
+    if (!linha.data_movimento || !linha.descricao?.trim() || !Number.isFinite(valor) || valor <= 0) {
+      toast.error("Informe data, descrição e valor válido antes de revisar o lançamento.");
+      return;
+    }
+    try {
+      await apiFetch(`/api/acompanhamento-financeiro/semana/${semana.id}/lancamentos-importados/${linha.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          data_movimento: String(linha.data_movimento).slice(0, 10),
+          tipo: linha.tipo,
+          categoria: linha.categoria || null,
+          descricao: linha.descricao.trim(),
+          valor,
+          status,
+        }),
+      });
+      toast.success(status === "aprovado" ? "Lançamento aprovado para aplicação." : status === "descartado" ? "Lançamento descartado." : "Lançamento revisado.");
+      await carregarLinhas();
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível salvar a revisão.");
+    }
+  };
+
+  const aprovarSelecionados = async () => {
+    const itens = linhas.filter((linha) => selecionados.has(linha.id) && linha.status === "pendente" && !linha.aplicado_em);
+    if (!itens.length) { toast.error("Selecione pelo menos um lançamento pendente."); return; }
+    try {
+      await Promise.all(itens.map((linha) => apiFetch(`/api/acompanhamento-financeiro/semana/${semana.id}/lancamentos-importados/${linha.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "aprovado" }),
+      })));
+      toast.success(`${itens.length} lançamento${itens.length === 1 ? " aprovado" : "s aprovados"} para aplicação.`);
+      await carregarLinhas();
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível aprovar os lançamentos selecionados.");
+      await carregarLinhas();
+    }
+  };
+
+  const aplicarAprovados = async () => {
+    const quantidade = linhas.filter((linha) => linha.status === "aprovado" && !linha.aplicado_em).length;
+    if (!quantidade) { toast.error("Nenhum lançamento aprovado está aguardando aplicação."); return; }
+    setAplicando(true);
+    try {
+      const resposta = await apiFetch(`/api/acompanhamento-financeiro/semana/${semana.id}/aplicar-lancamentos`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      onSemanaAtualizada(resposta.semana);
+      toast.success(`${resposta.aplicados || 0} lançamento${Number(resposta.aplicados || 0) === 1 ? " aplicado" : "s aplicados"}. ${resposta.duplicados || 0} duplicado${Number(resposta.duplicados || 0) === 1 ? " foi ignorado" : "s foram ignorados"}.`);
+      await carregarLinhas();
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível aplicar os lançamentos aprovados.");
+    } finally {
+      setAplicando(false);
+    }
+  };
+
+  const pendentes = linhas.filter((linha) => linha.status === "pendente" && !linha.aplicado_em);
+  const aprovados = linhas.filter((linha) => linha.status === "aprovado" && !linha.aplicado_em);
+
+  return (
+    <div className="border border-blue-200 bg-blue-50/50 rounded-lg p-3 space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold text-blue-800 uppercase flex items-center gap-1.5"><FileText className="h-3.5 w-3.5" /> Importar extrato e comprovantes</p>
+          <p className="text-xs text-blue-700 mt-1">Anexe PDF ou imagem. A leitura ficará em revisão e não altera os lançamentos manuais até a aprovação.</p>
+        </div>
+        <Badge variant="secondary" className="w-fit text-xs">{pendentes.length} pendente{pendentes.length === 1 ? "" : "s"}</Badge>
+      </div>
+      <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+        <div className="flex-1">
+          <Label className="text-xs text-gray-600">Extrato ou comprovante</Label>
+          <Input
+            type="file"
+            accept="application/pdf,image/jpeg,image/png,image/webp"
+            className="mt-1 bg-white text-xs"
+            onChange={(e) => setArquivo(e.target.files?.[0] || null)}
+            disabled={analisando}
+          />
+          {arquivo && <p className="text-[11px] text-gray-500 mt-1 truncate">Selecionado: {arquivo.name}</p>}
+        </div>
+        <Button size="sm" onClick={analisarArquivo} disabled={!arquivo || analisando} className="sm:min-w-[140px]">
+          {analisando ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <FileText className="h-4 w-4 mr-1" />}
+          {analisando ? "Analisando..." : "Analisar documento"}
+        </Button>
+      </div>
+
+      {carregandoLinhas ? (
+        <div className="flex items-center gap-2 text-xs text-gray-500 py-3"><Loader2 className="h-4 w-4 animate-spin" /> Carregando revisão...</div>
+      ) : linhas.length > 0 ? (
+        <div className="space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-blue-200 pt-3">
+            <p className="text-xs font-semibold text-gray-700">Lançamentos extraídos para revisão</p>
+            <div className="flex flex-wrap gap-2">
+              {pendentes.length > 0 && <Button size="sm" variant="outline" className="h-8 text-xs bg-white" onClick={() => setSelecionados(new Set(selecionados.size === pendentes.length ? [] : pendentes.map((linha) => linha.id)))}>
+                {selecionados.size === pendentes.length ? "Desmarcar pendentes" : "Selecionar pendentes"}
+              </Button>}
+              <Button size="sm" variant="outline" className="h-8 text-xs bg-white" onClick={aprovarSelecionados} disabled={!selecionados.size}>
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-green-600" /> Aprovar selecionados
+              </Button>
+              <Button size="sm" onClick={aplicarAprovados} disabled={!aprovados.length || aplicando} className="h-8 text-xs">
+                {aplicando ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
+                Aplicar aprovados ({aprovados.length})
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {linhas.map((linha) => {
+              const bloqueada = Boolean(linha.aplicado_em);
+              return (
+                <div key={linha.id} className={`border rounded-lg p-2.5 bg-white ${linha.status === "descartado" ? "opacity-60" : ""}`}>
+                  <div className="flex flex-col lg:flex-row gap-2 lg:items-end">
+                    <div className="flex items-center gap-2 lg:pb-1">
+                      <input
+                        type="checkbox"
+                        checked={selecionados.has(linha.id)}
+                        onChange={(e) => setSelecionados((atual) => { const novo = new Set(atual); if (e.target.checked) novo.add(linha.id); else novo.delete(linha.id); return novo; })}
+                        disabled={bloqueada || linha.status !== "pendente"}
+                        className="h-4 w-4 accent-blue-600"
+                        aria-label={`Selecionar lançamento ${linha.descricao || linha.id}`}
+                      />
+                    </div>
+                    <div className="w-full lg:w-32"><Label className="text-[11px]">Data</Label><Input type="date" value={String(linha.data_movimento).slice(0, 10)} onChange={(e) => atualizarLinhaLocal(linha.id, "data_movimento", e.target.value)} disabled={bloqueada} className="h-8 mt-0.5 text-xs" /></div>
+                    <div className="w-full lg:w-28"><Label className="text-[11px]">Tipo</Label><select value={linha.tipo} onChange={(e) => atualizarLinhaLocal(linha.id, "tipo", e.target.value)} disabled={bloqueada} className="flex h-8 mt-0.5 w-full rounded-md border border-input bg-background px-2 text-xs"><option value="entrada">Entrada</option><option value="saida">Saída</option></select></div>
+                    <div className="w-full lg:flex-1"><Label className="text-[11px]">Descrição</Label><Input value={linha.descricao || ""} onChange={(e) => atualizarLinhaLocal(linha.id, "descricao", e.target.value)} disabled={bloqueada} className="h-8 mt-0.5 text-xs" /></div>
+                    <div className="w-full lg:w-32"><Label className="text-[11px]">Valor</Label><Input type="text" inputMode="numeric" value={linha.valor ? formatBRLCurrency(Number(linha.valor)) : ""} onChange={(e) => atualizarLinhaLocal(linha.id, "valor", unmaskCurrencyInput(maskCurrencyInput(e.target.value)))} disabled={bloqueada} className="h-8 mt-0.5 text-xs text-right" /></div>
+                    <div className="flex items-center gap-1 lg:pb-0.5">
+                      <Badge variant="outline" className={`text-[10px] whitespace-nowrap ${linha.status === "aprovado" ? "border-green-300 text-green-700" : linha.status === "descartado" ? "border-gray-300 text-gray-500" : "border-amber-300 text-amber-700"}`}>{bloqueada ? "Aplicado" : linha.status === "aprovado" ? "Aprovado" : linha.status === "descartado" ? "Descartado" : "Pendente"}</Badge>
+                      {!bloqueada && linha.status !== "descartado" && <Button size="sm" variant="outline" onClick={() => revisarLinha(linha, "pendente")} className="h-8 px-2 text-xs">Salvar</Button>}
+                      {!bloqueada && linha.status === "pendente" && <Button size="sm" onClick={() => revisarLinha(linha, "aprovado")} className="h-8 px-2 text-xs"><CheckCircle2 className="h-3 w-3 mr-1" />Aprovar</Button>}
+                      {!bloqueada && linha.status !== "descartado" && <Button size="sm" variant="outline" onClick={() => revisarLinha(linha, "descartado")} className="h-8 px-2 text-xs text-red-600 border-red-200"><XCircle className="h-3 w-3 mr-1" />Descartar</Button>}
+                    </div>
+                  </div>
+                  {linha.evidencia && <p className="text-[11px] text-gray-500 mt-2 border-t pt-1.5"><span className="font-semibold">Evidência:</span> {linha.evidencia}</p>}
+                  {linha.arquivo_nome && <p className="text-[10px] text-gray-400 mt-1">Origem: {linha.arquivo_nome}{linha.confianca !== null && linha.confianca !== undefined ? ` · confiança ${Math.round(Number(linha.confianca) * 100)}%` : ""}</p>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-gray-500 border-t border-blue-200 pt-3">Nenhum lançamento importado nesta semana. Os documentos analisados aparecerão aqui para revisão.</p>
+      )}
+    </div>
+  );
+}
+
+// ─── Detalhe da semana ────────────────────────────────────────────────────────
+
 function DetalheSemana({
   semana,
   onClose,
   onExportarPdf,
   onEditar,
+  onSemanaAtualizada,
 }: {
   semana: SemanaFinanceira;
   onClose: () => void;
   onExportarPdf: (id: string) => void;
   onEditar: (s: SemanaFinanceira) => void;
+  onSemanaAtualizada: (semana: SemanaFinanceira) => void;
 }) {
   const [exportando, setExportando] = useState(false);
 
@@ -1030,6 +1260,8 @@ function DetalheSemana({
           <p className="text-xs text-gray-700 leading-relaxed text-justify">{semana.diagnostico}</p>
         </div>
       )}
+
+      <ImportacaoExtratoSemana semana={semana} onSemanaAtualizada={onSemanaAtualizada} />
 
       {/* Movimentações */}
       {semana.movimentacoes && semana.movimentacoes.length > 0 && (
@@ -1179,7 +1411,7 @@ function CardSemana({
           {/* Ações */}
           <div className="flex flex-wrap gap-2 pt-1">
             <Button size="sm" variant="outline" onClick={() => onVerDetalhe(semana)} className="flex-1 sm:flex-none">
-              <FileText className="h-3.5 w-3.5 mr-1" /> Detalhes
+              <FileText className="h-3.5 w-3.5 mr-1" /> Detalhes / Extratos
             </Button>
             <Button size="sm" variant="outline" onClick={() => onEditar(semana)} className="flex-1 sm:flex-none">
               <Edit className="h-3.5 w-3.5 mr-1" /> Editar
@@ -1643,6 +1875,10 @@ export default function AcompanhamentoFinanceiro() {
               onClose={() => setSemanaDetalhe(null)}
               onExportarPdf={exportarPdf}
               onEditar={s => { setSemanaDetalhe(null); abrirEdicao(s); }}
+              onSemanaAtualizada={(atualizada) => {
+                setSemanaDetalhe(atualizada);
+                setSemanas((atuais) => atuais.map((item) => item.id === atualizada.id ? { ...item, ...atualizada } : item));
+              }}
             />
           )}
         </DialogContent>

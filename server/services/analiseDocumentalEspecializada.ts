@@ -53,6 +53,31 @@ export interface AnaliseDocumentalResult {
   revisao_humana_necessaria: boolean;
 }
 
+export interface LancamentoExtratoExtraido {
+  data: string;
+  tipo: 'entrada' | 'saida';
+  descricao: string;
+  valor: number;
+  evidencia: string | null;
+}
+
+export interface AnaliseExtratoBancarioResult {
+  arquivo_id: string;
+  empresa_id: string;
+  documento_compativel: boolean;
+  banco: string | null;
+  periodo_inicio: string | null;
+  periodo_fim: string | null;
+  lancamentos: LancamentoExtratoExtraido[];
+  total_entradas: number;
+  total_saidas: number;
+  confianca: number | null;
+  fonte_extracao: string | null;
+  modelo_ia: string | null;
+  revisao_humana_necessaria: boolean;
+  observacoes: string[];
+}
+
 interface Queryable {
   query: (text: string, values?: any[]) => Promise<{ rows: any[]; rowCount?: number | null }>;
 }
@@ -1223,6 +1248,90 @@ function promptComprovanteResidencia(): string {
 O mês de referência pode vir da competência, emissão ou vencimento. Preserve o nome completo do titular.`;
 }
 
+function promptExtratoBancario(): string {
+  return `Você é auditor de movimentação bancária brasileira. Leia todas as páginas do extrato ou comprovante anexado e extraia SOMENTE lançamentos de dinheiro expressamente visíveis no documento. Responda SOMENTE JSON válido, sem markdown:
+{
+  "documento_compativel": true,
+  "banco": "nome do banco ou null",
+  "periodo_inicio": "YYYY-MM-DD ou null",
+  "periodo_fim": "YYYY-MM-DD ou null",
+  "lancamentos": [
+    {
+      "data": "YYYY-MM-DD",
+      "tipo": "entrada|saida",
+      "descricao": "descrição curta e literal",
+      "valor": 0.00,
+      "evidencia": "trecho literal curto que comprova a linha ou null"
+    }
+  ],
+  "total_entradas": 0.00,
+  "total_saidas": 0.00,
+  "confianca": 0.0
+}
+
+Regras obrigatórias: o valor deve ser positivo e representar o valor absoluto do lançamento; classifique como entrada ou saída conforme a coluna, sinal ou descrição expressa no documento; nunca trate saldo anterior, saldo final, limite, subtotal ou total do extrato como lançamento; inclua tarifas, juros, impostos, transferências e pagamentos somente quando forem linhas de movimentação efetiva; não invente data, tipo, valor ou descrição; se uma linha estiver ambígua, omita-a; preserve uma evidência curta e literal; use null quando não houver informação. Datas devem ser convertidas para YYYY-MM-DD. A confiança deve estar entre 0 e 1.`;
+}
+
+function normalizarExtratoBancario(
+  extraidos: any,
+  semanaInicio: string,
+  semanaFim: string,
+): Omit<AnaliseExtratoBancarioResult, 'arquivo_id' | 'empresa_id'> {
+  const inicio = parseDate(semanaInicio);
+  const fim = parseDate(semanaFim);
+  const observacoes: string[] = [];
+  const documentoCompativel = extraidos?.documento_compativel !== false;
+  const entradas = Array.isArray(extraidos?.lancamentos) ? extraidos.lancamentos : [];
+  const lancamentos: LancamentoExtratoExtraido[] = [];
+
+  for (const item of entradas) {
+    const data = parseDate(item?.data || item?.data_movimento);
+    const tipoRaw = String(item?.tipo || '').trim().toLowerCase();
+    const tipo = tipoRaw === 'entrada' || tipoRaw === 'credito' || tipoRaw === 'crédito'
+      ? 'entrada'
+      : tipoRaw === 'saida' || tipoRaw === 'saída' || tipoRaw === 'debito' || tipoRaw === 'débito'
+        ? 'saida'
+        : null;
+    const valorBruto = asNumber(item?.valor ?? item?.amount);
+    const valor = valorBruto === null ? null : Math.round(Math.abs(valorBruto) * 100) / 100;
+    const descricao = String(item?.descricao || item?.description || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+    if (!data || !tipo || valor === null || valor <= 0 || !descricao) continue;
+    if (inicio && data < inicio || fim && data > fim) continue;
+    const evidencia = item?.evidencia === null || item?.evidencia === undefined
+      ? null
+      : String(item.evidencia).replace(/\s+/g, ' ').trim().slice(0, 1000) || null;
+    const chave = `${data}|${tipo}|${valor.toFixed(2)}|${normalizarBasico(descricao)}`;
+    if (lancamentos.some((lancamento) => `${lancamento.data}|${lancamento.tipo}|${lancamento.valor.toFixed(2)}|${normalizarBasico(lancamento.descricao)}` === chave)) continue;
+    lancamentos.push({ data, tipo, descricao, valor, evidencia });
+  }
+
+  if (!documentoCompativel) observacoes.push('O arquivo não foi identificado como extrato ou comprovante bancário. Nenhum lançamento foi importado.');
+  if (Array.isArray(extraidos?.lancamentos) && extraidos.lancamentos.length !== lancamentos.length) {
+    observacoes.push('Algumas linhas foram descartadas por data fora da semana, valor/tipo inválido, duplicidade ou ausência de descrição objetiva.');
+  }
+  if (!lancamentos.length && documentoCompativel) observacoes.push('Nenhum lançamento legível foi encontrado no intervalo da semana.');
+
+  const totalEntradas = Math.round(lancamentos.filter((item) => item.tipo === 'entrada').reduce((total, item) => total + item.valor, 0) * 100) / 100;
+  const totalSaidas = Math.round(lancamentos.filter((item) => item.tipo === 'saida').reduce((total, item) => total + item.valor, 0) * 100) / 100;
+  const datas = lancamentos.map((item) => item.data).sort();
+  const confiancaRaw = asNumber(extraidos?.confianca);
+  const confianca = confiancaRaw === null ? null : Math.max(0, Math.min(1, confiancaRaw));
+  return {
+    documento_compativel: documentoCompativel,
+    banco: String(extraidos?.banco || '').trim().slice(0, 200) || null,
+    periodo_inicio: parseDate(extraidos?.periodo_inicio) || datas[0] || null,
+    periodo_fim: parseDate(extraidos?.periodo_fim) || datas.at(-1) || null,
+    lancamentos,
+    total_entradas: totalEntradas,
+    total_saidas: totalSaidas,
+    confianca,
+    fonte_extracao: String(extraidos?.fonte_extracao || '').trim() || null,
+    modelo_ia: null,
+    revisao_humana_necessaria: true,
+    observacoes,
+  };
+}
+
 export class AnaliseDocumentalService {
   private ultimoModeloUsado: string | null = null;
   private ultimaFonteExtracao: 'local' | 'gemini' | 'injetada' | null = null;
@@ -1470,6 +1579,21 @@ export class AnaliseDocumentalService {
     const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, promptComprovanteResidencia(), documento.mime_type || 'application/pdf', 'comprovante_residencia');
     const validacao = validarComprovanteEnderecoExtraido(socios, extraidos, documento.socio_id || null);
     return criarResultado('comprovante_residencia', empresaId, arquivoId, validacao.dados, validacao.alertas, this.ultimoModeloUsado);
+  }
+
+  async analisarExtratoBancario(empresaId: string, arquivoId: string, semanaInicio: string, semanaFim: string): Promise<AnaliseExtratoBancarioResult> {
+    this.ultimoModeloUsado = null;
+    this.ultimaFonteExtracao = null;
+    const { documento } = await this.carregarContexto(empresaId, arquivoId);
+    const extraidos = await this.extrairHibrido(documento.caminho_arquivo!, promptExtratoBancario(), documento.mime_type || 'application/pdf', 'extrato_bancario');
+    const dados = normalizarExtratoBancario(extraidos, semanaInicio, semanaFim);
+    return {
+      arquivo_id: arquivoId,
+      empresa_id: empresaId,
+      ...dados,
+      modelo_ia: this.ultimoModeloUsado,
+      fonte_extracao: dados.fonte_extracao || this.ultimaFonteExtracao,
+    };
   }
 
 

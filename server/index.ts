@@ -78,6 +78,8 @@ import {
   salvarFeatureAccessConfig,
 } from "./services/featureAccessService";
 import { enviarDocumento, resolverTokenPublico } from "./services/documentDeliveryService";
+import { analiseDocumentalService } from './services/analiseDocumentalEspecializada';
+import { isUuid } from './utils/validators';
 
 const { Pool } = pkg;
 
@@ -1442,6 +1444,33 @@ async function startServer() {
       CREATE INDEX IF NOT EXISTS idx_af_mov_acomp   ON acompanhamento_financeiro_movimentacoes(acompanhamento_id);
       CREATE INDEX IF NOT EXISTS idx_af_mov_empresa ON acompanhamento_financeiro_movimentacoes(empresa_id);
       CREATE INDEX IF NOT EXISTS idx_af_mov_data    ON acompanhamento_financeiro_movimentacoes(data_movimento);
+
+      CREATE TABLE IF NOT EXISTS acompanhamento_financeiro_lancamentos_importados (
+        id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        acompanhamento_id UUID NOT NULL REFERENCES acompanhamento_financeiro_semanal(id) ON DELETE CASCADE,
+        empresa_id        UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+        arquivo_id        UUID REFERENCES documentos_arquivos(id) ON DELETE SET NULL,
+        data_movimento    DATE NOT NULL,
+        tipo              TEXT NOT NULL CHECK (tipo IN ('entrada', 'saida')),
+        categoria         TEXT,
+        descricao         TEXT,
+        valor             NUMERIC(15,2) NOT NULL CHECK (valor > 0),
+        evidencia         TEXT,
+        confianca         NUMERIC(5,4),
+        status             TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'aprovado', 'descartado')),
+        criado_por        UUID REFERENCES colaboradores(id) ON DELETE SET NULL,
+        created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        aplicado_em       TIMESTAMPTZ
+      );
+      ALTER TABLE acompanhamento_financeiro_lancamentos_importados
+        ADD COLUMN IF NOT EXISTS aplicado_em TIMESTAMPTZ;
+      CREATE INDEX IF NOT EXISTS idx_af_importados_acomp ON acompanhamento_financeiro_lancamentos_importados(acompanhamento_id);
+      CREATE INDEX IF NOT EXISTS idx_af_importados_status ON acompanhamento_financeiro_lancamentos_importados(status);
+      CREATE INDEX IF NOT EXISTS idx_af_importados_arquivo ON acompanhamento_financeiro_lancamentos_importados(arquivo_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_af_importados_documento_lancamento
+        ON acompanhamento_financeiro_lancamentos_importados(
+          acompanhamento_id, arquivo_id, data_movimento, tipo, valor, COALESCE(descricao, '')
+        );
 
       CREATE TABLE IF NOT EXISTS acompanhamento_financeiro_saldos_diarios (
         id                UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -16530,6 +16559,104 @@ async function registrarDocumentoContratoGerado(params: {
     return gerarHtmlTimbrado(body, 'Relatório de Acompanhamento Financeiro Semanal');
   }
 
+  async function recalcularSemanaFinanceira(db: { query: (text: string, values?: any[]) => Promise<{ rows: any[]; rowCount?: number | null }> }, semanaId: string) {
+    const { rows: semanaRows } = await db.query(
+      `SELECT s.*,
+              e.razao_social, e.cnpj, e.cidade, e.estado,
+              c.faturamento_anual_declarado, c.percentual_operacional
+         FROM acompanhamento_financeiro_semanal s
+         JOIN empresas e ON e.id = s.empresa_id
+         LEFT JOIN acompanhamento_financeiro_config c ON c.empresa_id = s.empresa_id AND c.ativo = true
+        WHERE s.id = $1
+        LIMIT 1`,
+      [semanaId],
+    );
+    if (!semanaRows.length) throw new Error('Registro de semana não encontrado.');
+    const semana = semanaRows[0];
+    const { rows: totaisRows } = await db.query(
+      `SELECT
+         COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE 0 END), 0) AS total_entradas,
+         COALESCE(SUM(CASE WHEN tipo = 'saida' THEN valor ELSE 0 END), 0) AS total_saidas
+       FROM acompanhamento_financeiro_movimentacoes
+       WHERE acompanhamento_id = $1`,
+      [semanaId],
+    );
+    const { rows: saldosRows } = await db.query(
+      `SELECT saldo_dia FROM acompanhamento_financeiro_saldos_diarios WHERE acompanhamento_id = $1 ORDER BY data_referencia ASC`,
+      [semanaId],
+    );
+    const entradas = Math.round(Number(totaisRows[0]?.total_entradas || 0) * 100) / 100;
+    const saidas = Math.round(Number(totaisRows[0]?.total_saidas || 0) * 100) / 100;
+    const saldoInicial = Number(semana.saldo_inicial || 0);
+    const saldosDiarios = saldosRows.map((row) => Number(row.saldo_dia)).filter((value) => Number.isFinite(value));
+    const resumo = calcularResumoSemanal(saldoInicial, entradas, saidas, saldosDiarios);
+
+    const cfgExiste = semana.faturamento_anual_declarado !== null && semana.faturamento_anual_declarado !== undefined;
+    const limites = cfgExiste
+      ? calcularLimitesAcompanhamento(Number(semana.faturamento_anual_declarado), Number(semana.percentual_operacional || 30), Number(semana.ano), Number(semana.mes))
+      : { limite_anual: 0, limite_mensal: 0, limite_semanal: 0, semanas_no_mes: 4 };
+    const { rows: acumMesRows } = await db.query(
+      `SELECT COALESCE(SUM(total_entradas), 0) AS total
+         FROM acompanhamento_financeiro_semanal
+        WHERE empresa_id = $1 AND ano = $2 AND mes = $3 AND id <> $4`,
+      [semana.empresa_id, semana.ano, semana.mes, semanaId],
+    );
+    const { rows: acumAnoRows } = await db.query(
+      `SELECT COALESCE(SUM(total_entradas), 0) AS total
+         FROM acompanhamento_financeiro_semanal
+        WHERE empresa_id = $1 AND ano = $2 AND id <> $3`,
+      [semana.empresa_id, semana.ano, semanaId],
+    );
+    const acumuladoMensal = Math.round((Number(acumMesRows[0]?.total || 0) + entradas) * 100) / 100;
+    const acumuladoAnual = Math.round((Number(acumAnoRows[0]?.total || 0) + entradas) * 100) / 100;
+    const percentualSemana = limites.limite_semanal > 0 ? Math.round((entradas / limites.limite_semanal) * 10000) / 100 : 0;
+    const percentualMes = limites.limite_mensal > 0 ? Math.round((acumuladoMensal / limites.limite_mensal) * 10000) / 100 : 0;
+    const percentualAno = limites.limite_anual > 0 ? Math.round((acumuladoAnual / limites.limite_anual) * 10000) / 100 : 0;
+    const status = cfgExiste ? classificarStatusAcompanhamento(percentualSemana, percentualMes, percentualAno) : 'aguardando_atualizacao';
+    const diagnostico = gerarDiagnosticoAcompanhamento(
+      percentualSemana, percentualMes, percentualAno, status,
+      limites.limite_semanal, limites.limite_mensal, limites.limite_anual,
+      acumuladoMensal, acumuladoAnual,
+    );
+    const { rows: atualizadas } = await db.query(
+      `UPDATE acompanhamento_financeiro_semanal
+          SET total_entradas = $2,
+              total_saidas = $3,
+              saldo_final = $4,
+              saldo_medio = $5,
+              limite_semanal_referencia = $6,
+              limite_mensal_referencia = $7,
+              limite_anual_referencia = $8,
+              acumulado_mensal = $9,
+              acumulado_anual = $10,
+              percentual_uso_semana = $11,
+              percentual_uso_mes = $12,
+              percentual_uso_ano = $13,
+              status = $14,
+              diagnostico = $15,
+              updated_at = NOW()
+        WHERE id = $1
+        RETURNING *`,
+      [semanaId, entradas, saidas, resumo.saldo_final, resumo.saldo_medio,
+        limites.limite_semanal, limites.limite_mensal, limites.limite_anual,
+        acumuladoMensal, acumuladoAnual, percentualSemana, percentualMes, percentualAno,
+        status, diagnostico],
+    );
+    const { rows: movimentacoes } = await db.query(
+      `SELECT * FROM acompanhamento_financeiro_movimentacoes
+        WHERE acompanhamento_id = $1
+        ORDER BY data_movimento ASC, tipo ASC`,
+      [semanaId],
+    );
+    const { rows: saldosDiariosDetalhados } = await db.query(
+      `SELECT * FROM acompanhamento_financeiro_saldos_diarios
+        WHERE acompanhamento_id = $1
+        ORDER BY data_referencia ASC`,
+      [semanaId],
+    );
+    return { ...atualizadas[0], movimentacoes, saldos_diarios: saldosDiariosDetalhados };
+  }
+
   // ── ROTA: Configuração de Acompanhamento Financeiro ─────────────────────────
 
   // GET /api/acompanhamento-financeiro/config/:empresaId
@@ -16818,6 +16945,242 @@ async function registrarDocumentoContratoGerado(params: {
     } catch (err) {
       console.error('[POST /api/acompanhamento-financeiro/semana]', err);
       res.status(500).json({ error: 'Erro ao salvar semana de acompanhamento.' });
+    }
+  });
+
+  // POST /api/acompanhamento-financeiro/semana/:id/analisar-extrato
+  app.post('/api/acompanhamento-financeiro/semana/:id/analisar-extrato', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    const semanaId = String(req.params.id || '').trim();
+    const arquivoId = String(req.body?.arquivo_id || '').trim();
+    if (!isUuid(semanaId) || !isUuid(arquivoId)) {
+      res.status(400).json({ error: 'ID da semana e arquivo_id devem ser UUIDs válidos.' });
+      return;
+    }
+    try {
+      const { rows: semanas } = await pool.query(
+        `SELECT id, empresa_id, semana_inicio, semana_fim
+           FROM acompanhamento_financeiro_semanal
+          WHERE id = $1
+          LIMIT 1`,
+        [semanaId],
+      );
+      if (!semanas.length) { res.status(404).json({ error: 'Semana de acompanhamento não encontrada.' }); return; }
+      const semana = semanas[0];
+      const { rows: arquivos } = await pool.query(
+        `SELECT id, empresa_id, entidade_tipo, entidade_id, tipo_documento
+           FROM documentos_arquivos
+          WHERE id = $1
+            AND excluido_em IS NULL
+            AND COALESCE(status, 'ativo') <> 'excluido'
+          LIMIT 1`,
+        [arquivoId],
+      );
+      const arquivo = arquivos[0];
+      if (!arquivo) { res.status(404).json({ error: 'Arquivo documental não encontrado.' }); return; }
+      if (arquivo.empresa_id !== semana.empresa_id || arquivo.entidade_tipo !== 'acompanhamento_financeiro' || arquivo.entidade_id !== semanaId || !['extrato_bancario', 'outros'].includes(arquivo.tipo_documento)) {
+        res.status(400).json({ error: 'O arquivo precisa estar anexado à semana selecionada como extrato bancário ou comprovante.' });
+        return;
+      }
+
+      const analise = await analiseDocumentalService.analisarExtratoBancario(
+        semana.empresa_id,
+        arquivoId,
+        String(semana.semana_inicio),
+        String(semana.semana_fim),
+      );
+      const colaboradorId = (req as any).colaborador?.id || null;
+      const client = await pool.connect();
+      let importados = 0;
+      try {
+        await client.query('BEGIN');
+        for (const lancamento of analise.lancamentos) {
+          const inserido = await client.query(
+            `INSERT INTO acompanhamento_financeiro_lancamentos_importados
+              (acompanhamento_id, empresa_id, arquivo_id, data_movimento, tipo, categoria, descricao, valor, evidencia, confianca, status, criado_por)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pendente',$11)
+             ON CONFLICT DO NOTHING`,
+            [
+              semanaId,
+              semana.empresa_id,
+              arquivoId,
+              lancamento.data,
+              lancamento.tipo,
+              null,
+              lancamento.descricao,
+              lancamento.valor,
+              lancamento.evidencia,
+              analise.confianca,
+              colaboradorId,
+            ],
+          );
+          importados += Number(inserido.rowCount || 0);
+        }
+        await client.query(
+          `UPDATE documentos_arquivos
+              SET resultado_validacao = COALESCE(resultado_validacao, '{}'::jsonb) || $2::jsonb,
+                  exige_revisao_humana = true,
+                  atualizado_em = NOW()
+            WHERE id = $1`,
+          [arquivoId, JSON.stringify({ analise_extrato_bancario: analise })],
+        );
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      } finally {
+        client.release();
+      }
+      res.json({ ...analise, importados });
+    } catch (err: any) {
+      console.error('[POST /api/acompanhamento-financeiro/semana/:id/analisar-extrato]', err);
+      res.status(500).json({ error: err?.message || 'Erro ao analisar extrato ou comprovante.' });
+    }
+  });
+
+  // GET /api/acompanhamento-financeiro/semana/:id/lancamentos-importados
+  app.get('/api/acompanhamento-financeiro/semana/:id/lancamentos-importados', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    const semanaId = String(req.params.id || '').trim();
+    if (!isUuid(semanaId)) { res.status(400).json({ error: 'ID da semana inválido.' }); return; }
+    try {
+      const { rows: semanas } = await pool.query('SELECT id FROM acompanhamento_financeiro_semanal WHERE id = $1 LIMIT 1', [semanaId]);
+      if (!semanas.length) { res.status(404).json({ error: 'Semana de acompanhamento não encontrada.' }); return; }
+      const { rows } = await pool.query(
+        `SELECT i.*, d.nome_original AS arquivo_nome, d.tipo_documento, d.mime_type
+           FROM acompanhamento_financeiro_lancamentos_importados i
+           LEFT JOIN documentos_arquivos d ON d.id = i.arquivo_id
+          WHERE i.acompanhamento_id = $1
+          ORDER BY CASE i.status WHEN 'pendente' THEN 1 WHEN 'aprovado' THEN 2 ELSE 3 END, i.data_movimento ASC, i.created_at ASC`,
+        [semanaId],
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error('[GET /api/acompanhamento-financeiro/semana/:id/lancamentos-importados]', err);
+      res.status(500).json({ error: 'Erro ao listar lançamentos importados.' });
+    }
+  });
+
+  // PATCH /api/acompanhamento-financeiro/semana/:id/lancamentos-importados/:lancamentoId
+  app.patch('/api/acompanhamento-financeiro/semana/:id/lancamentos-importados/:lancamentoId', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    const semanaId = String(req.params.id || '').trim();
+    const lancamentoId = String(req.params.lancamentoId || '').trim();
+    if (!isUuid(semanaId) || !isUuid(lancamentoId)) { res.status(400).json({ error: 'IDs inválidos.' }); return; }
+    try {
+      const { rows: existentes } = await pool.query(
+        `SELECT i.*, s.semana_inicio, s.semana_fim
+           FROM acompanhamento_financeiro_lancamentos_importados i
+           JOIN acompanhamento_financeiro_semanal s ON s.id = i.acompanhamento_id
+          WHERE i.id = $1 AND i.acompanhamento_id = $2
+          LIMIT 1`,
+        [lancamentoId, semanaId],
+      );
+      const atual = existentes[0];
+      if (!atual) { res.status(404).json({ error: 'Lançamento importado não encontrado.' }); return; }
+      if (atual.aplicado_em) { res.status(409).json({ error: 'Lançamento já aplicado e não pode ser alterado.' }); return; }
+      const tipo = req.body?.tipo === undefined ? atual.tipo : String(req.body.tipo).trim().toLowerCase();
+      const status = req.body?.status === undefined ? atual.status : String(req.body.status).trim().toLowerCase();
+      const data = req.body?.data_movimento === undefined ? String(atual.data_movimento).slice(0, 10) : String(req.body.data_movimento).trim();
+      const descricao = req.body?.descricao === undefined ? String(atual.descricao || '').trim() : String(req.body.descricao || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+      const categoria = req.body?.categoria === undefined ? atual.categoria : String(req.body.categoria || '').trim().slice(0, 120) || null;
+      const valor = req.body?.valor === undefined ? Number(atual.valor) : Number(req.body.valor);
+      if (!['entrada', 'saida'].includes(tipo)) { res.status(400).json({ error: 'Tipo deve ser entrada ou saida.' }); return; }
+      if (!['pendente', 'aprovado', 'descartado'].includes(status)) { res.status(400).json({ error: 'Status de revisão inválido.' }); return; }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || data < String(atual.semana_inicio).slice(0, 10) || data > String(atual.semana_fim).slice(0, 10)) {
+        res.status(400).json({ error: 'A data deve estar dentro do período da semana.' });
+        return;
+      }
+      if (!Number.isFinite(valor) || valor <= 0) { res.status(400).json({ error: 'Valor do lançamento inválido.' }); return; }
+      if (!descricao) { res.status(400).json({ error: 'Descrição do lançamento é obrigatória.' }); return; }
+      const { rows } = await pool.query(
+        `UPDATE acompanhamento_financeiro_lancamentos_importados
+            SET data_movimento = $3, tipo = $4, categoria = $5, descricao = $6, valor = $7, status = $8
+          WHERE id = $1 AND acompanhamento_id = $2 AND aplicado_em IS NULL
+          RETURNING *`,
+        [lancamentoId, semanaId, data, tipo, categoria, descricao, Math.round(valor * 100) / 100, status],
+      );
+      res.json(rows[0]);
+    } catch (err) {
+      console.error('[PATCH /api/acompanhamento-financeiro/semana/:id/lancamentos-importados/:lancamentoId]', err);
+      res.status(500).json({ error: 'Erro ao revisar lançamento importado.' });
+    }
+  });
+
+  // POST /api/acompanhamento-financeiro/semana/:id/aplicar-lancamentos
+  app.post('/api/acompanhamento-financeiro/semana/:id/aplicar-lancamentos', auth, requireAcessoFinanceiro, async (req: Request, res: Response) => {
+    const semanaId = String(req.params.id || '').trim();
+    if (!isUuid(semanaId)) { res.status(400).json({ error: 'ID da semana inválido.' }); return; }
+    const idsInformados = Array.isArray(req.body?.lancamento_ids) ? Array.from(new Set(req.body.lancamento_ids.map((value: unknown) => String(value || '').trim()).filter(isUuid))) : [];
+    try {
+      const client = await pool.connect();
+      let aplicados = 0;
+      let duplicados = 0;
+      try {
+        await client.query('BEGIN');
+        const filtroIds = idsInformados.length ? ' AND i.id = ANY($2::uuid[])' : '';
+        const params = idsInformados.length ? [semanaId, idsInformados] : [semanaId];
+        const { rows: aprovados } = await client.query(
+          `SELECT i.*, s.empresa_id
+             FROM acompanhamento_financeiro_lancamentos_importados i
+             JOIN acompanhamento_financeiro_semanal s ON s.id = i.acompanhamento_id
+            WHERE i.acompanhamento_id = $1 AND i.status = 'aprovado' AND i.aplicado_em IS NULL${filtroIds}
+            FOR UPDATE`,
+          params,
+        );
+        if (!aprovados.length) {
+          await client.query('ROLLBACK');
+          res.status(400).json({ error: 'Nenhum lançamento aprovado está aguardando aplicação.' });
+          return;
+        }
+        const colaboradorId = (req as any).colaborador?.id || null;
+        for (const item of aprovados) {
+          const { rows: existente } = await client.query(
+            `SELECT id
+               FROM acompanhamento_financeiro_movimentacoes
+              WHERE acompanhamento_id = $1
+                AND data_movimento = $2
+                AND tipo = $3
+                AND valor = $4
+                AND LOWER(TRIM(COALESCE(descricao, ''))) = LOWER(TRIM(COALESCE($5, '')))
+              LIMIT 1`,
+            [semanaId, item.data_movimento, item.tipo, item.valor, item.descricao],
+          );
+          if (existente.length) {
+            duplicados += 1;
+          } else {
+            await client.query(
+              `INSERT INTO acompanhamento_financeiro_movimentacoes
+                (acompanhamento_id, empresa_id, data_movimento, tipo, categoria, descricao, valor, comprovante_url, criado_por)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+              [
+                semanaId,
+                item.empresa_id,
+                item.data_movimento,
+                item.tipo,
+                item.categoria || null,
+                item.descricao,
+                item.valor,
+                item.arquivo_id ? `/api/documentos/${item.arquivo_id}/download` : null,
+                colaboradorId,
+              ],
+            );
+            aplicados += 1;
+          }
+          await client.query(
+            `UPDATE acompanhamento_financeiro_lancamentos_importados SET aplicado_em = NOW() WHERE id = $1`,
+            [item.id],
+          );
+        }
+        const semanaAtualizada = await recalcularSemanaFinanceira(client as any, semanaId);
+        await client.query('COMMIT');
+        res.json({ semana: semanaAtualizada, aplicados, duplicados });
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err: any) {
+      console.error('[POST /api/acompanhamento-financeiro/semana/:id/aplicar-lancamentos]', err);
+      res.status(500).json({ error: err?.message || 'Erro ao aplicar lançamentos aprovados.' });
     }
   });
 
