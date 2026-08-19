@@ -1221,7 +1221,6 @@ export default function DocumentosEntidade({
                 const resultado = documento.resultado_analise || {};
                 const agenteSocietario = resultado.analise_societaria_auditavel || {};
                 const campos = Array.isArray(resultado.campos) ? resultado.campos : [];
-                const alertas = Array.isArray(resultado.alertas) ? resultado.alertas : [];
                 return (
                   <div key={`${documento.codigo}-${index}`} className="rounded-xl border border-emerald-200 bg-white p-3">
                     <div className="flex flex-col gap-1.5 md:flex-row md:items-start md:justify-between">
@@ -1236,7 +1235,6 @@ export default function DocumentosEntidade({
                      {Array.isArray(resultado.evidencias) && resultado.evidencias.length > 0 && <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2"><p className="text-[9px] font-black uppercase text-slate-600">Trechos de evidência utilizados</p>{resultado.evidencias.map((evidencia: string, evidenciaIndex: number) => <p key={evidenciaIndex} className="mt-1 whitespace-pre-line text-[10px] italic text-slate-600">“{evidencia}”</p>)}</div>}
                     {!!campos.length && <div className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">{campos.map((campo: any, campoIndex: number) => <div key={`${campo.label}-${campoIndex}`} className="rounded-lg border border-slate-100 bg-slate-50 px-2 py-1.5"><p className="text-[8px] font-black uppercase text-slate-400">{nomeCampoRelatorio(String(campo.label || "Campo"))}</p><p className="mt-0.5 break-words text-[10px] font-semibold text-slate-700">{campo.valor}</p></div>)}</div>}
                     {!!resultado.observacoes?.length && <div className="mt-2 space-y-1"><p className="text-[9px] font-black uppercase text-slate-500">Observações e anotações</p>{itensTextoRelatorio(resultado.observacoes).map((item, itemIndex) => <p key={itemIndex} className="text-[10px] text-slate-700">• {item}</p>)}</div>}
-                    {!!alertas.length && <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2"><p className="text-[9px] font-black uppercase text-amber-800">Alertas identificados</p>{alertas.map((alerta: any, alertaIndex: number) => <p key={alertaIndex} className="mt-1 text-[10px] text-amber-900">• <strong>{String(alerta.severidade || "atenção").toUpperCase()}:</strong> {alerta.mensagem || alerta.recomendacao}</p>)}</div>}
                   </div>
                 );
               })}

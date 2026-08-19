@@ -853,11 +853,6 @@ function DocumentacaoSocietariaCard({
                 </div>
               )}
               {documento.qsa_adicional_necessario ? <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[10px] text-amber-900"><strong>QSA adicional necessário:</strong> {documento.qsa_adicional_motivo || "O quadro da última alteração vigente possui sócio não localizado no QSA atual."}</div> : documento.estado_atual_societario?.fonte === "contrato" && documento.confronto_qsa?.status === "confirmado" ? <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-[10px] text-emerald-900"><strong>QSA vigente confirmado:</strong> a última alteração/contrato vigente define o quadro atual e não é necessário solicitar outro QSA.</div> : null}
-              {!!documento.alertas?.length && (
-                <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[10px] text-amber-900">
-                  {documento.alertas.map((alerta, alertaIndex) => <p key={alertaIndex}>• <strong>{String(alerta.severidade || "atenção").toUpperCase()}:</strong> {alerta.mensagem || alerta.recomendacao}</p>)}
-                </div>
-              )}
             </div>
           ))}
         </div>

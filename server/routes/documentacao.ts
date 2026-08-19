@@ -491,10 +491,6 @@ function gerarHtmlRelatorioDocumental(relatorio: any): string {
     const campos = Array.isArray(resultado?.campos) ? resultado.campos : [];
     return campos.length ? `<div class="fields">${campos.map((campo: any) => `<div class="field"><span>${escapeHtmlRelatorio(campo.label)}</span><strong>${escapeHtmlRelatorio(campo.valor)}</strong></div>`).join('')}</div>` : '';
   };
-  const alertasHtml = (resultado: any) => {
-    const alertas = Array.isArray(resultado?.alertas) ? resultado.alertas : [];
-    return alertas.length ? `<div class="alerts"><strong>Alertas identificados</strong><ul>${alertas.map((alerta: any) => `<li><b>${escapeHtmlRelatorio(String(alerta.severidade || 'atenção').toUpperCase())}:</b> ${escapeHtmlRelatorio(alerta.mensagem || alerta.recomendacao || alerta.codigo)}</li>`).join('')}</ul></div>` : '';
-  };
   const fatosSocietariosHtml = (resultado: any) => {
     const alteracoes = Array.isArray(resultado?.alteracoes_societarias) ? resultado.alteracoes_societarias : [];
     const quadroFinal = Array.isArray(resultado?.quadro_societario_final) ? resultado.quadro_societario_final : [];
@@ -517,7 +513,7 @@ function gerarHtmlRelatorioDocumental(relatorio: any): string {
   };
   const analisadosHtml = analisados.length ? analisados.map((documento: any) => {
     const resultado = documento.resultado_analise || {};
-    return `<article class="doc analyzed"><div class="doc-head"><div><strong>${escapeHtmlRelatorio(documento.nome)}</strong><small>${escapeHtmlRelatorio(documento.bloco)}${documento.criado_em ? ` · ${escapeHtmlRelatorio(dataRelatorio(documento.criado_em))}` : ''}</small></div><span class="pill green">${escapeHtmlRelatorio(documento.status || 'Analisado')}</span></div><div class="result"><b>Resultado da análise</b><p>${escapeHtmlRelatorio(resultado.conclusao || documento.observacao || 'Leitura concluída.')}</p>${resultado.diagnostico && resultado.diagnostico !== resultado.conclusao ? `<p>${escapeHtmlRelatorio(resultado.diagnostico)}</p>` : ''}</div>${fatosSocietariosHtml(resultado)}${camposHtml(resultado)}${resultado.observacoes?.length ? `<div class="notes"><b>Observações e anotações</b>${listaOuVazio(resultado.observacoes, '')}</div>` : ''}${alertasHtml(resultado)}</article>`;
+    return `<article class="doc analyzed"><div class="doc-head"><div><strong>${escapeHtmlRelatorio(documento.nome)}</strong><small>${escapeHtmlRelatorio(documento.bloco)}${documento.criado_em ? ` · ${escapeHtmlRelatorio(dataRelatorio(documento.criado_em))}` : ''}</small></div><span class="pill green">${escapeHtmlRelatorio(documento.status || 'Analisado')}</span></div><div class="result"><b>Resultado da análise</b><p>${escapeHtmlRelatorio(resultado.conclusao || documento.observacao || 'Leitura concluída.')}</p>${resultado.diagnostico && resultado.diagnostico !== resultado.conclusao ? `<p>${escapeHtmlRelatorio(resultado.diagnostico)}</p>` : ''}</div>${fatosSocietariosHtml(resultado)}${camposHtml(resultado)}${resultado.observacoes?.length ? `<div class="notes"><b>Observações e anotações</b>${listaOuVazio(resultado.observacoes, '')}</div>` : ''}</article>`;
   }).join('') : `<div class="success">Nenhum documento analisado foi encontrado no acervo.</div>`;
   const pendentesAnaliseHtml = pendentesAnalise.length ? pendentesAnalise.map((documento: any) => {
     const resultado = documento.resultado_analise || {};
