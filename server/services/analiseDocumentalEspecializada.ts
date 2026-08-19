@@ -172,6 +172,265 @@ function criarResultado(
   };
 }
 
+export interface AnaliseSocietariaAuditavel {
+  status_documento: 'atual' | 'historico' | 'indeterminado';
+  ato_praticado: string | null;
+  diagnostico_objetivo: string;
+  linha_tempo_societaria: Array<{
+    data: string | null;
+    numero_arquivamento: string | null;
+    tipo_ato: string | null;
+    fonte: 'atos_junta' | 'contrato';
+    e_ato_mais_recente: boolean;
+    corresponde_ao_contrato: boolean;
+  }>;
+  ato_mais_recente: {
+    data: string | null;
+    numero_arquivamento: string | null;
+    tipo_ato: string | null;
+  } | null;
+  quadro_anterior: Array<Record<string, any>>;
+  quadro_final_documento: Array<Record<string, any>>;
+  estado_atual: {
+    fonte: 'qsa' | 'contrato' | 'indeterminado';
+    data_referencia: string | null;
+    socios: Array<Record<string, any>>;
+    descricao: string;
+  };
+  confronto_qsa: {
+    status: 'confirmado' | 'historico' | 'divergente' | 'inconclusivo';
+    nomes_documento: string[];
+    nomes_qsa: string[];
+    nomes_nao_localizados_no_qsa: string[];
+    nomes_nao_localizados_no_documento: string[];
+    descricao: string;
+  };
+  evidencias: Array<{
+    tipo: 'transferencia' | 'quadro_final' | 'registro' | 'qsa' | 'ato';
+    texto: string;
+    data: string | null;
+    pagina: number | null;
+    origem: string;
+  }>;
+  revisao_obrigatoria: boolean;
+  motivos_revisao: string[];
+  confianca: number | null;
+}
+
+function nomesSocietariosEquivalentes(a: unknown, b: unknown): boolean {
+  const nomeA = normalizarBasico(a);
+  const nomeB = normalizarBasico(b);
+  return !!nomeA && !!nomeB && (nomeA === nomeB || nomeA.includes(nomeB) || nomeB.includes(nomeA));
+}
+
+function normalizarSociosParaAgente(socios: any): Array<Record<string, any>> {
+  if (!Array.isArray(socios)) return [];
+  return socios.map((socio: any) => ({
+    nome: socio?.nome || socio?.nome_socio || socio?.razao_social || null,
+    quotas: asNumber(socio?.quotas),
+    percentual: asNumber(socio?.percentual),
+    administrador: administradorSocietario(socio),
+    qualificacao: socio?.qualificacao ? String(socio.qualificacao).trim() : null,
+  })).filter((socio: any) => String(socio.nome || '').trim());
+}
+
+function formatarQuotasAgente(value: unknown): string {
+  const quotas = asNumber(value);
+  return quotas === null ? 'quantidade não identificada' : `${quotas.toLocaleString('pt-BR')} quotas`;
+}
+
+export function executarAgenteAnaliseSocietaria(
+  contrato: any,
+  atos: any,
+  empresa?: any,
+  sociosQsa: any[] = [],
+): AnaliseSocietariaAuditavel {
+  const dataContrato = parseDate(contrato?.data_registro);
+  const numeroContrato = onlyDigits(contrato?.numero_arquivamento);
+  const historico = (Array.isArray(atos?.historico_arquivamentos) ? atos.historico_arquivamentos : [])
+    .map((item: any) => ({
+      data: parseDate(item?.data),
+      numero_arquivamento: item?.numero ? String(item.numero).trim() : null,
+      tipo_ato: item?.tipo_ato ? String(item.tipo_ato).trim() : null,
+      fonte: 'atos_junta' as const,
+    }))
+    .filter((item: any) => item.data || item.numero_arquivamento || item.tipo_ato);
+  const dataAtoPrincipal = parseDate(atos?.data_registro);
+  if (dataAtoPrincipal || atos?.numero_arquivamento) {
+    historico.push({
+      data: dataAtoPrincipal,
+      numero_arquivamento: atos?.numero_arquivamento ? String(atos.numero_arquivamento).trim() : null,
+      tipo_ato: atos?.tipo_ato ? String(atos.tipo_ato).trim() : null,
+      fonte: 'atos_junta' as const,
+    });
+  }
+
+  const eventosJunta = historico
+    .filter((evento: any, index: number, array: any[]) => array.findIndex((outro: any) => (
+      (evento.data && outro.data === evento.data) &&
+      (onlyDigits(evento.numero_arquivamento) || onlyDigits(outro.numero_arquivamento)) &&
+      onlyDigits(evento.numero_arquivamento) === onlyDigits(outro.numero_arquivamento)
+    )) === index)
+    .sort((a: any, b: any) => String(a.data || '').localeCompare(String(b.data || '')));
+  const atoMaisRecente = eventosJunta.filter((evento: any) => evento.data).at(-1) || eventosJunta.at(-1) || null;
+  const numeroAtoMaisRecente = onlyDigits(atoMaisRecente?.numero_arquivamento);
+  const mesmaDataDoAtoMaisRecente = !!dataContrato && !!atoMaisRecente?.data && dataContrato === atoMaisRecente.data;
+  const numerosConfiaveisParaComparacao = !!numeroContrato && !!numeroAtoMaisRecente;
+  const correspondeAoMaisRecente = !!atoMaisRecente && (
+    numerosConfiaveisParaComparacao
+      ? numeroContrato === numeroAtoMaisRecente && (!dataContrato || !atoMaisRecente.data || mesmaDataDoAtoMaisRecente)
+      : mesmaDataDoAtoMaisRecente
+  );
+  const documentoHistorico = !!dataContrato && !!atoMaisRecente?.data && dataContrato < atoMaisRecente.data && !correspondeAoMaisRecente;
+
+  const quadroFinalExplicito = Array.isArray(contrato?.quadro_societario_final) && contrato.quadro_societario_final.length > 0;
+  const quadroFinal = normalizarSociosParaAgente(quadroFinalExplicito ? contrato.quadro_societario_final : []);
+  const sociosContrato = normalizarSociosParaAgente(contrato?.socios);
+  const quadroAnterior = normalizarSociosParaAgente(
+    (Array.isArray(contrato?.alteracoes_societarias) ? contrato.alteracoes_societarias : [])
+      .map((alteracao: any) => alteracao?.cedente || alteracao?.socio_retirante)
+      .filter(Boolean),
+  );
+  const nomesDocumento = quadroFinal.map((socio) => String(socio.nome));
+  const nomesQsa = normalizarSociosParaAgente(sociosQsa).map((socio) => String(socio.nome));
+  const nomesNaoLocalizadosNoQsa = nomesDocumento.filter((nome) => !nomesQsa.some((qsa) => nomesSocietariosEquivalentes(nome, qsa)));
+  const nomesNaoLocalizadosNoDocumento = nomesQsa.filter((nome) => !nomesDocumento.some((documento) => nomesSocietariosEquivalentes(nome, documento)));
+
+  let confrontoStatus: AnaliseSocietariaAuditavel['confronto_qsa']['status'] = 'inconclusivo';
+  let statusDocumento: AnaliseSocietariaAuditavel['status_documento'] = 'indeterminado';
+  if (documentoHistorico) {
+    statusDocumento = 'historico';
+    confrontoStatus = 'historico';
+  } else if (correspondeAoMaisRecente) {
+    statusDocumento = 'atual';
+    if (quadroFinalExplicito && nomesQsa.length > 0) {
+      confrontoStatus = nomesNaoLocalizadosNoQsa.length === 0 && nomesNaoLocalizadosNoDocumento.length === 0 ? 'confirmado' : 'divergente';
+    }
+  } else if (!atoMaisRecente && dataContrato) {
+    statusDocumento = 'atual';
+    if (quadroFinalExplicito && nomesQsa.length > 0) {
+      confrontoStatus = nomesNaoLocalizadosNoQsa.length === 0 && nomesNaoLocalizadosNoDocumento.length === 0 ? 'confirmado' : 'divergente';
+    }
+  }
+
+  const estadoAtualSocios = nomesQsa.length > 0
+    ? normalizarSociosParaAgente(sociosQsa)
+    : statusDocumento === 'atual' && quadroFinal.length > 0 ? quadroFinal : [];
+  const estadoAtualFonte: AnaliseSocietariaAuditavel['estado_atual']['fonte'] = nomesQsa.length > 0
+    ? 'qsa'
+    : estadoAtualSocios.length > 0 ? 'contrato' : 'indeterminado';
+  const estadoAtualDescricao = estadoAtualFonte === 'qsa'
+    ? 'O QSA fornecido é a referência do estado atual; o contrato mais recente foi comparado somente com seu quadro final.'
+    : estadoAtualFonte === 'contrato'
+      ? 'O estado atual foi obtido do quadro final do contrato porque não havia QSA disponível para confronto.'
+      : 'Não foi possível determinar o estado atual sem QSA ou quadro final expressamente identificado.';
+
+  const alteracoes = Array.isArray(contrato?.alteracoes_societarias) ? contrato.alteracoes_societarias : [];
+  const descricaoAlteracoes = alteracoes.map((alteracao: any) => {
+    const cedente = alteracao?.cedente?.nome || alteracao?.socio_retirante?.nome || null;
+    const cessionario = alteracao?.cessionario?.nome || alteracao?.socio_admitido?.nome || null;
+    if (cedente && cessionario) return `retirada de ${cedente} e transferência de ${formatarQuotasAgente(alteracao?.quotas_transferidas)} para ${cessionario}`;
+    if (cedente) return `retirada de ${cedente}, sem cessionário expressamente identificado`;
+    if (cessionario) return `entrada de ${cessionario}, sem cedente expressamente identificado`;
+    return 'alteração societária sem partes identificadas de forma suficiente';
+  });
+  const diagnosticoPartes = [
+    contrato?.tipo_ato ? `Tipo de ato: ${contrato.tipo_ato}.` : null,
+    dataContrato ? `Data de registro identificada: ${dataContrato}.` : 'Data de registro não identificada com segurança.',
+    contrato?.numero_arquivamento ? `Número de arquivamento: ${contrato.numero_arquivamento}.` : 'Número de arquivamento não identificado com segurança.',
+    descricaoAlteracoes.length ? `O ato praticou: ${descricaoAlteracoes.join('; ')}.` : 'Não foi identificada alteração societária expressa no documento.',
+    quadroFinal.length ? `Quadro final declarado: ${quadroFinal.map((socio) => `${socio.nome}${socio.quotas !== null ? ` com ${formatarQuotasAgente(socio.quotas)}` : ''}${socio.percentual !== null ? ` (${socio.percentual}%)` : ''}`).join('; ')}.` : 'O quadro societário final não foi identificado expressamente.',
+    confrontoStatus === 'confirmado' ? 'O quadro final do ato mais recente confere com o QSA vigente.' : null,
+    confrontoStatus === 'historico' ? 'Este documento é histórico e não foi usado para invalidar o QSA vigente.' : null,
+    confrontoStatus === 'divergente' ? 'O quadro final do ato mais recente não confere integralmente com o QSA vigente.' : null,
+  ].filter(Boolean) as string[];
+
+  const linhaTempo: AnaliseSocietariaAuditavel['linha_tempo_societaria'] = eventosJunta.map((evento: any) => ({
+    data: evento.data,
+    numero_arquivamento: evento.numero_arquivamento,
+    tipo_ato: evento.tipo_ato,
+    fonte: 'atos_junta' as const,
+    e_ato_mais_recente: evento === atoMaisRecente,
+    corresponde_ao_contrato: (!!numeroContrato && !!onlyDigits(evento.numero_arquivamento) && numeroContrato === onlyDigits(evento.numero_arquivamento)) || (!!dataContrato && !!evento.data && dataContrato === evento.data),
+  }));
+  if (dataContrato && !linhaTempo.some((evento) => evento.corresponde_ao_contrato)) {
+    linhaTempo.push({
+      data: dataContrato,
+      numero_arquivamento: contrato?.numero_arquivamento || null,
+      tipo_ato: contrato?.tipo_ato || null,
+      fonte: 'contrato',
+      e_ato_mais_recente: !atoMaisRecente?.data || dataContrato >= atoMaisRecente.data,
+      corresponde_ao_contrato: true,
+    });
+  }
+  linhaTempo.sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')));
+
+  const evidencias = [
+    ...alteracoes.filter((alteracao: any) => alteracao?.evidencia).map((alteracao: any) => ({
+      tipo: 'transferencia' as const,
+      texto: String(alteracao.evidencia).trim(),
+      data: dataContrato,
+      pagina: Number.isFinite(Number(alteracao?.pagina)) ? Number(alteracao.pagina) : null,
+      origem: 'Contrato/Alteração',
+    })),
+    ...(contrato?.evidencia_quadro_societario ? [{ tipo: 'quadro_final' as const, texto: String(contrato.evidencia_quadro_societario).trim(), data: dataContrato, pagina: null, origem: 'Contrato/Alteração' }] : []),
+    ...(atos?.evidencia_ato_mais_recente ? [{ tipo: 'ato' as const, texto: String(atos.evidencia_ato_mais_recente).trim(), data: atoMaisRecente?.data || null, pagina: null, origem: 'Atos da Junta Comercial' }] : []),
+  ].filter((evidencia) => evidencia.texto);
+
+  const motivosRevisao: string[] = [];
+  const conflitosInternos = [
+    ...(Array.isArray(contrato?.conflitos_internos) ? contrato.conflitos_internos : []),
+    ...(Array.isArray(atos?.conflitos_internos) ? atos.conflitos_internos : []),
+  ].map((item: any) => String(item || '').trim()).filter(Boolean);
+  if (!dataContrato) motivosRevisao.push('Data de registro do contrato/alteração não identificada com segurança.');
+  if (!atoMaisRecente?.data && !dataContrato) motivosRevisao.push('Não foi possível estabelecer o ato mais recente da cadeia societária.');
+  if (statusDocumento === 'atual' && !quadroFinalExplicito) motivosRevisao.push('O documento mais recente não apresentou quadro societário final expresso.');
+  if (statusDocumento === 'atual' && nomesQsa.length === 0) motivosRevisao.push('Não há QSA vigente disponível para o confronto do estado atual.');
+  if (confrontoStatus === 'divergente') motivosRevisao.push('O quadro final do ato mais recente diverge do QSA vigente.');
+  if (!alteracoes.length && /alterac|consolid/i.test(String(contrato?.tipo_ato || ''))) motivosRevisao.push('O documento foi classificado como alteração/consolidação, mas não houve alteração societária expressamente extraída.');
+  for (const conflito of conflitosInternos) motivosRevisao.push(`Conflito interno informado na leitura: ${conflito}`);
+
+  return {
+    status_documento: statusDocumento,
+    ato_praticado: descricaoAlteracoes.length ? descricaoAlteracoes.join('; ') : null,
+    diagnostico_objetivo: diagnosticoPartes.join(' '),
+    linha_tempo_societaria: linhaTempo,
+    ato_mais_recente: atoMaisRecente ? {
+      data: atoMaisRecente.data,
+      numero_arquivamento: atoMaisRecente.numero_arquivamento,
+      tipo_ato: atoMaisRecente.tipo_ato,
+    } : null,
+    quadro_anterior: quadroAnterior,
+    quadro_final_documento: quadroFinal,
+    estado_atual: {
+      fonte: estadoAtualFonte,
+      data_referencia: atoMaisRecente?.data || dataContrato || null,
+      socios: estadoAtualSocios,
+      descricao: estadoAtualDescricao,
+    },
+    confronto_qsa: {
+      status: confrontoStatus,
+      nomes_documento: nomesDocumento,
+      nomes_qsa: nomesQsa,
+      nomes_nao_localizados_no_qsa: nomesNaoLocalizadosNoQsa,
+      nomes_nao_localizados_no_documento: nomesNaoLocalizadosNoDocumento,
+      descricao: confrontoStatus === 'confirmado'
+        ? 'O quadro societário final do ato mais recente confere com o QSA vigente.'
+        : confrontoStatus === 'historico'
+          ? 'Documento histórico; a comparação com o QSA vigente foi deliberadamente não aplicada ao quadro antigo.'
+          : confrontoStatus === 'divergente'
+            ? 'Há diferença entre o quadro final do ato mais recente e o QSA vigente.'
+            : 'O confronto não pode ser concluído com segurança com as evidências disponíveis.',
+    },
+    evidencias,
+    revisao_obrigatoria: motivosRevisao.length > 0,
+    motivos_revisao: motivosRevisao,
+    confianca: normalizarConfianca(contrato?.confianca) === null || normalizarConfianca(atos?.confianca) === null
+      ? normalizarConfianca(contrato?.confianca) ?? normalizarConfianca(atos?.confianca)
+      : Math.min(normalizarConfianca(contrato?.confianca) as number, normalizarConfianca(atos?.confianca) as number),
+  };
+}
+
 function qualificacaoSocietariaNormalizada(value: unknown): string {
   const texto = normalizarBasico(value);
   if (!texto) return '';
@@ -626,6 +885,8 @@ function normalizarDadosContratoSocial(dados: any): Record<string, any> {
     numero_arquivamento: dados?.numero_arquivamento ? String(dados.numero_arquivamento).trim() : null,
     socios: Array.isArray(dados?.socios) ? dados.socios.map((socio: any) => ({
       nome: socio?.nome ? String(socio.nome).trim() : null,
+      quotas: asNumber(socio?.quotas),
+      percentual: asNumber(socio?.percentual),
       qualificacao: socio?.qualificacao ? String(socio.qualificacao).trim() : null,
       administrador: administradorSocietario(socio),
     })).filter((socio: any) => socio.nome) : [],
@@ -645,6 +906,13 @@ function normalizarDadosContratoSocial(dados: any): Record<string, any> {
       percentual: asNumber(socio?.percentual),
       administrador: administradorSocietario(socio),
     })).filter((socio: any) => socio.nome) : [],
+    evidencia_quadro_societario: dados?.evidencia_quadro_societario ? String(dados.evidencia_quadro_societario).trim() : null,
+    marcadores_documentais: Array.isArray(dados?.marcadores_documentais) ? dados.marcadores_documentais.map((item: any) => ({
+      tipo: item?.tipo ? String(item.tipo).trim() : null,
+      pagina: Number.isFinite(Number(item?.pagina)) && Number(item.pagina) > 0 ? Number(item.pagina) : null,
+      texto: item?.texto ? String(item.texto).trim() : null,
+    })).filter((item: any) => item.texto) : [],
+    conflitos_internos: Array.isArray(dados?.conflitos_internos) ? dados.conflitos_internos.map((item: any) => String(item || '').trim()).filter(Boolean) : [],
     capital_social_anterior: asNumber(dados?.capital_social_anterior),
     capital_social_atual: asNumber(dados?.capital_social_atual),
     confianca: normalizarConfianca(dados?.confianca),
@@ -755,6 +1023,8 @@ function normalizarDadosAtos(dados: any): Record<string, any> {
     socios_alterados: sociosAlterados,
     historico_arquivamentos: historicoArquivamentos,
     total_alteracoes_historico: historicoArquivamentos.filter((i: any) => /alterac/i.test(normalizeText(i.tipo_ato || ''))).length,
+    evidencia_ato_mais_recente: dados?.evidencia_ato_mais_recente ? String(dados.evidencia_ato_mais_recente).trim() : null,
+    conflitos_internos: Array.isArray(dados?.conflitos_internos) ? dados.conflitos_internos.map((item: any) => String(item || '').trim()).filter(Boolean) : [],
     confianca: normalizarConfianca(dados?.confianca),
   };
 }
@@ -861,9 +1131,11 @@ Responda SOMENTE JSON válido, sem markdown e sem comentários:
   "capital_social_atual": 0.00,
   "socios_alterados": [{"nome":"texto","tipo_alteracao":"entrada|saida|percentual","data_alteracao":"YYYY-MM-DD ou null"}],
   "historico_arquivamentos": [{"numero":"texto ou null","data":"YYYY-MM-DD","tipo_ato":"texto (ex: ALTERAÇÃO, CONTRATO, ENQUADRAMENTO DE MICROEMPRESA)"}],
+  "evidencia_ato_mais_recente": "transcrição curta e literal do registro/ato mais recente ou null",
+  "conflitos_internos": ["conflito textual identificado ou []"],
   "confianca": 0.0
 }
-Se o documento for uma lista/certidão de arquivamentos (ex: "Lista de Arquivamentos" da Junta Comercial), preencha "historico_arquivamentos" com TODOS os itens listados, do mais antigo ao mais recente -- é esse histórico completo que interessa, não só o último. Se for um único ato/alteração, preencha também "data_registro" e "socios_alterados" para esse ato específico. Extraia apenas informações expressas no documento. Não deduza alterações que não estejam descritas. Capital social deve ser numérico. Use null quando não estiver visível. Confianca deve estar entre 0 e 1.`;
+Leia o documento inteiro. Se o documento for uma lista/certidão de arquivamentos (ex: "Lista de Arquivamentos" da Junta Comercial), preencha "historico_arquivamentos" com TODOS os itens listados, do mais antigo ao mais recente -- é esse histórico completo que interessa, não só o último. Identifique qual é o ato mais recente pela data e pelo número do registro, sem assumir que a última linha seja a mais recente. Se for um único ato/alteração, preencha também "data_registro" e "socios_alterados" para esse ato específico. Extraia apenas informações expressas no documento. Não deduza alterações que não estejam descritas. Preserve literalmente a evidência do ato mais recente. Registre em "conflitos_internos" qualquer data, número, nome ou quadro que não possa ser resolvido pelo próprio documento. Capital social deve ser numérico. Use null quando não estiver visível. Confianca deve estar entre 0 e 1.`;
 }
 
 
@@ -893,12 +1165,15 @@ Responda SOMENTE JSON válido:
     "evidencia":"transcrição curta e literal do trecho que comprova o fato ou null"
   }],
   "quadro_societario_final":[{"nome":"texto","quotas":0,"percentual":0,"administrador":true}],
+  "evidencia_quadro_societario":"transcrição curta e literal da cláusula/tabela que comprova o quadro final ou null",
+  "marcadores_documentais":[{"tipo":"registro|transferencia|quadro_final|administracao","pagina":0,"texto":"transcrição curta e literal"}],
+  "conflitos_internos":["conflito textual identificado ou []"],
   "capital_social_anterior":0,
   "capital_social_atual":0,
   "confianca":0.0
 }
 
-Regras obrigatórias: use null quando o dado não estiver visível; não invente nomes, quotas, percentuais, cláusulas ou páginas. Extraia todos os fatos de retirada, entrada, cessão ou transferência de quotas e identifique cedente e cessionário. Em uma consolidação, diferencie os sócios históricos do quadro societário final que aparece depois da alteração; o QSA deve ser comparado somente com o quadro final do ato mais recente, nunca com um sócio que se retirou em documento anterior. Copie uma evidência curta e literal para cada alteração. Use em data_registro a data da certificação/registro da Junta (ex.: CERTIFICO O REGISTRO EM), não a mera data de assinatura. Se não houver alteração societária expressa, retorne lista vazia.`;
+Regras obrigatórias: leia o documento inteiro antes de concluir; use null quando o dado não estiver visível; não invente nomes, quotas, percentuais, cláusulas, datas ou páginas. Extraia todos os fatos de retirada, entrada, cessão ou transferência de quotas e identifique cedente e cessionário apenas quando o texto os vincular expressamente. Em uma consolidação, reconstrua a sequência: quadro anterior, ato praticado e quadro societário final. Diferencie sócios históricos do quadro final; o QSA deve ser comparado somente com o quadro final do ato mais recente, nunca com um sócio que se retirou em documento anterior. Copie uma evidência curta e literal para cada alteração e para o quadro final. Use em data_registro a data da certificação/registro da Junta (ex.: CERTIFICO O REGISTRO EM), não a mera data de assinatura. Se houver duas datas, números, nomes ou quadros incompatíveis, liste o conflito em "conflitos_internos" e não escolha um valor por inferência. Se não houver alteração societária expressa, retorne lista vazia.`;
 }
 
 function promptFaturamento12Meses(): string {
@@ -1192,12 +1467,42 @@ export class AnaliseDocumentalService {
     ]);
     const contratoNormalizado = normalizarDadosContratoSocial(contrato);
     const atosNormalizados = normalizarDadosAtos(atos);
-    const alertas = validarContratoComAtosJunta(contratoNormalizado, atosNormalizados, contratoContexto.empresa, contratoContexto.socios);
+    const analiseSocietariaAuditavel = executarAgenteAnaliseSocietaria(
+      contratoNormalizado,
+      atosNormalizados,
+      contratoContexto.empresa,
+      contratoContexto.socios,
+    );
+    const alertasBase = validarContratoComAtosJunta(contratoNormalizado, atosNormalizados, contratoContexto.empresa, contratoContexto.socios);
+    const alertasAgente: AlertaDocumental[] = analiseSocietariaAuditavel.revisao_obrigatoria
+      ? [{
+          codigo: 'contrato_agente_societario_revisao_obrigatoria',
+          campo: 'analise_societaria_auditavel',
+          mensagem: `A reconstrução societária exige revisão humana: ${analiseSocietariaAuditavel.motivos_revisao.join(' ')}`,
+          severidade: 'alta',
+          valor_documento: analiseSocietariaAuditavel,
+          recomendacao: 'Conferir o documento inteiro, a certificação da Junta, o quadro final e o QSA vigente antes de concluir.',
+        }]
+      : [];
+    const alertas = uniqueAlerts([...alertasBase, ...alertasAgente]);
     const dados = {
       contrato_arquivo_id: contratoArquivoId,
       atos_arquivo_id: atosArquivoId,
       contrato: contratoNormalizado,
       atos_junta: atosNormalizados,
+      analise_societaria_auditavel: analiseSocietariaAuditavel,
+      status_societario: analiseSocietariaAuditavel.status_documento,
+      estado_atual_societario: analiseSocietariaAuditavel.estado_atual,
+      linha_tempo_societaria: analiseSocietariaAuditavel.linha_tempo_societaria,
+      evidencias_societarias: analiseSocietariaAuditavel.evidencias,
+      datas_chave: {
+        data_documento: contratoNormalizado.data_documento,
+        data_registro: contratoNormalizado.data_registro,
+        data_efeitos_registro: contratoNormalizado.data_efeitos_registro,
+        data_ato_junta_mais_recente: atosNormalizados.historico_arquivamentos?.at(-1)?.data || atosNormalizados.data_registro || null,
+      },
+      tipo_ato: contratoNormalizado.tipo_ato,
+      diagnostico_factual: analiseSocietariaAuditavel.diagnostico_objetivo,
       nire_confere: onlyDigits(contratoNormalizado.nire) !== '' && onlyDigits(contratoNormalizado.nire) === onlyDigits(atosNormalizados.nire),
       data_registro_confere: !!parseDate(contratoNormalizado.data_registro) && [
         parseDate(atosNormalizados.data_registro),

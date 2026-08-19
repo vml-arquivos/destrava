@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AnaliseDocumentalService,
+  executarAgenteAnaliseSocietaria,
   validarAtosJuntaExtraidos,
   validarContratoComAtosJunta,
   validarQsaExtraida,
@@ -172,6 +173,95 @@ describe('validação documental especializada', () => {
     expect(alertas.some((a) => a.codigo === 'contrato_historico_nao_comparado_qsa')).toBe(true);
     expect(alertas.some((a) => a.codigo === 'contrato_socios_divergentes_qsa')).toBe(false);
     expect(alertas.some((a) => a.severidade === 'alta' && a.campo === 'socios')).toBe(false);
+  });
+
+  it('reconstrói transferência integral e confirma o QSA pelo quadro final do ato mais recente', () => {
+    const resultado = executarAgenteAnaliseSocietaria(
+      {
+        tipo_ato: 'Consolidação',
+        data_registro: '2025-06-06',
+        numero_arquivamento: '20251505987',
+        alteracoes_societarias: [{
+          tipo_alteracao: 'saida_transferencia',
+          cedente: { nome: 'Marcos Henrique Soares Pio', quotas: 65000 },
+          cessionario: { nome: 'Jonnathas Rodrigues Pires', quotas: 65000 },
+          quotas_transferidas: 65000,
+          evidencia: 'O sócio Marcos Henrique Soares Pio retira-se da sociedade e cede e transfere suas quotas para Jonnathas Rodrigues Pires.',
+        }],
+        quadro_societario_final: [{ nome: 'Jonnathas Rodrigues Pires', quotas: 65000, percentual: 100, administrador: true }],
+        confianca: 0.96,
+      },
+      {
+        nire: '52206183723',
+        historico_arquivamentos: [{ numero: '20251505987', data: '2025-06-06', tipo_ato: 'ALTERAÇÃO' }],
+        confianca: 0.96,
+      },
+      { cnpj: '52.008.360/0001-33' },
+      [{ nome: 'Jonnathas Rodrigues Pires', administrador: true }],
+    );
+
+    expect(resultado.status_documento).toBe('atual');
+    expect(resultado.ato_praticado).toContain('transferência');
+    expect(resultado.ato_praticado).toContain('Jonnathas Rodrigues Pires');
+    expect(resultado.quadro_final_documento[0]).toMatchObject({ nome: 'Jonnathas Rodrigues Pires', quotas: 65000, percentual: 100 });
+    expect(resultado.estado_atual.fonte).toBe('qsa');
+    expect(resultado.confronto_qsa.status).toBe('confirmado');
+    expect(resultado.revisao_obrigatoria).toBe(false);
+    expect(resultado.evidencias[0].texto).toContain('cede e transfere');
+  });
+
+  it('classifica contrato anterior como histórico e não usa o sócio retirado para invalidar o QSA', () => {
+    const resultado = executarAgenteAnaliseSocietaria(
+      {
+        tipo_ato: 'Alteração Contratual',
+        data_registro: '2025-03-27',
+        numero_arquivamento: '20244323909',
+        alteracoes_societarias: [{
+          tipo_alteracao: 'saida_transferencia',
+          cedente: { nome: 'Irene Correia dos Reis Silva', quotas: 32500 },
+          cessionario: { nome: 'Marcos Henrique Soares Pio', quotas: 32500 },
+          quotas_transferidas: 32500,
+        }],
+        quadro_societario_final: [{ nome: 'Marcos Henrique Soares Pio', quotas: 65000, percentual: 100 }],
+        confianca: 0.94,
+      },
+      {
+        historico_arquivamentos: [
+          { numero: '20244323909', data: '2025-03-27', tipo_ato: 'ALTERAÇÃO' },
+          { numero: '20251505987', data: '2025-06-06', tipo_ato: 'ALTERAÇÃO' },
+        ],
+        confianca: 0.95,
+      },
+      { cnpj: '52.008.360/0001-33' },
+      [{ nome: 'Jonnathas Rodrigues Pires', administrador: true }],
+    );
+
+    expect(resultado.status_documento).toBe('historico');
+    expect(resultado.confronto_qsa.status).toBe('historico');
+    expect(resultado.diagnostico_objetivo).toContain('histórico');
+    expect(resultado.revisao_obrigatoria).toBe(false);
+  });
+
+  it('exige revisão humana quando o quadro final do ato mais recente diverge do QSA', () => {
+    const resultado = executarAgenteAnaliseSocietaria(
+      {
+        tipo_ato: 'Alteração Contratual',
+        data_registro: '2025-06-06',
+        numero_arquivamento: '20251505987',
+        quadro_societario_final: [{ nome: 'Pessoa Diferente', quotas: 65000, percentual: 100 }],
+        confianca: 0.92,
+      },
+      {
+        historico_arquivamentos: [{ numero: '20251505987', data: '2025-06-06', tipo_ato: 'ALTERAÇÃO' }],
+        confianca: 0.94,
+      },
+      { cnpj: '52.008.360/0001-33' },
+      [{ nome: 'Jonnathas Rodrigues Pires', administrador: true }],
+    );
+
+    expect(resultado.confronto_qsa.status).toBe('divergente');
+    expect(resultado.revisao_obrigatoria).toBe(true);
+    expect(resultado.motivos_revisao.join(' ')).toContain('diverge');
   });
 
   it('cruza número do ato, CNPJ e sócios do contrato com Junta, empresa e QSA', () => {

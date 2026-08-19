@@ -175,7 +175,12 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
   const analise = laudo || analiseEspecializada || null;
   const dados = analise?.dados_extraidos || {};
   const contratoDados = dados?.contrato || {};
-  const diagnosticoFactual = documento?.diagnostico_factual
+  const analiseSocietariaAuditavel = documento?.analise_societaria_auditavel
+    || contratoDados?.analise_societaria_auditavel
+    || dados?.analise_societaria_auditavel
+    || null;
+  const diagnosticoFactual = analiseSocietariaAuditavel?.diagnostico_objetivo
+    || documento?.diagnostico_factual
     || contratoDados?.diagnostico_factual
     || dados?.diagnostico_factual
     || null;
@@ -183,16 +188,20 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
     ? documento.alteracoes_societarias
     : Array.isArray(contratoDados?.alteracoes_societarias)
       ? contratoDados.alteracoes_societarias
-      : [];
+      : Array.isArray(analiseSocietariaAuditavel?.alteracoes_documento)
+        ? analiseSocietariaAuditavel.alteracoes_documento
+        : [];
   const quadroSocietarioFinal = Array.isArray(documento?.quadro_societario_final)
     ? documento.quadro_societario_final
     : Array.isArray(contratoDados?.quadro_societario_final)
       ? contratoDados.quadro_societario_final
-      : [];
-  const evidencias = alteracoesSocietarias
-    .map((alteracao: any) => alteracao?.evidencia)
-    .filter(Boolean)
-    .map(String);
+      : Array.isArray(analiseSocietariaAuditavel?.quadro_final_documento)
+        ? analiseSocietariaAuditavel.quadro_final_documento
+        : [];
+  const evidencias = Array.from(new Set([
+    ...alteracoesSocietarias.map((alteracao: any) => alteracao?.evidencia).filter(Boolean).map(String),
+    ...(Array.isArray(analiseSocietariaAuditavel?.evidencias) ? analiseSocietariaAuditavel.evidencias.map((item: any) => item?.texto || item).filter(Boolean).map(String) : []),
+  ]));
   const campos = documento?.campos_principais || {};
   const camposResultado: Array<{ label: string; valor: string }> = [];
   const adicionarCampo = (label: string, value: unknown) => {
@@ -214,6 +223,11 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
   adicionarCampo('Número do arquivamento', contratoDados?.numero_arquivamento);
   adicionarCampo('Capital social anterior', contratoDados?.capital_social_anterior);
   adicionarCampo('Capital social atual', contratoDados?.capital_social_atual);
+  adicionarCampo('Status societário', analiseSocietariaAuditavel?.status_documento || dados?.status_societario);
+  adicionarCampo('Data do documento', contratoDados?.data_documento || dados?.datas_chave?.data_documento);
+  adicionarCampo('Data de efeitos do registro', contratoDados?.data_efeitos_registro || dados?.datas_chave?.data_efeitos_registro);
+  adicionarCampo('Data do ato mais recente da Junta', dados?.datas_chave?.data_ato_junta_mais_recente);
+  adicionarCampo('Confronto com QSA', analiseSocietariaAuditavel?.confronto_qsa?.status || dados?.estado_atual_societario?.fonte);
 
   const alertas = [
     ...(Array.isArray(documento?.alertas) ? documento.alertas : []),
@@ -225,6 +239,8 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
     documento?.observacao,
     laudoErro?.mensagem ? `Falha na análise automática: ${laudoErro.mensagem}` : null,
     analise?.revisao_humana_necessaria === true ? 'A análise exige revisão humana antes da conclusão operacional.' : null,
+    analiseSocietariaAuditavel?.revisao_obrigatoria ? 'A análise societária exige revisão humana antes da conclusão operacional.' : null,
+    ...(Array.isArray(analiseSocietariaAuditavel?.motivos_revisao) ? analiseSocietariaAuditavel.motivos_revisao : []),
   ].filter(Boolean).map(String);
   const observacoesUnicas = Array.from(new Set(observacoes));
   const temEvidenciaDeAnalise = documento?.analisado === true
@@ -245,6 +261,13 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
     alteracoes_societarias: alteracoesSocietarias,
     quadro_societario_final: quadroSocietarioFinal,
     evidencias,
+    analise_societaria_auditavel: analiseSocietariaAuditavel,
+    status_societario: analiseSocietariaAuditavel?.status_documento || dados?.status_societario || null,
+    estado_atual_societario: analiseSocietariaAuditavel?.estado_atual || dados?.estado_atual_societario || null,
+    confronto_qsa: analiseSocietariaAuditavel?.confronto_qsa || null,
+    linha_tempo_societaria: analiseSocietariaAuditavel?.linha_tempo_societaria || dados?.linha_tempo_societaria || [],
+    datas_chave: dados?.datas_chave || null,
+    motivos_revisao: analiseSocietariaAuditavel?.motivos_revisao || [],
     campos: camposResultado,
     observacoes: observacoesUnicas.filter((item) => item !== diagnosticoFactual).slice(1),
     alertas: alertas.map((item: any) => ({
@@ -474,7 +497,9 @@ function gerarHtmlRelatorioDocumental(relatorio: any): string {
     const alteracoes = Array.isArray(resultado?.alteracoes_societarias) ? resultado.alteracoes_societarias : [];
     const quadroFinal = Array.isArray(resultado?.quadro_societario_final) ? resultado.quadro_societario_final : [];
     const evidencias = Array.isArray(resultado?.evidencias) ? resultado.evidencias : [];
-    if (!resultado?.diagnostico_factual && !alteracoes.length && !quadroFinal.length && !evidencias.length) return '';
+    const agente = resultado?.analise_societaria_auditavel || null;
+    if (!resultado?.diagnostico_factual && !alteracoes.length && !quadroFinal.length && !evidencias.length && !agente) return '';
+    const agenteHtml = agente ? `<div class="facts"><b>Agente societário auditável</b><p><b>Status do documento:</b> ${escapeHtmlRelatorio(agente.status_documento || 'não classificado')}</p>${agente.ato_praticado ? `<p><b>Ato praticado:</b> ${escapeHtmlRelatorio(agente.ato_praticado)}</p>` : ''}${agente.estado_atual?.descricao ? `<p><b>Estado atual:</b> ${escapeHtmlRelatorio(agente.estado_atual.descricao)}</p>` : ''}${agente.confronto_qsa?.status ? `<p><b>Confronto com QSA:</b> ${escapeHtmlRelatorio(agente.confronto_qsa.status)}${agente.confronto_qsa.mensagem ? ` — ${escapeHtmlRelatorio(agente.confronto_qsa.mensagem)}` : ''}</p>` : ''}${Array.isArray(agente.linha_tempo_societaria) && agente.linha_tempo_societaria.length ? `<p><b>Linha do tempo:</b></p><ul>${agente.linha_tempo_societaria.map((evento: any) => `<li>${escapeHtmlRelatorio(evento?.data || 'Data não identificada')} — ${escapeHtmlRelatorio(evento?.tipo_ato || 'Ato societário')}${evento?.numero_arquivamento ? ` — registro ${escapeHtmlRelatorio(evento.numero_arquivamento)}` : ''}</li>`).join('')}</ul>` : ''}${agente.revisao_obrigatoria && Array.isArray(agente.motivos_revisao) && agente.motivos_revisao.length ? `<div class="alerts"><b>Revisão humana obrigatória</b>${listaOuVazio(agente.motivos_revisao, '')}</div>` : ''}</div>` : '';
     const alteracoesHtml = alteracoes.length ? `<div class="facts"><b>Alteração societária identificada</b><ul>${alteracoes.map((alteracao: any) => {
       const cedente = alteracao?.cedente?.nome || alteracao?.socio_retirante?.nome || 'cedente não identificado';
       const cessionario = alteracao?.cessionario?.nome || alteracao?.socio_admitido?.nome || 'cessionário não identificado';
@@ -486,7 +511,7 @@ function gerarHtmlRelatorioDocumental(relatorio: any): string {
     }).join('')}</ul></div>` : '';
     const quadroHtml = quadroFinal.length ? `<div class="facts"><b>Quadro societário final declarado no documento</b><ul>${quadroFinal.map((socio: any) => `<li><b>${escapeHtmlRelatorio(socio?.nome || 'Sócio não identificado')}</b>${socio?.quotas != null ? ` — ${escapeHtmlRelatorio(socio.quotas)} quotas` : ''}${socio?.percentual != null ? ` (${escapeHtmlRelatorio(socio.percentual)}%)` : ''}${socio?.qualificacao ? ` — ${escapeHtmlRelatorio(socio.qualificacao)}` : ''}</li>`).join('')}</ul></div>` : '';
     const evidenciasHtml = evidencias.length ? `<div class="notes"><b>Trechos de evidência utilizados</b><ul>${evidencias.map((evidencia: any) => `<li><i>“${escapeHtmlRelatorio(evidencia)}”</i></li>`).join('')}</ul></div>` : '';
-    return `${resultado.diagnostico_factual ? `<div class="facts"><b>Diagnóstico objetivo do documento</b><p>${escapeHtmlRelatorio(resultado.diagnostico_factual)}</p></div>` : ''}${alteracoesHtml}${quadroHtml}${evidenciasHtml}`;
+    return `${resultado.diagnostico_factual ? `<div class="facts"><b>Diagnóstico objetivo do documento</b><p>${escapeHtmlRelatorio(resultado.diagnostico_factual)}</p></div>` : ''}${agenteHtml}${alteracoesHtml}${quadroHtml}${evidenciasHtml}`;
   };
   const analisadosHtml = analisados.length ? analisados.map((documento: any) => {
     const resultado = documento.resultado_analise || {};
