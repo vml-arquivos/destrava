@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { ResultadoAnaliseDocumento } from "../documentos/ResultadoAnaliseDocumento";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -137,6 +138,7 @@ type DocumentacaoSocietaria = {
   bloqueios?: string[];
   avisos?: string[];
   diagnostico?: string;
+  resultado_analise_atos?: any;
   documentos_analisados?: Array<{
     nome?: string | null;
     tipo_ato?: string | null;
@@ -154,6 +156,7 @@ type DocumentacaoSocietaria = {
     qsa_adicional_necessario?: boolean;
     qsa_adicional_motivo?: string | null;
     alertas?: Array<{ severidade?: string; mensagem?: string; recomendacao?: string }>;
+    resultado_analise?: any;
   }>;
 };
 
@@ -807,6 +810,13 @@ function DocumentacaoSocietariaCard({
         <div className="rounded-xl border border-white bg-white p-3"><p className="text-[10px] font-bold uppercase text-slate-400">Corte mínimo</p><p className="mt-1 text-xs font-extrabold text-slate-800">{formatDate(dados.data_corte_12_meses || undefined)}</p></div>
       </div>
 
+      {!!dados.resultado_analise_atos && (
+        <div className="mt-3 rounded-xl border border-blue-100 bg-white p-3">
+          <p className="text-xs font-extrabold text-blue-900">Análise detalhada dos Atos da Junta Comercial</p>
+          <ResultadoAnaliseDocumento resultado={dados.resultado_analise_atos} documento={{ nome: "Atos da Junta Comercial", bloco: "Atos da Junta Comercial" }} compacto />
+        </div>
+      )}
+
       {registros.length > 0 && (
         <div className="mt-3 rounded-xl border border-blue-100 bg-white p-3">
           <p className="text-xs font-extrabold text-slate-800">Cadeia documental exigida</p>
@@ -828,33 +838,32 @@ function DocumentacaoSocietariaCard({
 
       {!!dados.documentos_analisados?.length && (
         <div className="mt-3 rounded-xl border border-indigo-100 bg-white p-3">
-          <p className="text-xs font-extrabold text-indigo-900">Diagnóstico factual dos contratos e alterações</p>
-          <p className="mt-1 text-[11px] text-slate-500">Os fatos abaixo vêm da leitura do documento e devem ser conferidos com o QSA e os Atos da Junta.</p>
-          {dados.documentos_analisados.map((documento, documentoIndex) => (
-            <div key={`${documento.nome}-${documentoIndex}`} className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[11px] font-extrabold text-slate-900">{documento.nome || "Contrato/alteração"}</p>
-                <span className={`rounded-full px-2 py-0.5 text-[9px] font-extrabold ${documento.consistente ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>
-                  {documento.consistente ? "Leitura consistente" : documento.revisao_humana_necessaria ? "Revisão humana" : "Com ressalvas"}
-                </span>
+          <p className="text-xs font-extrabold text-indigo-900">Análises documentais detalhadas</p>
+          <p className="mt-1 text-[11px] text-slate-500">Esta seção usa o mesmo resultado normalizado exibido no relatório consolidado e no PDF.</p>
+          {dados.documentos_analisados.map((documento, documentoIndex) => {
+            const resultado = documento.resultado_analise || {
+              conclusao: documento.consistente ? "Leitura concluída; documento considerado consistente." : documento.diagnostico || "Leitura concluída com observações ou necessidade de revisão.",
+              diagnostico: documento.diagnostico,
+              diagnostico_factual: documento.diagnostico_factual,
+              alteracoes_societarias: documento.alteracoes_societarias,
+              quadro_societario_final: documento.quadro_societario_final,
+              analise_societaria_auditavel: null,
+              evidencias: (documento.alteracoes_societarias || []).map((item: any) => item?.evidencia).filter(Boolean),
+              campos: [],
+              observacoes: [],
+            };
+            return (
+              <div key={`${documento.nome}-${documentoIndex}`} className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11px] font-extrabold text-slate-900">{documento.nome || "Contrato/alteração"}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-extrabold ${documento.consistente ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>
+                    {documento.consistente ? "Leitura consistente" : documento.revisao_humana_necessaria ? "Revisão humana" : "Com ressalvas"}
+                  </span>
+                </div>
+                <ResultadoAnaliseDocumento resultado={resultado} documento={documento} compacto />
               </div>
-              {(documento.diagnostico_factual || documento.diagnostico) && <p className="mt-2 whitespace-pre-line text-[11px] font-semibold text-indigo-950">{documento.diagnostico_factual || documento.diagnostico}</p>}
-              {documento.alteracoes_societarias?.map((alteracao, alteracaoIndex) => (
-                <div key={alteracaoIndex} className="mt-2 rounded-lg border border-indigo-100 bg-white p-2 text-[10px] text-slate-700">
-                  <p><span className="font-extrabold">Transferência:</span> {alteracao.cedente?.nome || "cedente não identificado"} → {alteracao.cessionario?.nome || "cessionário não identificado"}</p>
-                  <p className="mt-1"><span className="font-extrabold">Quotas:</span> {alteracao.quotas_transferidas ?? "não identificadas"}{alteracao.percentual_transferido != null ? ` (${alteracao.percentual_transferido}%)` : ""}{alteracao.clausula ? ` · ${alteracao.clausula}` : ""}</p>
-                  {alteracao.evidencia && <p className="mt-1 whitespace-pre-line italic text-slate-600">Evidência: “{alteracao.evidencia}”</p>}
-                </div>
-              ))}
-              {!!documento.quadro_societario_final?.length && (
-                <div className="mt-2 rounded-lg border border-cyan-100 bg-cyan-50/70 p-2">
-                  <p className="text-[9px] font-extrabold uppercase text-cyan-800">Quadro final no documento</p>
-                  {documento.quadro_societario_final.map((socio, socioIndex) => <p key={socioIndex} className="mt-1 text-[10px] text-slate-700">• <span className="font-extrabold">{socio.nome || "Sócio não identificado"}</span>{socio.quotas != null ? ` — ${socio.quotas} quotas` : ""}{socio.percentual != null ? ` (${socio.percentual}%)` : ""}</p>)}
-                </div>
-              )}
-              {documento.qsa_adicional_necessario ? <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[10px] text-amber-900"><strong>QSA adicional necessário:</strong> {documento.qsa_adicional_motivo || "O quadro da última alteração vigente possui sócio não localizado no QSA atual."}</div> : documento.estado_atual_societario?.fonte === "contrato" && documento.confronto_qsa?.status === "confirmado" ? <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-[10px] text-emerald-900"><strong>QSA vigente confirmado:</strong> a última alteração/contrato vigente define o quadro atual e não é necessário solicitar outro QSA.</div> : null}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       {!!dados.avisos?.length && <div className="mt-3 rounded-xl border border-blue-100 bg-white p-3"><p className="text-xs font-extrabold text-blue-800">Avisos da análise</p>{dados.avisos.map((item, index) => <p key={index} className="mt-1 text-[11px] text-blue-800">• {item}</p>)}</div>}

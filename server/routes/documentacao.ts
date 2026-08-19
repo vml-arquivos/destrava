@@ -12,6 +12,7 @@ import { ensureDocumentacaoSchema } from '../services/documentacaoSchema';
 import { gerarMapaDocumentalCredito } from '../services/mapaDocumentalCreditoService';
 import { upsertSocioEmpresa } from './socios_documentos';
 import { generateBrandedPdfBuffer } from '../services/brandedPdfLayout';
+import { construirSecoesAnaliseDocumento } from '../../shared/documentalPresentation';
 
 const { Pool } = pkg;
 const pool = new Pool({
@@ -299,6 +300,7 @@ function montarRelatorioDocumental(dossie: any) {
       nire: documentacaoSocietaria.nire_junta,
       data_registro: documentacaoSocietaria.data_ato_junta,
       diagnostico: documentacaoSocietaria.diagnostico,
+      resultado_analise: documentacaoSocietaria.resultado_analise_atos || null,
       alertas: [
         ...(Array.isArray(documentacaoSocietaria.avisos) ? documentacaoSocietaria.avisos : []).map((mensagem: string) => ({ mensagem, severidade: 'media' })),
         ...(Array.isArray(documentacaoSocietaria.bloqueios) ? documentacaoSocietaria.bloqueios : []).map((mensagem: string) => ({ mensagem, severidade: 'alta' })),
@@ -487,33 +489,25 @@ function gerarHtmlRelatorioDocumental(relatorio: any): string {
   const escapeLista = (items: unknown[]) => items.filter(Boolean).map((item: any) => `<li>${escapeHtmlRelatorio(typeof item === 'string' ? item : item.mensagem || item.recomendacao || item.nome || item.label || '')}</li>`).join('');
   const listaOuVazio = (items: unknown[], texto: string) => items.length ? `<ul>${escapeLista(items)}</ul>` : `<p class="empty">${escapeHtmlRelatorio(texto)}</p>`;
   const cardsHtml = cards.map(([label, value]) => `<div class="card"><span>${escapeHtmlRelatorio(label)}</span><strong>${escapeHtmlRelatorio(value)}</strong></div>`).join('');
-  const camposHtml = (resultado: any) => {
-    const campos = Array.isArray(resultado?.campos) ? resultado.campos : [];
-    return campos.length ? `<div class="fields">${campos.map((campo: any) => `<div class="field"><span>${escapeHtmlRelatorio(campo.label)}</span><strong>${escapeHtmlRelatorio(campo.valor)}</strong></div>`).join('')}</div>` : '';
-  };
-  const fatosSocietariosHtml = (resultado: any) => {
-    const alteracoes = Array.isArray(resultado?.alteracoes_societarias) ? resultado.alteracoes_societarias : [];
-    const quadroFinal = Array.isArray(resultado?.quadro_societario_final) ? resultado.quadro_societario_final : [];
-    const evidencias = Array.isArray(resultado?.evidencias) ? resultado.evidencias : [];
-    const agente = resultado?.analise_societaria_auditavel || null;
-    if (!resultado?.diagnostico_factual && !alteracoes.length && !quadroFinal.length && !evidencias.length && !agente) return '';
-    const agenteHtml = agente ? `<div class="facts"><b>Agente societário auditável</b><p><b>Status do documento:</b> ${escapeHtmlRelatorio(agente.status_documento || 'não classificado')}</p>${agente.ato_praticado ? `<p><b>Ato praticado:</b> ${escapeHtmlRelatorio(agente.ato_praticado)}</p>` : ''}${agente.estado_atual?.descricao ? `<p><b>Estado atual:</b> ${escapeHtmlRelatorio(agente.estado_atual.descricao)}</p>` : ''}${agente.confronto_qsa?.status ? `<p><b>Confronto com QSA:</b> ${escapeHtmlRelatorio(agente.confronto_qsa.status)}${agente.confronto_qsa.mensagem ? ` — ${escapeHtmlRelatorio(agente.confronto_qsa.mensagem)}` : ''}</p>` : ''}${agente.qsa_adicional_necessario ? `<div class="alerts"><b>QSA adicional necessário</b><p>${escapeHtmlRelatorio(agente.qsa_adicional_motivo || 'O quadro da última alteração vigente possui sócio não localizado no QSA atual.')}</p></div>` : agente.status_documento === 'atual' && agente.confronto_qsa?.status === 'confirmado' ? `<div class="positive"><b>QSA vigente confirmado</b><p>A última alteração/contrato vigente define o quadro atual e não é necessário solicitar outro QSA.</p></div>` : ''}${Array.isArray(agente.linha_tempo_societaria) && agente.linha_tempo_societaria.length ? `<p><b>Linha do tempo:</b></p><ul>${agente.linha_tempo_societaria.map((evento: any) => `<li>${escapeHtmlRelatorio(evento?.data || 'Data não identificada')} — ${escapeHtmlRelatorio(evento?.tipo_ato || 'Ato societário')}${evento?.numero_arquivamento ? ` — registro ${escapeHtmlRelatorio(evento.numero_arquivamento)}` : ''}</li>`).join('')}</ul>` : ''}${agente.revisao_obrigatoria && Array.isArray(agente.motivos_revisao) && agente.motivos_revisao.length ? `<div class="alerts"><b>Revisão humana obrigatória</b>${listaOuVazio(agente.motivos_revisao, '')}</div>` : ''}</div>` : '';
-    const alteracoesHtml = alteracoes.length ? `<div class="facts"><b>Alteração societária identificada</b><ul>${alteracoes.map((alteracao: any) => {
-      const cedente = alteracao?.cedente?.nome || alteracao?.socio_retirante?.nome || 'cedente não identificado';
-      const cessionario = alteracao?.cessionario?.nome || alteracao?.socio_admitido?.nome || 'cessionário não identificado';
-      const quotas = alteracao?.quotas_transferidas ?? alteracao?.cedente?.quotas;
-      const percentual = alteracao?.percentual_transferido != null ? ` (${alteracao.percentual_transferido}%)` : '';
-      const evidencia = alteracao?.evidencia ? `<br/><i>Evidência: “${escapeHtmlRelatorio(alteracao.evidencia)}”</i>` : '';
-      const pagina = alteracao?.pagina ? ` · página ${escapeHtmlRelatorio(alteracao.pagina)}` : '';
-      return `<li>Retirada/cedente: <b>${escapeHtmlRelatorio(cedente)}</b>; entrada/cessionário: <b>${escapeHtmlRelatorio(cessionario)}</b>; quotas transferidas: ${escapeHtmlRelatorio(quotas ?? 'não identificadas')}${escapeHtmlRelatorio(percentual)}${alteracao?.clausula ? ` · cláusula ${escapeHtmlRelatorio(alteracao.clausula)}` : ''}${pagina}${evidencia}</li>`;
-    }).join('')}</ul></div>` : '';
-    const quadroHtml = quadroFinal.length ? `<div class="facts"><b>Quadro societário final declarado no documento</b><ul>${quadroFinal.map((socio: any) => `<li><b>${escapeHtmlRelatorio(socio?.nome || 'Sócio não identificado')}</b>${socio?.quotas != null ? ` — ${escapeHtmlRelatorio(socio.quotas)} quotas` : ''}${socio?.percentual != null ? ` (${escapeHtmlRelatorio(socio.percentual)}%)` : ''}${socio?.qualificacao ? ` — ${escapeHtmlRelatorio(socio.qualificacao)}` : ''}</li>`).join('')}</ul></div>` : '';
-    const evidenciasHtml = evidencias.length ? `<div class="notes"><b>Trechos de evidência utilizados</b><ul>${evidencias.map((evidencia: any) => `<li><i>“${escapeHtmlRelatorio(evidencia)}”</i></li>`).join('')}</ul></div>` : '';
-    return `${resultado.diagnostico_factual ? `<div class="facts"><b>Diagnóstico objetivo do documento</b><p>${escapeHtmlRelatorio(resultado.diagnostico_factual)}</p></div>` : ''}${agenteHtml}${alteracoesHtml}${quadroHtml}${evidenciasHtml}`;
-  };
+  const secoesAnaliseHtml = (resultado: any, documento: any) => construirSecoesAnaliseDocumento(resultado, documento).map((secao: any) => {
+    const classe = secao.id === 'resultado'
+      ? 'result'
+      : secao.id === 'diagnostico_factual'
+        ? 'facts'
+        : secao.id === 'evidencias' || secao.id === 'observacoes'
+          ? 'notes'
+          : 'facts';
+    const itens = Array.isArray(secao.itens) && secao.itens.length
+      ? `<ul>${secao.itens.map((item: string) => `<li>${secao.id === 'evidencias' ? `<i>${escapeHtmlRelatorio(item)}</i>` : escapeHtmlRelatorio(item)}</li>`).join('')}</ul>`
+      : '';
+    const campos = Array.isArray(secao.campos) && secao.campos.length
+      ? `<div class="fields">${secao.campos.map((campo: any) => `<div class="field"><span>${escapeHtmlRelatorio(campo.label)}</span><strong>${escapeHtmlRelatorio(campo.valor)}</strong></div>`).join('')}</div>`
+      : '';
+    return `<div class="${classe}"><b>${escapeHtmlRelatorio(secao.titulo)}</b>${secao.texto ? `<p>${escapeHtmlRelatorio(secao.texto)}</p>` : ''}${itens}${campos}</div>`;
+  }).join('');
   const analisadosHtml = analisados.length ? analisados.map((documento: any) => {
     const resultado = documento.resultado_analise || {};
-    return `<article class="doc analyzed"><div class="doc-head"><div><strong>${escapeHtmlRelatorio(documento.nome)}</strong><small>${escapeHtmlRelatorio(documento.bloco)}${documento.criado_em ? ` · ${escapeHtmlRelatorio(dataRelatorio(documento.criado_em))}` : ''}</small></div><span class="pill green">${escapeHtmlRelatorio(documento.status || 'Analisado')}</span></div><div class="result"><b>Resultado da análise</b><p>${escapeHtmlRelatorio(resultado.conclusao || documento.observacao || 'Leitura concluída.')}</p>${resultado.diagnostico && resultado.diagnostico !== resultado.conclusao ? `<p>${escapeHtmlRelatorio(resultado.diagnostico)}</p>` : ''}</div>${fatosSocietariosHtml(resultado)}${camposHtml(resultado)}${resultado.observacoes?.length ? `<div class="notes"><b>Observações e anotações</b>${listaOuVazio(resultado.observacoes, '')}</div>` : ''}</article>`;
+    return `<article class="doc analyzed"><div class="doc-head"><div><strong>${escapeHtmlRelatorio(documento.nome)}</strong><small>${escapeHtmlRelatorio(documento.bloco)}${documento.criado_em ? ` · ${escapeHtmlRelatorio(dataRelatorio(documento.criado_em))}` : ''}</small></div><span class="pill green">${escapeHtmlRelatorio(documento.status || 'Analisado')}</span></div>${secoesAnaliseHtml(resultado, documento)}</article>`;
   }).join('') : `<div class="success">Nenhum documento analisado foi encontrado no acervo.</div>`;
   const pendentesAnaliseHtml = pendentesAnalise.length ? pendentesAnalise.map((documento: any) => {
     const resultado = documento.resultado_analise || {};
@@ -1710,6 +1704,10 @@ async function montarValidacaoSocietaria(
       const dados = item.analise!.dados_extraidos || {};
       const contrato = dados.contrato || {};
       const bloqueios = (item.analise!.alertas || []).filter((alerta) => alerta.severidade === 'alta' || alerta.severidade === 'critica');
+      const resultadoAnalise = montarResultadoDetalhadoRelatorio(
+        { ...item.documento, analisado: true, consistente: item.analise!.status === 'concluido' && bloqueios.length === 0 },
+        item.analise,
+      );
       return {
         arquivo_id: item.documento.id,
         nome: item.documento.nome_original || item.documento.nome_arquivo || 'Contrato/Alteração',
@@ -1733,6 +1731,7 @@ async function montarValidacaoSocietaria(
         linha_tempo_societaria: Array.isArray(dados.analise_societaria_auditavel?.linha_tempo_societaria) ? dados.analise_societaria_auditavel.linha_tempo_societaria : [],
         qsa_adicional_necessario: dados.analise_societaria_auditavel?.qsa_adicional_necessario === true,
         qsa_adicional_motivo: dados.analise_societaria_auditavel?.qsa_adicional_motivo || null,
+        resultado_analise: resultadoAnalise,
       };
     });
 
@@ -1791,6 +1790,18 @@ async function montarValidacaoSocietaria(
   const documentoPrincipal = documentosAnalisados.find((item) => item.data_registro === cadeia.ultimo_registro?.data)
     || documentosAnalisados[0]
     || null;
+  const resultadoAnaliseAtos = {
+    conclusao: atosDados?.diagnostico || (atosAprovados ? 'Leitura concluída; documento considerado consistente.' : 'Leitura concluída com observações ou necessidade de revisão.'),
+    diagnostico: atosDados?.diagnostico || null,
+    diagnostico_factual: atosDados?.diagnostico || null,
+    campos: [
+      { label: 'NIRE', valor: atosDados?.nire || null },
+      { label: 'Data do último ato', valor: atosDados?.data_registro || cadeia.ultimo_registro?.data || null },
+      { label: 'CNPJ informado na Junta', valor: atosDados?.cnpj || null },
+      { label: 'Arquivamentos identificados', valor: Array.isArray(atosDados?.historico_arquivamentos) ? atosDados.historico_arquivamentos.length : null },
+    ].filter((campo) => campo.valor != null && String(campo.valor).trim() !== ''),
+    observacoes: [],
+  };
 
   return {
     etapa: 'documentacao_societaria',
@@ -1829,6 +1840,7 @@ async function montarValidacaoSocietaria(
     empresa_sem_tempo_minimo_constituicao: cadeia.empresa_sem_tempo_minimo_constituicao,
     meses_comprovados: cadeia.meses_entre_registros_extremos,
     documentos_analisados: documentosAnalisados,
+    resultado_analise_atos: atosDados?.analisado === true ? resultadoAnaliseAtos : null,
     fonte_estado_atual: documentosAnalisados.find((item) => item.estado_atual_societario?.fonte === 'contrato')?.estado_atual_societario?.fonte
       || (documentosAnalisados.some((item) => item.estado_atual_societario?.fonte === 'qsa') ? 'qsa' : 'indeterminado'),
     qsa_adicional_necessario: documentosAnalisados.some((item) => item.qsa_adicional_necessario === true),
