@@ -344,3 +344,66 @@ describe('AnaliseDocumentalService com dependências isoladas', () => {
     await expect(service.analisarSimplesNacional('empresa-1', 'doc-1')).rejects.toThrow('não pertence à empresa');
   });
 });
+
+// Bug relatado pelo usuário (zip 10): um extrato bancário real (SICOOB) anexado
+// no Acompanhamento Bancário aparecia com "0 lançamentos" -- indistinguível de
+// uma falha de leitura -- mesmo quando a extração (IA ou OCR local) lia o
+// documento perfeitamente. A causa: `normalizarExtratoBancario` descartava
+// silenciosamente qualquer lançamento fora da janela da semana selecionada e
+// devolvia a mesma mensagem genérica tanto para "documento ilegível" quanto
+// para "lido com sucesso, mas fora da semana escolhida". Estes testes
+// reproduzem os dois casos usando dados no mesmo formato do extrato SICOOB
+// real fornecido pelo usuário (FHTECH SOLUCAO & DIESEL LTDA, período
+// 01/08/2026-17/08/2026).
+describe('AnaliseDocumentalService.analisarExtratoBancario -- diagnóstico de "0 lançamentos"', () => {
+  const empresa = { id: 'empresa-1', cnpj: '12.345.678/0001-90', razao_social: 'FHTECH SOLUCAO & DIESEL LTDA' };
+  const extraidoSicoob = {
+    documento_compativel: true,
+    banco: 'SICOOB',
+    periodo_inicio: '2026-08-01',
+    periodo_fim: '2026-08-17',
+    lancamentos: [
+      { data: '2026-08-04', tipo: 'entrada', descricao: 'PIX RECEB.OUTRA IF', valor: 1500, evidencia: 'linha 1' },
+      { data: '2026-08-05', tipo: 'saida', descricao: 'PIX EMIT.OUTRA IF', valor: 92.38, evidencia: 'linha 2' },
+      { data: '2026-08-17', tipo: 'entrada', descricao: 'CRÉD.LIQ.COBRANÇA', valor: 945, evidencia: 'linha 3' },
+    ],
+    total_entradas: 2445,
+    total_saidas: 92.38,
+    confianca: 0.95,
+  };
+
+  it('importa somente os lançamentos dentro da semana selecionada, mesmo quando o documento tem mais lançamentos fora dela', async () => {
+    const db = criarDbMock(empresa, [], { tipo_documento: 'extrato_bancario' });
+    const service = new AnaliseDocumentalService(db, async () => extraidoSicoob);
+
+    const resultado = await service.analisarExtratoBancario('empresa-1', 'doc-1', '2026-08-17', '2026-08-17');
+
+    expect(resultado.documento_compativel).toBe(true);
+    expect(resultado.total_lancamentos_no_documento).toBe(3);
+    expect(resultado.lancamentos).toHaveLength(1);
+    expect(resultado.lancamentos[0].descricao).toContain('CRÉD.LIQ.COBRANÇA');
+  });
+
+  it('NÃO confunde "lido com sucesso, fora da semana" com "documento ilegível": mensagem cita a leitura bem-sucedida e o período real do documento', async () => {
+    const db = criarDbMock(empresa, [], { tipo_documento: 'extrato_bancario' });
+    const service = new AnaliseDocumentalService(db, async () => extraidoSicoob);
+
+    // Semana bancária de um mês totalmente diferente do período do extrato.
+    const resultado = await service.analisarExtratoBancario('empresa-1', 'doc-1', '2026-05-04', '2026-05-10');
+
+    expect(resultado.lancamentos).toHaveLength(0);
+    expect(resultado.total_lancamentos_no_documento).toBe(3);
+    expect(resultado.observacoes.some((item) => /lido com sucesso/i.test(item) && /04\/08\/2026/.test(item) && /17\/08\/2026/.test(item))).toBe(true);
+  });
+
+  it('distingue esse caso de um documento genuinamente sem lançamentos legíveis (total_lancamentos_no_documento = 0)', async () => {
+    const db = criarDbMock(empresa, [], { tipo_documento: 'extrato_bancario' });
+    const service = new AnaliseDocumentalService(db, async () => ({ documento_compativel: true, lancamentos: [] }));
+
+    const resultado = await service.analisarExtratoBancario('empresa-1', 'doc-1', '2026-08-11', '2026-08-17');
+
+    expect(resultado.lancamentos).toHaveLength(0);
+    expect(resultado.total_lancamentos_no_documento).toBe(0);
+    expect(resultado.observacoes.some((item) => /nenhum lançamento legível foi encontrado no documento/i.test(item))).toBe(true);
+  });
+});

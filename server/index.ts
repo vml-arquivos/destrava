@@ -15433,14 +15433,28 @@ async function registrarDocumentoContratoGerado(params: {
           inseridos.push(inserted.rows[0]);
         }
         await client.query('COMMIT');
+        // A mensagem antes era genérica demais: "não foram legíveis no período" saía
+        // tanto quando o documento realmente não tinha lançamento legível quanto
+        // quando a leitura funcionou perfeitamente mas a semana bancária selecionada
+        // não cobria nenhuma das datas do extrato -- os dois casos pareciam a mesma
+        // falha de leitura para quem estava anexando o documento. Agora usamos
+        // `total_lancamentos_no_documento` (ver AnaliseExtratoBancarioResult) para
+        // diferenciar os casos e apontar a causa real.
+        const totalNoDocumento = Number((analise as any)?.total_lancamentos_no_documento || 0);
+        const mensagem = inseridos.length
+          ? `${inseridos.length} lançamento(s) aguardando revisão.`
+          : (analise.lancamentos || []).length > 0
+            ? 'Os lançamentos deste documento já haviam sido importados anteriormente para esta semana.'
+            : totalNoDocumento > 0
+              ? (analise.observacoes || []).find((item) => /semana selecionada/i.test(item))
+                || 'O documento foi lido, mas nenhum lançamento cai na semana bancária selecionada. Selecione a semana correta.'
+              : 'Não foi possível identificar nenhum lançamento legível neste documento. Verifique se o arquivo está nítido e completo, ou anexe outro formato (PDF, JPG, PNG ou WebP).';
         res.json({
           success: true,
           analise,
           inseridos: inseridos.length,
           lancamentos: inseridos,
-          mensagem: inseridos.length
-            ? `${inseridos.length} lançamento(s) aguardando revisão.`
-            : 'Nenhum lançamento novo foi incluído; os dados já podem existir ou não foram legíveis no período.',
+          mensagem,
         });
       } catch (err) {
         await client.query('ROLLBACK');

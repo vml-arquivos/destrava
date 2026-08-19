@@ -323,7 +323,7 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
   };
 }
 
-function montarRelatorioDocumental(dossie: any) {
+export async function montarRelatorioDocumental(dossie: any) {
   const blocos = Array.isArray(dossie?.blocos) ? dossie.blocos : [];
   const mapa = dossie?.mapa_documental_credito || {};
   const etapas = Array.isArray(mapa.etapas) ? mapa.etapas : [];
@@ -354,6 +354,38 @@ function montarRelatorioDocumental(dossie: any) {
     bloco_nome: bloco.nome_amigavel,
     bloco_status: bloco.status,
   })));
+
+  // Bug real observado: um QSA (ou outro documento com análise especializada
+  // própria) podia aparecer no relatório como "Validado"/"Leitura concluída;
+  // documento considerado consistente" mesmo quando a extração de IA não achou
+  // nenhum sócio -- porque este relatório só conhecia a análise especializada
+  // dos documentos societários (contrato/alteração + atos da Junta) e, para
+  // qualquer outro arquivo, caía de volta na flag manual `documento.validado`
+  // (um campo administrativo, não uma confirmação de que a IA leu o conteúdo).
+  // Isso é o mesmo laudo persistido que `montarQsaDocumentalDados` já usa para
+  // decidir a Etapa 1 -- aqui ele só precisa ser buscado por arquivo (o Acervo
+  // Documental permite múltiplos arquivos do mesmo tipo, ex.: mais de um QSA).
+  const idsParaAnaliseEspecializada = new Map<string, string>();
+  for (const documento of documentosAnexados) {
+    const id = String(documento?.id || '');
+    if (!id || analisesSocietariasPorArquivo.has(id)) continue;
+    const configuracao = ANALISE_ESPECIALIZADA_POR_TIPO[String(documento?.tipo_documento || '')];
+    if (configuracao) idsParaAnaliseEspecializada.set(id, configuracao.promptCodigo);
+  }
+  const analisesPorTipoPorArquivo = new Map<string, any>(
+    (await Promise.all(
+      Array.from(idsParaAnaliseEspecializada.entries()).map(async ([id, promptCodigo]) => {
+        try {
+          const resultado = await buscarAnaliseEspecializadaPersistida(id, promptCodigo);
+          return resultado ? ([id, resultado] as [string, any]) : null;
+        } catch (error) {
+          console.warn('[Relatório documental] Falha ao buscar análise especializada persistida:', id, promptCodigo, (error as any)?.message || error);
+          return null;
+        }
+      }),
+    )).filter((item): item is [string, any] => item !== null),
+  );
+
   const documentosRelatorio = deduplicarDocumentosRelatorio([
     ...documentosIniciais
       .filter((documento) => documentoTemAnalise(documento, true))
@@ -362,16 +394,26 @@ function montarRelatorioDocumental(dossie: any) {
   ].map(({ documento, inicial }) => {
     const laudo = documento?.resultado_validacao?.analise_regra_documental;
     const laudoErro = documento?.resultado_validacao?.analise_regra_documental_erro;
-    const analiseEspecializada = analisesSocietariasPorArquivo.get(String(documento?.id || '')) || null;
+    const analiseEspecializada = analisesSocietariasPorArquivo.get(String(documento?.id || ''))
+      || analisesPorTipoPorArquivo.get(String(documento?.id || ''))
+      || null;
     const conteudoValido = inicial || arquivoDocumentoTemConteudo(documento);
     const analisado = documentoTemAnalise(documento, inicial, documento?.bloco_status)
       || (conteudoValido && Boolean(analiseEspecializada));
     const tipoTemAnaliseAutomatica = TIPOS_COM_ANALISE_AUTOMATICA.has(String(documento?.tipo_documento || ''));
+    // Quando existe uma análise especializada real para ESTE arquivo, ela manda:
+    // nem uma flag manual de "validado" pode transformar uma leitura que a IA
+    // marcou como incompleta/revisão em "consistente" no relatório, nem a
+    // ausência dela deve esconder uma leitura que a IA de fato concluiu bem.
+    // Sem análise especializada para o tipo do documento (ex.: certidões,
+    // garantias), o comportamento anterior é preservado.
+    const analiseEspecializadaIndicaConsistente = Boolean(analiseEspecializada?.consistente) || analiseEspecializada?.status === 'concluido';
     const consistente = inicial
       ? documento.consistente === true
-      : documento.consistente === true
-        || Boolean(analiseEspecializada?.consistente)
-        || (documento.validado === true && !laudoErro && (!tipoTemAnaliseAutomatica || Boolean(laudo)) && documento.exige_revisao_humana !== true);
+      : analiseEspecializada
+        ? analiseEspecializadaIndicaConsistente
+        : documento.consistente === true
+          || (documento.validado === true && !laudoErro && (!tipoTemAnaliseAutomatica || Boolean(laudo)) && documento.exige_revisao_humana !== true);
     const statusOrigem = laudoErro ? 'falha_leitura' : documento.status || laudo?.status || (consistente ? 'validado' : analisado ? 'analisado' : 'aguardando_analise');
     const resultadoDetalhado = montarResultadoDetalhadoRelatorio({ ...documento, analisado, consistente }, analiseEspecializada);
     if (!analisado) {
@@ -2303,7 +2345,7 @@ router.get('/empresa/:empresaId/relatorio', auth, async (req: Request, res: Resp
   try {
     const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
     if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
-    res.json(montarRelatorioDocumental(dossie));
+    res.json(await montarRelatorioDocumental(dossie));
   } catch (err: any) {
     console.error('[GET /api/documentacao/empresa/:empresaId/relatorio]', err);
     res.status(500).json({ error: 'Erro ao montar relatório documental' });
@@ -2314,7 +2356,7 @@ router.get('/empresa/:empresaId/relatorio/pdf', auth, async (req: Request, res: 
   try {
     const dossie = await montarDossieCreditoEmpresa(req.params.empresaId);
     if (!dossie) { res.status(404).json({ error: 'Empresa não encontrada' }); return; }
-    const relatorio = montarRelatorioDocumental(dossie);
+    const relatorio = await montarRelatorioDocumental(dossie);
     const pdf = await generateBrandedPdfBuffer(gerarHtmlRelatorioDocumental(relatorio), { brand: 'destrava', topMargin: '38mm' });
     const nomeEmpresa = String(relatorio.empresa?.razao_social || relatorio.empresa?.nome_fantasia || 'empresa')
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'empresa';

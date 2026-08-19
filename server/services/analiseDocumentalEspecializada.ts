@@ -69,6 +69,14 @@ export interface AnaliseExtratoBancarioResult {
   periodo_inicio: string | null;
   periodo_fim: string | null;
   lancamentos: LancamentoExtratoExtraido[];
+  // Quantos lançamentos o documento realmente tinha, ANTES do filtro pela
+  // semana selecionada. Sem este campo, um extrato lido com sucesso mas cuja
+  // semana bancária selecionada não cobre nenhuma das datas do documento
+  // ficava indistinguível de um extrato que a leitura simplesmente não
+  // conseguiu ler -- os dois casos zeravam `lancamentos` e geravam a mesma
+  // mensagem genérica. Ver uso em `normalizarExtratoBancario` e na rota
+  // POST /api/acompanhamentos-bancarios/:id/extratos/analisar.
+  total_lancamentos_no_documento: number;
   total_entradas: number;
   total_saidas: number;
   confianca: number | null;
@@ -1272,6 +1280,11 @@ function promptExtratoBancario(): string {
 Regras obrigatórias: o valor deve ser positivo e representar o valor absoluto do lançamento; classifique como entrada ou saída conforme a coluna, sinal ou descrição expressa no documento; nunca trate saldo anterior, saldo final, limite, subtotal ou total do extrato como lançamento; inclua tarifas, juros, impostos, transferências e pagamentos somente quando forem linhas de movimentação efetiva; não invente data, tipo, valor ou descrição; se uma linha estiver ambígua, omita-a; preserve uma evidência curta e literal; use null quando não houver informação. Datas devem ser convertidas para YYYY-MM-DD. A confiança deve estar entre 0 e 1.`;
 }
 
+function formatarDataBr(dataIso: string | null | undefined): string {
+  const match = String(dataIso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : '--';
+}
+
 function normalizarExtratoBancario(
   extraidos: any,
   semanaInicio: string,
@@ -1282,7 +1295,11 @@ function normalizarExtratoBancario(
   const observacoes: string[] = [];
   const documentoCompativel = extraidos?.documento_compativel !== false;
   const entradas = Array.isArray(extraidos?.lancamentos) ? extraidos.lancamentos : [];
-  const lancamentos: LancamentoExtratoExtraido[] = [];
+  // `validos` guarda TODO lançamento bem formado do documento, antes do filtro
+  // pela semana selecionada -- serve para diferenciar "o documento não tinha
+  // lançamentos legíveis" de "o documento foi lido corretamente, mas nenhuma
+  // data cai na semana escolhida" (ver `total_lancamentos_no_documento`).
+  const validos: LancamentoExtratoExtraido[] = [];
 
   for (const item of entradas) {
     const data = parseDate(item?.data || item?.data_movimento);
@@ -1296,24 +1313,38 @@ function normalizarExtratoBancario(
     const valor = valorBruto === null ? null : Math.round(Math.abs(valorBruto) * 100) / 100;
     const descricao = String(item?.descricao || item?.description || '').replace(/\s+/g, ' ').trim().slice(0, 500);
     if (!data || !tipo || valor === null || valor <= 0 || !descricao) continue;
-    if (inicio && data < inicio || fim && data > fim) continue;
     const evidencia = item?.evidencia === null || item?.evidencia === undefined
       ? null
       : String(item.evidencia).replace(/\s+/g, ' ').trim().slice(0, 1000) || null;
     const chave = `${data}|${tipo}|${valor.toFixed(2)}|${normalizarBasico(descricao)}`;
-    if (lancamentos.some((lancamento) => `${lancamento.data}|${lancamento.tipo}|${lancamento.valor.toFixed(2)}|${normalizarBasico(lancamento.descricao)}` === chave)) continue;
-    lancamentos.push({ data, tipo, descricao, valor, evidencia });
+    if (validos.some((lancamento) => `${lancamento.data}|${lancamento.tipo}|${lancamento.valor.toFixed(2)}|${normalizarBasico(lancamento.descricao)}` === chave)) continue;
+    validos.push({ data, tipo, descricao, valor, evidencia });
   }
 
+  const lancamentos = validos.filter((item) => !(inicio && item.data < inicio) && !(fim && item.data > fim));
+
   if (!documentoCompativel) observacoes.push('O arquivo não foi identificado como extrato ou comprovante bancário. Nenhum lançamento foi importado.');
-  if (Array.isArray(extraidos?.lancamentos) && extraidos.lancamentos.length !== lancamentos.length) {
-    observacoes.push('Algumas linhas foram descartadas por data fora da semana, valor/tipo inválido, duplicidade ou ausência de descrição objetiva.');
+  if (entradas.length !== validos.length) {
+    observacoes.push('Algumas linhas foram descartadas por valor/tipo inválido, duplicidade ou ausência de descrição objetiva.');
   }
-  if (!lancamentos.length && documentoCompativel) observacoes.push('Nenhum lançamento legível foi encontrado no intervalo da semana.');
+  if (documentoCompativel && !validos.length) {
+    observacoes.push('Nenhum lançamento legível foi encontrado no documento.');
+  } else if (documentoCompativel && validos.length && !lancamentos.length) {
+    // Este é o caso que antes ficava indistinguível de uma falha de leitura: a
+    // IA/OCR leu o extrato corretamente (há `validos.length` lançamentos),
+    // mas nenhuma data cai dentro da semana bancária selecionada.
+    const datasDocumento = validos.map((item) => item.data).sort();
+    observacoes.push(
+      `O documento foi lido com sucesso e tem ${validos.length} lançamento(s) entre `
+      + `${formatarDataBr(datasDocumento[0])} e ${formatarDataBr(datasDocumento.at(-1) || datasDocumento[0])}, `
+      + `mas nenhuma data cai na semana selecionada${inicio || fim ? ` (${formatarDataBr(inicio)} a ${formatarDataBr(fim)})` : ''}. `
+      + 'Selecione a semana bancária correta para importar esses lançamentos.',
+    );
+  }
 
   const totalEntradas = Math.round(lancamentos.filter((item) => item.tipo === 'entrada').reduce((total, item) => total + item.valor, 0) * 100) / 100;
   const totalSaidas = Math.round(lancamentos.filter((item) => item.tipo === 'saida').reduce((total, item) => total + item.valor, 0) * 100) / 100;
-  const datas = lancamentos.map((item) => item.data).sort();
+  const datas = validos.map((item) => item.data).sort();
   const confiancaRaw = asNumber(extraidos?.confianca);
   const confianca = confiancaRaw === null ? null : Math.max(0, Math.min(1, confiancaRaw));
   return {
@@ -1322,6 +1353,7 @@ function normalizarExtratoBancario(
     periodo_inicio: parseDate(extraidos?.periodo_inicio) || datas[0] || null,
     periodo_fim: parseDate(extraidos?.periodo_fim) || datas.at(-1) || null,
     lancamentos,
+    total_lancamentos_no_documento: validos.length,
     total_entradas: totalEntradas,
     total_saidas: totalSaidas,
     confianca,

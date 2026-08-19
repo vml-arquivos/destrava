@@ -468,7 +468,7 @@ function assertAllowedRelation(entidadeTipo: string, tipoDocumento: string, body
   if (!tipoDocumento) throw new Error('tipo_documento é obrigatório.');
 }
 
-async function validarEntidade(entidadeTipo: string, entidadeId: string, body: any) {
+export async function validarEntidade(entidadeTipo: string, entidadeId: string, body: any) {
   if (!ENTIDADES.includes(entidadeTipo as any)) throw new Error('entidade_tipo inválido.');
   if (!isUuid(entidadeId)) throw new Error('entidade_id inválido ou ausente.');
 
@@ -506,6 +506,30 @@ async function validarEntidade(entidadeTipo: string, entidadeId: string, body: a
   if (entidadeTipo === 'simulacao') {
     if (!(await existsSimulacao(entidadeId))) throw new Error('Simulação/análise não encontrada.');
     return { simulacao_id: entidadeId, empresa_id: body.empresa_id || null, cliente_pf_id: body.cliente_pf_id || null };
+  }
+
+  // Antes desta correção, uploads de extrato bancário no Acompanhamento
+  // Bancário (entidade_tipo='acompanhamento_bancario') caíam no `return {}`
+  // genérico abaixo: nem a existência do acompanhamento era conferida, nem o
+  // empresa_id do documento vinha do banco -- ele só existia se o cliente
+  // enviasse `empresa_id` corretamente no FormData. Quando isso falhava (ex.:
+  // corrida de carregamento no front, campo vazio), o documento era gravado
+  // com `empresa_id` NULL. A análise do extrato (`analisarExtratoBancario` em
+  // `analiseDocumentalEspecializada.ts`) exige `documento.empresa_id ===
+  // empresaId` para aceitar o arquivo (`carregarContexto`); com NULL essa
+  // checagem falhava e a leitura nunca chegava a rodar -- sem nenhum aviso
+  // claro para quem anexou o documento. Agora o empresa_id vem sempre do
+  // próprio registro do acompanhamento no banco, igual ao padrão já usado
+  // para 'socio' e 'contrato' acima.
+  if (entidadeTipo === 'acompanhamento_bancario') {
+    if (!(await tableExists('acompanhamentos_bancarios'))) throw new Error('Acompanhamento bancário não encontrado.');
+    const { rows } = await pool.query('SELECT empresa_id FROM public.acompanhamentos_bancarios WHERE id=$1 LIMIT 1', [entidadeId]);
+    const empresaId = rows[0]?.empresa_id || null;
+    if (!empresaId) throw new Error('Acompanhamento bancário não encontrado.');
+    if (body.empresa_id && String(body.empresa_id) !== String(empresaId)) {
+      throw new Error('empresa_id não confere com o acompanhamento bancário informado.');
+    }
+    return { empresa_id: empresaId };
   }
 
   return {};
