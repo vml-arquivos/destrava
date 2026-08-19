@@ -174,6 +174,25 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
   const laudoErro = documento?.resultado_validacao?.analise_regra_documental_erro;
   const analise = laudo || analiseEspecializada || null;
   const dados = analise?.dados_extraidos || {};
+  const contratoDados = dados?.contrato || {};
+  const diagnosticoFactual = documento?.diagnostico_factual
+    || contratoDados?.diagnostico_factual
+    || dados?.diagnostico_factual
+    || null;
+  const alteracoesSocietarias = Array.isArray(documento?.alteracoes_societarias)
+    ? documento.alteracoes_societarias
+    : Array.isArray(contratoDados?.alteracoes_societarias)
+      ? contratoDados.alteracoes_societarias
+      : [];
+  const quadroSocietarioFinal = Array.isArray(documento?.quadro_societario_final)
+    ? documento.quadro_societario_final
+    : Array.isArray(contratoDados?.quadro_societario_final)
+      ? contratoDados.quadro_societario_final
+      : [];
+  const evidencias = alteracoesSocietarias
+    .map((alteracao: any) => alteracao?.evidencia)
+    .filter(Boolean)
+    .map(String);
   const campos = documento?.campos_principais || {};
   const camposResultado: Array<{ label: string; valor: string }> = [];
   const adicionarCampo = (label: string, value: unknown) => {
@@ -190,6 +209,11 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
   adicionarCampo('Status da leitura', documento?.status_leitura || analise?.status);
   if (dados?.periodo_analisado) adicionarCampo('Período analisado', dados.periodo_analisado);
   if (dados?.titular_identificado) adicionarCampo('Titular identificado', dados.titular_identificado);
+  adicionarCampo('CNPJ do contrato', contratoDados?.cnpj);
+  adicionarCampo('Razão social do contrato', contratoDados?.razao_social);
+  adicionarCampo('Número do arquivamento', contratoDados?.numero_arquivamento);
+  adicionarCampo('Capital social anterior', contratoDados?.capital_social_anterior);
+  adicionarCampo('Capital social atual', contratoDados?.capital_social_atual);
 
   const alertas = [
     ...(Array.isArray(documento?.alertas) ? documento.alertas : []),
@@ -216,9 +240,13 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
 
   return {
     conclusao: resultado,
-    diagnostico: observacoesUnicas[0] || null,
+    diagnostico: diagnosticoFactual || observacoesUnicas[0] || null,
+    diagnostico_factual: diagnosticoFactual,
+    alteracoes_societarias: alteracoesSocietarias,
+    quadro_societario_final: quadroSocietarioFinal,
+    evidencias,
     campos: camposResultado,
-    observacoes: observacoesUnicas.slice(1),
+    observacoes: observacoesUnicas.filter((item) => item !== diagnosticoFactual).slice(1),
     alertas: alertas.map((item: any) => ({
       codigo: item.codigo || 'alerta_documental',
       mensagem: item.mensagem || String(item.codigo || 'Alerta documental'),
@@ -442,9 +470,27 @@ function gerarHtmlRelatorioDocumental(relatorio: any): string {
     const alertas = Array.isArray(resultado?.alertas) ? resultado.alertas : [];
     return alertas.length ? `<div class="alerts"><strong>Alertas identificados</strong><ul>${alertas.map((alerta: any) => `<li><b>${escapeHtmlRelatorio(String(alerta.severidade || 'atenção').toUpperCase())}:</b> ${escapeHtmlRelatorio(alerta.mensagem || alerta.recomendacao || alerta.codigo)}</li>`).join('')}</ul></div>` : '';
   };
+  const fatosSocietariosHtml = (resultado: any) => {
+    const alteracoes = Array.isArray(resultado?.alteracoes_societarias) ? resultado.alteracoes_societarias : [];
+    const quadroFinal = Array.isArray(resultado?.quadro_societario_final) ? resultado.quadro_societario_final : [];
+    const evidencias = Array.isArray(resultado?.evidencias) ? resultado.evidencias : [];
+    if (!resultado?.diagnostico_factual && !alteracoes.length && !quadroFinal.length && !evidencias.length) return '';
+    const alteracoesHtml = alteracoes.length ? `<div class="facts"><b>Alteração societária identificada</b><ul>${alteracoes.map((alteracao: any) => {
+      const cedente = alteracao?.cedente?.nome || alteracao?.socio_retirante?.nome || 'cedente não identificado';
+      const cessionario = alteracao?.cessionario?.nome || alteracao?.socio_admitido?.nome || 'cessionário não identificado';
+      const quotas = alteracao?.quotas_transferidas ?? alteracao?.cedente?.quotas;
+      const percentual = alteracao?.percentual_transferido != null ? ` (${alteracao.percentual_transferido}%)` : '';
+      const evidencia = alteracao?.evidencia ? `<br/><i>Evidência: “${escapeHtmlRelatorio(alteracao.evidencia)}”</i>` : '';
+      const pagina = alteracao?.pagina ? ` · página ${escapeHtmlRelatorio(alteracao.pagina)}` : '';
+      return `<li>Retirada/cedente: <b>${escapeHtmlRelatorio(cedente)}</b>; entrada/cessionário: <b>${escapeHtmlRelatorio(cessionario)}</b>; quotas transferidas: ${escapeHtmlRelatorio(quotas ?? 'não identificadas')}${escapeHtmlRelatorio(percentual)}${alteracao?.clausula ? ` · cláusula ${escapeHtmlRelatorio(alteracao.clausula)}` : ''}${pagina}${evidencia}</li>`;
+    }).join('')}</ul></div>` : '';
+    const quadroHtml = quadroFinal.length ? `<div class="facts"><b>Quadro societário final declarado no documento</b><ul>${quadroFinal.map((socio: any) => `<li><b>${escapeHtmlRelatorio(socio?.nome || 'Sócio não identificado')}</b>${socio?.quotas != null ? ` — ${escapeHtmlRelatorio(socio.quotas)} quotas` : ''}${socio?.percentual != null ? ` (${escapeHtmlRelatorio(socio.percentual)}%)` : ''}${socio?.qualificacao ? ` — ${escapeHtmlRelatorio(socio.qualificacao)}` : ''}</li>`).join('')}</ul></div>` : '';
+    const evidenciasHtml = evidencias.length ? `<div class="notes"><b>Trechos de evidência utilizados</b><ul>${evidencias.map((evidencia: any) => `<li><i>“${escapeHtmlRelatorio(evidencia)}”</i></li>`).join('')}</ul></div>` : '';
+    return `${resultado.diagnostico_factual ? `<div class="facts"><b>Diagnóstico objetivo do documento</b><p>${escapeHtmlRelatorio(resultado.diagnostico_factual)}</p></div>` : ''}${alteracoesHtml}${quadroHtml}${evidenciasHtml}`;
+  };
   const analisadosHtml = analisados.length ? analisados.map((documento: any) => {
     const resultado = documento.resultado_analise || {};
-    return `<article class="doc analyzed"><div class="doc-head"><div><strong>${escapeHtmlRelatorio(documento.nome)}</strong><small>${escapeHtmlRelatorio(documento.bloco)}${documento.criado_em ? ` · ${escapeHtmlRelatorio(dataRelatorio(documento.criado_em))}` : ''}</small></div><span class="pill green">${escapeHtmlRelatorio(documento.status || 'Analisado')}</span></div><div class="result"><b>Resultado da análise</b><p>${escapeHtmlRelatorio(resultado.conclusao || documento.observacao || 'Leitura concluída.')}</p>${resultado.diagnostico && resultado.diagnostico !== resultado.conclusao ? `<p>${escapeHtmlRelatorio(resultado.diagnostico)}</p>` : ''}</div>${camposHtml(resultado)}${resultado.observacoes?.length ? `<div class="notes"><b>Observações e anotações</b>${listaOuVazio(resultado.observacoes, '')}</div>` : ''}${alertasHtml(resultado)}</article>`;
+    return `<article class="doc analyzed"><div class="doc-head"><div><strong>${escapeHtmlRelatorio(documento.nome)}</strong><small>${escapeHtmlRelatorio(documento.bloco)}${documento.criado_em ? ` · ${escapeHtmlRelatorio(dataRelatorio(documento.criado_em))}` : ''}</small></div><span class="pill green">${escapeHtmlRelatorio(documento.status || 'Analisado')}</span></div><div class="result"><b>Resultado da análise</b><p>${escapeHtmlRelatorio(resultado.conclusao || documento.observacao || 'Leitura concluída.')}</p>${resultado.diagnostico && resultado.diagnostico !== resultado.conclusao ? `<p>${escapeHtmlRelatorio(resultado.diagnostico)}</p>` : ''}</div>${fatosSocietariosHtml(resultado)}${camposHtml(resultado)}${resultado.observacoes?.length ? `<div class="notes"><b>Observações e anotações</b>${listaOuVazio(resultado.observacoes, '')}</div>` : ''}${alertasHtml(resultado)}</article>`;
   }).join('') : `<div class="success">Nenhum documento analisado foi encontrado no acervo.</div>`;
   const pendentesAnaliseHtml = pendentesAnalise.length ? pendentesAnalise.map((documento: any) => {
     const resultado = documento.resultado_analise || {};
@@ -457,7 +503,7 @@ function gerarHtmlRelatorioDocumental(relatorio: any): string {
   const etapasHtml = etapas.length ? `<table><thead><tr><th>Etapa</th><th>Situação</th><th>Documentos faltantes</th></tr></thead><tbody>${etapas.map((etapa: any) => `<tr><td>${escapeHtmlRelatorio(`${etapa.numero || ''} — ${etapa.titulo || 'Etapa documental'}`)}</td><td>${etapa.bloqueada ? 'Aguardando etapa anterior' : 'Disponível para análise'}</td><td>${escapeHtmlRelatorio(etapa.documentos_faltantes)}</td></tr>`).join('')}</tbody></table>` : `<p class="empty">As próximas etapas ainda não foram calculadas.</p>`;
 
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/><title>Relatório documental — ${escapeHtmlRelatorio(empresa.razao_social || empresa.nome_fantasia || 'Empresa')}</title><style>
-  @page { size: A4; margin: 14mm; } * { box-sizing: border-box; } body { margin: 0; font-family: Arial, sans-serif; color: #172033; font-size: 9pt; line-height: 1.4; } h1 { color: #123b78; font-size: 20pt; margin: 0 0 4px; } h2 { color: #123b78; font-size: 13pt; margin: 22px 0 9px; border-bottom: 1px solid #d9e2ef; padding-bottom: 5px; page-break-after: avoid; } p { margin: 5px 0; } .subtitle { color: #64748b; font-size: 9pt; } .identity { background: #f1f7ff; border: 1px solid #cbdcf4; border-radius: 8px; padding: 12px; margin: 15px 0; } .meta { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 10px; margin-top: 8px; } .meta span, .card span, .field span { display: block; color: #64748b; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; } .meta strong { display: block; margin-top: 2px; } .cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; margin: 12px 0 15px; } .card { border: 1px solid #d9e2ef; border-radius: 7px; padding: 8px; min-height: 53px; } .card strong { display: block; margin-top: 4px; font-size: 9.2pt; color: #123b78; } .legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 10px 0 15px; } .legend div { border: 1px solid #d9e2ef; border-radius: 7px; padding: 8px; font-size: 8pt; } .green { color: #047857; } .orange { color: #c2410c; } .amber { color: #b45309; } table { width: 100%; border-collapse: collapse; margin: 5px 0 12px; } th { background: #123b78; color: #fff; text-align: left; font-size: 7.8pt; padding: 6px; } td { border-bottom: 1px solid #e5eaf1; vertical-align: top; padding: 6px; font-size: 8pt; } tr:nth-child(even) td { background: #f8fafc; } small { display: block; color: #64748b; font-size: 7.5pt; margin-top: 3px; } .doc, .stage { border: 1px solid #d9e2ef; border-radius: 8px; padding: 9px; margin: 7px 0; page-break-inside: avoid; } .analyzed { border-left: 4px solid #10b981; } .waiting { border-left: 4px solid #f97316; } .missing { border-left: 4px solid #f59e0b; } .doc-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; } .doc-head > div { flex: 1; } .pill { display: inline-block; border-radius: 999px; padding: 3px 7px; font-size: 7.5pt; font-weight: bold; white-space: nowrap; } .pill.green { background: #d1fae5; } .pill.orange { background: #ffedd5; } .pill.amber { background: #fef3c7; } .pill.purple { background: #ede9fe; color: #6d28d9; } .result, .positive, .notes, .alerts { margin-top: 7px; padding: 7px; border-radius: 6px; } .result { background: #ecfdf5; border: 1px solid #bbf7d0; } .positive { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; } .notes { background: #f8fafc; border: 1px solid #e2e8f0; } .alerts { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; } .fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 7px; } .field { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 6px; } .field strong { display: block; margin-top: 2px; overflow-wrap: anywhere; } ul { margin: 5px 0 3px; padding-left: 17px; } li { margin: 3px 0; } .success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857; padding: 10px; border-radius: 7px; } .empty { color: #64748b; font-style: italic; padding: 4px 0; } .footer-note { margin-top: 18px; color: #64748b; font-size: 7.5pt; border-top: 1px solid #e5eaf1; padding-top: 8px; }
+  @page { size: A4; margin: 14mm; } * { box-sizing: border-box; } body { margin: 0; font-family: Arial, sans-serif; color: #172033; font-size: 9pt; line-height: 1.4; } h1 { color: #123b78; font-size: 20pt; margin: 0 0 4px; } h2 { color: #123b78; font-size: 13pt; margin: 22px 0 9px; border-bottom: 1px solid #d9e2ef; padding-bottom: 5px; page-break-after: avoid; } p { margin: 5px 0; } .subtitle { color: #64748b; font-size: 9pt; } .identity { background: #f1f7ff; border: 1px solid #cbdcf4; border-radius: 8px; padding: 12px; margin: 15px 0; } .meta { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 10px; margin-top: 8px; } .meta span, .card span, .field span { display: block; color: #64748b; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; } .meta strong { display: block; margin-top: 2px; } .cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; margin: 12px 0 15px; } .card { border: 1px solid #d9e2ef; border-radius: 7px; padding: 8px; min-height: 53px; } .card strong { display: block; margin-top: 4px; font-size: 9.2pt; color: #123b78; } .legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 10px 0 15px; } .legend div { border: 1px solid #d9e2ef; border-radius: 7px; padding: 8px; font-size: 8pt; } .green { color: #047857; } .orange { color: #c2410c; } .amber { color: #b45309; } table { width: 100%; border-collapse: collapse; margin: 5px 0 12px; } th { background: #123b78; color: #fff; text-align: left; font-size: 7.8pt; padding: 6px; } td { border-bottom: 1px solid #e5eaf1; vertical-align: top; padding: 6px; font-size: 8pt; } tr:nth-child(even) td { background: #f8fafc; } small { display: block; color: #64748b; font-size: 7.5pt; margin-top: 3px; } .doc, .stage { border: 1px solid #d9e2ef; border-radius: 8px; padding: 9px; margin: 7px 0; page-break-inside: avoid; } .analyzed { border-left: 4px solid #10b981; } .waiting { border-left: 4px solid #f97316; } .missing { border-left: 4px solid #f59e0b; } .doc-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; } .doc-head > div { flex: 1; } .pill { display: inline-block; border-radius: 999px; padding: 3px 7px; font-size: 7.5pt; font-weight: bold; white-space: nowrap; } .pill.green { background: #d1fae5; } .pill.orange { background: #ffedd5; } .pill.amber { background: #fef3c7; } .pill.purple { background: #ede9fe; color: #6d28d9; } .result, .positive, .notes, .alerts, .facts { margin-top: 7px; padding: 7px; border-radius: 6px; } .result { background: #ecfdf5; border: 1px solid #bbf7d0; } .positive { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; } .notes { background: #f8fafc; border: 1px solid #e2e8f0; } .facts { background: #eff6ff; border: 1px solid #bfdbfe; } .alerts { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; } .fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 7px; } .field { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 6px; } .field strong { display: block; margin-top: 2px; overflow-wrap: anywhere; } ul { margin: 5px 0 3px; padding-left: 17px; } li { margin: 3px 0; } .success { background: #ecfdf5; border: 1px solid #a7f3d0; color: #047857; padding: 10px; border-radius: 7px; } .empty { color: #64748b; font-style: italic; padding: 4px 0; } .footer-note { margin-top: 18px; color: #64748b; font-size: 7.5pt; border-top: 1px solid #e5eaf1; padding-top: 8px; }
   </style></head><body><h1>Relatório de análise documental</h1><p class="subtitle">Estado consolidado do acervo, das análises realizadas e dos documentos necessários para a próxima etapa.</p><div class="identity"><strong>${escapeHtmlRelatorio(empresa.razao_social || empresa.nome_fantasia || 'Empresa não identificada')}</strong><div class="meta"><div><span>CNPJ</span><strong>${escapeHtmlRelatorio(empresa.cnpj)}</strong></div><div><span>Regime tributário</span><strong>${escapeHtmlRelatorio(relatorio.regime?.descricao)}</strong></div><div><span>Relatório gerado em</span><strong>${escapeHtmlRelatorio(dataRelatorio(relatorio.gerado_em))}</strong></div></div></div><div class="cards">${cardsHtml}</div><div class="legend"><div><b class="green">Anexados e analisados</b><br/>Arquivo localizado com leitura ou validação concluída.</div><div><b class="orange">Aguardando análise</b><br/>Arquivo recebido, mas ainda não considerado validado.</div><div><b class="amber">Faltantes</b><br/>Documento que ainda precisa ser anexado.</div></div><h2>Resumo executivo</h2><p>${escapeHtmlRelatorio(relatorio.proxima_acao)}</p><h2>1. Documentos anexados e analisados</h2>${analisadosHtml}<h2>2. Documentos anexados e aguardando análise</h2>${pendentesAnaliseHtml}<h2>3. Documentos ainda faltantes para anexar</h2>${faltantesHtml}<h2>4. Resultados consolidados por etapa</h2>${resultadosHtml}<h2>5. Observações e anotações gerais</h2>${listaOuVazio(anotacoes, 'Nenhuma observação adicional registrada.')}<h2>6. Blocos e pendências operacionais</h2>${blocosHtml}${pendenciasHtml}<h2>7. Próximas etapas</h2>${etapasHtml}<p class="footer-note">Este relatório é uma fotografia do dossiê no momento da geração. Após anexar novos documentos, gere novamente o relatório para atualizar o estado da empresa.</p></body></html>`;
 }
 
@@ -1648,6 +1694,15 @@ async function montarValidacaoSocietaria(
         data_registro: contrato.data_registro || null,
         tipo_ato: contrato.tipo_ato || null,
         consistente: item.analise!.status === 'concluido' && bloqueios.length === 0,
+        status_analise: item.analise!.status,
+        revisao_humana_necessaria: item.analise!.revisao_humana_necessaria === true,
+        confianca: item.analise!.nivel_confianca ?? contrato.confianca ?? null,
+        diagnostico: contrato.diagnostico_factual || dados.diagnostico_factual || null,
+        diagnostico_factual: contrato.diagnostico_factual || dados.diagnostico_factual || null,
+        alteracoes_societarias: Array.isArray(contrato.alteracoes_societarias) ? contrato.alteracoes_societarias : [],
+        quadro_societario_final: Array.isArray(contrato.quadro_societario_final) ? contrato.quadro_societario_final : [],
+        capital_social_anterior: contrato.capital_social_anterior ?? null,
+        capital_social_atual: contrato.capital_social_atual ?? null,
         alertas: item.analise!.alertas || [],
       };
     });

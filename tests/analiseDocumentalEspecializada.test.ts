@@ -148,6 +148,32 @@ describe('validação documental especializada', () => {
     expect(alertas.some((a) => a.codigo === 'contrato_junta_data_divergente')).toBe(true);
   });
 
+  it('confronta o quadro societário final com o QSA e não penaliza sócio histórico', () => {
+    const alertas = validarContratoComAtosJunta(
+      {
+        documento_compativel: true,
+        nire: '52206183723',
+        data_registro: '2025-06-06',
+        socios: [{ nome: 'Marcos Antonio da Silva' }],
+        quadro_societario_final: [{ nome: 'Jonnathas Rodrigues Pires', quotas: 65000, percentual: 100 }],
+      },
+      {
+        documento_compativel: true,
+        nire: '52206183723',
+        historico_arquivamentos: [
+          { numero: '20251505987', data: '2025-06-06', tipo_ato: 'ALTERAÇÃO' },
+          { numero: '20261234567', data: '2026-07-20', tipo_ato: 'ALTERAÇÃO DE SÓCIO' },
+        ],
+      },
+      { cnpj: '52.008.360/0001-33' },
+      [{ nome: 'Jonnathas Rodrigues Pires', administrador: true }],
+    );
+
+    expect(alertas.some((a) => a.codigo === 'contrato_historico_nao_comparado_qsa')).toBe(true);
+    expect(alertas.some((a) => a.codigo === 'contrato_socios_divergentes_qsa')).toBe(false);
+    expect(alertas.some((a) => a.severidade === 'alta' && a.campo === 'socios')).toBe(false);
+  });
+
   it('cruza número do ato, CNPJ e sócios do contrato com Junta, empresa e QSA', () => {
     const alertas = validarContratoComAtosJunta(
       {

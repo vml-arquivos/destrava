@@ -550,18 +550,71 @@ export function validarContratoComAtosJunta(contrato: any, atos: any, empresa?: 
   }
 
   const sociosContrato = Array.isArray(contrato?.socios) ? contrato.socios : [];
+  const quadroFinal = Array.isArray(contrato?.quadro_societario_final) && contrato.quadro_societario_final.length
+    ? contrato.quadro_societario_final
+    : sociosContrato;
   const nomesQsa = (Array.isArray(sociosQsa) ? sociosQsa : []).map((socio) => normalizarBasico(socio?.nome)).filter(Boolean);
-  const nomesContrato = sociosContrato.map((socio: any) => normalizarBasico(socio?.nome || socio)).filter(Boolean);
-  if (nomesContrato.length && nomesQsa.length) {
-    const divergentes = nomesContrato.filter((nome: string) => !nomesQsa.some((qsa: string) => qsa === nome || qsa.includes(nome) || nome.includes(qsa)));
-    if (divergentes.length) alertas.push({ codigo: 'contrato_socios_divergentes_qsa', campo: 'socios', mensagem: 'Há sócio(s) no contrato/alteração que não foram localizados no QSA da empresa.', severidade: 'alta', valor_documento: divergentes, valor_receita: nomesQsa, recomendacao: 'Atualizar o QSA ou anexar o ato societário correto.' });
+  const nomesQuadroFinal = quadroFinal.map((socio: any) => normalizarBasico(socio?.nome || socio)).filter(Boolean);
+  const datasJuntaOrdenadas = Array.from(datasJunta).sort();
+  const ultimaDataJunta = datasJuntaOrdenadas.at(-1) || null;
+  const contratoHistorico = !!dataContrato && !!ultimaDataJunta && dataContrato < ultimaDataJunta;
+  if (contratoHistorico && nomesQuadroFinal.length && nomesQsa.length) {
+    alertas.push({
+      codigo: 'contrato_historico_nao_comparado_qsa',
+      campo: 'socios',
+      mensagem: `O documento registrado em ${dataContrato} é anterior ao ato mais recente da Junta (${ultimaDataJunta}); os sócios históricos não foram tratados como quadro atual do QSA.`,
+      severidade: 'baixa',
+      valor_documento: nomesQuadroFinal,
+      valor_receita: nomesQsa,
+      recomendacao: 'Confrontar o QSA vigente com o quadro final do ato societário mais recente.',
+    });
+  } else if (nomesQuadroFinal.length && nomesQsa.length) {
+    const divergentes = nomesQuadroFinal.filter((nome: string) => !nomesQsa.some((qsa: string) => qsa === nome || qsa.includes(nome) || nome.includes(qsa)));
+    const ausentesNoDocumento = nomesQsa.filter((qsa: string) => !nomesQuadroFinal.some((nome: string) => qsa === nome || qsa.includes(nome) || nome.includes(qsa)));
+    if (divergentes.length || ausentesNoDocumento.length) {
+      alertas.push({
+        codigo: 'contrato_socios_divergentes_qsa',
+        campo: 'socios',
+        mensagem: `O quadro societário final do documento não confere integralmente com o QSA vigente. Não localizado no QSA: ${divergentes.join(', ') || 'nenhum'}. Não localizado no documento: ${ausentesNoDocumento.join(', ') || 'nenhum'}.`,
+        severidade: 'alta',
+        valor_documento: divergentes,
+        valor_receita: ausentesNoDocumento,
+        recomendacao: 'Conferir o ato societário mais recente, o QSA vigente e a data de efetivação antes de concluir a análise.',
+      });
+    }
   }
 
   return uniqueAlerts(alertas);
 }
 
+function montarDiagnosticoContratoFactual(dados: any): string | null {
+  const alteracoes = Array.isArray(dados?.alteracoes_societarias) ? dados.alteracoes_societarias : [];
+  const quadroFinal = Array.isArray(dados?.quadro_societario_final) ? dados.quadro_societario_final : [];
+  const frases = alteracoes.map((alteracao: any) => {
+    const cedente = alteracao?.cedente?.nome || alteracao?.socio_retirante?.nome || null;
+    const cessionario = alteracao?.cessionario?.nome || alteracao?.socio_admitido?.nome || null;
+    const quotas = asNumber(alteracao?.quotas_transferidas ?? alteracao?.cedente?.quotas);
+    if (cedente && cessionario) {
+      return `O documento registra a retirada de ${cedente} e a cessão/transferência de ${quotas !== null ? `${quotas.toLocaleString('pt-BR')} quotas` : 'suas quotas'} para ${cessionario}.`;
+    }
+    if (cedente) return `O documento registra a retirada de ${cedente}, mas não foi identificado cessionário de forma expressa.`;
+    if (cessionario) return `O documento registra a entrada de ${cessionario}, mas não foi identificado cedente de forma expressa.`;
+    return null;
+  }).filter(Boolean);
+  if (quadroFinal.length) {
+    const resumoFinal = quadroFinal.map((socio: any) => {
+      const nome = socio?.nome || 'sócio não identificado';
+      const quotas = asNumber(socio?.quotas);
+      const percentual = asNumber(socio?.percentual);
+      return `${nome}${quotas !== null ? ` com ${quotas.toLocaleString('pt-BR')} quotas` : ''}${percentual !== null ? ` (${percentual.toLocaleString('pt-BR')}%)` : ''}`;
+    }).join('; ');
+    frases.push(`O quadro societário final do documento é: ${resumoFinal}.`);
+  }
+  return frases.length ? frases.join(' ') : null;
+}
+
 function normalizarDadosContratoSocial(dados: any): Record<string, any> {
-  return {
+  const contrato = {
     ...dados,
     cnpj: dados?.cnpj ? String(dados.cnpj).trim() : null,
     razao_social: dados?.razao_social ? String(dados.razao_social).trim() : null,
@@ -576,8 +629,27 @@ function normalizarDadosContratoSocial(dados: any): Record<string, any> {
       qualificacao: socio?.qualificacao ? String(socio.qualificacao).trim() : null,
       administrador: administradorSocietario(socio),
     })).filter((socio: any) => socio.nome) : [],
+    alteracoes_societarias: Array.isArray(dados?.alteracoes_societarias) ? dados.alteracoes_societarias.map((alteracao: any) => ({
+      ...alteracao,
+      cedente: alteracao?.cedente ? { ...alteracao.cedente, nome: alteracao.cedente.nome ? String(alteracao.cedente.nome).trim() : null } : null,
+      cessionario: alteracao?.cessionario ? { ...alteracao.cessionario, nome: alteracao.cessionario.nome ? String(alteracao.cessionario.nome).trim() : null } : null,
+      quotas_transferidas: asNumber(alteracao?.quotas_transferidas),
+      percentual_transferido: asNumber(alteracao?.percentual_transferido),
+      clausula: alteracao?.clausula ? String(alteracao.clausula).trim() : null,
+      pagina: Number.isFinite(Number(alteracao?.pagina)) && Number(alteracao.pagina) > 0 ? Number(alteracao.pagina) : null,
+      evidencia: alteracao?.evidencia ? String(alteracao.evidencia).trim() : null,
+    })) : [],
+    quadro_societario_final: Array.isArray(dados?.quadro_societario_final) ? dados.quadro_societario_final.map((socio: any) => ({
+      nome: socio?.nome ? String(socio.nome).trim() : null,
+      quotas: asNumber(socio?.quotas),
+      percentual: asNumber(socio?.percentual),
+      administrador: administradorSocietario(socio),
+    })).filter((socio: any) => socio.nome) : [],
+    capital_social_anterior: asNumber(dados?.capital_social_anterior),
+    capital_social_atual: asNumber(dados?.capital_social_atual),
     confianca: normalizarConfianca(dados?.confianca),
   };
+  return { ...contrato, diagnostico_factual: dados?.diagnostico_factual || montarDiagnosticoContratoFactual(contrato) };
 }
 
 function inferirSociosQsaPorTextoSincronizado(texto: unknown, sociosBase: any[]): Array<{ nome: string; qualificacao: string | null; administrador: boolean | null }> {
@@ -796,7 +868,8 @@ Se o documento for uma lista/certidão de arquivamentos (ex: "Lista de Arquivame
 
 
 function promptContratoSocial(): string {
-  return `Você é um auditor de registro societário brasileiro. Extraia somente os dados necessários para conferir um Contrato Social, Alteração Contratual ou Consolidação com os Atos da Junta Comercial.
+  return `Você é um auditor de registro societário brasileiro. Leia o documento inteiro e extraia somente fatos expressamente escritos em Contrato Social, Alteração Contratual ou Consolidação. O objetivo é explicar objetivamente o que o ato fez, não apenas listar nomes.
+
 Responda SOMENTE JSON válido:
 {
   "documento_compativel": true,
@@ -809,9 +882,23 @@ Responda SOMENTE JSON válido:
   "data_documento": "YYYY-MM-DD ou null",
   "numero_arquivamento": "texto ou null",
   "socios": [{"nome":"texto","qualificacao":"texto ou null","administrador":true}],
-  "confianca": 0.0
+  "alteracoes_societarias": [{
+    "tipo_alteracao":"retirada|entrada|cessao_quotas|transferencia_quotas|alteracao_administracao|outro",
+    "cedente":{"nome":"texto ou null","quotas":0},
+    "cessionario":{"nome":"texto ou null","quotas":0},
+    "quotas_transferidas":0,
+    "percentual_transferido":0,
+    "clausula":"texto ou null",
+    "pagina":0,
+    "evidencia":"transcrição curta e literal do trecho que comprova o fato ou null"
+  }],
+  "quadro_societario_final":[{"nome":"texto","quotas":0,"percentual":0,"administrador":true}],
+  "capital_social_anterior":0,
+  "capital_social_atual":0,
+  "confianca":0.0
 }
-Use em data_registro a data da certificação/registro da Junta (ex.: CERTIFICO O REGISTRO EM), não a mera data de assinatura. Não invente informações.`;
+
+Regras obrigatórias: use null quando o dado não estiver visível; não invente nomes, quotas, percentuais, cláusulas ou páginas. Extraia todos os fatos de retirada, entrada, cessão ou transferência de quotas e identifique cedente e cessionário. Em uma consolidação, diferencie os sócios históricos do quadro societário final que aparece depois da alteração; o QSA deve ser comparado somente com o quadro final do ato mais recente, nunca com um sócio que se retirou em documento anterior. Copie uma evidência curta e literal para cada alteração. Use em data_registro a data da certificação/registro da Junta (ex.: CERTIFICO O REGISTRO EM), não a mera data de assinatura. Se não houver alteração societária expressa, retorne lista vazia.`;
 }
 
 function promptFaturamento12Meses(): string {

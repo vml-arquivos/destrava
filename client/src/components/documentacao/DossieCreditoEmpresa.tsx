@@ -137,6 +137,20 @@ type DocumentacaoSocietaria = {
   bloqueios?: string[];
   avisos?: string[];
   diagnostico?: string;
+  documentos_analisados?: Array<{
+    nome?: string | null;
+    tipo_ato?: string | null;
+    data_registro?: string | null;
+    consistente?: boolean;
+    revisao_humana_necessaria?: boolean;
+    diagnostico?: string | null;
+    diagnostico_factual?: string | null;
+    alteracoes_societarias?: Array<{ cedente?: { nome?: string | null; quotas?: number | null } | null; cessionario?: { nome?: string | null; quotas?: number | null } | null; quotas_transferidas?: number | null; percentual_transferido?: number | null; clausula?: string | null; pagina?: number | null; evidencia?: string | null }>;
+    quadro_societario_final?: Array<{ nome?: string | null; quotas?: number | null; percentual?: number | null; qualificacao?: string | null; administrador?: boolean | null }>;
+    capital_social_anterior?: number | null;
+    capital_social_atual?: number | null;
+    alertas?: Array<{ severidade?: string; mensagem?: string; recomendacao?: string }>;
+  }>;
 };
 
 type DocumentoMapaCredito = {
@@ -808,6 +822,41 @@ function DocumentacaoSocietariaCard({
         </div>
       )}
 
+      {!!dados.documentos_analisados?.length && (
+        <div className="mt-3 rounded-xl border border-indigo-100 bg-white p-3">
+          <p className="text-xs font-extrabold text-indigo-900">Diagnóstico factual dos contratos e alterações</p>
+          <p className="mt-1 text-[11px] text-slate-500">Os fatos abaixo vêm da leitura do documento e devem ser conferidos com o QSA e os Atos da Junta.</p>
+          {dados.documentos_analisados.map((documento, documentoIndex) => (
+            <div key={`${documento.nome}-${documentoIndex}`} className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11px] font-extrabold text-slate-900">{documento.nome || "Contrato/alteração"}</p>
+                <span className={`rounded-full px-2 py-0.5 text-[9px] font-extrabold ${documento.consistente ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>
+                  {documento.consistente ? "Leitura consistente" : documento.revisao_humana_necessaria ? "Revisão humana" : "Com ressalvas"}
+                </span>
+              </div>
+              {(documento.diagnostico_factual || documento.diagnostico) && <p className="mt-2 whitespace-pre-line text-[11px] font-semibold text-indigo-950">{documento.diagnostico_factual || documento.diagnostico}</p>}
+              {documento.alteracoes_societarias?.map((alteracao, alteracaoIndex) => (
+                <div key={alteracaoIndex} className="mt-2 rounded-lg border border-indigo-100 bg-white p-2 text-[10px] text-slate-700">
+                  <p><span className="font-extrabold">Transferência:</span> {alteracao.cedente?.nome || "cedente não identificado"} → {alteracao.cessionario?.nome || "cessionário não identificado"}</p>
+                  <p className="mt-1"><span className="font-extrabold">Quotas:</span> {alteracao.quotas_transferidas ?? "não identificadas"}{alteracao.percentual_transferido != null ? ` (${alteracao.percentual_transferido}%)` : ""}{alteracao.clausula ? ` · ${alteracao.clausula}` : ""}</p>
+                  {alteracao.evidencia && <p className="mt-1 whitespace-pre-line italic text-slate-600">Evidência: “{alteracao.evidencia}”</p>}
+                </div>
+              ))}
+              {!!documento.quadro_societario_final?.length && (
+                <div className="mt-2 rounded-lg border border-cyan-100 bg-cyan-50/70 p-2">
+                  <p className="text-[9px] font-extrabold uppercase text-cyan-800">Quadro final no documento</p>
+                  {documento.quadro_societario_final.map((socio, socioIndex) => <p key={socioIndex} className="mt-1 text-[10px] text-slate-700">• <span className="font-extrabold">{socio.nome || "Sócio não identificado"}</span>{socio.quotas != null ? ` — ${socio.quotas} quotas` : ""}{socio.percentual != null ? ` (${socio.percentual}%)` : ""}</p>)}
+                </div>
+              )}
+              {!!documento.alertas?.length && (
+                <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[10px] text-amber-900">
+                  {documento.alertas.map((alerta, alertaIndex) => <p key={alertaIndex}>• <strong>{String(alerta.severidade || "atenção").toUpperCase()}:</strong> {alerta.mensagem || alerta.recomendacao}</p>)}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       {!!dados.avisos?.length && <div className="mt-3 rounded-xl border border-blue-100 bg-white p-3"><p className="text-xs font-extrabold text-blue-800">Avisos da análise</p>{dados.avisos.map((item, index) => <p key={index} className="mt-1 text-[11px] text-blue-800">• {item}</p>)}</div>}
       {!!dados.registros_faltantes?.length && (
         <div className="mt-3 rounded-xl border border-amber-100 bg-white p-3">

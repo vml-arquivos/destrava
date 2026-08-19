@@ -181,6 +181,33 @@ describe('extração documental local determinística', () => {
     expect(resultado.dados.numero_arquivamento).toBe('20251505987');
   });
 
+  it('extrai retirada, transferência de quotas, quadro final e evidência do contrato', () => {
+    const texto = `
+      ALTERAÇÃO CONTRATUAL CONSOLIDADA
+      PALUMA BURGER LTDA
+      CNPJ 52.008.360/0001-33
+      O capital social, que é de R$ 65.000,00, passa a ser assim distribuído.
+      A sócia MARCOS ANTONIO DA SILVA, brasileiro, possuidor de 65.000 quotas,
+      retira-se da sociedade, cedendo e transferindo suas quotas para o sócio
+      JONNATHAS RODRIGUES PIRES, brasileiro, que passa a integrar o quadro social.
+      PASSA A SER ASSIM DISTRIBUÍDO
+      JONNATHAS RODRIGUES PIRES 65.000 100%
+      NIRE: 52206183723
+      CERTIFICO O REGISTRO EM 06/06/2025 SOB Nº 20251505987
+    `;
+    const resultado = analisarTextoDocumentoLocal('contrato_social_alteracao', texto);
+    const alteracao = resultado.dados.alteracoes_societarias[0];
+
+    expect(alteracao.cedente.nome).toContain('MARCOS ANTONIO DA SILVA');
+    expect(alteracao.cessionario.nome).toContain('JONNATHAS RODRIGUES PIRES');
+    expect(alteracao.quotas_transferidas).toBe(65000);
+    expect(resultado.dados.quadro_societario_final).toEqual(expect.arrayContaining([
+      expect.objectContaining({ nome: 'JONNATHAS RODRIGUES PIRES', quotas: 65000, percentual: 100 }),
+    ]));
+    expect(resultado.dados.capital_social_anterior).toBe(65000);
+    expect(alteracao.evidencia).toContain('cedendo e transferindo');
+  });
+
   it('aceita lista de atos da Junta do DF sem CNPJ e infere o NIRE pela constituição', () => {
     const texto = `
       REDE SIM DF - Serviços Web

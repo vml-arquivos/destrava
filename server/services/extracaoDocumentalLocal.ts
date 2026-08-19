@@ -103,6 +103,15 @@ function formatarCnpj(value: string | null): string | null {
   return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
 }
 
+function numeroInteiroBrasileiro(value: unknown): number | null {
+  const raw = String(value ?? '').replace(/R\$/gi, '').replace(/\s/g, '').trim();
+  if (!raw) return null;
+  const token = raw.match(/-?[\d.]+(?:,\d+)?/)?.[0] || raw;
+  const normalized = token.includes(',') ? token.replace(/\./g, '').split(',')[0] : (/^-?\d{1,3}(?:\.\d{3})+$/.test(token) ? token.replace(/\./g, '') : token);
+  const result = Number(normalized.replace(/[^\d-]/g, ''));
+  return Number.isFinite(result) ? result : null;
+}
+
 function numeroMonetario(value: unknown): number | null {
   const raw = String(value ?? '').replace(/R\$/gi, '').trim();
   if (!raw) return null;
@@ -445,6 +454,20 @@ function parseContratoSocialAlteracao(texto: string): { dados: Record<string, an
         ? 'Contrato Social'
         : null;
 
+  const padraoNome = '[A-ZÀ-Ú][A-Za-zÀ-ú]+(?:\\s+[A-ZÀ-Ú][A-Za-zÀ-ú]+){1,8}';
+  const limparNomeSocietario = (value: string | null | undefined): string | null => limparValor(value || null)?.replace(/\s+/g, ' ') || null;
+  const indiceTransferencia = texto.search(/retira-se\s+da\s+sociedade|vende\s+e\s+transfere|cedendo\s+e\s+transferindo/i);
+  const contextoTransferencia = indiceTransferencia >= 0
+    ? texto.slice(Math.max(0, indiceTransferencia - 900), Math.min(texto.length, indiceTransferencia + 1800))
+    : '';
+  const cedente = limparNomeSocietario(contextoTransferencia.match(new RegExp(`(?:s[óo]cio|s[óo]cia)\\s+(${padraoNome})(?=\\s*,\\s*(?:possuidor|acima|brasileir[oa]))`, 'i'))?.[1]);
+  const cessionario = limparNomeSocietario(contextoTransferencia.match(new RegExp(`(?:para|ao)\\s+(?:o\\s+)?s[óo]cio(?:\\s+(?:ora\\s+admitido|remanescente|admitido)(?:\\s+neste\\s+ato)?)?\\s+(${padraoNome})(?=\\s*,\\s*(?:brasileir[oa]|advogado|data|portador|acima))`, 'i'))?.[1]);
+  const quotasMatch = contextoTransferencia.match(/(?:possuidor\s+de|suas)\s+([\d.]+(?:,\d+)?)\s*(?:\([^)]*\)\s*)?quotas/i);
+  const quotasTransferidas = numeroInteiroBrasileiro(quotasMatch?.[1] || null);
+  const textoParaCapital = texto.replace(/quotas\s+de\s+capital\s+social/gi, 'quotas societárias');
+  const capitalAnteriorMatch = textoParaCapital.match(/\b(?:o\s+)?capital\s+social\b[^.\n]{0,140}?\b(?:é|de|valor\s+de)\s+(?:R\$\s*)?([\d.]+(?:,\d+)?)/i);
+  const capitalSocialAnterior = numeroInteiroBrasileiro(capitalAnteriorMatch?.[1] || null);
+
   const socios = linhas
     .filter((linha) => /s[oó]ci[oa]|administrador|titular/i.test(linha))
     .map((linha) => {
@@ -456,9 +479,49 @@ function parseContratoSocialAlteracao(texto: string): { dados: Record<string, an
     .filter(Boolean)
     .filter((item: any, index, array: any[]) => array.findIndex((outro: any) => textoNormalizado(outro.nome) === textoNormalizado(item.nome)) === index);
 
+  const nomesConhecidos = Array.from(new Set([cedente, cessionario, ...socios.map((socio: any) => socio.nome)].filter(Boolean))) as string[];
+  const inicioQuadro = texto.search(/passa\s+a\s+ser\s+assim\s+distribu[ií]do|fica\s+da\s+seguinte\s+forma|capital\s+encontra-se\s+subscrito/i);
+  const secaoQuadro = inicioQuadro >= 0 ? texto.slice(inicioQuadro, Math.min(texto.length, inicioQuadro + 2400)) : '';
+  const quadroSocietarioFinal = nomesConhecidos.map((nome) => {
+    const linha = linhas.find((item) => {
+      const normalizada = textoNormalizado(item);
+      return normalizada.includes(textoNormalizado(nome)) && /\d/.test(item)
+        && (!secaoQuadro || textoNormalizado(secaoQuadro).includes(normalizada));
+    });
+    if (!linha) return null;
+    const indiceNome = linha.toLocaleLowerCase('pt-BR').indexOf(nome.toLocaleLowerCase('pt-BR'));
+    const depoisNome = indiceNome >= 0 ? linha.slice(indiceNome + nome.length) : linha;
+    const numeros = depoisNome.match(/\b\d{1,3}(?:\.\d{3})+(?:,\d+)?\b|\b\d+(?:,\d+)?\b/g) || [];
+    const percentualExplicito = /%/.test(linha) || /%/.test(secaoQuadro);
+    return {
+      nome,
+      quotas: numeroInteiroBrasileiro(numeros[0] || null),
+      percentual: percentualExplicito ? numeros.map((numero) => numeroMonetario(numero)).reverse().find((numero) => numero !== null && numero >= 0 && numero <= 100) ?? null : null,
+      administrador: cessionario ? textoNormalizado(nome) === textoNormalizado(cessionario) : null,
+    };
+  }).filter(Boolean) as Array<Record<string, any>>;
+  if (!quadroSocietarioFinal.length && cessionario && quotasTransferidas !== null) {
+    quadroSocietarioFinal.push({ nome: cessionario, quotas: quotasTransferidas, percentual: 100, administrador: true });
+  }
+  const alteracoesSocietarias = cedente && cessionario
+    ? [{
+        tipo_alteracao: 'saida_transferencia',
+        cedente: { nome: cedente, quotas: quotasTransferidas },
+        cessionario: { nome: cessionario, quotas: quotasTransferidas },
+        quotas_transferidas: quotasTransferidas,
+        percentual_transferido: capitalSocialAnterior && quotasTransferidas !== null ? (quotasTransferidas / capitalSocialAnterior) * 100 : null,
+        clausula: /cl[aá]usula\s+primeira/i.test(contextoTransferencia) ? 'Cláusula Primeira' : null,
+        evidencia: texto.slice(indiceTransferencia, Math.min(texto.length, indiceTransferencia + 900)).replace(/\s+/g, ' ').trim().slice(0, 700),
+      }]
+    : [];
+  const capitalSocialAtual = quadroSocietarioFinal.reduce((total, socio: any) => total + (Number(socio.quotas) || 0), 0) || null;
+  if (quadroSocietarioFinal.length === 1 && quadroSocietarioFinal[0].percentual == null && capitalSocialAtual) {
+    quadroSocietarioFinal[0].percentual = 100;
+  }
+
   const campos = [nire, dataRegistro, razaoSocial, cnpj, tipoAto];
   const preenchidos = campos.filter(Boolean).length;
-  const confianca = clamp((compativel ? 0.15 : 0) + (nire ? 0.2 : 0) + (dataRegistro ? 0.2 : 0) + (preenchidos / campos.length) * 0.15 + (socios.length ? 0.3 : 0));
+  const confianca = clamp((compativel ? 0.15 : 0) + (nire ? 0.2 : 0) + (dataRegistro ? 0.2 : 0) + (preenchidos / campos.length) * 0.15 + (socios.length ? 0.15 : 0) + (alteracoesSocietarias.length ? 0.15 : 0));
   return {
     dados: {
       documento_compativel: compativel,
@@ -471,6 +534,10 @@ function parseContratoSocialAlteracao(texto: string): { dados: Record<string, an
       data_documento: dataDocumento,
       numero_arquivamento: numeroArquivamento,
       socios,
+      alteracoes_societarias: alteracoesSocietarias,
+      quadro_societario_final: quadroSocietarioFinal,
+      capital_social_anterior: capitalSocialAnterior,
+      capital_social_atual: capitalSocialAtual,
       confianca,
       fonte_extracao: 'local_deterministica',
     },
