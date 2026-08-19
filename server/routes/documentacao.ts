@@ -206,6 +206,17 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
         : Array.isArray(analiseSocietariaAuditavel?.quadro_final_documento)
           ? analiseSocietariaAuditavel.quadro_final_documento
           : [];
+  const sociosLidos = Array.isArray(analise?.socios_lidos)
+    ? analise.socios_lidos
+    : Array.isArray(analise?.socios)
+      ? analise.socios
+      : Array.isArray(documento?.socios_lidos)
+        ? documento.socios_lidos
+        : Array.isArray(documento?.socios)
+          ? documento.socios
+          : Array.isArray(documento?.analise_documental?.socios)
+            ? documento.analise_documental.socios
+            : [];
   const evidencias = Array.from(new Set([
     ...(Array.isArray(analise?.evidencias) ? analise.evidencias.map((item: any) => item?.texto || item).filter(Boolean).map(String) : []),
     ...alteracoesSocietarias.map((alteracao: any) => alteracao?.evidencia).filter(Boolean).map(String),
@@ -271,6 +282,10 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
     conclusao: resultado,
     diagnostico: diagnosticoFactual || observacoesUnicas[0] || null,
     diagnostico_factual: diagnosticoFactual,
+    tipo_documento: documento?.tipo_documento || null,
+    tipo_leitura: documento?.tipo_leitura || (String(documento?.codigo || '').toLowerCase() === 'qsa' ? 'qsa' : null),
+    qsa_leitura: documento?.qsa_leitura === true || String(documento?.tipo_documento || '').toLowerCase() === 'qsa' || String(documento?.codigo || '').toLowerCase() === 'qsa',
+    socios_lidos: sociosLidos,
     alteracoes_societarias: alteracoesSocietarias,
     quadro_societario_final: quadroSocietarioFinal,
     evidencias,
@@ -1711,8 +1726,12 @@ async function avaliarProntidaoIdentidadeCnpj(params: {
     qsa: {
       codigo: 'qsa', nome: 'QSA / Quadro Societário', anexado: qsaAnexado, analisado: qsaAnalisado, consistente: qsaConsistente,
       status: statusDocumento(qsaAnexado, qsaAnalisado, qsaConsistente, params.qsaDados?.status_leitura === 'falha_leitura'),
+      tipo_documento: 'qsa',
+      tipo_leitura: 'qsa',
+      qsa_leitura: true,
       diagnostico: qsaConsistente ? 'CNPJ, razão social, capital social, nomes dos sócios e identificação do Sócio-Administrador foram conferidos.' : params.qsaDados?.diagnostico || qsaPendencia?.mensagem || (qsaAnexado ? 'Documento anexado; a análise societária ainda precisa ser concluída.' : 'Documento não anexado.'),
       fonte: params.qsaDados?.fonte_extracao || params.qsaDados?.modelo || null, confianca: params.qsaDados?.nivel_confianca ?? params.qsaDados?.confianca ?? null,
+      socios_lidos: Array.isArray(params.qsaDados?.socios) ? params.qsaDados.socios : [],
       campos_principais: {
         cnpj: params.qsaDados?.cnpj || null,
         razao_social: params.qsaDados?.razao_social || null,
