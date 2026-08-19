@@ -10,6 +10,9 @@ function classesSecao(secao: DocumentoAnaliseSecao): string {
   if (secao.id === "resultado") return "border-emerald-100 bg-emerald-50/60";
   if (secao.id === "diagnostico_factual") return "border-blue-200 bg-blue-50/70";
   if (secao.id === "transacoes") return "border-indigo-200 bg-indigo-50/60";
+  if (secao.id === "qsa_nomes") return "border-blue-200 bg-blue-50/60";
+  if (secao.id === "amostra_dados") return "border-sky-200 bg-sky-50/60";
+  if (secao.id === "validacoes") return "border-amber-200 bg-amber-50/60";
   if (secao.id === "titular_atual") return "border-cyan-200 bg-cyan-50/60";
   if (secao.id === "leitura_societaria") return "border-violet-200 bg-violet-50/70";
   if (secao.id === "evidencias") return "border-slate-200 bg-slate-50";
@@ -20,6 +23,9 @@ function classesTitulo(secao: DocumentoAnaliseSecao): string {
   if (secao.id === "resultado") return "text-emerald-700";
   if (secao.id === "diagnostico_factual") return "text-blue-800";
   if (secao.id === "transacoes") return "text-indigo-800";
+  if (secao.id === "qsa_nomes") return "text-blue-800";
+  if (secao.id === "amostra_dados") return "text-sky-800";
+  if (secao.id === "validacoes") return "text-amber-800";
   if (secao.id === "titular_atual") return "text-cyan-800";
   if (secao.id === "leitura_societaria") return "text-violet-800";
   if (secao.id === "evidencias") return "text-slate-700";

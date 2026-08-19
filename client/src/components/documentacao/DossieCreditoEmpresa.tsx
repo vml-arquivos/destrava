@@ -400,33 +400,29 @@ function BlocoCnpj({ bloco }: { bloco: BlocoDossie }) {
 }
 
 function BlocoQsa({ bloco }: { bloco: BlocoDossie }) {
-  const socios = Array.isArray(bloco.dados_estruturados?.socios) ? bloco.dados_estruturados.socios : [];
-  const analise = bloco.dados_estruturados?.analise_documental || {};
+  const dados = bloco.dados_estruturados || {};
+  const socios = Array.isArray(dados.socios) ? dados.socios : [];
+  const analise = dados.analise_documental || {};
+  const resultadoQsa = {
+    ...analise,
+    conclusao: analise.diagnostico || dados.diagnostico || "Leitura do QSA concluída.",
+    tipo_documento: "qsa",
+    tipo_leitura: "qsa",
+    qsa_leitura: true,
+    socios_lidos: Array.isArray(analise.socios_lidos) && analise.socios_lidos.length ? analise.socios_lidos : socios,
+    campos: [
+      { label: "CNPJ no QSA", valor: analise.cnpj ? formatCnpj(analise.cnpj) : "Não identificado" },
+      { label: "Razão social", valor: analise.razao_social || "Não identificada" },
+      { label: "Capital social", valor: analise.capital_social !== null && analise.capital_social !== undefined ? formatMoney(analise.capital_social) : "Não identificado" },
+    ],
+  };
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
         <p className="text-xs font-extrabold text-blue-900">Conferência da Etapa 1</p>
         <p className="mt-1 text-[11px] leading-relaxed text-blue-800">Somente CNPJ, razão social, capital social, nomes dos sócios e identificação do Sócio-Administrador. Dados pessoais pertencem às próximas etapas e não bloqueiam esta análise.</p>
       </div>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <MiniCampo label="CNPJ no QSA" value={analise.cnpj ? formatCnpj(analise.cnpj) : "Aguardando leitura"} />
-        <MiniCampo label="Razão social" value={analise.razao_social || "Aguardando leitura"} />
-        <MiniCampo label="Capital social" value={analise.capital_social !== null && analise.capital_social !== undefined ? formatMoney(analise.capital_social) : "Aguardando leitura"} />
-      </div>
-      {socios.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500">Nenhum sócio disponível para conferência.</div>
-      ) : (
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-          {socios.slice(0, 20).map((s: any) => (
-            <div key={s.id || s.nome} className="rounded-xl border border-slate-100 bg-white p-3">
-              <p className="text-xs font-extrabold text-slate-800">{s.nome || "Sócio sem nome"}</p>
-              <div className="mt-2">
-                <MiniCampo label="Sócio-Administrador" value={s.administrador === true ? "Sim" : s.administrador === false ? "Não" : "Não identificado"} />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <ResultadoAnaliseDocumento resultado={resultadoQsa} documento={{ codigo: "qsa", tipo_documento: "qsa", nome: "QSA / Quadro Societário" }} />
       <DocumentosDoBloco documentos={bloco.documentos} />
     </div>
   );
@@ -841,16 +837,23 @@ function DocumentacaoSocietariaCard({
           <p className="text-xs font-extrabold text-indigo-900">Análises documentais detalhadas</p>
           <p className="mt-1 text-[11px] text-slate-500">Esta seção usa o mesmo resultado normalizado exibido no relatório consolidado e no PDF.</p>
           {dados.documentos_analisados.map((documento, documentoIndex) => {
-            const resultado = documento.resultado_analise || {
-              conclusao: documento.consistente ? "Leitura concluída; documento considerado consistente." : documento.diagnostico || "Leitura concluída com observações ou necessidade de revisão.",
-              diagnostico: documento.diagnostico,
-              diagnostico_factual: documento.diagnostico_factual,
-              alteracoes_societarias: documento.alteracoes_societarias,
-              quadro_societario_final: documento.quadro_societario_final,
-              analise_societaria_auditavel: null,
-              evidencias: (documento.alteracoes_societarias || []).map((item: any) => item?.evidencia).filter(Boolean),
-              campos: [],
-              observacoes: [],
+            const documentoDados = documento as any;
+            const resultado = documentoDados.resultado_analise || {
+              ...documentoDados,
+              conclusao: documentoDados.consistente ? "Leitura concluída; documento considerado consistente." : documentoDados.diagnostico || "Leitura concluída com observações ou necessidade de revisão.",
+              diagnostico: documentoDados.diagnostico,
+              diagnostico_factual: documentoDados.diagnostico_factual,
+              socios_lidos: documentoDados.socios_lidos || documentoDados.socios || [],
+              alteracoes_societarias: documentoDados.alteracoes_societarias || [],
+              quadro_societario_final: documentoDados.quadro_societario_final || [],
+              analise_societaria_auditavel: documentoDados.analise_societaria_auditavel || null,
+              evidencias: [
+                ...(Array.isArray(documentoDados.evidencias) ? documentoDados.evidencias : []),
+                ...(documentoDados.alteracoes_societarias || []).map((item: any) => item?.evidencia).filter(Boolean),
+              ],
+              campos: documentoDados.campos || [],
+              validacoes: documentoDados.validacoes || documentoDados.validacoes_realizadas || [],
+              observacoes: documentoDados.observacoes || [],
             };
             return (
               <div key={`${documento.nome}-${documentoIndex}`} className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">

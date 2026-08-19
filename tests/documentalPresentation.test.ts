@@ -33,6 +33,7 @@ describe("construirSecoesAnaliseDocumento", () => {
       "resultado",
       "transacoes",
       "titular_atual",
+      "validacoes",
       "evidencias",
     ]);
     expect(secoes.find((secao) => secao.id === "transacoes")?.itens?.[0]).toContain("Ação realizada: Transferência de quotas");
@@ -44,6 +45,34 @@ describe("construirSecoesAnaliseDocumento", () => {
     expect(JSON.stringify(secoes)).not.toContain("alerta histórico");
     expect(JSON.stringify(secoes)).not.toContain("NIRE");
     expect(JSON.stringify(secoes)).not.toContain("Cláusula segunda");
+  });
+
+  it("exibe nomes lidos, amostra objetiva e validações do QSA", () => {
+    const secoes = construirSecoesAnaliseDocumento({
+      conclusao: "Leitura concluída; QSA compatível.",
+      tipo_documento: "qsa",
+      tipo_leitura: "qsa",
+      qsa_leitura: true,
+      cnpj: "12.345.678/0001-90",
+      razao_social: "Empresa Exemplo Ltda.",
+      capital_social: 8400000,
+      socios_lidos: [
+        { nome: "Jonnathas Rodrigues Pires", qualificacao: "Sócio", administrador: true },
+        { nome: "Maria de Fátima Souza", qualificacao: "Sócia", administrador: false },
+      ],
+      campos: [
+        { label: "CNPJ", valor: "12.345.678/0001-90" },
+        { label: "Razão social", valor: "Empresa Exemplo Ltda." },
+      ],
+    }, { codigo: "qsa", nome: "QSA / Quadro Societário" });
+
+    expect(secoes.map((secao) => secao.id)).toEqual(["resultado", "amostra_dados", "qsa_nomes", "validacoes"]);
+    expect(secoes.find((secao) => secao.id === "qsa_nomes")?.itens).toEqual([
+      "Jonnathas Rodrigues Pires — Sócio — Sócio-Administrador",
+      "Maria de Fátima Souza — Sócia — Sócio",
+    ]);
+    expect(JSON.stringify(secoes)).toContain("CNPJ: identificado");
+    expect(JSON.stringify(secoes)).toContain("Sócio-Administrador: Jonnathas Rodrigues Pires");
   });
 
   it("não chama sócio histórico de titular atual", () => {
