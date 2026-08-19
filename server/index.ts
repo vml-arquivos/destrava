@@ -1597,6 +1597,43 @@ async function startServer() {
     console.error('[startup] Aviso Fix 060:', err.message);
   }
 
+  // ─── AUTO-CREATE: Rascunhos de extratos/comprovantes bancários ───────────────
+  // Isolado do histórico semanal: somente lançamentos aprovados são aplicados.
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS acompanhamento_bancario_lancamentos_importados (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        acompanhamento_id   UUID NOT NULL REFERENCES acompanhamentos_bancarios(id) ON DELETE CASCADE,
+        atualizacao_id      UUID REFERENCES acompanhamento_bancario_atualizacoes(id) ON DELETE CASCADE,
+        empresa_id          UUID REFERENCES empresas(id) ON DELETE CASCADE,
+        arquivo_id          UUID REFERENCES documentos_arquivos(id) ON DELETE SET NULL,
+        data_movimento      DATE NOT NULL,
+        tipo                TEXT NOT NULL CHECK (tipo IN ('entrada', 'saida')),
+        categoria           TEXT,
+        descricao           TEXT,
+        valor               NUMERIC(15,2) NOT NULL CHECK (valor > 0),
+        evidencia           TEXT,
+        confianca           NUMERIC(5,4),
+        status              TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'aprovado', 'descartado')),
+        criado_por          UUID REFERENCES colaboradores(id) ON DELETE SET NULL,
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        aplicado_em         TIMESTAMPTZ
+      );
+      ALTER TABLE acompanhamento_bancario_lancamentos_importados
+        ADD COLUMN IF NOT EXISTS aplicado_em TIMESTAMPTZ;
+      CREATE INDEX IF NOT EXISTS idx_ab_importados_acomp ON acompanhamento_bancario_lancamentos_importados(acompanhamento_id);
+      CREATE INDEX IF NOT EXISTS idx_ab_importados_atualizacao ON acompanhamento_bancario_lancamentos_importados(atualizacao_id);
+      CREATE INDEX IF NOT EXISTS idx_ab_importados_status ON acompanhamento_bancario_lancamentos_importados(status);
+      CREATE INDEX IF NOT EXISTS idx_ab_importados_arquivo ON acompanhamento_bancario_lancamentos_importados(arquivo_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_ab_importados_documento_lancamento
+        ON acompanhamento_bancario_lancamentos_importados(
+          acompanhamento_id, atualizacao_id, arquivo_id, data_movimento, tipo, valor, COALESCE(descricao, '')
+        );
+    `);
+    console.log('[startup] Rascunhos de extratos bancários verificados/criados com sucesso.');
+  } catch (err: any) {
+    console.error('[startup] Aviso: não foi possível criar os rascunhos de extratos bancários:', err.message);
+  }
 
 
   // ─── PATCH: Remove CHECK constraint legado de modelo_usado ─────────────────────
@@ -15123,6 +15160,458 @@ async function registrarDocumentoContratoGerado(params: {
     } catch (err) {
       console.error("[GET /api/acompanhamentos-bancarios/:id/inteligencia]", err);
       res.status(500).json({ error: "Erro ao gerar inteligência do acompanhamento bancário." });
+    }
+  });
+
+  function classificarCategoriaEntradaBancaria(descricao: string): string {
+    const texto = String(descricao || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+    if (/pix/.test(texto)) return 'entrada_pix';
+    if (/maquininha|cartao|pos |cielo|stone|rede |getnet|pagseguro|mercado pago/.test(texto)) return 'entrada_maquininha';
+    if (/boleto/.test(texto)) return 'entrada_boleto';
+    if (/ted|doc|transfer/.test(texto)) return 'entrada_ted';
+    if (/dinheiro|especie/.test(texto)) return 'entrada_dinheiro';
+    return 'outras_entradas';
+  }
+
+  async function recalcularSemanaBancariaAposImportacao(
+    db: { query: (text: string, values?: any[]) => Promise<{ rows: any[]; rowCount?: number | null }> },
+    acompanhamentoId: string,
+    atualizacaoId: string,
+    lancamentos: any[],
+    colaboradorId?: string | null,
+  ) {
+    const semanaResult = await db.query(
+      `SELECT u.*, a.faturamento_anual, a.percentual_operacional, a.nome_empresa, a.banco_observado, a.responsavel_id
+         FROM acompanhamento_bancario_atualizacoes u
+         JOIN acompanhamentos_bancarios a ON a.id = u.acompanhamento_id
+        WHERE u.id = $1 AND u.acompanhamento_id = $2
+        FOR UPDATE`,
+      [atualizacaoId, acompanhamentoId]
+    );
+    if (!semanaResult.rows.length) throw new Error('Atualização semanal bancária não encontrada.');
+    const semana = semanaResult.rows[0];
+    const numeroSemana = Number(semana.numero_semana || 1);
+    const entradas = {
+      entrada_maquininha: Number(semana.entrada_maquininha || 0),
+      entrada_pix: Number(semana.entrada_pix || 0),
+      entrada_boleto: Number(semana.entrada_boleto || 0),
+      entrada_ted: Number(semana.entrada_ted || 0),
+      entrada_dinheiro: Number(semana.entrada_dinheiro || 0),
+      outras_entradas: Number(semana.outras_entradas ?? semana.entrada_outras ?? 0),
+    };
+    let totalSaidas = Number(semana.total_saidas || 0);
+    let quantidadeTransacoes = Number(semana.quantidade_transacoes || 0);
+
+    for (const lancamento of lancamentos) {
+      const valor = Math.round(Math.abs(Number(lancamento.valor || 0)) * 100) / 100;
+      if (!(valor > 0)) continue;
+      quantidadeTransacoes += 1;
+      if (lancamento.tipo === 'saida') {
+        totalSaidas += valor;
+      } else {
+        const categoria = classificarCategoriaEntradaBancaria(`${lancamento.categoria || ''} ${lancamento.descricao || ''}`);
+        entradas[categoria as keyof typeof entradas] += valor;
+      }
+    }
+
+    Object.keys(entradas).forEach((key) => {
+      entradas[key as keyof typeof entradas] = Math.round(entradas[key as keyof typeof entradas] * 100) / 100;
+    });
+    totalSaidas = Math.round(totalSaidas * 100) / 100;
+    const totalEntradas = Math.round(Object.values(entradas).reduce((sum, value) => sum + value, 0) * 100) / 100;
+    const saldoSemanal = Math.round((totalEntradas - totalSaidas) * 100) / 100;
+    const statusSemana = statusSemanaAcompanhamento({
+      saldo: saldoSemanal,
+      restricaoNova: Boolean(semana.restricao_nova),
+      ocorrenciaNegativa: Boolean(semana.ocorrencia_negativa),
+      devolucaoOuEstorno: Boolean(semana.devolucao_ou_estorno),
+    });
+
+    const dataRef = semana.data_referencia_inicio || semana.data_atualizacao || new Date().toISOString().slice(0, 10);
+    const dataRefDate = new Date(String(dataRef).slice(0, 10) + 'T00:00:00Z');
+    const anoRef = Number.isNaN(dataRefDate.getTime()) ? new Date().getUTCFullYear() : dataRefDate.getUTCFullYear();
+    const mesRef = Number.isNaN(dataRefDate.getTime()) ? new Date().getUTCMonth() + 1 : dataRefDate.getUTCMonth() + 1;
+    const refs = calcularReferenciasAcompanhamento(
+      Number(semana.faturamento_anual || 0),
+      anoRef,
+      mesRef,
+      Number(semana.percentual_operacional || 30),
+    );
+    const todasSemanas = await db.query(
+      `SELECT * FROM acompanhamento_bancario_atualizacoes WHERE acompanhamento_id = $1 ORDER BY numero_semana ASC`,
+      [acompanhamentoId]
+    );
+    const semanasParaAcumulo = todasSemanas.rows.filter((item: any) => String(item.id) !== String(atualizacaoId));
+    const { acumuladoMensalAnterior, acumuladoAnual } = calcularAcumulados(semanasParaAcumulo, numeroSemana, mesRef, anoRef);
+    const comp = calcularCompensacaoMensal(totalEntradas, acumuladoMensalAnterior, acumuladoAnual, numeroSemana, refs);
+    const diagnostico = gerarDiagnosticoSemana(comp, refs, numeroSemana);
+
+    const updated = await db.query(
+      `UPDATE acompanhamento_bancario_atualizacoes SET
+         entrada_maquininha = $3, entrada_pix = $4, entrada_boleto = $5,
+         entrada_ted = $6, entrada_dinheiro = $7, outras_entradas = $8,
+         total_entradas = $9, total_saidas = $10, saldo_semanal = $11,
+         quantidade_transacoes = $12, status_semana = $13,
+         faturamento_anual_ref = $14, teto_anual_movimentacao = $15,
+         faturamento_mensal_base = $16, teto_mensal_movimentacao = $17,
+         referencia_semanal_base = $18, teto_semanal_movimentacao = $19,
+         semanas_no_mes = $20, acumulado_mensal = $21, acumulado_anual = $22,
+         valor_abaixo_semana = $23, valor_excedente_semana = $24,
+         saldo_faltante_ref_mensal = $25, saldo_disponivel_teto_mensal = $26,
+         semanas_restantes_mes = $27, meta_base_dinamica = $28, teto_dinamico_proxima = $29,
+         percentual_uso_semanal = $30, percentual_uso_mensal = $31, percentual_uso_anual = $32,
+         status_aderencia = $33, alerta_aderencia = $34, motivo_alerta_aderencia = $35,
+         diagnostico_tecnico = $36, updated_at = NOW()
+       WHERE acompanhamento_id = $1 AND id = $2
+       RETURNING *`,
+      [
+        acompanhamentoId, atualizacaoId,
+        entradas.entrada_maquininha, entradas.entrada_pix, entradas.entrada_boleto,
+        entradas.entrada_ted, entradas.entrada_dinheiro, entradas.outras_entradas,
+        totalEntradas, totalSaidas, saldoSemanal, quantidadeTransacoes, statusSemana,
+        refs.faturamento_anual_ref, refs.teto_anual_movimentacao,
+        refs.faturamento_mensal_base, refs.teto_mensal_movimentacao,
+        refs.referencia_semanal_base, refs.teto_semanal_movimentacao,
+        refs.semanas_no_mes, comp.acumulado_mensal, Number(acumuladoAnual) + totalEntradas,
+        comp.valor_abaixo_semana, comp.valor_excedente_semana,
+        comp.saldo_faltante_ref_mensal, comp.saldo_disponivel_teto_mensal,
+        comp.semanas_restantes_mes, comp.meta_base_dinamica, comp.teto_dinamico_proxima,
+        comp.percentual_uso_semanal, comp.percentual_uso_mensal, comp.percentual_uso_anual,
+        comp.status_aderencia, comp.alerta_aderencia, comp.motivo_alerta_aderencia,
+        diagnostico,
+      ]
+    );
+
+    try {
+      await db.query(
+        `INSERT INTO acompanhamento_compensacoes_historico (
+          acompanhamento_id, numero_semana, data_referencia_inicio, data_referencia_fim,
+          entrada_realizada, faturamento_anual_ref, teto_anual_movimentacao,
+          faturamento_mensal_base, teto_mensal_movimentacao, referencia_semanal_base,
+          teto_semanal_movimentacao, acumulado_mensal, valor_abaixo_semana, valor_excedente_semana,
+          saldo_faltante_ref_mensal, saldo_disponivel_teto_mensal, meta_base_dinamica,
+          teto_dinamico_proxima, percentual_uso_semanal, percentual_uso_mensal, percentual_uso_anual,
+          status_aderencia, alerta_aderencia, motivo_alerta, diagnostico_tecnico, criado_por
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+        ON CONFLICT (acompanhamento_id, numero_semana) DO UPDATE SET
+          entrada_realizada = EXCLUDED.entrada_realizada, acumulado_mensal = EXCLUDED.acumulado_mensal,
+          valor_abaixo_semana = EXCLUDED.valor_abaixo_semana, valor_excedente_semana = EXCLUDED.valor_excedente_semana,
+          status_aderencia = EXCLUDED.status_aderencia, alerta_aderencia = EXCLUDED.alerta_aderencia,
+          motivo_alerta = EXCLUDED.motivo_alerta, diagnostico_tecnico = EXCLUDED.diagnostico_tecnico`,
+        [
+          acompanhamentoId, numeroSemana, semana.data_referencia_inicio || null, semana.data_referencia_fim || null,
+          totalEntradas, refs.faturamento_anual_ref, refs.teto_anual_movimentacao,
+          refs.faturamento_mensal_base, refs.teto_mensal_movimentacao, refs.referencia_semanal_base,
+          refs.teto_semanal_movimentacao, comp.acumulado_mensal, comp.valor_abaixo_semana, comp.valor_excedente_semana,
+          comp.saldo_faltante_ref_mensal, comp.saldo_disponivel_teto_mensal, comp.meta_base_dinamica,
+          comp.teto_dinamico_proxima, comp.percentual_uso_semanal, comp.percentual_uso_mensal, comp.percentual_uso_anual,
+          comp.status_aderencia, comp.alerta_aderencia, comp.motivo_alerta_aderencia, diagnostico, colaboradorId || null,
+        ]
+      );
+    } catch (historicoErr) {
+      console.warn('[acompanhamento] Aplicação de extrato preservada, mas histórico auxiliar não foi atualizado.', historicoErr);
+    }
+
+    try {
+      await registrarAlertasAcompanhamentoBancario(db, {
+        acompanhamentoId,
+        atualizacaoId,
+        numeroSemana,
+        nomeEmpresa: semana.nome_empresa || null,
+        banco: semana.banco_observado || null,
+        responsavelId: semana.responsavel_id || colaboradorId || null,
+        totalEntradas,
+        refs,
+        comp,
+        dadosSemana: updated.rows[0] || semana,
+      });
+    } catch (alertErr) {
+      console.warn('[acompanhamento] Aplicação de extrato preservada, mas alertas auxiliares não foram atualizados.', alertErr);
+    }
+
+    await db.query(
+      `UPDATE acompanhamentos_bancarios SET ultimo_update_em = NOW(), updated_at = NOW() WHERE id = $1`,
+      [acompanhamentoId]
+    );
+    return updated.rows[0];
+  }
+
+  app.post("/api/acompanhamentos-bancarios/:id/extratos/analisar", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const acompanhamentoId = String(req.params.id || '');
+      const arquivoId = String(req.body?.arquivo_id || '');
+      const atualizacaoId = req.body?.atualizacao_id ? String(req.body.atualizacao_id) : null;
+      if (!arquivoId) {
+        res.status(400).json({ error: 'arquivo_id é obrigatório.' });
+        return;
+      }
+
+      const acompanhamentoResult = await pool.query(
+        `SELECT id, empresa_id FROM acompanhamentos_bancarios WHERE id = $1 LIMIT 1`,
+        [acompanhamentoId]
+      );
+      if (!acompanhamentoResult.rows.length) {
+        res.status(404).json({ error: 'Acompanhamento bancário não encontrado.' });
+        return;
+      }
+      const empresaId = acompanhamentoResult.rows[0].empresa_id;
+      const documentoResult = await pool.query(
+        `SELECT id, empresa_id, entidade_tipo, entidade_id, tipo_documento
+           FROM documentos_arquivos
+          WHERE id = $1 AND entidade_tipo = 'acompanhamento_bancario' AND entidade_id = $2
+          LIMIT 1`,
+        [arquivoId, acompanhamentoId]
+      );
+      if (!documentoResult.rows.length) {
+        res.status(400).json({ error: 'O documento não está vinculado a este acompanhamento bancário.' });
+        return;
+      }
+      if (documentoResult.rows[0].empresa_id && String(documentoResult.rows[0].empresa_id) !== String(empresaId)) {
+        res.status(403).json({ error: 'O documento pertence a outra empresa.' });
+        return;
+      }
+
+      let semanaInicio = String(req.body?.semana_inicio || '');
+      let semanaFim = String(req.body?.semana_fim || '');
+      if (atualizacaoId) {
+        const semanaResult = await pool.query(
+          `SELECT data_referencia_inicio, data_referencia_fim
+             FROM acompanhamento_bancario_atualizacoes
+            WHERE id = $1 AND acompanhamento_id = $2
+            LIMIT 1`,
+          [atualizacaoId, acompanhamentoId]
+        );
+        if (!semanaResult.rows.length) {
+          res.status(404).json({ error: 'Semana bancária selecionada não encontrada.' });
+          return;
+        }
+        semanaInicio = String(semanaResult.rows[0].data_referencia_inicio || semanaInicio || '');
+        semanaFim = String(semanaResult.rows[0].data_referencia_fim || semanaFim || '');
+      }
+
+      const analise = await analiseDocumentalService.analisarExtratoBancario(
+        String(empresaId), arquivoId, semanaInicio, semanaFim
+      );
+      if (!analise.documento_compativel) {
+        res.status(422).json({ error: 'O arquivo não foi identificado como extrato ou comprovante bancário.', analise });
+        return;
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const inseridos: any[] = [];
+        for (const lancamento of analise.lancamentos || []) {
+          const valor = Math.round(Math.abs(Number(lancamento.valor || 0)) * 100) / 100;
+          if (!(valor > 0)) continue;
+          const existente = await client.query(
+            `SELECT id FROM acompanhamento_bancario_lancamentos_importados
+              WHERE acompanhamento_id = $1
+                AND data_movimento = $2::date
+                AND tipo = $3
+                AND valor = $4
+                AND COALESCE(descricao, '') = COALESCE($5, '')
+                AND (arquivo_id = $6 OR arquivo_id IS NULL OR $6 IS NULL)
+                AND status <> 'descartado'
+              LIMIT 1`,
+            [acompanhamentoId, lancamento.data, lancamento.tipo, valor, lancamento.descricao || null, arquivoId]
+          );
+          if (existente.rows.length) continue;
+          const inserted = await client.query(
+            `INSERT INTO acompanhamento_bancario_lancamentos_importados (
+              acompanhamento_id, atualizacao_id, empresa_id, arquivo_id, data_movimento,
+              tipo, descricao, valor, evidencia, confianca, status, criado_por
+            ) VALUES ($1,$2,$3,$4,$5::date,$6,$7,$8,$9,$10,'pendente',$11)
+            RETURNING *`,
+            [
+              acompanhamentoId, atualizacaoId, empresaId, arquivoId, lancamento.data,
+              lancamento.tipo, lancamento.descricao || null, valor, lancamento.evidencia || null,
+              analise.confianca, colaborador?.id || null,
+            ]
+          );
+          inseridos.push(inserted.rows[0]);
+        }
+        await client.query('COMMIT');
+        res.json({
+          success: true,
+          analise,
+          inseridos: inseridos.length,
+          lancamentos: inseridos,
+          mensagem: inseridos.length
+            ? `${inseridos.length} lançamento(s) aguardando revisão.`
+            : 'Nenhum lançamento novo foi incluído; os dados já podem existir ou não foram legíveis no período.',
+        });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err: any) {
+      console.error('[POST /api/acompanhamentos-bancarios/:id/extratos/analisar]', err);
+      res.status(500).json({ error: err?.message || 'Erro ao analisar extrato bancário.' });
+    }
+  });
+
+  app.get("/api/acompanhamentos-bancarios/:id/lancamentos-importados", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+    try {
+      const params: any[] = [req.params.id];
+      const filtros = ['acompanhamento_id = $1'];
+      if (req.query.atualizacao_id) {
+        params.push(String(req.query.atualizacao_id));
+        filtros.push(`atualizacao_id = $${params.length}`);
+      }
+      if (req.query.status) {
+        const status = String(req.query.status);
+        if (!['pendente', 'aprovado', 'descartado'].includes(status)) {
+          res.status(400).json({ error: 'Status de lançamento inválido.' });
+          return;
+        }
+        params.push(status);
+        filtros.push(`status = $${params.length}`);
+      }
+      const { rows } = await pool.query(
+        `SELECT l.*, to_char(l.data_movimento, 'YYYY-MM-DD') AS data_movimento_iso,
+                d.nome_arquivo AS arquivo_nome
+           FROM acompanhamento_bancario_lancamentos_importados l
+           LEFT JOIN documentos_arquivos d ON d.id = l.arquivo_id
+          WHERE ${filtros.join(' AND ')}
+          ORDER BY l.data_movimento ASC, l.created_at ASC`,
+        params
+      );
+      res.json(rows);
+    } catch (err) {
+      console.error('[GET /api/acompanhamentos-bancarios/:id/lancamentos-importados]', err);
+      res.status(500).json({ error: 'Erro ao listar lançamentos importados.' });
+    }
+  });
+
+  app.patch("/api/acompanhamentos-bancarios/:id/lancamentos-importados/:lancamentoId", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+    try {
+      const b = req.body || {};
+      const campos: string[] = [];
+      const valores: any[] = [];
+      const adicionar = (coluna: string, valor: any) => { valores.push(valor); campos.push(`${coluna} = $${valores.length}`); };
+      if (b.status !== undefined) {
+        const status = String(b.status);
+        if (!['pendente', 'aprovado', 'descartado'].includes(status)) {
+          res.status(400).json({ error: 'Status de lançamento inválido.' });
+          return;
+        }
+        adicionar('status', status);
+      }
+      if (b.data_movimento !== undefined) {
+        const data = String(b.data_movimento || '');
+        if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(data)) {
+          res.status(400).json({ error: 'Data do lançamento inválida.' });
+          return;
+        }
+        adicionar('data_movimento', data);
+      }
+      if (b.tipo !== undefined) {
+        const tipo = String(b.tipo);
+        if (!['entrada', 'saida'].includes(tipo)) {
+          res.status(400).json({ error: 'Tipo do lançamento inválido.' });
+          return;
+        }
+        adicionar('tipo', tipo);
+      }
+      if (b.categoria !== undefined) adicionar('categoria', String(b.categoria || '').slice(0, 100) || null);
+      if (b.descricao !== undefined) adicionar('descricao', String(b.descricao || '').replace(/\\s+/g, ' ').trim().slice(0, 500) || null);
+      if (b.valor !== undefined) {
+        const valor = Math.round(Math.abs(Number(b.valor)) * 100) / 100;
+        if (!(valor > 0)) {
+          res.status(400).json({ error: 'Valor do lançamento inválido.' });
+          return;
+        }
+        adicionar('valor', valor);
+      }
+      if (!campos.length) {
+        res.status(400).json({ error: 'Nenhuma alteração informada.' });
+        return;
+      }
+      valores.push(req.params.id, req.params.lancamentoId);
+      const result = await pool.query(
+        `UPDATE acompanhamento_bancario_lancamentos_importados
+            SET ${campos.join(', ')}
+          WHERE acompanhamento_id = $${valores.length - 1} AND id = $${valores.length}
+            AND aplicado_em IS NULL
+          RETURNING *`,
+        valores
+      );
+      if (!result.rows.length) {
+        res.status(404).json({ error: 'Lançamento não encontrado ou já aplicado.' });
+        return;
+      }
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error('[PATCH /api/acompanhamentos-bancarios/:id/lancamentos-importados/:lancamentoId]', err);
+      res.status(500).json({ error: 'Erro ao revisar lançamento importado.' });
+    }
+  });
+
+  app.post("/api/acompanhamentos-bancarios/:id/lancamentos-importados/aplicar", auth, requireAcessoAcompanhamento, async (req: Request, res: Response) => {
+    const client = await pool.connect();
+    try {
+      const colaborador = (req as Request & { colaborador: any }).colaborador;
+      const acompanhamentoId = String(req.params.id || '');
+      const atualizacaoId = String(req.body?.atualizacao_id || '');
+      const ids = Array.isArray(req.body?.lancamento_ids) ? req.body.lancamento_ids.map(String).filter(Boolean) : [];
+      if (!atualizacaoId) {
+        res.status(400).json({ error: 'Selecione uma semana bancária para aplicar os lançamentos.' });
+        return;
+      }
+      await client.query('BEGIN');
+      const semana = await client.query(
+        `SELECT u.id
+           FROM acompanhamento_bancario_atualizacoes u
+           JOIN acompanhamentos_bancarios a ON a.id = u.acompanhamento_id
+          WHERE u.id = $1 AND a.id = $2
+          FOR UPDATE`,
+        [atualizacaoId, acompanhamentoId]
+      );
+      if (!semana.rows.length) {
+        await client.query('ROLLBACK');
+        res.status(404).json({ error: 'Semana bancária selecionada não encontrada.' });
+        return;
+      }
+      const params: any[] = [acompanhamentoId, atualizacaoId];
+      let filtroIds = '';
+      if (ids.length) {
+        params.push(ids);
+        filtroIds = ` AND id = ANY($${params.length}::uuid[])`;
+      }
+      const pendentes = await client.query(
+        `SELECT * FROM acompanhamento_bancario_lancamentos_importados
+          WHERE acompanhamento_id = $1 AND atualizacao_id = $2
+            AND status = 'aprovado' AND aplicado_em IS NULL${filtroIds}
+          ORDER BY data_movimento ASC, created_at ASC`,
+        params
+      );
+      if (!pendentes.rows.length) {
+        await client.query('ROLLBACK');
+        res.status(400).json({ error: 'Nenhum lançamento aprovado aguardando aplicação para esta semana.' });
+        return;
+      }
+      const semanaAtualizada = await recalcularSemanaBancariaAposImportacao(
+        client as any, acompanhamentoId, atualizacaoId, pendentes.rows, colaborador?.id || null
+      );
+      const idsAplicados = pendentes.rows.map((item: any) => item.id);
+      await client.query(
+        `UPDATE acompanhamento_bancario_lancamentos_importados
+            SET aplicado_em = NOW()
+          WHERE acompanhamento_id = $1 AND id = ANY($2::uuid[])`,
+        [acompanhamentoId, idsAplicados]
+      );
+      await client.query('COMMIT');
+      res.json({ success: true, aplicados: idsAplicados.length, semana: semanaAtualizada });
+    } catch (err: any) {
+      await client.query('ROLLBACK');
+      console.error('[POST /api/acompanhamentos-bancarios/:id/lancamentos-importados/aplicar]', err);
+      res.status(500).json({ error: err?.message || 'Erro ao aplicar lançamentos aprovados.' });
+    } finally {
+      client.release();
     }
   });
 

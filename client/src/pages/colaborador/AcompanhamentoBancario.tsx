@@ -39,6 +39,22 @@ type AtualizacaoForm = {
   proxima_acao: string;
 };
 
+type LancamentoImportadoBancario = {
+  id: string;
+  atualizacao_id?: string | null;
+  data_movimento: string;
+  data_movimento_iso?: string | null;
+  tipo: "entrada" | "saida";
+  categoria?: string | null;
+  descricao?: string | null;
+  valor: number;
+  evidencia?: string | null;
+  confianca?: number | null;
+  status: "pendente" | "aprovado" | "descartado";
+  arquivo_nome?: string | null;
+  aplicado_em?: string | null;
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDateBR(value?: string | null): string {
@@ -957,6 +973,15 @@ export default function AcompanhamentoBancario() {
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [editandoSemanaNumero, setEditandoSemanaNumero] = useState<number | null>(null);
 
+  const [lancamentosImportados, setLancamentosImportados] = useState<LancamentoImportadoBancario[]>([]);
+  const [semanaImportacaoId, setSemanaImportacaoId] = useState("");
+  const [arquivoExtrato, setArquivoExtrato] = useState<File | null>(null);
+  const [carregandoImportados, setCarregandoImportados] = useState(false);
+  const [analisandoExtrato, setAnalisandoExtrato] = useState(false);
+  const [aplicandoImportados, setAplicandoImportados] = useState(false);
+  const [erroImportacao, setErroImportacao] = useState("");
+  const [mensagemImportacao, setMensagemImportacao] = useState("");
+
   const [novo, setNovo] = useState<Acompanhamento>({
     nome_empresa: "",
     banco_observado: "",
@@ -1467,16 +1492,167 @@ export default function AcompanhamentoBancario() {
     }
   };
 
+  const carregarLancamentosImportados = async (acompanhamentoId: string, atualizacaoId?: string) => {
+    if (!acompanhamentoId) return;
+    setCarregandoImportados(true);
+    try {
+      const query = atualizacaoId ? `?atualizacao_id=${encodeURIComponent(atualizacaoId)}` : "";
+      const response = await fetch(`/api/acompanhamentos-bancarios/${acompanhamentoId}/lancamentos-importados${query}`, {
+        headers: authHeaders(),
+      });
+      const payload = await response.json().catch(() => []);
+      if (!response.ok) throw new Error(payload?.error || "Não foi possível carregar os lançamentos importados.");
+      setLancamentosImportados(Array.isArray(payload) ? payload : []);
+    } catch (err: any) {
+      setErroImportacao(err?.message || "Não foi possível carregar os lançamentos importados.");
+    } finally {
+      setCarregandoImportados(false);
+    }
+  };
+
+  const analisarExtratoBancario = async () => {
+    if (!detalhe?.id) return;
+    if (!semanaImportacaoId) {
+      setErroImportacao("Selecione uma semana bancária existente antes de analisar o documento.");
+      return;
+    }
+    if (!arquivoExtrato) {
+      setErroImportacao("Selecione um extrato ou comprovante em PDF ou imagem.");
+      return;
+    }
+    if (arquivoExtrato.size > 25 * 1024 * 1024) {
+      setErroImportacao("O arquivo ultrapassa o limite de 25 MB.");
+      return;
+    }
+    const tiposAceitos = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+    if (!tiposAceitos.includes(arquivoExtrato.type)) {
+      setErroImportacao("Formato não suportado. Use PDF, JPG, JPEG, PNG ou WebP.");
+      return;
+    }
+
+    setAnalisandoExtrato(true);
+    setErroImportacao("");
+    setMensagemImportacao("");
+    try {
+      const formData = new FormData();
+      formData.append("file", arquivoExtrato);
+      formData.append("entidade_tipo", "acompanhamento_bancario");
+      formData.append("entidade_id", String(detalhe.id));
+      formData.append("empresa_id", String(detalhe.empresa_id || ""));
+      formData.append("tipo_documento", "extrato_bancario");
+      formData.append("origem", "upload_manual");
+      formData.append("observacoes", `Documento anexado no Acompanhamento Bancário — semana ${semanaImportacaoId}.`);
+
+      const uploadHeaders = authHeaders();
+      delete uploadHeaders["Content-Type"];
+      const uploadResponse = await fetch("/api/documentos/upload", {
+        method: "POST",
+        headers: uploadHeaders,
+        body: formData,
+      });
+      const documento = await uploadResponse.json().catch(() => ({}));
+      if (!uploadResponse.ok) throw new Error(documento?.error || "Não foi possível anexar o documento.");
+
+      const semana = (detalhe.atualizacoes || []).find((item: any) => String(item.id) === String(semanaImportacaoId));
+      const analiseResponse = await fetch(`/api/acompanhamentos-bancarios/${detalhe.id}/extratos/analisar`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          arquivo_id: documento.id,
+          atualizacao_id: semanaImportacaoId,
+          semana_inicio: semana?.data_referencia_inicio || undefined,
+          semana_fim: semana?.data_referencia_fim || undefined,
+        }),
+      });
+      const resultado = await analiseResponse.json().catch(() => ({}));
+      if (!analiseResponse.ok) throw new Error(resultado?.error || "Não foi possível analisar o documento.");
+
+      setArquivoExtrato(null);
+      setMensagemImportacao(resultado?.mensagem || "Documento analisado. Revise os lançamentos antes de aplicar.");
+      await carregarLancamentosImportados(detalhe.id, semanaImportacaoId);
+    } catch (err: any) {
+      setErroImportacao(err?.message || "Erro ao anexar e analisar o documento.");
+    } finally {
+      setAnalisandoExtrato(false);
+    }
+  };
+
+  const revisarLancamentoImportado = async (lancamento: LancamentoImportadoBancario, alteracoes: Record<string, unknown>) => {
+    if (!detalhe?.id) return;
+    try {
+      const response = await fetch(`/api/acompanhamentos-bancarios/${detalhe.id}/lancamentos-importados/${lancamento.id}`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify(alteracoes),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || "Não foi possível revisar o lançamento.");
+      setLancamentosImportados((anteriores) => anteriores.map((item) => item.id === lancamento.id ? { ...item, ...payload } : item));
+    } catch (err: any) {
+      setErroImportacao(err?.message || "Não foi possível revisar o lançamento.");
+    }
+  };
+
+  const aplicarLancamentosImportados = async () => {
+    if (!detalhe?.id || !semanaImportacaoId) return;
+    const aprovados = lancamentosImportados.filter((item) => item.status === "aprovado" && !item.aplicado_em);
+    if (!aprovados.length) {
+      setErroImportacao("Aprove pelo menos um lançamento antes de aplicar.");
+      return;
+    }
+    setAplicandoImportados(true);
+    setErroImportacao("");
+    setMensagemImportacao("");
+    try {
+      const response = await fetch(`/api/acompanhamentos-bancarios/${detalhe.id}/lancamentos-importados/aplicar`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          atualizacao_id: semanaImportacaoId,
+          lancamento_ids: aprovados.map((item) => item.id),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || "Não foi possível aplicar os lançamentos aprovados.");
+      setMensagemImportacao(`${payload?.aplicados || aprovados.length} lançamento(s) aplicado(s) sem apagar os dados manuais.`);
+      setLancamentosImportados((anteriores) => anteriores.map((item) =>
+        aprovados.some((aprovado) => aprovado.id === item.id) ? { ...item, aplicado_em: new Date().toISOString() } : item
+      ));
+      if (payload?.semana) {
+        setDetalhe((anterior) => anterior ? {
+          ...anterior,
+          atualizacoes: (anterior.atualizacoes || []).map((item: any) =>
+            String(item.id) === String(semanaImportacaoId) ? { ...item, ...payload.semana } : item
+          ),
+        } : anterior);
+      }
+      await fetchData();
+    } catch (err: any) {
+      setErroImportacao(err?.message || "Erro ao aplicar lançamentos aprovados.");
+    } finally {
+      setAplicandoImportados(false);
+    }
+  };
+
   const carregarDetalhe = async (id: string) => {
     setInteligenciaAcompanhamento(null);
     setErroInteligenciaAcompanhamento("");
+    setErroImportacao("");
+    setMensagemImportacao("");
+    setArquivoExtrato(null);
     const response = await fetch(`/api/acompanhamentos-bancarios/${id}`, {
       headers: authHeaders(),
     });
     if (!response.ok) { alert("Não foi possível carregar os detalhes."); return; }
     const payload = await response.json();
+    const semanas = Array.isArray(payload?.atualizacoes) ? payload.atualizacoes : [];
+    const semanaInicial = getSemanaAtual(payload) || semanas[0];
+    setSemanaImportacaoId(String(semanaInicial?.id || ""));
     setDetalhe(payload);
-    await carregarInteligenciaAcompanhamento(id);
+    await Promise.all([
+      carregarInteligenciaAcompanhamento(id),
+      carregarLancamentosImportados(id, semanaInicial?.id ? String(semanaInicial.id) : undefined),
+    ]);
   };
 
   const copiarTextoInteligencia = async (texto?: string | null) => {
@@ -2094,6 +2270,11 @@ export default function AcompanhamentoBancario() {
           className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
           onClick={() => carregarDetalhe(row.id)}
         >Detalhes</button>
+        <button
+          className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-100"
+          onClick={() => carregarDetalhe(row.id)}
+          title="Abrir extratos e comprovantes bancários deste acompanhamento"
+        >Extratos</button>
         {!encerradoJa && (
           <button
             className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
@@ -3462,6 +3643,181 @@ export default function AcompanhamentoBancario() {
                       Nenhuma atualização semanal registrada.
                     </div>
                   )}
+                </section>
+
+                <section className="rounded-2xl border border-violet-200 bg-white shadow-sm">
+                  <div className="border-b border-violet-100 bg-violet-50/60 px-4 py-4">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                      <div>
+                        <h4 className="text-sm font-bold uppercase tracking-wide text-violet-800">Extratos e comprovantes bancários</h4>
+                        <p className="mt-1 max-w-3xl text-xs leading-5 text-violet-900/80">
+                          Anexe um extrato em PDF ou imagem para extrair entradas e saídas deste acompanhamento. Os dados ficam em revisão e não alteram o histórico até uma aprovação explícita.
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-violet-200 bg-white px-3 py-1 text-[11px] font-semibold text-violet-700">
+                        {lancamentosImportados.filter((item) => item.status === "pendente" && !item.aplicado_em).length} pendente(s)
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 p-4">
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto] lg:items-end">
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-semibold text-slate-600">Semana bancária de destino</span>
+                        <select
+                          className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700"
+                          value={semanaImportacaoId}
+                          onChange={async (e) => {
+                            const value = e.target.value;
+                            setSemanaImportacaoId(value);
+                            setErroImportacao("");
+                            setMensagemImportacao("");
+                            await carregarLancamentosImportados(detalhe.id, value || undefined);
+                          }}
+                          disabled={analisandoExtrato || aplicandoImportados}
+                        >
+                          <option value="">Selecione uma semana</option>
+                          {(detalhe.atualizacoes || [])
+                            .filter((item: any) => {
+                              const inicio = parseDateLocal(item?.data_referencia_inicio);
+                              return !inicio || inicio <= todayLocal();
+                            })
+                            .map((item: any) => (
+                              <option key={item.id} value={item.id}>
+                                Semana {item.numero_semana || "-"} — {formatDateBR(item.data_referencia_inicio)} a {formatDateBR(item.data_referencia_fim)}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-semibold text-slate-600">Extrato ou comprovante (PDF ou imagem)</span>
+                        <input
+                          type="file"
+                          accept=".pdf,application/pdf,.jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                          onChange={(e) => {
+                            setArquivoExtrato(e.target.files?.[0] || null);
+                            setErroImportacao("");
+                            setMensagemImportacao("");
+                          }}
+                          disabled={analisandoExtrato || aplicandoImportados}
+                          className="block h-10 w-full cursor-pointer rounded-lg border border-slate-300 bg-white text-xs text-slate-600 file:mr-3 file:h-10 file:border-0 file:border-r file:border-slate-200 file:bg-slate-50 file:px-3 file:text-xs file:font-semibold file:text-slate-700"
+                        />
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={analisarExtratoBancario}
+                        disabled={analisandoExtrato || aplicandoImportados || !arquivoExtrato || !semanaImportacaoId}
+                        className="h-10 rounded-lg bg-violet-600 px-4 text-xs font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {analisandoExtrato ? "Analisando..." : "Anexar e analisar"}
+                      </button>
+                    </div>
+
+                    {arquivoExtrato && (
+                      <p className="text-xs text-slate-500">Arquivo selecionado: <strong>{arquivoExtrato.name}</strong></p>
+                    )}
+                    {!detalhe.atualizacoes?.length && (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                        Primeiro registre uma atualização semanal em <strong>Atualizar semana</strong> para definir o destino dos lançamentos importados.
+                      </div>
+                    )}
+                    {erroImportacao && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">{erroImportacao}</div>}
+                    {mensagemImportacao && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-700">{mensagemImportacao}</div>}
+
+                    {carregandoImportados ? (
+                      <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-500">Carregando lançamentos importados...</div>
+                    ) : lancamentosImportados.length ? (
+                      <div className="space-y-3">
+                        <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+                          <span>Revise cada lançamento. Aprovar não aplica o dado automaticamente.</span>
+                          <button
+                            type="button"
+                            onClick={aplicarLancamentosImportados}
+                            disabled={aplicandoImportados || !lancamentosImportados.some((item) => item.status === "aprovado" && !item.aplicado_em) || !semanaImportacaoId}
+                            className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {aplicandoImportados ? "Aplicando..." : "Aplicar aprovados"}
+                          </button>
+                        </div>
+
+                        <div className="space-y-2">
+                          {lancamentosImportados.map((item) => {
+                            const dataValue = String(item.data_movimento_iso || item.data_movimento || "").slice(0, 10);
+                            const aplicado = Boolean(item.aplicado_em);
+                            return (
+                              <div key={item.id} className={`rounded-xl border p-3 ${aplicado ? "border-emerald-200 bg-emerald-50/40" : item.status === "descartado" ? "border-slate-200 bg-slate-50 opacity-70" : "border-slate-200 bg-white"}`}>
+                                <div className="grid grid-cols-1 gap-2 md:grid-cols-[130px_110px_minmax(0,1fr)_145px_auto] md:items-end">
+                                  <label className="block">
+                                    <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-400">Data</span>
+                                    <input
+                                      type="date"
+                                      value={dataValue}
+                                      disabled={aplicado}
+                                      onChange={(e) => revisarLancamentoImportado(item, { data_movimento: e.target.value })}
+                                      className="h-9 w-full rounded-md border border-slate-300 px-2 text-xs"
+                                    />
+                                  </label>
+                                  <label className="block">
+                                    <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-400">Tipo</span>
+                                    <select
+                                      value={item.tipo}
+                                      disabled={aplicado}
+                                      onChange={(e) => revisarLancamentoImportado(item, { tipo: e.target.value })}
+                                      className="h-9 w-full rounded-md border border-slate-300 bg-white px-2 text-xs"
+                                    >
+                                      <option value="entrada">Entrada</option>
+                                      <option value="saida">Saída</option>
+                                    </select>
+                                  </label>
+                                  <label className="block">
+                                    <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-400">Descrição</span>
+                                    <input
+                                      type="text"
+                                      value={item.descricao || ""}
+                                      disabled={aplicado}
+                                      onBlur={(e) => revisarLancamentoImportado(item, { descricao: e.target.value })}
+                                      className="h-9 w-full rounded-md border border-slate-300 px-2 text-xs"
+                                    />
+                                  </label>
+                                  <label className="block">
+                                    <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-400">Valor</span>
+                                    <input
+                                      type="number"
+                                      min="0.01"
+                                      step="0.01"
+                                      value={Number(item.valor || 0).toFixed(2)}
+                                      disabled={aplicado}
+                                      onBlur={(e) => revisarLancamentoImportado(item, { valor: Number(e.target.value) })}
+                                      className="h-9 w-full rounded-md border border-slate-300 px-2 text-right text-xs"
+                                    />
+                                  </label>
+                                  <div className="flex flex-wrap items-center gap-1.5 md:justify-end">
+                                    <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${item.status === "aprovado" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : item.status === "descartado" ? "border-slate-200 bg-slate-100 text-slate-500" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                                      {aplicado ? "Aplicado" : item.status === "aprovado" ? "Aprovado" : item.status === "descartado" ? "Descartado" : "Pendente"}
+                                    </span>
+                                    {!aplicado && item.status !== "aprovado" && (
+                                      <button type="button" onClick={() => revisarLancamentoImportado(item, { status: "aprovado" })} className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100">Aprovar</button>
+                                    )}
+                                    {!aplicado && item.status !== "descartado" && (
+                                      <button type="button" onClick={() => revisarLancamentoImportado(item, { status: "descartado" })} className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700 hover:bg-red-100">Descartar</button>
+                                    )}
+                                  </div>
+                                </div>
+                                {item.evidencia && <p className="mt-2 rounded-md bg-slate-50 px-2 py-1 text-[10px] leading-4 text-slate-500">Evidência: {item.evidencia}</p>}
+                                {item.arquivo_nome && <p className="mt-1 text-[10px] text-slate-400">Origem: {item.arquivo_nome}{item.confianca != null ? ` · confiança ${Math.round(Number(item.confianca) * 100)}%` : ""}</p>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-500">
+                        Nenhum lançamento importado para a semana selecionada. Anexe um extrato ou comprovante para iniciar a análise.
+                      </div>
+                    )}
+                  </div>
                 </section>
 
                 {Array.isArray(detalhe.atualizacoes) && detalhe.atualizacoes.some((i: any) => i.analise_semana || i.orientacao_cliente || i.proxima_acao) && (
