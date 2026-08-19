@@ -31,6 +31,7 @@ describe("construirSecoesAnaliseDocumento", () => {
 
     expect(secoes.map((secao) => secao.id)).toEqual([
       "resultado",
+      "diagnostico_factual",
       "transacoes",
       "titular_atual",
       "validacoes",
@@ -73,6 +74,36 @@ describe("construirSecoesAnaliseDocumento", () => {
     ]);
     expect(JSON.stringify(secoes)).toContain("CNPJ: identificado");
     expect(JSON.stringify(secoes)).toContain("Sócio-Administrador: Jonnathas Rodrigues Pires");
+  });
+
+  it("recupera nomes do QSA quando existem apenas em dados_extraidos", () => {
+    const secoes = construirSecoesAnaliseDocumento({
+      conclusao: "Leitura concluída; documento considerado consistente.",
+      diagnostico_factual: "O QSA apresenta o quadro societário vigente na data da emissão.",
+      tipo_documento: "qsa",
+      tipo_leitura: "qsa",
+      qsa_leitura: true,
+      dados_extraidos: {
+        cnpj: "52.008.368/0001-03",
+        razao_social: "Paluma Burger Ltda.",
+        capital_social: 65000,
+        socios: [{ nome: "Jonnathas Rodrigues Pires", qualificacao: "Sócio-Administrador", administrador: true }],
+      },
+    }, { codigo: "qsa", nome: "QSA / Quadro Societário" });
+
+    expect(secoes.map((secao) => secao.id)).toEqual([
+      "resultado",
+      "diagnostico_factual",
+      "amostra_dados",
+      "qsa_nomes",
+      "validacoes",
+    ]);
+    expect(secoes.find((secao) => secao.id === "qsa_nomes")?.itens).toEqual([
+      "Jonnathas Rodrigues Pires — Sócio-Administrador — Sócio-Administrador",
+    ]);
+    expect(JSON.stringify(secoes)).toContain("Jonnathas Rodrigues Pires");
+    expect(JSON.stringify(secoes)).toContain("Sócios lidos no QSA");
+    expect(JSON.stringify(secoes)).toContain("Descrição objetiva da leitura");
   });
 
   it("não chama sócio histórico de titular atual", () => {

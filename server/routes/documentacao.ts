@@ -206,17 +206,27 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
         : Array.isArray(analiseSocietariaAuditavel?.quadro_final_documento)
           ? analiseSocietariaAuditavel.quadro_final_documento
           : [];
-  const sociosLidos = Array.isArray(analise?.socios_lidos)
-    ? analise.socios_lidos
-    : Array.isArray(analise?.socios)
-      ? analise.socios
-      : Array.isArray(documento?.socios_lidos)
-        ? documento.socios_lidos
-        : Array.isArray(documento?.socios)
-          ? documento.socios
-          : Array.isArray(documento?.analise_documental?.socios)
-            ? documento.analise_documental.socios
-            : [];
+  const fontesSociosLidos = [
+    analise?.socios_lidos,
+    analise?.socios,
+    dados?.socios_lidos,
+    dados?.socios,
+    dados?.qsa?.socios,
+    documento?.socios_lidos,
+    documento?.socios,
+    documento?.analise_documental?.socios_lidos,
+    documento?.analise_documental?.socios,
+  ];
+  const sociosLidos = Array.from(new Map(
+    fontesSociosLidos
+      .filter(Array.isArray)
+      .flatMap((lista: any[]) => lista)
+      .filter((socio: any) => socio && typeof socio === 'object' && String(socio.nome || socio.nome_socio || socio.razao_social || '').trim())
+      .map((socio: any) => {
+        const nome = String(socio.nome || socio.nome_socio || socio.razao_social).trim();
+        return [nome.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase(), { ...socio, nome }] as [string, any];
+      }),
+  ).values());
   const evidencias = Array.from(new Set([
     ...(Array.isArray(analise?.evidencias) ? analise.evidencias.map((item: any) => item?.texto || item).filter(Boolean).map(String) : []),
     ...alteracoesSocietarias.map((alteracao: any) => alteracao?.evidencia).filter(Boolean).map(String),
@@ -232,10 +242,14 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
     if (valor) camposResultado.push({ label, valor });
   };
   Object.entries(campos).forEach(([chave, valor]) => adicionarCampo(chave.replace(/_/g, ' '), valor));
+  adicionarCampo('CNPJ do QSA', dados?.cnpj);
+  adicionarCampo('Razão social do QSA', dados?.razao_social);
+  adicionarCampo('Capital social do QSA', dados?.capital_social);
+  adicionarCampo('Sócios lidos no QSA', sociosLidos.length || null);
   adicionarCampo('NIRE', documento?.nire || dados?.nire || dados?.contrato?.nire);
   adicionarCampo('Data de registro', documento?.data_registro || dados?.data_registro || dados?.contrato?.data_registro);
   adicionarCampo('Tipo do ato', documento?.tipo_ato || dados?.tipo_ato || dados?.contrato?.tipo_ato);
-  adicionarCampo('Sócios identificados', Array.isArray(documento?.socios) ? documento.socios.length : null);
+  adicionarCampo('Sócios identificados', sociosLidos.length || (Array.isArray(documento?.socios) ? documento.socios.length : null));
   adicionarCampo('Fonte da leitura', documento?.fonte || documento?.fonte_extracao || analise?.modelo_ia);
   adicionarCampo('Confiança da leitura', documento?.confianca ?? documento?.nivel_confianca ?? analise?.nivel_confianca);
   adicionarCampo('Status da leitura', documento?.status_leitura || analise?.status);

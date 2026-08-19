@@ -629,52 +629,105 @@ function parseComprovanteResidencia(texto: string): { dados: Record<string, any>
 function parseExtratoBancario(texto: string): { dados: Record<string, any>; confianca: number } {
   const linhas = linhasTexto(texto);
   const norm = textoNormalizado(texto);
-  const compativel = /extrato|movimenta[cç][aã]o financeira|lan[cç]amentos|conta corrente|conta poupan[cç]a|saldo anterior|saldo atual|ag[eê]ncia/.test(norm);
+  const compativel = /extrato|movimenta[cç][aã]o financeira|hist[oó]rico de movimenta[cç][aã]o|lan[cç]amentos|conta corrente|conta poupan[cç]a|saldo anterior|saldo atual|ag[eê]ncia|sicoob/.test(norm);
+
+  const periodoMatch = texto.match(/per[ií]odo\s*:\s*(\d{2}\/\d{2}\/20\d{2})\s*[-–—]\s*(\d{2}\/\d{2}\/20\d{2})/i);
+  const anoDoPeriodo = periodoMatch?.[1]?.match(/\/(\d{4})$/)?.[1]
+    || texto.match(/\b(20\d{2})\b/)?.[1]
+    || String(new Date().getFullYear());
+
+  const dataDoMovimento = (valor: string): string | null => {
+    const parcial = valor.match(/^(\d{2})\/(\d{2})$/);
+    if (parcial) {
+      const candidato = `${anoDoPeriodo}-${parcial[2]}-${parcial[1]}`;
+      const data = new Date(`${candidato}T00:00:00Z`);
+      if (Number.isNaN(data.getTime()) || data.getUTCFullYear() !== Number(anoDoPeriodo) || data.getUTCMonth() + 1 !== Number(parcial[2]) || data.getUTCDate() !== Number(parcial[1])) return null;
+      return candidato;
+    }
+    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(valor) && !/^20\d{2}-\d{2}-\d{2}$/.test(valor)) return null;
+    return parseDate(valor);
+  };
+
   const banco = limparValor(valorAposRotulo(linhas, ['banco', 'instituição financeira', 'instituicao financeira', 'nome do banco']))
-    || limparValor(linhas.find((linha) => /\b(?:banco|bank)\b/i.test(linha) && linha.length <= 100) || null);
+    || limparValor(linhas.find((linha) => /\b(?:banco|bank)\b/i.test(linha) && linha.length <= 100) || null)
+    || limparValor(linhas.find((linha) => /\bsicoob\b/i.test(linha))?.match(/(?:\/|:)\s*(sicoob[^|]+)$/i)?.[1] || null)
+    || limparValor(linhas.find((linha) => /\bsicoob\b/i.test(linha)) || null);
+
   const periodoDatas = Array.from(texto.matchAll(/\b(\d{2}\/\d{2}\/20\d{2}|20\d{2}-\d{2}-\d{2})\b/g))
     .map((match) => parseDate(match[1]))
     .filter((value): value is string => Boolean(value));
-  const datasUnicas = Array.from(new Set(periodoDatas)).sort();
-  const dataInicio = datasUnicas[0] || null;
-  const dataFim = datasUnicas.at(-1) || null;
-  const lancamentos: Array<{ data: string; tipo: 'entrada' | 'saida'; descricao: string; valor: number; evidencia: string }> = [];
-  const valorRegex = /[-+]?\s*(?:R\$\s*)?(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2}|\.\d{2})/g;
-
-  for (const linha of linhas) {
-    const dataMatch = linha.match(/^\s*(\d{2}\/\d{2}\/(?:20\d{2}|\d{2})|20\d{2}-\d{2}-\d{2})\b/);
-    if (!dataMatch) continue;
-    const data = parseDate(dataMatch[1]);
-    if (!data) continue;
-    const restante = linha.slice((dataMatch.index || 0) + dataMatch[0].length).trim();
-    const valores = Array.from(restante.matchAll(valorRegex)).map((match) => ({
-      token: match[0],
-      index: match.index || 0,
-    }));
-    if (!valores.length) continue;
-    const valorToken = valores[0].token;
-    const valor = numeroMonetario(valorToken);
-    if (!valor || valor <= 0) continue;
-    const antesDoValor = restante.slice(0, valores[0].index).trim();
-    const depoisDoValor = restante.slice(valores[0].index + valorToken.length).trim();
-    const contexto = textoNormalizado(`${antesDoValor} ${depoisDoValor}`);
-    if (/^(saldo|total|limite|per[ií]odo|data|descri[cç][aã]o|hist[oó]rico)/.test(contexto)) continue;
-    const saida = /(^|\s)(?:d|deb|d[eé]bito|d[eé]bitos|sa[ií]da|pagamento|compra|tarifa|taxa|boleto|pix enviado|ted enviado|transfer[eê]ncia enviada|transferencia enviada|resgate)(?:\s|$)/i.test(contexto)
-      || /^-/.test(valorToken);
-    const entrada = /(^|\s)(?:c|cred|cr[eé]dito|cr[eé]ditos|entrada|recebimento|dep[oó]sito|pix recebido|ted recebido|transfer[eê]ncia recebida|estorno)(?:\s|$)/i.test(contexto)
-      || /^\+/.test(valorToken);
-    if (!entrada && !saida) continue;
-    const descricao = limparValor(antesDoValor.replace(/\b(?:[CD]|deb|cred)\b/gi, '').replace(/[|;:]+/g, ' ')) || 'Lançamento identificado no extrato';
-    if (descricao.length < 3 || /saldo (anterior|final|atual)/i.test(descricao)) continue;
-    lancamentos.push({
-      data,
-      tipo: saida ? 'saida' : 'entrada',
-      descricao: descricao.slice(0, 500),
-      valor: Math.round(Math.abs(valor) * 100) / 100,
-      evidencia: linha.slice(0, 1000),
-    });
+  if (periodoMatch) {
+    periodoDatas.push(parseDate(periodoMatch[1]) || '', parseDate(periodoMatch[2]) || '');
   }
 
+  const lancamentos: Array<{ data: string; tipo: 'entrada' | 'saida'; descricao: string; valor: number; evidencia: string }> = [];
+  const valorRegex = /[-+]?\s*(?:R\$\s*)?(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2}|\.\d{2})/g;
+  const dataLinhaRegex = /^\s*(\d{2}\/\d{2}(?:\/20\d{2}|\/\d{2})?|20\d{2}-\d{2}-\d{2})\b/;
+  let indiceLancamentoAtual = -1;
+
+  for (const linha of linhas) {
+    const dataMatch = linha.match(dataLinhaRegex);
+    if (dataMatch) {
+      indiceLancamentoAtual = -1;
+      const data = dataDoMovimento(dataMatch[1]);
+      if (!data) continue;
+      const restante = linha.slice((dataMatch.index || 0) + dataMatch[0].length).trim();
+      const valores = Array.from(restante.matchAll(valorRegex)).map((match) => ({
+        token: match[0],
+        index: match.index || 0,
+      }));
+      if (!valores.length) continue;
+
+      const valorToken = valores[0].token;
+      const valor = numeroMonetario(valorToken);
+      if (!valor || valor <= 0) continue;
+      const antesDoValor = restante.slice(0, valores[0].index).trim();
+      const depoisDoValor = restante.slice(valores[0].index + valorToken.length).trim();
+      const marcador = depoisDoValor.match(/^([CD*])(?:\s|$)/i)?.[1]?.toUpperCase() || null;
+      const contexto = textoNormalizado(`${antesDoValor} ${depoisDoValor}`);
+      if (marcador === '*' || /^(saldo|total|limite|per[ií]odo|data|descri[cç][aã]o|hist[oó]rico)/.test(contexto)) continue;
+
+      const saida = marcador === 'D'
+        || /(^|\s)(?:d|deb|d[eé]bito|d[eé]bitos|sa[ií]da|pagamento|compra|tarifa|taxa|boleto|pix enviado|ted enviado|transfer[eê]ncia enviada|transferencia enviada|resgate)(?:\s|$)/i.test(contexto)
+        || /^-/.test(valorToken);
+      const entrada = marcador === 'C'
+        || /(^|\s)(?:c|cred|cr[eé]dito|cr[eé]ditos|entrada|recebimento|dep[oó]sito|pix recebido|ted recebido|transfer[eê]ncia recebida|estorno)(?:\s|$)/i.test(contexto)
+        || /^\+/.test(valorToken);
+      if (!entrada && !saida) continue;
+
+      const descricao = limparValor(antesDoValor.replace(/\b(?:[CD]|deb|cred)\b/gi, '').replace(/[|;:]+/g, ' ')) || 'Lançamento identificado no extrato';
+      if (descricao.length < 3 || /saldo (anterior|final|atual|bloq)/i.test(descricao)) continue;
+      lancamentos.push({
+        data,
+        tipo: saida ? 'saida' : 'entrada',
+        descricao: descricao.slice(0, 500),
+        valor: Math.round(Math.abs(valor) * 100) / 100,
+        evidencia: linha.slice(0, 1000),
+      });
+      indiceLancamentoAtual = lancamentos.length - 1;
+      continue;
+    }
+
+    if (indiceLancamentoAtual < 0) continue;
+    const complemento = limparValor(linha) || '';
+    if (/^(?:resumo|encargos|outras informa[cç][oõ]es|saldo(?:\s|:)|total(?:\s|:)|previs[aã]o|juros(?:\s|:)|tarifas vencidas|cheque especial)/i.test(complemento)) {
+      indiceLancamentoAtual = -1;
+      continue;
+    }
+    if (!complemento || /^(?:doc\.?|cpf|cnpj)\s*:/i.test(complemento) || /^(?:\*{2,}|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})$/.test(complemento)) {
+      if (complemento && /^(?:doc\.?\s*:)/i.test(complemento)) {
+        lancamentos[indiceLancamentoAtual].evidencia = `${lancamentos[indiceLancamentoAtual].evidencia} ${complemento}`.slice(0, 1000);
+      }
+      continue;
+    }
+    const atual = lancamentos[indiceLancamentoAtual];
+    atual.descricao = `${atual.descricao} ${complemento}`.replace(/\s+/g, ' ').trim().slice(0, 500);
+    atual.evidencia = `${atual.evidencia} ${complemento}`.replace(/\s+/g, ' ').trim().slice(0, 1000);
+  }
+
+  const datasUnicas = Array.from(new Set(periodoDatas.filter(Boolean).concat(lancamentos.map((item) => item.data)))).sort();
+  const dataInicio = datasUnicas[0] || null;
+  const dataFim = datasUnicas.at(-1) || null;
   const unicos = lancamentos.filter((item, index, array) => array.findIndex((outro) => `${outro.data}|${outro.tipo}|${outro.valor}|${textoNormalizado(outro.descricao)}` === `${item.data}|${item.tipo}|${item.valor}|${textoNormalizado(item.descricao)}`) === index);
   const totalEntradas = Math.round(unicos.filter((item) => item.tipo === 'entrada').reduce((total, item) => total + item.valor, 0) * 100) / 100;
   const totalSaidas = Math.round(unicos.filter((item) => item.tipo === 'saida').reduce((total, item) => total + item.valor, 0) * 100) / 100;

@@ -266,4 +266,78 @@ describe('extração documental local determinística', () => {
     expect(resultado.dados.total_saidas).toBe(120.5);
   });
 
+  it('lê o layout SICOOB com data DD/MM, marcadores C/D e linhas complementares', () => {
+    const texto = `
+      SICOOB EXECUTIVO
+      EXTRATO CONTA CORRENTE
+      CONTA: 135.873-1 / FHTECH SOLUCAO & DIESEL LTDA
+      PERÍODO: 01/08/2026 - 17/08/2026
+      DATA HISTÓRICO VALOR
+      04/08 SALDO ANTERIOR 0,00C
+      04/08 SALDO BLOQ.ANTERIOR 0,00*
+      04/08 DEP DIN AG 1,00C
+      DOC.: 3
+      04/08 DEB.PARC.SUBS/INTEG 1,00D
+      DOC.: 33130
+      04/08 PIX RECEB.OUTRA IF 1.500,00C
+      Recebimento Pix
+      FREDIANA ALVES DA SILVA
+      DOC.: Pix
+      04/08 PIX EMIT.OUTRA IF 210,00D
+      Pagamento Pix
+      DOC.: Pix
+      04/08 SALDO DO DIA 1.290,00C
+      05/08 DÉB.TIT.COMPE.EFETI 338,71D
+      DOC.: 3705493
+      05/08 PIX EMIT.OUTRA IF 92,38D
+      Pagamento Pix
+      05/08 DEB.PARC.SUBS/INTEG 300,00D
+      05/08 CADASTRO 45,00D
+      05/08 DEB.PARC.SUBS/INTEG 50,00D
+      05/08 SALDO DO DIA 463,91C
+      10/08 PIX EMIT.OUTRA IF 17,58D
+      Pagamento Pix
+      SHEIN
+      10/08 PIX EMIT.OUTRA IF 102,95D
+      SHEIN
+      10/08 PIX EMIT.OUTRA IF 10,00D
+      10/08 PIX EMIT.OUTRA IF 8,93D
+      10/08 SALDO DO DIA 324,45C
+      13/08 PIX EMIT.OUTRA IF 110,00D
+      13/08 PIX EMIT.OUTRA IF 80,00D
+      13/08 PIX EMIT.OUTRA IF 13,98D
+      13/08 SALDO DO DIA 120,47C
+      14/08 TARIFA COBRANÇA 0,25D
+      14/08 SALDO DO DIA 120,22C
+      17/08 CRÉD.LIQ.COBRANÇA 945,00C
+      17/08 TARIFA COBRANÇA 1,75D
+      17/08 PIX EMIT.OUTRA IF 63,74D
+      Pagamento Pix
+      DOC.: Pix
+      17/08 SALDO DO DIA 999,73C
+      RESUMO
+      (+) SALDO EM CONTA: 999,73C
+      PREVISÃO TARIFAS: 20,00D
+    `;
+    const resultado = analisarTextoDocumentoLocal('extrato_bancario', texto);
+    const lancamentos = resultado.dados.lancamentos as Array<Record<string, any>>;
+
+    expect(resultado.dados.documento_compativel).toBe(true);
+    expect(resultado.dados.periodo_inicio).toBe('2026-08-01');
+    expect(resultado.dados.periodo_fim).toBe('2026-08-17');
+    expect(lancamentos).toHaveLength(20);
+    expect(lancamentos).toEqual(expect.arrayContaining([
+      expect.objectContaining({ data: '2026-08-04', tipo: 'entrada', valor: 1500, descricao: expect.stringContaining('FREDIANA ALVES DA SILVA') }),
+      expect.objectContaining({ data: '2026-08-04', tipo: 'saida', valor: 210 }),
+      expect.objectContaining({ data: '2026-08-05', tipo: 'saida', valor: 338.71 }),
+      expect.objectContaining({ data: '2026-08-05', tipo: 'saida', valor: 92.38 }),
+      expect.objectContaining({ data: '2026-08-17', tipo: 'entrada', valor: 945 }),
+      expect.objectContaining({ data: '2026-08-17', tipo: 'saida', valor: 63.74 }),
+    ]));
+    expect(lancamentos.some((item) => /saldo|resumo|previs[aã]o/i.test(String(item.descricao)))).toBe(false);
+    expect(resultado.dados.total_entradas).toBe(2446);
+    expect(resultado.dados.total_saidas).toBe(1446.27);
+    expect(resultado.confianca).toBeGreaterThanOrEqual(0.72);
+  });
+
 });

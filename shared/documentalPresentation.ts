@@ -115,6 +115,10 @@ function sociosLidos(resultado: any, documento: any): any[] {
     resultado?.socios,
     resultado?.dados_qsa?.socios,
     resultado?.qsa?.socios,
+    resultado?.dados_extraidos?.socios,
+    resultado?.dados_extraidos?.qsa?.socios,
+    resultado?.analise_documental?.socios_lidos,
+    resultado?.analise_documental?.socios,
     documento?.socios_lidos,
     documento?.socios,
     documento?.analise_documental?.socios,
@@ -150,6 +154,7 @@ function formatarValidacao(item: any): string {
 }
 
 function validacoes(resultado: any, documento: any, qsa: boolean, socios: any[]): string[] {
+  const dadosQsa = resultado?.dados_extraidos || resultado?.dados_qsa || resultado?.analise_documental || {};
   const declaradas = [
     ...itens(resultado?.validacoes),
     ...itens(resultado?.validacoes_realizadas),
@@ -163,9 +168,9 @@ function validacoes(resultado: any, documento: any, qsa: boolean, socios: any[])
     if (Array.isArray(confronto?.nomes_documento) && confronto.nomes_documento.length) declaradas.push(`Nomes no documento: ${confronto.nomes_documento.join(", ")}`);
     if (Array.isArray(confronto?.nomes_qsa) && confronto.nomes_qsa.length) declaradas.push(`Nomes no QSA: ${confronto.nomes_qsa.join(", ")}`);
   } else {
-    const cnpj = resultado?.campos_principais?.cnpj || resultado?.cnpj || documento?.campos_principais?.cnpj;
-    const razaoSocial = resultado?.campos_principais?.razao_social || resultado?.razao_social || documento?.campos_principais?.razao_social;
-    const capitalSocial = resultado?.campos_principais?.capital_social ?? resultado?.capital_social ?? documento?.campos_principais?.capital_social;
+    const cnpj = resultado?.campos_principais?.cnpj || resultado?.cnpj || dadosQsa?.cnpj || documento?.campos_principais?.cnpj;
+    const razaoSocial = resultado?.campos_principais?.razao_social || resultado?.razao_social || dadosQsa?.razao_social || documento?.campos_principais?.razao_social;
+    const capitalSocial = resultado?.campos_principais?.capital_social ?? resultado?.capital_social ?? dadosQsa?.capital_social ?? documento?.campos_principais?.capital_social;
     declaradas.push(`CNPJ: ${cnpj ? "identificado" : "não identificado"}`);
     declaradas.push(`Razão social: ${razaoSocial ? "identificada" : "não identificada"}`);
     declaradas.push(`Capital social: ${capitalSocial !== null && capitalSocial !== undefined && capitalSocial !== "" ? "identificado" : "não identificado"}`);
@@ -187,9 +192,20 @@ function evidenciasCompactas(resultado: any, alteracoes: any[], quadroFinal: any
 
 function secoesSocietariasCompactas(resultado: any, documento: any, conclusao: string, socios: any[], qsa: boolean): DocumentoAnaliseSecao[] {
   const secoes: DocumentoAnaliseSecao[] = [{ id: "resultado", titulo: qsa ? "Resultado da leitura do QSA" : "Resultado da leitura", texto: conclusao || "Leitura concluída." }];
-  const campos = (Array.isArray(resultado?.campos) ? resultado.campos : [])
+  const diagnostico = texto(resultado?.diagnostico_factual || resultado?.diagnostico || resultado?.descricao_leitura);
+  if (diagnostico && diagnostico !== conclusao) secoes.push({ id: "diagnostico_factual", titulo: "Descrição objetiva da leitura", texto: diagnostico });
+  const dadosQsa = resultado?.dados_extraidos || resultado?.dados_qsa || resultado?.analise_documental || {};
+  const camposBase = Array.isArray(resultado?.campos) ? resultado.campos : [];
+  const camposQsa = qsa ? [
+    { label: "CNPJ do QSA", valor: dadosQsa?.cnpj },
+    { label: "Razão social do QSA", valor: dadosQsa?.razao_social },
+    { label: "Capital social do QSA", valor: dadosQsa?.capital_social },
+    { label: "Sócios lidos no QSA", valor: socios.length ? String(socios.length) : "0" },
+  ] : [];
+  const campos = [...camposBase, ...camposQsa]
     .map((campo: any) => ({ label: texto(campo?.label) || "Campo", valor: texto(campo?.valor) }))
     .filter((campo: DocumentoAnaliseCampo) => campo.valor)
+    .filter((campo: DocumentoAnaliseCampo, index: number, lista: DocumentoAnaliseCampo[]) => lista.findIndex((item) => normalizar(item.label) === normalizar(campo.label) && item.valor === campo.valor) === index)
     .filter((campo: DocumentoAnaliseCampo) => qsa || !/nire|clausula|numero de arquivamento|arquivamento/i.test(normalizar(campo.label)));
   if (campos.length) secoes.push({ id: "amostra_dados", titulo: "Amostra objetiva dos dados lidos", campos });
   if (qsa && socios.length) secoes.push({ id: "qsa_nomes", titulo: "Nomes identificados no QSA", itens: socios.map(formatarSocio).filter(Boolean) });
