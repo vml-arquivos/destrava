@@ -533,7 +533,15 @@ function parseContratoSocialAlteracao(texto: string): { dados: Record<string, an
       data_efeitos_registro: dataEfeitos,
       data_documento: dataDocumento,
       numero_arquivamento: numeroArquivamento,
-      socios,
+      socios: quadroSocietarioFinal.length
+        ? quadroSocietarioFinal.map((socio: any) => ({
+            nome: socio.nome,
+            quotas: socio.quotas ?? null,
+            percentual: socio.percentual ?? null,
+            qualificacao: socio.administrador ? 'Administrador' : 'Sócio',
+            administrador: socio.administrador ?? false,
+          }))
+        : socios,
       alteracoes_societarias: alteracoesSocietarias,
       quadro_societario_final: quadroSocietarioFinal,
       capital_social_anterior: capitalSocialAnterior,
