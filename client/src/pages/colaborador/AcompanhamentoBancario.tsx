@@ -1685,6 +1685,52 @@ export default function AcompanhamentoBancario() {
     }
   };
 
+  // Fluxo pedido pelo usuário: não aprovar lançamento por lançamento -- aplicar
+  // de uma vez o total lido do extrato (tudo que não foi descartado), somando
+  // ao que já existir na semana (entradas/saídas de outras origens não são
+  // sobrescritas, o backend soma em cima do valor atual da semana).
+  const aplicarTodosLancamentosDaSemana = async () => {
+    if (!detalhe?.id || !semanaImportacaoId) return;
+    const pendentesOuAprovados = lancamentosImportados.filter((item) => item.status !== "descartado" && !item.aplicado_em);
+    if (!pendentesOuAprovados.length) {
+      setErroImportacao("Não há lançamentos para aplicar nesta semana (revise se todos foram descartados ou já aplicados).");
+      return;
+    }
+    setAplicandoImportados(true);
+    setErroImportacao("");
+    setMensagemImportacao("");
+    try {
+      const response = await fetch(`/api/acompanhamentos-bancarios/${detalhe.id}/lancamentos-importados/aplicar`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          atualizacao_id: semanaImportacaoId,
+          lancamento_ids: pendentesOuAprovados.map((item) => item.id),
+          incluir_pendentes: true,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || "Não foi possível aplicar o total da semana.");
+      setMensagemImportacao(`${payload?.aplicados || pendentesOuAprovados.length} lançamento(s) somado(s) à semana — os valores já existentes (de outras origens) foram preservados e somados, não sobrescritos.`);
+      setLancamentosImportados((anteriores) => anteriores.map((item) =>
+        pendentesOuAprovados.some((aplicado) => aplicado.id === item.id) ? { ...item, status: "aprovado", aplicado_em: new Date().toISOString() } : item
+      ));
+      if (payload?.semana) {
+        setDetalhe((anterior) => anterior ? {
+          ...anterior,
+          atualizacoes: (anterior.atualizacoes || []).map((item: any) =>
+            String(item.id) === String(semanaImportacaoId) ? { ...item, ...payload.semana } : item
+          ),
+        } : anterior);
+      }
+      await fetchData();
+    } catch (err: any) {
+      setErroImportacao(err?.message || "Erro ao aplicar o total da semana.");
+    } finally {
+      setAplicandoImportados(false);
+    }
+  };
+
   const carregarDetalhe = async (id: string) => {
     setInteligenciaAcompanhamento(null);
     setErroInteligenciaAcompanhamento("");
@@ -3839,14 +3885,26 @@ export default function AcompanhamentoBancario() {
                           >
                             {mostrarLancamentosDetalhados ? "Ocultar lançamentos detalhados" : `Ver e revisar lançamentos individuais (${lancamentosImportados.length})`}
                           </button>
-                          <button
-                            type="button"
-                            onClick={aplicarLancamentosImportados}
-                            disabled={aplicandoImportados || !lancamentosImportados.some((item) => item.status === "aprovado" && !item.aplicado_em) || !semanaImportacaoId}
-                            className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {aplicandoImportados ? "Aplicando..." : "Aplicar aprovados"}
-                          </button>
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <button
+                              type="button"
+                              onClick={aplicarLancamentosImportados}
+                              disabled={aplicandoImportados || !lancamentosImportados.some((item) => item.status === "aprovado" && !item.aplicado_em) || !semanaImportacaoId}
+                              className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+                              title="Aplica apenas os lançamentos que você já marcou como 'Aprovado' individualmente na lista detalhada."
+                            >
+                              {aplicandoImportados ? "Aplicando..." : "Aplicar só os aprovados"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={aplicarTodosLancamentosDaSemana}
+                              disabled={aplicandoImportados || !lancamentosImportados.some((item) => item.status !== "descartado" && !item.aplicado_em) || !semanaImportacaoId}
+                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                              title="Soma o total de todos os lançamentos lidos do extrato (exceto os descartados) direto na semana, somando ao que já existir de outras origens."
+                            >
+                              {aplicandoImportados ? "Aplicando..." : "Aplicar tudo (somar total da semana)"}
+                            </button>
+                          </div>
                         </div>
 
                         {mostrarLancamentosDetalhados && (

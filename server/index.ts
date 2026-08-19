@@ -15282,6 +15282,17 @@ async function registrarDocumentoContratoGerado(params: {
       ]
     );
 
+    // Os dois blocos auxiliares abaixo (histórico de compensação e alertas) rodam
+    // dentro da MESMA transação do client chamador (POST .../lancamentos-importados/aplicar).
+    // Se uma dessas escritas auxiliares falhar (ex.: coluna legada, conflito de
+    // constraint), o Postgres aborta a transação inteira -- e qualquer comando
+    // seguinte (inclusive o UPDATE final abaixo) passa a estourar
+    // "current transaction is aborted, commands ignored until end of transaction
+    // block", mascarando o erro real e bloqueando a aplicação dos lançamentos
+    // aprovados. Por isso cada bloco roda isolado num SAVEPOINT: se falhar,
+    // fazemos ROLLBACK TO SAVEPOINT para recuperar a transação e seguir salvando
+    // o que realmente importa (o recálculo da semana).
+    await db.query('SAVEPOINT sp_recalculo_historico');
     try {
       await db.query(
         `INSERT INTO acompanhamento_compensacoes_historico (
@@ -15308,10 +15319,14 @@ async function registrarDocumentoContratoGerado(params: {
           comp.status_aderencia, comp.alerta_aderencia, comp.motivo_alerta_aderencia, diagnostico, colaboradorId || null,
         ]
       );
+      await db.query('RELEASE SAVEPOINT sp_recalculo_historico');
     } catch (historicoErr) {
       console.warn('[acompanhamento] Aplicação de extrato preservada, mas histórico auxiliar não foi atualizado.', historicoErr);
+      await db.query('ROLLBACK TO SAVEPOINT sp_recalculo_historico').catch(() => null);
+      await db.query('RELEASE SAVEPOINT sp_recalculo_historico').catch(() => null);
     }
 
+    await db.query('SAVEPOINT sp_recalculo_alertas');
     try {
       await registrarAlertasAcompanhamentoBancario(db, {
         acompanhamentoId,
@@ -15325,8 +15340,11 @@ async function registrarDocumentoContratoGerado(params: {
         comp,
         dadosSemana: updated.rows[0] || semana,
       });
+      await db.query('RELEASE SAVEPOINT sp_recalculo_alertas');
     } catch (alertErr) {
       console.warn('[acompanhamento] Aplicação de extrato preservada, mas alertas auxiliares não foram atualizados.', alertErr);
+      await db.query('ROLLBACK TO SAVEPOINT sp_recalculo_alertas').catch(() => null);
+      await db.query('RELEASE SAVEPOINT sp_recalculo_alertas').catch(() => null);
     }
 
     await db.query(
@@ -15572,6 +15590,12 @@ async function registrarDocumentoContratoGerado(params: {
       const acompanhamentoId = String(req.params.id || '');
       const atualizacaoId = String(req.body?.atualizacao_id || '');
       const ids = Array.isArray(req.body?.lancamento_ids) ? req.body.lancamento_ids.map(String).filter(Boolean) : [];
+      // Fluxo "aplicar tudo de uma vez": o usuário não quer revisar/aprovar
+      // lançamento por lançamento -- quer que o total lido do extrato (exceto
+      // os descartados) já entre direto na semana, somando ao que já existir.
+      // Quando `incluir_pendentes` vem true, tratamos também os lançamentos
+      // ainda em 'pendente' como prontos para aplicar (só 'descartado' fica de fora).
+      const incluirPendentes = Boolean(req.body?.incluir_pendentes);
       if (!atualizacaoId) {
         res.status(400).json({ error: 'Selecione uma semana bancária para aplicar os lançamentos.' });
         return;
@@ -15596,17 +15620,34 @@ async function registrarDocumentoContratoGerado(params: {
         params.push(ids);
         filtroIds = ` AND id = ANY($${params.length}::uuid[])`;
       }
+      const filtroStatus = incluirPendentes ? `status IN ('pendente','aprovado')` : `status = 'aprovado'`;
       const pendentes = await client.query(
         `SELECT * FROM acompanhamento_bancario_lancamentos_importados
           WHERE acompanhamento_id = $1 AND atualizacao_id = $2
-            AND status = 'aprovado' AND aplicado_em IS NULL${filtroIds}
+            AND ${filtroStatus} AND aplicado_em IS NULL${filtroIds}
           ORDER BY data_movimento ASC, created_at ASC`,
         params
       );
       if (!pendentes.rows.length) {
         await client.query('ROLLBACK');
-        res.status(400).json({ error: 'Nenhum lançamento aprovado aguardando aplicação para esta semana.' });
+        res.status(400).json({
+          error: incluirPendentes
+            ? 'Nenhum lançamento aguardando aplicação para esta semana.'
+            : 'Nenhum lançamento aprovado aguardando aplicação para esta semana.',
+        });
         return;
+      }
+      // Ao aplicar tudo de uma vez, os lançamentos ainda 'pendente' que entrarem
+      // aqui são considerados revisados/aprovados neste ato -- marcamos o status
+      // deles junto com o carimbo de aplicação, para o histórico ficar coerente.
+      if (incluirPendentes) {
+        const idsPendentes = pendentes.rows.filter((item: any) => item.status === 'pendente').map((item: any) => item.id);
+        if (idsPendentes.length) {
+          await client.query(
+            `UPDATE acompanhamento_bancario_lancamentos_importados SET status = 'aprovado' WHERE id = ANY($1::uuid[])`,
+            [idsPendentes]
+          );
+        }
       }
       const semanaAtualizada = await recalcularSemanaBancariaAposImportacao(
         client as any, acompanhamentoId, atualizacaoId, pendentes.rows, colaborador?.id || null

@@ -187,3 +187,154 @@ Gemini também não estiver configurada no ambiente.
 Nenhuma rota foi removida ou renomeada, nenhuma migração de schema, nenhum
 armazenamento alterado. `npx vitest run` → **539/539 testes passando** (531
 da base do zip 10 + 8 novos), `npx tsc --noEmit` → 0 erros.
+
+## Extra — revisão do extrato por modalidade, em vez de dia a dia
+
+Depois da correção do Bug 2, foi pedido para trocar a lista de revisão
+lançamento-a-lançamento (um card por dia) por um **resumo por modalidade**:
+total de entrada e saída da semana selecionada, separado em Pix,
+Transferência (TED/DOC), Crédito (demais entradas) e Débito (demais saídas).
+Dinheiro (depósito em espécie) fica de fora — é lançado manualmente, não vem
+do extrato, conforme confirmado.
+
+### O que mudou
+
+Em `client/src/pages/colaborador/AcompanhamentoBancario.tsx`, na seção
+"Extratos e comprovantes bancários":
+
+- Cada lançamento importado é classificado em uma de 4 modalidades
+  (`classificarModalidadeLancamento`): Pix e Transferência são identificados
+  pela descrição do lançamento (contém "pix", "ted", "doc" ou "transfer");
+  o que sobra vira Crédito (entradas) ou Débito (saídas) — o mesmo critério
+  que o próprio extrato usa para marcar C/D quando não é uma modalidade
+  nomeada.
+- Uma tabela de resumo (`resumoModalidadesLancamentos`) aparece no topo da
+  seção, somando entrada e saída de cada modalidade e o total geral —
+  contando todos os lançamentos da semana selecionada que não foram
+  descartados (pendentes, aprovados e já aplicados).
+- A lista detalhada por lançamento **continua existindo** (não foi removida)
+  porque é o mecanismo usado para aprovar/corrigir/descartar cada linha antes
+  de aplicar (`aplicarLancamentosImportados` só aplica os que estão como
+  "aprovado") — mas agora fica escondida por padrão, atrás de um link "Ver e
+  revisar lançamentos individuais (N)". A visão padrão passa a ser o resumo
+  por modalidade, como pedido.
+
+Só a tela mudou — nenhuma rota, nenhum schema de banco, nenhuma lógica de
+extração/classificação no servidor foi tocada. `npx tsc --noEmit` limpo e
+`npx vite build` concluído sem erros depois da mudança (validação de que o
+JSX/TS da tela está correto). `npx vitest run` continua em 539/539 (esta
+mudança é só de front-end, não adiciona nem quebra teste de backend).
+
+## Extra 2 — bloqueio "current transaction is aborted" ao salvar, e aplicar tudo de uma vez
+
+Depois de usar o resumo por modalidade, apareceu um erro vermelho ao tentar
+salvar: **"current transaction is aborted, commands ignored until end of
+transaction block"**. Junto veio o pedido de trocar o fluxo de "aprovar
+lançamento por lançamento" por "aplicar o total de uma vez", somando com o
+que já existir na semana (nunca sobrescrevendo).
+
+### Causa raiz do bloqueio
+
+Em `server/index.ts`, a função `recalcularSemanaBancariaAposImportacao` (usada
+pela rota `POST /lancamentos-importados/aplicar`, o botão "Aplicar
+aprovados") roda dentro de uma única transação de banco. Depois de gravar o
+recálculo da semana, ela faz duas escritas auxiliares — histórico de
+compensação e alertas automáticos — cada uma dentro de um `try/catch` que
+só registrava um aviso no log (`console.warn`) se desse erro, sem desfazer
+nada.
+
+O problema: no Postgres, se **qualquer** comando dentro de uma transação
+falha, a transação inteira fica "abortada" e passa a rejeitar todo comando
+seguinte com essa mensagem, até um `COMMIT`/`ROLLBACK` explícito — mesmo que
+o comando seguinte não tenha nada a ver com o que falhou. Como esses
+`try/catch` engoliam o erro original sem desfazer a transação, o próximo
+comando (um `UPDATE` de rotina, "atualizar `ultimo_update_em`") caía direto
+nesse bloqueio, e era **esse** erro genérico — não o erro real — que
+aparecia pro usuário na tela.
+
+**Correção**: os dois blocos auxiliares agora rodam isolados dentro de um
+`SAVEPOINT` (o mesmo padrão que já existia em outro ponto do arquivo, na
+rota de editar semana). Se uma dessas escritas auxiliares falhar, fazemos
+`ROLLBACK TO SAVEPOINT` só daquele bloco — a transação principal continua
+saudável e o recálculo da semana é salvo normalmente. Nenhuma escrita
+auxiliar deixa de tentar rodar; só deixa de travar tudo se der problema.
+
+### Aplicar tudo de uma vez, somando com o que já existe
+
+Antes, só dava pra aplicar lançamentos já marcados individualmente como
+"Aprovado". Agora existem dois botões:
+
+- **"Aplicar só os aprovados"** — o comportamento antigo, para quem quer
+  revisar/aprovar item a item antes de aplicar.
+- **"Aplicar tudo (somar total da semana)"** (novo, botão principal) — pega
+  de uma vez todos os lançamentos da semana que não foram descartados
+  (aprovados e pendentes juntos), marca os pendentes como aprovados no ato,
+  e aplica tudo numa única chamada. Não é mais preciso aprovar dia a dia.
+
+Em `server/index.ts`, a rota `POST
+/acompanhamentos-bancarios/:id/lancamentos-importados/aplicar` ganhou um
+parâmetro `incluir_pendentes`: quando `true`, o filtro de status passa a
+aceitar `'pendente'` além de `'aprovado'` (só `'descartado'` fica de fora).
+
+O cálculo em si **já era aditivo** e continua sendo — não foi preciso mudar
+essa parte, só destravar o bloqueio: `recalcularSemanaBancariaAposImportacao`
+lê o valor atual de cada campo de entrada da semana (pix, maquininha, ted,
+etc.) antes de aplicar os novos lançamentos e **soma** em cima, nunca
+substitui. Ou seja, se a semana já tinha entradas lançadas manualmente ou de
+uma aplicação anterior, elas continuam lá — o novo total só se soma a elas.
+Saldo, referências, teto, percentuais e diagnóstico da semana são
+recalculados na mesma chamada, então tudo fica consistente depois de aplicar.
+
+Dinheiro continua fora do fluxo automático (não muda nesta correção) — segue
+sendo lançado manualmente, como já estava.
+
+### Escopo desta correção
+
+- `server/index.ts` — `recalcularSemanaBancariaAposImportacao` (savepoints
+  nos dois blocos auxiliares) e a rota `.../lancamentos-importados/aplicar`
+  (parâmetro `incluir_pendentes`).
+- `client/src/pages/colaborador/AcompanhamentoBancario.tsx` — nova função
+  `aplicarTodosLancamentosDaSemana` e o novo botão "Aplicar tudo (somar total
+  da semana)", ao lado do botão antigo (renomeado para "Aplicar só os
+  aprovados").
+
+Nenhuma migração de schema. `npx tsc --noEmit` limpo, `npx vite build`
+concluído sem erros, `npx vitest run` → **539/539 testes passando**.
+
+## Extra 3 — logo do cabeçalho sobrepondo o título no PDF do relatório documental
+
+Foi enviado um relatório em PDF (`Relatório Documental — Paluma Burger
+LTDA`) mostrando a logo do cabeçalho sobreposta ao título H1 da primeira
+página, cortando o texto.
+
+**Causa**: em `server/routes/documentacao.ts`, a função
+`gerarHtmlRelatorioDocumental` embutia no HTML um `<style>` com
+`@page { size: A4; margin: 14mm; }`. Só que essa margem de 14mm no CSS não
+batia com a margem que o Puppeteer realmente usa para desenhar o PDF —
+passada em JavaScript por quem chama essa função
+(`generateBrandedPdfBuffer(..., { topMargin: '38mm' })`, com margem superior
+de 38mm reservada pro cabeçalho com a logo). Como o CSS dizia 14mm mas o
+Puppeteer reservava 38mm de área de cabeçalho por fora do conteúdo, o
+título HTML (que só respeitava o `margin: 14mm` do CSS) começava a ser
+desenhado bem mais cedo do que a área do cabeçalho terminava — daí a
+sobreposição.
+
+**Correção**: uma linha — o `@page` do CSS passou a usar exatamente as
+mesmas margens do Puppeteer: `@page { size: A4; margin: 38mm 22mm 28mm; }`
+(topo 38mm, laterais 22mm, rodapé 28mm), no mesmo padrão que outra função de
+relatório do mesmo arquivo já usava corretamente.
+
+**Verificação**: gerei um PDF de teste real com essa função (dados
+sintéticos) e comparei a página 1 renderizada como imagem antes/depois — a
+logo ficou limpa, com espaço em branco generoso acima do título, sem
+sobreposição. Script de teste e PDF temporário foram apagados depois da
+verificação; nada de teste ficou no repositório.
+
+### Escopo desta correção
+
+- `server/routes/documentacao.ts` — uma linha de CSS dentro de
+  `gerarHtmlRelatorioDocumental`.
+
+Nenhuma outra função de geração de PDF foi tocada. `npx tsc --noEmit`
+limpo, `npx vitest run` → **539/539 testes passando** (mudança é só CSS
+dentro de uma string de template, não afeta nenhum teste existente).
