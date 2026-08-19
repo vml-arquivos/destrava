@@ -76,6 +76,56 @@ function moneyBR(value?: unknown): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+// ─── Resumo por modalidade (Extratos e comprovantes bancários) ────────────────
+// A revisão de um extrato importado mostrava só a lista lançamento a lançamento
+// (um card por dia/linha). O pedido foi trocar isso por um resumo com o total de
+// entrada e saída agrupado por modalidade -- Pix, Transferência (TED/DOC),
+// Crédito (demais entradas) e Débito (demais saídas) -- somando todos os dias da
+// semana selecionada de uma vez. Dinheiro (depósito em espécie) fica de fora
+// dessa classificação automática porque é lançado manualmente, não vem do
+// extrato.
+type ModalidadeLancamentoBancario = "pix" | "transferencia" | "credito" | "debito";
+
+const LABEL_MODALIDADE_LANCAMENTO: Record<ModalidadeLancamentoBancario, string> = {
+  pix: "Pix",
+  transferencia: "Transferência (TED/DOC)",
+  credito: "Crédito (outras entradas)",
+  debito: "Débito (outras saídas)",
+};
+
+function classificarModalidadeLancamento(item: { tipo?: string | null; descricao?: string | null; categoria?: string | null }): ModalidadeLancamentoBancario {
+  const texto = `${item.categoria || ""} ${item.descricao || ""}`
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (/\bpix\b/.test(texto)) return "pix";
+  if (/\bted\b|\bdoc\b|transfer/.test(texto)) return "transferencia";
+  return item.tipo === "saida" ? "debito" : "credito";
+}
+
+function resumoModalidadesLancamentos(itens: LancamentoImportadoBancario[]): Array<{
+  modalidade: ModalidadeLancamentoBancario;
+  label: string;
+  entradas: number;
+  saidas: number;
+  quantidade: number;
+}> {
+  const totais = new Map<ModalidadeLancamentoBancario, { entradas: number; saidas: number; quantidade: number }>();
+  for (const item of itens) {
+    if (item.status === "descartado") continue;
+    const modalidade = classificarModalidadeLancamento(item);
+    const atual = totais.get(modalidade) || { entradas: 0, saidas: 0, quantidade: 0 };
+    const valor = Math.abs(Number(item.valor || 0));
+    if (item.tipo === "saida") atual.saidas += valor;
+    else atual.entradas += valor;
+    atual.quantidade += 1;
+    totais.set(modalidade, atual);
+  }
+  return (["pix", "transferencia", "credito", "debito"] as ModalidadeLancamentoBancario[])
+    .map((modalidade) => ({ modalidade, label: LABEL_MODALIDADE_LANCAMENTO[modalidade], ...(totais.get(modalidade) || { entradas: 0, saidas: 0, quantidade: 0 }) }))
+    .filter((linha) => linha.quantidade > 0);
+}
+
 function normalizePermValue(value?: string | null): string {
   return String(value || "")
     .trim()
@@ -981,6 +1031,7 @@ export default function AcompanhamentoBancario() {
   const [aplicandoImportados, setAplicandoImportados] = useState(false);
   const [erroImportacao, setErroImportacao] = useState("");
   const [mensagemImportacao, setMensagemImportacao] = useState("");
+  const [mostrarLancamentosDetalhados, setMostrarLancamentosDetalhados] = useState(false);
 
   const [novo, setNovo] = useState<Acompanhamento>({
     nome_empresa: "",
@@ -3730,8 +3781,64 @@ export default function AcompanhamentoBancario() {
                       <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-500">Carregando lançamentos importados...</div>
                     ) : lancamentosImportados.length ? (
                       <div className="space-y-3">
+                        {(() => {
+                          const resumoModalidades = resumoModalidadesLancamentos(lancamentosImportados);
+                          const totalEntradasModalidades = resumoModalidades.reduce((acc, linha) => acc + linha.entradas, 0);
+                          const totalSaidasModalidades = resumoModalidades.reduce((acc, linha) => acc + linha.saidas, 0);
+                          const totalLancamentosModalidades = resumoModalidades.reduce((acc, linha) => acc + linha.quantidade, 0);
+                          return (
+                            <div className="overflow-hidden rounded-xl border border-violet-200">
+                              <div className="border-b border-violet-100 bg-violet-50/60 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-violet-700">
+                                Total por modalidade — semana selecionada
+                              </div>
+                              <table className="w-full border-collapse text-xs">
+                                <thead>
+                                  <tr className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                    <th className="px-3 py-2 text-left">Modalidade</th>
+                                    <th className="px-3 py-2 text-right">Entradas</th>
+                                    <th className="px-3 py-2 text-right">Saídas</th>
+                                    <th className="px-3 py-2 text-right">Lançamentos</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {resumoModalidades.map((linha) => (
+                                    <tr key={linha.modalidade}>
+                                      <td className="px-3 py-2 text-slate-700">{linha.label}</td>
+                                      <td className="px-3 py-2 text-right text-emerald-700">{linha.entradas > 0 ? moneyBR(linha.entradas) : "-"}</td>
+                                      <td className="px-3 py-2 text-right text-red-600">{linha.saidas > 0 ? moneyBR(linha.saidas) : "-"}</td>
+                                      <td className="px-3 py-2 text-right text-slate-500">{linha.quantidade}</td>
+                                    </tr>
+                                  ))}
+                                  {!resumoModalidades.length && (
+                                    <tr>
+                                      <td colSpan={4} className="px-3 py-3 text-center text-slate-400">Nenhum lançamento válido nesta semana (todos descartados).</td>
+                                    </tr>
+                                  )}
+                                </tbody>
+                                <tfoot>
+                                  <tr className="border-t border-violet-200 bg-violet-50/40 font-bold">
+                                    <td className="px-3 py-2 text-slate-700">Total da semana</td>
+                                    <td className="px-3 py-2 text-right text-emerald-700">{moneyBR(totalEntradasModalidades)}</td>
+                                    <td className="px-3 py-2 text-right text-red-600">{moneyBR(totalSaidasModalidades)}</td>
+                                    <td className="px-3 py-2 text-right text-slate-600">{totalLancamentosModalidades}</td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                              <div className="border-t border-violet-100 bg-white px-3 py-1.5 text-[10px] leading-4 text-slate-400">
+                                Dinheiro (depósito em espécie) não entra neste total automático — lance manualmente no Histórico Semanal.
+                              </div>
+                            </div>
+                          );
+                        })()}
+
                         <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-                          <span>Revise cada lançamento. Aprovar não aplica o dado automaticamente.</span>
+                          <button
+                            type="button"
+                            onClick={() => setMostrarLancamentosDetalhados((v) => !v)}
+                            className="text-left font-semibold text-violet-700 underline decoration-dotted underline-offset-2"
+                          >
+                            {mostrarLancamentosDetalhados ? "Ocultar lançamentos detalhados" : `Ver e revisar lançamentos individuais (${lancamentosImportados.length})`}
+                          </button>
                           <button
                             type="button"
                             onClick={aplicarLancamentosImportados}
@@ -3742,7 +3849,9 @@ export default function AcompanhamentoBancario() {
                           </button>
                         </div>
 
+                        {mostrarLancamentosDetalhados && (
                         <div className="space-y-2">
+                          <p className="text-[11px] text-slate-500">Revise cada lançamento. Aprovar não aplica o dado automaticamente.</p>
                           {lancamentosImportados.map((item) => {
                             const dataValue = String(item.data_movimento_iso || item.data_movimento || "").slice(0, 10);
                             const aplicado = Boolean(item.aplicado_em);
@@ -3811,6 +3920,7 @@ export default function AcompanhamentoBancario() {
                             );
                           })}
                         </div>
+                        )}
                       </div>
                     ) : (
                       <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center text-xs text-slate-500">
