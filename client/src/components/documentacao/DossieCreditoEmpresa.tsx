@@ -149,6 +149,10 @@ type DocumentacaoSocietaria = {
     quadro_societario_final?: Array<{ nome?: string | null; quotas?: number | null; percentual?: number | null; qualificacao?: string | null; administrador?: boolean | null }>;
     capital_social_anterior?: number | null;
     capital_social_atual?: number | null;
+    estado_atual_societario?: { fonte?: string | null; descricao?: string | null } | null;
+    confronto_qsa?: { status?: string | null; mensagem?: string | null } | null;
+    qsa_adicional_necessario?: boolean;
+    qsa_adicional_motivo?: string | null;
     alertas?: Array<{ severidade?: string; mensagem?: string; recomendacao?: string }>;
   }>;
 };
@@ -848,6 +852,7 @@ function DocumentacaoSocietariaCard({
                   {documento.quadro_societario_final.map((socio, socioIndex) => <p key={socioIndex} className="mt-1 text-[10px] text-slate-700">• <span className="font-extrabold">{socio.nome || "Sócio não identificado"}</span>{socio.quotas != null ? ` — ${socio.quotas} quotas` : ""}{socio.percentual != null ? ` (${socio.percentual}%)` : ""}</p>)}
                 </div>
               )}
+              {documento.qsa_adicional_necessario ? <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[10px] text-amber-900"><strong>QSA adicional necessário:</strong> {documento.qsa_adicional_motivo || "O quadro da última alteração vigente possui sócio não localizado no QSA atual."}</div> : documento.estado_atual_societario?.fonte === "contrato" && documento.confronto_qsa?.status === "confirmado" ? <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-[10px] text-emerald-900"><strong>QSA vigente confirmado:</strong> a última alteração/contrato vigente define o quadro atual e não é necessário solicitar outro QSA.</div> : null}
               {!!documento.alertas?.length && (
                 <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[10px] text-amber-900">
                   {documento.alertas.map((alerta, alertaIndex) => <p key={alertaIndex}>• <strong>{String(alerta.severidade || "atenção").toUpperCase()}:</strong> {alerta.mensagem || alerta.recomendacao}</p>)}

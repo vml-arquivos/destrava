@@ -36,6 +36,7 @@ export interface AlertaDocumental {
   valor_documento?: unknown;
   valor_receita?: unknown;
   recomendacao?: string;
+  solicitar_qsa_atualizado?: boolean;
 }
 
 export interface AnaliseDocumentalResult {
@@ -205,6 +206,8 @@ export interface AnaliseSocietariaAuditavel {
     nomes_nao_localizados_no_documento: string[];
     descricao: string;
   };
+  qsa_adicional_necessario: boolean;
+  qsa_adicional_motivo: string | null;
   evidencias: Array<{
     tipo: 'transferencia' | 'quadro_final' | 'registro' | 'qsa' | 'ato';
     texto: string;
@@ -295,6 +298,14 @@ export function executarAgenteAnaliseSocietaria(
   const nomesQsa = normalizarSociosParaAgente(sociosQsa).map((socio) => String(socio.nome));
   const nomesNaoLocalizadosNoQsa = nomesDocumento.filter((nome) => !nomesQsa.some((qsa) => nomesSocietariosEquivalentes(nome, qsa)));
   const nomesNaoLocalizadosNoDocumento = nomesQsa.filter((nome) => !nomesDocumento.some((documento) => nomesSocietariosEquivalentes(nome, documento)));
+  // O QSA adicional só é necessário quando o último ato vigente declara
+  // múltiplos sócios e pelo menos um deles não aparece no QSA. Contratos
+  // históricos servem para a continuidade temporal, não para abrir nova
+  // solicitação de QSA.
+  const qsaAdicionalNecessario = correspondeAoMaisRecente
+    && nomesQsa.length > 0
+    && quadroFinal.length > 1
+    && nomesNaoLocalizadosNoQsa.length > 0;
 
   let confrontoStatus: AnaliseSocietariaAuditavel['confronto_qsa']['status'] = 'inconclusivo';
   let statusDocumento: AnaliseSocietariaAuditavel['status_documento'] = 'indeterminado';
@@ -313,16 +324,20 @@ export function executarAgenteAnaliseSocietaria(
     }
   }
 
-  const estadoAtualSocios = nomesQsa.length > 0
-    ? normalizarSociosParaAgente(sociosQsa)
-    : statusDocumento === 'atual' && quadroFinal.length > 0 ? quadroFinal : [];
-  const estadoAtualFonte: AnaliseSocietariaAuditavel['estado_atual']['fonte'] = nomesQsa.length > 0
-    ? 'qsa'
-    : estadoAtualSocios.length > 0 ? 'contrato' : 'indeterminado';
-  const estadoAtualDescricao = estadoAtualFonte === 'qsa'
-    ? 'O QSA fornecido é a referência do estado atual; o contrato mais recente foi comparado somente com seu quadro final.'
-    : estadoAtualFonte === 'contrato'
-      ? 'O estado atual foi obtido do quadro final do contrato porque não havia QSA disponível para confronto.'
+  // Quando o documento corresponde ao ato mais recente, seu quadro final é a
+  // fonte primária do estado atual. O QSA é usado para confirmar essa leitura;
+  // nunca substitui o quadro final por si só. Para documentos históricos, o
+  // QSA vigente continua sendo o estado atual de referência.
+  const estadoAtualSocios = statusDocumento === 'atual' && quadroFinal.length > 0
+    ? quadroFinal
+    : nomesQsa.length > 0 ? normalizarSociosParaAgente(sociosQsa) : [];
+  const estadoAtualFonte: AnaliseSocietariaAuditavel['estado_atual']['fonte'] = statusDocumento === 'atual' && quadroFinal.length > 0
+    ? 'contrato'
+    : nomesQsa.length > 0 ? 'qsa' : 'indeterminado';
+  const estadoAtualDescricao = estadoAtualFonte === 'contrato'
+    ? 'O quadro final da última alteração/contrato vigente é a fonte primária do estado atual; o QSA foi usado para conferência.'
+    : estadoAtualFonte === 'qsa'
+      ? 'Este documento é histórico ou não possui quadro final vigente; o QSA permanece como referência do estado atual.'
       : 'Não foi possível determinar o estado atual sem QSA ou quadro final expressamente identificado.';
 
   const alteracoes = Array.isArray(contrato?.alteracoes_societarias) ? contrato.alteracoes_societarias : [];
@@ -423,6 +438,10 @@ export function executarAgenteAnaliseSocietaria(
             : 'O confronto não pode ser concluído com segurança com as evidências disponíveis.',
     },
     evidencias,
+    qsa_adicional_necessario: qsaAdicionalNecessario,
+    qsa_adicional_motivo: qsaAdicionalNecessario
+      ? 'A última alteração vigente declara mais de um sócio e pelo menos uma pessoa do quadro final não foi localizada no QSA.'
+      : null,
     revisao_obrigatoria: motivosRevisao.length > 0,
     motivos_revisao: motivosRevisao,
     confianca: normalizarConfianca(contrato?.confianca) === null || normalizarConfianca(atos?.confianca) === null
@@ -817,17 +836,7 @@ export function validarContratoComAtosJunta(contrato: any, atos: any, empresa?: 
   const datasJuntaOrdenadas = Array.from(datasJunta).sort();
   const ultimaDataJunta = datasJuntaOrdenadas.at(-1) || null;
   const contratoHistorico = !!dataContrato && !!ultimaDataJunta && dataContrato < ultimaDataJunta;
-  if (contratoHistorico && nomesQuadroFinal.length && nomesQsa.length) {
-    alertas.push({
-      codigo: 'contrato_historico_nao_comparado_qsa',
-      campo: 'socios',
-      mensagem: `O documento registrado em ${dataContrato} é anterior ao ato mais recente da Junta (${ultimaDataJunta}); os sócios históricos não foram tratados como quadro atual do QSA.`,
-      severidade: 'baixa',
-      valor_documento: nomesQuadroFinal,
-      valor_receita: nomesQsa,
-      recomendacao: 'Confrontar o QSA vigente com o quadro final do ato societário mais recente.',
-    });
-  } else if (nomesQuadroFinal.length && nomesQsa.length) {
+  if (!contratoHistorico && nomesQuadroFinal.length && nomesQsa.length) {
     const divergentes = nomesQuadroFinal.filter((nome: string) => !nomesQsa.some((qsa: string) => qsa === nome || qsa.includes(nome) || nome.includes(qsa)));
     const ausentesNoDocumento = nomesQsa.filter((qsa: string) => !nomesQuadroFinal.some((nome: string) => qsa === nome || qsa.includes(nome) || nome.includes(qsa)));
     if (divergentes.length || ausentesNoDocumento.length) {
@@ -839,6 +848,7 @@ export function validarContratoComAtosJunta(contrato: any, atos: any, empresa?: 
         valor_documento: divergentes,
         valor_receita: ausentesNoDocumento,
         recomendacao: 'Conferir o ato societário mais recente, o QSA vigente e a data de efetivação antes de concluir a análise.',
+        solicitar_qsa_atualizado: nomesQuadroFinal.length > 1 && divergentes.length > 0,
       });
     }
   }

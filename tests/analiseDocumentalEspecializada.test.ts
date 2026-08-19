@@ -170,7 +170,7 @@ describe('validação documental especializada', () => {
       [{ nome: 'Jonnathas Rodrigues Pires', administrador: true }],
     );
 
-    expect(alertas.some((a) => a.codigo === 'contrato_historico_nao_comparado_qsa')).toBe(true);
+    expect(alertas.some((a) => a.codigo === 'contrato_historico_nao_comparado_qsa')).toBe(false);
     expect(alertas.some((a) => a.codigo === 'contrato_socios_divergentes_qsa')).toBe(false);
     expect(alertas.some((a) => a.severidade === 'alta' && a.campo === 'socios')).toBe(false);
   });
@@ -204,8 +204,10 @@ describe('validação documental especializada', () => {
     expect(resultado.ato_praticado).toContain('transferência');
     expect(resultado.ato_praticado).toContain('Jonnathas Rodrigues Pires');
     expect(resultado.quadro_final_documento[0]).toMatchObject({ nome: 'Jonnathas Rodrigues Pires', quotas: 65000, percentual: 100 });
-    expect(resultado.estado_atual.fonte).toBe('qsa');
+    expect(resultado.estado_atual.fonte).toBe('contrato');
+    expect(resultado.estado_atual.socios[0]).toMatchObject({ nome: 'Jonnathas Rodrigues Pires', quotas: 65000, percentual: 100 });
     expect(resultado.confronto_qsa.status).toBe('confirmado');
+    expect(resultado.qsa_adicional_necessario).toBe(false);
     expect(resultado.revisao_obrigatoria).toBe(false);
     expect(resultado.evidencias[0].texto).toContain('cede e transfere');
   });
@@ -261,7 +263,33 @@ describe('validação documental especializada', () => {
 
     expect(resultado.confronto_qsa.status).toBe('divergente');
     expect(resultado.revisao_obrigatoria).toBe(true);
+    expect(resultado.qsa_adicional_necessario).toBe(false);
     expect(resultado.motivos_revisao.join(' ')).toContain('diverge');
+  });
+
+  it('solicita QSA adicional somente quando a última alteração tem múltiplos sócios e falta pessoa no QSA', () => {
+    const resultado = executarAgenteAnaliseSocietaria(
+      {
+        tipo_ato: 'Alteração Contratual',
+        data_registro: '2025-06-06',
+        numero_arquivamento: '20251505987',
+        quadro_societario_final: [
+          { nome: 'Sócio Um', quotas: 32500, percentual: 50 },
+          { nome: 'Sócio Dois', quotas: 32500, percentual: 50 },
+        ],
+        confianca: 0.92,
+      },
+      {
+        historico_arquivamentos: [{ numero: '20251505987', data: '2025-06-06', tipo_ato: 'ALTERAÇÃO' }],
+        confianca: 0.94,
+      },
+      { cnpj: '52.008.360/0001-33' },
+      [{ nome: 'Sócio Um', administrador: true }],
+    );
+
+    expect(resultado.confronto_qsa.status).toBe('divergente');
+    expect(resultado.qsa_adicional_necessario).toBe(true);
+    expect(resultado.qsa_adicional_motivo).toContain('mais de um sócio');
   });
 
   it('cruza número do ato, CNPJ e sócios do contrato com Junta, empresa e QSA', () => {

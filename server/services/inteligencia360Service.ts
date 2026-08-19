@@ -172,6 +172,7 @@ export interface AlertaDocumental360 {
   severidade: "critica" | "alta" | "media" | "baixa";
   recomendacao?: string;
   tipo_analise?: string;
+  solicitar_qsa_atualizado?: boolean;
 }
 
 export interface ConsistenciaDocumentalAvancada360 {
@@ -264,6 +265,7 @@ function consolidarConsistenciaDocumental(analisesInput: unknown): ConsistenciaD
         severidade: normalizarSeveridade360(item?.severidade),
         recomendacao: item?.recomendacao ? String(item.recomendacao) : undefined,
         tipo_analise: tipo,
+        solicitar_qsa_atualizado: item?.solicitar_qsa_atualizado === true,
       });
     }
   }
@@ -336,15 +338,16 @@ function elevarRisco(
 function recomendacoesConsistenciaDocumental(consistencia: ConsistenciaDocumentalAvancada360): Recomendacao360[] {
   const recomendacoes: Recomendacao360[] = [];
   const alertasQsa = consistencia.alertas.filter(a => /qsa/i.test(`${a.codigo} ${a.tipo_analise || ""}`));
+  const alertasQsaQueExigemAtualizacao = alertasQsa.filter(a => a.solicitar_qsa_atualizado === true);
   const alertasSimples = consistencia.alertas.filter(a => /simples/i.test(`${a.codigo} ${a.tipo_analise || ""}`));
   const alertasJunta = consistencia.alertas.filter(a => /junta|atos_junta/i.test(`${a.codigo} ${a.tipo_analise || ""}`));
 
-  if (alertasQsa.length > 0) {
+  if (alertasQsaQueExigemAtualizacao.length > 0) {
     recomendacoes.push({
-      titulo: "Solicitar novo QSA atualizado",
-      prioridade: alertasQsa.some(a => ["critica", "alta"].includes(a.severidade)) ? "alta" : "media",
-      motivo: "A análise documental identificou divergências entre o quadro societário anexado e os dados cadastrais.",
-      acao: "Solicitar QSA, contrato social ou alteração contratual atualizada e revisar os sócios.",
+      titulo: "Solicitar QSA atualizado",
+      prioridade: alertasQsaQueExigemAtualizacao.some(a => ["critica", "alta"].includes(a.severidade)) ? "alta" : "media",
+      motivo: "A última alteração vigente declara mais de um sócio e pelo menos uma pessoa do quadro final não foi localizada no QSA.",
+      acao: "Solicitar somente o QSA atualizado para conferir os sócios ausentes no quadro vigente.",
       modulo: "documentos",
     });
   }

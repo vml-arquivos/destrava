@@ -266,6 +266,8 @@ function montarResultadoDetalhadoRelatorio(documento: any, analiseEspecializada:
     estado_atual_societario: analiseSocietariaAuditavel?.estado_atual || dados?.estado_atual_societario || null,
     confronto_qsa: analiseSocietariaAuditavel?.confronto_qsa || null,
     linha_tempo_societaria: analiseSocietariaAuditavel?.linha_tempo_societaria || dados?.linha_tempo_societaria || [],
+    qsa_adicional_necessario: analiseSocietariaAuditavel?.qsa_adicional_necessario === true,
+    qsa_adicional_motivo: analiseSocietariaAuditavel?.qsa_adicional_motivo || null,
     datas_chave: dados?.datas_chave || null,
     motivos_revisao: analiseSocietariaAuditavel?.motivos_revisao || [],
     campos: camposResultado,
@@ -499,7 +501,7 @@ function gerarHtmlRelatorioDocumental(relatorio: any): string {
     const evidencias = Array.isArray(resultado?.evidencias) ? resultado.evidencias : [];
     const agente = resultado?.analise_societaria_auditavel || null;
     if (!resultado?.diagnostico_factual && !alteracoes.length && !quadroFinal.length && !evidencias.length && !agente) return '';
-    const agenteHtml = agente ? `<div class="facts"><b>Agente societário auditável</b><p><b>Status do documento:</b> ${escapeHtmlRelatorio(agente.status_documento || 'não classificado')}</p>${agente.ato_praticado ? `<p><b>Ato praticado:</b> ${escapeHtmlRelatorio(agente.ato_praticado)}</p>` : ''}${agente.estado_atual?.descricao ? `<p><b>Estado atual:</b> ${escapeHtmlRelatorio(agente.estado_atual.descricao)}</p>` : ''}${agente.confronto_qsa?.status ? `<p><b>Confronto com QSA:</b> ${escapeHtmlRelatorio(agente.confronto_qsa.status)}${agente.confronto_qsa.mensagem ? ` — ${escapeHtmlRelatorio(agente.confronto_qsa.mensagem)}` : ''}</p>` : ''}${Array.isArray(agente.linha_tempo_societaria) && agente.linha_tempo_societaria.length ? `<p><b>Linha do tempo:</b></p><ul>${agente.linha_tempo_societaria.map((evento: any) => `<li>${escapeHtmlRelatorio(evento?.data || 'Data não identificada')} — ${escapeHtmlRelatorio(evento?.tipo_ato || 'Ato societário')}${evento?.numero_arquivamento ? ` — registro ${escapeHtmlRelatorio(evento.numero_arquivamento)}` : ''}</li>`).join('')}</ul>` : ''}${agente.revisao_obrigatoria && Array.isArray(agente.motivos_revisao) && agente.motivos_revisao.length ? `<div class="alerts"><b>Revisão humana obrigatória</b>${listaOuVazio(agente.motivos_revisao, '')}</div>` : ''}</div>` : '';
+    const agenteHtml = agente ? `<div class="facts"><b>Agente societário auditável</b><p><b>Status do documento:</b> ${escapeHtmlRelatorio(agente.status_documento || 'não classificado')}</p>${agente.ato_praticado ? `<p><b>Ato praticado:</b> ${escapeHtmlRelatorio(agente.ato_praticado)}</p>` : ''}${agente.estado_atual?.descricao ? `<p><b>Estado atual:</b> ${escapeHtmlRelatorio(agente.estado_atual.descricao)}</p>` : ''}${agente.confronto_qsa?.status ? `<p><b>Confronto com QSA:</b> ${escapeHtmlRelatorio(agente.confronto_qsa.status)}${agente.confronto_qsa.mensagem ? ` — ${escapeHtmlRelatorio(agente.confronto_qsa.mensagem)}` : ''}</p>` : ''}${agente.qsa_adicional_necessario ? `<div class="alerts"><b>QSA adicional necessário</b><p>${escapeHtmlRelatorio(agente.qsa_adicional_motivo || 'O quadro da última alteração vigente possui sócio não localizado no QSA atual.')}</p></div>` : agente.status_documento === 'atual' && agente.confronto_qsa?.status === 'confirmado' ? `<div class="positive"><b>QSA vigente confirmado</b><p>A última alteração/contrato vigente define o quadro atual e não é necessário solicitar outro QSA.</p></div>` : ''}${Array.isArray(agente.linha_tempo_societaria) && agente.linha_tempo_societaria.length ? `<p><b>Linha do tempo:</b></p><ul>${agente.linha_tempo_societaria.map((evento: any) => `<li>${escapeHtmlRelatorio(evento?.data || 'Data não identificada')} — ${escapeHtmlRelatorio(evento?.tipo_ato || 'Ato societário')}${evento?.numero_arquivamento ? ` — registro ${escapeHtmlRelatorio(evento.numero_arquivamento)}` : ''}</li>`).join('')}</ul>` : ''}${agente.revisao_obrigatoria && Array.isArray(agente.motivos_revisao) && agente.motivos_revisao.length ? `<div class="alerts"><b>Revisão humana obrigatória</b>${listaOuVazio(agente.motivos_revisao, '')}</div>` : ''}</div>` : '';
     const alteracoesHtml = alteracoes.length ? `<div class="facts"><b>Alteração societária identificada</b><ul>${alteracoes.map((alteracao: any) => {
       const cedente = alteracao?.cedente?.nome || alteracao?.socio_retirante?.nome || 'cedente não identificado';
       const cessionario = alteracao?.cessionario?.nome || alteracao?.socio_admitido?.nome || 'cessionário não identificado';
@@ -1729,6 +1731,12 @@ async function montarValidacaoSocietaria(
         capital_social_anterior: contrato.capital_social_anterior ?? null,
         capital_social_atual: contrato.capital_social_atual ?? null,
         alertas: item.analise!.alertas || [],
+        analise_societaria_auditavel: dados.analise_societaria_auditavel || null,
+        estado_atual_societario: dados.analise_societaria_auditavel?.estado_atual || null,
+        confronto_qsa: dados.analise_societaria_auditavel?.confronto_qsa || null,
+        linha_tempo_societaria: Array.isArray(dados.analise_societaria_auditavel?.linha_tempo_societaria) ? dados.analise_societaria_auditavel.linha_tempo_societaria : [],
+        qsa_adicional_necessario: dados.analise_societaria_auditavel?.qsa_adicional_necessario === true,
+        qsa_adicional_motivo: dados.analise_societaria_auditavel?.qsa_adicional_motivo || null,
       };
     });
 
@@ -1825,6 +1833,10 @@ async function montarValidacaoSocietaria(
     empresa_sem_tempo_minimo_constituicao: cadeia.empresa_sem_tempo_minimo_constituicao,
     meses_comprovados: cadeia.meses_entre_registros_extremos,
     documentos_analisados: documentosAnalisados,
+    fonte_estado_atual: documentosAnalisados.find((item) => item.estado_atual_societario?.fonte === 'contrato')?.estado_atual_societario?.fonte
+      || (documentosAnalisados.some((item) => item.estado_atual_societario?.fonte === 'qsa') ? 'qsa' : 'indeterminado'),
+    qsa_adicional_necessario: documentosAnalisados.some((item) => item.qsa_adicional_necessario === true),
+    qsa_adicional_motivo: documentosAnalisados.find((item) => item.qsa_adicional_motivo)?.qsa_adicional_motivo || null,
     bloqueios: bloqueiosUnicos,
     avisos: Array.from(new Set(avisos.filter(Boolean))),
     diagnostico: consistente
