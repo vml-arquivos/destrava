@@ -2,29 +2,28 @@ import { describe, expect, it } from "vitest";
 import { construirSecoesAnaliseDocumento } from "@shared/documentalPresentation";
 
 describe("construirSecoesAnaliseDocumento", () => {
-  it("mantém a ordem única de resultado, diagnóstico e detalhes da leitura", () => {
+  it("apresenta somente resultado, transação, titular vigente e evidências", () => {
     const secoes = construirSecoesAnaliseDocumento({
       conclusao: "Leitura concluída; documento considerado consistente.",
-      diagnostico: "A leitura foi concluída.",
       diagnostico_factual: "A última alteração transferiu a empresa para Jonnathas Rodrigues Pires.",
       alteracoes_societarias: [{
-        cedente: { nome: "Sócio histórico", quotas: 100 },
-        cessionario: { nome: "Jonnathas Rodrigues Pires", quotas: 100 },
-        quotas_transferidas: 100,
+        tipo_alteracao: "transferencia_quotas",
+        cedente: { nome: "Marcos Henrique Soares Pio", quotas: 65000 },
+        cessionario: { nome: "Jonnathas Rodrigues Pires", quotas: 65000 },
+        quotas_transferidas: 65000,
         percentual_transferido: 100,
         clausula: "Cláusula segunda",
         pagina: 3,
-        evidencia: "trecho contratual",
+        evidencia: "retira-se da sociedade Marcos Henrique Soares Pio e cede suas quotas a Jonnathas Rodrigues Pires",
       }],
-      quadro_societario_final: [{ nome: "Jonnathas Rodrigues Pires", quotas: 100, percentual: 100 }],
+      quadro_societario_final: [{ nome: "Jonnathas Rodrigues Pires", quotas: 65000, percentual: 100, administrador: true }],
       analise_societaria_auditavel: {
         status_documento: "atual",
         ato_praticado: "Transferência integral de quotas",
         estado_atual: { descricao: "Quadro final com sócio único" },
         confronto_qsa: { status: "confirmado", mensagem: "QSA compatível" },
-        linha_tempo_societaria: [{ data: "2025-06-06", tipo_ato: "Alteração consolidada" }],
       },
-      evidencias: ["trecho contratual"],
+      evidencias: ["retira-se da sociedade Marcos Henrique Soares Pio e cede suas quotas a Jonnathas Rodrigues Pires"],
       campos: [{ label: "NIRE", valor: "123" }],
       observacoes: ["Laudo persistido"],
       alertas: [{ severidade: "baixa", mensagem: "alerta histórico" }],
@@ -32,31 +31,48 @@ describe("construirSecoesAnaliseDocumento", () => {
 
     expect(secoes.map((secao) => secao.id)).toEqual([
       "resultado",
-      "diagnostico_factual",
-      "alteracoes_societarias",
-      "quadro_societario_final",
-      "leitura_societaria",
+      "transacoes",
+      "titular_atual",
       "evidencias",
-      "campos",
-      "observacoes",
     ]);
-    expect(secoes.find((secao) => secao.id === "diagnostico_factual")?.texto).toContain("Jonnathas Rodrigues Pires");
-    expect(secoes.find((secao) => secao.id === "alteracoes_societarias")?.itens?.[0]).toContain("Novo sócio/cessionário: Jonnathas Rodrigues Pires");
-    expect(secoes.find((secao) => secao.id === "alteracoes_societarias")?.itens?.[0]).toContain("Quotas transferidas: 100 (100%)");
-    expect(secoes.find((secao) => secao.id === "leitura_societaria")?.itens).toEqual(expect.arrayContaining([
-      "Status do documento: atual",
-      "Confronto documentado com QSA: confirmado — QSA compatível",
-    ]));
+    expect(secoes.find((secao) => secao.id === "transacoes")?.itens?.[0]).toContain("Ação realizada: Transferência de quotas");
+    expect(secoes.find((secao) => secao.id === "transacoes")?.itens?.[0]).toContain("Cedente/retirante: Marcos Henrique Soares Pio");
+    expect(secoes.find((secao) => secao.id === "transacoes")?.itens?.[0]).toContain("Cessionário/admitido: Jonnathas Rodrigues Pires");
+    expect(secoes.find((secao) => secao.id === "transacoes")?.itens?.[0]).toContain("Quotas transferidas: 65.000 (100%)");
+    expect(secoes.find((secao) => secao.id === "titular_atual")?.itens?.[0]).toContain("Jonnathas Rodrigues Pires");
+    expect(secoes.find((secao) => secao.id === "evidencias")?.itens?.[0]).toContain("Jonnathas Rodrigues Pires");
     expect(JSON.stringify(secoes)).not.toContain("alerta histórico");
+    expect(JSON.stringify(secoes)).not.toContain("NIRE");
+    expect(JSON.stringify(secoes)).not.toContain("Cláusula segunda");
   });
 
-  it("usa o diagnóstico factual também quando o documento não tem laudo especializado", () => {
+  it("não chama sócio histórico de titular atual", () => {
+    const secoes = construirSecoesAnaliseDocumento({
+      conclusao: "Leitura concluída.",
+      status_societario: "historico",
+      alteracoes_societarias: [{
+        tipo_alteracao: "transferencia_quotas",
+        cedente: { nome: "Irene Correia dos Reis Silva", quotas: 32500 },
+        cessionario: { nome: "Marcos Henrique Soares Pio", quotas: 32500 },
+        quotas_transferidas: 32500,
+        evidencia: "cessão de quotas para Marcos Henrique Soares Pio",
+      }],
+      quadro_societario_final: [{ nome: "Marcos Henrique Soares Pio", quotas: 65000, percentual: 100 }],
+    }, { nome: "Contrato histórico" });
+
+    expect(secoes.map((secao) => secao.id)).toEqual(["resultado", "transacoes", "evidencias"]);
+    expect(JSON.stringify(secoes)).not.toContain("titular_atual");
+  });
+
+  it("mantém resultado e diagnóstico para documentos sem leitura societária", () => {
     const secoes = construirSecoesAnaliseDocumento({
       conclusao: "Leitura concluída.",
       diagnostico_factual: "A Junta Comercial registra o ato mais recente em 2025-06-06.",
     }, { nome: "Atos da Junta Comercial" });
 
-    expect(secoes[0]).toMatchObject({ id: "resultado", texto: "Leitura concluída." });
-    expect(secoes[1]).toMatchObject({ id: "diagnostico_factual", texto: "A Junta Comercial registra o ato mais recente em 2025-06-06." });
+    expect(secoes).toEqual([
+      { id: "resultado", titulo: "Resultado da análise", texto: "Leitura concluída." },
+      { id: "diagnostico_factual", titulo: "Diagnóstico objetivo do documento", texto: "A Junta Comercial registra o ato mais recente em 2025-06-06." },
+    ]);
   });
 });

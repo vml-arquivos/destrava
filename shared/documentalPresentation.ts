@@ -16,6 +16,26 @@ function texto(value: unknown): string {
   return String(value).trim();
 }
 
+function normalizar(value: unknown): string {
+  return texto(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function numero(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "";
+  const numeric = typeof value === "number" ? value : Number(String(value).replace(/\./g, "").replace(",", "."));
+  if (Number.isFinite(numeric)) return numeric.toLocaleString("pt-BR");
+  return texto(value);
+}
+
+function limitarEvidencia(value: unknown): string {
+  const evidencia = texto(value).replace(/\s+/g, " ");
+  if (!evidencia) return "";
+  return evidencia.length > 420 ? `${evidencia.slice(0, 417).trim()}...` : evidencia;
+}
+
 function itens(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -30,99 +50,89 @@ function itens(value: unknown): string[] {
     .filter(Boolean);
 }
 
-function formatarAlteracao(alteracao: any): string {
-  const cedente = texto(alteracao?.cedente?.nome || alteracao?.socio_retirante?.nome) || "não identificado";
-  const cessionario = texto(alteracao?.cessionario?.nome || alteracao?.socio_admitido?.nome) || "não identificado";
-  const quotas = alteracao?.quotas_transferidas ?? alteracao?.cedente?.quotas ?? alteracao?.cessionario?.quotas;
-  const percentual = alteracao?.percentual_transferido ?? alteracao?.cessionario?.percentual;
-  const tipo = texto(alteracao?.tipo_alteracao || alteracao?.operacao || alteracao?.tipo);
-  const operacao = /saida_transferencia|transfer/i.test(tipo) || (cedente !== "não identificado" && cessionario !== "não identificado")
-    ? "Transferência de quotas"
-    : tipo || "Alteração societária";
-  const partes = [
-    `Operação identificada: ${operacao}`,
-    `Sócio cedente/retirante: ${cedente}`,
-    `Novo sócio/cessionário: ${cessionario}`,
-    `Quotas transferidas: ${texto(quotas) || "não identificadas"}${percentual != null ? ` (${texto(percentual)}%)` : ""}`,
+function nomeSocio(socio: any): string {
+  return texto(socio?.nome) || "Nome não identificado no documento";
+}
+
+function formatarAlteracaoCompacta(alteracao: any): string {
+  const cedente = texto(alteracao?.cedente?.nome || alteracao?.socio_retirante?.nome);
+  const cessionario = texto(alteracao?.cessionario?.nome || alteracao?.socio_admitido?.nome);
+  const quotas = numero(alteracao?.quotas_transferidas ?? alteracao?.cedente?.quotas ?? alteracao?.cessionario?.quotas);
+  const percentual = numero(alteracao?.percentual_transferido ?? alteracao?.cessionario?.percentual);
+  const tipo = normalizar(alteracao?.tipo_alteracao || alteracao?.operacao || alteracao?.tipo);
+  const transferencia = /cess|transfer/.test(tipo) || (cedente && cessionario);
+  const acao = transferencia ? "Transferência de quotas" : texto(alteracao?.tipo_alteracao || alteracao?.operacao || alteracao?.tipo) || "Alteração societária";
+  const linhas = [`Ação realizada: ${acao}`];
+  if (cedente) linhas.push(`Cedente/retirante: ${cedente}`);
+  if (cessionario) linhas.push(`Cessionário/admitido: ${cessionario}`);
+  if (quotas) linhas.push(`Quotas transferidas: ${quotas}${percentual ? ` (${percentual}%)` : ""}`);
+  const evidencia = limitarEvidencia(alteracao?.evidencia);
+  if (evidencia) linhas.push(`Evidência: “${evidencia}”`);
+  return linhas.join("\n");
+}
+
+function statusDocumento(resultado: any): string {
+  return normalizar(resultado?.analise_societaria_auditavel?.status_documento || resultado?.status_societario || resultado?.statusDocumento);
+}
+
+function documentoAtual(resultado: any, documento: any): boolean {
+  const status = statusDocumento(resultado);
+  return status === "atual" || status === "vigente" || resultado?.documento_vigente === true || documento?.documento_vigente === true;
+}
+
+function titularAtual(resultado: any): string[] {
+  const quadroFinal = Array.isArray(resultado?.quadro_societario_final) ? resultado.quadro_societario_final : [];
+  return quadroFinal.map((socio: any) => {
+    const nome = nomeSocio(socio);
+    const quotas = numero(socio?.quotas);
+    const percentual = numero(socio?.percentual);
+    const qualificacao = texto(socio?.qualificacao);
+    const administrador = socio?.administrador === true ? " — administrador" : "";
+    return `${nome}${quotas ? ` — ${quotas} quotas` : ""}${percentual ? ` (${percentual}%)` : ""}${qualificacao ? ` — ${qualificacao}` : ""}${administrador}`;
+  }).filter(Boolean);
+}
+
+function evidenciasCompactas(resultado: any, alteracoes: any[], quadroFinal: any[]): string[] {
+  const fontes = [
+    ...alteracoes.map((alteracao: any) => alteracao?.evidencia),
+    resultado?.evidencia_quadro_societario,
+    ...(Array.isArray(resultado?.evidencias) ? resultado.evidencias : []),
   ];
-  if (alteracao?.clausula) partes.push(`Cláusula: ${texto(alteracao.clausula)}`);
-  if (alteracao?.pagina) partes.push(`Página: ${texto(alteracao.pagina)}`);
-  if (alteracao?.evidencia) partes.push(`Evidência documental: “${texto(alteracao.evidencia)}”`);
-  return partes.join("\n");
+  return Array.from(new Set(fontes.map(limitarEvidencia).filter(Boolean))).slice(0, 3).map((item) => `“${item}”`);
 }
 
-function formatarQuadroFinal(socio: any): string {
-  const nome = texto(socio?.nome) || "Sócio não identificado";
-  const quotas = socio?.quotas != null ? ` — ${texto(socio.quotas)} quotas` : "";
-  const percentual = socio?.percentual != null ? ` (${texto(socio.percentual)}%)` : "";
-  const qualificacao = socio?.qualificacao ? ` — ${texto(socio.qualificacao)}` : "";
-  const administrador = socio?.administrador === true ? " — administrador" : "";
-  return `${nome}${quotas}${percentual}${qualificacao}${administrador}`;
-}
-
-function formatarEvento(evento: any): string {
-  const data = texto(evento?.data) || "Data não identificada";
-  const tipo = texto(evento?.tipo_ato) || "Ato societário";
-  const registro = evento?.numero_arquivamento ? ` — registro ${texto(evento.numero_arquivamento)}` : "";
-  return `${data} — ${tipo}${registro}`;
+function secoesSocietariasCompactas(resultado: any, documento: any, conclusao: string): DocumentoAnaliseSecao[] {
+  const secoes: DocumentoAnaliseSecao[] = [{ id: "resultado", titulo: "Resultado da leitura", texto: conclusao || "Leitura concluída." }];
+  const alteracoes = Array.isArray(resultado?.alteracoes_societarias) ? resultado.alteracoes_societarias : [];
+  if (alteracoes.length) {
+    secoes.push({ id: "transacoes", titulo: "Transação ou ação realizada", itens: alteracoes.map(formatarAlteracaoCompacta).filter(Boolean) });
+  }
+  if (documentoAtual(resultado, documento)) {
+    const titulares = titularAtual(resultado);
+    if (titulares.length) {
+      secoes.push({ id: "titular_atual", titulo: "Titular atual do contrato social", itens: titulares });
+    }
+  }
+  const evidencias = evidenciasCompactas(resultado, alteracoes, Array.isArray(resultado?.quadro_societario_final) ? resultado.quadro_societario_final : []);
+  if (evidencias.length) secoes.push({ id: "evidencias", titulo: "Evidências documentais", itens: evidencias });
+  return secoes;
 }
 
 export function construirSecoesAnaliseDocumento(resultado: any = {}, documento: any = {}): DocumentoAnaliseSecao[] {
-  const secoes: DocumentoAnaliseSecao[] = [];
   const conclusao = texto(resultado?.conclusao || documento?.observacao || "Leitura concluída.");
-  const diagnostico = texto(resultado?.diagnostico);
-  secoes.push({
-    id: "resultado",
-    titulo: "Resultado da análise",
-    texto: [conclusao, diagnostico && diagnostico !== conclusao ? diagnostico : ""].filter(Boolean).join("\n"),
-  });
+  const alteracoes = Array.isArray(resultado?.alteracoes_societarias) ? resultado.alteracoes_societarias : [];
+  const quadroFinal = Array.isArray(resultado?.quadro_societario_final) ? resultado.quadro_societario_final : [];
+  const societario = alteracoes.length > 0 || quadroFinal.length > 0 || Boolean(resultado?.analise_societaria_auditavel) || Boolean(resultado?.status_societario);
+  if (societario) return secoesSocietariasCompactas(resultado, documento, conclusao);
 
-  const diagnosticoFactual = texto(resultado?.diagnostico_factual);
-  if (diagnosticoFactual) {
+  const secoes: DocumentoAnaliseSecao[] = [{ id: "resultado", titulo: "Resultado da análise", texto: conclusao }];
+  const diagnosticoFactual = texto(resultado?.diagnostico_factual || resultado?.diagnostico);
+  if (diagnosticoFactual && diagnosticoFactual !== conclusao) {
     secoes.push({ id: "diagnostico_factual", titulo: "Diagnóstico objetivo do documento", texto: diagnosticoFactual });
   }
-
-  const alteracoes = Array.isArray(resultado?.alteracoes_societarias) ? resultado.alteracoes_societarias : [];
-  if (alteracoes.length) {
-    secoes.push({
-      id: "alteracoes_societarias",
-      titulo: "Alterações societárias identificadas",
-      itens: alteracoes.map(formatarAlteracao).filter(Boolean),
-    });
-  }
-
-  const quadroFinal = Array.isArray(resultado?.quadro_societario_final) ? resultado.quadro_societario_final : [];
-  if (quadroFinal.length) {
-    secoes.push({
-      id: "quadro_societario_final",
-      titulo: "Quadro societário final declarado no documento",
-      itens: quadroFinal.map(formatarQuadroFinal).filter(Boolean),
-    });
-  }
-
-  const agente = resultado?.analise_societaria_auditavel;
-  if (agente && typeof agente === "object") {
-    const agenteItens: string[] = [];
-    if (agente.status_documento) agenteItens.push(`Status do documento: ${texto(agente.status_documento)}`);
-    if (agente.ato_praticado) agenteItens.push(`Ato praticado: ${texto(agente.ato_praticado)}`);
-    if (agente.estado_atual?.descricao) agenteItens.push(`Estado atual: ${texto(agente.estado_atual.descricao)}`);
-    if (agente.confronto_qsa?.status) {
-      agenteItens.push(`Confronto documentado com QSA: ${texto(agente.confronto_qsa.status)}${agente.confronto_qsa.mensagem ? ` — ${texto(agente.confronto_qsa.mensagem)}` : ""}`);
-    }
-    if (Array.isArray(agente.linha_tempo_societaria)) agenteItens.push(...agente.linha_tempo_societaria.map(formatarEvento));
-    if (agenteItens.length) secoes.push({ id: "leitura_societaria", titulo: "Leitura societária estruturada", itens: agenteItens });
-  }
-
-  const evidencias = Array.isArray(resultado?.evidencias) ? resultado.evidencias.map(texto).filter(Boolean) : [];
-  if (evidencias.length) secoes.push({ id: "evidencias", titulo: "Trechos de evidência utilizados", itens: evidencias.map((item: string) => `“${item}”`) });
-
   const campos = Array.isArray(resultado?.campos)
     ? resultado.campos.map((campo: any) => ({ label: texto(campo?.label) || "Campo", valor: texto(campo?.valor) })).filter((campo: DocumentoAnaliseCampo) => campo.valor)
     : [];
   if (campos.length) secoes.push({ id: "campos", titulo: "Campos extraídos da leitura", campos });
-
-  const observacoes = itens(resultado?.observacoes);
-  if (observacoes.length) secoes.push({ id: "observacoes", titulo: "Observações e anotações", itens: observacoes });
-
   return secoes;
 }

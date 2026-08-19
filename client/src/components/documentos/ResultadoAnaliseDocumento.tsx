@@ -9,8 +9,8 @@ type ResultadoAnaliseDocumentoProps = {
 function classesSecao(secao: DocumentoAnaliseSecao): string {
   if (secao.id === "resultado") return "border-emerald-100 bg-emerald-50/60";
   if (secao.id === "diagnostico_factual") return "border-blue-200 bg-blue-50/70";
-  if (secao.id === "alteracoes_societarias") return "border-indigo-200 bg-indigo-50/60";
-  if (secao.id === "quadro_societario_final") return "border-cyan-200 bg-cyan-50/60";
+  if (secao.id === "transacoes") return "border-indigo-200 bg-indigo-50/60";
+  if (secao.id === "titular_atual") return "border-cyan-200 bg-cyan-50/60";
   if (secao.id === "leitura_societaria") return "border-violet-200 bg-violet-50/70";
   if (secao.id === "evidencias") return "border-slate-200 bg-slate-50";
   return "border-slate-200 bg-slate-50";
@@ -19,9 +19,10 @@ function classesSecao(secao: DocumentoAnaliseSecao): string {
 function classesTitulo(secao: DocumentoAnaliseSecao): string {
   if (secao.id === "resultado") return "text-emerald-700";
   if (secao.id === "diagnostico_factual") return "text-blue-800";
-  if (secao.id === "alteracoes_societarias") return "text-indigo-800";
-  if (secao.id === "quadro_societario_final") return "text-cyan-800";
+  if (secao.id === "transacoes") return "text-indigo-800";
+  if (secao.id === "titular_atual") return "text-cyan-800";
   if (secao.id === "leitura_societaria") return "text-violet-800";
+  if (secao.id === "evidencias") return "text-slate-700";
   return "text-slate-600";
 }
 
