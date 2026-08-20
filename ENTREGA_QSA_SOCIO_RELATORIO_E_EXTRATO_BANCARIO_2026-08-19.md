@@ -787,3 +787,102 @@ o que é relevante pra quem está anexando aquele documento naquele momento.
   (colapsa o cartão da Etapa 1 depois de apta); `iniciarAnaliseIdentidade`
   passou a trocar a aba do checklist pra "Documentação da Empresa"
   automaticamente quando a Etapa 1 fica apta.
+
+## Extra 9 — Relatório consolidado em modal + descrição dos documentos sob demanda (2026-08-20)
+
+### Pedido do usuário
+
+Novo print da tela de Acervo Documental (empresa "TOK CELL CELULARES E
+ACESSORIOS LTDA"), com um X grande cobrindo praticamente toda a extensão
+do "Relatório consolidado da análise documental" (que aparece embutido na
+própria página assim que o usuário clica em "Relatório da análise") e
+rabiscos em cima do checklist de anexação logo abaixo, mais mensagem de
+voz longa. Pedidos específicos: (1) o relatório marcado com X não deve
+mais abrir dentro da própria página de documentação — deve abrir "em
+outro modal"; (2) a parte de anexar documentos (checklist) também precisa
+diminuir — "tem muita informação repetida, pendências e bloqueios,
+contrato social, alteração, anexar" — trocando texto sempre visível por um
+ícone de informação que só mostra o conteúdo ao clicar, do jeito que já
+tinha sido pedido antes; (3) zero regressão, zero quebra em qualquer parte
+do sistema.
+
+### Causa
+
+O "Relatório consolidado da análise documental" (6 seções: resumo em
+números, documentos analisados, documentos aguardando análise, documentos
+faltantes, resultado por etapa, observações e próxima ação — cada
+documento com seu próprio card de `ResultadoAnaliseDocumento`) era
+renderizado como mais um bloco dentro do fluxo normal da página, logo
+acima do checklist de upload. Ao clicar em "Relatório da análise", esse
+bloco inteiro aparecia entre o cabeçalho e o checklist, empurrando toda a
+área de anexação pra muito mais embaixo — exatamente o oposto do pedido
+de "análise e documentos no mesmo lugar, sem precisar rolar demais" já
+atendido no Extra 8 pra Etapa 1/2/3.
+
+Separadamente, cada um dos ~19 campos de upload do checklist (Certidão de
+Regularidade do FGTS, Contrato Social, Relatório SCR, PGDAS, etc.) sempre
+mostrava, abaixo do botão "Anexar", um parágrafo fixo com a descrição
+completa do documento (e o Cartão CNPJ tinha um parágrafo extra só dele) —
+mesmo pra quem já sabia o que era aquele documento e só queria anexar o
+arquivo.
+
+### Correção
+
+**Relatório em modal.** O bloco inteiro do relatório consolidado (as 6
+seções, sem nenhum texto/cálculo alterado) passou a ser desenhado dentro
+de uma janela modal (`fixed inset-0` com fundo escurecido, painel branco
+central com rolagem própria, cabeçalho fixo com título + botão "Gerar PDF
+deste estado" + botão "X" de fechar) — o mesmo padrão visual já usado no
+modal de "Exportar documentos" desta mesma tela. Um novo estado,
+`relatorioModalAberto`, controla só a visibilidade: clicar em "Relatório
+da análise" continua buscando o estado mais atual no servidor e agora
+também abre o modal; fechar no "X" apenas esconde o modal (o resultado já
+buscado fica em cache — reabrir não refaz a consulta). A página de
+documentação, por trás do modal, nunca mais é empurrada pra baixo por
+causa do relatório.
+
+**Descrição dos documentos sob demanda.** Cada card de upload do checklist
+ganhou um pequeno ícone "i" ao lado do título do documento (só aparece
+quando aquele campo tem descrição ou é o Cartão CNPJ). O parágrafo de
+descrição — que antes ficava sempre visível, ocupando uma linha extra em
+praticamente todos os ~19 cards — agora só aparece quando o usuário clica
+no ícone (novo estado `descricaoVisivel`, por tipo de documento), e some
+de novo ao clicar de novo. Nenhuma outra informação do card (nome, contador
+de arquivos, botão "Anexar", lista de arquivos já anexados, observação,
+validação) foi tocada ou escondida — só a descrição explicativa, que é a
+parte que se repetia em quase todo campo.
+
+Os painéis de análise por etapa (Etapa 1 "Identidade do CNPJ" e Etapa 2/3
+"Atos da Junta/Contrato Social", entregues no Extra 8) e as informações de
+"Avisos", "Pendências que bloqueiam o avanço" e "Próxima leva de
+documentos" dentro deles **não foram alterados nesta correção** — são
+alertas ativos sobre o que está impedindo o avanço da análise, então
+esconder esse conteúdo atrás de um clique arriscaria o usuário não ver por
+que algo está bloqueado, o que contraria a exigência de zero regressão.
+Se o usuário quiser que esses avisos também fiquem sob demanda, é um
+próximo passo à parte, pra tratar com o mesmo cuidado.
+
+### Verificação
+
+- `npx tsc --noEmit` limpo.
+- `npx vitest run` (suíte completa) → **540/540 testes passando** (sem
+  mudança na contagem — mudança de layout/estado local, não toca nenhuma
+  rota nem regra testada).
+- `npx vite build --mode production` concluído sem erros.
+- Conferido por leitura de código que todo o conteúdo movido pra dentro do
+  modal é idêntico ao original (nenhum texto, cálculo ou condição de
+  negócio alterada) — só a estrutura de contêiner (overlay + painel com
+  cabeçalho fixo + corpo com rolagem) e a condição de exibição
+  (`relatorioModalAberto`) mudaram; e que os dois parágrafos de descrição
+  do checklist continuam existindo no código exatamente como antes, só
+  agora condicionados a `descricaoVisivel[tipo]`.
+
+### Escopo desta correção
+
+- `client/src/components/documentos/DocumentosEntidade.tsx` — bloco do
+  "Relatório consolidado da análise documental" convertido de seção
+  inline pra modal (`relatorioModalAberto`); botão "Relatório da análise"
+  passou a abrir o modal ao carregar; novo botão "X" fecha só a
+  visibilidade, sem descartar o dado já carregado; novo ícone de
+  informação por campo do checklist, controlado por `descricaoVisivel`,
+  substitui o parágrafo de descrição sempre visível.

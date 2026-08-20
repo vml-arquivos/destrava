@@ -10,6 +10,7 @@ import {
   Eye,
   FileArchive,
   FileText,
+  Info,
   Loader2,
   Paperclip,
   Printer,
@@ -485,6 +486,12 @@ export default function DocumentosEntidade({
   // frontend, mas nunca era mostrado por completo -- só um resuminho de uma linha.
   // Isso controla qual laudo está expandido, por documento.
   const [laudosExpandidos, setLaudosExpandidos] = useState<Record<string, boolean>>({});
+  // Descrição de cada campo (o que é o documento, pra que serve) e a dica extra do
+  // Cartão CNPJ antes ficavam sempre visíveis, um parágrafo cheio em cada um dos
+  // ~19 cards do checklist -- muita informação repetida ocupando a tela o tempo
+  // todo. Agora só aparecem ao clicar no ícone "i" do card (por tipo de documento),
+  // igual ao mecanismo de "Ver detalhes" já usado na Etapa 1/2/3.
+  const [descricaoVisivel, setDescricaoVisivel] = useState<Record<string, boolean>>({});
   const [pipeline, setPipeline] = useState<any>(null);
   // Resultado da Etapa 1 (Cartão CNPJ + QSA + Enquadramento Tributário), mostrado
   // direto nesta tela com o mesmo cartão usado no Dossiê/Laudo IA
@@ -516,6 +523,13 @@ export default function DocumentosEntidade({
   const [relatorioDocumental, setRelatorioDocumental] = useState<any>(null);
   const [carregandoRelatorio, setCarregandoRelatorio] = useState(false);
   const [baixandoRelatorioPdf, setBaixandoRelatorioPdf] = useState(false);
+  // O relatório consolidado (seções 1 a 6, com o resultado documento a documento)
+  // antes ficava sempre visível na própria página assim que carregado, empurrando
+  // o checklist de anexação pra muito mais embaixo -- pedido explícito do usuário
+  // pra abrir "em outro modal", sem misturar com a tela de anexar documentos. O
+  // dado já carregado (relatorioDocumental) fica em cache: fechar e reabrir o
+  // modal não refaz a consulta, só alterna esta visibilidade.
+  const [relatorioModalAberto, setRelatorioModalAberto] = useState(false);
 
   const query = useMemo(() => {
     if (!entidadeId) return "";
@@ -531,6 +545,7 @@ export default function DocumentosEntidade({
   const carregar = useCallback(async () => {
     if (!entidadeId) return;
     setRelatorioDocumental(null);
+    setRelatorioModalAberto(false);
     setLoading(true);
     try {
       const [data, observacoes, sociosEmpresa, pipelineAtual, dossieAtual] = await Promise.all([
@@ -845,6 +860,7 @@ export default function DocumentosEntidade({
     try {
       const relatorio = await apiFetch(`/api/documentacao/empresa/${empresaId}/relatorio`);
       setRelatorioDocumental(relatorio);
+      setRelatorioModalAberto(true);
       toast.success("Relatório da análise documental atualizado.");
     } catch (err: any) {
       toast.error(err?.message || "Não foi possível montar o relatório documental.");
@@ -1059,19 +1075,29 @@ export default function DocumentosEntidade({
         </div>
       </div>
 
-      {entidadeTipo === "empresa" && empresaId && relatorioDocumental && (
-        <div className="rounded-2xl border border-violet-200 bg-violet-50/40 p-4 space-y-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <p className="flex items-center gap-2 text-sm font-black text-violet-950"><FileText className="h-4 w-4" /> Relatório consolidado da análise documental</p>
-              <p className="mt-1 text-[11px] text-violet-900/70">Visualização completa do estado atual antes da geração do PDF. Atualizado em {new Date(relatorioDocumental.gerado_em || Date.now()).toLocaleString("pt-BR")} — {relatorioDocumental.regime?.descricao || "regime ainda não identificado"}.</p>
+      {/* O relatório consolidado abre num modal próprio, por cima da tela --
+          pedido explícito do usuário pra não empurrar o checklist de anexação
+          pra baixo. O botão "Relatório da análise" (acima) continua buscando o
+          estado mais atual a cada clique; fechar o "X" só esconde o modal, sem
+          descartar o resultado já carregado (reabrir não refaz a consulta). */}
+      {entidadeTipo === "empresa" && empresaId && relatorioDocumental && relatorioModalAberto && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 p-4 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="px-4 py-3 border-b border-violet-100 bg-violet-50/60 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="flex items-center gap-2 text-sm font-black text-violet-950"><FileText className="h-4 w-4" /> Relatório consolidado da análise documental</p>
+                <p className="mt-1 text-[11px] text-violet-900/70">Visualização completa do estado atual antes da geração do PDF. Atualizado em {new Date(relatorioDocumental.gerado_em || Date.now()).toLocaleString("pt-BR")} — {relatorioDocumental.regime?.descricao || "regime ainda não identificado"}.</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button type="button" onClick={baixarRelatorioDocumentalPdf} disabled={baixandoRelatorioPdf} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white px-3 py-2 text-[11px] font-black text-violet-800 shadow-sm ring-1 ring-violet-200 hover:bg-violet-50 disabled:opacity-50">
+                  {baixandoRelatorioPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                  {baixandoRelatorioPdf ? "Gerando..." : "Gerar PDF deste estado"}
+                </button>
+                <button type="button" onClick={() => setRelatorioModalAberto(false)} className="p-2 rounded-lg hover:bg-white/70 text-violet-700"><X className="h-5 w-5" /></button>
+              </div>
             </div>
-            <button type="button" onClick={baixarRelatorioDocumentalPdf} disabled={baixandoRelatorioPdf} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-white px-3 py-2 text-[11px] font-black text-violet-800 shadow-sm ring-1 ring-violet-200 hover:bg-violet-50 disabled:opacity-50">
-              {baixandoRelatorioPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-              {baixandoRelatorioPdf ? "Gerando..." : "Gerar PDF deste estado"}
-            </button>
-          </div>
 
+            <div className="flex-1 overflow-y-auto bg-violet-50/40 p-4 space-y-4">
           <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
             <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Status geral</p><p className="mt-1 text-[11px] font-black text-slate-800">{relatorioDocumental.status_geral}</p></div>
             <div className="rounded-xl border border-white bg-white p-2.5"><p className="text-[9px] font-black uppercase text-slate-400">Anexados e analisados</p><p className="mt-1 text-lg font-black text-emerald-700">{relatorioDocumental.resumo?.documentos_analisados ?? 0}</p></div>
@@ -1147,6 +1173,8 @@ export default function DocumentosEntidade({
             <p className="text-xs font-black text-violet-950">6. Próxima ação recomendada</p>
             <p className="mt-1 text-[10px] font-semibold text-slate-800">{relatorioDocumental.proxima_acao}</p>
             {!!relatorioDocumental.pendencias?.length && <div className="mt-2 space-y-1">{relatorioDocumental.pendencias.map((pendencia: any, index: number) => <p key={`${pendencia.codigo}-${index}`} className="text-[10px] text-red-700">• <strong>{String(pendencia.severidade || "atenção").toUpperCase()}:</strong> {pendencia.mensagem || pendencia.recomendacao || pendencia.codigo}</p>)}</div>}
+          </div>
+            </div>
           </div>
         </div>
       )}
@@ -1473,6 +1501,16 @@ export default function DocumentosEntidade({
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <p className="text-xs font-bold text-slate-700 leading-tight">{documentoSlot.titulo}</p>
                               {documentoSlot.obrigatorio && !satisfeitoPorOutro && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-800 text-white shrink-0">OBRIGATÓRIO NA ETAPA</span>}
+                              {(documentoSlot.descricao || tipo === "cartao_cnpj") && (
+                                <button
+                                  type="button"
+                                  onClick={() => setDescricaoVisivel((prev) => ({ ...prev, [tipo]: !prev[tipo] }))}
+                                  title="O que é este documento?"
+                                  className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${descricaoVisivel[tipo] ? "border-blue-400 bg-blue-100 text-blue-700" : "border-slate-300 text-slate-400 hover:border-blue-300 hover:text-blue-600"}`}
+                                >
+                                  <Info className="h-2.5 w-2.5" />
+                                </button>
+                              )}
                             </div>
                             <p className="text-[10px] text-slate-400 mt-0.5">
                               {exigeVinculoSocio ? `${sociosComDocumento}/${socios.length} sócio(s) com documento · ` : ""}{docsTipo.length} arquivo(s) no contexto atual
@@ -1550,8 +1588,8 @@ export default function DocumentosEntidade({
                             )}
                           </div>
                         </div>
-                        {documentoSlot.descricao && <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded-md px-2.5 py-1.5">{documentoSlot.descricao}</p>}
-                        {tipo === "cartao_cnpj" && <p className="text-[11px] text-blue-700 bg-blue-50 border border-blue-100 rounded-md px-2.5 py-1.5">O usuário só anexa. O sistema/IA deverá identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral para o relatório.</p>}
+                        {descricaoVisivel[tipo] && documentoSlot.descricao && <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded-md px-2.5 py-1.5">{documentoSlot.descricao}</p>}
+                        {descricaoVisivel[tipo] && tipo === "cartao_cnpj" && <p className="text-[11px] text-blue-700 bg-blue-50 border border-blue-100 rounded-md px-2.5 py-1.5">O usuário só anexa. O sistema/IA deverá identificar emissão, CNPJ, matriz/filial, abertura, CNAE, natureza, porte, endereço e situação cadastral para o relatório.</p>}
                         {docsTipo.length > 0 && (
                           <div className="rounded-md border border-slate-100 bg-slate-50 p-2">
                             {/* Rolagem interna só a partir de telas maiores (sm: 640px+): é só
