@@ -163,6 +163,26 @@ function hojeISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// ─── Sem movimentação ───────────────────────────────────────────────────────
+// A tela mostrava, lado a lado, empresas em dia e empresas com a "Próxima
+// atualização" vencida há semanas ou meses -- sem nenhuma separação visual,
+// tudo misturado na mesma lista comprida. Este limite (dias corridos desde a
+// data prevista de atualização) decide o que sai da lista principal e vai
+// pro bloco "Sem movimentação", recolhido por padrão -- sem apagar nem
+// encerrar nada, é só uma reorganização de exibição.
+const DIAS_LIMITE_SEM_MOVIMENTO = 10;
+
+function diasAtrasoAtualizacao(row: Acompanhamento): number {
+  const status = String(row.status || "").toLowerCase();
+  if (status === "encerrado") return 0;
+  const proxima = String(row.proxima_atualizacao || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(proxima)) return 0;
+  const hoje = hojeISO();
+  const diffMs = new Date(hoje + "T00:00:00Z").getTime() - new Date(proxima + "T00:00:00Z").getTime();
+  const diasCorridos = Math.round(diffMs / (24 * 60 * 60 * 1000));
+  return diasCorridos > 0 ? diasCorridos : 0;
+}
+
 function updFormInicial(): AtualizacaoForm {
   const hoje = hojeISO();
   const fimPeriodo = proximaQuartaFeira(hoje);
@@ -1005,6 +1025,16 @@ export default function AcompanhamentoBancario() {
   const [gerentesCatalogo, setGerentesCatalogo] = useState<Array<{ id: string; nome: string; banco_id?: string; regiao?: string }>>([]);
   const [pendentes, setPendentes] = useState(false);
 
+  // Bloco "Sem movimentação" (ver diasAtrasoAtualizacao) começa recolhido --
+  // são registros parados há muito tempo, não precisam ocupar espaço na
+  // primeira tela que o usuário vê. Um clique expande sem recarregar nada.
+  const [semMovimentoAberto, setSemMovimentoAberto] = useState(false);
+  // Menu "Mais ações" de uma linha por vez -- guarda o id do acompanhamento
+  // cujo menu está aberto (null = nenhum). Antes, as 11 ações de cada linha
+  // ficavam todas visíveis ao mesmo tempo; agora só as mais usadas aparecem
+  // direto, o resto fica atrás deste menu.
+  const [menuAcoesAbertoId, setMenuAcoesAbertoId] = useState<string | null>(null);
+
   const [novoOpen, setNovoOpen] = useState(false);
   const [updOpen, setUpdOpen] = useState<Acompanhamento | null>(null);
   const [detalhe, setDetalhe] = useState<Acompanhamento | null>(null);
@@ -1143,6 +1173,18 @@ export default function AcompanhamentoBancario() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canAccess]);
 
+  // Fecha o menu "Mais ações" ao clicar fora dele (mesmo padrão usado no
+  // seletor de empresas de client/src/pages/colaborador/Empresas.tsx).
+  useEffect(() => {
+    if (!menuAcoesAbertoId) return;
+    function onClickOutside(e: MouseEvent) {
+      const alvo = e.target as Element;
+      if (!alvo.closest(`[data-menu-acoes="${menuAcoesAbertoId}"]`)) setMenuAcoesAbertoId(null);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [menuAcoesAbertoId]);
+
   useEffect(() => {
     if (!canAccess) return;
     fetch("/api/bancos-parceiros", { headers: authHeaders() })
@@ -1179,6 +1221,22 @@ export default function AcompanhamentoBancario() {
       return 0;
     });
   }, [rows, banco, bancoIdFiltro, gerenteIdFiltro]);
+
+  // ─── Sem movimentação ────────────────────────────────────────────────────────
+  // Separa quem está com a atualização vencida há DIAS_LIMITE_SEM_MOVIMENTO dias
+  // ou mais (não teve nada feito desde então) de quem está de fato em
+  // acompanhamento ativo. Os dois grupos continuam vindo da mesma consulta
+  // (`filtered`) -- nada é removido nem escondido do banco, só reorganizado na
+  // tela: a lista principal fica só com quem está em dia ou perto do prazo, e
+  // quem parou há muito tempo vai pro bloco recolhido logo abaixo.
+  const listaEmAndamento = useMemo(
+    () => filtered.filter((row) => diasAtrasoAtualizacao(row) < DIAS_LIMITE_SEM_MOVIMENTO),
+    [filtered]
+  );
+  const listaSemMovimento = useMemo(
+    () => filtered.filter((row) => diasAtrasoAtualizacao(row) >= DIAS_LIMITE_SEM_MOVIMENTO),
+    [filtered]
+  );
 
   // ─── Resumo ──────────────────────────────────────────────────────────────────
   const resumo = useMemo(
@@ -2358,46 +2416,27 @@ export default function AcompanhamentoBancario() {
     }
   };
 
+  // As 11 ações possíveis de uma linha antes ficavam todas visíveis ao mesmo
+  // tempo, sempre -- a maior fonte de poluição visual da tela. Nenhuma ação
+  // foi removida, renomeada ou teve seu comportamento alterado; só foram
+  // divididas em "sempre visíveis" (as 3 mais usadas no dia a dia: abrir
+  // detalhes, lançar a semana e falar com o cliente) e "Mais ações" (as
+  // demais, atrás de um menu que abre só quando clicado).
   const renderActionButtons = (row: Acompanhamento) => {
     const whats = whatsappUrl(row);
     const encerradoJa = String(row.status || "").toLowerCase() === "encerrado";
+    const menuAberto = menuAcoesAbertoId === row.id;
     return (
       <div className="flex flex-wrap items-center gap-1.5">
         <button
           className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
           onClick={() => carregarDetalhe(row.id)}
         >Detalhes</button>
-        <button
-          className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-100"
-          onClick={() => carregarDetalhe(row.id)}
-          title="Abrir extratos e comprovantes bancários deste acompanhamento"
-        >Extratos</button>
-        {!encerradoJa && (
-          <button
-            className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-100"
-            onClick={() => abrirEditarAcompanhamento(row)}
-          >Editar</button>
-        )}
-        {!encerradoJa && (
-          <button
-            className="rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100 disabled:opacity-60"
-            disabled={saving}
-            onClick={() => sincronizarCadastroEmpresa(row)}
-            title="Puxa para este acompanhamento os mesmos dados cadastrais já atualizados no módulo Empresas"
-          >Atualizar cadastro</button>
-        )}
         {!encerradoJa && (
           <button
             className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
             onClick={() => abrirAtualizacao(row)}
           >Atualizar semana</button>
-        )}
-        {!encerradoJa && (
-          <button
-            className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
-            onClick={() => adicionarOutroBanco(row)}
-            title="Criar acompanhamento separado para outro banco da mesma empresa"
-          >+ Banco</button>
         )}
         {whats && (
           <a
@@ -2407,45 +2446,243 @@ export default function AcompanhamentoBancario() {
             rel="noreferrer"
           >WhatsApp</a>
         )}
-        <button
-          className="rounded-lg border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 transition hover:bg-purple-100"
-          onClick={() => abrirImpressao(row)}
-        >Imprimir</button>
-        <button
-          className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700 transition hover:bg-teal-100"
-          onClick={async () => {
-            let rowCompleto = row;
-            try {
-              const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}`, { headers: authHeaders() });
-              if (resp.ok) rowCompleto = await resp.json();
-            } catch { /* usa row sem atualizações */ }
-            exportarCSV(rowCompleto, prestadoraRelatorio);
-          }}
-        >Exportar XLS</button>
-        <button
-          className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
-          onClick={() => abrirRelatorio(row)}
-        >Gerar relatório</button>
-        {!encerradoJa && (
-          <button
-            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-50"
-            onClick={() => prorrogar(row.id)}
-          >Prorrogar</button>
-        )}
-        {!encerradoJa && (
-          <button
-            className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100"
-            onClick={() => encerrar(row)}
-          >Encerrar</button>
-        )}
         {encerradoJa && (
           <span className="rounded-lg border border-slate-300 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-500">
             Encerrado{row.observacoes_finais ? ` — ${row.observacoes_finais}` : ""}
           </span>
         )}
+
+        <div className="relative" data-menu-acoes={row.id}>
+          <button
+            type="button"
+            onClick={() => setMenuAcoesAbertoId(menuAberto ? null : row.id)}
+            className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${menuAberto ? "border-slate-300 bg-slate-100 text-slate-800" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}
+          >Mais ações ▾</button>
+          {menuAberto && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+              <button
+                className="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-violet-50 hover:text-violet-700"
+                onClick={() => { setMenuAcoesAbertoId(null); carregarDetalhe(row.id); }}
+                title="Abrir extratos e comprovantes bancários deste acompanhamento"
+              >Extratos</button>
+              {!encerradoJa && (
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-amber-50 hover:text-amber-700"
+                  onClick={() => { setMenuAcoesAbertoId(null); abrirEditarAcompanhamento(row); }}
+                >Editar</button>
+              )}
+              {!encerradoJa && (
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-sky-50 hover:text-sky-700 disabled:opacity-60"
+                  disabled={saving}
+                  onClick={() => { setMenuAcoesAbertoId(null); sincronizarCadastroEmpresa(row); }}
+                  title="Puxa para este acompanhamento os mesmos dados cadastrais já atualizados no módulo Empresas"
+                >Atualizar cadastro</button>
+              )}
+              {!encerradoJa && (
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700"
+                  onClick={() => { setMenuAcoesAbertoId(null); adicionarOutroBanco(row); }}
+                  title="Criar acompanhamento separado para outro banco da mesma empresa"
+                >+ Banco</button>
+              )}
+              <button
+                className="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-purple-50 hover:text-purple-700"
+                onClick={() => { setMenuAcoesAbertoId(null); abrirImpressao(row); }}
+              >Imprimir</button>
+              <button
+                className="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-teal-50 hover:text-teal-700"
+                onClick={async () => {
+                  setMenuAcoesAbertoId(null);
+                  let rowCompleto = row;
+                  try {
+                    const resp = await fetch(`/api/acompanhamentos-bancarios/${row.id}`, { headers: authHeaders() });
+                    if (resp.ok) rowCompleto = await resp.json();
+                  } catch { /* usa row sem atualizações */ }
+                  exportarCSV(rowCompleto, prestadoraRelatorio);
+                }}
+              >Exportar XLS</button>
+              <button
+                className="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                onClick={() => { setMenuAcoesAbertoId(null); abrirRelatorio(row); }}
+              >Gerar relatório</button>
+              {!encerradoJa && (
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-xs font-medium text-slate-700 hover:bg-slate-100"
+                  onClick={() => { setMenuAcoesAbertoId(null); prorrogar(row.id); }}
+                >Prorrogar</button>
+              )}
+              {!encerradoJa && (
+                <button
+                  className="block w-full px-3 py-1.5 text-left text-xs font-medium text-red-700 hover:bg-red-50"
+                  onClick={() => { setMenuAcoesAbertoId(null); encerrar(row); }}
+                >Encerrar</button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     );
   };
+
+  // Corpo da tabela (desktop) + lista de cards (mobile) para uma lista de
+  // acompanhamentos qualquer -- extraído pra ser reaproveitado tanto no bloco
+  // principal ("Acompanhamentos cadastrados") quanto no bloco recolhido
+  // "Sem movimentação" logo abaixo, sem duplicar a marcação inteira duas
+  // vezes. `mostrarDivisorPendente` liga/desliga os separadores "Parados" /
+  // "Em dia" -- dentro do bloco "Sem movimentação" todo mundo já está parado
+  // por definição, então esse separador não faz sentido ali.
+  const renderListaAcompanhamentos = (lista: Acompanhamento[], opts: { mostrarDivisorPendente: boolean }) => (
+    <>
+      {/* Desktop */}
+      <div className="hidden lg:block">
+        <table className="w-full table-fixed text-sm">
+          <colgroup>
+            <col className="w-[22%]" /><col className="w-[13%]" /><col className="w-[10%]" />
+            <col className="w-[8%]" /><col className="w-[12%]" /><col className="w-[12%]" />
+            <col className="w-[12%]" /><col className="w-[7%]" /><col className="w-[8%]" />
+          </colgroup>
+          <thead>
+            <tr className="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+              <th className="px-4 py-3">Empresa</th>
+              <th className="px-3 py-3">CNPJ</th>
+              <th className="px-3 py-3">Banco</th>
+              <th className="px-3 py-3">Rating</th>
+              <th className="px-3 py-3">Última atualização</th>
+              <th className="px-3 py-3">Próxima atualização</th>
+              <th className="px-3 py-3 text-right">Saldo semana atual</th>
+              <th className="px-3 py-3">Status</th>
+              <th className="px-3 py-3">Responsável</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td className="px-4 py-5 text-gray-500" colSpan={9}>Carregando acompanhamentos...</td></tr>
+            ) : lista.length === 0 ? (
+              <tr><td className="px-4 py-5 text-gray-500" colSpan={9}>Nenhum acompanhamento cadastrado.</td></tr>
+            ) : (
+              lista.map((row, index) => {
+                const pendente = row.status_pendente || row.atualizacao_pendente;
+                const saldo = Number(row.saldo_semanal || row.saldo_ultima_semana || 0);
+                const anterior = lista[index - 1];
+                const pendenteAnterior = anterior ? Boolean(anterior.status_pendente || anterior.atualizacao_pendente) : null;
+                const iniciaGrupoEmDia = opts.mostrarDivisorPendente && !pendente && pendenteAnterior === true;
+                return (
+                  <Fragment key={row.id}>
+                    {opts.mostrarDivisorPendente && index === 0 && pendente && (
+                      <tr>
+                        <td colSpan={9} className="bg-orange-50 border-t border-orange-200 px-4 py-2 text-xs font-bold text-orange-700 uppercase tracking-wide">
+                          ⚠️ Parados — precisam de atenção ({lista.filter((r) => r.status_pendente || r.atualizacao_pendente).length})
+                        </td>
+                      </tr>
+                    )}
+                    {iniciaGrupoEmDia && (
+                      <tr>
+                        <td colSpan={9} className="bg-slate-50 border-t border-slate-200 px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wide">
+                          Em dia
+                        </td>
+                      </tr>
+                    )}
+                    <tr className="border-t border-gray-100 align-middle hover:bg-gray-50/60">
+                      <td className="px-4 py-4">
+                        <div className="min-w-0">
+                          <div className="break-words font-semibold leading-snug text-gray-900">{row.nome_empresa || "-"}</div>
+                          {pendente && (
+                            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-orange-700">
+                              ⚠️ {row.dias_sem_atualizacao > 0 ? `Parado há ${row.dias_sem_atualizacao} dia(s)` : "Pendente hoje"}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-4 text-gray-700"><span className="break-words">{row.cnpj || "-"}</span></td>
+                      <td className="px-3 py-4 font-medium text-gray-800">{row.banco_observado || "-"}</td>
+                      <td className="px-3 py-4 text-gray-700">{row.rating_interno_atual || row.rating_bacen_atual || "-"}</td>
+                      <td className="px-3 py-4 text-gray-700">{formatDateBR(row.ultima_atualizacao_em || row.ultimo_update_em)}</td>
+                      <td className="px-3 py-4 text-gray-700">{formatDateBR(row.proxima_atualizacao)}</td>
+                      <td className={`px-3 py-4 text-right font-semibold ${saldo < 0 ? "text-red-600" : saldo > 0 ? "text-green-700" : "text-gray-700"}`}>
+                        {moneyBR(saldo)}
+                      </td>
+                      <td className="px-3 py-4">
+                        <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${situacaoBadgeInfo(row).classe}`}>
+                          {situacaoBadgeInfo(row).label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-4 text-gray-700">{row.responsavel_nome || "-"}</td>
+                    </tr>
+                    <tr className="border-t border-gray-100 bg-gray-50/70">
+                      <td colSpan={9} className="px-4 py-3">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                          <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Ações do acompanhamento</div>
+                          {renderActionButtons(row)}
+                        </div>
+                      </td>
+                    </tr>
+                  </Fragment>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile */}
+      <div className="grid gap-3 p-3 lg:hidden">
+        {loading ? (
+          <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500">Carregando acompanhamentos...</div>
+        ) : lista.length === 0 ? (
+          <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500">Nenhum acompanhamento cadastrado.</div>
+        ) : (
+          lista.map((row) => {
+            const pendente = row.status_pendente || row.atualizacao_pendente;
+            const saldo = Number(row.saldo_semanal || row.saldo_ultima_semana || 0);
+            return (
+              <article key={row.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold leading-snug text-gray-900">{row.nome_empresa || "-"}</h3>
+                    <p className="mt-1 text-xs text-gray-500">{row.cnpj || "-"} · {row.banco_observado || "-"}</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full border px-2 py-1 text-xs font-medium ${situacaoBadgeInfo(row).classe}`}>
+                    {situacaoBadgeInfo(row).label}
+                  </span>
+                </div>
+                {pendente && (
+                  <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-medium text-orange-700">
+                    Atualização pendente
+                  </div>
+                )}
+                <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <dt className="text-xs text-gray-500">Rating</dt>
+                    <dd className="font-semibold">{row.rating_interno_atual || row.rating_bacen_atual || "-"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-gray-500">Responsável</dt>
+                    <dd className="font-semibold">{row.responsavel_nome || "-"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-gray-500">Última atualização</dt>
+                    <dd className="font-semibold">{formatDateBR(row.ultima_atualizacao_em || row.ultimo_update_em)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-gray-500">Próxima atualização</dt>
+                    <dd className="font-semibold">{formatDateBR(row.proxima_atualizacao)}</dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-xs text-gray-500">Saldo última semana</dt>
+                    <dd className={`font-bold ${saldo < 0 ? "text-red-600" : saldo > 0 ? "text-green-700" : "text-gray-700"}`}>
+                      {moneyBR(saldo)}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="mt-4 border-t border-gray-100 pt-3">{renderActionButtons(row)}</div>
+              </article>
+            );
+          })
+        )}
+      </div>
+    </>
+  );
 
   // ─── Acesso negado ────────────────────────────────────────────────────────────
   if (!canAccess) {
@@ -2584,163 +2821,43 @@ export default function AcompanhamentoBancario() {
           </div>
         </div>
 
-        {/* Tabela */}
+        {/* Bloco principal: em acompanhamento */}
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-4 py-2.5 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-bold text-slate-900">Acompanhamentos cadastrados</h2>
-              <p className="text-[10px] text-slate-400">{filtered.length} registro(s) · ações disponíveis em cada linha</p>
+              <p className="text-[10px] text-slate-400">{listaEmAndamento.length} registro(s) · ações disponíveis em cada linha</p>
             </div>
           </div>
+          {renderListaAcompanhamentos(listaEmAndamento, { mostrarDivisorPendente: true })}
+        </div>
 
-          {/* Desktop */}
-          <div className="hidden lg:block">
-            <table className="w-full table-fixed text-sm">
-              <colgroup>
-                <col className="w-[22%]" /><col className="w-[13%]" /><col className="w-[10%]" />
-                <col className="w-[8%]" /><col className="w-[12%]" /><col className="w-[12%]" />
-                <col className="w-[12%]" /><col className="w-[7%]" /><col className="w-[8%]" />
-              </colgroup>
-              <thead>
-                <tr className="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                  <th className="px-4 py-3">Empresa</th>
-                  <th className="px-3 py-3">CNPJ</th>
-                  <th className="px-3 py-3">Banco</th>
-                  <th className="px-3 py-3">Rating</th>
-                  <th className="px-3 py-3">Última atualização</th>
-                  <th className="px-3 py-3">Próxima atualização</th>
-                  <th className="px-3 py-3 text-right">Saldo semana atual</th>
-                  <th className="px-3 py-3">Status</th>
-                  <th className="px-3 py-3">Responsável</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td className="px-4 py-5 text-gray-500" colSpan={9}>Carregando acompanhamentos...</td></tr>
-                ) : filtered.length === 0 ? (
-                  <tr><td className="px-4 py-5 text-gray-500" colSpan={9}>Nenhum acompanhamento cadastrado.</td></tr>
-                ) : (
-                  filtered.map((row, index) => {
-                    const pendente = row.status_pendente || row.atualizacao_pendente;
-                    const saldo = Number(row.saldo_semanal || row.saldo_ultima_semana || 0);
-                    const anterior = filtered[index - 1];
-                    const pendenteAnterior = anterior ? Boolean(anterior.status_pendente || anterior.atualizacao_pendente) : null;
-                    const iniciaGrupoEmDia = !pendente && pendenteAnterior === true;
-                    return (
-                      <Fragment key={row.id}>
-                        {index === 0 && pendente && (
-                          <tr>
-                            <td colSpan={9} className="bg-orange-50 border-t border-orange-200 px-4 py-2 text-xs font-bold text-orange-700 uppercase tracking-wide">
-                              ⚠️ Parados — precisam de atenção ({filtered.filter((r) => r.status_pendente || r.atualizacao_pendente).length})
-                            </td>
-                          </tr>
-                        )}
-                        {iniciaGrupoEmDia && (
-                          <tr>
-                            <td colSpan={9} className="bg-slate-50 border-t border-slate-200 px-4 py-2 text-xs font-bold text-slate-500 uppercase tracking-wide">
-                              Em dia
-                            </td>
-                          </tr>
-                        )}
-                        <tr className="border-t border-gray-100 align-middle hover:bg-gray-50/60">
-                          <td className="px-4 py-4">
-                            <div className="min-w-0">
-                              <div className="break-words font-semibold leading-snug text-gray-900">{row.nome_empresa || "-"}</div>
-                              {pendente && (
-                                <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-orange-700">
-                                  ⚠️ {row.dias_sem_atualizacao > 0 ? `Parado há ${row.dias_sem_atualizacao} dia(s)` : "Pendente hoje"}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-3 py-4 text-gray-700"><span className="break-words">{row.cnpj || "-"}</span></td>
-                          <td className="px-3 py-4 font-medium text-gray-800">{row.banco_observado || "-"}</td>
-                          <td className="px-3 py-4 text-gray-700">{row.rating_interno_atual || row.rating_bacen_atual || "-"}</td>
-                          <td className="px-3 py-4 text-gray-700">{formatDateBR(row.ultima_atualizacao_em || row.ultimo_update_em)}</td>
-                          <td className="px-3 py-4 text-gray-700">{formatDateBR(row.proxima_atualizacao)}</td>
-                          <td className={`px-3 py-4 text-right font-semibold ${saldo < 0 ? "text-red-600" : saldo > 0 ? "text-green-700" : "text-gray-700"}`}>
-                            {moneyBR(saldo)}
-                          </td>
-                          <td className="px-3 py-4">
-                            <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${situacaoBadgeInfo(row).classe}`}>
-                              {situacaoBadgeInfo(row).label}
-                            </span>
-                          </td>
-                          <td className="px-3 py-4 text-gray-700">{row.responsavel_nome || "-"}</td>
-                        </tr>
-                        <tr className="border-t border-gray-100 bg-gray-50/70">
-                          <td colSpan={9} className="px-4 py-3">
-                            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                              <div className="text-xs font-medium uppercase tracking-wide text-gray-500">Ações do acompanhamento</div>
-                              {renderActionButtons(row)}
-                            </div>
-                          </td>
-                        </tr>
-                      </Fragment>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile */}
-          <div className="grid gap-3 p-3 lg:hidden">
-            {loading ? (
-              <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500">Carregando acompanhamentos...</div>
-            ) : filtered.length === 0 ? (
-              <div className="rounded-lg border border-gray-200 p-4 text-sm text-gray-500">Nenhum acompanhamento cadastrado.</div>
-            ) : (
-              filtered.map((row) => {
-                const pendente = row.status_pendente || row.atualizacao_pendente;
-                const saldo = Number(row.saldo_semanal || row.saldo_ultima_semana || 0);
-                return (
-                  <article key={row.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="font-semibold leading-snug text-gray-900">{row.nome_empresa || "-"}</h3>
-                        <p className="mt-1 text-xs text-gray-500">{row.cnpj || "-"} · {row.banco_observado || "-"}</p>
-                      </div>
-                      <span className={`shrink-0 rounded-full border px-2 py-1 text-xs font-medium ${situacaoBadgeInfo(row).classe}`}>
-                        {situacaoBadgeInfo(row).label}
-                      </span>
-                    </div>
-                    {pendente && (
-                      <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-medium text-orange-700">
-                        Atualização pendente
-                      </div>
-                    )}
-                    <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <dt className="text-xs text-gray-500">Rating</dt>
-                        <dd className="font-semibold">{row.rating_interno_atual || row.rating_bacen_atual || "-"}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs text-gray-500">Responsável</dt>
-                        <dd className="font-semibold">{row.responsavel_nome || "-"}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs text-gray-500">Última atualização</dt>
-                        <dd className="font-semibold">{formatDateBR(row.ultima_atualizacao_em || row.ultimo_update_em)}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-xs text-gray-500">Próxima atualização</dt>
-                        <dd className="font-semibold">{formatDateBR(row.proxima_atualizacao)}</dd>
-                      </div>
-                      <div className="col-span-2">
-                        <dt className="text-xs text-gray-500">Saldo última semana</dt>
-                        <dd className={`font-bold ${saldo < 0 ? "text-red-600" : saldo > 0 ? "text-green-700" : "text-gray-700"}`}>
-                          {moneyBR(saldo)}
-                        </dd>
-                      </div>
-                    </dl>
-                    <div className="mt-4 border-t border-gray-100 pt-3">{renderActionButtons(row)}</div>
-                  </article>
-                );
-              })
+        {/* Bloco recolhido: parados há muito tempo (ver DIAS_LIMITE_SEM_MOVIMENTO) --
+            não some da tela, mas também não fica ocupando espaço junto com quem
+            está de fato em acompanhamento ativo. Nada é apagado nem encerrado
+            automaticamente; é só onde a linha aparece por padrão. */}
+        {listaSemMovimento.length > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/40 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setSemMovimentoAberto((v) => !v)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left"
+            >
+              <div>
+                <h2 className="text-sm font-bold text-amber-900">Sem movimentação há mais de {DIAS_LIMITE_SEM_MOVIMENTO} dias</h2>
+                <p className="text-[10px] text-amber-700/80">{listaSemMovimento.length} registro(s) parado(s) — a atualização prevista já passou e nada foi feito desde então</p>
+              </div>
+              <span className="shrink-0 rounded-lg border border-amber-200 bg-white px-2.5 py-1 text-xs font-bold text-amber-700">
+                {semMovimentoAberto ? "Ocultar ▲" : "Mostrar ▼"}
+              </span>
+            </button>
+            {semMovimentoAberto && (
+              <div className="border-t border-amber-100">
+                {renderListaAcompanhamentos(listaSemMovimento, { mostrarDivisorPendente: false })}
+              </div>
             )}
           </div>
-        </div>
+        )}
 
         {/* ── Modal — Novo Acompanhamento ──────────────────────────────────── */}
         {novoOpen && (

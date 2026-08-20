@@ -982,3 +982,81 @@ o relatório em modal é só uma segunda leitura/consulta.
   nas seções 3 e 4 do relatório em modal.
 - `client/src/pages/colaborador/AcervoDocumentalEmpresa.tsx` — botão
   "Voltar para a lista de empresas" no topo da página.
+
+## Extra 11 — Acompanhamento Bancário: menos poluição e separação de quem parou (2026-08-20)
+
+### Pedido do usuário
+
+Dois prints da tela "Acompanhamento Bancário" (lista de empresas com
+monitoramento semanal) e mensagem de voz pedindo correção "pontual,
+urgente". Pedidos: (1) a tela está confusa -- nome da empresa e uma fileira
+de botões repetida em toda linha; organizar em blocos e adicionar filtros
+dinâmicos; (2) existem empresas na lista cuja "Próxima atualização" já
+passou há meses (o usuário cita o mês 6, hoje é agosto) e que continuam
+ocupando a tela como se estivessem em dia -- pediu uma regra pra tirar
+quem está parado há dez ou quinze dias da visão principal, sem precisar
+ficar olhando pra elas o tempo todo.
+
+### Causa
+
+Cada linha da tabela desenhava, sempre visíveis ao mesmo tempo, as 11
+ações possíveis (Detalhes, Extratos, Editar, Atualizar cadastro, Atualizar
+semana, + Banco, WhatsApp, Imprimir, Exportar XLS, Gerar relatório,
+Prorrogar/Encerrar) -- a maior fonte de poluição visual apontada. Além
+disso, a lista já tinha uma lógica de "parados" (`status_pendente` /
+`atualizacao_pendente`, calculada no servidor), mas ela não refletia
+quanto tempo, de fato, uma empresa está sem receber nenhuma atualização
+desde a data prevista -- por isso empresas com "Próxima atualização" de
+meses atrás continuavam misturadas, sem destaque, junto de quem está em
+dia.
+
+### Correção
+
+**Ações em blocos.** `renderActionButtons` continua com exatamente as
+mesmas 11 ações, os mesmos textos e o mesmo comportamento de cada uma
+(nenhuma rota, chamada de API ou confirmação foi alterada) -- só a
+exibição mudou: ficam sempre visíveis as 3 mais usadas no dia a dia
+(Detalhes, Atualizar semana, WhatsApp), e as outras 8 foram agrupadas
+atrás de um botão "Mais ações ▾", que abre um menu compacto e fecha
+sozinho ao clicar fora dele (mesmo padrão do seletor de empresas de
+`Empresas.tsx`) ou ao escolher uma ação.
+
+**Separação de quem parou.** Foi criada uma regra puramente de exibição
+(nenhum dado é apagado, encerrado ou alterado no banco): calcula-se
+`diasAtrasoAtualizacao`, os dias corridos desde a "Próxima atualização"
+prevista até hoje. Acompanhamentos com 10 dias ou mais de atraso (
+`DIAS_LIMITE_SEM_MOVIMENTO`) saem da lista principal "Acompanhamentos
+cadastrados" e passam a aparecer só dentro de um bloco separado, "Sem
+movimentação há mais de 10 dias", que já vem **recolhido** por padrão
+(um clique mostra os registros ali dentro, exatamente com as mesmas
+informações e ações de sempre). Os contadores do topo da tela (Ativos,
+Pendentes, Positivas, Negativas, Prontos, Prorrogados) e os filtros já
+existentes (busca, banco, gerente, status, "Apenas pendentes") não foram
+alterados -- continuam funcionando exatamente como antes, aplicados antes
+dessa nova separação.
+
+Encerrados não entram nessa regra (a função retorna 0 dias de atraso para
+quem já está com `status = "encerrado"`), então quem já foi formalmente
+encerrado continua só onde já aparecia, via o filtro de status.
+
+### Verificação
+
+- `npx tsc --noEmit` limpo.
+- `npx vitest run` (suíte completa) → **540/540 testes passando** (sem
+  mudança na contagem -- mudança de exibição, nenhuma rota nem cálculo de
+  negócio já testado foi tocado).
+- `npx vite build --mode production` concluído sem erros.
+- Conferido por leitura de código que a tabela (desktop) e os cards
+  (mobile) usados nos dois blocos são a mesma marcação de antes, agora
+  numa função reaproveitada (`renderListaAcompanhamentos`) parametrizada
+  pela lista recebida -- nenhuma coluna, campo ou cálculo de saldo/rating/
+  status foi alterado.
+
+### Escopo desta correção
+
+- `client/src/pages/colaborador/AcompanhamentoBancario.tsx` — nova
+  constante `DIAS_LIMITE_SEM_MOVIMENTO` e função `diasAtrasoAtualizacao`;
+  novas listas derivadas `listaEmAndamento` / `listaSemMovimento`; novo
+  bloco recolhido "Sem movimentação"; `renderActionButtons` reorganizado
+  em ações sempre visíveis + menu "Mais ações"; tabela/cards extraídos
+  para `renderListaAcompanhamentos`, reaproveitada nos dois blocos.
