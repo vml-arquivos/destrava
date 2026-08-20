@@ -408,3 +408,67 @@ limpo, `npx vitest run` → **539/539 testes passando** (não havia teste
 automatizado cobrindo esse gerador de HTML antes desta mudança — a
 verificação de layout foi visual, renderizando um PDF de teste real com a
 mesma técnica de papel timbrado e conferindo a página 1 como imagem).
+
+## Extra 5 — navegação confusa entre "Acervo Documental" e "Dossiê / Laudo IA"
+
+Foi reportado (com prints e um vídeo de navegação) que, para conseguir ver o
+laudo depois de anexar CNPJ/QSA, o caminho era: anexar → "Iniciar análise
+documental" → o laudo abre → pra anexar o próximo documento tinha que clicar
+"Voltar para a empresa" → clicar de novo na aba "Dossiê / Laudo IA" → esperar
+"Montando Dossiê de Crédito..." recarregar tudo do zero. "Caminho longo pra
+pouca coisa."
+
+### Causa raiz
+
+O laudo (`DossieCreditoEmpresa`) tinha **duas casas diferentes e
+independentes** no sistema:
+
+1. A página exclusiva do acervo (`/colaborador/empresas/:id/acervo`), que já
+   abre o laudo embutido na mesma tela (`?view=analise`) assim que "Iniciar
+   análise documental" termina — isso já funcionava certo.
+2. A aba "Dossiê / Laudo IA" dentro da página da empresa
+   (`client/src/pages/colaborador/Empresas.tsx`), que renderizava uma
+   **segunda cópia própria** do mesmo `<DossieCreditoEmpresa>`, calculada do
+   zero, numa página diferente.
+
+Como são duas instâncias diferentes do mesmo componente, sem nada em comum
+além dos dados que buscam do servidor, ir de uma pra outra sempre recarrega
+tudo — daí "Montando Dossiê de Crédito..." toda vez. E como anexar mais
+documentos só é possível na página do acervo (não na aba da empresa), o
+usuário ficava preso pingando entre as duas.
+
+### Correção
+
+O laudo passou a ter **uma casa só**: a página exclusiva do acervo. A aba
+"Dossiê / Laudo IA" agora só redireciona pra lá (`/acervo?view=analise`) —
+exatamente o mesmo padrão que a aba "Acervo Documental" já usava pra abrir a
+página do checklist, só que agora as duas abas levam pro mesmo lugar, cada
+uma já na visão certa (checklist ou laudo). E, dentro da própria página do
+acervo, adicionei um link "Voltar para o checklist de documentos" acima do
+laudo — pra alternar entre anexar documentos e ver o laudo sem precisar
+sair pra "Voltar para a empresa" e voltar de novo.
+
+Fluxo novo: `Empresas.tsx` → aba "Acervo Documental" **ou** aba "Dossiê /
+Laudo IA" → ambas caem na mesma página do acervo → anexa CNPJ/QSA → clica
+"Iniciar análise documental" → vê o laudo ali mesmo → clica "Voltar para o
+checklist de documentos" (sem sair da página) → anexa o próximo documento
+(Atos da Junta) → repete → só no fim, com tudo anexado, é que faz sentido
+gerar/baixar o relatório em PDF. Nenhuma tela nova foi criada — só
+eliminada a segunda cópia redundante do laudo e fechado o vaivém entre
+página do acervo e aba da empresa.
+
+### Escopo desta correção
+
+- `client/src/pages/colaborador/Empresas.tsx` — aba "Dossiê / Laudo IA"
+  agora redireciona para a página do acervo em vez de renderizar sua
+  própria cópia do laudo (mesmo padrão já usado pela aba "Acervo
+  Documental"); import não usado removido.
+- `client/src/pages/colaborador/AcervoDocumentalEmpresa.tsx` — link "Voltar
+  para o checklist de documentos" na visão do laudo, pra trocar de visão
+  sem sair da página.
+
+Nenhuma rota de API mudou, nenhum dado de análise foi alterado — é só
+navegação/composição de tela. `npx tsc --noEmit` limpo, `npx vite build`
+concluído sem erros, `npx vitest run` → **539/539 testes passando** (essa
+mudança é só de front-end/roteamento, não adiciona nem quebra teste de
+backend).

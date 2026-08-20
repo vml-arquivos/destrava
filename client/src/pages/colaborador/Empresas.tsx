@@ -23,7 +23,6 @@ import {
 import { EmptyState, LoadingState, ErrorState } from "@/components/ui/states";
 import { RiscoBadge, ScoreIndicator, StatusCadastroBadge } from "@/components/ui/risco-badge";
 import DocumentosEntidade from "@/components/documentos/DocumentosEntidade";
-import DossieCreditoEmpresa from "@/components/documentacao/DossieCreditoEmpresa";
 import Inteligencia360 from "./Inteligencia360";
 import EsteiraCredito from "./EsteiraCredito";
 import Historico360 from "./Historico360";
@@ -1381,6 +1380,18 @@ export default function Empresas() {
     }
   }, [abaAtiva, selecionada?.id]);
 
+  // ── Dossiê / Laudo IA também abre direto na página exclusiva ────────────────
+  // Mesma rede de segurança acima, mas para a aba "dossie_credito": cobre
+  // qualquer caminho que ainda ative essa aba sem passar por navegarParaAba()
+  // (link salvo, "?aba=dossie_credito" direto na URL, etc.), redirecionando
+  // pra a mesma página exclusiva do acervo (?view=analise) em vez de montar
+  // uma segunda cópia do dossiê aqui dentro.
+  useEffect(() => {
+    if (abaAtiva === "dossie_credito" && selecionada?.id) {
+      setLocation(`/colaborador/empresas/${selecionada.id}/acervo?view=analise`);
+    }
+  }, [abaAtiva, selecionada?.id]);
+
   // ── Carregar detalhe ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!selecionada) return;
@@ -1673,6 +1684,15 @@ export default function Empresas() {
     // intermediário com o botão "Abrir acervo documental".
     if (destino === "documentos" && selecionada?.id) {
       setLocation(`/colaborador/empresas/${selecionada.id}/acervo`);
+      return;
+    }
+    // Dossiê / Laudo IA é a mesma tela que já abre sozinha dentro do acervo
+    // documental (?view=analise) -- mandar pra lá em vez de montar uma segunda
+    // cópia aqui evita o vaivém "acervo -> voltar pra empresa -> aba Dossiê ->
+    // recarregar tudo de novo" e garante que exista só um lugar no sistema
+    // onde o dossiê é calculado e mostrado.
+    if (destino === "dossie_credito" && selecionada?.id) {
+      setLocation(`/colaborador/empresas/${selecionada.id}/acervo?view=analise`);
       return;
     }
     setAbaAtiva(destino);
@@ -2157,13 +2177,24 @@ export default function Empresas() {
                     )
 
                     /* ── DOSSIÊ DE CRÉDITO ── */
+                    // O dossiê/laudo IA passou a ter uma casa única: a página exclusiva
+                    // do acervo (/acervo?view=analise), a mesma que abre sozinha ao
+                    // terminar "Iniciar análise documental". Antes esta aba renderizava
+                    // uma SEGUNDA cópia independente do <DossieCreditoEmpresa>, com seu
+                    // próprio carregamento do zero ("Montando Dossiê de Crédito...") --
+                    // clicar em "Voltar para a empresa" a partir do acervo e depois nesta
+                    // aba recarregava tudo de novo, um caminho longo pra ver a mesma
+                    // coisa. O useEffect de segurança logo acima já redireciona direto
+                    // pra página exclusiva assim que abaAtiva vira "dossie_credito";
+                    // este bloco só cobre o instante entre o clique e o redirecionamento,
+                    // igual ao padrão já usado na aba "Acervo Documental".
                     : (abaPermitida(abaAtiva) ? abaAtiva : primeiraAbaPermitida()) === "dossie_credito" ? (
-                      <DossieCreditoEmpresa
-                        empresaId={selecionada?.id}
-                        onAtualizarReceita={selecionada ? () => sincronizarDados(selecionada) : undefined}
-                        onAvancar={abaPermitida("documentos") && selecionada?.id ? () => setLocation(`/colaborador/empresas/${selecionada.id}/acervo?etapa=documentacao_empresa`) : undefined}
-                        onAvancarSocietario={abaPermitida("documentos") && selecionada?.id ? () => setLocation(`/colaborador/empresas/${selecionada.id}/acervo?etapa=documentacao_socios`) : undefined}
-                      />
+                      <div className="p-3 fade-in">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex items-center justify-center gap-3 text-slate-500">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <p className="text-sm font-semibold">Abrindo dossiê / laudo IA...</p>
+                        </div>
+                      </div>
                     )
 
                     /* ── INTELIGÊNCIA 360 ── */

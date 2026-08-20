@@ -140,12 +140,25 @@ export default function AcervoDocumentalEmpresa() {
           </div>
 
           {empresaId && view === "analise" && (
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <DossieCreditoEmpresa
-                empresaId={empresaId}
-                onAvancar={() => setLocation(`/colaborador/empresas/${empresaId}/acervo?etapa=documentacao_empresa`)}
-                onAvancarSocietario={() => setLocation(`/colaborador/empresas/${empresaId}/acervo?etapa=documentacao_socios`)}
-              />
+            <div className="space-y-2">
+              {/* Antes, pra anexar mais um documento depois de ver o laudo, só dava pra
+                  sair com "Voltar para a empresa" e reabrir o acervo do zero. Esse link
+                  fica na mesma página (só troca o checklist pelo laudo e volta), sem
+                  perder o contexto nem recarregar a empresa inteira. */}
+              <button
+                type="button"
+                onClick={() => setLocation(`/colaborador/empresas/${empresaId}/acervo`)}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 hover:text-blue-800"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" /> Voltar para o checklist de documentos
+              </button>
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <DossieCreditoEmpresa
+                  empresaId={empresaId}
+                  onAvancar={() => setLocation(`/colaborador/empresas/${empresaId}/acervo?etapa=documentacao_empresa`)}
+                  onAvancarSocietario={() => setLocation(`/colaborador/empresas/${empresaId}/acervo?etapa=documentacao_socios`)}
+                />
+              </div>
             </div>
           )}
 
