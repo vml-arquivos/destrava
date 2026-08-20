@@ -8,6 +8,22 @@ import DocumentosEntidade from "@/components/documentos/DocumentosEntidade";
 import DossieCreditoEmpresa from "@/components/documentacao/DossieCreditoEmpresa";
 import { formatCNPJ } from "@/utils/cnpj";
 
+// Mesmas abas de client/src/pages/colaborador/Empresas.tsx (ABAS_EMPRESA) --
+// ficam aqui também pra quem está anexando/analisando documento no acervo
+// conseguir ir direto pra qualquer outra aba da empresa com um clique só, sem
+// precisar "Voltar para a empresa" e só então clicar na aba desejada lá.
+const ABAS_EMPRESA_ACERVO = [
+  { id: "visao_geral", label: "Dados da Empresa" },
+  { id: "dossie_credito", label: "Dossiê / Laudo IA" },
+  { id: "inteligencia_360", label: "Inteligência 360" },
+  { id: "esteira_credito", label: "Esteira de Crédito" },
+  { id: "documentos", label: "Acervo Documental" },
+  { id: "followup", label: "Conversas" },
+  { id: "simulacoes", label: "Simulações" },
+  { id: "contratos", label: "Contratos Firmados" },
+  { id: "historico", label: "Histórico" },
+] as const;
+
 type EmpresaResumo = {
   id: string;
   razao_social: string;
@@ -47,46 +63,23 @@ export default function AcervoDocumentalEmpresa() {
     return () => { active = false; };
   }, [empresaId]);
 
-  async function analisarEAbrirLaudo() {
-    if (!empresaId) return;
+  // Leva pra qualquer outra aba da empresa (ou pra própria visão do acervo) com
+  // um clique só -- antes, sair do acervo exigia "Voltar para a empresa" e só
+  // depois clicar na aba desejada lá, dois passos pra chegar em qualquer lugar
+  // que não fosse o checklist de documentos.
+  function navegarParaAbaEmpresa(aba: (typeof ABAS_EMPRESA_ACERVO)[number]["id"]) {
+    if (!empresaId) { setLocation("/colaborador/empresas"); return; }
+    if (aba === "documentos") { setLocation(`/colaborador/empresas/${empresaId}/acervo`); return; }
+    // Dossiê / Laudo IA é a mesma tela do acervo, só trocando o checklist pelo
+    // laudo (?view=analise) -- ver comentário no bloco de renderização abaixo.
+    if (aba === "dossie_credito") { setLocation(`/colaborador/empresas/${empresaId}/acervo?view=analise`); return; }
     try {
-      const resultado = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-inicial/iniciar`, {
-        method: "POST",
-        body: JSON.stringify({ forcar: false }),
-      });
-      if (resultado?.dossie?.identidade_cnpj?.apto_para_avancar) {
-        toast.success("Relatório inicial concluído. A próxima etapa está liberada.");
-      } else if (resultado?.processando) {
-        toast.info("Leitura iniciada. O relatório mostrará os resultados assim que cada documento for concluído.");
-      }
-      // O processamento e o resultado permanecem sob a rota que contém o ID da
-      // empresa. A rota antiga dependia de query string + recarga assíncrona da
-      // lista e podia desmontar o detalhe, exibindo novamente “Selecionar empresa”.
-      sessionStorage.setItem(
-        "destrava_acervo_empresa_ativa",
-        JSON.stringify({ empresaId, view: "analise", ts: Date.now() }),
-      );
-      setLocation(`/colaborador/empresas/${empresaId}/acervo?view=analise`);
-    } catch (err: any) {
-      const mensagem = err?.message || "Não foi possível abrir o relatório inicial.";
-      toast.error(mensagem);
-      throw err;
-    }
-  }
-
-  function voltarParaEmpresa() {
-    if (!empresaId) return setLocation("/colaborador/empresas");
-    try {
-      // "aba: documentos" não é mais usado aqui de propósito: como o clique em
-      // Acervo Documental agora abre direto esta página, voltar com
-      // aba=documentos criaria um vaivém automático de volta pro acervo.
-      // "visao_geral" é o destino seguro de retorno.
       sessionStorage.setItem(
         "destrava_empresa_retorno_acervo",
-        JSON.stringify({ empresaId, aba: "visao_geral", ts: Date.now() }),
+        JSON.stringify({ empresaId, aba, ts: Date.now() }),
       );
     } catch {}
-    setLocation(`/colaborador/empresas?empresa=${empresaId}&aba=visao_geral`);
+    setLocation(`/colaborador/empresas?empresa=${empresaId}&aba=${aba}`);
   }
 
   const etapaInicial = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("etapa") : null;
@@ -104,15 +97,6 @@ export default function AcervoDocumentalEmpresa() {
           <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex min-w-0 items-center gap-3">
-                <button
-                  type="button"
-                  onClick={voltarParaEmpresa}
-                  className="flex h-9 shrink-0 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 text-blue-700 hover:bg-blue-100"
-                  title="Voltar para a página da empresa"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                  <span className="hidden text-xs font-bold lg:inline">Voltar para a empresa</span>
-                </button>
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
                   <FileText className="h-5 w-5" />
                 </div>
@@ -136,6 +120,30 @@ export default function AcervoDocumentalEmpresa() {
                   <span className="inline-flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> {[empresa.cidade, empresa.estado].filter(Boolean).join(" / ")}</span>
                 )}
               </div>
+            </div>
+
+            {/* Todas as abas da empresa, também aqui no acervo -- antes, sair do
+                acervo pra ver outra aba (Inteligência 360, Conversas, etc.) exigia
+                "Voltar para a empresa" e só então clicar na aba lá. Agora é um
+                clique só, direto desta tela. */}
+            <div className="mt-2 flex flex-wrap gap-1 border-t border-slate-100 pt-2">
+              {ABAS_EMPRESA_ACERVO.map((aba) => {
+                const ativa = aba.id === "dossie_credito" ? view === "analise" : aba.id === "documentos" ? view !== "analise" : false;
+                return (
+                  <button
+                    key={aba.id}
+                    type="button"
+                    onClick={() => navegarParaAbaEmpresa(aba.id)}
+                    className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold border transition-all whitespace-nowrap ${
+                      ativa
+                        ? "border-blue-300 bg-blue-600 text-white shadow-md shadow-blue-100"
+                        : "border-slate-200 text-slate-600 bg-white hover:text-slate-800 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    {aba.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -172,7 +180,6 @@ export default function AcervoDocumentalEmpresa() {
               permitirUpload
               permitirExcluir
               permitirValidar
-              onAbrirLaudo={analisarEAbrirLaudo}
               secaoInicial={secaoInicial}
             />
           )}

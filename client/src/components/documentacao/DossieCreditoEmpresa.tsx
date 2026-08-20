@@ -65,7 +65,10 @@ type BlocoDossie = {
   atualizacao_em?: string;
 };
 
-type DocumentoInicialStatus = {
+// Exportado -- reaproveitado por DocumentosEntidade.tsx pra mostrar o
+// resultado da Etapa 1 (Identidade do CNPJ) direto no Acervo Documental, sem
+// precisar navegar pra esta tela (ver ProntidaoIdentidadeCard mais abaixo).
+export type DocumentoInicialStatus = {
   codigo?: string;
   nome: string;
   anexado: boolean;
@@ -78,7 +81,7 @@ type DocumentoInicialStatus = {
   campos_principais?: Record<string, unknown>;
 };
 
-type IdentidadeCnpj = {
+export type IdentidadeCnpj = {
   etapa: string;
   proxima_etapa: string;
   apto_para_avancar: boolean;
@@ -591,7 +594,12 @@ function AnaliseCnpjCard({ analise }: { analise: AnaliseCnpjEmpresa | null }) {
   );
 }
 
-function ProntidaoIdentidadeCard({
+// Exportado -- é o mesmo cartão usado aqui na Etapa 1 do laudo completo, e
+// agora também direto no Acervo Documental (DocumentosEntidade.tsx), pra que
+// a análise "Cartão CNPJ + QSA + Enquadramento" mostre o resultado na mesma
+// tela onde os documentos são anexados, sem precisar abrir o Dossiê/Laudo IA
+// (que passa a ser só o laudo final, depois de tudo validado).
+export function ProntidaoIdentidadeCard({
   identidade,
   onAvancar,
   onTentarNovamente,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiFetchBlob } from "@/lib/api";
 import { ResultadoAnaliseDocumento } from "./ResultadoAnaliseDocumento";
+import { ProntidaoIdentidadeCard, type IdentidadeCnpj } from "../documentacao/DossieCreditoEmpresa";
 import { toast } from "sonner";
 import {
   ArrowRight,
@@ -62,8 +63,6 @@ export type DocumentosEntidadeProps = {
   permitirUpload?: boolean;
   permitirExcluir?: boolean;
   permitirValidar?: boolean;
-  /** Executa a análise dos três documentos iniciais e abre o laudo. */
-  onAbrirLaudo?: () => Promise<void> | void;
   secaoInicial?: string | null;
 };
 
@@ -455,7 +454,6 @@ export default function DocumentosEntidade({
   permitirUpload = true,
   permitirExcluir = true,
   permitirValidar = false,
-  onAbrirLaudo,
   secaoInicial = null,
 }: DocumentosEntidadeProps) {
   const [docs, setDocs] = useState<DocumentoArquivo[]>([]);
@@ -469,7 +467,6 @@ export default function DocumentosEntidade({
   const [nomeCustomizadoPorTipo, setNomeCustomizadoPorTipo] = useState<Record<string, string>>({});
   const [selecionados, setSelecionados] = useState<Record<string, boolean>>({});
   const [exportando, setExportando] = useState(false);
-  const [gerandoLaudo, setGerandoLaudo] = useState(false);
   const [modalExportacao, setModalExportacao] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<DocumentoArquivo | null>(null);
@@ -489,6 +486,15 @@ export default function DocumentosEntidade({
   // Isso controla qual laudo está expandido, por documento.
   const [laudosExpandidos, setLaudosExpandidos] = useState<Record<string, boolean>>({});
   const [pipeline, setPipeline] = useState<any>(null);
+  // Resultado da Etapa 1 (Cartão CNPJ + QSA + Enquadramento Tributário), mostrado
+  // direto nesta tela com o mesmo cartão usado no Dossiê/Laudo IA
+  // (ProntidaoIdentidadeCard) -- antes, clicar em "Iniciar análise documental"
+  // navegava pra fora do acervo e abria o laudo completo (?view=analise), então
+  // quem estava anexando documento aqui era jogado pra uma tela diferente só pra
+  // ver o resultado da Etapa 1. O Dossiê/Laudo IA passa a ser só o laudo final,
+  // gerado depois que todos os documentos já estiverem validados.
+  const [identidadeCnpj, setIdentidadeCnpj] = useState<IdentidadeCnpj | null>(null);
+  const [analisandoIdentidade, setAnalisandoIdentidade] = useState(false);
   // Diagnóstico da Etapa 2/3 (Atos da Junta + Contrato Social/Alteração), mostrado
   // direto nesta tela -- antes só existia numa aba separada ("Dossiê / Laudo IA"),
   // então quem estava anexando documento aqui nunca via o que a IA concluiu nem
@@ -539,6 +545,7 @@ export default function DocumentosEntidade({
           : Promise.resolve(null),
       ]);
       setPipeline(pipelineAtual);
+      setIdentidadeCnpj(dossieAtual?.identidade_cnpj || null);
       const societariaAtual = dossieAtual?.documentacao_societaria || null;
       setSocietaria(societariaAtual);
       // Depois que os Atos da Junta forem aprovados, o acervo deixa de esconder
@@ -604,6 +611,45 @@ export default function DocumentosEntidade({
       setLoading(false);
     }
   }, [entidadeId, query, entidadeTipo, empresaId]);
+
+  // Dispara a análise da Etapa 1 (Cartão CNPJ + QSA + Enquadramento Tributário) e
+  // faz o mesmo polling já usado em DossieCreditoEmpresa.tsx (recalcular) -- só
+  // que agora direto nesta tela: o botão "Iniciar análise documental" não navega
+  // mais pra fora do acervo, o resultado (ProntidaoIdentidadeCard) aparece aqui
+  // mesmo, embaixo do checklist. O Dossiê/Laudo IA vira só o laudo final, gerado
+  // à parte quando todos os documentos já estiverem validados.
+  const iniciarAnaliseIdentidade = useCallback(async (opcoes: { silencioso?: boolean } = {}) => {
+    if (!empresaId || entidadeTipo !== "empresa") return;
+    setAnalisandoIdentidade(true);
+    try {
+      const inicio = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-inicial/iniciar`, {
+        method: "POST",
+        body: JSON.stringify({ forcar: opcoes.silencioso !== true }),
+      });
+      let processando = inicio?.processando === true;
+      let data = inicio?.dossie;
+      if (data?.identidade_cnpj) setIdentidadeCnpj(data.identidade_cnpj);
+      for (let tentativa = 0; processando && tentativa < 60; tentativa += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 3000));
+        const status = await apiFetch(`/api/documentacao/empresa/${empresaId}/analise-inicial/status`);
+        processando = status?.processando === true;
+        data = status?.dossie || data;
+        if (data?.identidade_cnpj) setIdentidadeCnpj(data.identidade_cnpj);
+      }
+      // Recarrega o restante do acervo (contadores, Etapa 2/3) junto -- a Etapa 2
+      // pode ter ficado habilitada agora que a Etapa 1 está apta.
+      await carregar();
+      if (!opcoes.silencioso) {
+        if (data?.identidade_cnpj?.apto_para_avancar) toast.success("Relatório inicial concluído. A próxima etapa está liberada.");
+        else toast.info("Análise concluída. Veja o resultado no painel abaixo.");
+      }
+    } catch (err: any) {
+      if (!opcoes.silencioso) toast.error(err?.message || "Erro ao iniciar a análise documental.");
+      else console.warn("[DocumentosEntidade] análise de identidade do CNPJ automática pendente:", err?.message || err);
+    } finally {
+      setAnalisandoIdentidade(false);
+    }
+  }, [empresaId, entidadeTipo, carregar]);
 
   // Dispara a análise da Etapa 2/3 (Atos da Junta / Contrato Social e alterações) e
   // faz o mesmo polling já usado em DossieCreditoEmpresa.tsx (validarSocietario) --
@@ -870,20 +916,6 @@ export default function DocumentosEntidade({
     }
   }
 
-  async function abrirLaudo() {
-    if (!onAbrirLaudo) {
-      toast.info("Abra a empresa na aba Dossiê / Laudo IA para executar a análise documental.");
-      return;
-    }
-    setGerandoLaudo(true);
-    try {
-      await onAbrirLaudo();
-    } catch (error: any) {
-      console.error("[DocumentosEntidade] Falha ao gerar laudo inicial:", error);
-    } finally {
-      setGerandoLaudo(false);
-    }
-  }
 
   async function visualizar(doc: DocumentoArquivo) {
     try {
@@ -1035,20 +1067,35 @@ export default function DocumentosEntidade({
           <div className="flex flex-wrap items-center justify-end gap-2 text-[11px]">
             <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-slate-600"><b className="text-slate-900">{docs.length}</b> arquivos</span>
             <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-slate-600"><b className="text-emerald-700">{documentosValidados}</b> validados</span>
-            {onAbrirLaudo && (
+            {/* Depois da primeira análise, o cartão completo (ProntidaoIdentidadeCard,
+                logo abaixo) já traz seu próprio botão de "iniciar/tentar novamente" --
+                este botão fica só pra disparar a primeira leitura, sem duplicar ação. */}
+            {entidadeTipo === "empresa" && empresaId && !identidadeCnpj && (
               <button
                 type="button"
-                onClick={abrirLaudo}
-                disabled={gerandoLaudo || identidadeObrigatorios.preenchidos !== identidadeObrigatorios.total}
+                onClick={() => void iniciarAnaliseIdentidade()}
+                disabled={analisandoIdentidade || identidadeObrigatorios.preenchidos !== identidadeObrigatorios.total}
                 className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {gerandoLaudo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-                {gerandoLaudo ? "Iniciando análise..." : "Iniciar análise documental"}
+                {analisandoIdentidade ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                {analisandoIdentidade ? "Iniciando análise..." : "Iniciar análise documental"}
               </button>
             )}
           </div>
         </div>
       </div>
+
+      {/* Resultado completo da Etapa 1, direto nesta tela -- antes, clicar em
+          "Iniciar análise documental" navegava pra fora do acervo e mostrava este
+          mesmo cartão só dentro do Dossiê/Laudo IA (?view=analise). O Dossiê passa
+          a ser só o laudo final, gerado à parte quando tudo já estiver validado. */}
+      {entidadeTipo === "empresa" && identidadeCnpj && (
+        <ProntidaoIdentidadeCard
+          identidade={identidadeCnpj}
+          onTentarNovamente={() => void iniciarAnaliseIdentidade()}
+          processando={analisandoIdentidade}
+        />
+      )}
 
       {entidadeTipo === "empresa" && societaria?.habilitada && (() => {
         const apto = societaria.apto_para_avancar === true;

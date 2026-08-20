@@ -588,3 +588,118 @@ o comportamento ficou consistente nos três lugares:
 Nenhuma rota de API nem cálculo de análise mudou — é só reorganização de
 apresentação (quais seções aparecem por padrão, quais ficam atrás do
 botão) e a correção pontual do checklist que lia a fonte de dado errada.
+
+## Extra 7 — a análise da Etapa 1 saía do Acervo Documental, e botões duplicados na tela da empresa
+
+Foram enviadas quatro capturas de tela anotadas (duas do cabeçalho da empresa
+com círculos em "Nova Simulação", "Novo Contrato", "Iniciar conversa",
+"Atualizar cadastro", "Dossiê / Laudo IA" e "Acervo Documental"; duas do
+próprio Acervo Documental com círculos no botão "Iniciar análise documental"
+e no checklist) mais uma mensagem de voz detalhada com três pedidos:
+
+1. A análise da Etapa 1 (Cartão CNPJ + QSA + Enquadramento Tributário) tem
+   que acontecer e mostrar o resultado dentro do próprio Acervo Documental —
+   não abrindo o Dossiê / Laudo IA. O Dossiê passa a ser só o laudo final,
+   gerado à parte, depois que todos os documentos já estiverem anexados e
+   validados.
+2. Sair do Acervo Documental pra ver outra aba da empresa (Inteligência 360,
+   Conversas, Simulações...) não pode exigir "Voltar para a empresa" e só
+   depois clicar na aba lá — as abas têm que estar disponíveis ali mesmo, um
+   clique só.
+3. A tela da empresa tem botões repetidos fazendo exatamente a mesma coisa
+   duas vezes na mesma tela ("Atualizar cadastro"/"Atualizar", "Editar",
+   "Nova Simulação", "Novo Contrato", "Iniciar conversa") — tirar a
+   repetição, deixar a tela limpa.
+
+### 1. Etapa 1 passou a analisar e mostrar o resultado dentro do Acervo Documental
+
+**Causa**: o botão "Iniciar análise documental" (`DocumentosEntidade.tsx`,
+usado pelo Acervo Documental) chamava a prop `onAbrirLaudo`, que em
+`AcervoDocumentalEmpresa.tsx` disparava a análise e IMEDIATAMENTE navegava
+pra `?view=analise` — trocando toda a tela do checklist pelo `<DossieCreditoEmpresa>`
+(o laudo completo). Ou seja: anexar CNPJ/QSA, clicar em "Iniciar análise
+documental" e ver o resultado da Etapa 1 exigia sair do Acervo Documental e
+entrar no Dossiê — só voltando por "Voltar para a empresa" pra anexar o
+próximo documento. A Etapa 2/3 (Atos da Junta) já tinha sido corrigida numa
+entrega anterior (Extra 5) pra mostrar o resultado sem sair da tela; a
+Etapa 1 continuava com o comportamento antigo.
+
+**Correção**: o cartão que mostra o resultado da Etapa 1
+(`ProntidaoIdentidadeCard`, dentro de `DossieCreditoEmpresa.tsx` — os
+documentos lidos, o diagnóstico, "Confirmações"/"O que precisa ser
+resolvido"/"Avisos estratégicos", estatísticas de análise) foi exportado e
+passou a ser reaproveitado direto dentro de `DocumentosEntidade.tsx`, no
+mesmo lugar onde os documentos são anexados. O botão "Iniciar análise
+documental" agora chama uma função local (`iniciarAnaliseIdentidade`, no
+mesmo padrão de polling já usado pela Etapa 2/3) que dispara a análise e
+atualiza esse cartão SEM navegar pra lugar nenhum. Assim que a primeira
+análise roda, o botão de disparo simples desaparece (evitando duplicar
+ação) e quem controla novas tentativas passa a ser o próprio cartão
+completo (que já tem seu botão de "tentar novamente" em caso de falha de
+leitura). O Dossiê / Laudo IA (`?view=analise`) continua existindo e
+funcionando exatamente igual — só deixou de ser aberto automaticamente pela
+Etapa 1; agora é o laudo final, acessado quando o usuário quiser conferir o
+relatório completo depois de tudo validado.
+
+### 2. Todas as abas da empresa, também dentro do Acervo Documental
+
+**Correção**: `AcervoDocumentalEmpresa.tsx` ganhou a mesma barra de abas que
+já existe na tela da empresa (Dados da Empresa, Dossiê / Laudo IA,
+Inteligência 360, Esteira de Crédito, Acervo Documental, Conversas,
+Simulações, Contratos Firmados, Histórico), substituindo o botão único
+"Voltar para a empresa". Clicar em "Acervo Documental" ou "Dossiê / Laudo
+IA" troca a visão na mesma página, sem navegação nenhuma (só alterna o
+checklist pelo laudo, como já acontecia). Clicar em qualquer outra aba leva
+direto pra ela na tela da empresa, num clique só — sem passar mais por
+"Voltar para a empresa" no meio do caminho.
+
+### 3. Botões que faziam a mesma ação duas vezes na mesma tela
+
+Conferido cada botão marcado nas capturas contra o código: eram, de fato, a
+mesma ação (mesmo `onClick`) desenhada duas vezes na mesma tela.
+
+- O cabeçalho local do painel "Dados da empresa" (`EmpresaDadosWorkspace`,
+  visível em cima de qualquer sub-painel: Resumo, Receita Federal, Cadastro
+  interno...) tinha seu próprio par "Editar"/"Atualizar" — idêntico, mesmo
+  `onClick`, ao "Editar"/"Atualizar cadastro" que já fica sempre visível no
+  cabeçalho da empresa, acima das abas. Removido o par local.
+- O painel "Resumo" tinha sua própria linha "Nova simulação" / "Novo
+  contrato" / "Iniciar conversa" / "Acervo documental" — as três primeiras
+  idênticas à barra "Quick Actions" que já fica sempre visível acima das
+  abas (qualquer aba, não só o Resumo), e "Acervo documental" já é uma aba
+  própria. Removida a linha inteira.
+
+Nada foi removido do cabeçalho da empresa nem da barra "Quick Actions" — são
+os únicos lugares que restaram pra cada uma dessas ações, com uma única
+via de acesso por ação (nenhuma removida de vez, só a repetição).
+
+### Verificação
+
+- `npx tsc --noEmit` limpo.
+- `npx vitest run` (suíte completa) → **540/540 testes passando** (sem
+  mudança na contagem — as alterações desta entrega são de navegação/UI,
+  não tocam nenhuma rota nem regra testada).
+- `npx vite build --mode production` concluído sem erros.
+- Conferido por leitura de código que `onAbrirLaudo` (prop removida) e as
+  três props de botão removidas de `EmpresaDadosWorkspace`
+  (`onNovaSimulacao`, `onNovoContrato`, `onIniciarConversa`) não tinham
+  nenhum outro consumidor no projeto antes de remover (checado com busca em
+  todo o `client/src`).
+
+### Escopo desta correção
+
+- `client/src/components/documentacao/DossieCreditoEmpresa.tsx` —
+  `ProntidaoIdentidadeCard` e os tipos `IdentidadeCnpj`/`DocumentoInicialStatus`
+  passaram a ser exportados; nenhuma mudança de comportamento neste arquivo.
+- `client/src/components/documentos/DocumentosEntidade.tsx` — nova função
+  `iniciarAnaliseIdentidade` (mesmo padrão de polling da Etapa 2/3), novo
+  estado `identidadeCnpj`/`analisandoIdentidade`, `ProntidaoIdentidadeCard`
+  renderizado inline; prop `onAbrirLaudo` e a navegação associada removidas.
+- `client/src/pages/colaborador/AcervoDocumentalEmpresa.tsx` — barra de
+  abas da empresa adicionada no lugar do botão único "Voltar para a
+  empresa"; função `analisarEAbrirLaudo` (não usada mais) removida.
+- `client/src/pages/colaborador/Empresas.tsx` — removido o par
+  "Editar"/"Atualizar" duplicado do cabeçalho de `EmpresaDadosWorkspace` e a
+  linha "Nova simulação"/"Novo contrato"/"Iniciar conversa"/"Acervo
+  documental" duplicada do painel "Resumo"; props não mais usadas removidas
+  de `EmpresaDadosWorkspace`.

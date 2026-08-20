@@ -471,9 +471,6 @@ function EmpresaDadosWorkspace({
   onSincronizar,
   onEditar,
   onEditarSocio,
-  onNovaSimulacao,
-  onNovoContrato,
-  onIniciarConversa,
   onAbrirAcervo,
 }: {
   empresa: Empresa;
@@ -485,9 +482,6 @@ function EmpresaDadosWorkspace({
   onSincronizar?: () => void;
   onEditar?: () => void;
   onEditarSocio?: (socio: any) => void;
-  onNovaSimulacao?: () => void;
-  onNovoContrato?: () => void;
-  onIniciarConversa?: () => void;
   onAbrirAcervo?: () => void;
 }) {
   const [painelAtivo, setPainelAtivo] = useState<"resumo" | "receita" | "cadastro" | "contato" | "endereco" | "socios" | "documentos">("resumo");
@@ -727,12 +721,11 @@ function EmpresaDadosWorkspace({
           <DataCell label="Localização" value={[empresa.cidade, empresa.estado].filter(Boolean).join(" / ")} icon={<MapPin className="w-3.5 h-3.5" />} />
           <DataCell label="Contato principal" value={empresa.responsavel_nome || empresa.telefone || empresa.whatsapp || empresa.email} icon={<Phone className="w-3.5 h-3.5" />} />
         </div>
-        <div className="flex flex-wrap gap-2">
-          {onNovaSimulacao && <button onClick={onNovaSimulacao} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"><Calculator className="w-4 h-4" /> Nova simulação</button>}
-          {onNovoContrato && <button onClick={onNovoContrato} className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-bold text-violet-700 hover:bg-violet-100"><FileText className="w-4 h-4" /> Novo contrato</button>}
-          {onIniciarConversa && <button onClick={onIniciarConversa} className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-700 hover:bg-amber-100"><Bell className="w-4 h-4" /> Iniciar conversa</button>}
-          {onAbrirAcervo && <button onClick={onAbrirAcervo} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"><ExternalLink className="w-4 h-4" /> Acervo documental</button>}
-        </div>
+        {/* "Nova simulação" / "Novo contrato" / "Iniciar conversa" não se repetem
+            mais aqui -- são a mesma ação da barra "Quick Actions" logo acima das
+            abas, visível em qualquer aba. "Acervo documental" também já é uma aba
+            própria. Manter os quatro botões aqui só duplicava ações já visíveis
+            na mesma tela. */}
       </div>
     );
   };
@@ -776,18 +769,14 @@ function EmpresaDadosWorkspace({
           </aside>
 
           <section className="min-w-0 bg-white">
+            {/* "Editar"/"Atualizar" não se repetem mais aqui -- são exatamente a mesma
+                ação dos botões já visíveis no cabeçalho da empresa, acima das abas,
+                em qualquer painel. Repeti-los aqui só duplicava a mesma ação duas
+                vezes na mesma tela. */}
             <div className="border-b border-slate-200 px-3 sm:px-4 py-2.5">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Visualização</p>
-                  <h3 className="text-lg font-black text-slate-900 truncate">{painelSelecionado.label}</h3>
-                  <p className="text-sm text-slate-500 truncate">{painelSelecionado.description}</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={onEditar} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"><Edit2 className="w-3.5 h-3.5" /> Editar</button>
-                  {empresa.cnpj && <button onClick={onSincronizar} disabled={sincronizando} className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"><RotateCw className={`w-3.5 h-3.5 ${sincronizando ? "animate-spin" : ""}`} /> Atualizar</button>}
-                </div>
-              </div>
+              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Visualização</p>
+              <h3 className="text-lg font-black text-slate-900 truncate">{painelSelecionado.label}</h3>
+              <p className="text-sm text-slate-500 truncate">{painelSelecionado.description}</p>
             </div>
             <div className="p-3 sm:p-4">
               {renderPainel()}
@@ -2161,17 +2150,6 @@ export default function Empresas() {
                         onSincronizar={isFeatureEnabled("empresa-action-atualizar-cadastro") ? () => sincronizarDados(selecionada) : undefined}
                         onEditar={isFeatureEnabled("empresa-action-editar") ? () => abrirEditar(selecionada) : undefined}
                         onEditarSocio={isFeatureEnabled("empresa-action-editar") ? abrirEdicaoSocio : undefined}
-                        onNovaSimulacao={isFeatureEnabled("empresa-action-nova-simulacao") && isFeatureEnabled("calculadora") ? () => {
-                          sessionStorage.setItem("calculadora_empresa", JSON.stringify({
-                            nome: selecionada.responsavel_nome || selecionada.razao_social,
-                            empresa: selecionada.razao_social,
-                            telefone: selecionada.telefone || selecionada.whatsapp || "",
-                            cpf_cnpj: selecionada.cnpj || "",
-                          }));
-                          window.location.href = "/colaborador/calculadora";
-                        } : undefined}
-                        onNovoContrato={isFeatureEnabled("empresa-action-novo-contrato") && isFeatureEnabled("contratos") ? () => { window.location.href = "/colaborador/contratos"; } : undefined}
-                        onIniciarConversa={isFeatureEnabled("empresa-action-iniciar-conversa") && abaPermitida("followup") ? () => navegarParaAba("followup", { abrirFollowup: true }) : undefined}
                         onAbrirAcervo={abaPermitida("documentos") ? () => navegarParaAba("documentos") : undefined}
                       />
                     )
