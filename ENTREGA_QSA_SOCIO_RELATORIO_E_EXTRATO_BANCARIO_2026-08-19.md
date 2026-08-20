@@ -338,3 +338,73 @@ verificação; nada de teste ficou no repositório.
 Nenhuma outra função de geração de PDF foi tocada. `npx tsc --noEmit`
 limpo, `npx vitest run` → **539/539 testes passando** (mudança é só CSS
 dentro de uma string de template, não afeta nenhum teste existente).
+
+## Extra 4 — limpeza do "Relatório Bancário Inteligente de Acompanhamento"
+
+Foi enviado um PDF real (FHTECH SOLUCAO & DIESEL LTDA) mostrando o mesmo
+problema de cabeçalho sobreposto ao título nesse relatório — e pedido para
+deixar o relatório mensal de acompanhamento bancário "totalmente
+profissional": sem dado duplicado, com entrada/saída/saldo da semana bem
+visíveis, faturamento anual/mensal/semanal com a margem de 30%, alertas
+diretos, e sem informação faltando.
+
+Essa tela é gerada por `gerarHtmlRelatorioMensalAcompanhamento` (server/
+index.ts), acionada pelas rotas `POST /acompanhamentos-bancarios/:id/relatorio`
+e `.../relatorio-mensal`. Revisei o PDF real enviado e encontrei 4 problemas
+concretos:
+
+1. **Logo sobrepondo o título** — mesma causa das correções anteriores: o
+   `@page` do CSS dizia `margin: 0`, enquanto o Puppeteer (via
+   `generateBrandedPdfBuffer`, sem `topMargin` customizado nesta rota) reserva
+   `28mm` de margem superior pro cabeçalho da marca. Corrigido para
+   `@page { size: A4; margin: 28mm 22mm 28mm; }`, batendo exatamente com a
+   margem real do Puppeteer (top 28mm, laterais 22mm, rodapé 28mm) — mesmo
+   padrão já usado nos outros dois relatórios com essa técnica de papel
+   timbrado. Verificado renderizando um PDF de teste com a mesma estrutura de
+   cabeçalho: logo limpa, sem sobreposição.
+
+2. **Card da semana faltando "Saídas"** — a seção "Semana em evidência" só
+   mostrava Entradas e Saldo da semana atual; o valor de Saídas ficava
+   escondido, só dava pra deduzir. Adicionei o card "Saídas da semana" e
+   também "Status da semana" (dentro da faixa / abaixo da referência /
+   crítico etc.), reorganizando em duas fileiras de 3 cards: Semana atual /
+   Período / Status, depois Entradas / Saídas / Saldo — a leitura pedida
+   ("entrada, saída, saldo da semana, de forma bem simples e visível") fica
+   direta, sem precisar calcular nada de cabeça.
+
+3. **"Parecer técnico" duplicado palavra por palavra** — o mesmo texto
+   aparecia duas vezes no relatório: uma vez na seção "Assessoria inteligente
+   de crédito" (bloco "Parecer técnico:") e de novo, idêntico, na seção final
+   "Parecer técnico final" perto das assinaturas. Removi a repetição do meio
+   — o parecer técnico completo agora aparece só uma vez, no fechamento do
+   relatório, junto com a orientação ao cliente e as assinaturas, onde faz
+   mais sentido como conclusão.
+
+4. **Documento anexado repetido 6 vezes na tabela "Documentos e anexos
+   considerados"** — a consulta que busca os documentos da empresa
+   (`documentos_arquivos`) não removia duplicatas, e o mesmo arquivo físico
+   (reenviado/reprocessado mais de uma vez durante os testes) aparecia várias
+   vezes seguidas com o mesmo nome, tamanho e data. Adicionei uma deduplicação
+   por nome do arquivo + tamanho antes de montar o relatório, mantendo sempre
+   a ocorrência mais recente (a consulta já vem ordenada por `criado_em
+   DESC`). Isso é só uma proteção na hora de montar o relatório — não apaga
+   nem altera nada no acervo documental do acompanhamento.
+
+O restante da estrutura do relatório (faturamento anual/mensal/semanal com
+margem de 30%, teto e % de uso, semanas positivas/negativas/críticas,
+movimentação consolidada por semana, composição das entradas por modalidade,
+diagnóstico semana a semana, alertas operacionais, rating e prontidão para
+crédito) já cobria o que foi pedido — o ajuste foi de clareza/duplicação, não
+de dados faltando de cálculo.
+
+### Escopo desta correção
+
+- `server/index.ts` — `gerarHtmlRelatorioMensalAcompanhamento` (CSS `@page`,
+  cards da semana, remoção do parecer técnico duplicado) e
+  `responderRelatorioAcompanhamentoBancario` (deduplicação de documentos).
+
+Nenhuma migração de schema, nenhuma rota renomeada. `npx tsc --noEmit`
+limpo, `npx vitest run` → **539/539 testes passando** (não havia teste
+automatizado cobrindo esse gerador de HTML antes desta mudança — a
+verificação de layout foi visual, renderizando um PDF de teste real com a
+mesma técnica de papel timbrado e conferindo a página 1 como imagem).

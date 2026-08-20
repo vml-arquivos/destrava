@@ -14484,7 +14484,15 @@ async function registrarDocumentoContratoGerado(params: {
   <meta charset="utf-8" />
   <title>Relatório Bancário Inteligente</title>
   <style>
-    @page { size: A4; margin: 0; }
+    /* O PDF final é montado por generateBrandedPdfBuffer(), que chama o Puppeteer
+       com margin: { top: 28mm (padrão, sem topMargin customizado nesta rota),
+       bottom: 28mm, left/right: 22mm } -- essa margem JS que reserva o espaço
+       do cabeçalho com a logo/rodapé institucional. Antes o @page daqui dizia
+       "margin: 0", em conflito com a margem real do Puppeteer: o conteúdo
+       (título, CNPJ) começava a ser desenhado a partir do topo da página,
+       por baixo da faixa reservada pro cabeçalho -- daí a logo sobrepondo o
+       texto. Alinhado aqui para bater exatamente com a margem do Puppeteer. */
+    @page { size: A4; margin: 28mm 22mm 28mm; }
     * { box-sizing: border-box; }
     body { font-family: Arial, Helvetica, sans-serif; color: #172033; font-size: 10.6px; line-height: 1.42; margin: 0; background: #fff; }
     h1 { font-size: 22px; margin: 0 0 5px; letter-spacing: -0.2px; }
@@ -14567,11 +14575,15 @@ async function registrarDocumentoContratoGerado(params: {
   <div class="box ${statusInteligente === "critico" ? "alerta" : ""}">${esc(inteligencia?.resumoExecutivo || parecerFinal)}</div>
 
   <h2>Semana em evidência</h2>
-  <div class="grid4 section">
+  <div class="grid3 section">
     <div class="card"><strong class="label">Semana atual</strong><div class="value">${esc(numeroSemanaAtual)}</div></div>
-    <div class="card"><strong class="label">Período</strong><div class="value">${esc(periodoSemanaAtual)}</div></div>
-    <div class="card"><strong class="label">Entradas</strong><div class="value">${fmt(semanaAtual ? totalEntradasRelatorioAcompanhamento(semanaAtual) : 0)}</div></div>
-    <div class="card"><strong class="label">Saldo</strong><div class="value ${saldoSemanaAtual < 0 ? "kpi-neg" : "kpi-pos"}">${fmt(saldoSemanaAtual)}</div></div>
+    <div class="card"><strong class="label">Período</strong><div class="value" style="font-size:12px">${esc(periodoSemanaAtual)}</div></div>
+    <div class="card"><strong class="label">Status da semana</strong><div class="value" style="font-size:12px">${esc(semanaAtual ? textoStatusAderencia(semanaAtual.status_aderencia || semanaAtual.status_semana || semanaAtual.status) : "—")}</div></div>
+  </div>
+  <div class="grid3" style="margin-top:8px">
+    <div class="card"><strong class="label">Entradas da semana</strong><div class="value">${fmt(semanaAtual ? totalEntradasRelatorioAcompanhamento(semanaAtual) : 0)}</div></div>
+    <div class="card"><strong class="label">Saídas da semana</strong><div class="value">${fmt(semanaAtual?.total_saidas || 0)}</div></div>
+    <div class="card"><strong class="label">Saldo da semana</strong><div class="value ${saldoSemanaAtual < 0 ? "kpi-neg" : "kpi-pos"}">${fmt(saldoSemanaAtual)}</div></div>
   </div>
 
   <h2>Base de cálculo e resumo do período</h2>
@@ -14616,7 +14628,6 @@ async function registrarDocumentoContratoGerado(params: {
     <div class="card"><h3>Pontos de atenção</h3><ul>${itemList(inteligencia?.pontosAtencao, "Nenhum ponto de atenção adicional.")}</ul></div>
     <div class="card"><h3>Plano de ação</h3><ul>${itemList(inteligencia?.planoAcao, "Manter rotina semanal de alimentação e revisão mensal.")}</ul></div>
   </div>
-  <div class="box" style="margin-top:8px"><strong>Parecer técnico:</strong> ${esc(parecerFinal)}</div>
   ` : ""}
 
   <h2>Movimentação consolidada por semana</h2>
@@ -14741,7 +14752,18 @@ async function registrarDocumentoContratoGerado(params: {
             LIMIT 80`,
           [acompanhamento.empresa_id]
         ).catch(() => ({ rows: [] as any[] }));
-        documentos = docsResult.rows || [];
+        // O mesmo arquivo físico pode ter mais de uma linha em documentos_arquivos
+        // (reenvio, reprocessamento de análise, etc.) -- sem isso, o relatório
+        // listava o mesmo comprovante repetido várias vezes na seção "Documentos
+        // e anexos considerados". Já vem ordenado por criado_em DESC, então a
+        // primeira ocorrência de cada nome+tamanho é sempre a mais recente.
+        const documentosVistos = new Set<string>();
+        documentos = (docsResult.rows || []).filter((d: any) => {
+          const chave = `${String(d.nome_customizado || d.nome_original || d.nome_arquivo || "").trim().toLowerCase()}::${d.tamanho_bytes || ""}`;
+          if (documentosVistos.has(chave)) return false;
+          documentosVistos.add(chave);
+          return true;
+        });
       }
 
       const inteligencia = incluirIa
