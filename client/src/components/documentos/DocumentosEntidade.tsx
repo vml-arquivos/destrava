@@ -495,6 +495,11 @@ export default function DocumentosEntidade({
   // gerado depois que todos os documentos já estiverem validados.
   const [identidadeCnpj, setIdentidadeCnpj] = useState<IdentidadeCnpj | null>(null);
   const [analisandoIdentidade, setAnalisandoIdentidade] = useState(false);
+  // Depois que a Etapa 1 está apta pra avançar, o cartão completo (com todos os
+  // documentos, confirmações e avisos) fica fechado por padrão -- só o resumo de
+  // uma linha aparece -- pra não poluir a tela de quem já passou pra Etapa 2.
+  // Clicar em "Ver detalhes" reabre o cartão inteiro sem perder nenhum dado.
+  const [identidadeDetalhesAbertos, setIdentidadeDetalhesAbertos] = useState(false);
   // Diagnóstico da Etapa 2/3 (Atos da Junta + Contrato Social/Alteração), mostrado
   // direto nesta tela -- antes só existia numa aba separada ("Dossiê / Laudo IA"),
   // então quem estava anexando documento aqui nunca via o que a IA concluiu nem
@@ -639,9 +644,15 @@ export default function DocumentosEntidade({
       // Recarrega o restante do acervo (contadores, Etapa 2/3) junto -- a Etapa 2
       // pode ter ficado habilitada agora que a Etapa 1 está apta.
       await carregar();
-      if (!opcoes.silencioso) {
-        if (data?.identidade_cnpj?.apto_para_avancar) toast.success("Relatório inicial concluído. A próxima etapa está liberada.");
-        else toast.info("Análise concluída. Veja o resultado no painel abaixo.");
+      if (data?.identidade_cnpj?.apto_para_avancar) {
+        // Etapa 1 concluída: troca sozinho pra aba "Documentação da Empresa" do
+        // checklist (não a barra de abas da empresa, que fica fixa) -- é pra lá
+        // que vai o próximo documento (Atos da Junta). O cartão desta etapa some
+        // e fica só um resumo de uma linha, sem duplicar informação na tela.
+        setSecaoAtiva("Documentação da Empresa");
+        if (!opcoes.silencioso) toast.success("Relatório inicial concluído. A próxima etapa está liberada.");
+      } else if (!opcoes.silencioso) {
+        toast.info("Análise concluída. Veja o resultado no painel abaixo.");
       }
     } catch (err: any) {
       if (!opcoes.silencioso) toast.error(err?.message || "Erro ao iniciar a análise documental.");
@@ -1048,189 +1059,6 @@ export default function DocumentosEntidade({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-3">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-black text-slate-900">Etapa 1 — Identidade do CNPJ</p>
-              <span className={`rounded-full border bg-white px-2 py-0.5 text-[10px] font-black ${identidadeObrigatorios.preenchidos === identidadeObrigatorios.total ? "border-emerald-200 text-emerald-700" : "border-blue-200 text-blue-700"}`}>
-                {identidadeObrigatorios.preenchidos}/{identidadeObrigatorios.total} obrigatórios anexados
-              </span>
-              {identidadeInicialPreenchida > identidadeObrigatorios.preenchidos && (
-                <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-black text-slate-500">
-                  +{identidadeInicialPreenchida - identidadeObrigatorios.preenchidos} opcional
-                </span>
-              )}
-            </div>
-            <p className="mt-1 text-[11px] text-slate-600">Cartão CNPJ e QSA formam o primeiro laudo. O Enquadramento Tributário vem da consulta de CNPJ (upload opcional). Contrato/Alteração e Atos da Junta pertencem à Etapa 2.</p>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2 text-[11px]">
-            <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-slate-600"><b className="text-slate-900">{docs.length}</b> arquivos</span>
-            <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-slate-600"><b className="text-emerald-700">{documentosValidados}</b> validados</span>
-            {/* Depois da primeira análise, o cartão completo (ProntidaoIdentidadeCard,
-                logo abaixo) já traz seu próprio botão de "iniciar/tentar novamente" --
-                este botão fica só pra disparar a primeira leitura, sem duplicar ação. */}
-            {entidadeTipo === "empresa" && empresaId && !identidadeCnpj && (
-              <button
-                type="button"
-                onClick={() => void iniciarAnaliseIdentidade()}
-                disabled={analisandoIdentidade || identidadeObrigatorios.preenchidos !== identidadeObrigatorios.total}
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {analisandoIdentidade ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-                {analisandoIdentidade ? "Iniciando análise..." : "Iniciar análise documental"}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Resultado completo da Etapa 1, direto nesta tela -- antes, clicar em
-          "Iniciar análise documental" navegava pra fora do acervo e mostrava este
-          mesmo cartão só dentro do Dossiê/Laudo IA (?view=analise). O Dossiê passa
-          a ser só o laudo final, gerado à parte quando tudo já estiver validado. */}
-      {entidadeTipo === "empresa" && identidadeCnpj && (
-        <ProntidaoIdentidadeCard
-          identidade={identidadeCnpj}
-          onTentarNovamente={() => void iniciarAnaliseIdentidade()}
-          processando={analisandoIdentidade}
-        />
-      )}
-
-      {entidadeTipo === "empresa" && societaria?.habilitada && (() => {
-        const apto = societaria.apto_para_avancar === true;
-        const registros = Array.isArray(societaria.registros_requeridos) ? societaria.registros_requeridos : [];
-        const faltantes = Array.isArray(societaria.registros_faltantes) ? societaria.registros_faltantes : registros.filter((registro: any) => !registro.comprovado);
-        // Depois que a Etapa 2/3 já está comprovada (apto), o "próximo documento" deixa
-        // de ser sobre Atos da Junta/Contrato e passa a vir do mapa documental de
-        // crédito (cadastro/regularidade + fiscal do regime, ex: Simples Nacional) --
-        // sem isso, a mensagem parava em "Continuidade comprovada" e não dizia mais nada.
-        const proximoDocumento = !societaria.atos_junta_anexados
-          ? "Atos da Junta Comercial"
-          : !societaria.atos_junta_aprovados
-            ? "Aguardando a análise dos Atos da Junta anexados"
-            : faltantes.length
-              ? "Contrato Social ou alteração contratual anterior (para completar 12 meses de histórico)"
-              : !societaria.contrato_anexado
-                ? "Contrato Social ou alteração contratual"
-                  : apto && proximaLevaCredito
-                    ? `${proximaLevaCredito.proximo.nome} (${proximaLevaCredito.proximo.etapaTitulo})`
-                    : societaria.contrato_anexado
-                      ? "Demais documentos do dossiê conforme o enquadramento tributário"
-                      : null;
-        return (
-          <div className={`rounded-2xl border p-3 ${apto ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/60"}`}>
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  {apto ? <ShieldCheck className="h-4 w-4 text-emerald-700" /> : <FileText className="h-4 w-4 text-amber-700" />}
-                  <p className="text-sm font-black text-slate-900">
-                    {societaria.atos_junta_aprovados ? "Etapa 3 — Contrato e histórico mínimo de 12 meses" : "Etapa 2 — Atos da Junta Comercial"}
-                  </p>
-                  <span className={`rounded-full border bg-white px-2 py-0.5 text-[10px] font-black ${apto ? "border-emerald-200 text-emerald-700" : "border-amber-200 text-amber-700"}`}>
-                    {apto ? "Continuidade comprovada" : analisandoSocietario ? "Analisando..." : societaria.analisado ? "Documento(s) pendente(s)" : "Aguardando análise"}
-                  </span>
-                </div>
-                {/* Relatório: texto explicativo que a IA produziu para este lote de documentos --
-                    fica sempre visível aqui, não só num toast que desaparece. */}
-                {societaria.diagnostico && <p className="mt-1.5 text-[11px] leading-relaxed text-slate-700">{societaria.diagnostico}</p>}
-                {proximoDocumento && (
-                  <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-blue-700">
-                    <ArrowRight className="h-3.5 w-3.5 shrink-0" /> Próximo documento a anexar: {proximoDocumento}
-                  </p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => void iniciarAnaliseSocietaria()}
-                disabled={analisandoSocietario}
-                className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {analisandoSocietario ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                {analisandoSocietario ? "Conferindo..." : societaria.atos_junta_aprovados ? "Validar contratos, datas e 12 meses" : "Analisar Atos da Junta"}
-              </button>
-            </div>
-
-            {/* Histórico: cadeia de registros já exigida pela análise, cada um com seu
-                próprio status -- comprovado (documento já lido e conferido) ou pendente
-                (ainda precisa ser anexado), com data e origem de cada ato. */}
-            {registros.length > 0 && (
-              <div className="mt-3 rounded-xl border border-white bg-white p-2.5">
-                <p className="text-[11px] font-black text-slate-800">Histórico da cadeia societária (mínimo 12 meses)</p>
-                <div className="mt-2 grid gap-1.5 md:grid-cols-2">
-                  {registros.map((registro: any, index: number) => (
-                    <div key={`${registro.data}-${registro.numero}-${index}`} className={`rounded-lg border p-2 ${registro.comprovado ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-[10px] font-black text-slate-800">{registro.tipo_ato || "Registro societário"}</p>
-                        <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${registro.comprovado ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                          {registro.comprovado ? "Comprovado" : "Anexar documento"}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[9px] text-slate-600">Data: {formatDate(registro.data)}{registro.numero ? ` · Registro ${registro.numero}` : ""}</p>
-                      {registro.documento_nome && <p className="mt-0.5 truncate text-[9px] font-semibold text-emerald-700">{registro.documento_nome}</p>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Interação/avisos: alertas não-bloqueantes (ex: dispensa MEI, "outro órgão",
-                divergências de NIRE/data) -- antes calculados no backend mas nunca exibidos
-                em nenhuma tela. */}
-            {!!societaria.avisos?.length && (
-              <div className="mt-3 rounded-xl border border-blue-100 bg-white p-2.5">
-                <p className="text-[11px] font-black text-blue-800">Avisos da análise</p>
-                {societaria.avisos.map((item: string, index: number) => <p key={index} className="mt-1 text-[10px] text-blue-800">• {item}</p>)}
-              </div>
-            )}
-
-            {!!societaria.bloqueios?.length && (
-              <div className="mt-3 rounded-xl border border-red-100 bg-white p-2.5">
-                <p className="text-[11px] font-black text-red-800">Pendências que bloqueiam o avanço</p>
-                {societaria.bloqueios.map((item: string, index: number) => <p key={index} className="mt-1 text-[10px] text-red-800">• {item}</p>)}
-              </div>
-            )}
-
-            {/* Análise: depois que a continuidade societária está comprovada, o sistema
-                continua indicando a sequência -- não para em "liberado". A ordem e os
-                documentos vêm do mapa documental de crédito, que já é sensível ao
-                regime tributário identificado (Simples Nacional, MEI, Lucro Presumido...). */}
-            {apto && proximaLevaCredito && (
-              <div className="mt-3 rounded-xl border border-blue-100 bg-white p-2.5">
-                <p className="text-[11px] font-black text-slate-800">
-                  Próxima leva de documentos{mapaCredito?.regime_descricao ? ` — regime: ${mapaCredito.regime_descricao}` : ""}
-                </p>
-                <p className="mt-1 text-[10px] text-slate-500">
-                  {proximaLevaCredito.total} documento(s) obrigatório(s) ainda faltando para montar o dossiê completo de crédito.
-                </p>
-                <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2">
-                  <p className="text-[9px] font-black uppercase text-blue-500">Próximo documento</p>
-                  <p className="text-[11px] font-black text-blue-900">{proximaLevaCredito.proximo.nome}</p>
-                  <p className="mt-0.5 text-[10px] text-blue-800">{proximaLevaCredito.proximo.finalidade}</p>
-                </div>
-                {!!proximaLevaCredito.restantes.length && (
-                  <div className="mt-2">
-                    <p className="text-[9px] font-black uppercase text-slate-400">Depois desse, o sistema também vai pedir</p>
-                    {proximaLevaCredito.restantes.map((documento: any) => (
-                      <p key={documento.codigo} className="mt-1 text-[10px] text-slate-600">• {documento.nome}</p>
-                    ))}
-                    {proximaLevaCredito.total - 1 > proximaLevaCredito.restantes.length && (
-                      <p className="mt-1 text-[10px] text-slate-400">e mais {proximaLevaCredito.total - 1 - proximaLevaCredito.restantes.length} documento(s)...</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-            {apto && !proximaLevaCredito && mapaCredito && (
-              <div className="mt-3 rounded-xl border border-emerald-100 bg-white p-2.5">
-                <p className="text-[11px] font-black text-emerald-800">Dossiê documental completo</p>
-                <p className="mt-1 text-[10px] text-emerald-800">Toda a documentação obrigatória de cadastro, regularidade e fiscal já foi anexada. {mapaCredito.proxima_acao}</p>
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
       {entidadeTipo === "empresa" && empresaId && relatorioDocumental && (
         <div className="rounded-2xl border border-violet-200 bg-violet-50/40 p-4 space-y-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -1352,6 +1180,223 @@ export default function DocumentosEntidade({
               );
             })}
           </div>
+
+          {/* Resultado da Etapa 1, unido ao checklist de "Identidade do CNPJ" --
+              antes ficava sempre visível no topo da tela, junto com a Etapa 2/3 e o
+              checklist inteiro, repetindo os mesmos 3 documentos (Cartão CNPJ, QSA,
+              Enquadramento) duas vezes na mesma tela. Agora só aparece quando esta
+              aba do checklist está selecionada, no mesmo lugar onde os documentos
+              são anexados. Depois de apto, fecha sozinho num resumo de uma linha. */}
+          {secaoAtivaTitulo === "Identidade do CNPJ" && entidadeTipo === "empresa" && empresaId && (
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-3">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-black text-slate-900">Etapa 1 — Identidade do CNPJ</p>
+                      <span className={`rounded-full border bg-white px-2 py-0.5 text-[10px] font-black ${identidadeObrigatorios.preenchidos === identidadeObrigatorios.total ? "border-emerald-200 text-emerald-700" : "border-blue-200 text-blue-700"}`}>
+                        {identidadeObrigatorios.preenchidos}/{identidadeObrigatorios.total} obrigatórios anexados
+                      </span>
+                      {identidadeInicialPreenchida > identidadeObrigatorios.preenchidos && (
+                        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-black text-slate-500">
+                          +{identidadeInicialPreenchida - identidadeObrigatorios.preenchidos} opcional
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[11px] text-slate-600">Cartão CNPJ e QSA formam o primeiro laudo. O Enquadramento Tributário vem da consulta de CNPJ (upload opcional). Contrato/Alteração e Atos da Junta pertencem à Etapa 2.</p>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-end gap-2 text-[11px]">
+                    <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-slate-600"><b className="text-slate-900">{docs.length}</b> arquivos</span>
+                    <span className="rounded-lg border border-white bg-white px-2.5 py-1.5 font-semibold text-slate-600"><b className="text-emerald-700">{documentosValidados}</b> validados</span>
+                    {/* Depois da primeira análise, o cartão completo (ProntidaoIdentidadeCard,
+                        logo abaixo) já traz seu próprio botão de "iniciar/tentar novamente" --
+                        este botão fica só pra disparar a primeira leitura, sem duplicar ação. */}
+                    {!identidadeCnpj && (
+                      <button
+                        type="button"
+                        onClick={() => void iniciarAnaliseIdentidade()}
+                        disabled={analisandoIdentidade || identidadeObrigatorios.preenchidos !== identidadeObrigatorios.total}
+                        className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {analisandoIdentidade ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                        {analisandoIdentidade ? "Iniciando análise..." : "Iniciar análise documental"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {identidadeCnpj && (
+                identidadeCnpj.apto_para_avancar && !identidadeDetalhesAbertos ? (
+                  <button
+                    type="button"
+                    onClick={() => setIdentidadeDetalhesAbertos(true)}
+                    className="flex w-full items-center justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-3 py-2.5 text-left hover:bg-emerald-100/60"
+                  >
+                    <span className="flex items-center gap-2 text-xs font-black text-emerald-800">
+                      <ShieldCheck className="h-4 w-4" /> Etapa 1 concluída — Identidade do CNPJ validada
+                    </span>
+                    <span className="text-[11px] font-bold text-emerald-700">Ver detalhes</span>
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    {identidadeCnpj.apto_para_avancar && (
+                      <button
+                        type="button"
+                        onClick={() => setIdentidadeDetalhesAbertos(false)}
+                        className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800"
+                      >
+                        Ocultar detalhes ▲
+                      </button>
+                    )}
+                    <ProntidaoIdentidadeCard
+                      identidade={identidadeCnpj}
+                      onTentarNovamente={() => void iniciarAnaliseIdentidade()}
+                      processando={analisandoIdentidade}
+                    />
+                  </div>
+                )
+              )}
+            </div>
+          )}
+
+          {/* Etapa 2/3 (Atos da Junta + Contrato Social), unida ao checklist de
+              "Documentação da Empresa" pelo mesmo motivo -- só aparece quando esta
+              aba está selecionada, junto com os campos de upload correspondentes. */}
+          {secaoAtivaTitulo === "Documentação da Empresa" && entidadeTipo === "empresa" && societaria?.habilitada && (() => {
+            const apto = societaria.apto_para_avancar === true;
+            const registros = Array.isArray(societaria.registros_requeridos) ? societaria.registros_requeridos : [];
+            const faltantes = Array.isArray(societaria.registros_faltantes) ? societaria.registros_faltantes : registros.filter((registro: any) => !registro.comprovado);
+            // Depois que a Etapa 2/3 já está comprovada (apto), o "próximo documento" deixa
+            // de ser sobre Atos da Junta/Contrato e passa a vir do mapa documental de
+            // crédito (cadastro/regularidade + fiscal do regime, ex: Simples Nacional) --
+            // sem isso, a mensagem parava em "Continuidade comprovada" e não dizia mais nada.
+            const proximoDocumento = !societaria.atos_junta_anexados
+              ? "Atos da Junta Comercial"
+              : !societaria.atos_junta_aprovados
+                ? "Aguardando a análise dos Atos da Junta anexados"
+                : faltantes.length
+                  ? "Contrato Social ou alteração contratual anterior (para completar 12 meses de histórico)"
+                  : !societaria.contrato_anexado
+                    ? "Contrato Social ou alteração contratual"
+                      : apto && proximaLevaCredito
+                        ? `${proximaLevaCredito.proximo.nome} (${proximaLevaCredito.proximo.etapaTitulo})`
+                        : societaria.contrato_anexado
+                          ? "Demais documentos do dossiê conforme o enquadramento tributário"
+                          : null;
+            return (
+              <div className={`rounded-2xl border p-3 ${apto ? "border-emerald-200 bg-emerald-50/60" : "border-amber-200 bg-amber-50/60"}`}>
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {apto ? <ShieldCheck className="h-4 w-4 text-emerald-700" /> : <FileText className="h-4 w-4 text-amber-700" />}
+                      <p className="text-sm font-black text-slate-900">
+                        {societaria.atos_junta_aprovados ? "Etapa 3 — Contrato e histórico mínimo de 12 meses" : "Etapa 2 — Atos da Junta Comercial"}
+                      </p>
+                      <span className={`rounded-full border bg-white px-2 py-0.5 text-[10px] font-black ${apto ? "border-emerald-200 text-emerald-700" : "border-amber-200 text-amber-700"}`}>
+                        {apto ? "Continuidade comprovada" : analisandoSocietario ? "Analisando..." : societaria.analisado ? "Documento(s) pendente(s)" : "Aguardando análise"}
+                      </span>
+                    </div>
+                    {/* Relatório: texto explicativo que a IA produziu para este lote de documentos --
+                        fica sempre visível aqui, não só num toast que desaparece. */}
+                    {societaria.diagnostico && <p className="mt-1.5 text-[11px] leading-relaxed text-slate-700">{societaria.diagnostico}</p>}
+                    {proximoDocumento && (
+                      <p className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-blue-700">
+                        <ArrowRight className="h-3.5 w-3.5 shrink-0" /> Próximo documento a anexar: {proximoDocumento}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void iniciarAnaliseSocietaria()}
+                    disabled={analisandoSocietario}
+                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {analisandoSocietario ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                    {analisandoSocietario ? "Conferindo..." : societaria.atos_junta_aprovados ? "Validar contratos, datas e 12 meses" : "Analisar Atos da Junta"}
+                  </button>
+                </div>
+
+                {/* Histórico: cadeia de registros já exigida pela análise, cada um com seu
+                    próprio status -- comprovado (documento já lido e conferido) ou pendente
+                    (ainda precisa ser anexado), com data e origem de cada ato. */}
+                {registros.length > 0 && (
+                  <div className="mt-3 rounded-xl border border-white bg-white p-2.5">
+                    <p className="text-[11px] font-black text-slate-800">Histórico da cadeia societária (mínimo 12 meses)</p>
+                    <div className="mt-2 grid gap-1.5 md:grid-cols-2">
+                      {registros.map((registro: any, index: number) => (
+                        <div key={`${registro.data}-${registro.numero}-${index}`} className={`rounded-lg border p-2 ${registro.comprovado ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[10px] font-black text-slate-800">{registro.tipo_ato || "Registro societário"}</p>
+                            <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black ${registro.comprovado ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                              {registro.comprovado ? "Comprovado" : "Anexar documento"}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[9px] text-slate-600">Data: {formatDate(registro.data)}{registro.numero ? ` · Registro ${registro.numero}` : ""}</p>
+                          {registro.documento_nome && <p className="mt-0.5 truncate text-[9px] font-semibold text-emerald-700">{registro.documento_nome}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Interação/avisos: alertas não-bloqueantes (ex: dispensa MEI, "outro órgão",
+                    divergências de NIRE/data) -- antes calculados no backend mas nunca exibidos
+                    em nenhuma tela. */}
+                {!!societaria.avisos?.length && (
+                  <div className="mt-3 rounded-xl border border-blue-100 bg-white p-2.5">
+                    <p className="text-[11px] font-black text-blue-800">Avisos da análise</p>
+                    {societaria.avisos.map((item: string, index: number) => <p key={index} className="mt-1 text-[10px] text-blue-800">• {item}</p>)}
+                  </div>
+                )}
+
+                {!!societaria.bloqueios?.length && (
+                  <div className="mt-3 rounded-xl border border-red-100 bg-white p-2.5">
+                    <p className="text-[11px] font-black text-red-800">Pendências que bloqueiam o avanço</p>
+                    {societaria.bloqueios.map((item: string, index: number) => <p key={index} className="mt-1 text-[10px] text-red-800">• {item}</p>)}
+                  </div>
+                )}
+
+                {/* Análise: depois que a continuidade societária está comprovada, o sistema
+                    continua indicando a sequência -- não para em "liberado". A ordem e os
+                    documentos vêm do mapa documental de crédito, que já é sensível ao
+                    regime tributário identificado (Simples Nacional, MEI, Lucro Presumido...). */}
+                {apto && proximaLevaCredito && (
+                  <div className="mt-3 rounded-xl border border-blue-100 bg-white p-2.5">
+                    <p className="text-[11px] font-black text-slate-800">
+                      Próxima leva de documentos{mapaCredito?.regime_descricao ? ` — regime: ${mapaCredito.regime_descricao}` : ""}
+                    </p>
+                    <p className="mt-1 text-[10px] text-slate-500">
+                      {proximaLevaCredito.total} documento(s) obrigatório(s) ainda faltando para montar o dossiê completo de crédito.
+                    </p>
+                    <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-2">
+                      <p className="text-[9px] font-black uppercase text-blue-500">Próximo documento</p>
+                      <p className="text-[11px] font-black text-blue-900">{proximaLevaCredito.proximo.nome}</p>
+                      <p className="mt-0.5 text-[10px] text-blue-800">{proximaLevaCredito.proximo.finalidade}</p>
+                    </div>
+                    {!!proximaLevaCredito.restantes.length && (
+                      <div className="mt-2">
+                        <p className="text-[9px] font-black uppercase text-slate-400">Depois desse, o sistema também vai pedir</p>
+                        {proximaLevaCredito.restantes.map((documento: any) => (
+                          <p key={documento.codigo} className="mt-1 text-[10px] text-slate-600">• {documento.nome}</p>
+                        ))}
+                        {proximaLevaCredito.total - 1 > proximaLevaCredito.restantes.length && (
+                          <p className="mt-1 text-[10px] text-slate-400">e mais {proximaLevaCredito.total - 1 - proximaLevaCredito.restantes.length} documento(s)...</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {apto && !proximaLevaCredito && mapaCredito && (
+                  <div className="mt-3 rounded-xl border border-emerald-100 bg-white p-2.5">
+                    <p className="text-[11px] font-black text-emerald-800">Dossiê documental completo</p>
+                    <p className="mt-1 text-[10px] text-emerald-800">Toda a documentação obrigatória de cadastro, regularidade e fiscal já foi anexada. {mapaCredito.proxima_acao}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {secaoAtivaObj && (() => {
             const temObrigatorios = secaoAtivaObj.slots.some((s) => s.obrigatorio);
             const liberarComplementares = societaria?.atos_junta_aprovados === true

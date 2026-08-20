@@ -703,3 +703,87 @@ via de acesso por ação (nenhuma removida de vez, só a repetição).
   linha "Nova simulação"/"Novo contrato"/"Iniciar conversa"/"Acervo
   documental" duplicada do painel "Resumo"; props não mais usadas removidas
   de `EmpresaDadosWorkspace`.
+
+## Extra 8 — Acervo Documental ainda repetia informação entre etapas e checklist
+
+Foi enviada uma captura de tela do próprio Acervo Documental (depois da
+Extra 7) com anotações coloridas e uma mensagem de voz longa apontando que a
+página ainda estava "poluída, muito confusa, difícil navegação": o cartão
+completo da Etapa 1 (laranja) e o painel da Etapa 2 (rosa) ficavam sempre
+visíveis no topo, repetindo exatamente os mesmos 3 documentos (Cartão CNPJ,
+QSA, Enquadramento) que já apareciam de novo no checklist (azul) logo
+abaixo — os quatro blocos empilhados ao mesmo tempo, mesmo quando o usuário
+só queria anexar o próximo documento. Pedido específico: unir a análise de
+cada etapa com o checklist de upload da mesma etapa "no mesmo lugar";
+terminada uma etapa, ela deve fechar sozinha (resumo de uma linha) e abrir
+a próxima; a barra de abas da empresa (amarela) continua fixa como guia,
+sem mexer.
+
+### Causa
+
+`DocumentosEntidade.tsx` desenhava, sempre, um por um, empilhados no topo
+da tela: (1) o resumo da Etapa 1, (2) o cartão completo `ProntidaoIdentidadeCard`
+com o resultado da Etapa 1, (3) o painel da Etapa 2/3 (Atos da Junta/Contrato
+Social) — e só depois disso vinha o checklist com as abas "Identidade do
+CNPJ" / "Documentação da Empresa" / "Documentação dos Sócios", cada uma com
+os mesmos campos de upload já descritos nos blocos acima. Não havia
+nenhuma relação entre qual aba do checklist estava selecionada e quais
+blocos de análise apareciam — todos ficavam visíveis ao mesmo tempo, o
+tempo todo, dobrando (ou triplicando) a quantidade de informação na tela.
+
+### Correção
+
+Os blocos de análise da Etapa 1 e da Etapa 2/3 foram movidos pra dentro do
+cartão "Checklist de inclusão de documentos", logo abaixo do seletor de
+abas (Identidade do CNPJ / Documentação da Empresa / Documentação dos
+Sócios) e antes dos campos de upload — e cada um só é desenhado quando a
+aba correspondente do checklist está selecionada:
+
+- Resultado da Etapa 1 (resumo + `ProntidaoIdentidadeCard`) aparece só
+  quando a aba ativa é "Identidade do CNPJ".
+- Painel da Etapa 2/3 (Atos da Junta/Contrato Social, histórico de 12
+  meses, avisos, próxima leva de documentos) aparece só quando a aba ativa
+  é "Documentação da Empresa".
+- Nenhum texto, campo ou regra de negócio foi alterado dentro desses dois
+  blocos — foram só realocados pra dentro do checklist e amarrados à aba
+  certa; o restante da tela (barra de abas da empresa, botões do
+  cabeçalho, relatório consolidado sob demanda) não foi tocado.
+
+Além disso, o cartão completo da Etapa 1 agora **fecha sozinho** assim que
+fica apto pra avançar: em vez do `ProntidaoIdentidadeCard` inteiro (com
+todos os documentos, confirmações e avisos), aparece só uma barra verde de
+uma linha — "Etapa 1 concluída — Identidade do CNPJ validada" — com um
+botão "Ver detalhes" pra reabrir o cartão completo sem perder nenhum dado,
+se o usuário quiser conferir de novo. E assim que a análise da Etapa 1
+termina apta, o checklist troca sozinho pra aba "Documentação da Empresa"
+(a aba do CHECKLIST, dentro do Acervo Documental — não a barra de abas da
+empresa lá em cima, que continua fixa como guia, exatamente como pedido),
+já mostrando o painel de Atos da Junta pronto pra anexar o próximo
+documento, sem o usuário precisar clicar em mais nada.
+
+Resultado: a qualquer momento a tela mostra só a análise da etapa que o
+usuário está olhando no checklist, nunca as três etapas empilhadas ao
+mesmo tempo — a página ficou bem mais curta e cada seção mostra exatamente
+o que é relevante pra quem está anexando aquele documento naquele momento.
+
+### Verificação
+
+- `npx tsc --noEmit` limpo.
+- `npx vitest run` (suíte completa) → **540/540 testes passando** (sem
+  mudança na contagem — mudança de layout/estado local, não toca nenhuma
+  rota nem regra testada).
+- `npx vite build --mode production` concluído sem erros.
+- Conferido por leitura de código, linha a linha, que o JSX movido é
+  idêntico ao original (nenhum texto, classe ou condição de negócio
+  alterada) — só a localização e a condição de exibição (`secaoAtivaTitulo`)
+  mudaram.
+
+### Escopo desta correção
+
+- `client/src/components/documentos/DocumentosEntidade.tsx` — blocos da
+  Etapa 1 (resumo + `ProntidaoIdentidadeCard`) e da Etapa 2/3 (Atos da
+  Junta/Contrato Social) movidos pra dentro do checklist, condicionados à
+  aba ativa (`secaoAtivaTitulo`); novo estado `identidadeDetalhesAbertos`
+  (colapsa o cartão da Etapa 1 depois de apta); `iniciarAnaliseIdentidade`
+  passou a trocar a aba do checklist pra "Documentação da Empresa"
+  automaticamente quando a Etapa 1 fica apta.
