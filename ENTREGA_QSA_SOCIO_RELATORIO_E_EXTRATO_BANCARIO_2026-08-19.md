@@ -1060,3 +1060,97 @@ encerrado continua só onde já aparecia, via o filtro de status.
   bloco recolhido "Sem movimentação"; `renderActionButtons` reorganizado
   em ações sempre visíveis + menu "Mais ações"; tabela/cards extraídos
   para `renderListaAcompanhamentos`, reaproveitada nos dois blocos.
+
+## Extra 12 — PDF do relatório documental: fim das páginas em branco e lista de faltantes enxuta (2026-08-20)
+
+### Pedido do usuário
+
+O usuário anexou o PDF baixado do "Relatório de análise documental" (o
+arquivo que o botão "Gerar PDF" produz, diferente do modal em tela já
+ajustado nos Extras 9/10) com a seguinte reclamação: o relatório está
+desorganizado, com "um pedaço de informação, aí uma página vazia, depois
+mais informação, mais espaço vazio"; pediu formatação profissional e,
+especificamente, que a seção "Documentos ainda faltantes para anexar"
+pare de mostrar código técnico, finalidade e "Origem: ..." embaixo de
+cada documento -- só o nome e a etiqueta (Obrigatório/Recomendado),
+"enxuto".
+
+### Causa
+
+O PDF é gerado renderizando um HTML com Chromium (mesmo motor usado em
+orçamentos e contratos) e duas regras de CSS de paginação combinavam mal
+com o tamanho dos blocos de conteúdo:
+
+1. Todo `<h2>` (título de cada uma das 7 seções do relatório) tinha
+   `page-break-after: avoid`, uma instrução para o Chromium nunca deixar
+   um título sozinho no fim da página -- então, sempre que o título mais
+   o conteúdo que vem logo depois não cabiam no espaço restante, a página
+   inteira ficava em branco dali pra baixo e título + conteúdo pulavam
+   juntos para a página seguinte.
+2. Cada documento da seção "Documentos ainda faltantes para anexar" era
+   um bloco alto (nome, código técnico, finalidade em texto corrido e
+   linha de origem), com `page-break-inside: avoid` (não pode ser
+   cortado ao meio) -- com 14 documentos nesse formato, blocos inteiros
+   não cabiam no espaço restante da página e pulavam em conjunto,
+   ampliando ainda mais os espaços em branco.
+
+### Correção
+
+**Lista de faltantes enxuta.** A seção 3 do PDF agora mostra só o nome do
+documento e a etiqueta Obrigatório/Recomendado -- código técnico
+(`documento.codigo`), a etapa, o parágrafo de finalidade e a linha
+"Origem: ..." saíram do PDF (diferente do modal em tela, o PDF é estático
+e impresso, então essas informações não podem ficar atrás de um ícone de
+clique como foi feito na tela no Extra 10 -- aqui elas simplesmente não
+entram mais no documento).
+
+**Fim das páginas em branco.** A regra `page-break-after: avoid` foi
+removida dos títulos de seção (`<h2>`), e as tabelas (blocos analisados,
+próximas etapas) passaram a poder ser divididas entre páginas quando
+necessário (`page-break-inside: auto`). Os blocos de documento
+individuais (`.doc`, `.stage`) continuam com `page-break-inside: avoid`
+-- ou seja, um único documento nunca é cortado ao meio -- mas, com a
+lista de faltantes bem mais compacta, isso deixou de forçar páginas
+inteiras em branco.
+
+### Verificação
+
+Como o PDF é gerado renderizando HTML/CSS num Chromium sem cabeça (sem
+banco de dados ou servidor real disponível neste ambiente de trabalho
+para emitir um relatório de verdade), a verificação foi feita
+recriando, num script isolado, exatamente a mesma função geradora de
+HTML e os mesmos dados do relatório da empresa TOK CELL CELULARES E
+ACESSORIOS LTDA anexado pelo usuário (mesmos 5 documentos analisados, 14
+faltantes, 2 resultados por etapa etc.), e comparando visualmente, página
+por página, a versão anterior e a corrigida:
+
+- **Antes:** 8 páginas geradas, com páginas quase inteiramente em branco
+  logo após "Resumo executivo" e após a seção "Documentos anexados e
+  aguardando análise" -- reproduzindo exatamente o problema relatado.
+- **Depois:** 7 páginas, sem nenhum espaço em branco grande no meio do
+  documento; a lista de 14 documentos faltantes, que antes ocupava uma
+  página inteira sozinha, passou a caber em poucas linhas compactas na
+  mesma página das seções vizinhas.
+- Só então a mesma alteração de CSS e o mesmo template da lista de
+  faltantes foram aplicados ao arquivo real
+  (`server/routes/documentacao.ts`, função
+  `gerarHtmlRelatorioDocumental`) -- o HTML e o CSS finais no código são
+  idênticos aos testados na simulação.
+- `npx tsc --noEmit` limpo.
+- `npx vitest run` (suíte completa) → **540/540 testes passando**.
+- `npx vite build --mode production` concluído sem erros.
+- Em anexo a esta entrega vai um PDF de exemplo
+  (`exemplo_relatorio_documental_corrigido.pdf`), gerado com os mesmos
+  dados da TOK CELL, para conferência visual do resultado antes de gerar
+  um relatório de verdade pelo sistema.
+
+### Escopo desta correção
+
+- `server/routes/documentacao.ts` — dentro de
+  `gerarHtmlRelatorioDocumental`: template da seção "Documentos ainda
+  faltantes para anexar" simplificado (só nome + etiqueta); removida a
+  regra `page-break-after: avoid` de `h2`; adicionada `page-break-inside:
+  auto` em `table`; nova classe `.doc.compact` para o espaçamento mais
+  enxuto dos cards de faltantes. Nenhuma outra seção do PDF, rota ou
+  cálculo de dados foi alterado -- só a formatação/paginação e o
+  template dessa seção específica.
