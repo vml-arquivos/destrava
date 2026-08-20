@@ -472,3 +472,119 @@ navegação/composição de tela. `npx tsc --noEmit` limpo, `npx vite build`
 concluído sem erros, `npx vitest run` → **539/539 testes passando** (essa
 mudança é só de front-end/roteamento, não adiciona nem quebra teste de
 backend).
+
+## Extra 6 — card de análise documental contraditório, e contrato social/QSA verboso demais
+
+Foi enviado um PDF real (`relatoriodocumentalpalumaburgerltda_17.pdf`) mais
+duas capturas de tela — uma delas com círculos vermelhos marcando o
+problema — mostrando o card de um documento QSA dizendo, no topo,
+"Leitura concluída; documento considerado consistente" (ou seja: validado),
+e logo abaixo, no checklist técnico do mesmo card, "CNPJ: não identificado",
+"Razão social: não identificada" e "Capital social: não identificado" — uma
+contradição visível na tela e impressa no PDF. Junto veio o pedido de deixar
+o card do Contrato Social/Atos da Junta bem mais enxuto (só a última
+alteração, se já completa 12 meses, e o resultado em uma frase — sem o
+texto jurídico completo) e de esconder todo o texto de apoio atrás de um
+botão de informações que não ocupe espaço na tela por padrão e nunca apareça
+no PDF impresso.
+
+### Causa raiz da contradição
+
+Em `shared/documentalPresentation.ts`, a seção "Amostra objetiva dos dados
+lidos" (que mostrava o CNPJ/razão social/capital corretamente) lia esses
+valores do array `resultado.campos` (uma lista de `{label, valor}` que a
+extração sempre preenche). Mas a seção "Validações realizadas", logo
+abaixo, checava esse mesmo dado só em campos com formato de objeto
+(`campos_principais`, `dados_extraidos`, `dados_qsa`, `analise_documental`)
+— nunca olhava para o array `campos`. Quando a extração só populava o
+array (como no caso relatado), a "Amostra" mostrava o valor certo e a
+"Validações" — cega para essa fonte — concluía "não identificado" para o
+mesmo dado, na mesma tela.
+
+### Correção da contradição
+
+Adicionei um helper `valorDeCampos(campos, ...labels)` que procura um valor
+no array `{label, valor}` por nome normalizado (sem acento/maiúscula) e
+passei a usá-lo como última opção da cadeia de fallback no checklist do
+QSA. Agora o checklist enxerga a mesma fonte de dado que a tela já mostra —
+nunca mais contradiz "identificado" com "não identificado" para o mesmo
+campo.
+
+### Contrato Social / Atos da Junta — card enxuto
+
+O card societário mostrava, sempre, o texto jurídico completo de cada
+alteração (cedente, cessionário, cláusula, evidência literal) e o
+diagnóstico bruto da leitura, ocupando bastante espaço tanto na tela quanto
+no PDF — mesmo quando só a última alteração importa. Agora, quando o
+documento tem alterações societárias, o card mostra por padrão só uma nova
+seção objetiva ("Resultado da alteração societária") com:
+
+- o resultado em uma frase (ex.: *"Transferência de titularidade: Marcos
+  Henrique Soares Pio → Jonnathas Rodrigues Pires (65.000 quotas, 100%)"*),
+  gerado por um novo helper `formatarAlteracaoResumo`;
+- a data da última alteração;
+- se essa alteração já completa 12 meses (*"Sim — não precisa de alteração
+  anterior"* ou *"Não — anexar também a alteração/contrato anterior"*),
+  respondendo diretamente ao pedido de não exigir o contrato anterior
+  quando os últimos 12 meses já estão cobertos pela alteração mais
+  recente.
+
+### Mecanismo do botão de informações (novo campo `colapsavel`)
+
+O tipo `DocumentoAnaliseSecao` (usado tanto pelo PDF quanto pela tela)
+ganhou um campo opcional `colapsavel?: boolean`. As seções de apoio —
+checklist técnico de validação, texto jurídico completo da transação,
+evidência literal do documento — passaram a ser marcadas `colapsavel:
+true`. As seções essenciais (resultado, resumo da alteração, titular
+atual, dados do QSA) continuam sem essa marca, ou seja, sempre visíveis.
+
+Essa é a mesma função (`construirSecoesAnaliseDocumento`) usada pelo PDF
+(`server/routes/documentacao.ts`) e pelos dois lugares da tela que mostram
+o card (`DocumentosEntidade.tsx` e `DossieCreditoEmpresa.tsx`, via
+`client/src/components/documentos/ResultadoAnaliseDocumento.tsx`) — então
+o comportamento ficou consistente nos três lugares:
+
+- **PDF**: `secoesAnaliseHtml` em `server/routes/documentacao.ts` agora
+  filtra `!secao.colapsavel` antes de desenhar o HTML — as seções
+  colapsáveis simplesmente nunca chegam a ser impressas.
+- **Tela**: `ResultadoAnaliseDocumento.tsx` separa as seções em
+  "principais" (sempre visíveis) e "detalhes" (colapsáveis) e mostra um
+  botão pequeno com ícone de informação — "Ver informações técnicas" — que
+  abre/fecha as seções de apoio sem sair da página e sem ocupar espaço
+  quando fechado.
+
+### Verificação
+
+- `npx vitest run tests/documentalPresentation.test.ts` → seis testes,
+  incluindo um novo criado especificamente para reproduzir o bug relatado
+  (QSA com CNPJ/razão social/capital só no array `campos`, confirmando que
+  o checklist não fala mais "não identificado" para nenhum deles).
+- `npx vitest run` (suíte completa) → **540/540 testes passando** (539
+  anteriores + 1 novo).
+- `npx tsc --noEmit` limpo.
+- `npx vite build --mode production` concluído sem erros.
+- Gerei um PDF de teste real reaproveitando o HTML da função de produção
+  (dados sintéticos equivalentes ao caso relatado) e conferi a página
+  renderizada como imagem: sem sobreposição de cabeçalho, sem mensagem de
+  erro/contradição, card do Contrato Social mostrando só resultado + data +
+  checagem de 12 meses. Script e PDF de teste apagados depois da
+  verificação.
+
+### Escopo desta correção
+
+- `shared/documentalPresentation.ts` — helper `valorDeCampos` (corrige a
+  contradição), helpers `parseDataIso`/`formatarDataBr`/
+  `formatarAlteracaoResumo` e nova seção `resumo_alteracao` (enxuga o card
+  societário), campo `colapsavel` no tipo `DocumentoAnaliseSecao` e nas
+  seções de apoio (checklist, texto jurídico completo, evidências).
+- `server/routes/documentacao.ts` — `secoesAnaliseHtml` passou a filtrar
+  seções `colapsavel` antes de montar o HTML do PDF.
+- `client/src/components/documentos/ResultadoAnaliseDocumento.tsx` —
+  reescrito para separar seções principais de seções colapsáveis atrás de
+  um botão "Ver informações técnicas".
+- `tests/documentalPresentation.test.ts` — testes atualizados para a nova
+  estrutura, mais um teste novo que reproduz e trava o bug da contradição.
+
+Nenhuma rota de API nem cálculo de análise mudou — é só reorganização de
+apresentação (quais seções aparecem por padrão, quais ficam atrás do
+botão) e a correção pontual do checklist que lia a fonte de dado errada.

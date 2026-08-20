@@ -667,7 +667,12 @@ function gerarHtmlRelatorioDocumental(relatorio: any): string {
   const escapeLista = (items: unknown[]) => items.filter(Boolean).map((item: any) => `<li>${escapeHtmlRelatorio(typeof item === 'string' ? item : item.mensagem || item.recomendacao || item.nome || item.label || '')}</li>`).join('');
   const listaOuVazio = (items: unknown[], texto: string) => items.length ? `<ul>${escapeLista(items)}</ul>` : `<p class="empty">${escapeHtmlRelatorio(texto)}</p>`;
   const cardsHtml = cards.map(([label, value]) => `<div class="card"><span>${escapeHtmlRelatorio(label)}</span><strong>${escapeHtmlRelatorio(value)}</strong></div>`).join('');
-  const secoesAnaliseHtml = (resultado: any, documento: any) => construirSecoesAnaliseDocumento(resultado, documento).map((secao: any) => {
+  // Seções marcadas `colapsavel` (checklist técnico, texto jurídico completo,
+  // evidência literal) existem pra quem quiser conferir o detalhe na tela,
+  // atrás de um botão de informações -- no PDF impresso elas nem entram: o
+  // relatório fica só com o resultado e os dados essenciais de cada
+  // documento, sem o texto de apoio inflando as páginas.
+  const secoesAnaliseHtml = (resultado: any, documento: any) => construirSecoesAnaliseDocumento(resultado, documento).filter((secao: any) => !secao.colapsavel).map((secao: any) => {
     const classe = secao.id === 'resultado'
       ? 'result'
       : secao.id === 'diagnostico_factual'
