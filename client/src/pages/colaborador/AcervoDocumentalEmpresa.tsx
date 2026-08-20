@@ -95,6 +95,17 @@ export default function AcervoDocumentalEmpresa() {
       <div className="h-full min-h-0 overflow-y-auto bg-slate-50 px-3 py-2 lg:px-4">
         <div className="mx-auto max-w-[1780px] space-y-2 pb-4">
           <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+            {/* Antes, quem entrava no acervo de uma empresa só conseguia sair (pra ver
+                outra empresa ou voltar pra lista) pelo botão "voltar" do navegador --
+                não havia nenhum link dentro do site pra isso. Este botão sempre volta
+                pra lista de empresas, de onde dá pra abrir qualquer outra em um clique. */}
+            <button
+              type="button"
+              onClick={() => setLocation("/colaborador/empresas")}
+              className="mb-1.5 inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-blue-700"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Voltar para a lista de empresas
+            </button>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">

@@ -427,6 +427,95 @@ function ResumoLaudoDocumento({ analise }: { analise: any }) {
   );
 }
 
+// Cards do relatório consolidado (seções 3 e 4) -- antes mostravam etapa,
+// finalidade e origem (seção 3) ou confirmações/observações/pendências
+// (seção 4) sempre abertos, um bloco de texto por documento. Pedido do
+// usuário: deixar só o título (e o essencial -- badge/status/conclusão) de
+// cara, com um ícone "i" que revela o resto ao clicar, do mesmo jeito que
+// já existe em ResultadoAnaliseDocumento (ver "detalhesAbertos" ali).
+function CardDocumentoFaltante({ documento }: { documento: any }) {
+  const [aberto, setAberto] = useState(false);
+  const temDetalhes = Boolean(documento.etapa || documento.finalidade || documento.origem);
+  return (
+    <div className="rounded-xl border border-amber-200 bg-white p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <p className="text-[10px] font-black text-slate-900">{documento.nome}</p>
+          {temDetalhes && (
+            <button
+              type="button"
+              onClick={() => setAberto((v) => !v)}
+              title="Ver etapa, finalidade e origem"
+              className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${aberto ? "border-amber-400 bg-amber-100 text-amber-700" : "border-slate-300 text-slate-400 hover:border-amber-300 hover:text-amber-600"}`}
+            >
+              <Info className="h-2.5 w-2.5" />
+            </button>
+          )}
+        </div>
+        <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black text-amber-800">{documento.obrigatorio ? "Obrigatório" : "Recomendado"}</span>
+      </div>
+      {aberto && (
+        <div className="mt-1.5 space-y-1">
+          {documento.etapa && <p className="text-[9px] font-semibold text-amber-900">{documento.etapa}</p>}
+          {documento.finalidade && <p className="text-[10px] text-slate-700">{documento.finalidade}</p>}
+          {documento.origem && <p className="text-[9px] text-slate-400">Origem: {documento.origem}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CardResultadoEtapa({ analise }: { analise: any }) {
+  const [aberto, setAberto] = useState(false);
+  const confirmados = itensTextoRelatorio(analise.pontos_positivos);
+  const observacoes = itensTextoRelatorio(analise.observacoes);
+  const bloqueios = itensTextoRelatorio(analise.bloqueios);
+  const temDetalhes = confirmados.length > 0 || observacoes.length > 0 || bloqueios.length > 0;
+  return (
+    <div className="rounded-xl border border-violet-100 bg-violet-50/50 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <p className="text-[11px] font-black text-violet-950">{analise.titulo}</p>
+          {temDetalhes && (
+            <button
+              type="button"
+              onClick={() => setAberto((v) => !v)}
+              title="Ver confirmações, observações e pendências"
+              className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${aberto ? "border-violet-400 bg-violet-100 text-violet-700" : "border-slate-300 text-slate-400 hover:border-violet-300 hover:text-violet-600"}`}
+            >
+              <Info className="h-2.5 w-2.5" />
+            </button>
+          )}
+        </div>
+        <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[9px] font-black text-violet-800">{analise.status}</span>
+      </div>
+      <p className="mt-2 whitespace-pre-line text-[10px] font-semibold text-slate-800">{analise.conclusao}</p>
+      {aberto && (
+        <>
+          {confirmados.length > 0 && (
+            <div className="mt-2">
+              <p className="text-[9px] font-black uppercase text-emerald-700">O que foi confirmado</p>
+              {confirmados.map((item, itemIndex) => <p key={itemIndex} className="mt-1 text-[10px] text-slate-700">• {item}</p>)}
+            </div>
+          )}
+          {observacoes.length > 0 && (
+            <div className="mt-2">
+              <p className="text-[9px] font-black uppercase text-blue-700">Observações</p>
+              {observacoes.map((item, itemIndex) => <p key={itemIndex} className="mt-1 text-[10px] text-slate-700">• {item}</p>)}
+            </div>
+          )}
+          {bloqueios.length > 0 && (
+            <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2">
+              <p className="text-[9px] font-black uppercase text-red-700">Pendências e bloqueios</p>
+              {bloqueios.map((item, itemIndex) => <p key={itemIndex} className="mt-1 text-[10px] text-red-800">• {item}</p>)}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -1151,7 +1240,7 @@ export default function DocumentosEntidade({
             <div className="flex items-center justify-between gap-2"><p className="text-xs font-black text-amber-950">3. Documentos ainda faltantes para anexar</p><span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black text-amber-800">{relatorioDocumental.documentos_faltantes?.length || 0} documento(s)</span></div>
             <p className="mt-1 text-[10px] text-amber-900/80">Itens calculados pelo mapa documental do regime tributário identificado e pelas pendências do dossiê.</p>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
-              {(Array.isArray(relatorioDocumental.documentos_faltantes) ? relatorioDocumental.documentos_faltantes : []).map((documento: any, index: number) => <div key={`${documento.codigo}-${index}`} className="rounded-xl border border-amber-200 bg-white p-3"><div className="flex items-start justify-between gap-2"><p className="text-[10px] font-black text-slate-900">{documento.nome}</p><span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black text-amber-800">{documento.obrigatorio ? "Obrigatório" : "Recomendado"}</span></div><p className="mt-1 text-[9px] font-semibold text-amber-900">{documento.etapa}</p><p className="mt-1 text-[10px] text-slate-700">{documento.finalidade}</p>{documento.origem && <p className="mt-1 text-[9px] text-slate-400">Origem: {documento.origem}</p>}</div>)}
+              {(Array.isArray(relatorioDocumental.documentos_faltantes) ? relatorioDocumental.documentos_faltantes : []).map((documento: any, index: number) => <CardDocumentoFaltante key={`${documento.codigo}-${index}`} documento={documento} />)}
               {!relatorioDocumental.documentos_faltantes?.length && <p className="rounded-lg border border-dashed border-amber-300 bg-white p-3 text-[10px] text-emerald-700">Nenhum documento obrigatório pendente foi identificado.</p>}
             </div>
           </div>
@@ -1159,7 +1248,7 @@ export default function DocumentosEntidade({
           <div className="rounded-xl border border-violet-200 bg-white p-3">
             <p className="text-xs font-black text-violet-950">4. Resultados consolidados por etapa</p>
             <div className="mt-3 grid gap-2 lg:grid-cols-2">
-              {(Array.isArray(relatorioDocumental.resultados_analises) ? relatorioDocumental.resultados_analises : []).map((analise: any, index: number) => <div key={`${analise.codigo}-${index}`} className="rounded-xl border border-violet-100 bg-violet-50/50 p-3"><div className="flex items-start justify-between gap-2"><p className="text-[11px] font-black text-violet-950">{analise.titulo}</p><span className="rounded-full bg-violet-100 px-2 py-0.5 text-[9px] font-black text-violet-800">{analise.status}</span></div><p className="mt-2 whitespace-pre-line text-[10px] font-semibold text-slate-800">{analise.conclusao}</p>{itensTextoRelatorio(analise.pontos_positivos).length > 0 && <div className="mt-2"><p className="text-[9px] font-black uppercase text-emerald-700">O que foi confirmado</p>{itensTextoRelatorio(analise.pontos_positivos).map((item, itemIndex) => <p key={itemIndex} className="mt-1 text-[10px] text-slate-700">• {item}</p>)}</div>}{itensTextoRelatorio(analise.observacoes).length > 0 && <div className="mt-2"><p className="text-[9px] font-black uppercase text-blue-700">Observações</p>{itensTextoRelatorio(analise.observacoes).map((item, itemIndex) => <p key={itemIndex} className="mt-1 text-[10px] text-slate-700">• {item}</p>)}</div>}{itensTextoRelatorio(analise.bloqueios).length > 0 && <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2"><p className="text-[9px] font-black uppercase text-red-700">Pendências e bloqueios</p>{itensTextoRelatorio(analise.bloqueios).map((item, itemIndex) => <p key={itemIndex} className="mt-1 text-[10px] text-red-800">• {item}</p>)}</div>}</div>)}
+              {(Array.isArray(relatorioDocumental.resultados_analises) ? relatorioDocumental.resultados_analises : []).map((analise: any, index: number) => <CardResultadoEtapa key={`${analise.codigo}-${index}`} analise={analise} />)}
             </div>
           </div>
 
@@ -1186,9 +1275,14 @@ export default function DocumentosEntidade({
             <p className="text-[11px] text-slate-400 mt-0.5">Anexe cada documento no campo certo. Visualizar, baixar, validar e excluir ficam disponíveis ali mesmo, sem precisar procurar em outro lugar da tela.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {secoesDaTela.map((secao) => {
+            {/* "Etapa N --" na frente do nome de cada aba é só rótulo visual (o texto
+                usado nas comparações de código continua sendo secao.titulo, sem o
+                prefixo) -- pedido do usuário pra deixar claro que as abas seguem uma
+                ordem (1, 2, 3...), não são só categorias soltas. */}
+            {secoesDaTela.map((secao, index) => {
               const preenchidos = contarPreenchidos(secao);
               const ativa = secao.titulo === secaoAtivaTitulo;
+              const completa = preenchidos === secao.slots.length;
               return (
                 <button
                   key={secao.titulo}
@@ -1197,11 +1291,14 @@ export default function DocumentosEntidade({
                   className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold border transition-colors ${
                     ativa
                       ? "bg-blue-600 border-blue-600 text-white"
-                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                      : completa
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                        : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
                   }`}
                 >
-                  {secao.titulo}
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${ativa ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>
+                  {completa && !ativa && <ShieldCheck className="h-3 w-3 shrink-0" />}
+                  <span className={ativa ? "font-black" : ""}>Etapa {index + 1} — {secao.titulo}</span>
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${ativa ? "bg-white/20 text-white" : completa ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
                     {preenchidos}/{secao.slots.length}
                   </span>
                 </button>

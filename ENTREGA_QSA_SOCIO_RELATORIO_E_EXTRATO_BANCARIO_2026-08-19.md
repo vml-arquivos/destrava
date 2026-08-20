@@ -886,3 +886,99 @@ próximo passo à parte, pra tratar com o mesmo cuidado.
   visibilidade, sem descartar o dado já carregado; novo ícone de
   informação por campo do checklist, controlado por `descricaoVisivel`,
   substitui o parágrafo de descrição sempre visível.
+
+## Extra 10 — Abas numeradas, navegação entre empresas e relatório mais enxuto (2026-08-20)
+
+### Pedido do usuário
+
+Dois prints da mesma tela do Extra 9 (relatório já abrindo em modal,
+confirmado como correto pelo usuário) mais mensagem de voz com três
+pedidos: (1) deixar explícito que o checklist segue uma ordem de etapas
+("primeira etapa identidade do CNPJ, segunda etapa documentação, terceira
+etapa...") e como se avança entre elas; (2) dentro da página de uma
+empresa (o Acervo Documental) não existe nenhum jeito de sair ou trocar de
+empresa a não ser o botão "voltar" do navegador -- pedido explícito pra
+corrigir; (3) mesmo dentro do modal, o relatório ainda tem informação
+demais -- em especial as seções "Documentos ainda faltantes para anexar"
+e "Resultados consolidados por etapa" (que repete "pendências e
+bloqueios") -- pedido pra deixar só o título/essencial visível e esconder
+o resto atrás de um ícone de informação, igual ao mecanismo já usado em
+outros lugares do sistema.
+
+### Correção 1 — Abas do checklist numeradas
+
+Cada aba do checklist ("Identidade do CNPJ", "Documentação da Empresa",
+"Documentação dos Sócios"...) passou a ser rotulada como "Etapa 1 —
+Identidade do CNPJ", "Etapa 2 — Documentação da Empresa" etc. (o número
+segue a posição real da aba pra aquela tela, calculado a cada renderização
+-- não é um valor fixo). O texto interno usado nas comparações de código
+(`secaoAtivaTitulo === "Identidade do CNPJ"` e afins, que já existiam) não
+mudou, só o rótulo mostrado no botão. Uma aba cujos campos já estão todos
+preenchidos agora também fica destacada em verde com um ícone de check,
+pra reforçar visualmente o que já foi concluído.
+
+Sobre "avançar automático ou botão": o avanço automático da Etapa 1 pra
+Etapa 2, entregue no Extra 8, continua funcionando (assim que Cartão CNPJ
++ QSA são validados, o checklist já troca de aba sozinho). Não estendi
+esse avanço automático da Etapa 2 pra Etapa 3: a aba "Documentação da
+Empresa" cobre 19 campos (Atos da Junta, Contrato Social, CCS, CCF,
+CENPROT, CND, PGDAS, DEFIS, faturamento, fotos...), e `apto_para_avancar`
+nessa etapa reflete só a comprovação de Atos da Junta + Contrato Social —
+avançar automaticamente nesse momento esconderia os outros ~15 campos que
+ainda podem estar pendentes, o que seria uma regressão real (documento
+obrigatório escondido). Prefiro deixar como está e tratar isso à parte se
+o usuário confirmar que quer esse comportamento.
+
+### Correção 2 — Navegação entre empresas dentro do Acervo Documental
+
+`AcervoDocumentalEmpresa.tsx` ganhou um botão fixo "← Voltar para a lista
+de empresas" no topo da página, acima do nome da empresa, que leva direto
+pra `/colaborador/empresas` (de onde qualquer outra empresa pode ser
+aberta com um clique, usando o seletor "Trocar empresa ou buscar outra..."
+que já existe naquela tela). Antes, a única forma de sair da página do
+acervo de uma empresa era o botão "voltar" do navegador.
+
+### Correção 3 — Relatório consolidado mais enxuto
+
+Dentro do modal do relatório (Extra 9), duas seções tinham texto sempre
+visível e foram condensadas com o mesmo padrão de ícone "i" já usado em
+`ResultadoAnaliseDocumento.tsx` (seção 1) e no checklist (Extra 9):
+
+- Seção 3 "Documentos ainda faltantes para anexar": cada card agora
+  mostra só o nome do documento e o selo Obrigatório/Recomendado. A
+  etapa, a finalidade e a origem (mapa documental de crédito) só
+  aparecem ao clicar no ícone "i" ao lado do nome.
+- Seção 4 "Resultados consolidados por etapa": cada card mantém título,
+  selo de status e a conclusão da análise (a "manchete" da informação,
+  que sozinha já diz o essencial). As listas "O que foi confirmado",
+  "Observações" e "Pendências e bloqueios" só aparecem ao clicar no ícone
+  "i".
+
+Nenhum dado foi removido -- é sempre o mesmo conteúdo, calculado do mesmo
+jeito; só a exibição inicial mudou. Os avisos e pendências que aparecem
+*fora* do modal, direto no painel de análise da Etapa 2/3 (dentro do
+checklist, sempre visível enquanto a etapa está em andamento) não foram
+tocados nesta nem na correção anterior -- continuam sempre visíveis ali,
+porque é o lugar onde o usuário realmente age para desbloquear o avanço;
+o relatório em modal é só uma segunda leitura/consulta.
+
+### Verificação
+
+- `npx tsc --noEmit` limpo.
+- `npx vitest run` (suíte completa) → **540/540 testes passando** (sem
+  mudança na contagem).
+- `npx vite build --mode production` concluído sem erros.
+- Conferido por leitura de código que as condições de negócio que já
+  existiam (`secaoAtivaTitulo === "..."`, `apto_para_avancar`,
+  `contarPreenchidos`) não foram alteradas -- só rótulos, navegação e a
+  exibição inicial de duas seções do relatório.
+
+### Escopo desta correção
+
+- `client/src/components/documentos/DocumentosEntidade.tsx` — rótulo
+  "Etapa N —" e destaque verde nas abas do checklist; novos componentes
+  `CardDocumentoFaltante` e `CardResultadoEtapa` (ícone "i" pra
+  etapa/finalidade/origem e confirmações/observações/pendências) usados
+  nas seções 3 e 4 do relatório em modal.
+- `client/src/pages/colaborador/AcervoDocumentalEmpresa.tsx` — botão
+  "Voltar para a lista de empresas" no topo da página.
