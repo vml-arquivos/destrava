@@ -1075,28 +1075,39 @@ pare de mostrar código técnico, finalidade e "Origem: ..." embaixo de
 cada documento -- só o nome e a etiqueta (Obrigatório/Recomendado),
 "enxuto".
 
+Depois de receber o primeiro PDF de exemplo corrigido, o usuário mandou
+prints apontando que ainda sobrava um vão grande logo abaixo do título
+"1. Documentos anexados e analisados" -- o título aparecia sozinho no
+fim da página, sem nenhum conteúdo visível embaixo dele -- e reforçou:
+"isso tem que ser totalmente profissional... um relatório que vai ser
+enviado pros clientes". Essa segunda rodada corrigiu justamente esse
+resquício.
+
 ### Causa
 
 O PDF é gerado renderizando um HTML com Chromium (mesmo motor usado em
-orçamentos e contratos) e duas regras de CSS de paginação combinavam mal
-com o tamanho dos blocos de conteúdo:
+orçamentos e contratos). A causa raiz teve duas camadas:
 
 1. Todo `<h2>` (título de cada uma das 7 seções do relatório) tinha
-   `page-break-after: avoid`, uma instrução para o Chromium nunca deixar
-   um título sozinho no fim da página -- então, sempre que o título mais
-   o conteúdo que vem logo depois não cabiam no espaço restante, a página
-   inteira ficava em branco dali pra baixo e título + conteúdo pulavam
-   juntos para a página seguinte.
-2. Cada documento da seção "Documentos ainda faltantes para anexar" era
-   um bloco alto (nome, código técnico, finalidade em texto corrido e
-   linha de origem), com `page-break-inside: avoid` (não pode ser
-   cortado ao meio) -- com 14 documentos nesse formato, blocos inteiros
-   não cabiam no espaço restante da página e pulavam em conjunto,
-   ampliando ainda mais os espaços em branco.
+   `page-break-after: avoid` (nunca deixar um título sozinho no fim da
+   página) combinado com blocos de documento (`.doc`, `.stage`) com
+   `page-break-inside: avoid` (nunca cortar um documento ao meio). Como a
+   seção "Documentos ainda faltantes para anexar" tinha 14 documentos
+   nesse formato verboso, blocos inteiros não cabiam no espaço restante
+   da página e o Chromium empurrava tudo para a página seguinte,
+   deixando um vão enorme.
+2. Na primeira correção, o `page-break-after: avoid` do `h2` foi apenas
+   removido para destravar esse empurrão -- só que isso trocou um
+   problema pelo outro: agora era o título que ficava sozinho no fim da
+   página (o "Amostra objetiva dos dados lidos" do primeiro documento da
+   seção 1 é um bloco alto, com grade de 4 a 6 campos, que também não
+   cabia no espaço restante e pulava sozinho, deixando o título acima
+   dele "pendurado" sem nada embaixo -- foi exatamente esse vão que o
+   usuário apontou nos prints).
 
 ### Correção
 
-**Lista de faltantes enxuta.** A seção 3 do PDF agora mostra só o nome do
+**Lista de faltantes enxuta.** A seção 3 do PDF mostra só o nome do
 documento e a etiqueta Obrigatório/Recomendado -- código técnico
 (`documento.codigo`), a etapa, o parágrafo de finalidade e a linha
 "Origem: ..." saíram do PDF (diferente do modal em tela, o PDF é estático
@@ -1104,53 +1115,74 @@ e impresso, então essas informações não podem ficar atrás de um ícone de
 clique como foi feito na tela no Extra 10 -- aqui elas simplesmente não
 entram mais no documento).
 
-**Fim das páginas em branco.** A regra `page-break-after: avoid` foi
-removida dos títulos de seção (`<h2>`), e as tabelas (blocos analisados,
-próximas etapas) passaram a poder ser divididas entre páginas quando
-necessário (`page-break-inside: auto`). Os blocos de documento
-individuais (`.doc`, `.stage`) continuam com `page-break-inside: avoid`
--- ou seja, um único documento nunca é cortado ao meio -- mas, com a
-lista de faltantes bem mais compacta, isso deixou de forçar páginas
-inteiras em branco.
+**Paginação profissional, sem vão nem título solto.** A combinação final
+de regras resolve as duas pontas ao mesmo tempo:
+
+- `h2` voltou a ter `page-break-after: avoid` -- um título nunca fica
+  mais sozinho no fim da página.
+- Os blocos de documento (`.doc`, `.stage`) deixaram de ter
+  `page-break-inside: avoid` e passaram a `page-break-inside: auto` --
+  ou seja, se um documento for alto demais pra caber inteiro no espaço
+  que sobrou, o Chromium agora pode continuar o conteúdo dele (fundo
+  colorido e borda incluídos) na página seguinte, em vez de empurrar o
+  bloco inteiro (e o título junto) para uma página nova. Isso é o mesmo
+  comportamento que uma tabela tem quando não cabe inteira numa página.
+- Os cards compactos da lista de faltantes (`.doc.compact`) continuam
+  com `page-break-inside: avoid` -- são pequenos o bastante (uma linha)
+  pra nunca precisarem ser cortados, então mantêm o corte limpo entre um
+  documento e outro.
+- As tabelas (blocos analisados, próximas etapas) continuam com
+  `page-break-inside: auto`, herdado da primeira rodada.
+
+Na prática, cada seção agora ocupa o espaço que realmente tem disponível
+em cada página -- sem vão em branco e sem título isolado -- e, quando um
+bloco de documento precisa continuar na página seguinte, ele simplesmente
+continua (mesmo efeito visual de uma tabela que vira a página), sem
+nenhum corte feio ou sobreposição.
 
 ### Verificação
 
 Como o PDF é gerado renderizando HTML/CSS num Chromium sem cabeça (sem
 banco de dados ou servidor real disponível neste ambiente de trabalho
-para emitir um relatório de verdade), a verificação foi feita
-recriando, num script isolado, exatamente a mesma função geradora de
-HTML e os mesmos dados do relatório da empresa TOK CELL CELULARES E
-ACESSORIOS LTDA anexado pelo usuário (mesmos 5 documentos analisados, 14
-faltantes, 2 resultados por etapa etc.), e comparando visualmente, página
-por página, a versão anterior e a corrigida:
+para emitir um relatório de verdade), a verificação foi feita em duas
+rodadas, sempre recriando os mesmos dados do relatório da empresa TOK
+CELL CELULARES E ACESSORIOS LTDA anexado pelo usuário (5 documentos
+analisados, 14 faltantes, 2 resultados por etapa etc.):
 
-- **Antes:** 8 páginas geradas, com páginas quase inteiramente em branco
-  logo após "Resumo executivo" e após a seção "Documentos anexados e
-  aguardando análise" -- reproduzindo exatamente o problema relatado.
-- **Depois:** 7 páginas, sem nenhum espaço em branco grande no meio do
-  documento; a lista de 14 documentos faltantes, que antes ocupava uma
-  página inteira sozinha, passou a caber em poucas linhas compactas na
-  mesma página das seções vizinhas.
-- Só então a mesma alteração de CSS e o mesmo template da lista de
-  faltantes foram aplicados ao arquivo real
-  (`server/routes/documentacao.ts`, função
-  `gerarHtmlRelatorioDocumental`) -- o HTML e o CSS finais no código são
-  idênticos aos testados na simulação.
+- **Antes de qualquer correção:** 8 páginas, com trechos quase inteiramente
+  em branco logo após "Resumo executivo" e após "Documentos anexados e
+  aguardando análise" -- reproduzindo o problema original relatado.
+- **Primeira correção (lista enxuta + `h2` sem `avoid`):** 7 páginas, sem
+  vãos grandes no meio do documento, mas com o título da seção 1
+  aparecendo sozinho no fim de uma página -- o problema que o usuário
+  apontou nos prints da segunda rodada.
+- **Correção final (`h2` com `avoid` + `.doc`/`.stage` com conteúdo
+  divisível entre páginas):** **6 páginas**, sem nenhum vão em branco e
+  sem nenhum título isolado -- confirmado visualmente, página por página,
+  convertendo o PDF gerado em imagem.
+- Na última rodada, em vez de recriar a função manualmente, o script de
+  verificação passou a **extrair e executar a função real** direto de
+  `server/routes/documentacao.ts` (via esbuild, só removendo a tipagem
+  TypeScript) -- então o PDF conferido é gerado pelo mesmo código que
+  está no arquivo entregue, não por uma cópia à parte.
 - `npx tsc --noEmit` limpo.
 - `npx vitest run` (suíte completa) → **540/540 testes passando**.
 - `npx vite build --mode production` concluído sem erros.
 - Em anexo a esta entrega vai um PDF de exemplo
   (`exemplo_relatorio_documental_corrigido.pdf`), gerado com os mesmos
-  dados da TOK CELL, para conferência visual do resultado antes de gerar
-  um relatório de verdade pelo sistema.
+  dados da TOK CELL pela função real do sistema, para conferência visual
+  antes de gerar um relatório de verdade pelo sistema.
 
 ### Escopo desta correção
 
 - `server/routes/documentacao.ts` — dentro de
   `gerarHtmlRelatorioDocumental`: template da seção "Documentos ainda
-  faltantes para anexar" simplificado (só nome + etiqueta); removida a
-  regra `page-break-after: avoid` de `h2`; adicionada `page-break-inside:
-  auto` em `table`; nova classe `.doc.compact` para o espaçamento mais
-  enxuto dos cards de faltantes. Nenhuma outra seção do PDF, rota ou
+  faltantes para anexar" simplificado (só nome + etiqueta); `h2` mantém
+  `page-break-after: avoid`; `.doc`/`.stage` passaram de
+  `page-break-inside: avoid` para `page-break-inside: auto` (podem
+  continuar na página seguinte quando não cabem inteiros); nova classe
+  `.doc.compact` (com `page-break-inside: avoid`, mantendo os cards
+  enxutos de faltantes sempre inteiros numa única página); `table`
+  mantém `page-break-inside: auto`. Nenhuma outra seção do PDF, rota ou
   cálculo de dados foi alterado -- só a formatação/paginação e o
   template dessa seção específica.
